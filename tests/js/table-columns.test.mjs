@@ -52,6 +52,7 @@ const COLUMNS = {
   // 6 = "Duration" — `#logView-profiling thead th:nth-child(6)`.
   profilingResults: { count: 8, aligned: { 6: 'Duration' } },
   captureResults: { count: 7, aligned: {} },
+  jobsTableEl: { count: 7, aligned: {} },
   dumpTableEl: { count: 8, aligned: {} },
   // 2–8 — `#tokenUsageModal … :nth-child(n+2)`; 1 = "Date" stays left.
   tokenUsageTable: {

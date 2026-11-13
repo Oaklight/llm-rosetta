@@ -15,6 +15,7 @@ import { loadKeys, loadLogKeyLabels, renderKeys } from '../tabs/keys.js';
 import { loadMetrics, loadDumps, renderPersistence } from '../tabs/dashboard.js';
 import { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions } from '../tabs/logs.js';
 import { loadOpsLog, switchLogView, populateOpsLogFilters } from '../tabs/ops-log.js';
+import { loadJobs } from '../tabs/jobs.js';
 import { renderShimSources } from '../tabs/shims.js';
 import { loadShimsPage } from '../tabs/shims-page.js';
 import { loadRouting, stopRoutingTimer } from '../tabs/routing.js';
@@ -40,10 +41,29 @@ const _dt = (window.__branding && window.__branding.disabled_tabs) || [];
 function _tabEnabled(id) {
   const alias = id === 'logs' ? 'observability' : id === 'observability' ? 'logs' : id;
   if (_dt.indexOf(id) !== -1 || _dt.indexOf(alias) !== -1) return false;
-  // The shims page is where a provider is added; its routes are guarded by
-  // the providers tab, so one cannot stay on without the other.
+  // Two pages are children of another: the shims page is where a provider is
+  // added and its routes carry the providers guard, and the job board's
+  // routes are guarded by `logs`.  The server lists both in `disabled_tabs`
+  // already; this covers branding written by hand downstream.
   if (id === 'shims') return _dt.indexOf('providers') === -1;
+  if (id === 'jobs') return _dt.indexOf('logs') === -1 && _dt.indexOf('observability') === -1;
   return true;
+}
+// Where a view lands when the tab it named is off: the first tab branding left
+// on, in the order the branding lists.  The list is the server's `_VALID_TABS`
+// (alphabetical, and still spelling this tab `logs`), so it is translated to
+// the rail's own id here and the hidden settings entry is skipped — landing on
+// it would paint a panel with no rail button.
+const _RAIL_ID = { logs: 'observability', observability: 'observability' };
+function _firstEnabledTab() {
+  const b = window.__branding || {};
+  const order = b.all_tabs || ['providers', 'models', 'routing', 'keys', 'dashboard', 'observability'];
+  for (let i = 0; i < order.length; i++) {
+    if (order[i] === 'settings') continue;
+    const id = _RAIL_ID[order[i]] || order[i];
+    if (_tabEnabled(id)) return id;
+  }
+  return null;
 }
 function _logRefreshMs() { return S._dashboardRefreshMs > 0 ? S._dashboardRefreshMs : 5000; }
 
@@ -136,6 +156,14 @@ window.toggleAppLang = toggleAppLang;
 window._syncRailPrefs = _syncRailPrefs;
 
 function activateTab(tab, opts = {}) {
+  // Branding can turn a tab off, but the hash, Back/Forward and the keyboard
+  // shortcuts can still name it.  Land on a tab that is on instead.
+  if (tab && !_tabEnabled(tab.dataset.tab)) {
+    const fallback = _firstEnabledTab();
+    const target = fallback && document.querySelector(`.tab[data-tab="${fallback}"]`);
+    if (!target) return;
+    tab = target;
+  }
   const prevId = S.currentTab;
   const allTabs = document.querySelectorAll('.tab[role="tab"]');
   allTabs.forEach(t => {
@@ -194,6 +222,7 @@ function activateTab(tab, opts = {}) {
   if (id === 'routing') { loadRouting(); }
   if (id === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
   if (id === 'keys' && _tabEnabled('keys')) { loadKeys(); }
+  if (id === 'jobs' && _tabEnabled('jobs')) { window.startJobsBoard?.(); }
   if (id === 'settings') {
     setSettingsPane(localStorage.getItem(SETTINGS_PANE_KEY) || 'appearance');
     openSettings();
@@ -377,6 +406,7 @@ function stopTimers() {
   if (S.dashboardTimer) { clearInterval(S.dashboardTimer); S.dashboardTimer = null; }
   if (S.logTimer) { clearInterval(S.logTimer); S.logTimer = null; }
   if (S.opsLogTimer) { clearInterval(S.opsLogTimer); S.opsLogTimer = null; }
+  window.stopJobsTimer?.();
   if (S.healthTimer) { clearInterval(S.healthTimer); S.healthTimer = null; }
   stopRoutingTimer();
 }
@@ -536,11 +566,9 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
     }
   }
   // Redirect away from disabled tabs
-  if (b.disabled_tabs && b.disabled_tabs.indexOf(S.currentTab) !== -1) {
-    const _allTabs = b.all_tabs || ['providers', 'models', 'routing', 'keys', 'dashboard', 'observability', 'settings'];
-    for (let i = 0; i < _allTabs.length; i++) {
-      if (b.disabled_tabs.indexOf(_allTabs[i]) === -1) { S.currentTab = _allTabs[i]; break; }
-    }
+  if (b.disabled_tabs && !_tabEnabled(S.currentTab)) {
+    const first = _firstEnabledTab();
+    if (first) S.currentTab = first;
     localStorage.setItem('llm-rosetta-tab', S.currentTab);
   }
 })();

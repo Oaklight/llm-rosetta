@@ -104,6 +104,7 @@
   <div class="tab" role="tab" id="tabBtn-routing" tabindex="-1" aria-selected="false" aria-controls="tab-routing" data-tab="routing"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="2"/><circle cx="19" cy="6" r="2"/><circle cx="19" cy="18" r="2"/><path d="M7 12h4a4 4 0 0 0 4-4V7"/><path d="M7 12h4a4 4 0 0 1 4 4v1"/></svg></span><span class="tab-label" data-i18n="tab.routing">Routing</span></div>
   <div class="tab" role="tab" id="tabBtn-keys" tabindex="-1" aria-selected="false" aria-controls="tab-keys" data-tab="keys"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M17 6l3 3M14 9l3 3"/></svg></span><span class="tab-label" data-i18n="tab.keys">API Keys</span></div>
   <div class="tab" role="tab" id="tabBtn-observability" tabindex="-1" aria-selected="false" aria-controls="tab-observability" data-tab="observability"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></span><span class="tab-label" data-i18n="tab.logs">Request Log</span></div>
+  <div class="tab" role="tab" id="tabBtn-jobs" tabindex="-1" aria-selected="false" aria-controls="tab-jobs" data-tab="jobs"><span class="tab-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="4" rx="1"/><rect x="3" y="15" width="18" height="4" rx="1"/><path d="M7 7h.01M7 17h.01"/></svg></span><span class="tab-label" data-i18n="tab.jobs">Jobs</span></div>
   <div class="tabs-spacer"></div>
   <div class="tab" role="tab" id="tabBtn-settings" tabindex="-1" aria-selected="false" aria-controls="tab-settings" data-tab="settings" style="display:none"></div>
 </div>
@@ -868,6 +869,39 @@
       </div>
     </div>
   </div>
+
+
+  <!-- Jobs Tab -->
+  <div class="tab-panel" id="tab-jobs" role="tabpanel" aria-labelledby="tabBtn-jobs">
+    <div class="section">
+      <div class="section-header">
+        <h2 data-i18n="tab.jobs">Jobs</h2>
+        <div class="jobs-head-actions">
+          <span class="jobs-count" id="jobsCount"></span>
+          <div class="seg-control" id="jobsSeg" role="radiogroup" aria-label="Job filter" data-i18n-aria-label="jobs.filterLabel">
+            <label class="active" role="radio" aria-checked="true" tabindex="0" data-view="all" onclick="setJobsFilter('all')" data-i18n="jobs.filter.all">All</label>
+            <label role="radio" aria-checked="false" tabindex="-1" data-view="active" onclick="setJobsFilter('active')" data-i18n="jobs.filter.active">Active</label>
+            <label role="radio" aria-checked="false" tabindex="-1" data-view="failed" onclick="setJobsFilter('failed')" data-i18n="jobs.filter.failed">Failed</label>
+          </div>
+          <button class="btn btn-sm" onclick="loadJobs()" data-i18n="jobs.refresh">Refresh</button>
+        </div>
+      </div>
+      <p class="jobs-hint" data-i18n="jobs.hint">Destructive operations run in the background; their progress appears here.</p>
+      <div class="table-scroll"><table id="jobsTableEl">
+        <thead><tr>
+          <th data-i18n="jobs.col.id">Job</th>
+          <th data-i18n="jobs.col.kind">Operation</th>
+          <th data-i18n="jobs.col.status">Status</th>
+          <th data-i18n="jobs.col.progress">Progress</th>
+          <th data-i18n="jobs.col.created">Created</th>
+          <th data-i18n="jobs.col.message">Result</th>
+          <th data-i18n="jobs.col.actions">Actions</th>
+        </tr></thead>
+        <tbody id="jobsBody"><tr><td colspan="7" style="color:var(--text-dim)" data-i18n="jobs.empty">No background jobs yet.</td></tr></tbody>
+      </table></div>
+    </div>
+  </div>
+
 
 <!-- Settings Tab Panel -->
 <div class="tab-panel" id="tab-settings" role="tabpanel" aria-labelledby="tabBtn-settings">

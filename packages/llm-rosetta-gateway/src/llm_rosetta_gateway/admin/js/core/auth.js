@@ -383,7 +383,6 @@ async function onCleanupConfirmClick() {
   const target = _cleanupTarget;
   const mode = _cleanupMode;
   closeModal('cleanupConfirmModal');
-  _showWorkingToast('toast.cleanupWorking');
 
   try {
     let d;
@@ -396,77 +395,53 @@ async function onCleanupConfirmClick() {
         : '/admin/api/db/cleanup';
       d = await api.post(url, { max_age_days: days });
       if (!d.ok) throw new Error(d.error || t('toast.error'));
-      _showOlderThanResult(target, d, days);
+      _jobQueued(d);
     } else if (mode === 'beforeDate') {
       const before = document.getElementById('cleanupBeforeDate').value;
       if (!before) { showToast(t('toast.error'), 'error'); return; }
       d = await api.post('/admin/api/db/cleanup-before', { target, before: before + 'T00:00:00Z' });
       if (!d.ok) throw new Error(d.error || t('toast.error'));
-      const total = Object.keys(d).filter(k => k.endsWith('_deleted')).reduce((s, k) => s + (d[k] || 0), 0);
-      if (total === 0) showToast(t('toast.cleanupNone', {days: before}));
-      else showToast(t('toast.cleanupBeforeDone', {total, date: before, freed: fmtBytesLong(d.freed_bytes)}));
+      _jobQueued(d);
     } else if (mode === 'dateRange') {
       const start = document.getElementById('cleanupRangeStart').value;
       const end = document.getElementById('cleanupRangeEnd').value;
       if (!start || !end) { showToast(t('toast.error'), 'error'); return; }
       d = await api.post('/admin/api/db/cleanup-range', { target, start: start + 'T00:00:00Z', end: end + 'T23:59:59Z' });
       if (!d.ok) throw new Error(d.error || t('toast.error'));
-      const total = Object.keys(d).filter(k => k.endsWith('_deleted')).reduce((s, k) => s + (d[k] || 0), 0);
-      if (total === 0) showToast(t('toast.cleanupNone', {days: `${start} ~ ${end}`}));
-      else showToast(t('toast.cleanupRangeDone', {total, freed: fmtBytesLong(d.freed_bytes)}));
+      _jobQueued(d);
     } else if (mode === 'trimToCap') {
       d = await api.post('/admin/api/db/trim');
       if (!d.ok) throw new Error(d.error || t('toast.error'));
-      const total = (d.request_log_trimmed || 0) + (d.error_dumps_trimmed || 0) + (d.ops_log_trimmed || 0);
-      if (total === 0) showToast(t('toast.trimNone'));
-      else showToast(t('toast.trimDone', {rl: d.request_log_trimmed, ed: d.error_dumps_trimmed, ops: d.ops_log_trimmed, freed: fmtBytesLong(d.freed_bytes)}));
+      _jobQueued(d);
     }
   } catch (e) { showToast(String(e.message || e) || t('toast.error'), 'error'); }
   window.loadMetrics?.();
   if (target === 'errors' || target === 'all') window.invalidateDumpCache?.();
 }
 
-function _showOlderThanResult(target, d, days) {
-  if (target === 'logs') {
-    if (d.deleted === 0) showToast(t('toast.cleanupNone', {days}));
-    else showToast(t('toast.cleanupLogsDone', {count: d.deleted, freed: fmtBytesLong(d.freed_bytes)}));
-  } else if (target === 'errors') {
-    const total = d.error_dumps_deleted + d.dump_bodies_deleted;
-    if (total === 0) showToast(t('toast.cleanupNone', {days}));
-    else showToast(t('toast.cleanupErrorsDone', {ed: d.error_dumps_deleted, db: d.dump_bodies_deleted, freed: fmtBytesLong(d.freed_bytes)}));
-  } else if (target === 'ops') {
-    if (d.deleted === 0) showToast(t('toast.cleanupNone', {days}));
-    else showToast(t('toast.cleanupOpsDone', {count: d.deleted, freed: fmtBytesLong(d.freed_bytes)}));
-  } else {
-    const total = d.request_log_deleted + d.error_dumps_deleted + d.dump_bodies_deleted;
-    if (total === 0) showToast(t('toast.cleanupNone', {days}));
-    else showToast(t('toast.cleanupDone', {rl: d.request_log_deleted, ed: d.error_dumps_deleted, db: d.dump_bodies_deleted, freed: fmtBytesLong(d.freed_bytes)}));
-  }
+/** The one answer every destructive request now gives: a job id. */
+function _jobQueued(d) {
+  const id = String((d && d.job_id) || '').slice(0, 8);
+  showToast(t('toast.jobQueued', {id}));
+  window.loadJobs?.();
 }
 
 // --- Trim to Cap (quick action) ---
 async function doTrimToCap() {
-  _showWorkingToast('toast.trimWorking');
   try {
     const d = await api.post('/admin/api/db/trim');
     if (!d.ok) throw new Error(d.error || t('toast.error'));
-    const total = (d.request_log_trimmed || 0) + (d.error_dumps_trimmed || 0) + (d.ops_log_trimmed || 0);
-    if (total === 0) showToast(t('toast.trimNone'));
-    else showToast(t('toast.trimDone', {rl: d.request_log_trimmed, ed: d.error_dumps_trimmed, ops: d.ops_log_trimmed, freed: fmtBytesLong(d.freed_bytes)}));
+    _jobQueued(d);
   } catch (e) { showToast(String(e.message || e) || t('toast.error'), 'error'); }
-  window.loadMetrics?.();
 }
 
 // --- Vacuum ---
 async function doVacuum() {
-  _showWorkingToast('toast.vacuumWorking');
   try {
     const d = await api.post('/admin/api/db/vacuum');
     if (!d.ok) throw new Error(d.error || t('toast.error'));
-    if (d.freed_bytes > 0) showToast(t('toast.vacuumDone', {freed: fmtBytesLong(d.freed_bytes)}));
-    else showToast(t('toast.vacuumNone'));
+    _jobQueued(d);
   } catch (e) { showToast(String(e.message || e) || t('toast.error'), 'error'); }
-  window.loadMetrics?.();
 }
 
 // --- Error Dump Export ---

@@ -185,7 +185,6 @@ const LOG_VIEWS = ['requests', 'ops', 'dumps', 'profiling', 'capture'];
 function switchLogView(view) {
   if (S._logView === view) return;
   S._logView = view;
-
   for (const name of LOG_VIEWS) {
     const el = document.getElementById('logView-' + name);
     if (el) el.style.display = name === view ? '' : 'none';

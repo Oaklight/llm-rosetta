@@ -15,7 +15,20 @@ import { S } from './state.js';
 export const I18N = {
   en: {
     'tab.providers':'Providers', 'col.type':'Type', 'col.capabilities':'Capabilities', 'col.actions':'Actions', 'tab.models':'Models', 'tab.keys':'API Keys',
-    'tab.logs':'Observability', 'logView.requests':'Requests', 'logView.ops':'Ops Log', 'logView.dumps':'Error Dumps', 'logView.profiling':'Profiling', 'logView.capture':'Capture', 'tab.dashboard':'Dashboard', 'tab.settings':'Settings',
+    'tab.logs':'Observability', 'logView.requests':'Requests', 'logView.ops':'Ops Log', 'logView.dumps':'Error Dumps', 'logView.profiling':'Profiling', 'logView.capture':'Capture',
+    'tab.jobs':'Jobs',
+    'jobs.hint':'Destructive operations run in the background; their progress appears here.',
+    'jobs.empty':'No background jobs yet.',
+    'jobs.refresh':'Refresh',
+    'jobs.col.id':'Job', 'jobs.col.kind':'Operation', 'jobs.col.status':'Status', 'jobs.col.progress':'Progress', 'jobs.col.created':'Created', 'jobs.col.message':'Result', 'jobs.col.actions':'Actions',
+    'jobs.status.queued':'Queued', 'jobs.status.running':'Running', 'jobs.status.succeeded':'Done', 'jobs.status.failed':'Failed', 'jobs.status.cancelled':'Cancelled',
+    'jobs.kind.clear':'Clear', 'jobs.kind.cleanup':'Cleanup', 'jobs.kind.trim':'Trim to cap', 'jobs.kind.vacuum':'Vacuum', 'jobs.kind.rebuild':'Rebuild counters', 'jobs.emptyFiltered':'No jobs match this filter.', 'jobs.filter.all':'All', 'jobs.filter.active':'Active', 'jobs.filter.failed':'Failed', 'jobs.filterLabel':'Job filter', 'jobs.count':'{count} jobs \u00b7 {active} active', 'jobs.unit.rows':'rows', 'jobs.unit.pass':'pass', 'jobs.result.deleted':'{count} deleted', 'jobs.result.rebuilt':'rebuilt from {count}',
+    'jobs.cancel':'Cancel', 'jobs.retry':'Retry', 'jobs.resume':'Resume', 'jobs.unhide':'Unhide',
+    'toast.jobQueued':'Queued as job {id}. Progress is in Observability -> Jobs.',
+    'toast.jobCancelRequested':'Cancellation requested - the job stops at its next batch.',
+    'toast.jobActionDone':'Job updated.',
+    'toast.jobFailed':'The job could not be started.',
+ 'tab.dashboard':'Dashboard', 'tab.settings':'Settings',
     'section.server':'Server Settings', 'section.providers':'Providers', 'section.models':'Model Routing',
     'label.globalProxy':'Global Proxy URL', 'server.proxyNone':'No global proxy',
     'label.globalProxy.hint':'Applies to all providers unless overridden per-provider.',
@@ -563,7 +576,20 @@ export const I18N = {
   zh: {
     'btn.logout':'\u9000\u51fa\u767b\u5f55',
     'tab.providers':'\u670d\u52a1\u65b9', 'col.type':'\u7c7b\u578b', 'col.capabilities':'\u80fd\u529b', 'col.tokens':'\u4ee4\u724c\u6570', 'col.actions':'\u64cd\u4f5c', 'tab.models':'\u6a21\u578b', 'tab.keys':'API \u5bc6\u94a5',
-    'tab.logs':'\u53ef\u89c2\u6d4b\u6027', 'logView.requests':'\u8bf7\u6c42', 'logView.ops':'\u8fd0\u7ef4\u65e5\u5fd7', 'logView.dumps':'\u9519\u8bef\u8f6c\u50a8', 'logView.profiling':'\u6027\u80fd\u5256\u6790', 'logView.capture':'\u6293\u5305', 'tab.dashboard':'\u76d1\u63a7\u9762\u677f', 'tab.settings':'设置',
+    'tab.logs':'\u53ef\u89c2\u6d4b\u6027', 'logView.requests':'\u8bf7\u6c42', 'logView.ops':'\u8fd0\u7ef4\u65e5\u5fd7', 'logView.dumps':'\u9519\u8bef\u8f6c\u50a8', 'logView.profiling':'\u6027\u80fd\u5256\u6790', 'logView.capture':'\u6293\u5305',
+    'tab.jobs':'\u540e\u53f0\u4efb\u52a1',
+    'jobs.hint':'删除类操作在后台执行，进度显示在这里。',
+    'jobs.empty':'还没有后台任务。',
+    'jobs.refresh':'刷新',
+    'jobs.col.id':'任务', 'jobs.col.kind':'操作', 'jobs.col.status':'状态', 'jobs.col.progress':'进度', 'jobs.col.created':'创建时间', 'jobs.col.message':'结果', 'jobs.col.actions':'操作',
+    'jobs.status.queued':'排队中', 'jobs.status.running':'执行中', 'jobs.status.succeeded':'已完成', 'jobs.status.failed':'失败', 'jobs.status.cancelled':'已取消',
+    'jobs.kind.clear':'清空', 'jobs.kind.cleanup':'清理', 'jobs.kind.trim':'裁剪到上限', 'jobs.kind.vacuum':'整理', 'jobs.kind.rebuild':'重建计数器', 'jobs.emptyFiltered':'没有符合筛选条件的任务。', 'jobs.filter.all':'全部', 'jobs.filter.active':'进行中', 'jobs.filter.failed':'失败', 'jobs.filterLabel':'任务筛选', 'jobs.count':'{count} 个任务 · {active} 个进行中', 'jobs.unit.rows':'行', 'jobs.unit.pass':'轮', 'jobs.result.deleted':'已删除 {count} 条', 'jobs.result.rebuilt':'从 {count} 重建',
+    'jobs.cancel':'取消', 'jobs.retry':'重试', 'jobs.resume':'继续', 'jobs.unhide':'恢复显示',
+    'toast.jobQueued':'已提交为任务 {id}，进度见「可观测性 - 后台任务」。',
+    'toast.jobCancelRequested':'已请求取消，任务会在下一批之后停止。',
+    'toast.jobActionDone':'任务已更新。',
+    'toast.jobFailed':'任务未能提交。',
+ 'tab.dashboard':'\u76d1\u63a7\u9762\u677f', 'tab.settings':'设置',
     'section.server':'\u670d\u52a1\u5668\u8bbe\u7f6e', 'section.providers':'\u670d\u52a1\u65b9', 'section.models':'\u6a21\u578b\u8def\u7531',
     'label.globalProxy':'\u5168\u5c40\u4ee3\u7406 URL', 'server.proxyNone':'\u672a\u8bbe\u7f6e\u5168\u5c40\u4ee3\u7406',
     'label.globalProxy.hint':'\u9002\u7528\u4e8e\u6240\u6709\u670d\u52a1\u65b9\uff0c\u9664\u975e\u5355\u72ec\u8bbe\u7f6e\u4e86\u4ee3\u7406\u3002',
@@ -1289,6 +1315,9 @@ export function applyI18n() {
   window.renderLoginForm?.();
   if (S.currentTab === 'dashboard') window.loadMetrics?.();
   if (S.currentTab === 'observability') window.loadLogs?.();
+  // The board's rows and its count line are built strings, so it repaints
+  // itself rather than waiting out its next poll in the old language.
+  if (S.currentTab === 'jobs') window.loadJobs?.();
   // The routing board, its columns and its state words are built strings, not
   // data-i18n attributes, so the panel repaints itself.
   if (S.currentTab === 'routing') window.loadRouting?.();
