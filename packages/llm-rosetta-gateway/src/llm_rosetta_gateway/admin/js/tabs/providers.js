@@ -19,6 +19,7 @@ import {
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect, createTypePicker } from '../components/type-picker.js';
 import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand } from '../core/shim-tree.js';
+import { providerPickRows, suggestedProviderName, pickDestination } from '../core/provider-pick.js';
 import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, orderedProviders, nonLlmFormatType } from '../core/provider-endpoints.js';
 import { routingRows, blockRow } from '../core/quota-lines.js';
 import { shimHintText } from '../core/shim-hint.js';
@@ -1359,9 +1360,90 @@ let _keyFieldVisible = false; // track visibility toggle for multi-key inputs
 
 // ── Provider modal ──────────────────────────────────────────────────
 
-function openProviderModal(name, baseUrl, apiKey, proxy, provType) {
-  _editingProviderName = name || null;
-  document.getElementById('providerModalTitle').textContent = name ? t('modal.editProvider') : t('modal.addProvider');
+/**
+ * The first step of Add Provider: every shim the gateway can serve.
+ *
+ * The form itself can build any provider, but it cannot tell an operator
+ * which vendors exist.  The chooser makes the catalogue visible before
+ * anything is typed; "Start from scratch" still opens the blank form, and so
+ * does a gateway that registered no shim at all.
+ */
+function openProviderPicker() {
+  const shims = (S.configData && S.configData.registered_shims) || [];
+  if (!shims.length) { openProviderModal(); return; }
+  const box = document.getElementById('providerPickSearch');
+  if (box) box.value = '';
+  renderProviderPickList();
+  openModal('providerPickModal');
+  if (box) setTimeout(() => box.focus(), 0);
+}
+
+/** Repaint the chooser's rows for the current search text. */
+function renderProviderPickList() {
+  const host = document.getElementById('providerPickList');
+  if (!host) return;
+  const shims = (S.configData && S.configData.registered_shims) || [];
+  const query = document.getElementById('providerPickSearch')?.value || '';
+  const rows = providerPickRows(shims, query);
+  if (!rows.length) {
+    host.innerHTML = `<div class="prov-pick-empty">${esc(t('prov.pickEmpty'))}</div>`;
+    return;
+  }
+  host.innerHTML = rows.map(r => `
+    <button type="button" class="prov-pick-row" role="option" data-shim="${esc(r.name)}" onclick="pickProviderShim(${jsArg(r.name)})">
+      <span class="prov-pick-logo">${r.logo ? `<img src="${esc(r.logo)}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}</span>
+      <span class="prov-pick-text">
+        <span class="prov-pick-name">${esc(r.title)}</span>
+        <span class="prov-pick-sub">${esc(r.subtitle)}</span>
+      </span>
+      ${r.badges.map(b => `<span class="prov-pick-badge">${esc(b)}</span>`).join('')}
+    </button>`).join('');
+}
+
+/** Open the form for one chosen shim, with a free name and its defaults. */
+function pickProviderShim(name) {
+  const shims = (S.configData && S.configData.registered_shims) || [];
+  const shim = shims.find(s => s.name === name);
+  closeModal('providerPickModal');
+  if (!shim) { openProviderModal(); return; }
+  const taken = Object.keys((S.configData && S.configData.providers) || {});
+  const suggested = suggestedProviderName(shim, taken);
+  const { type, control } = pickDestination(shim);
+  // The shim's own URL is passed explicitly: it is a value the operator can
+  // edit, unlike a bare format's hint placeholder.
+  openProviderModal(suggested, shim.default_base_url || '', '', '',
+    control === 'llm' ? shim.name : '', { isNew: true });
+  // The capability tick is what shows the control holding the pick: the LLM
+  // section for a chat shim, the endpoint section for the rest.  Without it
+  // the prefill is invisible and Save is refused for "no capability".
+  _selectPickedCapability(type, control === 'llm' ? '' : shim.name);
+}
+
+/** Tick the capability a pick belongs to, and choose the shim where that
+ *  capability's control offers a choice (the endpoint sections do; the LLM
+ *  type tree already holds the value). */
+function _selectPickedCapability(type, shimName) {
+  const chk = document.getElementById(`provCap${_capitalize(type)}`);
+  if (!chk) return;
+  chk.checked = true;
+  toggleProvCapSection();
+  if (!shimName) return;
+  const picker = _endpointPickers.get(type);
+  if (picker && picker.has(shimName)) picker.select(shimName);
+}
+
+/** Skip the chooser and open the blank form. */
+function startBlankProvider() {
+  closeModal('providerPickModal');
+  openProviderModal();
+}
+
+function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
+  const isNew = !!(opts && opts.isNew);
+  // A suggestion from the chooser prefills the name but is not an edit: the
+  // save path must create the entry, not overwrite whatever holds that id.
+  _editingProviderName = isNew ? null : (name || null);
+  document.getElementById('providerModalTitle').textContent = _editingProviderName ? t('modal.editProvider') : t('modal.addProvider');
   document.getElementById('provName').value = name || '';
   document.getElementById('provName').readOnly = false;
 
@@ -2804,7 +2886,8 @@ async function loadConfig(prefetchedData) {
 // ── Window bindings ─────────────────────────────────────────────────
 
 Object.assign(window, {
-  openProviderModal, toggleProvCapSection, toggleModalKeyVisibility, copyModalKey,
+  openProviderModal, openProviderPicker, renderProviderPickList, pickProviderShim, startBlankProvider,
+  toggleProvCapSection, toggleModalKeyVisibility, copyModalKey,
   _syncKeyField, _promoteToMultiKey, _addKeyEntry, _removeKeyEntry,
   switchProviderFilter, setProviderView, renderProviders,
   saveProvider, deleteProvider, onDeleteConfirmInput, onDeleteConfirmClick,
