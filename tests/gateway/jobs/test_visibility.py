@@ -342,6 +342,8 @@ def _reads(pm: PersistenceManager) -> dict[str, Callable[[], Any]]:
         "count_ops_info_entries": pm.count_ops_info_entries,
         "count_ops_warn_entries": pm.count_ops_warn_entries,
         "query_error_dumps": lambda: pm.query_error_dumps(limit=5),
+        "query_error_dump_ids": pm.query_error_dump_ids,
+        "error_dump_facets": pm.error_dump_facets,
         "get_error_dump": lambda: pm.get_error_dump("d0"),
         "count_error_dumps": pm.count_error_dumps,
         "export_error_dumps": pm.export_error_dumps,
