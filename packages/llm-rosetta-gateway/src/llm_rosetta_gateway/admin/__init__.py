@@ -310,6 +310,14 @@ async def setup_admin(
     )
     app.ops_ctx = _ops_ctx
 
+    # The data handlers need the ops context, which is built above; binding
+    # them here keeps `jobs` free of an import back into `admin`.
+    if job_manager is not None:
+        from llm_rosetta_gateway.jobs.handlers.data import data_handlers
+
+        for kind, handler in data_handlers(_ops_ctx).items():
+            job_manager.registry.register(kind, handler)
+
     # Wire amortized prune audit callback
     if persistence is not None:
 

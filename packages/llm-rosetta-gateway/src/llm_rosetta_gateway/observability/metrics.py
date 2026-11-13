@@ -11,7 +11,7 @@ This module is framework-agnostic and can be used by any consumer
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
 from dataclasses import dataclass, field
 
 
@@ -460,68 +460,26 @@ class MetricsCollector:
         Returns:
             Number of rows processed.
         """
-        # Build in temporaries, then swap atomically.  The gateway runs
-        # on a single asyncio thread so there are no true data races,
-        # but building first avoids exposing half-rebuilt counters to
-        # concurrent ``snapshot()`` calls between await points.
-        total_requests = 0
-        total_errors = 0
-        total_streams = 0
-        by_model: dict[str, int] = {}
-        by_source: dict[str, int] = {}
-        by_target: dict[str, int] = {}
-        by_status: dict[int, int] = {}
-        tmp = MetricsCollector()
+        # Build in temporaries, then swap atomically: a reader between
+        # awaits never sees half a rebuild.
+        acc = _RebuildAccumulator()
+        for row in rows:
+            acc.add(row)
+        acc.apply(self)
+        return acc.total_requests
 
-        for r in rows:
-            total_requests += 1
-            sc = r.get("status_code", 200)
-            if sc >= 400:
-                total_errors += 1
-            if r.get("is_stream"):
-                total_streams += 1
+    async def rebuild_from_stream(self, rows: AsyncIterator[dict]) -> int:
+        """Rebuild counters from an async row stream.
 
-            model = r.get("model", "unknown")
-            by_model[model] = by_model.get(model, 0) + 1
-
-            source = r.get("source_provider", "unknown")
-            by_source[source] = by_source.get(source, 0) + 1
-
-            target = r.get("target_provider_name") or r.get(
-                "target_provider", "unknown"
-            )
-            by_target[target] = by_target.get(target, 0) + 1
-
-            by_status[sc] = by_status.get(sc, 0) + 1
-
-            pn = r.get("target_provider_name") or r.get("target_provider", "unknown")
-            tmp._accumulate_tokens(
-                model,
-                pn,
-                **{tk: r.get(tk) for tk in self._TOKEN_KEYS},
-            )
-
-        # Atomic swap — active_streams is live state, not rebuilt.
-        # total_client_disconnects is a transport-level event not stored
-        # in request log rows, so it resets to 0 on rebuild.
-        self.total_requests = total_requests
-        self.total_errors = total_errors
-        self.total_streams = total_streams
-        self.total_client_disconnects = 0
-        self.by_model = by_model
-        self.by_source_provider = by_source
-        self.by_target_provider = by_target
-        self.by_status_code = by_status
-        self.total_input_tokens = tmp.total_input_tokens
-        self.total_output_tokens = tmp.total_output_tokens
-        self.total_cache_read_tokens = tmp.total_cache_read_tokens
-        self.total_cache_creation_tokens = tmp.total_cache_creation_tokens
-        self.total_reasoning_tokens = tmp.total_reasoning_tokens
-        self.total_tokens = tmp.total_tokens
-        self.by_model_tokens = tmp.by_model_tokens
-        self.by_provider_tokens = tmp.by_provider_tokens
-
-        return total_requests
+        The caller hands over the store's async generator, so the table is
+        never held in memory and the aggregation yields to the event loop
+        between batches.  Everything else is :meth:`rebuild_counters`.
+        """
+        acc = _RebuildAccumulator()
+        async for row in rows:
+            acc.add(row)
+        acc.apply(self)
+        return acc.total_requests
 
     def merge_rebuild(self, baseline: dict, pre_snapshot: dict) -> None:
         """Atomically merge a background-rebuilt baseline with live traffic.
@@ -663,3 +621,84 @@ class MetricsCollector:
             "series": self._window.get_series(series_seconds),
             "providers": self.provider_health_snapshot(),
         }
+
+
+class _RebuildAccumulator:
+    """Folds request-log rows into the counters one rebuild will install.
+
+    Split out so the synchronous and asynchronous entry points aggregate the
+    same way: two copies of this arithmetic would eventually disagree, and the
+    counter a dashboard shows is the one thing users notice drifting.
+    """
+
+    __slots__ = (
+        "total_requests",
+        "total_errors",
+        "total_streams",
+        "by_model",
+        "by_source",
+        "by_target",
+        "by_status",
+        "_tmp",
+    )
+
+    def __init__(self) -> None:
+        self.total_requests = 0
+        self.total_errors = 0
+        self.total_streams = 0
+        self.by_model: dict[str, int] = {}
+        self.by_source: dict[str, int] = {}
+        self.by_target: dict[str, int] = {}
+        self.by_status: dict[int, int] = {}
+        self._tmp = MetricsCollector()
+
+    def add(self, row: dict) -> None:
+        """Fold one log row into the counters."""
+        self.total_requests += 1
+        status = row.get("status_code", 200)
+        if status >= 400:
+            self.total_errors += 1
+        if row.get("is_stream"):
+            self.total_streams += 1
+
+        model = row.get("model", "unknown")
+        self.by_model[model] = self.by_model.get(model, 0) + 1
+
+        source = row.get("source_provider", "unknown")
+        self.by_source[source] = self.by_source.get(source, 0) + 1
+
+        provider = row.get("target_provider_name") or row.get(
+            "target_provider", "unknown"
+        )
+        self.by_target[provider] = self.by_target.get(provider, 0) + 1
+        self.by_status[status] = self.by_status.get(status, 0) + 1
+
+        self._tmp._accumulate_tokens(
+            model,
+            provider,
+            **{key: row.get(key) for key in MetricsCollector._TOKEN_KEYS},
+        )
+
+    def apply(self, target: MetricsCollector) -> None:
+        """Install the accumulated counters on *target* in one assignment each.
+
+        ``active_streams`` is live state and is not rebuilt.
+        ``total_client_disconnects`` is a transport event no log row records,
+        so a rebuild resets it.
+        """
+        target.total_requests = self.total_requests
+        target.total_errors = self.total_errors
+        target.total_streams = self.total_streams
+        target.total_client_disconnects = 0
+        target.by_model = self.by_model
+        target.by_source_provider = self.by_source
+        target.by_target_provider = self.by_target
+        target.by_status_code = self.by_status
+        target.total_input_tokens = self._tmp.total_input_tokens
+        target.total_output_tokens = self._tmp.total_output_tokens
+        target.total_cache_read_tokens = self._tmp.total_cache_read_tokens
+        target.total_cache_creation_tokens = self._tmp.total_cache_creation_tokens
+        target.total_reasoning_tokens = self._tmp.total_reasoning_tokens
+        target.total_tokens = self._tmp.total_tokens
+        target.by_model_tokens = self._tmp.by_model_tokens
+        target.by_provider_tokens = self._tmp.by_provider_tokens

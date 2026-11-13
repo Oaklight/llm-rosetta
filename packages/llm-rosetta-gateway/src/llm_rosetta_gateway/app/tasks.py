@@ -48,31 +48,41 @@ _CLEANUP_INITIAL_DELAY = 120  # seconds
 
 
 async def _periodic_cleanup(app: App) -> None:
-    """Periodically delete records older than the configured max_age_days."""
+    """Periodically queue a cleanup of records older than max_age_days.
+
+    The work itself is a job: it hides its ranges, deletes in batches and
+    reports progress on the board, instead of running a multi-second delete
+    inside this loop where nothing can see it.
+    """
     await asyncio.sleep(_CLEANUP_INITIAL_DELAY)
     while True:
         try:
-            ops_ctx = getattr(app, "ops_ctx", None)
+            jobs = getattr(app, "jobs", None)
             config = getattr(app, "gateway_config", None)
-            if (
-                ops_ctx is not None
-                and ops_ctx.persistence is not None
-                and config is not None
-            ):
-                from ..ops.data import OpsPeriodicCleanup
+            if jobs is not None and config is not None:
+                from ..jobs.enqueue import enqueue_cleanup
 
                 raw_cfg = getattr(config, "_raw", {})
                 server = raw_cfg.get("server", {}) if isinstance(raw_cfg, dict) else {}
                 rl_age = int((server.get("request_log") or {}).get("max_age_days", 90))
                 ol_age = int((server.get("ops_log") or {}).get("max_age_days", 90))
 
-                result = await OpsPeriodicCleanup(
-                    ops_ctx, rl_age=rl_age, ol_age=ol_age
-                ).execute()
-
-                total = (result or {}).get("total", 0)
-                if total > 0:
-                    logger.info("Periodic cleanup: %d entries removed", total)
+                queued = await enqueue_cleanup(
+                    jobs,
+                    mode="age",
+                    tables=("request_log", "error_dumps"),
+                    max_age_days=rl_age,
+                    source="periodic",
+                )
+                if ol_age != rl_age:
+                    await enqueue_cleanup(
+                        jobs,
+                        mode="age",
+                        tables=("ops_log",),
+                        max_age_days=ol_age,
+                        source="periodic",
+                    )
+                logger.info("Periodic cleanup queued as job %s", queued.id)
         except Exception as exc:
             logger.warning("Periodic cleanup failed: %s", exc)
         await asyncio.sleep(_CLEANUP_INTERVAL)
@@ -89,13 +99,22 @@ async def _periodic_flush(app: App) -> None:
         if metrics is not None:
             try:
                 if await persistence.check_and_clear_rebuild_flag():
-                    logger.info(
-                        "Rebuild flag detected (external cleanup), rebuilding counters"
-                    )
-                    rows = [
-                        row async for row in persistence.iter_log_rows_for_rebuild()
-                    ]
-                    metrics.rebuild_counters(iter(rows))
+                    jobs = getattr(app, "jobs", None)
+                    if jobs is not None:
+                        from ..jobs.enqueue import enqueue_rebuild
+
+                        job = await enqueue_rebuild(jobs, source="persistence")
+                        logger.info("Rebuild flag detected; queued as job %s", job.id)
+                    else:
+                        # No worker (in-memory mode): rebuild here, streaming so
+                        # the table is not materialised.
+                        logger.info(
+                            "Rebuild flag detected (external cleanup), "
+                            "rebuilding counters"
+                        )
+                        await metrics.rebuild_from_stream(
+                            persistence.iter_log_rows_for_rebuild()
+                        )
                 await persistence.save_metrics(metrics.export_counters())
             except Exception as exc:
                 logger.warning("Failed to flush metrics: %s", exc)
