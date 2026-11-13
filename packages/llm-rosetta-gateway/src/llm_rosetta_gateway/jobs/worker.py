@@ -179,13 +179,16 @@ class JobManager:
         self._wake = asyncio.Event()
         self._stopping = False
         self.recovered = 0
+        self.orphaned_ranges = 0
+        self._last_prune = 0.0
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     async def start(self) -> None:
-        """Recover interrupted jobs, then start one task per lane slot."""
+        """Repair orphaned ranges, recover interrupted jobs, start the lanes."""
+        self.orphaned_ranges = await self.store.sweep_orphan_ranges()
         self.recovered = await self.store.recover()
         if self.recovered:
             logger.info(
@@ -219,6 +222,19 @@ class JobManager:
         job = await self.store.enqueue(*args, **kwargs)
         self._wake.set()
         return job
+
+    async def maybe_prune(self, interval: float = 3600.0, keep: int = 200) -> int:
+        """Delete old terminal jobs, at most once per *interval*.
+
+        The board is a recent-history view; an unbounded table of finished
+        jobs is a slow leak.  A job that still owns a hidden range is never
+        pruned, so a failed job stays retryable however old it is.
+        """
+        now = time.monotonic()
+        if self._last_prune and now - self._last_prune < interval:
+            return 0
+        self._last_prune = now
+        return await self.store.prune(keep)
 
     async def cancel(self, job_id: str) -> tuple[bool, str | None]:
         """Ask a job to stop; a running one stops at its next checkpoint."""

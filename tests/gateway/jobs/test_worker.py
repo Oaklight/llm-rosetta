@@ -166,6 +166,32 @@ async def test_checkpoint_raises_once_cancelled():
         await job.checkpoint()
 
 
+async def test_start_repairs_an_orphaned_range(pm):
+    manager = JobManager(pm)
+    job = await manager.enqueue(
+        "data.clear", hidden_ranges=[("request_log", "", "9999-01-01")]
+    )
+    await pm.connection.execute("DELETE FROM jobs WHERE id = ?", (job.id,))
+    await pm.connection.commit()
+
+    await manager.start()
+    try:
+        assert manager.orphaned_ranges == 1
+        assert pm.visibility.ranges("request_log") == []
+    finally:
+        await manager.stop()
+
+
+async def test_pruning_finished_jobs_happens_at_most_once_per_interval(pm):
+    manager = JobManager(pm, handlers={"demo.ok": _ok})
+    for _ in range(3):
+        await manager.enqueue("demo.ok")
+    await manager.drain()
+
+    assert await manager.maybe_prune(interval=3600, keep=0) == 3
+    assert await manager.maybe_prune(interval=3600, keep=0) == 0
+
+
 async def _context_job(manager):
     """A JobContext over a harmless stand-in store."""
     from llm_rosetta_gateway.jobs.model import Job

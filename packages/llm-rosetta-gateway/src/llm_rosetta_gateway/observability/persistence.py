@@ -667,6 +667,10 @@ class PersistenceManager:
         """
         return self._visibility.clause(table, alias=alias, since=since, until=until)
 
+    async def reload_visibility(self) -> None:
+        """Re-read the hidden ranges after a subsystem edited them directly."""
+        await self._load_visibility()
+
     async def _load_visibility(self) -> None:
         """Load the hidden ranges into the cache every read consults."""
         try:

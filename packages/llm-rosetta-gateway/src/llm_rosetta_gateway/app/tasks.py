@@ -115,6 +115,9 @@ async def _periodic_flush(app: App) -> None:
                         await metrics.rebuild_from_stream(
                             persistence.iter_log_rows_for_rebuild()
                         )
+                jobs = getattr(app, "jobs", None)
+                if jobs is not None:
+                    await jobs.maybe_prune()
                 await persistence.save_metrics(metrics.export_counters())
             except Exception as exc:
                 logger.warning("Failed to flush metrics: %s", exc)
