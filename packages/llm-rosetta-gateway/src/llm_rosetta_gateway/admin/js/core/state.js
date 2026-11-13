@@ -82,7 +82,8 @@ export const S = {
   _profilingEnabled: false,
   _captureEnabled: false,
   _dumpPage: 0,
-  _dumpAllEntries: [],
+  // Provider and model values the dump store holds; null means "fetch it".
+  _dumpFacets: null,
   // Pages the filtered dump list spans; set by renderDumps.
   _dumpTotalPages: 1,
   _lastPersistence: null,

@@ -6,6 +6,7 @@
 import { S, DUMP_PAGE_SIZE, LOG_LIMIT } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { pageCount, clampPage, shouldResync } from '../core/pagination.js';
+import { dumpQuery, dumpStatusValue } from '../core/dump-query.js';
 import { jsArg } from '../core/html.js';
 import { api, _adminHeaders, showToast, esc, formatDuration, openModal, closeModal, fmtBytesShort, fmtBytesLong, fmtTokens, copyText } from '../core/utils.js';
 
@@ -532,7 +533,7 @@ async function downloadAllCaptures() {
 // ===================== Error Dumps =====================
 
 function invalidateDumpCache() {
-  S._dumpAllEntries = [];
+  S._dumpFacets = null;
 }
 
 async function loadDumps() {
@@ -549,68 +550,103 @@ const _dumpJumpInput = document.getElementById('dumpPageJump');
 _dumpJumpInput?.addEventListener?.('input', () => { _dumpJumpDirty = true; });
 _dumpJumpInput?.addEventListener?.('blur', () => { _dumpJumpDirty = false; });
 
-async function renderDumps() {
-  const phase = document.getElementById('dumpPhaseFilter').value;
+//: The newest render owns the table.  A filter typed while the previous page
+//: was in flight can otherwise land first and paint rows the toolbar no
+//: longer describes.
+let _dumpRenderSeq = 0;
+
+//: The filter values behind the table on screen.  A change means page 1.
+let _dumpFilterSig = '';
+
+/** Read the toolbar into the shape `dumpQuery` takes. */
+function _dumpFilterValues() {
   const statusDrop = document.getElementById('dumpStatusFilter').value;
   const statusSearch = document.getElementById('dumpStatusSearch').value.trim();
-  const status = (statusDrop === 'custom' || (!statusDrop && statusSearch)) ? statusSearch : statusDrop;
-  const provider = document.getElementById('dumpProviderFilter').value;
   const modelDrop = document.getElementById('dumpModelFilter').value;
-  const search = document.getElementById('dumpModelSearch').value.toLowerCase();
-  const timeRange = document.getElementById('dumpTimeRange').value;
-  const dateFrom = document.getElementById('dumpDateFrom').value;
-  const dateTo = document.getElementById('dumpDateTo').value;
+  return {
+    phase: document.getElementById('dumpPhaseFilter').value,
+    status: dumpStatusValue(statusDrop, statusSearch),
+    provider: document.getElementById('dumpProviderFilter').value,
+    model: (modelDrop && modelDrop !== 'custom') ? modelDrop : '',
+    modelSearch: document.getElementById('dumpModelSearch').value.trim(),
+    idQuery: (document.getElementById('dumpIdSearch')?.value || '').trim(),
+    timeRange: document.getElementById('dumpTimeRange').value,
+    dateFrom: document.getElementById('dumpDateFrom').value,
+    dateTo: document.getElementById('dumpDateTo').value,
+  };
+}
 
+/** The list request for one page under the current toolbar. */
+function _dumpListPath(filters, offset) {
+  return `/admin/api/error-dumps?${dumpQuery(filters, {limit: DUMP_PAGE_SIZE, offset})}`;
+}
+
+/**
+ * The provider and model values the store holds.
+ *
+ * The dropdowns list what has ever been recorded, not what the current
+ * filter kept — otherwise choosing a value would empty the list it came from.
+ */
+async function _dumpFacets() {
+  if (!S._dumpFacets) {
+    S._dumpFacets = await api.get('/admin/api/error-dumps/facets');
+  }
+  return S._dumpFacets;
+}
+
+/** Refill the provider and model selects, keeping a choice that still exists. */
+function _populateDumpFilters(facets) {
+  const provSelect = document.getElementById('dumpProviderFilter');
+  const prevProv = provSelect.value;
+  provSelect.innerHTML = `<option value="">${t('filter.allProviders')}</option>` +
+    (facets.providers || []).map(p => `<option value="${esc(p)}"${p===prevProv?' selected':''}>${esc(p)}</option>`).join('');
+
+  const modelSelect = document.getElementById('dumpModelFilter');
+  const prevModel = modelSelect.value;
+  modelSelect.innerHTML = `<option value="">${t('filter.allModels')}</option>` +
+    (facets.models || []).map(m => `<option value="${esc(m)}"${m===prevModel?' selected':''}>${esc(m)}</option>`).join('') +
+    `<option value="custom">${t('filter.custom')}</option>`;
+}
+
+/** Every dump id the current toolbar keeps, across all pages. */
+async function _dumpMatchingIds() {
+  const data = await api.get(
+    `/admin/api/error-dumps/ids?${dumpQuery(_dumpFilterValues())}`);
+  return data.ids || [];
+}
+
+async function renderDumps() {
+  const filters = _dumpFilterValues();
+  // A filter change starts at page 1.  Without this a narrowed result would
+  // be requested at the old offset, come back empty, and paint "no rows"
+  // under a header that says the store holds some.
+  const sig = JSON.stringify(filters);
+  if (sig !== _dumpFilterSig) {
+    _dumpFilterSig = sig;
+    S._dumpPage = 0;
+  }
+  const seq = ++_dumpRenderSeq;
   try {
-    // Fetch all entries on first load or refresh
-    if (S._dumpAllEntries.length === 0) {
-      const data = await api.get('/admin/api/error-dumps?limit=10000&offset=0');
-      S._dumpAllEntries = data.entries || [];
-    }
+    const facets = await _dumpFacets();
+    if (seq !== _dumpRenderSeq) return;
+    _populateDumpFilters(facets);
 
-    // Populate dropdowns from full dataset (before filtering)
-    const provSelect = document.getElementById('dumpProviderFilter');
-    const prevProv = provSelect.value;
-    const allProvSet = new Set(S._dumpAllEntries.map(e => e.provider_name).filter(Boolean));
-    provSelect.innerHTML = `<option value="">${t('filter.allProviders')}</option>` +
-      [...allProvSet].sort().map(p => `<option value="${p}"${p===prevProv?' selected':''}>${esc(p)}</option>`).join('');
-
-    const modelSelect = document.getElementById('dumpModelFilter');
-    const prevModel = modelSelect.value;
-    const allModelSet = new Set(S._dumpAllEntries.map(e => e.model).filter(Boolean));
-    modelSelect.innerHTML = `<option value="">${t('filter.allModels')}</option>` +
-      [...allModelSet].sort().map(m => `<option value="${m}"${m===prevModel?' selected':''}>${esc(m)}</option>`).join('') +
-      `<option value="custom">${t('filter.custom')}</option>`;
-
-    // Apply all filters client-side
-    let entries = S._dumpAllEntries;
-    // An id search is how a linked dump is found without paging to it.
-    const idQuery = (document.getElementById('dumpIdSearch')?.value || '').trim().toLowerCase();
-    if (idQuery) {
-      entries = entries.filter(e =>
-        String(e.dump_id || e.id || '').toLowerCase().includes(idQuery)
-        || String(e.request_log_id || '').toLowerCase().includes(idQuery));
+    // One page, filtered and counted by the server: a filter means the whole
+    // store, not the rows this browser happened to load.
+    let data = await api.get(
+      _dumpListPath(filters, S._dumpPage * DUMP_PAGE_SIZE));
+    if (seq !== _dumpRenderSeq) return;
+    let entries = data.entries || [];
+    let total = data.total ?? 0;
+    if (!entries.length && total > 0 && S._dumpPage > 0) {
+      // The set shrank under the current page (a delete, a prune).  Land on
+      // the last page that still exists instead of an empty one.
+      S._dumpPage = Math.max(0, pageCount(total, DUMP_PAGE_SIZE) - 1);
+      data = await api.get(_dumpListPath(filters, S._dumpPage * DUMP_PAGE_SIZE));
+      if (seq !== _dumpRenderSeq) return;
+      entries = data.entries || [];
+      total = data.total ?? 0;
     }
-    if (phase) entries = entries.filter(e => e.error_phase === phase);
-    if (provider) entries = entries.filter(e => e.provider_name === provider);
-    const filterModel = (modelDrop && modelDrop !== 'custom') ? modelDrop : '';
-    if (filterModel) entries = entries.filter(e => e.model === filterModel);
-    if (search) entries = entries.filter(e => (e.model||'').toLowerCase().includes(search));
-    if (status) {
-      if (status === '4xx') entries = entries.filter(e => e.status_code >= 400 && e.status_code < 500);
-      else if (status === '5xx') entries = entries.filter(e => e.status_code >= 500 && e.status_code < 600);
-      else entries = entries.filter(e => e.status_code === parseInt(status));
-    }
-    if (timeRange && timeRange !== 'custom') {
-      const now = Date.now();
-      const ms = {'1h':3600e3,'24h':86400e3,'7d':604800e3,'30d':2592000e3}[timeRange];
-      if (ms) entries = entries.filter(e => now - new Date(e.timestamp).getTime() < ms);
-    } else if (timeRange === 'custom') {
-      if (dateFrom) entries = entries.filter(e => new Date(e.timestamp) >= new Date(dateFrom));
-      if (dateTo) entries = entries.filter(e => new Date(e.timestamp) <= new Date(dateTo + 'T23:59:59'));
-    }
-
-    const total = entries.length;
 
     const tbody = document.getElementById('dumpTable');
     const countEl = document.getElementById('dumpCount');
@@ -619,21 +655,21 @@ async function renderDumps() {
 
     countEl.textContent = total > 0 ? t('dump.count', {n: total}) : '';
     emptyEl.style.display = total === 0 ? '' : 'none';
-    if (dlBtn) dlBtn.style.display = S._dumpAllEntries.length > 0 ? '' : 'none';
+    if (dlBtn) dlBtn.style.display = total > 0 ? '' : 'none';
 
     // Show/hide reset
-    const hasFilters = phase || status || provider || search || filterModel
-      || idQuery || (timeRange && timeRange !== '');
+    const hasFilters = filters.phase || filters.status || filters.provider
+      || filters.model || filters.modelSearch || filters.idQuery
+      || filters.timeRange;
     const resetBtn = document.getElementById('dumpResetBtn');
     if (resetBtn) resetBtn.style.display = hasFilters ? 'inline-flex' : 'none';
 
-    // Client-side pagination on filtered results
+    // Pagination is over the server's total.
     const totalPages = pageCount(total, DUMP_PAGE_SIZE);
     if (S._dumpPage >= totalPages) S._dumpPage = Math.max(0, totalPages - 1);
-    const pageStart = S._dumpPage * DUMP_PAGE_SIZE;
-    const pageEntries = entries.slice(pageStart, pageStart + DUMP_PAGE_SIZE);
+    const pageEntries = entries;
     S._dumpTotalPages = totalPages;
-    document.getElementById('dumpPageInfo').textContent = t('page.info', {current: S._dumpPage + 1, total: totalPages, count: ''}).replace(/\s*\(\s*\)\s*$/, '');
+    document.getElementById('dumpPageInfo').textContent = t('page.info', {current: S._dumpPage + 1, total: totalPages, count: total});
     document.getElementById('dumpPrevPage').disabled = S._dumpPage === 0;
     document.getElementById('dumpNextPage').disabled = (S._dumpPage + 1) * DUMP_PAGE_SIZE >= total;
     const jump = document.getElementById('dumpPageJump');
@@ -647,14 +683,8 @@ async function renderDumps() {
       }
     }
 
-    // A selection outlives the rows it was made on.  Drop ids the dump store
-    // no longer has, so the bar never counts a dump that is already gone.
-    const liveIds = new Set(S._dumpAllEntries.map(e => esc(e.dump_id || e.id || '')));
-    for (const id of [...S._selectedDumpIds]) if (!liveIds.has(id)) S._selectedDumpIds.delete(id);
-
-    // The header box covers one page; these two cover the whole filtered set,
-    // which is what an operator filtering to a provider actually means.
-    S._dumpFilteredIds = pageEntries.length ? entries.map(e => esc(e.dump_id || e.id || '')) : [];
+    // The header box covers one page; the two scope buttons cover the whole
+    // filtered set, which is what an operator filtering to a provider means.
     _syncDumpScopeButtons(total);
 
     if (total === 0) { tbody.innerHTML = ''; _syncDumpHeader(); return; }
@@ -909,12 +939,36 @@ async function downloadDump(dumpId) {
   } catch (e) { showToast(t('toast.downloadFailed'), 'error'); }
 }
 
+//: The list route caps a page at 500; both downloads walk pages this size.
+const DUMP_DOWNLOAD_PAGE = 500;
+
 async function downloadAllDumps() {
   try {
-    const data = await api.get('/admin/api/error-dumps?limit=10000&offset=0');
-    const entries = data.entries || [];
-    if (entries.length === 0) { showToast(t('toast.nothingToDownload'), 'error'); return; }
-    const json = JSON.stringify(entries, null, 2);
+    const filters = _dumpFilterValues();
+    const rows = [];
+    // The walk pages by keyset, not by offset: a dump inserted (or pruned)
+    // while it runs shifts every offset past it, which showed up as a
+    // duplicate row in the file and a skipped one somewhere else.  The last
+    // row's `(timestamp, id)` is a position that stays put.
+    let before = null;
+    for (;;) {
+      const page = {limit: DUMP_DOWNLOAD_PAGE};
+      if (before) page.before = before;
+      const data = await api.get(`/admin/api/error-dumps?${dumpQuery(filters, page)}`);
+      const batch = data.entries || [];
+      if (!batch.length) break;
+      rows.push(...batch);
+      if (batch.length < DUMP_DOWNLOAD_PAGE) break;
+      const last = batch[batch.length - 1];
+      const cursor = {timestamp: last.timestamp, id: last.id};
+      // A cursor that does not advance would make this loop run forever;
+      // stop rather than spin if the server ever answers out of order.
+      if (!cursor.timestamp || !cursor.id) break;
+      if (before && cursor.timestamp === before.timestamp && cursor.id === before.id) break;
+      before = cursor;
+    }
+    if (rows.length === 0) { showToast(t('toast.nothingToDownload'), 'error'); return; }
+    const json = JSON.stringify(rows, null, 2);
     const blob = new Blob([json], {type:'application/json'});
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1019,7 +1073,7 @@ function onDumpStatusFilterChange() {
 function onDumpStatusSearchInput() {
   const el = document.getElementById('dumpStatusSearch');
   el.value = el.value.replace(/\D/g, '');
-  renderDumps();
+  _dumpFilterSoon(false);
 }
 
 function closeDumpStatusSearch(silent) {
@@ -1050,8 +1104,25 @@ function closeDumpTimeCustom(silent) {
 
 /** A new id query starts from the first page, or the match stays off-screen. */
 function onDumpIdSearchInput() {
-  S._dumpPage = 0;
-  renderDumps();
+  _dumpFilterSoon(true);
+}
+
+/** The model substring filter, debounced like the id search. */
+function onDumpModelSearchInput() {
+  _dumpFilterSoon(true);
+}
+
+//: Text filters now ask the server, so a keystroke must not issue a request.
+let _dumpFilterTimer = null;
+
+/** Re-render soon, coalescing the keystrokes still arriving. */
+function _dumpFilterSoon(resetPage) {
+  if (resetPage) S._dumpPage = 0;
+  if (_dumpFilterTimer) clearTimeout(_dumpFilterTimer);
+  _dumpFilterTimer = setTimeout(() => {
+    _dumpFilterTimer = null;
+    renderDumps();
+  }, 250);
 }
 
 function resetDumpFilters() {
@@ -1488,15 +1559,21 @@ function _syncDumpScopeButtons(total) {
 }
 
 /** Add every row the filters keep, on every page, to the selection. */
-function selectAllFilteredDumps() {
-  (S._dumpFilteredIds || []).forEach(id => S._selectedDumpIds.add(id));
+async function selectAllFilteredDumps() {
+  let ids;
+  try { ids = await _dumpMatchingIds(); }
+  catch (e) { showToast(t('toast.loadFailed'), 'error'); return; }
+  ids.forEach(id => S._selectedDumpIds.add(id));
   renderDumps();
   _updateDumpBulkBar();
 }
 
 /** Flip every filtered row: selected becomes not, and the other way round. */
-function invertDumpSelection() {
-  (S._dumpFilteredIds || []).forEach(id => {
+async function invertDumpSelection() {
+  let ids;
+  try { ids = await _dumpMatchingIds(); }
+  catch (e) { showToast(t('toast.loadFailed'), 'error'); return; }
+  ids.forEach(id => {
     if (S._selectedDumpIds.has(id)) S._selectedDumpIds.delete(id);
     else S._selectedDumpIds.add(id);
   });
@@ -1534,15 +1611,27 @@ function clearDumpSelection() {
   _updateDumpBulkBar();
 }
 
-function bulkDownloadDumps() {
-  if (!S._selectedDumpIds.size) return;
-  const selected = S._dumpAllEntries.filter(e => S._selectedDumpIds.has(e.dump_id || e.id));
-  const blob = new Blob([JSON.stringify(selected, null, 2)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `error-dumps-selected-${new Date().toISOString().slice(0,19).replace(/[:.]/g,'-')}.json`;
-  a.click(); URL.revokeObjectURL(a.href);
-  showToast(t('toast.downloaded', {count: String(selected.length)}));
+async function bulkDownloadDumps() {
+  const ids = [...S._selectedDumpIds];
+  if (!ids.length) return;
+  try {
+    // One row set per request: the route binds each id as a separate SQL
+    // variable, so the selection is chunked to the size it accepts.
+    const rows = [];
+    for (let i = 0; i < ids.length; i += DUMP_DOWNLOAD_PAGE) {
+      const chunk = ids.slice(i, i + DUMP_DOWNLOAD_PAGE)
+        .map(encodeURIComponent).join(',');
+      const data = await api.get(
+        `/admin/api/error-dumps?limit=${DUMP_DOWNLOAD_PAGE}&offset=0&ids=${chunk}`);
+      rows.push(...(data.entries || []));
+    }
+    const blob = new Blob([JSON.stringify(rows, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `error-dumps-selected-${new Date().toISOString().slice(0,19).replace(/[:.]/g,'-')}.json`;
+    a.click(); URL.revokeObjectURL(a.href);
+    showToast(t('toast.downloaded', {count: String(rows.length)}));
+  } catch (e) { showToast(t('toast.downloadFailed'), 'error'); }
 }
 async function bulkDeleteDumps() {
   if (!S._selectedDumpIds.size) return;
@@ -1583,7 +1672,7 @@ Object.assign(window, {
   clearCaptureResults, viewCapture, downloadCapture, downloadAllCaptures,
   loadDumps, renderDumps, invalidateDumpCache, viewDump, downloadDump, downloadAllDumps,
   selectAllFilteredDumps, invertDumpSelection,
-  openDumpPage, closeDumpPage, exitDumpPage, copyDumpPageJson, downloadDumpPage, openDumpPageLog, onDumpIdSearchInput,
+  openDumpPage, closeDumpPage, exitDumpPage, copyDumpPageJson, downloadDumpPage, openDumpPageLog, onDumpIdSearchInput, onDumpModelSearchInput,
   changeDumpPage, jumpToDumpPage, toggleDumpMoreMenu, openClearDumpsConfirm,
   onClearDumpsInput, confirmClearDumps,
   onDumpModelFilterChange, closeDumpModelSearch,

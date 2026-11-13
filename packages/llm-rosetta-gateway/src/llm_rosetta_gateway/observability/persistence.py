@@ -66,6 +66,24 @@ _WAL_CHECKPOINT_INTERVAL = 300  # 5 minutes
 _CACHE_ADDITIVE_TARGETS: tuple[str, ...] = tuple(sorted(ADDITIVE_CACHE_STANDARDS))
 
 
+def _like_needle(text: str) -> str:
+    """Wrap *text* as a ``LIKE`` pattern with its own wildcards escaped.
+
+    SQLite treats ``%`` and ``_`` as wildcards inside a pattern, so a search
+    for ``100%`` would otherwise match every row.  The backslash escape is
+    declared by the caller's ``ESCAPE '\\'`` clause.
+    """
+    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+#: The order every error-dump read uses: newest first, with the id breaking a
+#: tie.  A tie-break is what makes the ``(timestamp, id)`` keyset cursor a
+#: page boundary that is still the same position after a row is inserted — an
+#: ``OFFSET`` on this table shifts underneath a walk that is already running.
+_DUMP_ORDER = "ORDER BY timestamp DESC, id DESC"
+
+
 class PersistenceManager:
     """SQLite-backed persistence for request logs and metrics.
 
@@ -1310,36 +1328,134 @@ class PersistenceManager:
         await self._conn.commit()
         await self._prune_error_dumps()
 
+    def _dump_filter_sql(
+        self,
+        *,
+        model: str | None = None,
+        model_search: str | None = None,
+        error_phase: str | None = None,
+        provider: str | None = None,
+        status_min: int | None = None,
+        status_max: int | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        q: str | None = None,
+        ids: Sequence[str] | None = None,
+        before: tuple[str, str] | None = None,
+    ) -> tuple[str, list[Any]]:
+        """Build the ``WHERE`` clause shared by every error-dump read.
+
+        One builder, so the page, the id list and any future read agree on
+        what a filter means.  ``LIKE`` needles escape the caller's own
+        wildcards: a search for ``100%`` must not match every row.
+
+        This is also the one place a row-visibility predicate belongs once
+        the store has one: every read here goes through this clause, so
+        adding it in this method covers the page and the id list at once
+        (``error_dump_facets`` queries the table directly and needs its own).
+
+        *before* is a ``(timestamp, id)`` keyset cursor: it keeps the rows
+        older than that position, which is a stable page boundary unlike an
+        ``OFFSET`` on a table that is still being written.
+
+        Returns:
+            A ``(where_sql, params)`` tuple; ``where_sql`` is empty when no
+            filter is active.
+        """
+        clauses: list[str] = []
+        params: list[Any] = []
+
+        if ids is not None:
+            if not ids:
+                # An empty id list matches nothing.  Without this branch the
+                # ``IN ()`` clause would be a syntax error instead.
+                return "WHERE 0", []
+            placeholders = ", ".join("?" for _ in ids)
+            clauses.append(f"id IN ({placeholders})")
+            params.extend(ids)
+        if model:
+            clauses.append("model = ?")
+            params.append(model)
+        if model_search:
+            clauses.append(r"model LIKE ? ESCAPE '\'")
+            params.append(_like_needle(model_search))
+        if error_phase:
+            clauses.append("error_phase = ?")
+            params.append(error_phase)
+        if provider:
+            clauses.append("(provider_name = ? OR target_provider = ?)")
+            params.extend([provider, provider])
+        if status_min is not None:
+            clauses.append("status_code >= ?")
+            params.append(status_min)
+        if status_max is not None:
+            clauses.append("status_code <= ?")
+            params.append(status_max)
+        if start:
+            clauses.append("timestamp >= ?")
+            params.append(start)
+        if end:
+            clauses.append("timestamp <= ?")
+            params.append(end)
+        if before is not None:
+            # Row-value comparison, spelled out for SQLite: the row is past
+            # the cursor when its timestamp is older, or equal and its id
+            # sorts lower — the same order ``_DUMP_ORDER`` names.
+            clauses.append("(timestamp < ? OR (timestamp = ? AND id < ?))")
+            params.extend([before[0], before[0], before[1]])
+        if q:
+            needle = _like_needle(q)
+            clauses.append(
+                r"(id LIKE ? ESCAPE '\' OR request_log_id LIKE ? ESCAPE '\')"
+            )
+            params.extend([needle, needle])
+
+        return ("WHERE " + " AND ".join(clauses)) if clauses else "", params
+
     async def query_error_dumps(
         self,
         *,
         limit: int = 50,
         offset: int = 0,
         model: str | None = None,
+        model_search: str | None = None,
         error_phase: str | None = None,
         provider: str | None = None,
+        status_min: int | None = None,
+        status_max: int | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        q: str | None = None,
+        ids: Sequence[str] | None = None,
+        before: tuple[str, str] | None = None,
     ) -> tuple[list[dict[str, Any]], int]:
         """Query error dumps with optional filters, newest first.
+
+        The filters are applied by SQLite, so the page and its ``total``
+        describe the whole store rather than the rows a browser happened to
+        load.  ``start``/``end`` are inclusive UTC ISO 8601 bounds compared
+        against the stored ``isoformat()`` strings.
+
+        ``before`` pages by keyset instead of by offset: pass the last row's
+        ``(timestamp, id)`` to get the rows after it.  ``total`` still
+        describes the filtered set, not the remainder.
 
         Returns:
             A ``(entries, total)`` tuple.
         """
-        where_clauses: list[str] = []
-        params: list[Any] = []
-
-        if model:
-            where_clauses.append("model = ?")
-            params.append(model)
-        if error_phase:
-            where_clauses.append("error_phase = ?")
-            params.append(error_phase)
-        if provider:
-            where_clauses.append("(provider_name = ? OR target_provider = ?)")
-            params.extend([provider, provider])
-
-        where_sql = ""
-        if where_clauses:
-            where_sql = "WHERE " + " AND ".join(where_clauses)
+        where_sql, params = self._dump_filter_sql(
+            model=model,
+            model_search=model_search,
+            error_phase=error_phase,
+            provider=provider,
+            status_min=status_min,
+            status_max=status_max,
+            start=start,
+            end=end,
+            q=q,
+            ids=ids,
+            before=before,
+        )
 
         count_row = await self._conn.execute_fetchone(
             f"SELECT COUNT(*) FROM error_dumps {where_sql}", params
@@ -1354,7 +1470,7 @@ class PersistenceManager:
         )
         rows = await self._conn.execute_fetchall(
             f"SELECT {cols} FROM error_dumps {where_sql} "
-            f"ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            f"{_DUMP_ORDER} LIMIT ? OFFSET ?",
             [*params, limit, offset],
         )
 
@@ -1378,6 +1494,67 @@ class PersistenceManager:
             {k: v for k, v in zip(col_names, row) if v is not None} for row in rows
         ]
         return entries, total
+
+    async def query_error_dump_ids(
+        self,
+        *,
+        model: str | None = None,
+        model_search: str | None = None,
+        error_phase: str | None = None,
+        provider: str | None = None,
+        status_min: int | None = None,
+        status_max: int | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        q: str | None = None,
+    ) -> list[str]:
+        """Return the ids of every dump the filters keep, newest first.
+
+        *Select all filtered* and *invert* act on the whole filtered set, and
+        the list endpoint only ever returns one page of it.  This is the one
+        read that spans the set, and it carries ids only — no bodies, no
+        previews — so a 10 000-row match stays a few hundred kilobytes.
+        """
+        where_sql, params = self._dump_filter_sql(
+            model=model,
+            model_search=model_search,
+            error_phase=error_phase,
+            provider=provider,
+            status_min=status_min,
+            status_max=status_max,
+            start=start,
+            end=end,
+            q=q,
+        )
+        rows = await self._conn.execute_fetchall(
+            f"SELECT id FROM error_dumps {where_sql} {_DUMP_ORDER}",
+            params,
+        )
+        return [row[0] for row in rows]
+
+    async def error_dump_facets(self) -> dict[str, list[str]]:
+        """Return the provider and model values present in the dump store.
+
+        The toolbar's dropdowns list what the store has ever recorded, not
+        what the current filter kept — otherwise choosing a provider would
+        empty the list it was chosen from.
+
+        This reads the table directly rather than through
+        ``_dump_filter_sql``, so a row-visibility predicate has to be applied
+        here as well as there.
+        """
+        providers = await self._conn.execute_fetchall(
+            "SELECT DISTINCT provider_name FROM error_dumps "
+            "WHERE provider_name IS NOT NULL ORDER BY provider_name"
+        )
+        models = await self._conn.execute_fetchall(
+            "SELECT DISTINCT model FROM error_dumps "
+            "WHERE model IS NOT NULL ORDER BY model"
+        )
+        return {
+            "providers": [row[0] for row in providers],
+            "models": [row[0] for row in models],
+        }
 
     async def get_error_dump(self, dump_id: str) -> dict[str, Any] | None:
         """Return a single error dump by ID, or ``None``."""

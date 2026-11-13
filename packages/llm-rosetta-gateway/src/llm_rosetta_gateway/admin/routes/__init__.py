@@ -70,6 +70,8 @@ from .observability import (
     get_circuit_breaker_states,
     get_error_dump_body,
     get_error_dump_detail,
+    get_error_dump_facets,
+    get_error_dump_ids,
     get_error_dumps,
     get_host_ip,
     get_metrics,
@@ -189,6 +191,8 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/diagnostics/host-ip", methods=["GET"])(get_host_ip)
     # Error dumps
     app.route("/admin/api/error-dumps", methods=["GET"])(get_error_dumps)
+    app.route("/admin/api/error-dumps/facets", methods=["GET"])(get_error_dump_facets)
+    app.route("/admin/api/error-dumps/ids", methods=["GET"])(get_error_dump_ids)
     app.route("/admin/api/error-dumps/<dump_id>", methods=["GET"])(
         get_error_dump_detail
     )

@@ -417,6 +417,100 @@ async def get_host_ip(request: Any) -> Response:
 # ------------------------------------------------------------------
 
 
+def _dump_status_bounds(request: Any) -> tuple[int | None, int | None]:
+    """Parse ``status`` into an inclusive code range.
+
+    ``4xx``/``5xx`` select a class; a three-digit code selects itself.  The
+    toolbar offers both, and the two used to be resolved in the browser over
+    whatever page had loaded.
+
+    Raises:
+        ValueError: If the value is neither a class nor a code.
+    """
+    raw = (_qp(request, "status") or "").strip()
+    if not raw:
+        return None, None
+    lowered = raw.lower()
+    if len(lowered) == 3 and lowered[1:] == "xx" and lowered[0] in "12345":
+        base = int(lowered[0]) * 100
+        return base, base + 99
+    try:
+        code = int(raw)
+    except ValueError as exc:
+        raise ValueError(
+            f"status must be a class like 4xx or a code like 429, got {raw!r}"
+        ) from exc
+    if not 100 <= code <= 599:
+        raise ValueError(f"status must be between 100 and 599, got {code}")
+    return code, code
+
+
+def _dump_filters(request: Any) -> dict[str, Any]:
+    """Read the error-dump filters shared by the list and id reads.
+
+    The tar.gz export route parses ``start``/``end`` itself: it is a
+    date-range download that also walks the body blobs, so it is not one of
+    the reads below.
+
+    Raises:
+        ValueError: If a bound is not parseable; callers answer 400.
+    """
+    status_min, status_max = _dump_status_bounds(request)
+    start = (_qp(request, "start") or "").strip()
+    end = (_qp(request, "end") or "").strip()
+    return {
+        "model": (_qp(request, "model") or None),
+        "model_search": (_qp(request, "model_search") or None),
+        "error_phase": (_qp(request, "error_phase") or None),
+        "provider": (_qp(request, "provider") or None),
+        "status_min": status_min,
+        "status_max": status_max,
+        "start": _normalise_time_bound(start) if start else None,
+        "end": _normalise_time_bound(end) if end else None,
+        "q": (_qp(request, "q") or None),
+    }
+
+
+def _dump_cursor(request: Any) -> tuple[str, str] | None:
+    """Read the ``(timestamp, id)`` keyset cursor, or ``None`` when absent.
+
+    The pair is what makes a page boundary stable while the table is being
+    written; either half alone does not name a row position.
+
+    Raises:
+        ValueError: If only one of the two halves is present, or the
+            timestamp carries no offset.
+    """
+    timestamp = (_qp(request, "before_timestamp") or "").strip()
+    dump_id = (_qp(request, "before_id") or "").strip()
+    if not timestamp and not dump_id:
+        return None
+    if not timestamp or not dump_id:
+        raise ValueError("before_timestamp and before_id must be given together")
+    return _normalise_time_bound(timestamp), dump_id
+
+
+#: One ``ids=`` read may carry at most this many ids: SQLite binds each one as
+#: a separate variable and refuses a statement past its variable limit.  The
+#: panel chunks a larger selection to match.
+MAX_DUMP_IDS = 500
+
+
+def _dump_ids(request: Any) -> list[str] | None:
+    """Read the ``ids`` parameter as a list, or ``None`` when absent.
+
+    Raises:
+        ValueError: If more ids are named than one statement can bind.
+    """
+    raw = _qp(request, "ids")
+    if raw is None or not raw.strip():
+        return None
+    ids = [part.strip() for part in raw.split(",") if part.strip()]
+    if len(ids) > MAX_DUMP_IDS:
+        raise ValueError(f"ids accepts at most {MAX_DUMP_IDS} entries, got {len(ids)}")
+    return ids
+
+
 async def get_error_dumps(request: Any) -> Response:
     """Return paginated, filtered error dump entries."""
     persistence = getattr(request.app, "persistence", None)
@@ -426,20 +520,44 @@ async def get_error_dumps(request: Any) -> Response:
     try:
         limit = _bounded_int(request, "limit", 50, minimum=1, maximum=500)
         offset = _bounded_int(request, "offset", 0, minimum=0, maximum=10_000_000)
+        filters = _dump_filters(request)
+        ids = _dump_ids(request)
+        before = _dump_cursor(request)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
-    model = _qp(request, "model")
-    error_phase = _qp(request, "error_phase")
-    provider = _qp(request, "provider")
 
     entries, total = await persistence.query_error_dumps(
-        limit=limit,
-        offset=offset,
-        model=model,
-        error_phase=error_phase,
-        provider=provider,
+        limit=limit, offset=offset, ids=ids, before=before, **filters
     )
     return JSONResponse({"entries": entries, "total": total})
+
+
+async def get_error_dump_ids(request: Any) -> Response:
+    """Return the ids of every dump the current filters keep.
+
+    *Select all filtered* and *invert* mean the whole filtered set, not the
+    page on screen; this route is how the panel reaches it without loading
+    the rows.
+    """
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+
+    try:
+        filters = _dump_filters(request)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    ids = await persistence.query_error_dump_ids(**filters)
+    return JSONResponse({"ids": ids, "total": len(ids)})
+
+
+async def get_error_dump_facets(request: Any) -> Response:
+    """Return the provider and model values present in the dump store."""
+    persistence = getattr(request.app, "persistence", None)
+    if persistence is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
+    return JSONResponse(await persistence.error_dump_facets())
 
 
 async def get_error_dump_detail(request: Any, **kwargs: Any) -> Response:
