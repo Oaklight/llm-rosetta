@@ -288,6 +288,14 @@ async def setup_admin(
     app.request_log = request_log
     app.ops_log = ops_log
     app.persistence = persistence
+    # Background jobs: the envelope destructive operations use.  Constructed
+    # here, beside the services a handler needs; `run_gateway` starts the
+    # workers once the loop is serving, so a test that builds the app never
+    # leaves a worker running.
+    from llm_rosetta_gateway.jobs import JobManager
+
+    job_manager = JobManager(persistence) if persistence is not None else None
+    app.jobs = job_manager
     # Unified ops context — used by gateway/ops/ operation layer
     from llm_rosetta_gateway.ops import OpsContext
 
@@ -298,6 +306,7 @@ async def setup_admin(
         persistence=persistence,
         config_io=config_io,
         config_path=config_path,
+        jobs=job_manager,
     )
     app.ops_ctx = _ops_ctx
 
