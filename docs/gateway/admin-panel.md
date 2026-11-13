@@ -226,7 +226,7 @@ The **Dashboard** is the landing section and reports live traffic.
 
 ## Observability
 
-**Observability** is one panel with five views of the same traffic.
+**Observability** is one panel with six views of the same traffic.
 
 ![Observability — requests](images/admin-observability.png)
 
@@ -237,6 +237,7 @@ The **Dashboard** is the landing section and reports live traffic.
 | **Error Dumps** | The bodies behind a failed request |
 | **Profiling** | Toggle for the phase profiler |
 | **Capture** | Toggle for request/response capture |
+| **Jobs** | Background deletions and rebuilds: progress, cancel, retry |
 
 ### Filters
 
@@ -313,6 +314,16 @@ Retention lives in **Settings → Logging & data** and applies per store — req
 - **Age-based**: entries older than a threshold are cleaned up
 
 Both thresholds apply independently — whichever triggers first wins.
+
+### Background jobs
+
+A destructive action no longer blocks the panel. Clearing the request log, a cleanup by age or date range, a trim to the retention caps and a VACUUM all return immediately with a job id; the **Jobs** view shows each one as it runs.
+
+- The rows a clear or cleanup targets stop being returned by every read the moment the job is queued, so the lists and the counts update immediately. The rows themselves are deleted in batches afterwards.
+- Progress is per row (`5,000 / 20,000 rows`), and every batch is a point where the job can stop: **Cancel** takes effect between batches, never mid-statement. A cancel before anything was deleted restores the rows; a cancel after a partial delete keeps them hidden and offers **Resume**.
+- A failed job keeps its rows hidden and offers **Retry** and **Unhide**. The rows are still on disk, so retrying loses nothing.
+- **Trim to cap** and **Vacuum** are jobs too, but hide nothing: their target is disk maintenance rather than a time window the operator asked to disappear. Vacuum cannot be interrupted once it starts, so it runs last.
+- The dashboard's request total is the **lifetime** count and is never reset by clearing records; the footer's `ok:` segment shows how many rows the log currently holds. Counters rebuild in the background after a deletion, so the breakdowns catch up a few seconds later.
 
 ## Settings
 
