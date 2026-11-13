@@ -39,6 +39,7 @@ class OpsContext:
         "persistence",
         "config_io",
         "config_path",
+        "jobs",
     )
 
     def __init__(
@@ -50,6 +51,7 @@ class OpsContext:
         persistence: Any = None,
         config_io: Any = None,
         config_path: str | None = None,
+        jobs: Any = None,
     ) -> None:
         self.ops_log = ops_log
         self.request_log = request_log
@@ -57,6 +59,7 @@ class OpsContext:
         self.persistence = persistence
         self.config_io = config_io
         self.config_path = config_path
+        self.jobs = jobs
 
 
 class OpsBase(ABC):

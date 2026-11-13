@@ -538,6 +538,47 @@ class PersistenceManager:
                 "ON hidden_ranges(job_id)",
             ],
         ),
+        (
+            15,
+            "add jobs so a destructive admin operation can run in the background",
+            [
+                # One envelope for every kind of background work: the data
+                # operations now, Batch API submissions later.  A lease rather
+                # than a boolean "running" is what makes a second process safe
+                # when one exists; the dedupe index keeps a repeated admin
+                # click from queueing the same cleanup twice.
+                "CREATE TABLE IF NOT EXISTS jobs ("
+                "    id                TEXT PRIMARY KEY,"
+                "    kind              TEXT NOT NULL,"
+                "    payload           TEXT NOT NULL,"
+                "    lane              TEXT NOT NULL DEFAULT 'sqlite',"
+                "    status            TEXT NOT NULL,"
+                "    priority          INTEGER NOT NULL DEFAULT 100,"
+                "    created_at        TEXT NOT NULL,"
+                "    started_at        TEXT,"
+                "    finished_at       TEXT,"
+                "    attempts          INTEGER NOT NULL DEFAULT 0,"
+                "    max_attempts      INTEGER NOT NULL DEFAULT 3,"
+                "    lease_owner       TEXT,"
+                "    lease_expires_at  TEXT,"
+                "    heartbeat_at      TEXT,"
+                "    cancel_requested  INTEGER NOT NULL DEFAULT 0,"
+                "    progress_done     INTEGER NOT NULL DEFAULT 0,"
+                "    progress_total    INTEGER,"
+                "    progress_unit     TEXT,"
+                "    result            TEXT,"
+                "    error             TEXT,"
+                "    hidden_range_ids  TEXT NOT NULL DEFAULT '[]',"
+                "    dedupe_key        TEXT"
+                ")",
+                "CREATE INDEX IF NOT EXISTS idx_jobs_claim "
+                "ON jobs(status, lane, priority, created_at)",
+                "CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC)",
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_dedupe "
+                "ON jobs(dedupe_key) WHERE dedupe_key IS NOT NULL "
+                "AND status IN ('queued', 'running')",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:
@@ -601,6 +642,16 @@ class PersistenceManager:
     def visibility(self) -> VisibilityFilter:
         """The ranges the operator cleared; empty unless a clear is pending."""
         return self._visibility
+
+    @property
+    def connection(self) -> aiosqlite.Connection:
+        """The open connection, for a subsystem that owns its own tables.
+
+        The job store keeps its rows in this database and needs the same
+        connection, lock and pragmas; this property keeps that dependency
+        explicit instead of reaching into a private attribute.
+        """
+        return self._conn
 
     def _visible(
         self,

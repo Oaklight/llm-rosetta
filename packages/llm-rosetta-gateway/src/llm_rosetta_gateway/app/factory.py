@@ -615,9 +615,20 @@ async def run_gateway(
     }
     refresh_tasks = await start_token_refreshers(static_providers)
 
+    # Background jobs start last, once migrations have run and the services a
+    # handler uses exist.  A job interrupted by the previous shutdown is back
+    # in the queue by the time the first request arrives.
+    jobs = getattr(app, "jobs", None)
+    if jobs is not None:
+        await jobs.start()
+
     try:
         await app._serve(host, port, socket=socket, ssl_context=ssl_context)
     finally:
+        # Stop the worker before anything closes the store: a job in flight
+        # releases itself back to the queue, which needs a live connection.
+        if jobs is not None:
+            await jobs.stop()
         if deferred is not None:
             await deferred.shutdown()
         # Cancel token refresh tasks (both static and deferred-startup ones)
