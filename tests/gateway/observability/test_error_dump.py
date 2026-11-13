@@ -433,3 +433,245 @@ class TestPersistenceErrorDumps:
         entry = await persistence.get_error_dump(dump_id)
         assert entry is not None
         assert entry["request_log_id"] == log_entry.id
+
+
+# ------------------------------------------------------------------
+# Whole-store filters
+# ------------------------------------------------------------------
+
+
+class TestDumpQueryFilters:
+    """The reads behind the panel's server-side paging and filtering.
+
+    Before these filters existed the panel loaded one 500-row page and
+    filtered it in the browser, so a header count and every filter described
+    a subset of the store.  Each case here pins a filter that must reach the
+    whole store.
+    """
+
+    @pytest.fixture
+    async def persistence(self, tmp_path: object) -> PersistenceManager:
+        return await PersistenceManager.create(str(tmp_path))
+
+    @staticmethod
+    async def _insert(
+        pm: PersistenceManager,
+        *,
+        dump_id: str,
+        timestamp: str = "2026-11-01T00:00:00+00:00",
+        model: str | None = "test-model",
+        provider: str | None = None,
+        status_code: int | None = 500,
+        error_phase: str | None = "upstream",
+        request_log_id: str | None = None,
+    ) -> None:
+        await pm.insert_error_dump(
+            dump_id=dump_id,
+            request_log_id=request_log_id,
+            timestamp=timestamp,
+            model=model,
+            source_provider="chat_completions",
+            target_provider="messages",
+            provider_name=provider,
+            status_code=status_code,
+            error_phase=error_phase,
+            body_hash=None,
+            response_text=None,
+            upstream_url=None,
+        )
+
+    @pytest.mark.asyncio
+    async def test_status_class_filters_the_whole_store(
+        self, persistence: PersistenceManager
+    ) -> None:
+        for i, code in enumerate([404, 429, 500, 502]):
+            await self._insert(persistence, dump_id=f"d{i}", status_code=code)
+
+        entries, total = await persistence.query_error_dumps(
+            status_min=400, status_max=499
+        )
+        assert total == 2
+        assert sorted(e["status_code"] for e in entries) == [404, 429]
+
+        entries, total = await persistence.query_error_dumps(
+            status_min=429, status_max=429
+        )
+        assert total == 1
+        assert entries[0]["status_code"] == 429
+
+    @pytest.mark.asyncio
+    async def test_time_bounds_are_inclusive(
+        self, persistence: PersistenceManager
+    ) -> None:
+        await self._insert(
+            persistence, dump_id="early", timestamp="2026-10-31T23:59:59+00:00"
+        )
+        await self._insert(
+            persistence, dump_id="edge", timestamp="2026-11-01T00:00:00+00:00"
+        )
+        await self._insert(
+            persistence, dump_id="late", timestamp="2026-11-02T00:00:00+00:00"
+        )
+
+        entries, total = await persistence.query_error_dumps(
+            start="2026-11-01T00:00:00+00:00"
+        )
+        assert total == 2
+        assert {e["id"] for e in entries} == {"edge", "late"}
+
+        entries, total = await persistence.query_error_dumps(
+            start="2026-11-01T00:00:00+00:00", end="2026-11-01T00:00:00+00:00"
+        )
+        assert total == 1
+        assert entries[0]["id"] == "edge"
+
+    @pytest.mark.asyncio
+    async def test_id_search_matches_dump_and_request_log_ids(
+        self, persistence: PersistenceManager
+    ) -> None:
+        from llm_rosetta_gateway.observability import RequestLogEntry
+
+        log_entry = RequestLogEntry.create(
+            model="test-model",
+            source_provider="chat_completions",
+            target_provider="messages",
+            is_stream=False,
+            status_code=500,
+            duration_ms=10.0,
+        )
+        await persistence.insert_log_entries([log_entry.to_dict()])
+        await self._insert(persistence, dump_id="dump-abc")
+        await self._insert(persistence, dump_id="dump-def", request_log_id=log_entry.id)
+
+        entries, total = await persistence.query_error_dumps(q="ABC")
+        assert total == 1
+        assert entries[0]["id"] == "dump-abc"
+
+        entries, total = await persistence.query_error_dumps(q=log_entry.id[-8:])
+        assert total == 1
+        assert entries[0]["id"] == "dump-def"
+
+    @pytest.mark.asyncio
+    async def test_model_search_is_a_substring_and_escapes_wildcards(
+        self, persistence: PersistenceManager
+    ) -> None:
+        for i, model in enumerate(["gpt-5-nano", "gpt-5-mini", "claude-haiku"]):
+            await self._insert(persistence, dump_id=f"d{i}", model=model)
+
+        entries, total = await persistence.query_error_dumps(model_search="GPT-5")
+        assert total == 2
+
+        # `%` and `_` are LIKE wildcards; searched literally each must match
+        # one row, not every row the wildcard pattern would match.
+        for i, model in enumerate(["m100%", "m100x", "m100_"]):
+            await self._insert(persistence, dump_id=f"w{i}", model=model)
+        entries, total = await persistence.query_error_dumps(model_search="100%")
+        assert total == 1
+        assert entries[0]["model"] == "m100%"
+        entries, total = await persistence.query_error_dumps(model_search="100_")
+        assert total == 1
+        assert entries[0]["model"] == "m100_"
+
+    @pytest.mark.asyncio
+    async def test_the_id_cursor_holds_while_a_row_arrives(
+        self, persistence: PersistenceManager
+    ) -> None:
+        for i in range(6):
+            await self._insert(
+                persistence, dump_id=f"d{i}", timestamp=f"2026-11-01T00:00:0{i}+00:00"
+            )
+
+        first, total = await persistence.query_error_dumps(limit=3)
+        assert [e["id"] for e in first] == ["d5", "d4", "d3"]
+        assert total == 6
+
+        # A dump written at the head while the walk is between pages: an
+        # `OFFSET 3` would return `d3` again and lose `d0` from the file.
+        await self._insert(
+            persistence, dump_id="new", timestamp="2026-11-01T00:00:09+00:00"
+        )
+        last = first[-1]
+        second, _ = await persistence.query_error_dumps(
+            limit=3, before=(last["timestamp"], last["id"])
+        )
+        assert [e["id"] for e in second] == ["d2", "d1", "d0"]
+
+        walked = [e["id"] for e in first + second]
+        assert len(walked) == len(set(walked)) == 6
+
+    @pytest.mark.asyncio
+    async def test_a_same_timestamp_boundary_names_one_row(
+        self, persistence: PersistenceManager
+    ) -> None:
+        # Every dump written in the same second shares a timestamp, so only
+        # the id can tell two page boundaries apart.
+        for i in range(4):
+            await self._insert(persistence, dump_id=f"d{i}")
+
+        first, _ = await persistence.query_error_dumps(limit=2)
+        last = first[-1]
+        second, _ = await persistence.query_error_dumps(
+            limit=2, before=(last["timestamp"], last["id"])
+        )
+        walked = [e["id"] for e in first + second]
+        assert walked == ["d3", "d2", "d1", "d0"]
+
+    @pytest.mark.asyncio
+    async def test_a_cursor_combines_with_a_filter(
+        self, persistence: PersistenceManager
+    ) -> None:
+        # The cursor adds three bind parameters, so a clause/parameter mismatch
+        # would show up as the wrong rows rather than as an error.
+        for i, provider in enumerate(["argo", "other", "argo", "argo"]):
+            await self._insert(
+                persistence,
+                dump_id=f"d{i}",
+                timestamp=f"2026-11-01T00:00:0{i}+00:00",
+                provider=provider,
+            )
+
+        first, _ = await persistence.query_error_dumps(provider="argo", limit=2)
+        assert [e["id"] for e in first] == ["d3", "d2"]
+        last = first[-1]
+        second, _ = await persistence.query_error_dumps(
+            provider="argo", limit=2, before=(last["timestamp"], last["id"])
+        )
+        assert [e["id"] for e in second] == ["d0"]
+
+    @pytest.mark.asyncio
+    async def test_ids_selects_named_rows_only(
+        self, persistence: PersistenceManager
+    ) -> None:
+        for i in range(3):
+            await self._insert(persistence, dump_id=f"d{i}")
+
+        entries, total = await persistence.query_error_dumps(ids=["d0", "d2"])
+        assert total == 2
+        assert {e["id"] for e in entries} == {"d0", "d2"}
+
+        # An empty selection is no rows, not a syntax error and not all rows.
+        entries, total = await persistence.query_error_dumps(ids=[])
+        assert total == 0
+        assert entries == []
+
+    @pytest.mark.asyncio
+    async def test_id_list_spans_the_filtered_set(
+        self, persistence: PersistenceManager
+    ) -> None:
+        for i, provider in enumerate(["argo", "argo", "other"]):
+            await self._insert(persistence, dump_id=f"d{i}", provider=provider)
+
+        ids = await persistence.query_error_dump_ids(provider="argo")
+        assert set(ids) == {"d0", "d1"}
+
+    @pytest.mark.asyncio
+    async def test_facets_list_what_the_store_holds(
+        self, persistence: PersistenceManager
+    ) -> None:
+        await self._insert(persistence, dump_id="d0", provider="argo", model="gpt-5")
+        await self._insert(persistence, dump_id="d1", provider="ark", model="gpt-5")
+        await self._insert(persistence, dump_id="d2", provider="argo", model="claude")
+
+        facets = await persistence.error_dump_facets()
+        assert facets["providers"] == ["argo", "ark"]
+        assert facets["models"] == ["claude", "gpt-5"]

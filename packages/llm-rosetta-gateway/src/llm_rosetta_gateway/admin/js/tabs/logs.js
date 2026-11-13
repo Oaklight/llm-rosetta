@@ -424,37 +424,41 @@ function updateKeyFilterOptions() {
 function jumpToErrorDump(requestLogId) {
   // The dumps live in the observability panel now, as one of its views.
   if (S._logView !== 'dumps') window.switchLogView?.('dumps');
-  goToTab('observability', function() {
-    function tryFind(attempts) {
-      const entries = S._dumpAllEntries || [];
-      const match = entries.find(e => e.request_log_id === requestLogId);
-      if (match) {
-        const dumpId = match.dump_id || match.id;
-        S._highlightDumpId = dumpId;
-        if (S._highlightDumpIdTimer) clearTimeout(S._highlightDumpIdTimer);
-        S._highlightDumpIdTimer = setTimeout(function() {
-          S._highlightDumpId = null;
-          S._highlightDumpIdTimer = null;
-        }, 10000);
-        const idx = entries.indexOf(match);
-        S._dumpPage = Math.floor(idx / 20);
-        renderDumps();
-        setTimeout(function() {
-          const section = document.getElementById('errorDumpSection');
-          if (section) section.scrollIntoView({behavior:'smooth', block:'start'});
-          setTimeout(function() {
-            const btn = document.querySelector('#dumpTable tr [onclick*="' + dumpId + '"]');
-            if (btn) btn.closest('tr').scrollIntoView({behavior:'smooth', block:'center'});
-          }, 300);
-        }, 200);
-      } else if (attempts < 5) {
-        setTimeout(function() { tryFind(attempts + 1); }, 500);
-      } else {
-        const section = document.getElementById('errorDumpSection');
-        if (section) section.scrollIntoView({behavior:'smooth', block:'start'});
-      }
+  goToTab('observability', async function() {
+    // The list pages on the server, so the linked dump is not in a local
+    // array to search.  Ask for it by request-log id and put the same id in
+    // the toolbar's search box, so the row is on the first page and the
+    // panel still states what it is showing.
+    let match = null;
+    try {
+      const data = await api.get(
+        `/admin/api/error-dumps?limit=1&offset=0&q=${encodeURIComponent(requestLogId)}`);
+      match = (data.entries || [])[0] || null;
+    } catch (e) { /* the scroll below still lands on the dumps section */ }
+    const box = document.getElementById('dumpIdSearch');
+    if (box) box.value = requestLogId;
+    S._dumpPage = 0;
+    let dumpId = null;
+    if (match) {
+      dumpId = match.dump_id || match.id;
+      S._highlightDumpId = dumpId;
+      if (S._highlightDumpIdTimer) clearTimeout(S._highlightDumpIdTimer);
+      S._highlightDumpIdTimer = setTimeout(function() {
+        S._highlightDumpId = null;
+        S._highlightDumpIdTimer = null;
+      }, 10000);
     }
-    setTimeout(function() { tryFind(0); }, 600);
+    renderDumps();
+    setTimeout(function() {
+      const section = document.getElementById('errorDumpSection');
+      if (section) section.scrollIntoView({behavior:'smooth', block:'start'});
+      if (dumpId) {
+        const btn = document.querySelector('#dumpTable tr [onclick*="' + dumpId + '"]');
+        if (btn && btn.closest('tr')) {
+          btn.closest('tr').scrollIntoView({behavior:'smooth', block:'center'});
+        }
+      }
+    }, 400);
   });
 }
 
