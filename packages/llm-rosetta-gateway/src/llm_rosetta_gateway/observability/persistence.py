@@ -1793,6 +1793,21 @@ class PersistenceManager:
             total += deleted
         return total
 
+    async def settle_deletions(self, total_deleted: int) -> bool:
+        """Vacuum or checkpoint after a batched delete.
+
+        The same rule the single-shot cleanup paths use: a big deletion earns
+        a VACUUM, a small one only a WAL truncation.  Public because a job
+        handler deletes in its own loop and still owes the store this step.
+        """
+        return await self._conditional_vacuum(total_deleted)
+
+    async def sweep_orphan_bodies(self) -> int:
+        """Delete dump bodies no error dump references; returns how many."""
+        removed = await self._delete_orphan_bodies()
+        await self._conn.commit()
+        return removed
+
     async def vacuum(self) -> dict[str, Any]:
         """Run VACUUM and return freed bytes."""
         size_before = self.db_path.stat().st_size

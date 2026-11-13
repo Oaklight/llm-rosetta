@@ -82,7 +82,7 @@ function initApp(prefetchedConfig) {
   if (_tabEnabled('keys')) { loadKeys(); loadLogKeyLabels(); }
   api.get('/admin/api/internal-token').then(r => { S.internalToken = r.token; }).catch(() => {});
   api.get('/admin/api/metrics?seconds=1').then(data => {
-    renderPersistence(data.persistence, data.total_requests);
+    renderPersistence(data.persistence, data.lifetime_total_requests ?? data.total_requests);
   }).catch(() => {});
   stopTimers();
   if (S.currentTab === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }

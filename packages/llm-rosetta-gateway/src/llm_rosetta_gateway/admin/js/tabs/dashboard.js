@@ -18,7 +18,7 @@ async function loadMetrics() {
     drawThroughputChart('chartThroughput', data.series);
     drawLatencyChart('chartLatency', data.series);
     renderProviderBreakdown(data);
-    renderPersistence(data.persistence, data.total_requests);
+    renderPersistence(data.persistence, data.lifetime_total_requests ?? data.total_requests);
     loadProfilingStatus();
     loadProfilingResults();
     loadCaptureStatus();
@@ -1097,7 +1097,12 @@ function renderPersistence(p, totalReq) {
 
 function renderStats(d) {
   const uptime = formatDuration(d.uptime_seconds);
-  const errRate = (d.error_rate * 100).toFixed(1) + '%';
+  // Lifetime, not the retained-row count: clearing records must not look like
+  // erasing history.  `total_requests` is still in the payload as the number
+  // of rows the log currently holds, and the footer shows it.
+  const lifetime = d.lifetime_total_requests ?? d.total_requests ?? 0;
+  const lifetimeErrors = d.lifetime_total_errors ?? d.total_errors ?? 0;
+  const errRate = (lifetime ? (lifetimeErrors / lifetime) * 100 : 0).toFixed(1) + '%';
   // The headline is the canonical total — the same number the API Keys panel
   // and the usage modal show, so the three can be reconciled.  The breakdown
   // below it is exactly that: reasoning rides inside the output, and cache
@@ -1112,7 +1117,7 @@ function renderStats(d) {
   const tokReason = has24h ? (d.reasoning_tokens_24h||0) : (d.total_reasoning_tokens||0);
   const tokLabel = has24h ? t('stat.tokens24h') : t('stat.totalTokens');
   document.getElementById('statsGrid').innerHTML = `
-    <div class="stat-card"><div class="label">${t('stat.totalRequests')}</div><div class="value">${(d.total_requests || 0).toLocaleString()}</div></div>
+    <div class="stat-card"><div class="label">${t('stat.totalRequests')}</div><div class="value">${lifetime.toLocaleString()}</div></div>
     <div class="stat-card"><div class="label">${t('stat.errorRate')}</div><div class="value ${d.error_rate > 0.05 ? 'red' : 'green'}">${errRate}</div></div>
     <div class="stat-card"><div class="label">${t('stat.activeStreams')}</div><div class="value blue">${(d.active_streams || 0).toLocaleString()}</div></div>
     <div class="stat-card"><div class="label">${t('stat.uptime')}</div><div class="value">${uptime}</div></div>

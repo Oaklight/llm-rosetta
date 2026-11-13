@@ -595,8 +595,11 @@ class DeferredStartup:
 
             logger.info("Starting background counter rebuild")
             tmp = MetricsCollector()
-            rows = [row async for row in persistence.iter_log_rows_for_rebuild()]
-            count = tmp.rebuild_counters(iter(rows))
+            # Streamed: the log is scanned in the store's batches instead of
+            # being materialised into one list on the event loop.
+            count = await tmp.rebuild_from_stream(
+                persistence.iter_log_rows_for_rebuild()
+            )
             logger.info("Background counter rebuild processed %d rows", count)
             baseline = tmp.export_counters()
 

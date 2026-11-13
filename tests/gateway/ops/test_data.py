@@ -75,7 +75,7 @@ class TestOpsClearData:
     async def test_clear_request_log(self):
         p = _mock_persistence()
         m = MagicMock()
-        m.rebuild_counters = MagicMock(return_value=2)
+        m.rebuild_from_stream = AsyncMock(return_value=2)
         m.export_counters = MagicMock(return_value={"total": 2})
         rl = MagicMock()
         rl.clear = AsyncMock()
@@ -86,7 +86,7 @@ class TestOpsClearData:
         assert result["deleted"] == 100
         rl.clear.assert_awaited_once()
         # Counter rebuild triggered
-        m.rebuild_counters.assert_called_once()
+        m.rebuild_from_stream.assert_awaited_once()
         p.save_metrics.assert_awaited_once()
         # ops_log entry written
         entry = ctx.ops_log.add.call_args[0][0]
@@ -146,7 +146,7 @@ class TestOpsCleanupData:
     async def test_cleanup_by_age_all(self):
         p = _mock_persistence()
         m = MagicMock()
-        m.rebuild_counters = MagicMock(return_value=2)
+        m.rebuild_from_stream = AsyncMock(return_value=2)
         m.export_counters = MagicMock(return_value={})
         ctx = _make_ctx(persistence=p, metrics=m)
 
@@ -162,7 +162,7 @@ class TestOpsCleanupData:
     async def test_cleanup_request_log_only(self):
         p = _mock_persistence()
         m = MagicMock()
-        m.rebuild_counters = MagicMock(return_value=1)
+        m.rebuild_from_stream = AsyncMock(return_value=1)
         m.export_counters = MagicMock(return_value={})
         ctx = _make_ctx(persistence=p, metrics=m)
 
@@ -171,7 +171,7 @@ class TestOpsCleanupData:
         ).execute()
 
         p.cleanup_logs_by_age.assert_awaited_once_with(7)
-        m.rebuild_counters.assert_called_once()
+        m.rebuild_from_stream.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_cleanup_error_dumps_only(self):
@@ -226,7 +226,7 @@ class TestOpsTrimData:
     async def test_trim(self):
         p = _mock_persistence()
         m = MagicMock()
-        m.rebuild_counters = MagicMock(return_value=2)
+        m.rebuild_from_stream = AsyncMock(return_value=2)
         m.export_counters = MagicMock(return_value={})
         ctx = _make_ctx(persistence=p, metrics=m)
 
@@ -258,7 +258,7 @@ class TestOpsRebuildMetrics:
         p = _mock_persistence()
         m = MagicMock()
         m.export_counters = MagicMock(side_effect=[{"before": True}, {"after": True}])
-        m.rebuild_counters = MagicMock(return_value=2)
+        m.rebuild_from_stream = AsyncMock(return_value=2)
         ctx = _make_ctx(persistence=p, metrics=m)
 
         result = await OpsRebuildMetrics(ctx).execute()
@@ -320,7 +320,7 @@ class TestOpsPeriodicCleanup:
 
         p = _mock_persistence()
         m = MagicMock()
-        m.rebuild_counters = MagicMock(return_value=2)
+        m.rebuild_from_stream = AsyncMock(return_value=2)
         m.export_counters = MagicMock(return_value={})
         ops_log = MagicMock()
         ops_log.add = AsyncMock()
