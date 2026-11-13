@@ -19,9 +19,11 @@ import gzip
 import json
 import logging
 import sqlite3
+import uuid
 import warnings
 from datetime import datetime, timedelta, timezone
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
+from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -29,6 +31,7 @@ from typing import Any
 from .._vendor import aiosqlite
 
 from .maintenance import Policy, Registry, Step, StepContext
+from .visibility import MAX_TS, MIN_TS, VisibilityFilter
 from .retention import RetentionPolicy, RetentionTracker
 from llm_rosetta.formats import canonical_model_type
 from llm_rosetta.observability.usage.normalize import DEFAULT_MODEL_TYPE, LEDGER_COLUMNS
@@ -64,6 +67,16 @@ _WAL_CHECKPOINT_INTERVAL = 300  # 5 minutes
 # semantics in observability.usage rather than restated — sorted so the SQL is
 # deterministic.
 _CACHE_ADDITIVE_TARGETS: tuple[str, ...] = tuple(sorted(ADDITIVE_CACHE_STANDARDS))
+
+
+def _and(clause: str) -> str:
+    """Prefix *clause* with ``AND``, or produce nothing when it is empty."""
+    return f" AND {clause}" if clause else ""
+
+
+def _where(clause: str) -> str:
+    """Prefix *clause* with a space and ``WHERE``, or produce nothing."""
+    return f" WHERE {clause}" if clause else ""
 
 
 class PersistenceManager:
@@ -149,6 +162,12 @@ class PersistenceManager:
         # Connection is opened by create() or _open(); asserted non-None
         # in all methods (callers must use create() or _open() first).
         self._conn: aiosqlite.Connection = None  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
+        #: Ranges the operator cleared.  Every read consults this, and a read
+        #: pays nothing while it is empty, which is the normal state.
+        self._visibility = VisibilityFilter()
+        #: Serialises a multi-statement write (hide + enqueue) so no other
+        #: handler's statement can land in the middle of the unit.
+        self._txn_lock = asyncio.Lock()
 
     async def _open(self, *, backup: bool = True, migrate: bool = True) -> None:
         """Open the database connection, create tables, and run migrations.
@@ -188,13 +207,20 @@ class PersistenceManager:
             await self._conn.execute("PRAGMA journal_mode=WAL")
             await self._conn.execute("PRAGMA synchronous=NORMAL")
             await self._conn.execute("PRAGMA foreign_keys=ON")
+            # Stated rather than inherited: the stock sqlite3 timeout is 5 s,
+            # and a CLI cleanup or a backup writing to the same file must not
+            # surface as "database is locked" because another Python build
+            # picked a different default.
+            await self._conn.execute("PRAGMA busy_timeout=5000")
             await self._init_tables()
             await self._run_migrations()
             await self._migrate_legacy()
+            await self._load_visibility()
             return
         self._conn = await aiosqlite.connect(
             f"{self.db_path.resolve().as_uri()}?mode=ro", uri=True
         )
+        await self._load_visibility()
 
     @classmethod
     def expected_schema_version(cls) -> int:
@@ -490,6 +516,28 @@ class PersistenceManager:
                 "ALTER TABLE request_log ADD COLUMN upstream_model TEXT",
             ],
         ),
+        (
+            14,
+            "add hidden_ranges so a cleared range disappears before it is deleted",
+            [
+                # A clear is O(1): record the range, stop returning its rows,
+                # and let a background job delete them.  The bounds use a
+                # sentinel for "open" rather than a NULL, so the predicate
+                # needs no COALESCE and the planner keeps the timestamp index.
+                "CREATE TABLE IF NOT EXISTS hidden_ranges ("
+                "    id         TEXT PRIMARY KEY,"
+                "    table_name TEXT NOT NULL,"
+                "    start_ts   TEXT NOT NULL,"
+                "    end_ts     TEXT NOT NULL,"
+                "    job_id     TEXT NOT NULL,"
+                "    created_at TEXT NOT NULL"
+                ")",
+                "CREATE INDEX IF NOT EXISTS idx_hidden_ranges_table "
+                "ON hidden_ranges(table_name, start_ts, end_ts)",
+                "CREATE INDEX IF NOT EXISTS idx_hidden_ranges_job "
+                "ON hidden_ranges(job_id)",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:
@@ -544,6 +592,113 @@ class PersistenceManager:
         except Exception:
             return None
         return row[0] if row and row[0] is not None else 0
+
+    # ------------------------------------------------------------------
+    # Visibility
+    # ------------------------------------------------------------------
+
+    @property
+    def visibility(self) -> VisibilityFilter:
+        """The ranges the operator cleared; empty unless a clear is pending."""
+        return self._visibility
+
+    def _visible(
+        self,
+        table: str,
+        *,
+        alias: str = "",
+        since: str | None = None,
+        until: str | None = None,
+    ) -> tuple[str, list[str]]:
+        """The predicate that hides *table*'s cleared rows, and its parameters.
+
+        Returns ``("", [])`` when nothing in the query's window is hidden.
+        """
+        return self._visibility.clause(table, alias=alias, since=since, until=until)
+
+    async def _load_visibility(self) -> None:
+        """Load the hidden ranges into the cache every read consults."""
+        try:
+            rows = await self._conn.execute_fetchall(
+                "SELECT table_name, start_ts, end_ts FROM hidden_ranges"
+            )
+        except Exception:
+            # A read-only open of a store that predates the table: nothing is
+            # hidden, which is exactly true for that store.
+            rows = []
+        self._visibility.load(rows)
+
+    async def add_hidden_range(
+        self, table: str, start: str, end: str, job_id: str = ""
+    ) -> str:
+        """Record *table*'s rows in ``[start, end)`` as hidden; return the id.
+
+        Nothing is written to the table itself.  The caller adds the job that
+        will delete the rows in the same transaction, so a crash cannot leave
+        rows hidden with nothing coming to remove them.
+        """
+        start = start or MIN_TS
+        end = end or MAX_TS
+        range_id = uuid.uuid4().hex
+        await self._conn.execute(
+            "INSERT INTO hidden_ranges "
+            "(id, table_name, start_ts, end_ts, job_id, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                range_id,
+                table,
+                start,
+                end,
+                job_id,
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
+        await self._conn.commit()
+        self._visibility.add(table, start, end)
+        return range_id
+
+    async def remove_hidden_ranges_for_job(self, job_id: str) -> int:
+        """Forget every range *job_id* owns, because its rows are gone."""
+        rows = await self._conn.execute_fetchall(
+            "SELECT table_name, start_ts, end_ts FROM hidden_ranges WHERE job_id = ?",
+            (job_id,),
+        )
+        cur = await self._conn.execute(
+            "DELETE FROM hidden_ranges WHERE job_id = ?", (job_id,)
+        )
+        await self._conn.commit()
+        for table, start, end in rows:
+            self._visibility.remove(table, start, end)
+        return cur.rowcount
+
+    async def count_hidden_entries(self, table: str) -> int:
+        """Rows physically present but hidden from reads for *table*."""
+        hidden_sql, params = self._visibility.hidden_clause(table)
+        if not hidden_sql:
+            return 0
+        row = await self._conn.execute_fetchone(
+            f"SELECT COUNT(*) FROM {table} WHERE {hidden_sql}",  # noqa: S608
+            params,
+        )
+        return row[0] if row else 0
+
+    @asynccontextmanager
+    async def transaction(self) -> AsyncIterator[aiosqlite.Connection]:
+        """Run several writes as one unit, with no coroutine interleaving.
+
+        The lock is what makes the unit: sqlite3 already keeps consecutive DML
+        in one implicit transaction until ``commit``, so holding it for the
+        block stops another handler's statement landing in the middle.  A
+        caller inside the block must not call a method that commits on its own.
+        """
+        async with self._txn_lock:
+            try:
+                yield self._conn
+            except BaseException:
+                await self._conn.rollback()
+                raise
+            else:
+                await self._conn.commit()
 
     async def backfill_provider_names(
         self, model_to_provider: Mapping[str, str]
@@ -719,7 +874,10 @@ class PersistenceManager:
         await self._conn.commit()
         if self._tracker.note_insert("request_log", len(entries)):
             await self._prune()
-        elif await self.count_success_entries() > self._retention.success_max:
+        elif (
+            await self.count_success_entries(include_hidden=True)
+            > self._retention.success_max
+        ):
             await self._prune()
 
     async def query_log_entries(
@@ -793,6 +951,11 @@ class PersistenceManager:
             where_clauses.append("timestamp < ?")
             params.append(until)
 
+        vis_sql, vis_params = self._visible("request_log", since=since, until=until)
+        if vis_sql:
+            where_clauses.append(vis_sql)
+            params.extend(vis_params)
+
         where_sql = ""
         if where_clauses:
             where_sql = "WHERE " + " AND ".join(where_clauses)
@@ -819,16 +982,19 @@ class PersistenceManager:
         Uses an indexed timestamp comparison; acceptable for single-entry
         lookups (not called in hot paths).
         """
+        vis_sql, vis_params = self._visible("request_log")
         row = await self._conn.execute_fetchone(
-            f"SELECT {', '.join(self._LOG_COLUMNS)} FROM request_log WHERE id = ?",
-            (entry_id,),
+            f"SELECT {', '.join(self._LOG_COLUMNS)} FROM request_log "
+            f"WHERE id = ?{_and(vis_sql)}",
+            (entry_id, *vis_params),
         )
         if row is None:
             return None
         d = self._row_to_dict(row)
+        offset_vis, offset_params = self._visible("request_log", since=d["timestamp"])
         offset_row = await self._conn.execute_fetchone(
-            "SELECT COUNT(*) FROM request_log WHERE timestamp > ?",
-            (d["timestamp"],),
+            f"SELECT COUNT(*) FROM request_log WHERE timestamp > ?{_and(offset_vis)}",
+            (d["timestamp"], *offset_params),
         )
         d["_offset"] = offset_row[0] if offset_row else 0
         return d
@@ -852,9 +1018,16 @@ class PersistenceManager:
         for req_name, up_name in (model_aliases or {}).items():
             reverse_aliases.setdefault(up_name, []).append(req_name)
 
+        # Both sides are reads the operator can see: linking a dump that is
+        # already queued for deletion, or pointing a visible dump at a row
+        # inside a cleared range, only produces a link that 404s.
+        dump_sql, dump_params = self._visible("error_dumps")
+        log_sql, log_params = self._visible("request_log")
         unmatched = await self._conn.execute_fetchall(
             "SELECT id, timestamp, model, status_code, source_provider, target_provider "
-            "FROM error_dumps WHERE request_log_id IS NULL OR request_log_id = ''"
+            "FROM error_dumps "
+            "WHERE (request_log_id IS NULL OR request_log_id = '')" + _and(dump_sql),
+            dump_params,
         )
         if not unmatched:
             return 0
@@ -872,10 +1045,11 @@ class PersistenceManager:
                     "SELECT id FROM request_log "
                     "WHERE source_provider = ? AND target_provider = ? "
                     "AND status_code = ? AND model = ? "
-                    "AND abs(julianday(timestamp) - julianday(?)) * 86400 < ? "
-                    "ORDER BY abs(julianday(timestamp) - julianday(?)) "
+                    "AND abs(julianday(timestamp) - julianday(?)) * 86400 < ?"
+                    + _and(log_sql)
+                    + " ORDER BY abs(julianday(timestamp) - julianday(?)) "
                     "LIMIT 1",
-                    (source, target, status, m, ts, window_seconds, ts),
+                    (source, target, status, m, ts, window_seconds, *log_params, ts),
                 )
                 if row:
                     break
@@ -886,10 +1060,11 @@ class PersistenceManager:
                     "SELECT id FROM request_log "
                     "WHERE source_provider = ? AND target_provider = ? "
                     "AND status_code = ? "
-                    "AND abs(julianday(timestamp) - julianday(?)) * 86400 < ? "
-                    "ORDER BY abs(julianday(timestamp) - julianday(?)) "
+                    "AND abs(julianday(timestamp) - julianday(?)) * 86400 < ?"
+                    + _and(log_sql)
+                    + " ORDER BY abs(julianday(timestamp) - julianday(?)) "
                     "LIMIT 1",
-                    (source, target, status, ts, window_seconds, ts),
+                    (source, target, status, ts, window_seconds, *log_params, ts),
                 )
             if row:
                 await self._conn.execute(
@@ -903,10 +1078,12 @@ class PersistenceManager:
 
     async def get_api_key_labels(self) -> list[str]:
         """Return distinct API key labels seen in request logs."""
+        vis_sql, vis_params = self._visible("request_log")
         rows = await self._conn.execute_fetchall(
             "SELECT DISTINCT api_key_label FROM request_log "
-            "WHERE api_key_label IS NOT NULL AND api_key_label != '' "
-            "ORDER BY api_key_label"
+            "WHERE api_key_label IS NOT NULL AND api_key_label != ''"
+            f"{_and(vis_sql)} ORDER BY api_key_label",
+            vis_params,
         )
         return [row[0] for row in rows]
 
@@ -920,12 +1097,14 @@ class PersistenceManager:
         in batches of *batch_size* to bound memory usage regardless of
         table size.
         """
+        vis_sql, vis_params = self._visible("request_log")
         cursor = await self._conn.execute(
             "SELECT model, source_provider, target_provider, "
             "target_provider_name, is_stream, status_code, "
             "input_tokens, output_tokens, total_tokens, "
             "cache_read_tokens, cache_creation_tokens, reasoning_tokens "
-            "FROM request_log"
+            f"FROM request_log{_where(vis_sql)}",
+            vis_params,
         )
         while True:
             batch = await cursor.fetchmany(batch_size)
@@ -947,22 +1126,41 @@ class PersistenceManager:
                     "reasoning_tokens": r[11],
                 }
 
-    async def count_log_entries(self) -> int:
-        """Return the total number of log entries."""
-        row = await self._conn.execute_fetchone("SELECT COUNT(*) FROM request_log")
-        return row[0] if row else 0
+    async def count_log_entries(self, *, include_hidden: bool = False) -> int:
+        """Return the number of log entries.
 
-    async def count_success_entries(self) -> int:
-        """Return the number of successful log entries (status_code < 400)."""
+        Counts what the UI shows by default: a cleared row is gone from the
+        operator's point of view the moment the range is recorded.
+        ``include_hidden`` is for the physical layer — retention, trimming and
+        the startup drift check, which care about the disk, not the view.
+        """
+        vis_sql, vis_params = (
+            ("", []) if include_hidden else self._visible("request_log")
+        )
         row = await self._conn.execute_fetchone(
-            "SELECT COUNT(*) FROM request_log WHERE status_code < 400"
+            f"SELECT COUNT(*) FROM request_log{_where(vis_sql)}", vis_params
         )
         return row[0] if row else 0
 
-    async def count_error_entries(self) -> int:
-        """Return the number of error log entries (status_code >= 400)."""
+    async def count_success_entries(self, *, include_hidden: bool = False) -> int:
+        """Return the number of successful log entries (status_code < 400)."""
+        vis_sql, vis_params = (
+            ("", []) if include_hidden else self._visible("request_log")
+        )
         row = await self._conn.execute_fetchone(
-            "SELECT COUNT(*) FROM request_log WHERE status_code >= 400"
+            f"SELECT COUNT(*) FROM request_log WHERE status_code < 400{_and(vis_sql)}",
+            vis_params,
+        )
+        return row[0] if row else 0
+
+    async def count_error_entries(self, *, include_hidden: bool = False) -> int:
+        """Return the number of error log entries (status_code >= 400)."""
+        vis_sql, vis_params = (
+            ("", []) if include_hidden else self._visible("request_log")
+        )
+        row = await self._conn.execute_fetchone(
+            f"SELECT COUNT(*) FROM request_log WHERE status_code >= 400{_and(vis_sql)}",
+            vis_params,
         )
         return row[0] if row else 0
 
@@ -983,10 +1181,11 @@ class PersistenceManager:
             with at least one row in the window.  A model with none is
             absent, not zero.
         """
+        vis_sql, vis_params = self._visible("request_log", since=since)
         rows = await self._conn.execute_fetchall(
             "SELECT model, COUNT(*), MAX(timestamp) FROM request_log "
-            "WHERE timestamp >= ? GROUP BY model",
-            [since],
+            f"WHERE timestamp >= ?{_and(vis_sql)} GROUP BY model",
+            [since, *vis_params],
         )
         return {row[0]: {"requests": int(row[1]), "last_seen": row[2]} for row in rows}
 
@@ -1084,6 +1283,11 @@ class PersistenceManager:
             where.append("source = ?")
             params.append(source)
 
+        vis_sql, vis_params = self._visible("ops_log")
+        if vis_sql:
+            where.append(vis_sql)
+            params.extend(vis_params)
+
         clause = (" WHERE " + " AND ".join(where)) if where else ""
 
         row = await self._conn.execute_fetchone(
@@ -1099,22 +1303,29 @@ class PersistenceManager:
         entries = [self._ops_row_to_dict(r) for r in rows]
         return entries, total
 
-    async def count_ops_log_entries(self) -> int:
+    async def count_ops_log_entries(self, *, include_hidden: bool = False) -> int:
         """Return the total number of ops log entries."""
-        row = await self._conn.execute_fetchone("SELECT COUNT(*) FROM ops_log")
-        return row[0] if row else 0
-
-    async def count_ops_info_entries(self) -> int:
-        """Return ops log entries with severity='info'."""
+        vis_sql, vis_params = ("", []) if include_hidden else self._visible("ops_log")
         row = await self._conn.execute_fetchone(
-            "SELECT COUNT(*) FROM ops_log WHERE severity = 'info'"
+            f"SELECT COUNT(*) FROM ops_log{_where(vis_sql)}", vis_params
         )
         return row[0] if row else 0
 
-    async def count_ops_warn_entries(self) -> int:
-        """Return ops log entries with severity in ('warning', 'error')."""
+    async def count_ops_info_entries(self, *, include_hidden: bool = False) -> int:
+        """Return ops log entries with severity='info'."""
+        vis_sql, vis_params = ("", []) if include_hidden else self._visible("ops_log")
         row = await self._conn.execute_fetchone(
-            "SELECT COUNT(*) FROM ops_log WHERE severity != 'info'"
+            f"SELECT COUNT(*) FROM ops_log WHERE severity = 'info'{_and(vis_sql)}",
+            vis_params,
+        )
+        return row[0] if row else 0
+
+    async def count_ops_warn_entries(self, *, include_hidden: bool = False) -> int:
+        """Return ops log entries with severity in ('warning', 'error')."""
+        vis_sql, vis_params = ("", []) if include_hidden else self._visible("ops_log")
+        row = await self._conn.execute_fetchone(
+            f"SELECT COUNT(*) FROM ops_log WHERE severity != 'info'{_and(vis_sql)}",
+            vis_params,
         )
         return row[0] if row else 0
 
@@ -1146,7 +1357,10 @@ class PersistenceManager:
         """Remove oldest ops log entries beyond per-severity retention limits."""
         committed = False
 
-        info_excess = await self.count_ops_info_entries() - self._retention.ops_info_max
+        info_excess = (
+            await self.count_ops_info_entries(include_hidden=True)
+            - self._retention.ops_info_max
+        )
         if info_excess > 0:
             await self._conn.execute(
                 "DELETE FROM ops_log "
@@ -1160,7 +1374,10 @@ class PersistenceManager:
             )
             committed = True
 
-        warn_excess = await self.count_ops_warn_entries() - self._retention.ops_warn_max
+        warn_excess = (
+            await self.count_ops_warn_entries(include_hidden=True)
+            - self._retention.ops_warn_max
+        )
         if warn_excess > 0:
             await self._conn.execute(
                 "DELETE FROM ops_log "
@@ -1337,6 +1554,11 @@ class PersistenceManager:
             where_clauses.append("(provider_name = ? OR target_provider = ?)")
             params.extend([provider, provider])
 
+        vis_sql, vis_params = self._visible("error_dumps")
+        if vis_sql:
+            where_clauses.append(vis_sql)
+            params.extend(vis_params)
+
         where_sql = ""
         if where_clauses:
             where_sql = "WHERE " + " AND ".join(where_clauses)
@@ -1387,8 +1609,10 @@ class PersistenceManager:
             "body_hash, response_text, upstream_url, converted_body_hash, "
             "tool_name_collisions"
         )
+        vis_sql, vis_params = self._visible("error_dumps")
         row = await self._conn.execute_fetchone(
-            f"SELECT {cols} FROM error_dumps WHERE id = ?", (dump_id,)
+            f"SELECT {cols} FROM error_dumps WHERE id = ?{_and(vis_sql)}",
+            (dump_id, *vis_params),
         )
         if row is None:
             return None
@@ -1417,9 +1641,14 @@ class PersistenceManager:
         )
         return row[0] if row else None
 
-    async def count_error_dumps(self) -> int:
+    async def count_error_dumps(self, *, include_hidden: bool = False) -> int:
         """Return the total number of error dump entries."""
-        row = await self._conn.execute_fetchone("SELECT COUNT(*) FROM error_dumps")
+        vis_sql, vis_params = (
+            ("", []) if include_hidden else self._visible("error_dumps")
+        )
+        row = await self._conn.execute_fetchone(
+            f"SELECT COUNT(*) FROM error_dumps{_where(vis_sql)}", vis_params
+        )
         return row[0] if row else 0
 
     async def delete_error_dump(self, dump_id: str) -> bool:
@@ -1477,22 +1706,40 @@ class PersistenceManager:
                 logger.warning("WAL checkpoint after deletion failed: %s", exc)
         return False
 
+    async def delete_batch(
+        self,
+        table: str,
+        where: str,
+        params: Sequence[Any] = (),
+        *,
+        limit: int = _PRUNE_BATCH_SIZE,
+    ) -> int:
+        """Delete up to *limit* rows matching *where*; return how many.
+
+        One statement, one commit.  A caller that must stay cancellable and
+        report progress deletes in batches rather than holding the writer for
+        the whole table, which is what makes the job envelope's checkpoints
+        possible.
+        """
+        cur = await self._conn.execute(
+            f"DELETE FROM {table} WHERE rowid IN ("  # noqa: S608
+            f"  SELECT rowid FROM {table} WHERE {where} LIMIT ?"
+            f")",
+            (*params, limit),
+        )
+        await self._conn.commit()
+        return cur.rowcount
+
     async def _batched_delete(
         self, table: str, where: str, params: tuple[Any, ...]
     ) -> int:
         """Delete rows matching *where* in batches, return total deleted."""
         total = 0
         while True:
-            cur = await self._conn.execute(
-                f"DELETE FROM {table} WHERE rowid IN ("  # noqa: S608
-                f"  SELECT rowid FROM {table} WHERE {where} LIMIT ?"
-                f")",
-                (*params, _PRUNE_BATCH_SIZE),
-            )
-            await self._conn.commit()
-            if cur.rowcount == 0:
+            deleted = await self.delete_batch(table, where, params)
+            if deleted == 0:
                 break
-            total += cur.rowcount
+            total += deleted
         return total
 
     async def vacuum(self) -> dict[str, Any]:
@@ -1641,7 +1888,7 @@ class PersistenceManager:
         """Trim all tables to their configured retention caps."""
         size_before = self.db_path.stat().st_size
 
-        success_count = await self.count_success_entries()
+        success_count = await self.count_success_entries(include_hidden=True)
         rl_excess = max(0, success_count - self._retention.success_max)
         rl_trimmed = 0
         if rl_excess > 0:
@@ -1661,7 +1908,7 @@ class PersistenceManager:
                 rl_trimmed += batch
                 rl_excess -= batch
 
-        dump_count = await self.count_error_dumps()
+        dump_count = await self.count_error_dumps(include_hidden=True)
         dump_excess = max(0, dump_count - self._retention.dump_max)
         dumps_trimmed = 0
         if dump_excess > 0:
@@ -1737,6 +1984,11 @@ class PersistenceManager:
             where_clauses.append("timestamp <= ?")
             params.append(end)
 
+        vis_sql, vis_params = self._visible("error_dumps", since=start, until=end)
+        if vis_sql:
+            where_clauses.append(vis_sql)
+            params.extend(vis_params)
+
         where_sql = ""
         if where_clauses:
             where_sql = "WHERE " + " AND ".join(where_clauses)
@@ -1806,7 +2058,7 @@ class PersistenceManager:
 
         Also cleans up orphaned dump_bodies entries.
         """
-        count = await self.count_error_dumps()
+        count = await self.count_error_dumps(include_hidden=True)
         excess = count - self._retention.dump_max
         if excess <= 0:
             return
@@ -2011,7 +2263,7 @@ class PersistenceManager:
         large (e.g. first run against a bloated table), deletion is
         batched to avoid holding a long write-lock.
         """
-        count = await self.count_success_entries()
+        count = await self.count_success_entries(include_hidden=True)
         excess = count - self._retention.success_max
         if excess <= 0:
             return
@@ -2137,6 +2389,10 @@ class PersistenceManager:
         if model_type:
             sql += " AND model_type = ?"
             params.append(canonical_model_type(model_type))
+        vis_sql, vis_params = self._visible("request_log", since=cutoff)
+        if vis_sql:
+            sql += _and(vis_sql)
+            params.extend(vis_params)
         sql += " GROUP BY date(timestamp), model_type ORDER BY day DESC"
 
         rows = await self._conn.execute_fetchall(sql, params)
@@ -2189,6 +2445,7 @@ class PersistenceManager:
         from datetime import datetime, timedelta, timezone
 
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        vis_sql, vis_params = self._visible("request_log", since=cutoff)
         row = await self._conn.execute_fetchone(
             "SELECT COALESCE(SUM(input_tokens), 0), "
             "COALESCE(SUM(output_tokens), 0), "
@@ -2196,8 +2453,8 @@ class PersistenceManager:
             "COALESCE(SUM(cache_creation_tokens), 0), "
             "COALESCE(SUM(reasoning_tokens), 0), "
             "COALESCE(SUM(total_tokens), 0) "
-            "FROM request_log WHERE timestamp >= ?",
-            (cutoff,),
+            f"FROM request_log WHERE timestamp >= ?{_and(vis_sql)}",
+            (cutoff, *vis_params),
         )
         return {
             "input_tokens_24h": row[0],
@@ -2235,6 +2492,7 @@ class PersistenceManager:
         start_epoch = int(start.timestamp())
         width = max(1, int(minutes * 60 / buckets))
 
+        vis_sql, vis_params = self._visible("request_log", since=start.isoformat())
         rows = await self._conn.execute_fetchall(
             "SELECT CAST((CAST(strftime('%s', timestamp) AS INTEGER) - ?) / ? "
             "AS INTEGER) AS b, "
@@ -2242,9 +2500,9 @@ class PersistenceManager:
             "COALESCE(SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END), 0), "
             "COALESCE(SUM(output_tokens), 0), "
             "COALESCE(SUM(duration_ms), 0) "
-            "FROM request_log WHERE timestamp >= ? "
+            f"FROM request_log WHERE timestamp >= ?{_and(vis_sql)} "
             "GROUP BY b ORDER BY b",
-            (start_epoch, width, start.isoformat()),
+            (start_epoch, width, start.isoformat(), *vis_params),
         )
         # A row in the sliver after the last whole bucket (a window that does
         # not divide evenly) still belongs to the chart: fold it into the last
@@ -2318,11 +2576,12 @@ class PersistenceManager:
         select, params, since = self._usage_window_select(
             ("api_key_bucket", "api_key_label", "model_type")
         )
+        vis_sql, vis_params = self._visible("request_log", since=since)
         rows = await self._conn.execute_fetchall(
             f"SELECT {select} FROM request_log "
-            "WHERE timestamp >= ? "
+            f"WHERE timestamp >= ?{_and(vis_sql)} "
             "GROUP BY api_key_bucket, api_key_label, model_type",
-            [*params, since],
+            [*params, since, *vis_params],
         )
 
         # One COUNT plus the token columns per window; the three leading columns
@@ -2415,10 +2674,12 @@ class PersistenceManager:
         select, params, since = self._usage_window_select(("model", "model_type"))
         # The rows are already bounded to the widest window, so the ordering
         # sum is that window's total for the model.
+        vis_sql, vis_params = self._visible("request_log", since=since)
         rows = await self._conn.execute_fetchall(
-            f"SELECT {select} FROM request_log WHERE timestamp >= ? "
+            f"SELECT {select} FROM request_log WHERE timestamp >= ?"
+            f"{_and(vis_sql)} "
             "GROUP BY model, model_type ORDER BY SUM(total_tokens) DESC, model",
-            [*params, since],
+            [*params, since, *vis_params],
         )
         groups = self._fold_window_rows(rows, ("model", "model_type"))
         for group in groups:
