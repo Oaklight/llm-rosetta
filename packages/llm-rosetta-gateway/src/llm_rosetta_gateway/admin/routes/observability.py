@@ -99,6 +99,12 @@ async def _persistence_snapshot(persistence: Any) -> dict[str, Any] | None:
     Returns a dict with on-disk byte sizes and per-class entry counts
     plus retention caps, or ``None`` when persistence is not configured
     (e.g. in tests without a config file).
+
+    The counts are what the operator can see: a cleared row is gone from the
+    lists the moment its range is recorded, so it must not keep the footer's
+    cap percentage above 100% while its job is still running.  The physical
+    and hidden counts ride along so the panel can say how much is waiting to
+    be deleted.
     """
     if persistence is None:
         return None
@@ -109,8 +115,18 @@ async def _persistence_snapshot(persistence: Any) -> dict[str, Any] | None:
             "log_entries": await persistence.count_log_entries(),
             "log_success_entries": await persistence.count_success_entries(),
             "log_error_entries": await persistence.count_error_entries(),
+            "log_physical_entries": await persistence.count_log_entries(
+                include_hidden=True
+            ),
+            "log_hidden_entries": await persistence.count_hidden_entries("request_log"),
             "log_max_success": persistence.success_max,
             "dump_entries": await persistence.count_error_dumps(),
+            "dump_physical_entries": await persistence.count_error_dumps(
+                include_hidden=True
+            ),
+            "dump_hidden_entries": await persistence.count_hidden_entries(
+                "error_dumps"
+            ),
             "dump_max": persistence.dump_max,
         }
     except Exception:

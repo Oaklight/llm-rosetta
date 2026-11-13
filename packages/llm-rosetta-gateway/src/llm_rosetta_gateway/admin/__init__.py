@@ -135,10 +135,12 @@ async def _init_persistence(
 
     # Detect counter drift (ungraceful shutdown) but defer the rebuild to
     # a background task so the server starts accepting connections immediately.
-    # Compare lifetime counter (monotonic) against current log size.
+    # Compare lifetime counter (monotonic) against the physical log size.
     # lifetime < log means counters were never persisted for some requests.
-    # The reverse (lifetime > log) is normal after pruning.
-    log_entries = await persistence.count_log_entries()
+    # The reverse (lifetime > log) is normal after pruning.  Hidden rows count
+    # here: a cleared prefix is still on disk until its job runs, and leaving
+    # it out would mask exactly the drift this check exists to catch.
+    log_entries = await persistence.count_log_entries(include_hidden=True)
     _counter_rebuild_needed = False
     if await persistence.check_and_clear_rebuild_flag():
         logger.info(

@@ -238,6 +238,27 @@ class KeyStore:
             log_conn = _sqlite3.connect(str(request_log_db_path))
         except Exception:
             return 0
+        # A clear hides a range before the rows are deleted; reading through
+        # the hidden window would stamp a key with a request the operator has
+        # already removed.  The ranges live in the same database and this
+        # connection is read-only, so the clause is built here.
+        try:
+            hidden_rows = log_conn.execute(
+                "SELECT start_ts, end_ts FROM hidden_ranges "
+                "WHERE table_name = 'request_log'"
+            ).fetchall()
+        except _sqlite3.OperationalError:
+            hidden_rows = []
+        hidden = ""
+        hidden_params: list[str] = []
+        if hidden_rows:
+            hidden = (
+                " AND NOT ("
+                + " OR ".join("(timestamp >= ? AND timestamp < ?)" for _ in hidden_rows)
+                + ")"
+            )
+            hidden_params = [bound for pair in hidden_rows for bound in pair]
+
         updated = 0
         try:
             cursor = await self._conn.execute(
@@ -248,8 +269,9 @@ class KeyStore:
                 if last_used or not label:
                     continue
                 r = log_conn.execute(
-                    "SELECT MAX(timestamp) FROM request_log WHERE api_key_label = ?",
-                    (label,),
+                    "SELECT MAX(timestamp) FROM request_log "
+                    f"WHERE api_key_label = ?{hidden}",
+                    (label, *hidden_params),
                 ).fetchone()
                 if r and r[0]:
                     await self._conn.execute(
