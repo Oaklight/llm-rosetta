@@ -187,6 +187,24 @@ class TestAdminSetup:
         assert "#tab-shims" in head
         assert "#tab-providers" not in head
 
+    @pytest.mark.asyncio
+    async def test_disabling_logs_also_hides_jobs(self):
+        """The job board is part of observability: hide CSS and branding both."""
+        ext = GatewayExtensions(disabled_tabs=["logs"])
+        app = await create_app(_minimal_cfg(), extensions=ext)
+        head = getattr(app, "admin_custom_head", "")
+        assert '.tab[data-tab="jobs"], #tab-jobs' in head
+        assert '"disabled_tabs": ["jobs", "logs"]' in head
+
+    @pytest.mark.asyncio
+    async def test_jobs_can_be_disabled_on_its_own(self):
+        """Naming `jobs` on its own hides just the job board."""
+        ext = GatewayExtensions(disabled_tabs=["jobs"])
+        app = await create_app(_minimal_cfg(), extensions=ext)
+        head = getattr(app, "admin_custom_head", "")
+        assert "#tab-logs" not in head
+        assert "#tab-jobs" in head
+
 
 class TestCombinedExtensions:
     @pytest.mark.asyncio

@@ -91,6 +91,7 @@ _VALID_TABS = frozenset(
         "keys",
         "dashboard",
         "logs",
+        "jobs",
         "settings",
     }
 )
@@ -229,11 +230,13 @@ async def setup_admin(
         disabled_tabs: Optional list of tab identifiers to hide from the
             admin panel.  Valid values: ``"providers"``, ``"shims"``,
             ``"models"``, ``"routing"``, ``"keys"``, ``"dashboard"``,
-            ``"logs"``, ``"settings"``.  Disabling ``"providers"`` hides
-            ``"shims"`` too: the shims page is where a provider is added,
-            and its routes are guarded by the providers tab.  Disabled tabs
-            are hidden via CSS, their data-fetching JS functions are
-            suppressed, and their API routes return 404.
+            ``"logs"``, ``"jobs"``, ``"settings"``.  Disabling
+            ``"providers"`` hides ``"shims"`` too: the shims page is where a
+            provider is added, and its routes are guarded by the providers
+            tab.  Disabling ``"logs"`` hides ``"jobs"`` too: the job board is
+            part of observability.  Disabled tabs are hidden via CSS, their
+            data-fetching JS functions are suppressed, and their API routes
+            return 404.
         custom_head: Optional HTML fragment (``<style>``, ``<script>``,
             etc.) injected before ``</head>`` when serving the admin
             panel.  Allows downstream projects to override UI behavior
@@ -347,13 +350,15 @@ async def setup_admin(
     app.capture_state = capture_state
     # Build custom_head: disabled-tab CSS + user fragment + branding injection
     parts: list[str] = []
-    # The shims page is a child of Providers: it is where a provider is
-    # added, and its routes carry the providers guard, so hiding the parent
-    # has to take it too.  One set feeds the hide CSS and the branding the
-    # client reads.
+    # Two child pages go with their parent: the shims page is where a
+    # provider is added and its routes carry the providers guard, and the job
+    # board's routes are guarded by ``logs``.  One set feeds both the hide CSS
+    # and the branding the client reads.
     hidden = set(disabled)
     if "providers" in hidden:
         hidden.add("shims")
+    if {"logs", "observability"} & hidden:
+        hidden.add("jobs")
     if hidden:
         selectors = ", ".join(f'.tab[data-tab="{t}"], #tab-{t}' for t in sorted(hidden))
         parts.append(f"<style>{selectors} {{ display: none !important; }}</style>")
