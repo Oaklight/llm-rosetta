@@ -454,6 +454,27 @@ class JobStore:
     # Recovery and reads
     # ------------------------------------------------------------------
 
+    async def sweep_orphan_ranges(self) -> int:
+        """Drop ranges whose job row no longer exists, and reload the cache.
+
+        A range outlives its job only if the job was deleted by something other
+        than its own terminal transition — a hand-edited database, or a job row
+        pruned while it still owned the range.  Left alone it would hide rows
+        that nothing will ever delete, so startup repairs it.
+        """
+        async with self._p.transaction() as conn:
+            rows = await conn.execute_fetchall(
+                "SELECT id FROM hidden_ranges WHERE job_id NOT IN (SELECT id FROM jobs)"
+            )
+            if rows:
+                await conn.execute(
+                    "DELETE FROM hidden_ranges "
+                    "WHERE job_id NOT IN (SELECT id FROM jobs)"
+                )
+        if rows:
+            await self._p.reload_visibility()
+        return len(rows)
+
     async def recover(self) -> int:
         """Return running jobs whose lease expired to the queue.
 

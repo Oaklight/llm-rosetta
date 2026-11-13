@@ -325,6 +325,21 @@ async def test_claim_is_atomic_under_two_claimers(store):
     assert await store.active_count() == 1
 
 
+async def test_sweeping_drops_a_range_whose_job_is_gone(store, pm):
+    job = await store.enqueue(
+        "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
+    )
+    # A job deleted by something other than its own terminal transition.
+    await pm.connection.execute("DELETE FROM jobs WHERE id = ?", (job.id,))
+    await pm.connection.commit()
+    assert pm.visibility.ranges("request_log") == [(MIN_TS, MAX_TS)]
+
+    assert await store.sweep_orphan_ranges() == 1
+
+    assert pm.visibility.ranges("request_log") == []
+    assert await pm.count_hidden_entries("request_log") == 0
+
+
 async def test_success_while_the_range_still_covers_rows_fails_the_job(store, pm):
     """A handler that returns without deleting must not resurrect its rows."""
     await pm.insert_log_entries(
