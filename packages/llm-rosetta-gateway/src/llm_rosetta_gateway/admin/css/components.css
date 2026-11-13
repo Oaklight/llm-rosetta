@@ -2569,3 +2569,100 @@ button.shim-update.unknown { color: var(--tag-warn); }
   .routing-dec-row > span:nth-child(3),
   .routing-dec-row > span:nth-child(5) { display: none; }
 }
+
+/* ── Add Provider chooser ─────────────────────────────────────────────
+   The catalogue shown before the form.  It is a list of what the gateway
+   can serve, so every row has to be readable at a glance: logo, name,
+   where it comes from, and how its credential arrives. */
+
+/* The header and the search field are fixed; only the rows scroll.  The
+   search field owns the divider, so a row clipped by the scrollport meets a
+   line rather than the input's own border — the earlier layout let a row
+   slide right up against the field and read as an overlap. */
+#providerPickModal > .modal {
+  display: flex; flex-direction: column;
+  max-height: 85vh; overflow: hidden;
+}
+
+.prov-pick-search {
+  flex: 0 0 auto;
+  padding: 0 0 10px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+.prov-pick-search input { width: 100%; }
+
+.prov-pick-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0 4px;
+}
+
+.prov-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.prov-pick-row:hover { background: var(--bg-hover); }
+.prov-pick-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.prov-pick-logo {
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.prov-pick-logo img { width: 24px; height: 24px; object-fit: contain; }
+
+.prov-pick-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.prov-pick-name {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prov-pick-sub {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prov-pick-badge {
+  flex: 0 0 auto;
+  font-size: var(--fs-micro);
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-dim);
+}
+
+.prov-pick-empty { padding: 28px 16px; text-align: center; color: var(--text-muted); }
+
+.prov-pick-foot { display: flex; justify-content: flex-end; padding: 0 16px 16px; }
+
+#providerPickModal > .modal { width: 520px; }
+#providerPickModal .drawer-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 0 0 16px;
+}
+#providerPickModal .drawer-head h3 { margin: 0; }
