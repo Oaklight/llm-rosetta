@@ -82,12 +82,12 @@ Go 订阅的窗口（5 小时 / 每周 / 每月）可以按 key 读取，显示�
 
 keyless 的 `/zen/v1` 免费池是一个独立 shim：`opencode_zen_free--chat_completions`，
 并且它作为独立包发布而不是内置在 core 里：
-[llm-rosetta-shim-opencode-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-free)。
-使用该名称前先声明这个包：
+[llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free)。
+该包同时提供 Kilo、LLM7 与 OVHcloud 的免费池。使用该名称前先声明这个包：
 
 ```jsonc
 {
-  "shims": { "presets": ["opencode_zen_free"] },
+  "shims": { "presets": ["free"] },
   "providers": {
     "zen-free": { "type": "opencode_zen_free--chat_completions" }
   },
@@ -96,6 +96,9 @@ keyless 的 `/zen/v1` 免费池是一个独立 shim：`opencode_zen_free--chat_c
   }
 }
 ```
+
+shim 名称未变，因此原先为 `opencode_zen_free` 预设写的配置，只需把声明改成 `free`
+即可继续使用。
 
 不需要任何 API key：这条 lane 的“凭据”就是字面量 `public`，shim 以
 `Authorization: Bearer public` 发送。上游会拒绝任何不像它自家客户端的请求，

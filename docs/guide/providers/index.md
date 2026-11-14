@@ -28,11 +28,12 @@ title: 提供方参考
 | [Argo](argo.md) | `argo--*` | 多种 | 独立包；阿贡内部网关 |
 | [AskSage](asksage.md) | `asksage--*` | 多种 | 独立包；多格式聚合器 |
 | [ALCF](alcf.md) | `alcf_<cluster>--chat_completions` | `chat_completions` | 独立包；Globus OAuth, token_command |
-| [Kilo](kilo.md) | `kilo--chat_completions` | `chat_completions` | 免费池，keyless |
+| [Kilo](kilo.md) | `kilo--chat_completions` | `chat_completions` | 付费线路在核心包；免费池在 `free` 包 |
 | [OpenCode](opencode.md) | `opencode--*` | 多种 | Go 订阅 / Zen 余额 |
 | [Open Design](opendesign.md) | `opendesign--*` | 多种 | 独立包；模型网关 |
 | [Plan (ChatGPT)](openai_chatgpt.md) | `openai_chatgpt--open_responses` | `open_responses` | ChatGPT 套餐通道；登录而非 API key |
+| [免密钥免费端点](free.md) | `kilo_free--*`、`llm7--*`、`opencode_zen_free--*`、`ovhcloud--*` | `chat_completions` | 独立包；无需账号 |
 
-Argo、AskSage、ALCF、Open Design 与 OpenCode 免费通道的 shim 作为独立包发布 —— 在使用其名称之前，请通过 `shims.presets`（或 **Settings → Shim Sources**）声明对应源。参见[独立 Shim 包](../shims.md#standalone-shim-packages)。
+Argo、AskSage、ALCF、Open Design 与免密钥免费端点的 shim 作为独立包发布 —— 在使用其名称之前，请通过 `shims.presets`（或 **Settings → Shim Sources**）声明对应源。参见[独立 Shim 包](../shims.md#standalone-shim-packages)。
 
 关于 shim 的通用概念和自定义 shim 注册，请参阅[提供方 Shims](../shims.md)。

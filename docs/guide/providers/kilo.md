@@ -4,77 +4,81 @@ title: Kilo
 
 # Kilo
 
-Kilo 的公共网关提供一个免费模型池。LLM-Rosetta 将其作为一个无需凭据的普通 provider
-暴露，在管理台中显示为 **Kilo (Free)**。
+Kilo Code 运营一个公共模型网关。我们用两个 shim 分别对接，这个拆分是有意的：
+付费线路发送凭据并开放完整目录，免费池不发送凭据、只开放上游标记为免费的模型。
 
-!!! warning "免费不等于私密，也不等于无限"
-    免费池声明 prompt 可能被上游服务方记录。切勿通过免费源发送密钥、凭据或敏感数据。
-    模型清单与配额政策归上游所有，随时可能变更或消失。
+| Shim 名称 | 基础类型 | 默认 Base URL | 凭据 | 所在位置 |
+|:---|:---|:---|:---|:---|
+| `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | `KILO_API_KEY` | 核心包 |
+| `kilo_free--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | 无（keyless） | [llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free) |
 
-## Shim
+## 付费线路
 
-| Shim 名称 | 基础类型 | 默认 Base URL | 凭据 |
-|:---|:---|:---|:---|
-| `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | 无（keyless） |
-
-该 shim 声明了 `display_name: Kilo`、`free_source: true`、一个 logo，以及
-`connection.keyless: true`：
-
-- **Keyless** —— 未配置 `api_key` 时，请求不携带任何鉴权头，该条目显示为
-  **Kilo (Free)**，归入 *Free Resource* 分区。
-- **Key 可选** —— 提供 `api_key`（或 `api_key_env`）后，同一 shim 切换为
-  `Authorization: Bearer <key>`。此时它是一个普通 provider：以你起的名字显示，
-  归入 *Providers* 分区，而不是 *Free Resource*。
-
-## 模型清单
-
-上游 `GET /models` 会列出全部模型，并用 `isFree: true` 标记免费切片。shim 的
-`model_list_transform` **仅**暴露该切片。
-
-清单是发现出来的，而非硬编码。在管理台中，**Fetch Models** 拉取清单，provider 卡片上的
-**Refresh** 按钮会重新拉取、报告差异（`{total}` 个免费模型、`{new}` 个新增），并把新增项
-提供给一键应用。Refresh 不会静默地增删模型。
-
-服务端**不会**重新校验某个已路由模型是否仍然免费 —— 路由表由运维控制。若上游撤下了某个
-模型，对它的请求会在上游失败；请将其从路由表中移除。
-
-## 网关配置
+`kilo--chat_completions` 始终携带凭据。未配置 key 的 provider 会在启动时被拒绝，
+而不是无凭据发往上游；它的模型列表是账号可访问的完整目录。两个 shim 都声明
+`group_label: Kilo`，因此在选择器中归到同一个厂商下。
 
 ```jsonc
 {
   "providers": {
-    "kilo-free": {
-      "type": "kilo--chat_completions"
-      // 无需 api_key —— 免费池不需要凭据。
-      // 填入 "api_key": "${KILO_API_KEY}" 可改用你自己的 Kilo 账号。
+    "kilo": {
+      "type": "kilo--chat_completions",
+      "api_key": "${KILO_API_KEY}"
     }
   }
 }
 ```
 
-也可以使用管理台中的 **+ Kilo (Free)** 预设，它会创建该条目，并把可选的 API Key 字段
-折叠到 "Use my own key" 链接之后。
+## 免费池
 
-## 隐私
+`kilo_free--chat_completions` 是 keyless 的，带 `free_source: true`，发布在核心包之外
+——免费池归上游所有，可能随时变更或关闭。使用前先声明包：
 
-免费模型流量会发往 Kilo。管理台会显示一条中性披露 ——
-*"Served by an external provider; prompts may be logged by that provider."*
+```jsonc
+{
+  "shims": { "presets": ["free"] },
+  "providers": {
+    "kilo-free": { "type": "kilo_free--chat_completions" }
+  }
+}
+```
+
+!!! warning "免费不等于私密，也不等于无限"
+    免费池声明 prompt 可能被上游服务方记录。切勿通过免费源发送密钥、凭据或敏感数据。
+    模型清单与配额政策归上游所有，随时可能变更或消失。
+
+### 模型清单
+
+上游 `GET /models` 返回完整目录，并用 `isFree: true` 标记免费子集。免费 shim 的
+`model_list_transform` 只暴露该子集；付费 shim 不做过滤。
+
+在管理台中，**Fetch Models** 拉取清单，provider 卡片上的 **Refresh** 重新拉取、
+报告差异并为新增项提供一键应用。Refresh 从不静默增删模型。
+
+系统**不会**在服务端复查被路由的模型是否仍然免费——路由表由运维掌控。若上游下线
+某模型，针对它的请求会在上游失败，需要从路由表中移除。
+
+### 速率限制
+
+免费池每 IP 每小时 200 次请求。给免费 shim 配置 `api_key` 会切换为
+`Authorization: Bearer <key>`，这是在免密钥线路上使用自己 Kilo 账号的受支持方式；
+但要开放完整目录，应使用付费 shim。
 
 ## 聚合多个免费源
 
-每个免费源都是独立的 provider 条目（`kilo-free`，以后还有 OpenCode 等），它们统一归入
-**Free Resource** 分区 —— 只有至少配置了一个这样的 provider 时该分区才会出现。当同一个
-模型在两个免费源上都可用时，把它配置为一条带多个 provider 的路由：
+每个免费源都是独立的 provider 条目（`kilo-free`，以后也可以有 OVHcloud 或 LLM7），
+统一归在 **Free Resource** 分组下——该分组只在至少配置了一个免费源后出现。同一个模型
+若有两个免费源，可配置为一个模型加两个 provider 和一种策略：
 
 ```jsonc
 {
   "models": {
     "some-free-model": {
-      "providers": ["kilo-free", "opencode-free"],
+      "providers": ["kilo-free", "ovh-free"],
       "strategy": "affinity_round_robin"
     }
   }
 }
 ```
 
-网关的多 provider 路由支持 `weighted_round_robin` 和 `affinity_round_robin` 两种策略。
+网关的多 provider 路由支持 `weighted_round_robin` 与 `affinity_round_robin` 两种策略。
