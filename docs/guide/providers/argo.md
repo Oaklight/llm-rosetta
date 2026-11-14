@@ -11,8 +11,8 @@ Argo 是美国阿贡国家实验室的内部 API 网关，通过统一端点提�
     { "shims": { "presets": ["argo"] } }
     ```
 
-    该包注册相同的规范名称，因此提供方配置无需改动。**Settings → Shim Sources**
-    已将该源作为预设提供。参见[独立 Shim 包](../shims.md#standalone-shim-packages)。
+    该包注册相同的规范名称，因此提供方配置无需改动。**网关 → Shims → 可安装**
+    已将该包作为卡片提供。参见[独立 Shim 包](../shims.md#standalone-shim-packages)。
 
 ## 端点
 

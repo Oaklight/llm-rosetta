@@ -6,7 +6,7 @@ ALCF（阿贡领先计算设施）推理服务通过三个 shim 端点提供支�
     自 0.14.0 起，三个 ALCF shim 不再内置在 LLM-Rosetta 中，而是由
     [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf)
     包提供。通过 `shims.presets`（或等价的 `shims.remotes` 条目）声明后，下面的名称即可继续使用。
-    **Settings → Shim Sources** 提供同一条目的一键预设。
+    **网关 → Shims → 可安装** 提供同一条目的一键安装。
 
     ```jsonc
     "shims": { "presets": ["alcf"] }

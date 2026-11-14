@@ -599,11 +599,12 @@ v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心�
 [OpenCode](providers/opencode.md#public-free-lane)。独立包注册相同的规范 shim
 名称，因此提供方的 `shim` 值无需改动 —— 新增的只是源声明。
 
-**点选预载一个包。** **Settings → Shims** 用一个下拉框列出全部已知的独立包，每行是名称与
-shim 数量，悬停显示仓库地址；免费资源排在付费包之前。点击一行即可把它加入或移出
-`shims.presets`——但要按 **Save** 才会写入，所以选择器旁有一行操作说明，按钮旁会显示
-*有未保存的更改*。写回的仍是那个逗号分隔的键列表，也可以手写。运行中的 catalog 不认识的键
-没有对应行，但会保留在声明中，触发器仍会显示它的名称，所以按新 catalog 写的配置不会被悄悄改写。
+**在卡片上安装包。** **网关 → Shims → 可安装** 为每个已知的独立包显示一张卡片，带资源层级
+标签（**免费**、**付费** 或 **订阅**）、shim 数量，悬停显示仓库地址。免费资源排在其余之前，
+工具栏的层级下拉框可把网格收窄到单一层级。在卡片上勾选 shim 并按下 **安装**，会把键加入
+`shims.presets` 并在旁边写入选择；已安装的卡片为每个 shim 标出 *已加载* / *未加载*，
+并提供 **更新**、**添加提供方** 与 **移除**。运行中的 catalog 不认识的键没有卡片，但会保留在
+声明中，启动警告仍会点名它，所以按新 catalog 写的配置不会被悄悄改写。
 
 **检查远程源是否已更新。** 远程源只拉取一次并固定在当时的提交上，之后即使仓库已前进也复用该
 提交。清单会在该源的标题行给出结论：*已是最新*、*可更新 `<旧>` → `<新>`*（点击即重新拉取
@@ -641,9 +642,15 @@ remote 配置：
 没有打 tag：不带 `ref` 的远程源会先把 `HEAD` 解析为某个 commit 并记录进缓存 stamp。等它们
 打上 tag 后再固定该 tag —— 参见 [ref 解析](../gateway/configuration.md#external-shim-sources)。
 
-**Settings → Shim Sources** 用一个下拉框列出每个 catalog 包——每包一行，免费资源在前——
-保存时会把 `presets` 或展开后的 remote 写入配置。若配置仍使用这些 shim 却没有声明源，
+**网关 → Shims → 可安装** 把每个 catalog 包显示为一张卡片，免费资源在前；安装一张卡片
+会把 `presets` 与选择一起写入配置。若配置仍使用这些 shim 却没有声明源，
 启动时会得到一条错误，指明包名、预设与展开后的 remote；源加载成功后错误即消失。
+
+**CI 让 catalog 与已发布的包同步。** `scripts/dev/check_shim_catalog.py` 列出该账号发布的
+`llm-rosetta-shim-*` 与 `llm-rosetta-shims-*` 仓库，与 `SHIM_SOURCE_PACKAGES` 对比，并在
+缺少某个包或它的 `repo` 已迁移时打印可直接粘贴的条目。它随每次推送在 `shim-catalog` CI
+任务中运行（带 token，因此私有仓库也能看到），发现漂移即以非零状态退出，因此已发布的包
+不会在整个发布周期里无人登记。
 
 旧拼写**不再**解析到 shim：`argo--openai_chat`、`argo--anthropic` 和
 `argo--openai_responses` 是内置 shim 的别名，独立包只注册规范名称。别名仍作为拼写映射保留，
@@ -786,7 +793,7 @@ Responses 格式通道，为拒绝 temperature 的 GPT/o 系列模型按模型�
 ```
 
 !!! note
-    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。三个 Argo shim 位于独立的 [`llm-rosetta-shim-argo`](https://github.com/Oaklight/llm-rosetta-shim-argo) 包中 —— 声明 `"shims": {"presets": ["argo"]}`，配置中的名称即可继续使用。**Settings → Shim Sources** 已将该源作为预设提供。
+    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。三个 Argo shim 位于独立的 [`llm-rosetta-shim-argo`](https://github.com/Oaklight/llm-rosetta-shim-argo) 包中 —— 声明 `"shims": {"presets": ["argo"]}`，配置中的名称即可继续使用。**网关 → Shims → 可安装** 已将该包作为卡片提供。
 
 ## 能力标志
 
