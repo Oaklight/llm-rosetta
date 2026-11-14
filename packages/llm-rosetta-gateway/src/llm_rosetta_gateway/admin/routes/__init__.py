@@ -201,10 +201,13 @@ def register_admin_routes(app: Any) -> None:
     # Network diagnostics
     app.route("/admin/api/diagnostics/network", methods=["GET"])(network_diagnostics)
     app.route("/admin/api/diagnostics/host-ip", methods=["GET"])(get_host_ip)
-    # Error dumps
+    # Error dumps.  The router takes the first pattern that matches, so the
+    # literal paths come before ``<dump_id>``: registered after it, "export"
+    # and "facets" are read as dump ids and answered 404 (#1544).
     app.route("/admin/api/error-dumps", methods=["GET"])(get_error_dumps)
     app.route("/admin/api/error-dumps/facets", methods=["GET"])(get_error_dump_facets)
     app.route("/admin/api/error-dumps/ids", methods=["GET"])(get_error_dump_ids)
+    app.route("/admin/api/error-dumps/export", methods=["GET"])(export_error_dumps)
     app.route("/admin/api/error-dumps/<dump_id>", methods=["GET"])(
         get_error_dump_detail
     )
@@ -222,7 +225,6 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/error-dumps/cleanup", methods=["POST"])(
         cleanup_error_dumps_by_age
     )
-    app.route("/admin/api/error-dumps/export", methods=["GET"])(export_error_dumps)
     # Background jobs (observability sub-view)
     app.route("/admin/api/jobs", methods=["GET"])(_guard("logs", get_jobs))
     app.route("/admin/api/jobs/<job_id>", methods=["GET"])(_guard("logs", get_job))

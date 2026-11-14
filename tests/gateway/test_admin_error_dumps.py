@@ -8,16 +8,20 @@ rather than silently widening the query.
 
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 
+from llm_rosetta_gateway._vendor.httpserver import App, Request, StreamingResponse
 from llm_rosetta_gateway.admin.routes.observability import (
     MAX_DUMP_IDS,
     _dump_cursor,
     _dump_filters,
     _dump_ids,
     _dump_status_bounds,
+    export_error_dumps,
     get_error_dumps,
 )
 
@@ -147,3 +151,152 @@ async def test_the_cursor_reaches_the_read() -> None:
     assert response.status_code == 200
     assert seen["before"] == ("2026-11-01T00:00:00+00:00", "d9")
     assert seen["limit"] == 500
+
+
+@pytest.mark.asyncio
+async def test_the_export_route_streams_the_archive() -> None:
+    """The export answers with the stream, not a finished archive.
+
+    The route used to await the whole tar.gz before answering; the response
+    has to be the generator now, and its headers are what makes the browser
+    save the file.
+    """
+    seen: dict[str, object] = {}
+
+    class _Persistence:
+        def iter_export_error_dumps(self, **kwargs: object):
+            seen.update(kwargs)
+
+            async def _gen():
+                yield b"metadata"
+                yield b"body"
+
+            return _gen()
+
+    req = _req(start="2026-11-01T00:00:00Z")
+    req.app = SimpleNamespace(persistence=_Persistence())
+
+    response = await export_error_dumps(req)
+
+    assert isinstance(response, StreamingResponse)
+    assert response.status_code == 200
+    assert response.content_type == "application/gzip"
+    assert (
+        response.headers["Content-Disposition"]
+        == "attachment; filename=error-dumps.tar.gz"
+    )
+    # The filters reach the read, so the export is the list's set.
+    assert seen["start"] == "2026-11-01T00:00:00+00:00"
+    # The first chunk is read inside the handler; the rest is the response.
+    body = [chunk async for chunk in response._generator]
+    assert body == [b"metadata", b"body"]
+
+
+@pytest.mark.asyncio
+async def test_a_store_error_is_raised_before_the_download_starts() -> None:
+    """A failing store must answer an error, not a truncated archive.
+
+    Reading the first chunk in the handler is what makes this possible: the
+    server's handler guard turns the raise into a JSON 500, and the browser
+    never receives a half-written tar.gz it would save anyway.
+    """
+
+    class _Persistence:
+        def iter_export_error_dumps(self, **kwargs: object):
+            async def _gen():
+                raise RuntimeError("db gone")
+                yield b""  # pragma: no cover - the raise is the point
+
+            return _gen()
+
+    req = _req()
+    req.app = SimpleNamespace(persistence=_Persistence())
+
+    with pytest.raises(RuntimeError):
+        await export_error_dumps(req)
+
+
+@pytest.mark.asyncio
+async def test_the_server_router_answers_the_export_path() -> None:
+    """The literal export path must not be read as a dump id.
+
+    The router takes the first pattern that matches, and
+    ``/admin/api/error-dumps/<dump_id>`` was registered before
+    ``/admin/api/error-dumps/export``, so the panel's Export button asked
+    for a dump named "export" and got a 404.  Calling the handler directly
+    never saw it; this goes through the server's own router.
+    """
+    from llm_rosetta_gateway.admin.routes import register_admin_routes
+    from llm_rosetta_gateway.admin.routes.observability import get_error_dump_detail
+
+    app = App()
+    register_admin_routes(app)
+
+    class _Persistence:
+        def iter_export_error_dumps(self, **kwargs: object):
+            seen.update(kwargs)
+
+            async def _gen():
+                yield b"chunk"
+
+            return _gen()
+
+    seen: dict[str, object] = {}
+
+    def _request(path: str) -> Request:
+        return Request(
+            method="GET",
+            path=path,
+            query_string="",
+            headers={},
+            body=b"",
+            client_addr=("127.0.0.1", 0),
+            app=app,
+        )
+
+    route, _, _ = app._match_route(_request("/admin/api/error-dumps/dump-1"))
+    assert route is not None
+    assert route.handler is get_error_dump_detail
+
+    setattr(app, "persistence", _Persistence())
+    response = await app._dispatch(_request("/admin/api/error-dumps/export"))
+
+    assert isinstance(response, StreamingResponse)
+    assert response.content_type == "application/gzip"
+    assert [chunk async for chunk in response._generator] == [b"chunk"]
+
+
+@pytest.mark.asyncio
+async def test_an_abandoned_download_closes_the_export() -> None:
+    """The transport only closes the wrapper; the export must close too.
+
+    ``StreamingResponse`` calls ``aclose()`` on the generator it was handed
+    and nothing deeper.  Without the wrapper forwarding that, the export
+    stays suspended with its last body and its gzip encoder alive until the
+    loop shuts down — what a client that stops reading (or a browser the
+    operator cancels) leaves behind per attempt.
+    """
+    closed: list[bool] = []
+
+    class _Persistence:
+        def iter_export_error_dumps(self, **kwargs: object):
+            async def _gen():
+                try:
+                    yield b"metadata"
+                    yield b"body"
+                finally:
+                    closed.append(True)
+
+            return _gen()
+
+    req = _req()
+    req.app = SimpleNamespace(persistence=_Persistence())
+
+    response = await export_error_dumps(req)
+    assert isinstance(response, StreamingResponse)
+    wrapper = cast(AsyncGenerator[bytes, None], response._generator)
+    assert await anext(wrapper) == b"metadata"
+
+    await wrapper.aclose()
+
+    assert closed == [True]

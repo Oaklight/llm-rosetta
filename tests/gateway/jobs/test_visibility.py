@@ -347,6 +347,7 @@ def _reads(pm: PersistenceManager) -> dict[str, Callable[[], Any]]:
         "get_error_dump": lambda: pm.get_error_dump("d0"),
         "count_error_dumps": pm.count_error_dumps,
         "export_error_dumps": pm.export_error_dumps,
+        "iter_export_error_dumps": lambda: _drain(pm.iter_export_error_dumps()),
         "query_token_usage_by_day": lambda: pm.query_token_usage_by_day(days=7),
         "query_rolling_24h_tokens": pm.query_rolling_24h_tokens,
         "query_request_histogram": lambda: pm.query_request_histogram(minutes=180),

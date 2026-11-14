@@ -6,6 +6,7 @@ import time
 
 import pytest
 
+from llm_rosetta_gateway.observability import persistence as persistence_module
 from llm_rosetta_gateway.observability.persistence import (
     DEFAULT_SUCCESS_MAX,
     PersistenceManager,
@@ -1012,4 +1013,218 @@ class TestExportErrorDumps:
             assert f is not None
             meta = json.loads(f.read())
             assert meta == []
+        await pm.close()
+
+    @pytest.mark.asyncio
+    async def test_the_stream_is_the_in_memory_archive(self, tmp_path):
+        """The chunks joined are the archive ``export_error_dumps`` returns.
+
+        The route and the CLI send the stream, so anything the in-memory form
+        carries — member names, body bytes, the metadata layout — has to
+        survive being written one member at a time.
+        """
+        import io
+        import tarfile
+
+        pm = await PersistenceManager.create(str(tmp_path))
+        for i in range(4):
+            await pm.insert_dump_body(f"h{i}", b"body-" + bytes([i]), 6)
+            await pm.insert_error_dump(
+                dump_id=f"d{i}",
+                request_log_id=None,
+                timestamp=f"2026-08-0{i + 1}T00:00:00+00:00",
+                model="gpt-4o",
+                source_provider="oc",
+                target_provider="anthropic",
+                provider_name="openai",
+                status_code=500,
+                error_phase="upstream",
+                body_hash=f"h{i}",
+                response_text="boom",
+                upstream_url="http://example.test/v1",
+            )
+
+        chunks = [chunk async for chunk in pm.iter_export_error_dumps(page_size=2)]
+        streamed = b"".join(chunks)
+        in_memory = await pm.export_error_dumps()
+
+        def _read(data: bytes) -> tuple[bytes, dict[str, bytes], list[str]]:
+            with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+                names = tar.getnames()
+                metadata = tar.extractfile("metadata.json")
+                assert metadata is not None
+                bodies: dict[str, bytes] = {}
+                for name in names:
+                    if not name.startswith("bodies/"):
+                        continue
+                    handle = tar.extractfile(name)
+                    assert handle is not None
+                    bodies[name] = handle.read()
+                return metadata.read(), bodies, names
+
+        raw_streamed, bodies, names = _read(streamed)
+        raw_in_memory, memory_bodies, memory_names = _read(in_memory)
+
+        assert names == memory_names
+        # The streamed metadata is the file the in-memory export wrote, down
+        # to its indentation — a consumer diffing two exports must not see a
+        # change that is only formatting.
+        assert raw_streamed == raw_in_memory
+        assert bodies == memory_bodies
+        assert bodies == {f"bodies/h{i}.bin": b"body-" + bytes([i]) for i in range(4)}
+        assert len(chunks) > 1, "one chunk means nothing was streamed"
+        await pm.close()
+
+    @pytest.mark.asyncio
+    async def test_the_metadata_is_read_in_keyset_pages(self, tmp_path):
+        """No read returns the whole dump table: rows arrive in LIMIT pages.
+
+        The entry list is what the export used to hold whole.  It is read in
+        ``(timestamp, id)`` keyset pages now, so the test records the SQL and
+        checks every page after the first continues from a cursor instead of
+        from an offset.
+        """
+        import io
+        import json
+        import tarfile
+
+        pm = await PersistenceManager.create(str(tmp_path))
+        for i in range(5):
+            await pm.insert_error_dump(
+                dump_id=f"d{i}",
+                request_log_id=None,
+                timestamp=f"2026-08-0{i + 1}T00:00:00+00:00",
+                model="gpt-4o",
+                source_provider="oc",
+                target_provider="anthropic",
+                provider_name="openai",
+                status_code=500,
+                error_phase="upstream",
+                body_hash=None,
+                response_text="boom",
+                upstream_url="http://example.test/v1",
+            )
+
+        seen: list[str] = []
+        conn = pm._conn
+        original = conn.execute_fetchall
+
+        async def _recording(sql: str, *args):
+            seen.append(sql)
+            return await original(sql, *args)
+
+        setattr(conn, "execute_fetchall", _recording)
+        try:
+            chunks = [chunk async for chunk in pm.iter_export_error_dumps(page_size=2)]
+        finally:
+            setattr(conn, "execute_fetchall", original)
+
+        reads = [sql for sql in seen if "FROM error_dumps" in sql]
+        assert len(reads) == 3, reads  # 2 + 2 + 1 rows
+        assert all("LIMIT ?" in sql for sql in reads), reads
+        assert all("ORDER BY timestamp DESC, id DESC" in sql for sql in reads), reads
+        assert all("timestamp < ?" not in sql for sql in reads[:1]), reads[:1]
+        assert all("timestamp < ?" in sql for sql in reads[1:]), reads[1:]
+
+        with tarfile.open(fileobj=io.BytesIO(b"".join(chunks)), mode="r:gz") as tar:
+            metadata = tar.extractfile("metadata.json")
+            assert metadata is not None
+            raw = metadata.read()
+            entries = json.loads(raw)
+
+        assert [entry["id"] for entry in entries] == ["d4", "d3", "d2", "d1", "d0"]
+        # The layout is pinned against `json.dumps`, not against the other
+        # export path: an indentation change there would otherwise pass.
+        listed, _ = await pm.query_error_dumps(limit=100)
+        assert raw == json.dumps(listed, indent=2, ensure_ascii=False).encode()
+        await pm.close()
+
+    @pytest.mark.asyncio
+    async def test_pages_carry_on_through_a_shared_timestamp(self, tmp_path):
+        """Rows that share a timestamp are paged by id, not dropped.
+
+        A proxy that fails several times in one second writes dumps with the
+        same timestamp, and the cursor's id half is the only thing that moves
+        the walk past them.  Without it the export stops at the end of the
+        first page and the archive stays well formed, which is why asserting
+        the archive's shape is not enough.
+        """
+        import io
+        import json
+        import tarfile
+
+        pm = await PersistenceManager.create(str(tmp_path))
+        shared = "2026-08-01T00:00:00+00:00"
+        for i in range(10):
+            await pm.insert_error_dump(
+                dump_id=f"dump-{i:04d}",
+                request_log_id=None,
+                timestamp=shared,
+                model="gpt-4o",
+                source_provider="oc",
+                target_provider="anthropic",
+                provider_name="openai",
+                status_code=500,
+                error_phase="upstream",
+                body_hash=None,
+                response_text="boom",
+                upstream_url="http://example.test/v1",
+            )
+
+        chunks = [chunk async for chunk in pm.iter_export_error_dumps(page_size=3)]
+        with tarfile.open(fileobj=io.BytesIO(b"".join(chunks)), mode="r:gz") as tar:
+            metadata = tar.extractfile("metadata.json")
+            assert metadata is not None
+            entries = json.loads(metadata.read())
+
+        assert [entry["id"] for entry in entries] == [
+            f"dump-{i:04d}" for i in range(9, -1, -1)
+        ]
+        await pm.close()
+
+    @pytest.mark.asyncio
+    async def test_a_metadata_file_over_the_bound_spools_to_disk(
+        self, tmp_path, monkeypatch
+    ):
+        """The metadata must leave memory once it passes the bound.
+
+        The whole reason a large export's entry list does not sit in memory
+        is that the spool rolls over; a plain buffer would pass every other
+        test here, so this one asks the spool itself.
+        """
+        import tempfile
+
+        spools = []
+        real = tempfile.SpooledTemporaryFile
+
+        def _recording(*args, **kwargs):
+            handle = real(*args, **kwargs)
+            spools.append(handle)
+            return handle
+
+        monkeypatch.setattr(tempfile, "SpooledTemporaryFile", _recording)
+        monkeypatch.setattr(persistence_module, "_DUMP_EXPORT_SPOOL_BYTES", 64)
+
+        pm = await PersistenceManager.create(str(tmp_path))
+        for i in range(4):
+            await pm.insert_error_dump(
+                dump_id=f"d{i}",
+                request_log_id=None,
+                timestamp=f"2026-08-0{i + 1}T00:00:00+00:00",
+                model="gpt-4o",
+                source_provider="oc",
+                target_provider="anthropic",
+                provider_name="openai",
+                status_code=500,
+                error_phase="upstream",
+                body_hash=None,
+                response_text="x" * 200,
+                upstream_url="http://example.test/v1",
+            )
+
+        chunks = [chunk async for chunk in pm.iter_export_error_dumps(page_size=2)]
+
+        assert b"".join(chunks)
+        assert spools, "the export did not open a spool"
+        assert spools[0]._rolled, "the metadata stayed in memory past the bound"
         await pm.close()
