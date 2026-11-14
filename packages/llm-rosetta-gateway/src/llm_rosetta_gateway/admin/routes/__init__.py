@@ -39,6 +39,7 @@ from .auth import (
 )
 from ._shared import _guard
 from .config import register_config_routes
+from .examples import get_key_examples
 from .keys import (
     create_api_key,
     delete_api_key,
@@ -241,6 +242,9 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/keys", methods=["GET"])(_guard("keys", get_api_keys))
     app.route("/admin/api/keys", methods=["POST"])(_guard("keys", create_api_key))
     app.route("/admin/api/keys/usage", methods=["GET"])(_guard("keys", get_key_usage))
+    app.route("/admin/api/keys/examples", methods=["GET"])(
+        _guard("keys", get_key_examples)
+    )
     app.route("/admin/api/keys/backfill-last-used", methods=["POST"])(
         _guard("keys", backfill_keys_last_used)
     )

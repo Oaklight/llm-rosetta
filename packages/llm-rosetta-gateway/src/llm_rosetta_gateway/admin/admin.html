@@ -319,11 +319,21 @@
 
   <!-- API Keys Tab -->
   <div class="tab-panel" id="tab-keys" role="tabpanel" aria-labelledby="tabBtn-keys">
-    <div class="section">
+    <div class="section" id="keysAccessSection">
+      <div class="section-header access-head">
+        <button type="button" class="section-toggle" id="accessToggle" aria-expanded="true" aria-controls="keyExamplesArea" onclick="toggleAccessPanel()">
+          <svg class="access-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          <span data-i18n="keys.access">Connect</span>
+        </button>
+      </div>
+      <div id="keyExamplesArea"></div>
+    </div>
+    <div class="section" id="keysSection">
       <div class="section-header">
         <h2 data-i18n="section.apiKeys">API Keys</h2>
-<button class="btn btn-primary btn-sm" onclick="openKeyModal()" data-i18n="btn.generateKey">+ Generate Key</button>
+<button class="btn btn-primary btn-sm" id="keyGenerateBtn" onclick="openKeyModal()" data-i18n="btn.generateKey">+ Generate Key</button>
       </div>
+      <div id="keysListView">
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px"><span data-i18n="keys.description">Manage gateway API keys used to authenticate requests to /v1/* endpoints.</span> <button class="icon-btn" onclick="backfillKeysLastUsed()" data-i18n-title="hint.refreshLastUsed" title="Refresh last-used timestamps from request log" "><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg></button></p>
       <div class="toolbar is-stacked">
         <div class="mt-row">
@@ -370,7 +380,9 @@
         </tr></thead>
         <tbody id="keysTable"></tbody>
       </table></div>
+      </div>
     </div>
+
   </div>
 
   <!-- Dashboard Tab -->
