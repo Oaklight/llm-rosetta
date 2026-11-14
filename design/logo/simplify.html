@@ -95,8 +95,9 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
   background:#111;color:#fff;padding:9px 16px;border-radius:10px;font-size:12.5px;
   opacity:0;transition:.2s;pointer-events:none}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.pin{cursor:pointer}
+.pin,.lock{cursor:pointer}
 .pin:hover{stroke:var(--accent)}
+.lock:hover{stroke:var(--fg)}
 </style>
 </head>
 <body>
@@ -161,7 +162,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
           <button data-preset="readme">README</button>
           <button data-preset="docs">docs</button>
         </div>
-        <p class="hint">点击实心顶点 = 添加锚点；点击橙色锚点 = 取消。空心点为候选点（当前预算下未进入轮廓），也可点选。</p>
+        <p class="hint">左键点顶点 = 橙色锚点（保证不被简化）；右键点顶点 = 红色绝对锚点（保留顶点，并把画布坐标固定）；再点一次取消。空心点为候选点，也可点选。</p>
       </div>
       <div class="panel">
         <h2>导出</h2>
@@ -200,7 +201,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
         </div>
         <div class="view-bar" id="viewBar">
           <span>视图 <b id="zoomPct">100%</b></span>
-          <button id="zoomReset" title="缩放与平移复位">重置视图</button>
+          <button id="zoomReset" title="缩放与平移复位，并把画布重新居中">重置视图</button>
           <span class="hint">Ctrl+滚轮缩放，拖动平移，双击复位</span>
         </div>
         <div class="sizes" id="sizes"></div>
@@ -670,20 +671,35 @@ function reduceTo(pts, target, method, closed, pinned, fidelity = 0.02) {
 }
 
 function chaikin(pts, passes, closed) {
-  if (passes <= 0 || pts.length < 3) return pts.slice();
-  let ring = pts.slice();
-  if (closed && ring[0][0] === ring[ring.length-1][0] && ring[0][1] === ring[ring.length-1][1]) ring.pop();
-  for (let k = 0; k < passes; k++) {
-    const out = [], n = ring.length, last = closed ? n : n - 1;
-    for (let i = 0; i < last; i++) {
-      const a = ring[i], b = ring[(i + 1) % n];
-      out.push([0.75*a[0] + 0.25*b[0], 0.75*a[1] + 0.25*b[1]]);
-      out.push([0.25*a[0] + 0.75*b[0], 0.25*a[1] + 0.75*b[1]]);
-    }
-    ring = out;
+  return chaikinSrc(pts, pts.map((_, i) => i), passes, closed, new Set())[0];
+}
+
+/* Chaikin that carries each vertex's source index, so a red anchor can still
+ * be found after the vertex count changes.  A locked source index keeps its
+ * vertex: the corner stays sharp and only its two incident edges are cut.
+ * Without that, smoothing leaves the pinned point off the outline. */
+function chaikinSrc(pts, src, passes, closed, locked) {
+  if (passes <= 0 || pts.length < 3) return [pts.slice(), src.slice()];
+  let ring = pts.slice(), tags = src.slice();
+  if (closed && ring[0][0] === ring[ring.length-1][0] && ring[0][1] === ring[ring.length-1][1]) {
+    ring.pop(); tags.pop();
   }
-  if (closed) ring.push(ring[0]);
-  return ring;
+  for (let k = 0; k < passes; k++) {
+    const out = [], outTags = [], n = ring.length, last = closed ? n : n - 1;
+    for (let i = 0; i < last; i++) {
+      const j = (i + 1) % n, a = ring[i], b = ring[j];
+      if (!locked.has(tags[i])) {
+        out.push([0.75*a[0] + 0.25*b[0], 0.75*a[1] + 0.25*b[1]]);
+        outTags.push(tags[i]);
+      }
+      if (locked.has(tags[j])) out.push([b[0], b[1]]);
+      else out.push([0.25*a[0] + 0.75*b[0], 0.25*a[1] + 0.75*b[1]]);
+      outTags.push(tags[j]);
+    }
+    ring = out; tags = outTags;
+  }
+  if (closed && ring.length) { ring.push(ring[0]); tags.push(tags[0]); }
+  return [ring, tags];
 }
 
 /* ----------------------------- deformation ------------------------- */
@@ -740,8 +756,9 @@ const state = {
   tol: 0.05, fidelity: 0.02, rotate: 0, aspect: 1, inflate: 0, smooth: 0,
   scale: 0.88, canvas: 600, pad: 0.04, tight: false,
   fill: "#1e293b", darkFill: "#ededed", grid: true, dots: true,
-  pins: new Set(),      // clicked on: always kept
-  unpins: new Set()     // clicked off: auto anchor suppressed
+  pins: new Set(),      // left-clicked: always kept
+  unpins: new Set(),    // left-clicked off: auto anchor suppressed
+  locks: new Map()      // right-clicked: kept, and held at a canvas point
 };
 let built = null;
 const $ = (id) => document.getElementById(id);
@@ -756,23 +773,26 @@ function build() {
   const totalIn = dense.reduce((a, r) => a + r.length, 0);
   const rings = [], srcs = [], dotRings = [], dotSrcs = [];
   const autoByRing = [];
+  const locked = new Set(state.locks.keys());
 
   dense.forEach((ring, ri) => {
     const isClosed = isRing(ring);
     const budget = Math.max(3, Math.round(state.points * ring.length / Math.max(totalIn, 1)));
     const auto = structuralAnchors(ring, state.anchor, isClosed, state.anchorMode);
-    const pins = new Set([...auto, ...state.pins].filter(i => i >= 0 && i < ring.length));
+    const pins = new Set([...auto, ...state.pins, ...locked].filter(i => i >= 0 && i < ring.length));
     state.unpins.forEach(i => pins.delete(i));
+    locked.forEach(i => { if (i >= 0 && i < ring.length) pins.add(i); });
     autoByRing.push(auto);
 
     const keepSet = new Set(reduceTo(ring, budget, state.method, isClosed, pins, state.fidelity));
-    let pts = [...keepSet].map(i => ring[i]);
-    let src = [...keepSet];
+    const keep = [...keepSet];
+    let pts = keep.map(i => ring[i]);
+    let src = keep.slice();
     if (isClosed && pts.length >= 3 &&
         (pts[0][0] !== pts[pts.length-1][0] || pts[0][1] !== pts[pts.length-1][1])) {
       pts.push(pts[0]); src.push(src[0]);
     }
-    if (state.smooth > 0) { pts = chaikin(pts, state.smooth, isClosed); src = null; }
+    if (state.smooth > 0) [pts, src] = chaikinSrc(pts, src, state.smooth, isClosed, locked);
 
     // Candidate dots: what a generous budget keeps, plus everything pinned.
     const generous = new Set(reduceTo(ring, Math.max(budget, 64), state.method, isClosed, pins, state.fidelity));
@@ -806,6 +826,24 @@ function build() {
     viewBox = `0 0 ${fmt(state.canvas)} ${fmt(state.canvas)}`;
   }
 
+  // Red anchors are held at a fixed canvas point.  The mark moves as one
+  // piece, so nothing around a locked vertex changes; with several locks the
+  // errors average, because one translation cannot satisfy two fixed points.
+  if (state.locks.size) {
+    let dx = 0, dy = 0, n = 0;
+    const seen = new Set();
+    deformed.forEach((ring, ri) => ring.forEach(([x, y], i) => {
+      const tag = srcs[ri] ? srcs[ri][i] : undefined;
+      if (tag === undefined || !state.locks.has(tag) || seen.has(tag)) return;
+      seen.add(tag);
+      const t = state.locks.get(tag);
+      dx += t[0] - (x * k + tx);
+      dy += t[1] - (y * k + ty);
+      n += 1;
+    }));
+    if (n) { tx += dx / n; ty += dy / n; }
+  }
+
   built = { deformed, srcs, dots, dotSrcs, autoByRing, viewBox, tx, ty, k, totalIn,
             outN: deformed.reduce((a, r) => a + r.length, 0) };
   return built;
@@ -827,7 +865,8 @@ function markFill(forExport) {
 }
 
 const isPinned = (ri, src) =>
-  (state.pins.has(src) || built.autoByRing[ri].has(src)) && !state.unpins.has(src);
+  (state.locks.has(src) || state.pins.has(src) || built.autoByRing[ri].has(src)) &&
+  !state.unpins.has(src);
 
 /* -------------------------------- render --------------------------- */
 function svgFor(size, opts = {}) {
@@ -842,7 +881,8 @@ function svgFor(size, opts = {}) {
         : `.m{fill:${state.fill}}`);
   const head = `<style>${markCss}`
              + `.dot{fill:var(--accent)}.ghost{fill:none;stroke:var(--grid);stroke-opacity:.45}`
-             + `.pin{fill:#e8890c;stroke:#fff}.pin-ghost{fill:none;stroke:#e8890c}</style>`;
+             + `.pin{fill:#e8890c;stroke:#fff}.pin-ghost{fill:none;stroke:#e8890c}`
+             + `.lock{fill:#e02424;stroke:#fff}</style>`;
   let grid = "";
   if (state.grid) {
     const lines = [];
@@ -868,7 +908,9 @@ function svgFor(size, opts = {}) {
         const idx = src[i];
         const pinned = isPinned(ri, idx);
         const on = inPoly[ri] ? inPoly[ri].includes(idx) : true;
-        const cls = pinned ? (on ? "pin" : "pin-ghost") : (on ? "dot" : "ghost");
+        const cls = state.locks.has(idx) ? "lock"
+                  : pinned ? (on ? "pin" : "pin-ghost")
+                  : (on ? "dot" : "ghost");
         circles.push(`<circle class="${cls}" data-ri="${ri}" data-src="${idx}" cx="${fmt(ring[i][0], 2)}" cy="${fmt(ring[i][1], 2)}" r="${fmt(rad, 2)}" stroke-width="${fmt(rad * 0.55, 2)}"/>`);
       }
     });
@@ -896,18 +938,62 @@ function render() {
   $("sVb").textContent = built.viewBox;
   const cell = parseFloat(built.viewBox.split(" ")[2]) / 10;
   $("sCell").textContent = state.tight ? "—" : fmt(cell, 2) + " / 格";
+  // A dot is a few pixels wide, so both clicks snap to the nearest vertex
+  // within a short radius instead of demanding a hit.
+  const pickDot = (ev) => {
+    const t = ev.target;
+    if (t && t.tagName === "circle") return t;
+    let best = null, bestD = Infinity;
+    for (const c of document.querySelectorAll("#big circle")) {
+      const r = c.getBoundingClientRect();
+      const d = Math.hypot(ev.clientX - (r.x + r.width / 2), ev.clientY - (r.y + r.height / 2));
+      if (d < bestD) { bestD = d; best = c; }
+    }
+    return bestD <= 16 ? best : null;
+  };
   $("big").onclick = (ev) => {
     if (suppressClick) return;
-    const t = ev.target;
-    if (!t || t.tagName !== "circle") return;
+    const t = pickDot(ev);
+    if (!t) return;
     const src = parseInt(t.getAttribute("data-src"), 10);
     if (Number.isNaN(src)) return;
-    if (isPinned(parseInt(t.getAttribute("data-ri"), 10), src)) {
+    if (state.locks.has(src)) {          // red anchor: left click releases it
+      state.locks.delete(src);
+      state.pins.delete(src);
+      state.unpins.add(src);
+      toast("已取消绝对锚点");
+    } else if (isPinned(parseInt(t.getAttribute("data-ri"), 10), src)) {
       state.pins.delete(src);
       state.unpins.add(src);
     } else {
       state.unpins.delete(src);
       state.pins.add(src);
+    }
+    render();
+  };
+  // Bound on the wrapper: a drag in progress holds pointer capture there, and
+  // the browser then delivers contextmenu to the capturing element rather than
+  // to the shape under the cursor.
+  $("bigWrap").oncontextmenu = (ev) => {
+    ev.preventDefault();               // never leave the canvas for the browser menu
+    if (suppressClick) return;
+    const t = pickDot(ev);
+    if (!t) return;
+    const src = parseInt(t.getAttribute("data-src"), 10);
+    if (Number.isNaN(src)) return;
+    if (state.locks.has(src)) {
+      state.locks.delete(src);
+      toast("已取消绝对锚点");
+    } else {
+      // The lock stores the canvas position, not the source position: later
+      // changes to scale, framing or deform keep the point where it was.
+      const cx = parseFloat(t.getAttribute("cx"));
+      const cy = parseFloat(t.getAttribute("cy"));
+      const target = [cx * built.k + built.tx, cy * built.k + built.ty];
+      state.locks.set(src, target);
+      state.pins.add(src);
+      state.unpins.delete(src);
+      toast(`绝对锚点固定在画布 ${fmt(target[0], 1)}, ${fmt(target[1], 1)}`);
     }
     render();
   };
@@ -975,6 +1061,13 @@ function cliCommand() {
   if (state.inflate) parts.push(`--inflate ${state.inflate.toFixed(3)}`);
   if (state.pins.size) parts.push(`--pin ${[...state.pins].sort((a,b)=>a-b).join(",")}`);
   if (state.unpins.size) parts.push(`--unpin ${[...state.unpins].sort((a,b)=>a-b).join(",")}`);
+  if (state.locks.size) {
+    const spec = [...state.locks.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([i, t]) => `${i}@${fmt(t[0], 2)},${fmt(t[1], 2)}`)
+      .join(";");
+    parts.push(`--lock "${spec}"`);
+  }
   if (state.fill !== "#1e293b") parts.push(`--fill '${state.fill}'`);
   if (state.darkFill !== "#ededed") parts.push(`--dark-fill '${state.darkFill}'`);
   return parts.join(" ");
@@ -982,7 +1075,7 @@ function cliCommand() {
 
 /* -------------------------------- zoom ----------------------------- */
 const zoom = { z: 1, x: 0, y: 0 };
-let drag = null, suppressClick = false;
+let drag = null, dragHint = null, suppressClick = false;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 function applyZoom() {
@@ -997,6 +1090,32 @@ function applyZoom() {
 }
 
 function resetZoom() { zoom.z = 1; zoom.x = 0; zoom.y = 0; applyZoom(); }
+
+/* Red anchors can push the mark off the canvas centre, because holding a
+ * vertex at a fixed canvas point moves everything else.  Re-referencing them
+ * to the centred layout lets 重置视图 put the mark back in the middle without
+ * throwing the anchors away. */
+function rebaseLocks() {
+  if (!state.locks.size) return;
+  const saved = new Map(state.locks);
+  const pins = state.pins;
+  saved.forEach((_, src) => pins.add(src));
+  state.locks = new Map();
+  const b = build();
+  const rebased = new Map();
+  for (const src of saved.keys()) {
+    for (let ri = 0; ri < b.srcs.length; ri++) {
+      const i = b.srcs[ri].indexOf(src);
+      if (i < 0) continue;
+      const [x, y] = b.deformed[ri][i];
+      rebased.set(src, [x * b.k + b.tx, y * b.k + b.ty]);
+      break;
+    }
+  }
+  state.locks = rebased;
+}
+
+function resetView() { resetZoom(); rebaseLocks(); render(); }
 
 $("bigWrap").addEventListener("wheel", (e) => {
   if (!e.ctrlKey && !e.metaKey) return;      // plain wheel keeps scrolling the page
@@ -1013,7 +1132,11 @@ $("bigWrap").addEventListener("wheel", (e) => {
 }, { passive: false });
 
 $("bigWrap").addEventListener("pointerdown", (e) => {
-  if (zoom.z <= 1 || e.target.tagName === "circle") return;
+  if (e.button !== 0) return;        // right-click marks anchors, it never pans
+  if (zoom.z <= 1 || e.target.tagName === "circle") {
+    dragHint = { x: e.clientX, y: e.clientY };
+    return;
+  }
   drag = { x: e.clientX, y: e.clientY, ox: zoom.x, oy: zoom.y, moved: 0 };
   $("bigWrap").setPointerCapture(e.pointerId);
   $("bigWrap").classList.add("dragging");
@@ -1025,15 +1148,21 @@ $("bigWrap").addEventListener("pointermove", (e) => {
   zoom.x = drag.ox + dx; zoom.y = drag.oy + dy;
   applyZoom();
 });
-$("bigWrap").addEventListener("pointerup", () => {
+$("bigWrap").addEventListener("pointerup", (e) => {
+  // Dragging at 100% has nothing to pan, so say what the gesture needs.
+  if (dragHint && zoom.z <= 1) {
+    const moved = Math.hypot(e.clientX - dragHint.x, e.clientY - dragHint.y);
+    if (moved > 6) toast("Ctrl + 滚轮放大后，拖动即可平移");
+  }
+  dragHint = null;
   if (!drag) return;
   const moved = drag.moved;
   drag = null;
   $("bigWrap").classList.remove("dragging");
   if (moved > 4) { suppressClick = true; setTimeout(() => { suppressClick = false; }, 0); }
 });
-$("bigWrap").addEventListener("dblclick", resetZoom);
-$("zoomReset").addEventListener("click", (e) => { e.stopPropagation(); resetZoom(); });
+$("bigWrap").addEventListener("dblclick", resetView);
+$("zoomReset").addEventListener("click", (e) => { e.stopPropagation(); resetView(); });
 
 /* ------------------------------ defaults --------------------------- */
 const DEFAULTS = {
@@ -1047,6 +1176,7 @@ function resetAll() {
   Object.assign(state, DEFAULTS);
   state.pins.clear();
   state.unpins.clear();
+  state.locks.clear();
   state.src = STONE;
   $("src").value = STONE;
   resetZoom();
@@ -1074,6 +1204,9 @@ function snapshot() {
     },
     pins: [...state.pins].sort((a, b) => a - b),
     unpins: [...state.unpins].sort((a, b) => a - b),
+    locks: [...state.locks.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([i, t]) => [i, t[0], t[1]]),
     zoom: { z: zoom.z, x: zoom.x, y: zoom.y }
   };
 }
@@ -1090,6 +1223,11 @@ function restore(draft) {
   }
   state.pins = new Set(Array.isArray(draft.pins) ? draft.pins : []);
   state.unpins = new Set(Array.isArray(draft.unpins) ? draft.unpins : []);
+  state.locks = new Map(
+    (Array.isArray(draft.locks) ? draft.locks : [])
+      .filter(e => Array.isArray(e) && e.length === 3)
+      .map(([i, x, y]) => [i, [Number(x), Number(y)]])
+  );
   if (draft.zoom) {
     zoom.z = clamp(Number(draft.zoom.z) || 1, 1, 12);
     zoom.x = Number(draft.zoom.x) || 0;
@@ -1176,20 +1314,20 @@ $("copyCli").addEventListener("click", async () => {
 
 $("src").value = state.src;
 $("applySrc").addEventListener("click", () => {
-  try { state.src = $("src").value.trim(); state.pins.clear(); render(); toast("已应用"); }
+  try { state.src = $("src").value.trim(); state.pins.clear(); state.locks.clear(); render(); toast("已应用"); }
   catch (e) { toast("解析失败：" + e.message); }
 });
 $("resetSrc").addEventListener("click", () => {
-  state.src = STONE; $("src").value = STONE; state.pins.clear(); state.unpins.clear(); render(); toast("已恢复内置石形");
+  state.src = STONE; $("src").value = STONE; state.pins.clear(); state.unpins.clear(); state.locks.clear(); render(); toast("已恢复内置石形");
 });
-$("clearPins").addEventListener("click", () => { state.pins.clear(); state.unpins.clear(); render(); toast("已清空手动锚点"); });
+$("clearPins").addEventListener("click", () => { state.pins.clear(); state.unpins.clear(); state.locks.clear(); render(); toast("已清空手动锚点"); });
 $("file").addEventListener("change", async (e) => {
   const f = e.target.files[0]; if (!f) return;
   const root = new DOMParser().parseFromString(await f.text(), "image/svg+xml");
   const ds = [...root.querySelectorAll("path")].map(p => p.getAttribute("d")).filter(Boolean);
   if (!ds.length) { toast("文件里没有 path"); return; }
   state.src = ds.sort((a, b) => b.length - a.length)[0];
-  state.pins.clear(); state.unpins.clear(); $("src").value = state.src; render(); toast("已载入 " + f.name);
+  state.pins.clear(); state.unpins.clear(); state.locks.clear(); $("src").value = state.src; render(); toast("已载入 " + f.name);
 });
 
 $("resetAll").addEventListener("click", resetAll);

@@ -104,6 +104,15 @@ half from area and fills the rest by depth. On this outline 46% of the
 flattened vertices are locally reflex, yet `area` selects 1 of 12, `corner`
 7 of 12, and `depth` 12 of 12, all non-hull.
 
+Red anchors reach the CLI as `--lock "85@497.09,267.21"`. `85` is an index into
+the flattened source ring, the same numbering `--pin` takes and not a position
+in the simplified output, so the vertex may not be in the result yet: a lock
+forces it in, dropping another vertex to keep the budget. `497.09,267.21` is
+the canvas point it is held at. Several locks are separated by `;`. The
+correction is one translation of the whole mark, so the geometry around a
+locked vertex is untouched; with more than one lock the remaining error is
+averaged.
+
 ```bash
 cd design/logo
 
@@ -153,9 +162,17 @@ Interaction:
 - click a vertex to add it as an anchor, and click an orange anchor to remove
   it. Hollow dots are candidates the current budget drops; they stay clickable,
   so an anchor can come off and go back on at any budget.
-- Ctrl and the wheel zoom the preview around the cursor, dragging pans, and a
-  double click or the 重置视图 button resets the view. The canvas grid stays in
-  step, so you can inspect pixel detail without changing the exported geometry.
+- right-click near a vertex for a red anchor; the click snaps to the nearest
+  one within a few pixels, and the browser menu never opens over the canvas.
+  It is kept like an orange one and it also stays put on the canvas: the whole
+  mark shifts so that vertex lands back on the point where you marked it,
+  whatever the deform knobs do. Its corner stays sharp through smoothing too.
+  Right-click again, or click the red dot, to release it.
+- Ctrl and the wheel zoom the preview around the cursor. Dragging pans once
+  zoomed; at 100% the mark already fills the frame, so a drag says so instead
+  of moving it. A double click or the 重置视图 button resets the view. The reset
+  also re-centres the canvas: red anchors are re-referenced to the centred
+  layout, so the mark goes back to the middle instead of drifting off it.
 - 重置 in the header restores every parameter, clears manual anchors and resets
   the view.
 - the 主题 toggle repaints the preview with that theme's fill: a dark page shows
