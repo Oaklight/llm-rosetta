@@ -115,6 +115,19 @@ anchors, so dragging one moves the rest of the outline and leaves the anchors
 where they are, and the framing maps that centroid back onto the recorded canvas
 point; several locks are separated by `;`.
 
+**Local character.** `--sharp u0.10` and `--round u0.60` override the corner
+treatment around a place on the outline instead of everywhere. A 锐 place drops
+to no rounding at its centre, so the corner stays exactly as traced, and it
+keeps the marked vertex plus every second vertex nearby: a 3% stretch of the
+outline roughly doubles its vertex count. A 圆 place adds two passes on top of
+`--smooth`. Both fade back to the global value by 4.5% of the outline, measured
+along it, so the two treatments blend rather than switch. The page marks them
+with the 左键模式 control (锚点 / 锐 / 圆) and draws them violet and teal.
+Measured at `--points 48 --smooth 2` on the stone: 14 vertices within 60 units
+of `u0.10` become 31 with `--sharp u0.10`, and 10 near `u0.60` become 34 with
+`--round u0.60`, while the marked vertex itself stays at its traced position to
+0.0001 canvas units.
+
 ```bash
 cd design/logo
 
@@ -164,6 +177,10 @@ Interaction:
 - click a vertex to add it as an anchor, and click an orange anchor to remove
   it. Hollow dots are candidates the current budget drops; they stay clickable,
   so an anchor can come off and go back on at any budget.
+- 左键模式 switches what a left click places: 锚点 (orange, kept through the
+  reduction), 锐 (violet, no rounding and more vertices nearby) or 圆 (teal, two
+  extra rounding passes). A 锐 and a 圆 place on the same vertex replace each
+  other, and either is kept like an anchor.
 - right-click near a vertex for a red anchor; the click snaps to the nearest
   one within a few pixels, and the browser menu never opens over the canvas.
   It is stored as a position on the outline, so changing 曲线精度 leaves it on

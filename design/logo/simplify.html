@@ -162,7 +162,15 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
           <button data-preset="readme">README</button>
           <button data-preset="docs">docs</button>
         </div>
-        <p class="hint">左键点顶点 = 橙色锚点（保证不被简化）；右键点顶点 = 红色绝对锚点（保留顶点并固定画布位置；锚点按轮廓位置记录，改曲线精度不会跑）。再点一次取消，空心点也可点选。</p>
+        <p class="hint">左键按当前模式落点：锚点（橙，保证不被简化）/ 锐（蓝，不圆角并保留更多顶点）/ 圆（青，额外圆角）。右键 = 红色绝对锚点（保留顶点并固定画布位置；锚点按轮廓位置记录，改曲线精度不会跑）。再点一次取消，空心点也可点选。</p>
+        <label class="row">
+          <span class="k"><span>左键模式</span></span>
+          <div class="seg">
+            <button id="modePin" class="on">锚点</button>
+            <button id="modeSharp">锐</button>
+            <button id="modeRound">圆</button>
+          </div>
+        </label>
       </div>
       <div class="panel">
         <h2>导出</h2>
@@ -679,24 +687,42 @@ function chaikin(pts, passes, closed) {
  * vertex: the corner stays sharp and only its two incident edges are cut.
  * Without that, smoothing leaves the pinned point off the outline. */
 function chaikinSrc(pts, src, passes, closed, locked) {
-  if (passes <= 0 || pts.length < 3) return [pts.slice(), src.slice()];
+  if (passes <= 0) return [pts.slice(), src.slice()];
+  return chaikinBudgeted(pts, src, pts.map(() => passes), closed, locked);
+}
+
+/* Per-vertex budget of cutting passes.  Budget 0 keeps the corner exactly,
+ * budget 1 is one round of cutting; --smooth is the default and the 锐 / 圆
+ * places override it locally.  Locked vertices are always budget 0. */
+function chaikinBudgeted(pts, src, budgets, closed, locked) {
   let ring = pts.slice(), tags = src.slice();
-  if (closed && ring[0][0] === ring[ring.length-1][0] && ring[0][1] === ring[ring.length-1][1]) {
-    ring.pop(); tags.pop();
+  let budget = budgets.map((b, i) => locked.has(src[i]) ? 0 : b);
+  if (closed && ring.length > 1 &&
+      ring[0][0] === ring[ring.length-1][0] && ring[0][1] === ring[ring.length-1][1]) {
+    ring.pop(); tags.pop(); budget.pop();
   }
-  for (let k = 0; k < passes; k++) {
-    const out = [], outTags = [], n = ring.length, last = closed ? n : n - 1;
-    for (let i = 0; i < last; i++) {
+  const top = budget.length ? Math.max(...budget) : 0;
+  for (let k = 1; k <= top; k++) {
+    const n = ring.length;
+    if (n < 3) break;
+    const out = [], outTags = [], outBudget = [];
+    for (let i = 0; i < (closed ? n : n - 1); i++) {
       const j = (i + 1) % n, a = ring[i], b = ring[j];
-      if (!locked.has(tags[i])) {
+      // A rounded vertex becomes the cut point just after it; a sharp one
+      // keeps its exact position.
+      if (budget[i] >= k) {
         out.push([0.75*a[0] + 0.25*b[0], 0.75*a[1] + 0.25*b[1]]);
-        outTags.push(tags[i]);
+        outTags.push(tags[i]); outBudget.push(budget[i]);
+      } else {
+        out.push([a[0], a[1]]);
+        outTags.push(tags[i]); outBudget.push(budget[i]);
       }
-      if (locked.has(tags[j])) out.push([b[0], b[1]]);
-      else out.push([0.25*a[0] + 0.75*b[0], 0.25*a[1] + 0.75*b[1]]);
-      outTags.push(tags[j]);
+      if (budget[j] >= k) {
+        out.push([0.25*a[0] + 0.75*b[0], 0.25*a[1] + 0.75*b[1]]);
+        outTags.push(tags[j]); outBudget.push(budget[j]);
+      }
     }
-    ring = out; tags = outTags;
+    ring = out; tags = outTags; budget = outBudget;
   }
   if (closed && ring.length) { ring.push(ring[0]); tags.push(tags[0]); }
   return [ring, tags];
@@ -768,7 +794,10 @@ const state = {
   fill: "#1e293b", darkFill: "#ededed", grid: true, dots: true,
   pins: new Set(),      // left-clicked: always kept
   unpins: new Set(),    // left-clicked off: auto anchor suppressed
-  locks: new Map()      // right-clicked: kept, and held at a canvas point
+  locks: new Map(),     // right-clicked: kept, and held at a canvas point
+  sharp: new Set(),     // 锐 places: no rounding, extra vertices nearby
+  round: new Set(),     // 圆 places: extra rounding nearby
+  mode: "pin"           // what a left click places: pin | sharp | round
 };
 let built = null;
 const $ = (id) => document.getElementById(id);
@@ -829,11 +858,59 @@ function indexAtFraction(fracs, u) {
 }
 const roundU = (u) => Math.round(u * 1e6) / 1e6;
 
+/* A marked place keeps its effect at full strength within REGION_CORE of the
+ * outline and fades to the global setting by REGION_REACH. */
+const REGION_CORE = 0.015, REGION_REACH = 0.045;
+
+function arcDistance(fracs, u) {
+  return fracs.map(f => { const d = Math.abs(f - u); return Math.min(d, 1 - d); });
+}
+function fade(d) {
+  if (d <= REGION_CORE) return 1;
+  if (d >= REGION_REACH) return 0;
+  return (REGION_REACH - d) / (REGION_REACH - REGION_CORE);
+}
+/* Per-vertex cutting budget: a 锐 place drops to 0 passes at its centre, a 圆
+ * place rises to base + 2, both fading back to base over the window. */
+function regionBudgets(fracs, base, sharp, rounded, extra = 2) {
+  const b = fracs.map(() => base);
+  for (const u of sharp) {
+    const d = arcDistance(fracs, u);
+    for (let i = 0; i < b.length; i++) {
+      const t = fade(d[i]);
+      b[i] = b[i] * (1 - t) + 0 * t;
+    }
+  }
+  for (const u of rounded) {
+    const d = arcDistance(fracs, u);
+    for (let i = 0; i < b.length; i++) {
+      const t = fade(d[i]);
+      b[i] = b[i] * (1 - t) + (base + extra) * t;
+    }
+  }
+  return b.map(v => Math.max(0, Math.round(v)));
+}
+/* Extra vertices to keep around a 锐 place: the marked vertex itself, every
+ * 2nd inside the core, every 4th in the fade band. */
+function regionPins(fracs, sharp, step = 2) {
+  const out = new Set();
+  for (const u of sharp) {
+    out.add(indexAtFraction(fracs, u));
+    const d = arcDistance(fracs, u);
+    for (let i = 0; i < fracs.length; i++) {
+      if (d[i] <= REGION_CORE) { if (i % step === 0) out.add(i); }
+      else if (d[i] < REGION_REACH && i % (step * 2) === 0) out.add(i);
+    }
+  }
+  return out;
+}
+
 function build() {
   const dense = flatten(parsePath(state.src), state.tol);
   const totalIn = dense.reduce((a, r) => a + r.length, 0);
   const rings = [], srcs = [], dotRings = [], dotSrcs = [];
   const autoByRing = [], fracsByRing = [], pinByRing = [], lockByRing = [];
+  const sharpByRing = [], roundByRing = [];
 
   dense.forEach((ring, ri) => {
     const isClosed = isRing(ring);
@@ -844,14 +921,21 @@ function build() {
     const lockIdx = new Map(
       [...state.locks.entries()].map(([u, t]) => [indexAtFraction(fracs, u), t])
     );
+    const sharpUs = [...state.sharp], roundUs = [...state.round];
     const auto = structuralAnchors(ring, state.anchor, isClosed, state.anchorMode);
-    const pins = new Set([...auto, ...pinIdx, ...lockIdx.keys()].filter(i => i >= 0 && i < ring.length));
+    const sharpIdx = new Set(sharpUs.map(u => indexAtFraction(fracs, u)));
+    const roundIdx = new Set(roundUs.map(u => indexAtFraction(fracs, u)));
+    const pins = new Set([...auto, ...pinIdx, ...lockIdx.keys(),
+                          ...regionPins(fracs, sharpUs), ...roundIdx]
+                         .filter(i => i >= 0 && i < ring.length));
     unpinIdx.forEach(i => pins.delete(i));
     lockIdx.forEach((_, i) => { if (i >= 0 && i < ring.length) pins.add(i); });
     autoByRing.push(auto);
     fracsByRing.push(fracs);
     pinByRing.push(pins);
     lockByRing.push(lockIdx);
+    sharpByRing.push(sharpIdx);
+    roundByRing.push(roundIdx);
 
     const keepSet = new Set(reduceTo(ring, budget, state.method, isClosed, pins, state.fidelity));
     const keep = [...keepSet];
@@ -861,7 +945,10 @@ function build() {
         (pts[0][0] !== pts[pts.length-1][0] || pts[0][1] !== pts[pts.length-1][1])) {
       pts.push(pts[0]); src.push(src[0]);
     }
-    if (state.smooth > 0) [pts, src] = chaikinSrc(pts, src, state.smooth, isClosed, new Set(lockIdx.keys()));
+    const ringBudgets = regionBudgets(fracs, state.smooth, sharpUs, roundUs);
+    const budgets = src.map(t => (t >= 0 && t < ringBudgets.length) ? ringBudgets[t] : state.smooth);
+    if (state.smooth > 0 || Math.max(...ringBudgets) > 0)
+      [pts, src] = chaikinBudgeted(pts, src, budgets, isClosed, new Set(lockIdx.keys()));
 
     // Candidate dots: what a generous budget keeps, plus everything pinned.
     const generous = new Set(reduceTo(ring, Math.max(budget, 64), state.method, isClosed, pins, state.fidelity));
@@ -912,7 +999,8 @@ function build() {
   }
 
   built = { deformed, srcs, dots, dotSrcs, autoByRing, fracs: fracsByRing,
-            pinsByRing: pinByRing, lockByRing, pivotNow, centred,
+            pinsByRing: pinByRing, lockByRing,
+            sharpByRing, roundByRing, pivotNow, centred,
             viewBox, tx, ty, k, totalIn,
             outN: deformed.reduce((a, r) => a + r.length, 0) };
   return built;
@@ -950,7 +1038,8 @@ function svgFor(size, opts = {}) {
   const head = `<style>${markCss}`
              + `.dot{fill:var(--accent)}.ghost{fill:none;stroke:var(--grid);stroke-opacity:.45}`
              + `.pin{fill:#e8890c;stroke:#fff}.pin-ghost{fill:none;stroke:#e8890c}`
-             + `.lock{fill:#e02424;stroke:#fff}</style>`;
+             + `.lock{fill:#e02424;stroke:#fff}`
+             + `.sharp{fill:#7c3aed;stroke:#fff}.roundpin{fill:#0f766e;stroke:#fff}</style>`;
   let grid = "";
   if (state.grid) {
     const lines = [];
@@ -976,9 +1065,12 @@ function svgFor(size, opts = {}) {
         const idx = src[i];
         const pinned = isPinned(ri, idx);
         const on = inPoly[ri] ? inPoly[ri].includes(idx) : true;
-        const cls = built.lockByRing[ri] && built.lockByRing[ri].has(idx) ? "lock"
+        const clsState = built.lockByRing[ri] && built.lockByRing[ri].has(idx) ? "lock"
+                  : built.sharpByRing[ri] && built.sharpByRing[ri].has(idx) ? "sharp"
+                  : built.roundByRing[ri] && built.roundByRing[ri].has(idx) ? "roundpin"
                   : pinned ? (on ? "pin" : "pin-ghost")
                   : (on ? "dot" : "ghost");
+        const cls = clsState;
         circles.push(`<circle class="${cls}" data-ri="${ri}" data-src="${idx}" cx="${fmt(ring[i][0], 2)}" cy="${fmt(ring[i][1], 2)}" r="${fmt(rad, 2)}" stroke-width="${fmt(rad * 0.55, 2)}"/>`);
       }
     });
@@ -1033,6 +1125,15 @@ function render() {
       state.pins.delete(u);
       state.unpins.add(u);
       toast("已取消绝对锚点");
+    } else if (state.mode === "sharp" || state.mode === "round") {
+      // 锐 / 圆 places replace each other, and either is also kept.
+      const own = state.mode === "sharp" ? state.sharp : state.round;
+      const other = state.mode === "sharp" ? state.round : state.sharp;
+      if (own.has(u)) { own.delete(u); }
+      else {
+        own.add(u); other.delete(u);
+        state.unpins.delete(u);
+      }
     } else if (isPinned(ri, src)) {
       state.pins.delete(u);
       state.unpins.add(u);
@@ -1088,6 +1189,9 @@ function syncLabels() {
 
 function pullUI() {
   $("points").value = state.points;
+  $("modePin").classList.toggle("on", state.mode === "pin");
+  $("modeSharp").classList.toggle("on", state.mode === "sharp");
+  $("modeRound").classList.toggle("on", state.mode === "round");
   $("anchor").value = state.anchor;
   $("anchorMode").value = state.anchorMode;
   $("tol").value = state.tol;
@@ -1141,6 +1245,8 @@ function cliCommand() {
       .join(";");
     parts.push(`--lock "${spec}"`);
   }
+  if (state.sharp.size) parts.push(`--sharp ${[...state.sharp].sort((a,b)=>a-b).map(u => "u" + u).join(",")}`);
+  if (state.round.size) parts.push(`--round ${[...state.round].sort((a,b)=>a-b).map(u => "u" + u).join(",")}`);
   if (state.fill !== "#1e293b") parts.push(`--fill '${state.fill}'`);
   if (state.darkFill !== "#ededed") parts.push(`--dark-fill '${state.darkFill}'`);
   return parts.join(" ");
@@ -1236,7 +1342,7 @@ const DEFAULTS = {
   points: 48, anchor: 12, anchorMode: "area", method: "visvalingam", tol: 0.05,
   rotate: 0, aspect: 1, inflate: 0, smooth: 0,
   scale: 0.88, canvas: 600, pad: 0.04, tight: false,
-  fill: "#1e293b", darkFill: "#ededed", grid: true, dots: true
+  fill: "#1e293b", darkFill: "#ededed", grid: true, dots: true, mode: "pin"
 };
 
 function resetAll() {
@@ -1244,6 +1350,8 @@ function resetAll() {
   state.pins.clear();
   state.unpins.clear();
   state.locks.clear();
+  state.sharp.clear();
+  state.round.clear();
   state.src = STONE;
   $("src").value = STONE;
   resetZoom();
@@ -1259,7 +1367,7 @@ const DRAFT_KEY = "rosetta.stoneDraft.v1";
 
 function snapshot() {
   return {
-    v: 2,
+    v: 3,
     savedAt: new Date().toISOString(),
     src: state.src,
     params: {
@@ -1274,12 +1382,15 @@ function snapshot() {
     locks: [...state.locks.entries()]
       .sort((a, b) => a[0] - b[0])
       .map(([u, t]) => [u, t[0], t[1]]),
+    sharp: [...state.sharp].sort((a, b) => a - b),
+    round: [...state.round].sort((a, b) => a - b),
+    mode: state.mode,
     zoom: { z: zoom.z, x: zoom.x, y: zoom.y }
   };
 }
 
 function restore(draft) {
-  if (!draft || (draft.v !== 1 && draft.v !== 2)) throw new Error("草稿格式无法识别");
+  if (!draft || (draft.v !== 1 && draft.v !== 2 && draft.v !== 3)) throw new Error("草稿格式无法识别");
   const params = draft.params || {};
   for (const k of Object.keys(DEFAULTS)) {
     if (params[k] !== undefined) state[k] = params[k];
@@ -1296,6 +1407,10 @@ function restore(draft) {
   const asU = (v) => draft.v === 1 ? roundU(fracs[v] ?? 0) : Number(v);
   state.pins = new Set((Array.isArray(draft.pins) ? draft.pins : []).map(asU));
   state.unpins = new Set((Array.isArray(draft.unpins) ? draft.unpins : []).map(asU));
+  state.sharp = new Set((Array.isArray(draft.sharp) ? draft.sharp : []).map(u => Number(u)));
+  state.round = new Set((Array.isArray(draft.round) ? draft.round : []).map(u => Number(u)));
+  if (draft.mode === "sharp" || draft.mode === "round" || draft.mode === "pin")
+    state.mode = draft.mode;
   state.locks = new Map(
     (Array.isArray(draft.locks) ? draft.locks : [])
       .filter(e => Array.isArray(e) && e.length === 3)
@@ -1346,6 +1461,9 @@ bind("smooth", "smooth");
 bind("scale", "scale"); bind("canvas", "canvas"); bind("pad", "pad");
 
 $("anchorMode").addEventListener("change", e => { state.anchorMode = e.target.value; render(); });
+$("modePin").addEventListener("click", () => { state.mode = "pin"; pullUI(); });
+$("modeSharp").addEventListener("click", () => { state.mode = "sharp"; pullUI(); });
+$("modeRound").addEventListener("click", () => { state.mode = "round"; pullUI(); });
 $("method").addEventListener("change", e => {
   state.method = e.target.value;
   pullUI();
@@ -1387,20 +1505,20 @@ $("copyCli").addEventListener("click", async () => {
 
 $("src").value = state.src;
 $("applySrc").addEventListener("click", () => {
-  try { state.src = $("src").value.trim(); state.pins.clear(); state.locks.clear(); render(); toast("已应用"); }
+  try { state.src = $("src").value.trim(); state.pins.clear(); state.locks.clear(); state.sharp.clear(); state.round.clear(); render(); toast("已应用"); }
   catch (e) { toast("解析失败：" + e.message); }
 });
 $("resetSrc").addEventListener("click", () => {
-  state.src = STONE; $("src").value = STONE; state.pins.clear(); state.unpins.clear(); state.locks.clear(); render(); toast("已恢复内置石形");
+  state.src = STONE; $("src").value = STONE; state.pins.clear(); state.unpins.clear(); state.locks.clear(); state.sharp.clear(); state.round.clear(); render(); toast("已恢复内置石形");
 });
-$("clearPins").addEventListener("click", () => { state.pins.clear(); state.unpins.clear(); state.locks.clear(); render(); toast("已清空手动锚点"); });
+$("clearPins").addEventListener("click", () => { state.pins.clear(); state.unpins.clear(); state.locks.clear(); state.sharp.clear(); state.round.clear(); render(); toast("已清空局部标记"); });
 $("file").addEventListener("change", async (e) => {
   const f = e.target.files[0]; if (!f) return;
   const root = new DOMParser().parseFromString(await f.text(), "image/svg+xml");
   const ds = [...root.querySelectorAll("path")].map(p => p.getAttribute("d")).filter(Boolean);
   if (!ds.length) { toast("文件里没有 path"); return; }
   state.src = ds.sort((a, b) => b.length - a.length)[0];
-  state.pins.clear(); state.unpins.clear(); state.locks.clear(); $("src").value = state.src; render(); toast("已载入 " + f.name);
+  state.pins.clear(); state.unpins.clear(); state.locks.clear(); state.sharp.clear(); state.round.clear(); $("src").value = state.src; render(); toast("已载入 " + f.name);
 });
 
 $("resetAll").addEventListener("click", resetAll);

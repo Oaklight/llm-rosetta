@@ -657,28 +657,56 @@ def chaikin_src(
     red anchor stops being a vertex of the result after the first pass, which
     is why a pinned point drifts off the outline once smoothing is on.
     """
+    if passes <= 0:
+        return list(pts), list(src)
+    return chaikin_budgeted(pts, src, [passes] * len(pts), closed, locked)
+
+
+def chaikin_budgeted(
+    pts: list[Point],
+    src: list[int],
+    budgets: list[int],
+    closed: bool,
+    locked: frozenset[int] = frozenset(),
+) -> tuple[list[Point], list[int]]:
+    """Corner cutting with a per-vertex budget of passes.
+
+    A vertex with budget 0 keeps its corner exactly, budget 1 is one round of
+    cutting, and so on; the global ``--smooth`` value is the default budget,
+    and "锐" / "圆" regions override it locally.  Locked vertices are always
+    budget 0.
+    """
     ring = list(pts)
     tags = list(src)
+    budget = [0 if t in locked else b for b, t in zip(budgets, src)]
     if closed and len(ring) > 1 and ring[0] == ring[-1]:
-        ring, tags = ring[:-1], tags[:-1]
-    for _ in range(passes):
+        ring, tags, budget = ring[:-1], tags[:-1], budget[:-1]
+    top = max(budget, default=0)
+    for k in range(1, top + 1):
         n = len(ring)
         if n < 3:
             break
         out: list[Point] = []
         out_tags: list[int] = []
+        out_budget: list[int] = []
         for i in range(n if closed else n - 1):
             j = (i + 1) % n
             a, b = ring[i], ring[j]
-            if tags[i] not in locked:
+            # A rounded vertex replaces itself with the cut point just after
+            # it; a sharp one keeps its exact position.
+            if budget[i] >= k:
                 out.append((0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]))
                 out_tags.append(tags[i])
-            if tags[j] in locked:
-                out.append(b)
+                out_budget.append(budget[i])
             else:
+                out.append(a)
+                out_tags.append(tags[i])
+                out_budget.append(budget[i])
+            if budget[j] >= k:
                 out.append((0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]))
-            out_tags.append(tags[j])
-        ring, tags = out, out_tags
+                out_tags.append(tags[j])
+                out_budget.append(budget[j])
+        ring, tags, budget = out, out_tags, out_budget
     if closed and ring:
         ring.append(ring[0])
         tags.append(tags[0])
@@ -984,6 +1012,76 @@ def index_at_fraction(fracs: list[float], u: float) -> int:
     return min(range(len(fracs)), key=lambda i: abs(fracs[i] - u))
 
 
+# A marked place keeps its effect at full strength within REGION_CORE of the
+# outline and fades to the global setting by REGION_REACH.
+REGION_CORE = 0.015
+REGION_REACH = 0.045
+
+
+def _arc_distance(fracs: list[float], u: float) -> list[float]:
+    """Distance along the outline from every vertex to *u*, 0..0.5."""
+    out = []
+    for f in fracs:
+        d = abs(f - u)
+        out.append(min(d, 1.0 - d))
+    return out
+
+
+def _fade(d: float) -> float:
+    """1 inside the core, 0 beyond the reach, linear in between."""
+    if d <= REGION_CORE:
+        return 1.0
+    if d >= REGION_REACH:
+        return 0.0
+    return (REGION_REACH - d) / (REGION_REACH - REGION_CORE)
+
+
+def region_budgets(
+    fracs: list[float],
+    base: int,
+    sharp: list[float],
+    rounded: list[float],
+    extra: int = 2,
+) -> list[int]:
+    """Per-vertex Chaikin budgets with the local overrides applied.
+
+    A 锐 place drops to 0 passes at its centre (the corner stays exactly) and a
+    圆 place rises to *base* + *extra*, both fading back to *base* over the
+    window, so a mark can be crisp in one place and soft in another.
+    """
+    budgets = [float(base)] * len(fracs)
+    for u in sharp:
+        for i, d in enumerate(_arc_distance(fracs, u)):
+            t = _fade(d)
+            budgets[i] = budgets[i] * (1 - t) + 0.0 * t
+    for u in rounded:
+        for i, d in enumerate(_arc_distance(fracs, u)):
+            t = _fade(d)
+            budgets[i] = budgets[i] * (1 - t) + (base + extra) * t
+    return [max(0, int(round(b))) for b in budgets]
+
+
+def region_pins(
+    fracs: list[float], sharp: list[float], step: int = 2
+) -> frozenset[int]:
+    """Extra vertices to keep around a 锐 place, so the line stays detailed.
+
+    Every *step*-th vertex inside the core is pinned, and every second one of
+    those in the fade band: a 3% stretch of the outline roughly doubles its
+    vertex count there without the whole budget following.
+    """
+    pinned: set[int] = set()
+    for u in sharp:
+        pinned.add(index_at_fraction(fracs, u))
+        for i, d in enumerate(_arc_distance(fracs, u)):
+            if d <= REGION_CORE:
+                if i % step == 0:
+                    pinned.add(i)
+            elif d < REGION_REACH and i % (step * 2) == 0:
+                pinned.add(i)
+    return frozenset(pinned)
+
+
 def parse_anchor_token(token: str) -> tuple[str, float]:
     """Read one anchor reference: ``u0.35`` is a fraction, ``120`` an index.
 
@@ -1135,6 +1233,21 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--sharp",
+        default="",
+        metavar="REF,...",
+        help=(
+            "锐 places: no rounding and extra vertices kept around them "
+            "(u0.35 or an index)"
+        ),
+    )
+    p.add_argument(
+        "--round",
+        default="",
+        metavar="REF,...",
+        help=("圆 places: two extra rounding passes around them, on top of --smooth"),
+    )
+    p.add_argument(
         "--tolerance",
         type=float,
         default=0.05,
@@ -1204,6 +1317,8 @@ def main(argv: list[str] | None = None) -> int:
     budgets = [int(x) for x in str(args.points).replace(" ", "").split(",") if x]
     pin_refs = parse_anchors(args.pin)
     unpin_refs = parse_anchors(args.unpin)
+    sharp_refs = parse_anchors(args.sharp)
+    round_refs = parse_anchors(args.round)
     lock_refs = parse_locks(args.lock)
     out_path: Path | None = args.out
     if out_path is None and not args.stats:
@@ -1233,11 +1348,15 @@ def main(argv: list[str] | None = None) -> int:
                     f"outline (0..{len(ring) - 1})"
                 )
             locked = frozenset(locks)
+            sharp = [v if kind == "u" else fracs[int(v)] for kind, v in sharp_refs]
+            rounded = [v if kind == "u" else fracs[int(v)] for kind, v in round_refs]
+            ring_budgets = region_budgets(fracs, args.smooth, sharp, rounded)
             share = max(3, round(budget * len(ring) / max(total_in, 1)))
             pinned = (
                 (
                     structural_anchors(ring, args.anchor, is_closed, args.anchor_mode)
                     | manual_pin
+                    | region_pins(fracs, sharp)
                 )
                 - manual_unpin
             ) | locked
@@ -1248,7 +1367,11 @@ def main(argv: list[str] | None = None) -> int:
             # anchor can still be located after the vertex count changes.
             by_point = {p: i for i, p in enumerate(ring)}
             tags = [by_point.get(p, -1) for p in reduced]
-            pts, tags = chaikin_src(reduced, tags, args.smooth, is_closed, locked)
+            budgets = [
+                ring_budgets[t] if 0 <= t < len(ring_budgets) else args.smooth
+                for t in tags
+            ]
+            pts, tags = chaikin_budgeted(reduced, tags, budgets, is_closed, locked)
             rings.append(pts)
             tags_by_ring.append(tags)
         rings = deform(rings, args, lock_pivot(rings, tags_by_ring, locks))
