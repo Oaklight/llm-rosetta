@@ -523,20 +523,6 @@ a { color: var(--accent); text-decoration: none; }
   display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px;
   user-select: none;
 }
-.settings-popup-item .toggle-label input[type="checkbox"] {
-  -webkit-appearance: none; appearance: none;
-  width: 34px; height: 20px; border-radius: var(--radius-pill);
-  background: var(--border); position: relative;
-  cursor: pointer; transition: background 0.2s ease; flex-shrink: 0;
-}
-.settings-popup-item .toggle-label input[type="checkbox"]::after {
-  content: ''; position: absolute; top: 2px; left: 2px;
-  width: 16px; height: 16px; border-radius: 50%; background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: transform 0.2s ease;
-}
-.settings-popup-item .toggle-label input[type="checkbox"]:checked { background: var(--accent); }
-.settings-popup-item .toggle-label input[type="checkbox"]:checked::after { transform: translateX(14px); }
-.settings-popup-item .toggle-label input[type="checkbox"]:focus-visible { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent); }
 .settings-item-disabled { opacity: 0.5; pointer-events: none; }
 /* Security pane: the admin token is a value to copy, never a field to type
    into, so it reads as a chip beside its own button.  The chip and the

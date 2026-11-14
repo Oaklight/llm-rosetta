@@ -41,7 +41,7 @@ export function laneSwitchHtml({
     .filter(Boolean)
     .join(' ');
   return (
-    `<label class="toggle row-toggle${extraClass ? ' ' + extraClass : ''}" title="${esc(title)}">` +
+    `<label class="toggle is-sm${extraClass ? ' ' + extraClass : ''}" title="${esc(title)}">` +
     `<input type="checkbox" role="switch" ${attrs}>` +
     '<span class="slider"></span></label>'
   );
