@@ -247,7 +247,9 @@ function _renderToast(type, delay, apply) {
 
 /** Show a plain-text toast. Text is never parsed as HTML. */
 function showToast(msg, type = 'success') {
-  _renderToast(type, 3000, el => { el.textContent = msg; });
+  // An error is the one toast worth reading twice, so it stays longer than a
+  // confirmation; both are announced through the live region on #toast.
+  _renderToast(type, type === 'error' ? 6000 : 3000, el => { el.textContent = msg; });
 }
 
 /**

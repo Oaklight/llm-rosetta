@@ -674,6 +674,7 @@ function showLoginOverlay() {
   if (overlay.style.display === 'flex') return;
   overlay.style.display = 'flex';
   document.getElementById('loginPassword').value = '';
+  document.getElementById('loginPassword').removeAttribute('aria-invalid');
   document.getElementById('loginError').textContent = '';
   document.getElementById('loginPassword').focus();
 }
@@ -785,6 +786,7 @@ async function doLogin() {
   const remember = !!(rememberBox && !rememberBox.hidden && rememberBox.checked);
   localStorage.setItem('login-remember', remember ? '1' : '0');
   errEl.textContent = '';
+  pwEl.removeAttribute('aria-invalid');
   if (btn) btn.disabled = true;
   try {
     const r = await fetch('/admin/api/login', {
@@ -810,6 +812,9 @@ async function doLogin() {
       errEl.textContent = (data && data.error && data.error !== 'Invalid password')
         ? data.error
         : t('login.error');
+      // The field is wrong, and assistive technology has to hear so: the
+      // error line is already a live region, and the box carries the mark.
+      pwEl.setAttribute('aria-invalid', 'true');
       pwEl.select();
     }
   } catch(e) {

@@ -63,6 +63,25 @@ input, textarea, select { accent-color: var(--accent); }
 input:not([type="checkbox"]):not([type="radio"]), textarea { caret-color: var(--text); }
 ::placeholder { color: var(--text-muted); opacity: 1; }
 
+/* Screen-reader-only text: present for assistive technology, absent on
+   screen.  A label the pointer already has (the password box's placeholder)
+   still needs a real one (#1520). */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+/* The first Tab stop on the page: the rail is 8 items and the topbar, so a
+   keyboard user needs a way past both (#1520).  Hidden until focused. */
+.skip-link {
+  position: fixed; top: 8px; left: 8px; z-index: 1000;
+  padding: 8px 12px; border-radius: var(--radius-control);
+  background: var(--accent); color: var(--accent-on);
+  font-size: 13px; text-decoration: none;
+  transform: translateY(-200%);
+}
+.skip-link:focus { transform: none; outline: 2px solid var(--accent); outline-offset: 2px; }
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
 /* Reserve the scrollbar gutter on every page, not just the tall ones.
    Without this, a page that fits the viewport (e.g. a filtered Request
