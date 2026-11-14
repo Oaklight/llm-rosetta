@@ -52,10 +52,11 @@ declaration switched.
 
 ## What the shims repair
 
-- **Reasoning field.** Kilo, LLM7 and OVHcloud serve reasoning text on
+- **Reasoning field.** LLM7 and OVHcloud serve reasoning text on
   `message.reasoning` / `delta.reasoning`, while the converter reads
-  `reasoning_content`. Each ships a rename, a no-op when no reasoning is
-  present.
+  `reasoning_content`. Both ship a rename, a no-op when no reasoning is
+  present. Kilo's free lane carries no rename: its reasoning field has not been
+  probed.
 - **Model roster.** Kilo and OpenCode list their paid models beside the free
   ones, so their `model_list_transform` keeps only the free slice. LLM7's
   catalogue is typed and tiered. OVHcloud's carries no type field and is
