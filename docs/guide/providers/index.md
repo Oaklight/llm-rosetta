@@ -19,6 +19,12 @@ Per-provider guides covering shim configuration, transforms, authentication, and
 | [Volcengine](volcengine.md) | `volcengine--chat_completions` | `chat_completions` | Field transforms |
 | [OpenRouter](openrouter.md) | `openrouter--chat_completions` | `chat_completions` | Multi-model router |
 | [MiniMax](minimax.md) | `minimax--chat_completions` | `chat_completions` | OpenAI-compatible |
+| [Z.ai](zai.md) | `zai--*` | multiple | GLM international platform; Chat, Messages, embeddings, rerank |
+| [Cohere](cohere.md) | `cohere--*` | multiple | Native embeddings and rerank; chat through the compatibility endpoint |
+| [Groq](groq.md) | `groq--chat_completions` | `chat_completions` | OpenAI-compatible, LPU inference |
+| [NVIDIA NIM](nvidia.md) | `nvidia--chat_completions` | `chat_completions` | OpenAI-compatible; prototyping licence |
+| [SiliconFlow](siliconflow.md) | `siliconflow--*` | multiple | Typed catalogue; chat, embeddings, rerank |
+| [ModelScope](modelscope.md) | `modelscope--chat_completions` | `chat_completions` | OpenAI-compatible; Alibaba Cloud account |
 | [Argo](argo.md) | `argo--*` | multiple | Standalone package; Argonne internal gateway |
 | [AskSage](asksage.md) | `asksage--*` | multiple | Standalone package; multi-format aggregator |
 | [ALCF](alcf.md) | `alcf_<cluster>--chat_completions` | `chat_completions` | Standalone package; Globus OAuth, token_command |

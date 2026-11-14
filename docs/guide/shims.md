@@ -537,14 +537,16 @@ preset (explicit keys win).
 
 ## Built-in Shims
 
-LLM-Rosetta ships with 39 built-in provider shims, one directory per shim under
+LLM-Rosetta ships with 49 built-in provider shims, one directory per shim under
 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`. `list_shims()` prints the live set; this is
-that set. The ALCF, AskSage, Argo and OpenCode free-lane shims ship as standalone packages — see
+that set. The ALCF, AskSage, Argo, OpenCode free-lane, Open Design and keyless
+free-endpoint shims ship as standalone packages — see
 [Standalone shim packages](#standalone-shim-packages).
 
 | Name | Format | Default Base URL | API Key Env | Transforms |
 |------|--------|-----------------|-------------|------------|
 | `anthropic--messages` | `messages` | `https://api.anthropic.com` | `ANTHROPIC_API_KEY` | — |
+| `cohere--chat_completions` | `chat_completions` | `https://api.cohere.com/compatibility/v1` | `COHERE_API_KEY` | — |
 | `cohere--embedding` | `cohere` | `https://api.cohere.com` | `COHERE_API_KEY` | — |
 | `cohere--rerank` | `cohere` | `https://api.cohere.com` | `COHERE_API_KEY` | — |
 | `deepseek--chat_completions` | `chat_completions` | `https://api.deepseek.com` | `DEEPSEEK_API_KEY` | strips `n`, `logit_bias`, `seed`, penalties; declares reasoning replay (`replay_missing`) |
@@ -552,6 +554,7 @@ that set. The ALCF, AskSage, Argo and OpenCode free-lane shims ship as standalon
 | `google--embedding` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `google--google_generate` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `google--google_interactions` | `google_interactions` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
+| `groq--chat_completions` | `chat_completions` | `https://api.groq.com/openai/v1` | `GROQ_API_KEY` | renames `reasoning` → `reasoning_content` |
 | `jina--embedding` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
 | `jina--rerank` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
 | `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | *(keyless)* | — |
@@ -559,6 +562,8 @@ that set. The ALCF, AskSage, Argo and OpenCode free-lane shims ship as standalon
 | `minimax--embedding` | `minimax` | `https://api.minimaxi.com` | `MINIMAX_API_KEY` | — |
 | `minimax--messages` | `messages` | `https://api.minimaxi.com/anthropic` | `MINIMAX_API_KEY` | — |
 | `moonshot` | `chat_completions` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | strips `logprobs`, `top_logprobs`, `logit_bias`, `seed` |
+| `modelscope--chat_completions` | `chat_completions` | `https://api-inference.modelscope.cn/v1` | `MODELSCOPE_API_KEY` | — |
+| `nvidia--chat_completions` | `chat_completions` | `https://integrate.api.nvidia.com/v1` | `NVIDIA_API_KEY` | — |
 | `openai--chat_completions` | `chat_completions` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--embedding` | `openai` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--open_responses` | `open_responses` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
@@ -571,6 +576,9 @@ that set. The ALCF, AskSage, Argo and OpenCode free-lane shims ship as standalon
 | `openrouter--open_responses` | `open_responses` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
 | `openrouter--rerank` | `cohere` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
 | `qwen` | `chat_completions` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | strips `frequency_penalty`, `logit_bias` |
+| `siliconflow--chat_completions` | `chat_completions` | `https://api.siliconflow.cn/v1` | `SILICONFLOW_API_KEY` | typed catalogue; keeps active `subType: chat` |
+| `siliconflow--embedding` | `openai` | `https://api.siliconflow.cn/v1` | `SILICONFLOW_API_KEY` | typed catalogue; keeps active `subType: embedding` |
+| `siliconflow--rerank` | `cohere` | `https://api.siliconflow.cn/v1` | `SILICONFLOW_API_KEY` | typed catalogue; keeps active `subType: reranker` |
 | `typesafe--systemone` | `systemone` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | — |
 | `volcengine--chat_completions` | `chat_completions` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | strips `logprobs`, `top_logprobs` |
 | `volcengine--embedding` | `openai` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | — |
@@ -578,6 +586,10 @@ that set. The ALCF, AskSage, Argo and OpenCode free-lane shims ship as standalon
 | `voyage--embedding` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
 | `voyage--rerank` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
 | `xai` | `chat_completions` | `https://api.x.ai/v1` | `XAI_API_KEY` | strips `logit_bias` |
+| `zai--chat_completions` | `chat_completions` | `https://api.z.ai/api/paas/v4` | `ZAI_API_KEY` | clamps `temperature` to [0, 1] |
+| `zai--embedding` | `openai` | `https://api.z.ai/api/paas/v4` | `ZAI_API_KEY` | — |
+| `zai--messages` | `messages` | `https://api.z.ai/api/anthropic` | `ZAI_API_KEY` | — |
+| `zai--rerank` | `cohere` | `https://api.z.ai/api/paas/v4` | `ZAI_API_KEY` | — |
 | `zhipu` | `chat_completions` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | strips `n`, penalties, `logprobs`, `logit_bias`, `seed` |
 | `zhipu--embedding` | `openai` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | — |
 | `zhipu--rerank` | `cohere` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | — |
@@ -589,7 +601,7 @@ here; every shim's full declaration is in its own `transforms.py`.
 
 ### Standalone shim packages
 
-Five shim sets live in their own repositories rather than in core:
+Six shim sets live in their own repositories rather than in core:
 
 | Package | Shim names | Repository |
 |---------|------------|------------|
@@ -598,6 +610,7 @@ Five shim sets live in their own repositories rather than in core:
 | AskSage | `asksage--chat_completions`, `asksage--messages`, `asksage--open_responses`, `asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
 | OpenCode Zen free lane | `opencode_zen_free--chat_completions` | [llm-rosetta-shim-opencode-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-free) |
 | Open Design | `opendesign--chat_completions`, `opendesign--open_responses`, `opendesign--messages` | [llm-rosetta-shim-opendesign](https://github.com/Oaklight/llm-rosetta-shim-opendesign) |
+| Keyless free endpoints | `ovhcloud--chat_completions`, `llm7--chat_completions` | [llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free) |
 
 ALCF and AskSage were introduced during the 0.14.0 development cycle and never
 appeared in a stable release's built-in set; Argo had shipped built in since
