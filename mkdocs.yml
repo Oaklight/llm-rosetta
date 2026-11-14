@@ -143,6 +143,12 @@ nav:
               - Volcengine: guide/providers/volcengine.md
               - OpenRouter: guide/providers/openrouter.md
               - MiniMax: guide/providers/minimax.md
+              - Z.ai: guide/providers/zai.md
+              - Cohere: guide/providers/cohere.md
+              - Groq: guide/providers/groq.md
+              - NVIDIA NIM: guide/providers/nvidia.md
+              - SiliconFlow: guide/providers/siliconflow.md
+              - ModelScope: guide/providers/modelscope.md
               - Argo: guide/providers/argo.md
               - AskSage: guide/providers/asksage.md
               - ALCF: guide/providers/alcf.md

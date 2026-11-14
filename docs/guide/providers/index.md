@@ -19,6 +19,12 @@ title: 提供方参考
 | [Volcengine](volcengine.md) | `volcengine--chat_completions` | `chat_completions` | 字段转换 |
 | [OpenRouter](openrouter.md) | `openrouter--chat_completions` | `chat_completions` | 多模型路由 |
 | [MiniMax](minimax.md) | `minimax--chat_completions` | `chat_completions` | OpenAI 兼容 |
+| [Z.ai](zai.md) | `zai--*` | 多种 | GLM 国际站；Chat、Messages、embedding、rerank |
+| [Cohere](cohere.md) | `cohere--*` | 多种 | 原生 embedding 与 rerank；chat 走兼容端点 |
+| [Groq](groq.md) | `groq--chat_completions` | `chat_completions` | OpenAI 兼容，LPU 推理 |
+| [NVIDIA NIM](nvidia.md) | `nvidia--chat_completions` | `chat_completions` | OpenAI 兼容；仅限原型验证 |
+| [SiliconFlow](siliconflow.md) | `siliconflow--*` | 多种 | 带类型的目录；chat、embedding、rerank |
+| [ModelScope](modelscope.md) | `modelscope--chat_completions` | `chat_completions` | OpenAI 兼容；需阿里云账号 |
 | [Argo](argo.md) | `argo--*` | 多种 | 独立包；阿贡内部网关 |
 | [AskSage](asksage.md) | `asksage--*` | 多种 | 独立包；多格式聚合器 |
 | [ALCF](alcf.md) | `alcf_<cluster>--chat_completions` | `chat_completions` | 独立包；Globus OAuth, token_command |
