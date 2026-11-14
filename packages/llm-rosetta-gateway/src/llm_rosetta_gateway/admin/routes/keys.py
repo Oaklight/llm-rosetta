@@ -218,7 +218,10 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
     if allowed_shims is not None:
         result["allowed_shims"] = allowed_shims
     if allowed_models is not None:
-        result["allowed_models"] = allowed_models or ["*"]
+        # What the store now holds, not a spelling of it: `[]` and `["*"]` are
+        # different keys, and a client that echoes this body back must not be
+        # handed the wide one for a key that allows nothing.
+        result["allowed_models"] = allowed_models
     if body.get("rate_limit") is not None:
         result["rate_limit"] = rate_limit
     from llm_rosetta_gateway.ops.keys import OpsKeyUpdate
