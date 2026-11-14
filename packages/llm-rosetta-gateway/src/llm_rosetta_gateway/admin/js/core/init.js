@@ -647,10 +647,13 @@ document.querySelectorAll('.modal-overlay').forEach(m => {
 
 // Global click handler for the row dropdowns — close on outside click.  The
 // toggles and the menus themselves are excluded so the click that opens a
-// menu, or lands inside it, does not immediately close it again.
+// menu, or lands inside it, does not immediately close it again.  A toggle is
+// recognised by `aria-haspopup="true"`, the property that says it opens a
+// surface: any button can be a menu anchor without carrying a class of its
+// own (#1535).
 document.addEventListener('click', function(e) {
   if (e.target.closest('.more-menu') || e.target.closest('.test-menu')
-      || e.target.closest('.more-menu-toggle') || e.target.closest('.btn-caret')
+      || e.target.closest('[aria-haspopup="true"]') || e.target.closest('.btn-caret')
       || e.target.closest('.provider-multi-btn') || e.target.closest('#fetchProviderBtn')
       || e.target.closest('#modelProviderBtn') || e.target.closest('#logProviderBtn')
       || e.target.closest('.cap-menu-toggle')) return;
