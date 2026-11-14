@@ -329,7 +329,7 @@ function _renderBoard() {
   const el = document.getElementById('routingBoard');
   if (!el || !_data) return;
   if (!_data.providers.length) {
-    el.innerHTML = '<div class="conn-row"><span class="conn-warn"></span><span class="conn-detail">' +
+    el.innerHTML = '<div class="conn-row"><span class="dot conn-warn"></span><span class="conn-detail">' +
       esc(t('routing.noProviders')) + '</span></div>';
     return;
   }
@@ -436,7 +436,7 @@ function _renderBoard() {
       allowanceCell + '</span>' +
       '<span class="routing-share">' + (excluded ? '—' : _sharePct(provider) + '%') + '</span>' +
       '<span class="routing-state">' +
-      '<span class="conn-' + _stateTone(provider) + '"></span>' +
+      '<span class="dot conn-' + _stateTone(provider) + '"></span>' +
       esc(_stateLabel(provider)) + until +
       ' ' + _statePill(provider) + '</span>' +
       '</div>'
@@ -574,11 +574,11 @@ function _renderLegend() {
   const el = document.getElementById('routingLegend');
   if (!el || !_data) return;
   el.innerHTML =
-    '<span class="routing-legend-item"><span class="conn-ok"></span>' +
+    '<span class="routing-legend-item"><span class="dot conn-ok"></span>' +
     esc(t('routing.legend.serving')) + '</span>' +
-    '<span class="routing-legend-item"><span class="conn-warn"></span>' +
+    '<span class="routing-legend-item"><span class="dot conn-warn"></span>' +
     esc(t('routing.legend.sunk')) + '</span>' +
-    '<span class="routing-legend-item"><span class="conn-fail"></span>' +
+    '<span class="routing-legend-item"><span class="dot conn-fail"></span>' +
     esc(t('routing.legend.blocked')) + '</span>' +
     '<span class="routing-legend-formula">' + esc(_shareFormula()) + '</span>';
 }
@@ -668,7 +668,7 @@ function _renderDecisions() {
       : '';
   }
   if (!_data.decisions.length) {
-    el.innerHTML = '<div class="conn-row"><span class="conn-warn"></span><span class="conn-detail">' +
+    el.innerHTML = '<div class="conn-row"><span class="dot conn-warn"></span><span class="conn-detail">' +
       esc(t('routing.noDecisions')) + '</span></div>';
     return;
   }
@@ -780,7 +780,7 @@ function _renderSessions() {
       : affinity;
   }
   if (!sessions.length) {
-    el.innerHTML = '<div class="conn-row"><span class="conn-warn"></span><span class="conn-detail">' +
+    el.innerHTML = '<div class="conn-row"><span class="dot conn-warn"></span><span class="conn-detail">' +
       esc(t('routing.noSessions')) + '</span></div>';
     return;
   }
@@ -1001,7 +1001,7 @@ function _renderEmpty() {
   const board = document.getElementById('routingBoard');
   if (board) {
     const message = _models().length ? t('routing.pickModel') : t('routing.noModels');
-    board.innerHTML = '<div class="conn-row"><span class="conn-warn"></span>' +
+    board.innerHTML = '<div class="conn-row"><span class="dot conn-warn"></span>' +
       '<span class="conn-detail">' + esc(message) + '</span></div>';
   }
   ['routingPolicy', 'routingDecisions'].forEach((id) => {

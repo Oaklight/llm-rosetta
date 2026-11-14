@@ -2805,9 +2805,9 @@ async function saveServerSettings() {
 async function runNetDiag() {
   const el = document.getElementById('netDiagResults');
   el.innerHTML = `
-    <span class="diag-item"><span class="diag-dot loading"></span>${t('diag.ip')}: ${t('diag.testing')}</span>
-    <span class="diag-item"><span class="diag-dot loading"></span>${t('diag.host')}: ${t('diag.testing')}</span>
-    <span class="diag-item"><span class="diag-dot loading"></span>${t('diag.google')}: ${t('diag.testing')}</span>`;
+    <span class="diag-item"><span class="dot diag-dot loading"></span>${t('diag.ip')}: ${t('diag.testing')}</span>
+    <span class="diag-item"><span class="dot diag-dot loading"></span>${t('diag.host')}: ${t('diag.testing')}</span>
+    <span class="diag-item"><span class="dot diag-dot loading"></span>${t('diag.google')}: ${t('diag.testing')}</span>`;
   try {
     const data = await api.get('/admin/api/diagnostics/network');
     const ipInfo = data.ip || {};
@@ -2820,11 +2820,11 @@ async function runNetDiag() {
     const googleText = googleInfo.ok ? t('diag.ok') : (googleInfo.error || t('diag.unreachable'));
     el.innerHTML = `
       <span class="diag-item" style="color:var(--text-dim);font-size:11px">${proxyText}</span>
-      <span class="diag-item"><span class="diag-dot ${ipInfo.ok ? 'ok' : 'fail'}"></span>${t('diag.ip')}: ${esc(ipText)}</span>
-      <span class="diag-item"><span class="diag-dot ${hostInfo.ok ? 'ok' : 'fail'}"></span>${t('diag.host')}: ${hostInfo.ok ? esc(hostInfo.ip) : esc(hostInfo.error || t('diag.unknown'))}</span>
-      <span class="diag-item"><span class="diag-dot ${googleInfo.ok ? 'ok' : 'fail'}"></span>${t('diag.google')}: ${esc(googleText)}</span>`;
+      <span class="diag-item"><span class="dot diag-dot ${ipInfo.ok ? 'ok' : 'fail'}"></span>${t('diag.ip')}: ${esc(ipText)}</span>
+      <span class="diag-item"><span class="dot diag-dot ${hostInfo.ok ? 'ok' : 'fail'}"></span>${t('diag.host')}: ${hostInfo.ok ? esc(hostInfo.ip) : esc(hostInfo.error || t('diag.unknown'))}</span>
+      <span class="diag-item"><span class="dot diag-dot ${googleInfo.ok ? 'ok' : 'fail'}"></span>${t('diag.google')}: ${esc(googleText)}</span>`;
   } catch(e) {
-    el.innerHTML = `<span class="diag-item"><span class="diag-dot fail"></span>Error: ${esc(String(e))}</span>`;
+    el.innerHTML = `<span class="diag-item"><span class="dot diag-dot fail"></span>Error: ${esc(String(e))}</span>`;
   }
 }
 
@@ -2966,7 +2966,7 @@ async function showProviderQuota(name) {
   try {
     const r = await api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/quota?refresh=1`);
     const lines = [];
-    const row = ({ tone, text }) => `<div class="conn-row"><span class="conn-${tone}"></span><span class="conn-detail">${esc(text)}</span></div>`;
+    const row = ({ tone, text }) => `<div class="conn-row"><span class="dot conn-${tone}"></span><span class="conn-detail">${esc(text)}</span></div>`;
     if (!r.supported) {
       // A lane with no usage endpoint still has a verdict: it is exactly the
       // lane whose exclusion an operator cannot read off any percentage.
@@ -2977,11 +2977,11 @@ async function showProviderQuota(name) {
       const head = t('quota.credential', {id: entry.credential})
         + (reading?.plan ? ' · ' + t('quota.plan', {plan: reading.plan}) : '');
       if (!reading) {
-        lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-label">${esc(head)}</span><span class="conn-detail">—</span></div>`);
+        lines.push(`<div class="conn-row"><span class="dot conn-warn"></span><span class="conn-label">${esc(head)}</span><span class="conn-detail">—</span></div>`);
         continue;
       }
       if (reading.status !== 'ok') {
-        lines.push(`<div class="conn-row"><span class="conn-fail"></span><span class="conn-label">${esc(head)}</span><span class="conn-detail">${esc(reading.error || reading.status)}</span></div>`);
+        lines.push(`<div class="conn-row"><span class="dot conn-fail"></span><span class="conn-label">${esc(head)}</span><span class="conn-detail">${esc(reading.error || reading.status)}</span></div>`);
         continue;
       }
       for (const w of reading.windows) {
@@ -2993,10 +2993,10 @@ async function showProviderQuota(name) {
           : t('quota.usedPercent', {percent: `${Math.round(w.used_percent)}%`});
         const reset = w.resets_at ? ` · ${new Date(w.resets_at).toLocaleString()}` : '';
         const cls = w.exhausted ? 'conn-fail' : 'conn-ok';
-        lines.push(`<div class="conn-row"><span class="${cls}"></span><span class="conn-label">${esc(head)} · ${esc(w.name)}</span><span class="conn-detail">${esc(pct + reset)}</span></div>`);
+        lines.push(`<div class="conn-row"><span class="dot ${cls}"></span><span class="conn-label">${esc(head)} · ${esc(w.name)}</span><span class="conn-detail">${esc(pct + reset)}</span></div>`);
       }
       if (entry.demotion) {
-        lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-detail">${esc(t('quota.demoted', {until: new Date(entry.demotion.until).toLocaleString(), reason: entry.demotion.reason}))}</span></div>`);
+        lines.push(`<div class="conn-row"><span class="dot conn-warn"></span><span class="conn-detail">${esc(t('quota.demoted', {until: new Date(entry.demotion.until).toLocaleString(), reason: entry.demotion.reason}))}</span></div>`);
       }
     }
     const blocked = blockRow(r.provider_block, t);
@@ -3023,22 +3023,22 @@ async function testProviderConnectivity(name) {
     const r = await api.post(`/admin/api/config/providers/${encodeURIComponent(name)}/test-connectivity`, {});
     const lines = [];
     if (r.reachable) {
-      lines.push(`<div class="conn-row"><span class="conn-ok"></span><span class="conn-label">${esc(name)}</span><span class="conn-detail">${t('diag.connected')}</span></div>`);
+      lines.push(`<div class="conn-row"><span class="dot conn-ok"></span><span class="conn-label">${esc(name)}</span><span class="conn-detail">${t('diag.connected')}</span></div>`);
     } else {
-      lines.push(`<div class="conn-row"><span class="conn-fail"></span><span class="conn-label">${esc(name)}</span><span class="conn-detail">${esc(r.base_error || t('diag.connectionFailed'))}</span></div>`);
+      lines.push(`<div class="conn-row"><span class="dot conn-fail"></span><span class="conn-label">${esc(name)}</span><span class="conn-detail">${esc(r.base_error || t('diag.connectionFailed'))}</span></div>`);
     }
     const eps = r.endpoints || {};
     for (const [ep, info] of Object.entries(eps)) {
       if (info.ok) {
-        lines.push(`<div class="conn-row"><span class="conn-ok"></span><span class="conn-label">${esc(ep)}</span><span class="conn-detail">ok</span></div>`);
+        lines.push(`<div class="conn-row"><span class="dot conn-ok"></span><span class="conn-label">${esc(ep)}</span><span class="conn-detail">ok</span></div>`);
       } else {
         const reason = esc(info.status ? `${info.status}` : (info.error || t('diag.failed')));
-        lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-label">${esc(ep)}</span><span class="conn-detail">${reason} ${t('diag.maybeUnsupported')}</span></div>`);
+        lines.push(`<div class="conn-row"><span class="dot conn-warn"></span><span class="conn-label">${esc(ep)}</span><span class="conn-detail">${reason} ${t('diag.maybeUnsupported')}</span></div>`);
       }
     }
     if (r.warnings?.length) {
       for (const w of r.warnings) {
-        lines.push(`<div class="conn-row"><span class="conn-warn"></span><span class="conn-detail">${esc(w)}</span></div>`);
+        lines.push(`<div class="conn-row"><span class="dot conn-warn"></span><span class="conn-detail">${esc(w)}</span></div>`);
       }
     }
     showToastHtml(lines.join(''), r.reachable ? 'success' : 'error');

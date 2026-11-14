@@ -633,11 +633,11 @@ function _renderProviderCell(name, info, disabledProviders) {
  */
 function _capDots(caps) {
   if (!caps.length) {
-    return '<span class="cap-dot is-inherit" title="' +
+    return '<span class="dot is-sm is-inherit" title="' +
       esc(t('label.providerCaps.inherit')) + '"></span>';
   }
   return caps.map((capability) =>
-    '<span class="cap-dot cap-badge-' + esc(capability) + '" title="' +
+    '<span class="dot is-sm cap-badge-' + esc(capability) + '" title="' +
     esc(capLabel(capability)) + '"></span>'
   ).join('');
 }
@@ -657,7 +657,7 @@ function _capPicker(model, provider) {
     ' data-capability="' + capability + '"' +
     ' onchange="toggleProviderCapability(' + jsArg(model) + ',' +
     jsArg(provider.name) + ',' + jsArg(provider.upstream_model || '') + ',this)">' +
-    '<span class="cap-dot cap-badge-' + capability + '" aria-hidden="true"></span>' +
+    '<span class="dot is-sm cap-badge-' + capability + '" aria-hidden="true"></span>' +
     '<span class="cap-menu-label">' + esc(capLabel(capability)) + '</span></label>'
   ).join('');
   return '<span class="cap-picker">' +
