@@ -456,6 +456,11 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 .bulk-bar .bulk-count { font-weight:600;color:var(--accent); }
 .bulk-bar .bulk-actions { margin-left:auto;display:flex;gap:6px; }
 .row-check { width:16px;height:16px;cursor:pointer;accent-color:var(--accent); }
+@media (max-width: 900px) {
+  /* Touch is the input a phone has, so the row boxes grow to the 24 px floor
+     there and keep their compact size on a desk (#1523). */
+  .row-check, #keysTable .key-check { width:24px;height:24px; }
+}
 .pill-toggle { display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-control);overflow:hidden;font-size:var(--fs-micro);font-weight:600;cursor:pointer;user-select:none;vertical-align:middle;min-width:52px;text-align:center; }
 .pill-toggle span { padding:3px 8px;transition:all 0.15s; }
 .pill-toggle.is-on .pill-on { background:var(--green);color:#fff; }
@@ -719,7 +724,7 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 .icon-btn.is-danger:hover { color: var(--red); }
 .icon-btn.is-bordered { border: 1px solid var(--border); background: var(--surface); }
 .icon-btn.is-bordered:hover { border-color: var(--text-dim); }
-code.copyable { cursor: pointer; transition: background 0.15s; }
+code.copyable { display:inline-flex; align-items:center; min-height:24px; cursor: pointer; transition: background 0.15s; }
 code.copyable:hover { background: var(--bg-hover); }
 
 /* Modal (epic #1472 P5).  A panel is a frame, not a floating card: one 1px
@@ -932,7 +937,7 @@ canvas { width: 100%; height: 160px; }
   color: var(--ink-warn); font-weight: 600;
 }
 .test-group .btn-test:hover { background: color-mix(in srgb, var(--orange) 10%, transparent); }
-.test-group .btn-caret {
+.test-group .btn-caret { min-width:24px;
   border-radius: 0 var(--radius-control) var(--radius-control) 0; padding: 0 6px;
   color: var(--ink-warn);
 }

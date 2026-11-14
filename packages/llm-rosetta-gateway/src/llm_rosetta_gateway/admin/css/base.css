@@ -302,9 +302,10 @@ body.auth-pending > .db-footer { display: none !important; }
     position: static; height: auto;
     border-right: none; border-bottom: 1px solid var(--border);
   }
-  .sidebar .tabs { flex-direction: row; overflow-x: auto; scrollbar-width: none; }
-  .sidebar .tabs::-webkit-scrollbar { display: none; }
-  .sidebar .tab { white-space: nowrap; border-radius: 0; padding: 10px 12px; }
+  /* The strip wraps instead of scrolling: eight items in 390 px used to cut
+     the last one to "Observabil…" with nothing saying it scrolled (#1523). */
+  .sidebar .tabs { flex-direction: row; flex-wrap: wrap; overflow: visible; }
+  .sidebar .tab { white-space: nowrap; border-radius: 0; padding: 8px 10px; min-height: 24px; }
   /* Horizontal strip: the mark is the underline, not the rail's left bar. */
   .sidebar .tab.active {
     background: none; border-left-color: transparent;
@@ -313,6 +314,10 @@ body.auth-pending > .db-footer { display: none !important; }
   .sb-foot { flex-direction: row; align-items: center; justify-content: space-between; }
   .sb-clock { flex-direction: row; align-items: baseline; gap: 6px; }
   .sb-actions { flex: 0 0 auto; }
+  /* 24 px is the floor for a pointer target; the rail's four buttons were
+     16×30 (#1523).  Touch is the input a phone has, so the row checkboxes grow
+     to the same floor here and keep their compact size on a desk. */
+  .sb-actions .icon-btn { min-width: 24px; min-height: 24px; }
   .db-footer { left: 0; }
 }
 a { color: var(--accent); text-decoration: none; }
@@ -431,12 +436,10 @@ a { color: var(--accent); text-decoration: none; }
 @media (max-width: 900px) {
   .settings-shell { grid-template-columns: 1fr; gap: 14px; }
   .settings-nav {
-    position: static; flex-direction: row; overflow-x: auto;
+    position: static; flex-direction: row; flex-wrap: wrap; overflow: visible;
     padding: 0 0 8px; border-right: 0; border-bottom: 1px solid var(--border);
-    scrollbar-width: none;
   }
-  .settings-nav::-webkit-scrollbar { display: none; }
-  .settings-nav-btn { white-space: nowrap; }
+  .settings-nav-btn { white-space: nowrap; min-height: 24px; }
   .settings-nav-btn.is-active::before { left: 8px; right: 8px; top: auto; bottom: 0; width: auto; height: 2px; }
 }
 .settings-pane { display: none; }
@@ -485,6 +488,11 @@ a { color: var(--accent); text-decoration: none; }
    an inline `grid-template-columns` overrode the media query and left the
    page scrolling sideways at 390px. */
 .settings-grid-retention { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px 16px; }
+@media (max-width: 600px) {
+  /* A full row of clock above the content pushes the first card below the
+     fold; the same time is in the observability header (#1523). */
+  .sb-clock { display: none; }
+}
 @media (max-width: 768px) {
   .settings-grid-retention { grid-template-columns: 1fr; }
 }

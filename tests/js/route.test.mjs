@@ -72,3 +72,14 @@ test('a page title names the tab, not only the product', () => {
   assert.equal(documentTitleOf('Models'), 'Models · llm-rosetta Gateway Console');
   assert.equal(documentTitleOf('  '), 'llm-rosetta Gateway Console');
 });
+
+test('the product half of a page title follows the interface language', () => {
+  const had = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+  const before = globalThis.window;
+  globalThis.window = { t: (k) => (k === 'brand.admin' ? '\u7f51\u5173\u63a7\u5236\u53f0' : k) };
+  try {
+    assert.equal(documentTitleOf('Models'), 'Models · llm-rosetta \u7f51\u5173\u63a7\u5236\u53f0');
+  } finally {
+    if (had) globalThis.window = before; else delete globalThis.window;
+  }
+});
