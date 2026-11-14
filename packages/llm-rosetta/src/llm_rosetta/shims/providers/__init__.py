@@ -78,7 +78,7 @@ import types
 import warnings
 from importlib.metadata import entry_points
 from pathlib import Path
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from typing import Any
 
 from llm_rosetta._vendor.yaml import load as yaml_load
@@ -92,6 +92,7 @@ from ..provider_shim import (
     ReasoningCapability,
     SoftErrorPattern,
     ToolsConfig,
+    Transform,
     VendorManifest,
     register_shim,
 )
@@ -128,6 +129,10 @@ _FLAT_CONNECTION_ALIASES: dict[str, str] = {
 
 #: Keys that make a ``provider.yaml`` a shim rather than a vendor manifest.
 _IDENTITY_KEYS: tuple[str, ...] = ("name", "format", "base")
+
+#: Keys a vendor manifest may declare: the shared credential block, and the
+#: three fields that describe the vendor itself rather than one lane.
+_MANIFEST_KEYS: tuple[str, ...] = ("connection", "logo", "group", "group_label")
 
 # Convention-based model list transforms registered by shim transforms modules.
 # Each entry maps a shim name to a callable that converts upstream model
@@ -459,22 +464,51 @@ def _load_transforms(
         sys.modules[module_name] = mod
     try:
         spec.loader.exec_module(mod)
+        pre, post, ir, response_body = _read_transform_exports(mod, tf_path)
     except BaseException:
         _rollback_plugin_load(module_name, before)
         raise
-    # New names take precedence; fall back to legacy names.
-    # Use `is None` (not `or`) since empty tuple () is falsy but valid.
-    pre = getattr(mod, "pre_ir_transforms", None)
+    return (pre, post, ir, response_body, mod)
+
+
+def _declared_transforms(
+    mod: Any, name: str, tf_path: Path
+) -> tuple[Transform, ...] | None:
+    """Return one export of a transforms module as a tuple, or ``None``.
+
+    The pipeline iterates these exports, so a module that exports a *function*
+    instead loads cleanly and then fails on the first request.  Refusing the
+    shape here puts the error beside the file that has it.
+    """
+    value = getattr(mod, name, None)
+    if value is None:
+        return None
+    if not isinstance(value, (tuple, list)):
+        raise TypeError(
+            f"{tf_path}: {name} must be a tuple of transforms, got "
+            f"{type(value).__name__}"
+        )
+    return tuple(value)
+
+
+def _read_transform_exports(mod: Any, tf_path: Path) -> tuple:
+    """Return ``(pre, post, ir, response_body)`` from a transforms module.
+
+    New names take precedence; legacy names are the fallback.  ``is None``
+    rather than truthiness, because an empty tuple is a valid declaration and
+    must not fall through to the legacy name.
+    """
+    pre = _declared_transforms(mod, "pre_ir_transforms", tf_path)
     if pre is None:
-        pre = getattr(mod, "from_transforms", ())
+        pre = _declared_transforms(mod, "from_transforms", tf_path) or ()
         if pre and hasattr(mod, "from_transforms"):
             logger.info(
                 "%s uses deprecated 'from_transforms'; rename to 'pre_ir_transforms'",
                 tf_path,
             )
-    post = getattr(mod, "post_ir_transforms", None)
+    post = _declared_transforms(mod, "post_ir_transforms", tf_path)
     if post is None:
-        post = getattr(mod, "to_transforms", ())
+        post = _declared_transforms(mod, "to_transforms", tf_path) or ()
         if post and hasattr(mod, "to_transforms"):
             logger.info(
                 "%s uses deprecated 'to_transforms'; rename to 'post_ir_transforms'",
@@ -483,9 +517,8 @@ def _load_transforms(
     return (
         pre,
         post,
-        getattr(mod, "ir_transforms", ()),
-        getattr(mod, "response_body_transforms", ()),
-        mod,
+        _declared_transforms(mod, "ir_transforms", tf_path) or (),
+        _declared_transforms(mod, "response_body_transforms", tf_path) or (),
     )
 
 
@@ -982,13 +1015,19 @@ def _vendor_manifest(vendor_dir: Path) -> VendorManifest | None:
         # identity with its own (skip-and-warn) behaviour, rather than turning
         # one malformed third-party directory into a failed scan.
         return None
-    unknown = set(cfg) - {"connection"}
+    unknown = set(cfg) - set(_MANIFEST_KEYS)
     if unknown:
         raise ValueError(
-            f"{path}: a vendor manifest may declare only a 'connection:' "
-            f"block; found {', '.join(sorted(unknown))}. Identity belongs in "
-            f"a leaf's provider.yaml"
+            f"{path}: a vendor manifest may declare {', '.join(_MANIFEST_KEYS)}; "
+            f"found {', '.join(sorted(unknown))}. Shim identity — 'name', "
+            f"'format', 'base' — belongs in a leaf's provider.yaml"
         )
+    vendor_fields: dict[str, str | None] = {}
+    for key in ("logo", "group", "group_label"):
+        value = cfg.get(key)
+        if value is not None and not isinstance(value, str):
+            raise ValueError(f"{path}: {key} must be a string")
+        vendor_fields[key] = value
     connection = cfg.get("connection")
     if connection is not None and not isinstance(connection, dict):
         raise ValueError(f"{path}: connection must be a mapping")
@@ -1006,6 +1045,7 @@ def _vendor_manifest(vendor_dir: Path) -> VendorManifest | None:
         path=path,
         connection=dict(connection or {}),
         auth=_load_auth_exchange(vendor_dir / "auth.py"),
+        **vendor_fields,
     )
 
 
@@ -1096,6 +1136,7 @@ def _load_single_provider(
     quota_probes: tuple[Any, ...] = (),
     expected_type: str | None = None,
     manifest: VendorManifest | None = None,
+    keep_names: Callable[[str], bool] | None = None,
 ) -> ProviderShim | None:
     """Load a single provider from *provider_dir* and register it.
 
@@ -1107,6 +1148,9 @@ def _load_single_provider(
             names.  When set, the shim's own ``model_type`` must match it.
         manifest: The vendor manifest whose connection defaults this leaf
             inherits and may override.
+        keep_names: Optional predicate over the shim name, applied to the
+            parsed leaf before its modules are imported.  A shim it declines
+            is neither imported nor registered.
 
     Returns:
         The registered :class:`ProviderShim`, or ``None`` on failure.
@@ -1125,6 +1169,12 @@ def _load_single_provider(
             "directory",
             yaml_path,
         )
+        return None
+
+    # Selection is decided from the parsed leaf, before any module is
+    # imported: a declined shim costs neither its ``transforms.py`` import nor
+    # its registration, and a broken one cannot fail the load it was left out of.
+    if keep_names is not None and not keep_names(str(cfg["name"])):
         return None
 
     fmt, model_type = _resolve_shim_pair(cfg, yaml_path)
@@ -1266,10 +1316,14 @@ def _load_single_provider(
         name=cfg["name"],
         format=fmt,
         model_type=model_type,
-        logo=cfg.get("logo"),
+        # The three fields that describe the vendor rather than one lane come
+        # from the manifest unless the leaf names its own: a vendor keeps its
+        # mark and its grouping once, and a lane that differs still wins.
+        logo=cfg.get("logo") or (manifest.logo if manifest else None),
         display_name=cfg.get("display_name"),
-        group=cfg.get("group"),
-        group_label=cfg.get("group_label"),
+        group=cfg.get("group") or (manifest.group if manifest else None),
+        group_label=cfg.get("group_label")
+        or (manifest.group_label if manifest else None),
         hint_msg=_parse_hint_msg(cfg.get("hint_msg"), yaml_path),
         free_source=cfg.get("free_source", False),
         connection=connection,
@@ -1311,6 +1365,43 @@ def _load_single_provider(
     return shim
 
 
+def _path_selected(directory: Path, root: Path, only: Collection[str] | None) -> bool:
+    """Whether *directory* may be scanned under an ``only_paths`` selection.
+
+    A path selects that directory **and everything under it**, so a vendor
+    directory is a valid selection and a leaf inside one is too.  A directory
+    that is merely an ancestor of a selection is entered as well: the loader
+    must walk through ``vendor/`` to reach ``vendor/llm/x``, and skipping the
+    vendor would skip the leaf.  An empty collection selects nothing, which is
+    the difference between "declares no shims" and ``None`` ("declares no
+    restriction").
+
+    Args:
+        directory: The directory about to be scanned.
+        root: The scan root the selection's paths are relative to.
+        only: The selected relative posix paths, or ``None`` for everything.
+            Callers normalize them; a ``./`` prefix or a trailing slash will
+            not match.
+
+    Returns:
+        Whether the directory may be entered.
+    """
+    if only is None:
+        return True
+    if not only:
+        return False
+    try:
+        rel = directory.relative_to(root).as_posix()
+    except ValueError:
+        # Not under the root: the selection says nothing about it, so the
+        # caller's own rules decide rather than this one silently dropping it.
+        return True
+    for path in only:
+        if rel == path or rel.startswith(f"{path}/") or path.startswith(f"{rel}/"):
+            return True
+    return False
+
+
 def _load_provider_tolerant(
     directory: Path,
     group: str | None,
@@ -1321,6 +1412,7 @@ def _load_provider_tolerant(
     quota_probes: tuple[Any, ...] = (),
     expected_type: str | None = None,
     manifest: VendorManifest | None = None,
+    keep_names: Callable[[str], bool] | None = None,
 ) -> ProviderShim | None:
     """Load one provider directory, optionally downgrading errors to a warning.
 
@@ -1337,6 +1429,7 @@ def _load_provider_tolerant(
             quota_probes=quota_probes,
             expected_type=expected_type,
             manifest=manifest,
+            keep_names=keep_names,
         )
     except Exception as exc:
         if on_error == "warn":
@@ -1355,6 +1448,8 @@ def _load_type_folder(
     on_error: str,
     quota_probes: tuple[Any, ...] = (),
     manifest: VendorManifest | None = None,
+    only_paths: Collection[str] | None = None,
+    keep_names: Callable[[str], bool] | None = None,
 ) -> list[ProviderShim]:
     """Load the leaves under a model-type directory.
 
@@ -1372,6 +1467,7 @@ def _load_type_folder(
             quota_probes=quota_probes,
             expected_type=expected_type,
             manifest=manifest,
+            keep_names=keep_names,
         )
         return [shim] if shim is not None else []
 
@@ -1379,6 +1475,8 @@ def _load_type_folder(
     loaded: list[ProviderShim] = []
     for sub in sorted(type_dir.iterdir()):
         if not sub.is_dir() or sub.name.startswith(("_", ".")):
+            continue
+        if not _path_selected(sub, root, only_paths):
             continue
         if (sub / "provider.yaml").exists():
             shim = _load_provider_tolerant(
@@ -1390,6 +1488,7 @@ def _load_type_folder(
                 quota_probes=quota_probes,
                 expected_type=expected_type,
                 manifest=manifest,
+                keep_names=keep_names,
             )
             if shim is not None:
                 loaded.append(shim)
@@ -1405,6 +1504,8 @@ def _load_group_folder(
     on_error: str,
     quota_probes: tuple[Any, ...] = (),
     manifest: VendorManifest | None = None,
+    only_paths: Collection[str] | None = None,
+    keep_names: Callable[[str], bool] | None = None,
 ) -> list[ProviderShim]:
     """Load every leaf provider inside a *group_dir*.
 
@@ -1418,6 +1519,8 @@ def _load_group_folder(
     for sub in sorted(group_dir.iterdir()):
         if not sub.is_dir() or sub.name.startswith(("_", ".")):
             continue
+        if not _path_selected(sub, root, only_paths):
+            continue
         expected_type = _TYPE_DIRS.get(sub.name)
         if expected_type is not None:
             loaded.extend(
@@ -1430,6 +1533,8 @@ def _load_group_folder(
                     on_error=on_error,
                     quota_probes=quota_probes,
                     manifest=manifest,
+                    only_paths=only_paths,
+                    keep_names=keep_names,
                 )
             )
             continue
@@ -1442,6 +1547,7 @@ def _load_group_folder(
                 on_error=on_error,
                 quota_probes=quota_probes,
                 manifest=manifest,
+                keep_names=keep_names,
             )
             if shim is not None:
                 loaded.append(shim)
@@ -1449,7 +1555,12 @@ def _load_group_folder(
 
 
 def load_providers_from_dir(
-    providers_dir: Path, *, group: str | None = None, on_error: str = "raise"
+    providers_dir: Path,
+    *,
+    group: str | None = None,
+    on_error: str = "raise",
+    only_paths: Collection[str] | None = None,
+    keep_names: Callable[[str], bool] | None = None,
 ) -> list[ProviderShim]:
     """Scan *providers_dir* for provider shims and register them.
 
@@ -1487,6 +1598,14 @@ def load_providers_from_dir(
             provider so one bad shim cannot abort the whole scan.  External
             sources use ``"warn"`` so a third-party repo cannot take down
             startup; built-ins keep the strict default.
+        only_paths: Posix paths, relative to *providers_dir*, that name the
+            leaves to load.  A directory that is neither one of them nor on
+            the way to one is skipped before its ``provider.yaml`` is read, so
+            a source can declare which of its directories the loader may
+            parse.  ``None`` scans everything.
+        keep_names: Optional predicate over a leaf's ``name``, applied after
+            the YAML is parsed and before any module import.  A declined leaf
+            is neither imported nor registered; it is not an error.
 
     Returns:
         List of registered :class:`ProviderShim` instances.
@@ -1495,6 +1614,8 @@ def load_providers_from_dir(
     shims: list[ProviderShim] = []
     for d in sorted(providers_dir.iterdir()):
         if not d.is_dir() or d.name.startswith(("_", ".")):
+            continue
+        if not _path_selected(d, providers_dir, only_paths):
             continue
         if (d / "provider.yaml").exists():
             # A shim (it declares ``name``/``format``) or a vendor manifest
@@ -1514,6 +1635,7 @@ def load_providers_from_dir(
                     builtin=builtin,
                     root=providers_dir,
                     on_error=on_error,
+                    keep_names=keep_names,
                 )
                 if shim is not None:
                     shims.append(shim)
@@ -1538,6 +1660,8 @@ def load_providers_from_dir(
                 on_error=on_error,
                 quota_probes=group_probes,
                 manifest=manifest,
+                only_paths=only_paths,
+                keep_names=keep_names,
             )
         )
     return shims

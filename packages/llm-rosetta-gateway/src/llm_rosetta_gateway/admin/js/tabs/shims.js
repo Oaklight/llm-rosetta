@@ -7,8 +7,6 @@
 import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, esc, copyText, openModal, closeModal } from '../core/utils.js';
-import { parsePresets, togglePreset, presetGroups } from '../core/shim-presets.js';
-import { shimHintText } from '../core/shim-hint.js';
 import {
   inheritanceRows, annotateBlast, changedLeaves, nameList,
 } from '../core/manifest-inherit.js';
@@ -38,12 +36,6 @@ function renderShimSources() {
   if (!pathsEl) return;
   const sec = _section();
   pathsEl.value = Array.isArray(sec.paths) ? sec.paths.join('\n') : '';
-  const presetsEl = document.getElementById('shimPresetsInput');
-  if (presetsEl) {
-    presetsEl.value = Array.isArray(sec.presets) ? sec.presets.join(', ') : '';
-  }
-  _bindPresetDropdown();
-  _renderPresetPicker();
   checkShimUpdates(false);
   const remEl = document.getElementById('shimRemotesInput');
   if (remEl) {
@@ -74,9 +66,6 @@ async function saveShimSources() {
   const paths = (document.getElementById('shimPathsInput').value || '')
     .split('\n').map(s => s.trim()).filter(Boolean);
 
-  const presets = (document.getElementById('shimPresetsInput').value || '')
-    .split(/[\s,]+/).map(s => s.trim()).filter(Boolean);
-
   let remotes = [];
   const rawRemotes = (document.getElementById('shimRemotesInput').value || '').trim();
   if (rawRemotes) {
@@ -90,7 +79,7 @@ async function saveShimSources() {
   }
 
   try {
-    const body = { paths, remotes, presets };
+    const body = { paths, remotes };
     const cacheDir = (document.getElementById('shimCacheDirInput').value || '').trim();
     body.cache_dir = cacheDir;
     const ttlRaw = (document.getElementById('shimTtlInput').value || '').trim();
@@ -135,76 +124,6 @@ async function reloadShimSources(forceRefresh) {
 }
 
 /**
- * Paint the preload-preset chips.
- *
- * The declared presets are a list of catalogue keys; showing them as a free
- * text field made the operator remember the keys and spell them correctly.
- * Each known package is a chip instead: clicking one toggles it in the list,
- * and the existing Save is still the one thing that persists anything.
- */
-function _renderPresetPicker() {
-  const list = document.getElementById('shimPresetList');
-  if (!list) return;
-  const presets = _presets();
-  const selected = _selectedPresets();
-  if (!presets.length) {
-    list.innerHTML = `<div class="tp-empty">${esc(t('shim.preset.none'))}</div>`;
-    _renderPresetTrigger(selected, []);
-    return;
-  }
-  const groups = presetGroups(presets, selected);
-  list.innerHTML = groups.map(g => {
-    const head = `<div class="tp-group-label" role="presentation">${esc(t('shim.preset.group.' + g.key))}</div>`;
-    const rows = g.items.map(c => {
-      // The note is the reason not to pick a package, so it rides the row's
-      // tooltip as well as the line under the picker.
-      const note = shimHintText(c.note, S.currentLang);
-      const title = [c.repo, note].filter(Boolean).join(' \u2014 ');
-      // A note is read *before* choosing, so it gets its own line in the row
-      // rather than living only in the tooltip.
-      const noteLine = note ? `<span class="tp-note">${esc(note)}</span>` : '';
-      const cls = note ? 'tp-item tp-has-note' : 'tp-item';
-      return `<label class="${cls}" title="${esc(title)}">`
-        + `<input type="checkbox" data-preset="${esc(c.key)}"${c.selected ? ' checked' : ''}>`
-        + `<span class="tp-name">${esc(c.label)}</span>`
-        + `<span class="tp-base">${c.count}</span>${noteLine}</label>`;
-    }).join('');
-    return head + rows;
-  }).join('');
-  list.querySelectorAll('input[data-preset]').forEach(box => {
-    box.addEventListener('change', () => toggleShimPreset(box.dataset.preset, box.checked));
-  });
-  _renderPresetTrigger(selected, presets);
-  _renderPresetNotes(presets, selected);
-}
-
-/** Show the note of every selected package, under the picker. */
-function _renderPresetNotes(presets, selected) {
-  const el = document.getElementById('shimPresetNote');
-  if (!el) return;
-  const chosen = new Set(selected);
-  const notes = (presets || [])
-    .filter(p => chosen.has(p.key))
-    .map(p => shimHintText(p.note, S.currentLang))
-    .filter(Boolean);
-  el.textContent = notes.join('; ');
-  el.hidden = notes.length === 0;
-}
-
-/** The trigger shows the chosen packages by name, or how many. */
-function _renderPresetTrigger(selected, presets) {
-  const label = document.getElementById('shimPresetLabel');
-  if (!label) return;
-  const byKey = new Map((presets || []).map(p => [p.key, p.label || p.key]));
-  const names = selected.map(k => byKey.get(k) || k);
-  label.textContent = names.length
-    ? names.join(', ')
-    : t('shim.preset.noneSelected');
-  label.classList.toggle('tp-placeholder', names.length === 0);
-  label.title = names.join(', ');
-}
-
-/**
  * Whether the form holds changes the saved config does not.
  *
  * Save is the only thing that persists, so the button says so: disabled when
@@ -220,10 +139,6 @@ function _shimFormDirty() {
     .split('\n').map(x => x.trim()).filter(Boolean);
   const savedPaths = Array.isArray(sec.paths) ? sec.paths : [];
   if (JSON.stringify(paths) !== JSON.stringify(savedPaths)) return true;
-
-  const presets = parsePresets(el('shimPresetsInput').value);
-  const savedPresets = Array.isArray(sec.presets) ? sec.presets : [];
-  if (JSON.stringify(presets) !== JSON.stringify(savedPresets)) return true;
 
   const rawRemotes = (el('shimRemotesInput').value || '').trim();
   const savedRemotes = Array.isArray(sec.remotes) && sec.remotes.length
@@ -245,54 +160,6 @@ function _updateShimDirty() {
   if (note) note.hidden = !dirty;
   const btn = document.getElementById('shimSaveBtn');
   if (btn) btn.disabled = !dirty;
-}
-
-/** Bind the trigger once: click opens, outside click and Escape close. */
-function _bindPresetDropdown() {
-  const trigger = document.getElementById('shimPresetTrigger');
-  if (!trigger || trigger.dataset.bound) return;
-  trigger.dataset.bound = '1';
-  trigger.addEventListener('click', (e) => {
-    e.stopPropagation();
-    const box = document.getElementById('shimPresetDropdown');
-    setPresetDropdown(!(box && box.classList.contains('open')));
-  });
-  document.addEventListener('click', (e) => {
-    const wrap = document.getElementById('shimPresetPicker');
-    if (wrap && !wrap.contains(e.target)) setPresetDropdown(false);
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') setPresetDropdown(false);
-  });
-  for (const id of ['shimPathsInput', 'shimPresetsInput', 'shimRemotesInput',
-                    'shimCacheDirInput', 'shimTtlInput', 'shimStrictInput']) {
-    const el = document.getElementById(id);
-    if (el) el.addEventListener('input', _updateShimDirty);
-    if (el) el.addEventListener('change', _updateShimDirty);
-  }
-}
-
-/** Open or close the preset dropdown. */
-function setPresetDropdown(open) {
-  const box = document.getElementById('shimPresetDropdown');
-  const trigger = document.getElementById('shimPresetTrigger');
-  if (!box || !trigger) return;
-  box.classList.toggle('open', !!open);
-  trigger.setAttribute('aria-expanded', open ? 'true' : 'false');
-}
-
-/** The preset keys currently declared, in declaration order. */
-function _selectedPresets() {
-  return parsePresets(document.getElementById('shimPresetsInput')?.value || '');
-}
-
-/** Toggle one preset and repaint. The hidden field is what Save reads. */
-function toggleShimPreset(key, on) {
-  const el = document.getElementById('shimPresetsInput');
-  if (el) el.value = togglePreset(_selectedPresets(), key, on).join(', ');
-  _renderPresetPicker();
-  // Writing the hidden field fires no input event, so refresh Save here.
-  _updateShimDirty();
 }
 
 /** List the providers that are still on a shim with a removal scheduled. */
@@ -876,15 +743,12 @@ async function saveManifestYaml() {
 }
 
 Object.assign(window, {
-  renderShimSources, saveShimSources, reloadShimSources,
-  setPresetDropdown, checkShimUpdates,
+  renderShimSources, saveShimSources, reloadShimSources, checkShimUpdates,
   addShimPresetFromRow, appendShimPreset,
   loadLoadedShims, renderLoadedShims, openShimDetail, saveShimYaml,
   copyShimYaml, deleteLoadedShim, toggleShimEnabled,
   openManifestDetail, saveShimModal, previewManifestYaml,
-  // Repainted on a language change; the chips carry translated labels and
-  // the update badges are built from translated strings.
-  renderShimPresetPicker: _renderPresetPicker,
+  // Repainted on a language change: the update badges are translated strings.
   repaintShimUpdateBadges: renderLoadedShims,
 });
 

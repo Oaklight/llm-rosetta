@@ -16,6 +16,7 @@ import { S, _CAP_ICONS } from '../core/state.js';
 import { t, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, esc, showToast, withBusyButton } from '../core/utils.js';
 import { jsArg, logoUrl } from '../core/html.js';
+import { hasPattern, keptShims, selectionMaps } from '../core/shim-selection.js';
 
 let _view = 'installed';
 let _shims = [];
@@ -97,6 +98,21 @@ async function loadShimsPage() {
       api.get('/admin/api/config/shims/catalog'),
     ]);
     _shims = inv.shims || [];
+    // A shim the operator declined is not registered, so it never appears in
+    // `registered_shims`; its card would then paint initials beside a loaded
+    // sibling that shows the vendor's mark. The inventory row of that same
+    // source carries the mark, so fill the gap from there and let a
+    // registered shim win whenever it has an opinion.
+    for (const row of _shims) {
+      const key = row.group || vendorOf(row.name);
+      const known = _shimMeta[key] || {};
+      _shimMeta[key] = {
+        ...row,
+        ...known,
+        logo: known.logo || row.logo || null,
+        group_label: known.group_label || row.group_label || null,
+      };
+    }
     _packages = cat.packages || [];
     _loaded = true;
   } catch (e) {
@@ -115,13 +131,24 @@ function _filters() {
     q: (document.getElementById('shimPageSearch')?.value || '').trim().toLowerCase(),
     origin: document.getElementById('shimOriginFilter')?.value || '',
     type: document.getElementById('shimTypeFilter')?.value || '',
+    tier: document.getElementById('shimTierFilter')?.value || '',
     builtin: document.getElementById('shimPageShowBuiltin')?.checked !== false,
   };
 }
 
+/**
+ * The resource tier of one loaded shim.
+ *
+ * A shim says so itself (`free_source` on a keyless pool); a plan a user pays
+ * for elsewhere is a package-level fact today, so a shim inside one inherits
+ * nothing here and reads as paid until the per-shim field exists.
+ */
+const _shimTier = (s) => s.tier || (s.free_source ? 'free' : 'paid');
+
 function _matches(s, f) {
   if (f.origin && s.origin !== f.origin) return false;
   if (f.type && (s.model_type || 'llm') !== f.type) return false;
+  if (f.tier && _shimTier(s) !== f.tier) return false;
   if (!f.builtin && s.origin === 'builtin') return false;
   if (!f.q) return true;
   const hay = `${s.name} ${s.display_name || ''} ${s.format || ''} ${s.model_type || ''}`.toLowerCase();
@@ -165,10 +192,14 @@ function _formatRow(s) {
       ? `<span class="tag is-square ${cls}" title="${esc(typeLabelAlt(kind))}" aria-label="${esc(typeLabel(kind))}">${icon}</span>`
       : `<span class="tag is-square ${cls}" title="${esc(typeLabelAlt(kind))}">${esc(typeLabel(kind))}</span>`)
     : '';
+  const free = s.free_source
+    ? `<span class="tag is-square is-free">${esc(t('shimPage.free'))}</span>`
+    : '';
   return `
     <div class="shim-row${s.enabled === false ? ' is-off' : ''}">
       <span class="shim-row-name">${esc(labelOf(s))}</span>
       ${type}
+      ${free}
       <button type="button" class="shim-row-add"
               title="${esc(t(s.enabled === false ? 'shimPage.addBlocked' : 'shimPage.addProvider'))}"
               aria-label="${esc(t('shimPage.addProvider'))}"${s.enabled === false ? ' disabled' : ''}
@@ -238,28 +269,91 @@ export function toggleShimVendor(vendor) {
   if (rows) rows.hidden = !open;
 }
 
+/** Whether a catalogue package passes the search and tier filters. */
+function _matchesPackage(p, f) {
+  if (f.tier && (p.tier || (p.free ? 'free' : 'paid')) !== f.tier) return false;
+  if (!f.q) return true;
+  const hay = `${p.key} ${p.label} ${(p.shims || []).join(' ')} ${(p.formats || []).join(' ')}`
+    .toLowerCase();
+  return hay.includes(f.q);
+}
+
+/** The saved selection of one package, as declaration lists. */
+function _selectionOf(key) {
+  const section = (S.configData && S.configData.shims) || {};
+  return { include: section.include && section.include[key],
+           exclude: section.exclude && section.exclude[key] };
+}
+
+/**
+ * One package card: what it ships, which of it is wanted, install or update.
+ *
+ * The checkboxes are the install, not a preference: the package's shims are
+ * read from the catalogue, so the list exists before the repository is ever
+ * fetched, and what is ticked is exactly the `include` map that gets written.
+ * Everything ticked writes no entry at all — that is the default, and it lets
+ * a shim the package adds later switch itself on.
+ */
 function _packageCard(p) {
   const formats = (p.formats || []).map((f) => `<span class="tag is-plain">${esc(f)}</span>`).join('');
   const status = p.installed
     ? '<span class="tag is-square is-builtin">' + esc(t('shimPage.installedBadge')) + '</span>'
     : '<span class="tag is-square is-remote">' + esc(t('shimPage.availableBadge')) + '</span>';
   const link = _sourceLink(p.source_repo, 'shim-repo');
+  const tier = p.tier || (p.free ? 'free' : 'paid');
+  const tierTag = `<span class="tag is-square is-${esc(tier)}">${esc(t('shimPage.' + tier))}</span>`;
+  const kept = new Set(keptShims(p.shims, _selectionOf(p.key)));
+  const loaded = new Set(p.installed_shims || []);
+  const { include, exclude } = _selectionOf(p.key);
+  const pattern = hasPattern(include) || hasPattern(exclude);
+  const rows = pattern
+    ? `<p class="field-hint">${esc(t('shimPage.patternNote'))}</p>`
+    : (p.shims || []).map((name) => {
+      const on = kept.has(name);
+      const state = !p.installed ? '' : t(loaded.has(name)
+        ? 'shimPage.loadedMark' : 'shimPage.notLoadedMark');
+      return `<label class="shim-preset-shim${on ? '' : ' off'}">`
+        + `<input type="checkbox" data-shim="${esc(name)}" value="${esc(name)}"${on ? ' checked' : ''}>`
+        + `<span class="shim-preset-name">${esc(name)}</span>`
+        + `<span class="shim-preset-state">${esc(state)}</span></label>`;
+    }).join('');
   return `
     <article class="shim-card" data-package="${esc(p.key)}">
       <div class="shim-card-head">
         <span class="shim-name">${esc(p.label)}</span>
+        ${tierTag}
         ${status}
       </div>
       <div class="shim-chips">${formats || '<span class="tag is-plain">—</span>'}</div>
       <div class="shim-usage">${esc(plural(p.shims.length, 'shimPage.shims', 'shimPage.shimOne'))}${link ? ' · ' + link : ''}</div>
+      <div class="shim-card-shims" role="group" aria-label="${esc(t('shimPage.chooseShims'))}">${rows}</div>
       ${p.installed ? '' : `<p class="shim-trust" role="note">${esc(t('shimPage.trustWarning'))}</p>`}
       <div class="shim-card-actions">
         ${p.installed
-          ? `<button type="button" class="btn btn-sm" onclick="startProviderFromShim(${jsArg(p.installed_shims[0] || '')})">${esc(t('shimPage.addProvider'))}</button>
+          ? `<button type="button" class="btn btn-sm btn-primary" onclick="updateShimPackage(this, ${jsArg(p.key)})">${esc(t('shimPage.update'))}</button>
+             <button type="button" class="btn btn-sm" onclick="startProviderFromShim(${jsArg(p.installed_shims[0] || '')})">${esc(t('shimPage.addProvider'))}</button>
              <button type="button" class="btn btn-sm" onclick="removeShimPackage(this, ${jsArg(p.key)})">${esc(t('shimPage.remove'))}</button>`
           : `<button type="button" class="btn btn-sm btn-primary" onclick="installShimPackage(this, ${jsArg(p.key)})">${esc(t('shimPage.install'))}</button>`}
       </div>
     </article>`;
+}
+
+/** The ticked shims of one card, and how many it offers. */
+function _cardSelection(key) {
+  const card = [...document.querySelectorAll('#shimCatalogGrid .shim-card')]
+    .find((c) => c.dataset.package === key);
+  const boxes = card ? [...card.querySelectorAll('input[data-shim]')] : [];
+  // The name rides in `data-shim`: a bare checkbox's value is the string "on".
+  return {
+    checked: boxes.filter((b) => b.checked).map((b) => b.dataset.shim),
+    total: boxes.length,
+  };
+}
+
+/** The same maps, built from the section this panel is running with. */
+function _mapsWith(key, checked, total) {
+  const section = (S.configData && S.configData.shims) || {};
+  return selectionMaps(section, key, checked, total);
 }
 
 /**
@@ -281,19 +375,28 @@ function _presets() {
 }
 
 /**
- * Declare a preset, reload the sources, and repaint.
+ * Declare a preset with the shims its card has ticked, reload, and repaint.
  *
- * Installing is two calls on purpose: the PUT persists `shims.presets`, and
- * the reload is what actually fetches the repository and registers its shims.
- * Either can fail on its own — a bad ref passes the PUT and fails the fetch —
- * so the toast reports what the reload said, not what the PUT accepted.
+ * Installing is two calls on purpose: the PUT persists `shims.presets` and the
+ * selection, and the reload is what actually fetches the repository and
+ * registers the shims.  Either can fail on its own — a bad ref passes the PUT
+ * and fails the fetch — so the toast reports what the reload said, not what
+ * the PUT accepted.
  */
 export async function installShimPackage(btn, key) {
   const presets = _presets();
   if (presets.includes(key)) return;
+  const { checked, total } = _cardSelection(key);
+  if (!checked.length) {
+    showToast(t('shimPage.noneSelected'), 'error');
+    return;
+  }
+  const { include, exclude } = _mapsWith(key, checked, total);
   await withBusyButton(btn, async () => {
     try {
-      await _mustWrite(() => api.put('/admin/api/config/shims', {presets: [...presets, key]}));
+      await _mustWrite(() => api.put('/admin/api/config/shims', {
+        presets: [...presets, key], include, exclude,
+      }));
       const r = await _mustWrite(() => api.post('/admin/api/config/shims/reload', {}));
       S.configData = await api.get('/admin/api/config');
       await loadShimsPage();
@@ -301,6 +404,30 @@ export async function installShimPackage(btn, key) {
       showToast(failures
         ? t('shimPage.installFailed', {key, count: failures})
         : t('shimPage.installDone', {key}), failures ? 'error' : undefined);
+    } catch (e) {
+      showToast(String(e.message || e), 'error');
+    }
+  });
+}
+
+/** Save a new selection for a package that is already installed. */
+export async function updateShimPackage(btn, key) {
+  const { checked, total } = _cardSelection(key);
+  if (!checked.length) {
+    showToast(t('shimPage.noneSelected'), 'error');
+    return;
+  }
+  const { include, exclude } = _mapsWith(key, checked, total);
+  await withBusyButton(btn, async () => {
+    try {
+      await _mustWrite(() => api.put('/admin/api/config/shims', {include, exclude}));
+      const r = await _mustWrite(() => api.post('/admin/api/config/shims/reload', {}));
+      S.configData = await api.get('/admin/api/config');
+      await loadShimsPage();
+      const failures = (r && r.status && r.status.failure_count) || 0;
+      showToast(failures
+        ? t('shimPage.installFailed', {key, count: failures})
+        : t('shimPage.updateDone', {key}), failures ? 'error' : undefined);
     } catch (e) {
       showToast(String(e.message || e), 'error');
     }
@@ -344,7 +471,13 @@ function renderShimsPage() {
   installed.hidden = _view !== 'installed';
   catalog.hidden = _view !== 'available';
   if (sources) sources.hidden = _view !== 'sources';
-  if (toolbar) toolbar.hidden = _view !== 'installed';
+  // Search and tier read the same way on both lists; origin and model type
+  // only mean something for loaded shims.
+  if (toolbar) toolbar.hidden = _view === 'sources';
+  const originFilter = document.getElementById('shimOriginFilter');
+  if (originFilter) originFilter.hidden = _view !== 'installed';
+  const typeFilter = document.getElementById('shimTypeFilter');
+  if (typeFilter) typeFilter.hidden = _view !== 'installed';
   if (_view === 'sources') window.renderShimSources?.();
 
   if (_view === 'installed') {
@@ -366,9 +499,11 @@ function renderShimsPage() {
       ? sorted.map(([v, rs]) => _vendorCard(v, rs)).join('')
       : '<div class="shim-empty">' + esc(t('shim.inventory.empty')) + '</div>';
   } else if (_view === 'available') {
-    if (count) count.textContent = _loaded ? t('shimPage.packages', {n: _packages.length}) : '';
-    catalog.innerHTML = _packages.length
-      ? _packages.map(_packageCard).join('')
+    const f = _filters();
+    const packages = _packages.filter((p) => _matchesPackage(p, f));
+    if (count) count.textContent = _loaded ? t('shimPage.packages', {n: packages.length}) : '';
+    catalog.innerHTML = packages.length
+      ? packages.map(_packageCard).join('')
       : '<div class="shim-empty">' + esc(t('shimPage.noPackages')) + '</div>';
   } else if (count) {
     count.textContent = '';
@@ -415,7 +550,9 @@ export async function shimToggleEnabled(input, name) {
 
 Object.assign(window, {
   loadShimsPage, renderShimsPage, setShimsView, toggleShimVendor,
-  installShimPackage, removeShimPackage, shimToggleEnabled,
+  installShimPackage, updateShimPackage, removeShimPackage, shimToggleEnabled,
+  // Repainted on a language change: the per-shim rows carry translated marks.
+  repaintShimCatalog: () => { if (_view === 'available') renderShimsPage(); },
 });
 
 export { loadShimsPage, renderShimsPage, setShimsView };

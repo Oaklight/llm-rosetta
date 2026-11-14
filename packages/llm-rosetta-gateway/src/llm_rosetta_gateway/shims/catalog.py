@@ -46,6 +46,10 @@ class ShimSourcePackage:
             public, so the presets carry no token by default.
         free: Whether the package serves a keyless free resource.  The panel
             groups these apart from the paid packages.
+        subscription: Whether the package serves a plan the operator already
+            pays for elsewhere (a ChatGPT plan, say) rather than metered API
+            credit.  A separate axis from ``free``: it still needs a credential,
+            just not a per-request one.  Nothing declares it yet.
         note: An optional sentence the operator should read before selecting
             the package, keyed by language code like a shim's ``hint_msg``.
             It travels with the preset so a warning cannot be left behind in
@@ -71,9 +75,22 @@ class ShimSourcePackage:
     legacy_names: tuple[str, ...] = ()
     token_env: str | None = None
     free: bool = False
+    subscription: bool = False
     note: dict[str, str] | None = None
     ref: str | None = None
     mirror: dict[str, Any] | None = None
+
+    @property
+    def tier(self) -> str:
+        """The resource tier the panel filters and labels on.
+
+        Returns:
+            ``"subscription"`` when the package serves a plan, ``"free"`` when
+            it serves a keyless pool, else ``"paid"``.
+        """
+        if self.subscription:
+            return "subscription"
+        return "free" if self.free else "paid"
 
     @property
     def remote(self) -> dict[str, Any]:
@@ -114,6 +131,7 @@ class ShimSourcePackage:
             "remote": self.remote,
             "shims": list(self.shims),
             "free": self.free,
+            "tier": self.tier,
             "note": self.note,
         }
 
@@ -274,18 +292,18 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         legacy_names=("alcf--metis", "alcf--minerva", "alcf--sophia"),
         # The archive lives on the orphan ``dist`` branch, one directory
         # per tag (#1412); the CDN URL is a template, not the only host.
-        # ``sha256`` is the published digest of the v0.2.0 archive: bump it
+        # ``sha256`` is the published digest of the v0.3.0 archive: bump it
         # together with ``ref`` when a new archive is released.
         # ``path`` names ``providers`` rather than ``"."``: the archive
         # strips its single top-level directory, and a future release that
         # wraps the providers tree must not stop this config loading.
-        ref="v0.2.0",
+        ref="v0.3.1",
         mirror={
             "url_template": (
                 "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf"
                 "@dist/{ref}/alcf.tar.gz"
             ),
-            "sha256": "85474163b1e054c05c38e83b6513a063d39935349650771316118a0ce9f53658",
+            "sha256": "2db618fb85826a2f71ba210ea37f3c471d24e05293fc1c9af310604e717c6b8b",
             "path": "providers",
         },
     ),
@@ -309,18 +327,18 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         ),
         # The archive lives on the orphan ``dist`` branch, one directory
         # per tag (#1412); the CDN URL is a template, not the only host.
-        # ``sha256`` is the published digest of the v0.2.0 archive: bump it
+        # ``sha256`` is the published digest of the v0.3.0 archive: bump it
         # together with ``ref`` when a new archive is released.
         # ``path`` names ``providers`` rather than ``"."``: the archive
         # strips its single top-level directory, and a future release that
         # wraps the providers tree must not stop this config loading.
-        ref="v0.2.0",
+        ref="v0.3.0",
         mirror={
             "url_template": (
                 "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argo"
                 "@dist/{ref}/argo.tar.gz"
             ),
-            "sha256": "921c85f86082b0edf3821c7171ef5c36cc5693d4f72a1aadb237edffd892e4b2",
+            "sha256": "caeeb7c07957df86600fdf573c448865a85fe87cca7a42e1d404c2ceea21c26e",
             "path": "providers",
         },
     ),
@@ -359,13 +377,13 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         # The archive lives on the orphan ``dist`` branch, one directory per
         # tag; v0.1.0 there is the pre-rename OpenCode-only archive, kept so a
         # released gateway still resolves its old preset.
-        ref="v0.2.0",
+        ref="v0.3.0",
         mirror={
             "url_template": (
                 "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-free"
                 "@dist/{ref}/free.tar.gz"
             ),
-            "sha256": "ec77ee8d50c2ca596bc99da6250ace48681307f912c6091c5a2b24d17a29198d",
+            "sha256": "397cc846adb14e0fb814dcd632057abb30480ff0ae7e281f4043f9c6f188e6fb",
             "path": "providers",
         },
     ),
@@ -393,18 +411,42 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         ),
         # The archive lives on the orphan ``dist`` branch, one directory
         # per tag (#1412); the CDN URL is a template, not the only host.
-        # ``sha256`` is the published digest of the v0.2.0 archive: bump it
+        # ``sha256`` is the published digest of the v0.3.0 archive: bump it
         # together with ``ref`` when a new archive is released.
         # ``path`` names ``providers`` rather than ``"."``: the archive
         # strips its single top-level directory, and a future release that
         # wraps the providers tree must not stop this config loading.
-        ref="v0.2.0",
+        ref="v0.3.0",
         mirror={
             "url_template": (
                 "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-asksage"
                 "@dist/{ref}/asksage.tar.gz"
             ),
-            "sha256": "ae850aeb1f5bde5fa0ff36102141ad75c37d131f7e4564319323fc9989c5e6a9",
+            "sha256": "0fe376890d57d0f1dea2684cd7af031e44319f9be7c83eb39d87ead7e34d7721",
+            "path": "providers",
+        },
+    ),
+    ShimSourcePackage(
+        key="opendesign",
+        label="Open Design Cloud",
+        repo="https://github.com/Oaklight/llm-rosetta-shim-opendesign",
+        package="llm_rosetta_shim_opendesign",
+        shims=(
+            "opendesign--chat_completions",
+            "opendesign--messages",
+            "opendesign--open_responses",
+        ),
+        # The vendor manifest carries the mark, so every lane shows it; the
+        # package needs a core that reads manifest identity (0.14.0.dev31+).
+        # ``sha256`` is the published digest of the v0.1.1 archive: bump it
+        # together with ``ref`` when a new archive is released.
+        ref="v0.1.1",
+        mirror={
+            "url_template": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-opendesign"
+                "@dist/{ref}/opendesign.tar.gz"
+            ),
+            "sha256": "428d333d7e91ef3e2bfce9930f18b3c3e5b5a219064a3bdd1f7d83d38656ade8",
             "path": "providers",
         },
     ),

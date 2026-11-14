@@ -269,6 +269,7 @@ class TestAdminPayload:
             "argo",
             "free",
             "asksage",
+            "opendesign",
         ]
         for entry in payload:
             assert set(entry) == {
@@ -278,6 +279,7 @@ class TestAdminPayload:
                 "remote",
                 "shims",
                 "free",
+                "tier",
                 "note",
             }
             # Every published package resolves to a pinned primary plus a
@@ -306,6 +308,31 @@ class TestAdminPayload:
         note = entries["free"]["note"]
         assert set(note) == {"en", "zh"}
         assert entries["alcf"]["note"] is None
+
+    def test_the_tier_says_which_kind_of_resource_a_package_serves(self):
+        """Free and paid split the list; a plan is a third axis, not a fourth
+        boolean — a subscription needs a credential, just not a metered one."""
+        from llm_rosetta_gateway.admin.routes.config import payload as config_payload
+
+        entries = {
+            entry["key"]: entry
+            for entry in config_payload._shim_source_presets_payload()
+        }
+        assert entries["free"]["tier"] == "free"
+        assert entries["alcf"]["tier"] == "paid"
+
+        from llm_rosetta_gateway.shims.catalog import ShimSourcePackage
+
+        plan = ShimSourcePackage(
+            key="plan",
+            label="Plan",
+            repo="https://example.invalid",
+            package="plan",
+            shims=("plan--chat_completions",),
+            subscription=True,
+        )
+        assert plan.tier == "subscription"
+        assert plan.to_dict()["tier"] == "subscription"
 
     def test_presets_come_from_the_source_catalog(self):
         """The panel's catalogue is the standalone-package list, not the manifest."""
@@ -362,7 +389,7 @@ class TestPresets:
     def test_an_unknown_preset_names_the_known_ones(self):
         with pytest.raises(ValueError, match="unknown shim preset 'nope'"):
             resolve_source_config({"presets": ["nope"]}, None)
-        with pytest.raises(ValueError, match="alcf, argo, free, asksage"):
+        with pytest.raises(ValueError, match="alcf, argo, free, asksage, opendesign"):
             resolve_source_config({"presets": ["nope"]}, None)
 
     @pytest.mark.parametrize("presets", ["argo", [123], [""], [None]])

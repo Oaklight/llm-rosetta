@@ -271,8 +271,11 @@ class VendorManifest:
     The file is optional and may declare any subset of
     :class:`ConnectionConfig`: a leaf overrides any field it names, so a
     vendor whose lanes differ (a different ``base_url`` per cluster) keeps the
-    differing field on the leaf.  The manifest carries no identity — a file
-    that declares ``name`` or ``format`` is a shim, not a manifest.
+    differing field on the leaf.  It may also declare the three fields that
+    describe the *vendor* rather than a lane — ``logo``, ``group`` and
+    ``group_label`` — on the same terms: a leaf that names one wins.  The
+    manifest carries no shim identity: a file that declares ``name``,
+    ``format`` or ``base`` is a shim, not a manifest.
 
     Attributes:
         vendor: Directory name the manifest sits in, for error messages.
@@ -281,12 +284,21 @@ class VendorManifest:
         connection: Raw ``connection:`` mapping, before leaf merging.
         auth: The exchange the vendor ships in ``auth.py`` beside the
             manifest, attached to every leaf.
+        logo: The vendor's mark, inherited by every leaf that names none.
+        group: The vendor's top-level grouping key, inherited the same way.
+            Without it the admin derives one from each shim's name, so a
+            vendor whose shim names carry a deployment (``alcf_metis``)
+            declares it once here.
+        group_label: The vendor's group title, inherited the same way.
     """
 
     vendor: str
     path: Path
     connection: dict[str, Any] = field(default_factory=dict)
     auth: Any | None = None
+    logo: str | None = None
+    group: str | None = None
+    group_label: str | None = None
 
 
 @dataclass(frozen=True)

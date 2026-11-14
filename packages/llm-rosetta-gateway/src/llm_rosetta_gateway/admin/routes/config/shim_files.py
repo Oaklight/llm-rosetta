@@ -77,6 +77,12 @@ def _yaml_meta(path: Path) -> dict[str, Any] | None:
         # one is read from this index alone, and without the group it would
         # surface as a vendor of its own.
         "group": group if isinstance(group, str) else None,
+        # The mark and the group title identify the vendor, and a declined shim
+        # is only ever read from this index — without them its card would fall
+        # back to initials while the loaded sibling beside it shows the mark.
+        "group_label": cfg.get("group_label"),
+        "logo": cfg.get("logo"),
+        "free_source": bool(cfg.get("free_source")),
     }
 
 
@@ -236,6 +242,8 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
             "name": shim.name,
             "display_name": shim.display_name,
             "group": shim.group,
+            "group_label": shim.group_label,
+            "logo": shim.logo,
             "model_type": shim.model_type,
             "format": shim.format,
             "origin": origin,
@@ -248,6 +256,7 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
             "editable": writable,
             "deletable": writable,
             "at_source_root": at_root,
+            "free_source": bool(shim.free_source),
             "used_by": sorted(usage.get(shim.name, [])),
         }
     for name, entry in index.items():
@@ -260,6 +269,8 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
             "name": name,
             "display_name": entry.get("display_name"),
             "group": entry.get("group"),
+            "group_label": entry.get("group_label"),
+            "logo": entry.get("logo"),
             "model_type": entry.get("model_type", "llm"),
             "format": entry.get("format", ""),
             "origin": origin,
@@ -267,6 +278,7 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
             "path": entry.get("path"),
             "manifest_path": _manifest_above(entry),
             "enabled": False,
+            "free_source": bool(entry.get("free_source")),
             "editable": writable,
             "deletable": writable,
             "at_source_root": at_root,

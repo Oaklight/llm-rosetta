@@ -246,6 +246,7 @@ class TestSourceCatalog:
             "argo",
             "free",
             "asksage",
+            "opendesign",
         ]
 
     def test_every_package_lists_its_shims_and_remote(self):
@@ -283,6 +284,7 @@ class TestSourceCatalog:
             "argo",
             "free",
             "asksage",
+            "opendesign",
         }
         for entry in SHIM_SOURCE_PACKAGES:
             assert entry.ref is not None, entry.key
@@ -324,6 +326,7 @@ class TestSourceCatalog:
             "remote",
             "shims",
             "free",
+            "tier",
             "note",
         }
 

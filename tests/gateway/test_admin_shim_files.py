@@ -233,6 +233,34 @@ async def test_inventory_marks_a_declared_shim_editable(tmp_path, local_source):
     assert demo["editable"] is True and demo["deletable"] is True
 
 
+@pytest.mark.asyncio
+async def test_a_declined_shim_keeps_the_vendors_mark(tmp_path):
+    """A shim the loader did not register still carries its mark.
+
+    It has no registered shim to read identity from, so without the file's
+    own ``logo`` and ``group_label`` its card would paint initials beside a
+    loaded sibling that shows the vendor's mark.
+    """
+    root = tmp_path / "free"
+    leaf = root / "kilo_free" / "provider.yaml"
+    leaf.parent.mkdir(parents=True)
+    leaf.write_text(
+        _yaml("kilo_free--chat_completions").replace(
+            "connection:",
+            "group_label: Kilo\nlogo: https://cdn.example/kilocode.svg\nconnection:",
+        ),
+        encoding="utf-8",
+    )
+    request = _request(tmp_path, {"providers": {}, "models": {}}, root)
+
+    rows = _body(await get_loaded_shims(request))["shims"]
+    row = next(r for r in rows if r["name"] == "kilo_free--chat_completions")
+
+    assert row["enabled"] is False
+    assert row["logo"] == "https://cdn.example/kilocode.svg"
+    assert row["group_label"] == "Kilo"
+
+
 @pytest.fixture()
 def root_definition(tmp_path: Path) -> Path:
     """A source whose provider.yaml sits at the root, beside a nested shim.
