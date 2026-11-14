@@ -320,6 +320,8 @@ A destructive action no longer blocks the panel. Clearing the request log, a cle
 
 **Jobs** is its own rail section rather than a view of Observability. The routes behind it belong to the observability panel, so disabling Observability hides **Jobs** as well.
 
+The board filters by state — **All**, **Active** and **Failed** — and the header counts what is on it (`6 jobs · 0 active`). Timestamps read like the request log's, with the raw ISO value in the tooltip.
+
 - The rows a clear or cleanup targets stop being returned by every read the moment the job is queued, so the lists and the counts update immediately. The rows themselves are deleted in batches afterwards.
 - Progress is per row (`5,000 / 20,000 rows`), and every batch is a point where the job can stop: **Cancel** takes effect between batches, never mid-statement. A cancel before anything was deleted restores the rows; a cancel after a partial delete keeps them hidden and offers **Resume**.
 - A failed job keeps its rows hidden and offers **Retry** and **Unhide**. The rows are still on disk, so retrying loses nothing.
