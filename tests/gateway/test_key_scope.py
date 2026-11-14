@@ -213,3 +213,47 @@ class TestTheAdminAnswersWhatItStored:
         finally:
             listener.close()
             await listener.wait_closed()
+
+    async def test_a_removed_field_is_ignored_rather_than_echoed(self, tmp_path):
+        # `allowed_shims` was stored, returned and never read.  An old client
+        # may still send it; the record simply has no such field.
+        keys_db = tmp_path / "keys.db"
+        store = await KeyStore.create(keys_db)
+        await store.close()
+        config = GatewayConfig(
+            {
+                "providers": PROVIDERS,
+                "models": MODELS,
+                "server": {
+                    "data_dir": str(tmp_path / "data"),
+                    "api_keys_db": str(keys_db),
+                },
+            }
+        )
+        app = await create_app(config)
+        listener = await asyncio.start_server(app._handle_connection, "127.0.0.1", 0)
+        port = listener.sockets[0].getsockname()[1]
+        try:
+            import json
+
+            raw = json.dumps({"label": "old", "allowed_shims": ["openai"]}).encode()
+            head = [
+                "POST /admin/api/keys HTTP/1.1",
+                "Host: test",
+                "Connection: close",
+                f"Content-Length: {len(raw)}",
+                "Content-Type: application/json",
+            ]
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write("\r\n".join(head).encode() + b"\r\n\r\n" + raw)
+            await writer.drain()
+            data = await reader.read()
+            writer.close()
+            _, _, payload = data.partition(b"\r\n\r\n")
+            body = json.loads(payload or b"{}")
+        finally:
+            listener.close()
+            await listener.wait_closed()
+
+        assert "allowed_shims" not in body["key"]
+        assert body["key"]["allowed_models"] == ["*"]

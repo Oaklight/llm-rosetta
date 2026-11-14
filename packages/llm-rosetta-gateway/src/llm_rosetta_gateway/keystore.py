@@ -53,6 +53,11 @@ VERSIONS: list[tuple[int, str, list[str]]] = [
         "add api_keys.rate_limit",
         ["ALTER TABLE api_keys ADD COLUMN rate_limit TEXT NOT NULL DEFAULT ''"],
     ),
+    (
+        5,
+        "drop api_keys.allowed_shims",
+        ["ALTER TABLE api_keys DROP COLUMN allowed_shims"],
+    ),
 ]
 
 
@@ -102,23 +107,11 @@ def _model_names(raw: str | None) -> frozenset[str]:
     return frozenset(str(n) for n in names if str(n).strip())
 
 
-def _names(raw: str | None) -> frozenset[str]:
-    """A stored JSON list as a set; anything unreadable means "all"."""
-    try:
-        names = json.loads(raw or "")
-    except (json.JSONDecodeError, TypeError):
-        return frozenset({"*"})
-    if not isinstance(names, list):
-        return frozenset({"*"})
-    return frozenset(str(n) for n in names if str(n).strip()) or frozenset({"*"})
-
-
 @dataclass(frozen=True)
 class KeyContext:
     """Per-request auth context attached via ContextVar after validation."""
 
     label: str
-    allowed_shims: frozenset[str]
     #: Models this key may call; ``{"*"}`` is every model the gateway serves.
     allowed_models: frozenset[str] = frozenset({"*"})
     #: This key's own request quota, in the settings fields' ``N/unit`` form
@@ -235,7 +228,6 @@ class KeyStore:
                 id          TEXT PRIMARY KEY,
                 key_hash    TEXT NOT NULL UNIQUE,
                 label       TEXT NOT NULL DEFAULT '',
-                allowed_shims TEXT NOT NULL DEFAULT '["*"]',
                 created     TEXT NOT NULL,
                 rotated     TEXT
             )"""
@@ -249,7 +241,7 @@ class KeyStore:
     async def _refresh_cache(self) -> None:
         """Rebuild the in-memory hash → (id, KeyContext) lookup."""
         cursor = await self._conn.execute(
-            "SELECT id, key_hash, label, allowed_shims, allowed_models, rate_limit, "
+            "SELECT id, key_hash, label, allowed_models, rate_limit, "
             "usage_bucket FROM api_keys"
         )
         rows = await cursor.fetchall()
@@ -258,7 +250,6 @@ class KeyStore:
             row_id,
             key_hash,
             label,
-            shims_json,
             models_json,
             rate_limit,
             bucket,
@@ -267,7 +258,6 @@ class KeyStore:
                 row_id,
                 KeyContext(
                     label=label,
-                    allowed_shims=_names(shims_json),
                     allowed_models=_model_names(models_json),
                     rate_limit=_quota(rate_limit),
                     usage_bucket=bucket or key_bucket(key_hash),
@@ -373,7 +363,6 @@ class KeyStore:
     async def create_key(
         self,
         label: str = "",
-        allowed_shims: list[str] | None = None,
         allowed_models: list[str] | None = None,
         rate_limit: str = "",
         manual_key: str | None = None,
@@ -386,18 +375,16 @@ class KeyStore:
         key_id = _generate_id()
         raw_key = manual_key or _generate_key()
         key_hash = _hash_key(raw_key)
-        shims = json.dumps(allowed_shims or ["*"])
         models = json.dumps(["*"] if allowed_models is None else allowed_models)
         created = datetime.now(timezone.utc).isoformat()
         await self._conn.execute(
             "INSERT INTO api_keys "
-            "(id, key_hash, label, allowed_shims, allowed_models, rate_limit, "
-            "created, usage_bucket) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "(id, key_hash, label, allowed_models, rate_limit, "
+            "created, usage_bucket) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 key_id,
                 key_hash,
                 label,
-                shims,
                 models,
                 _quota(rate_limit),
                 created,
@@ -411,7 +398,7 @@ class KeyStore:
     async def list_keys(self) -> list[dict[str, Any]]:
         """List all keys without secrets."""
         cursor = await self._conn.execute(
-            "SELECT id, label, allowed_shims, allowed_models, rate_limit, created, "
+            "SELECT id, label, allowed_models, rate_limit, created, "
             "rotated, last_used FROM api_keys"
         )
         rows = await cursor.fetchall()
@@ -420,21 +407,15 @@ class KeyStore:
             (
                 row_id,
                 label,
-                shims_json,
                 models_json,
                 rate_limit,
                 created,
                 rotated,
                 last_used,
             ) = row
-            try:
-                shims = json.loads(shims_json)
-            except (json.JSONDecodeError, TypeError):
-                shims = ["*"]
             entry: dict[str, Any] = {
                 "id": row_id,
                 "label": label,
-                "allowed_shims": shims,
                 "allowed_models": sorted(_model_names(models_json)),
                 "rate_limit": _quota(rate_limit),
                 "created": created,
@@ -485,19 +466,15 @@ class KeyStore:
         self,
         key_id: str,
         label: str | None = None,
-        allowed_shims: list[str] | None = None,
         allowed_models: list[str] | None = None,
         rate_limit: str | None = None,
     ) -> bool:
-        """Update a key's label, shims, model allowlist or rate limit."""
+        """Update a key's label, model allowlist or rate limit."""
         parts: list[str] = []
         params: list[Any] = []
         if label is not None:
             parts.append("label = ?")
             params.append(label)
-        if allowed_shims is not None:
-            parts.append("allowed_shims = ?")
-            params.append(json.dumps(allowed_shims))
         if allowed_models is not None:
             parts.append("allowed_models = ?")
             params.append(json.dumps(allowed_models))
@@ -558,13 +535,12 @@ class KeyStore:
             key_hash = _hash_key(raw_key)
             await self._conn.execute(
                 "INSERT OR IGNORE INTO api_keys "
-                "(id, key_hash, label, allowed_shims, created, usage_bucket) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
+                "(id, key_hash, label, created, usage_bucket) "
+                "VALUES (?, ?, ?, ?, ?)",
                 (
                     entry.get("id", _generate_id()),
                     key_hash,
                     entry.get("label", ""),
-                    '["*"]',
                     entry.get("created", ""),
                     key_bucket(key_hash),
                 ),

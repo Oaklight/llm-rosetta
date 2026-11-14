@@ -26,21 +26,12 @@ class TestKeyStoreCreate:
         )
         assert raw_key == "my-secret-key"
 
-    async def test_create_with_allowed_shims(self, keystore):
-        key_id, raw_key = await keystore.create_key(
-            label="limited", allowed_shims=["openai", "anthropic"]
-        )
-        result = keystore.validate(raw_key)
-        assert result is not None
-        _, ctx = result
-        assert ctx.allowed_shims == frozenset({"openai", "anthropic"})
-
-    async def test_default_allowed_shims_is_star(self, keystore):
+    async def test_create_without_an_allowlist_is_every_model(self, keystore):
         _, raw_key = await keystore.create_key(label="default")
         result = keystore.validate(raw_key)
         assert result is not None
         _, ctx = result
-        assert ctx.allowed_shims == frozenset({"*"})
+        assert ctx.allowed_models == frozenset({"*"})
 
 
 class TestKeyStoreValidate:
@@ -70,7 +61,10 @@ class TestKeyStoreList:
             assert "key_hash" not in k
             assert "id" in k
             assert "label" in k
-            assert "allowed_shims" in k
+            assert "allowed_shims" not in k, "the inert column is gone"
+            assert "allowed_shims" not in KeyContext.__dataclass_fields__, (
+                "and nothing in the context can read it either"
+            )
             assert "created" in k
 
     async def test_list_empty(self, keystore):
@@ -86,13 +80,13 @@ class TestKeyStoreUpdate:
         _, ctx = result
         assert ctx.label == "new"
 
-    async def test_update_allowed_shims(self, keystore):
+    async def test_update_allowed_models(self, keystore):
         key_id, raw_key = await keystore.create_key(label="x")
-        assert await keystore.update(key_id, allowed_shims=["google"])
+        assert await keystore.update(key_id, allowed_models=["m-a"])
         result = keystore.validate(raw_key)
         assert result is not None
         _, ctx = result
-        assert ctx.allowed_shims == frozenset({"google"})
+        assert ctx.allowed_models == frozenset({"m-a"})
 
     async def test_update_nonexistent(self, keystore):
         assert not await keystore.update("nonexistent", label="x")
@@ -161,13 +155,19 @@ class TestKeyStoreHasKeys:
 
 class TestKeyContext:
     def test_frozen(self):
-        ctx = KeyContext(label="test", allowed_shims=frozenset({"*"}))
+        ctx = KeyContext(
+            label="test",
+        )
         with pytest.raises(AttributeError):
             ctx.label = "changed"  # type: ignore
 
     def test_equality(self):
-        a = KeyContext(label="a", allowed_shims=frozenset({"*"}))
-        b = KeyContext(label="a", allowed_shims=frozenset({"*"}))
+        a = KeyContext(
+            label="a",
+        )
+        b = KeyContext(
+            label="a",
+        )
         assert a == b
 
 

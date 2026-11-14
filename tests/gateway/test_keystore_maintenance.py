@@ -28,6 +28,7 @@ _STEPS = [
     "api_keys.v2",
     "api_keys.v3",
     "api_keys.v4",
+    "api_keys.v5",
     "api_keys.backfill_usage_bucket",
 ]
 
@@ -85,11 +86,18 @@ class TestAFreshStore:
         store = await KeyStore.create(tmp_path / "keys.db")
         try:
             assert await _columns(store) >= {"last_used", "usage_bucket"}
-            assert await _versions(store) == {1, 2, 3, 4}
+            assert await _versions(store) == {1, 2, 3, 4, 5}
             assert store.maintenance is not None, (
                 "create() must keep what it ran, so an operator can read it"
             )
             assert [result.name for result in store.maintenance.results] == _STEPS
+        finally:
+            await store.close()
+
+    async def test_the_dropped_column_is_not_in_a_fresh_store(self, tmp_path):
+        store = await KeyStore.create(tmp_path / "keys.db")
+        try:
+            assert "allowed_shims" not in await _columns(store)
         finally:
             await store.close()
 
@@ -101,8 +109,11 @@ class TestAFreshStore:
             changed = {r.name: r.changed for r in store.maintenance.results}
             assert changed["api_keys.v1"] > 0, "v1 adds last_used"
             assert changed["api_keys.v2"] > 0, "v2 adds usage_bucket"
-            assert changed["api_keys.adopt_pre_registry_schema"] == 0, (
-                "a fresh store has no columns to adopt"
+            assert changed["api_keys.adopt_pre_registry_schema"] == 1, (
+                "a fresh store has no dropped column, which is v5's evidence"
+            )
+            assert changed["api_keys.v5"] == 0, (
+                "so the adoption already recorded it and v5 does not run"
             )
         finally:
             await store.close()
@@ -116,7 +127,7 @@ class TestAStoreFromAnOlderRelease:
         store = await KeyStore.create(db)
         try:
             assert await _columns(store) >= {"last_used", "usage_bucket"}
-            assert await _versions(store) == {1, 2, 3, 4}
+            assert await _versions(store) == {1, 2, 3, 4, 5}
             rows = await store._conn.execute_fetchall(
                 "SELECT key_hash, usage_bucket FROM api_keys ORDER BY id"
             )
@@ -141,7 +152,7 @@ class TestAStoreFromAnOlderRelease:
             )
             assert changed["api_keys.v2"] == 0, "and v2 does not run again"
             assert changed["api_keys.v1"] > 0, "while v1 still has work to do"
-            assert await _versions(store) == {1, 2, 3, 4}
+            assert await _versions(store) == {1, 2, 3, 4, 5}
         finally:
             await store.close()
 
@@ -171,6 +182,11 @@ class TestAStoreFromAnOlderRelease:
         store = await KeyStore.create(db)
         try:
             assert store.maintenance is not None
+            # v5 drops the column the server never read; the row survives it.
+            assert "allowed_shims" not in await _columns(store)
+            assert await store._conn.execute_fetchall("SELECT id FROM api_keys") == [
+                ("key0",)
+            ]
             changed = {r.name: r.changed for r in store.maintenance.results}
             assert changed == {
                 "api_keys.adopt_pre_registry_schema": 2,
@@ -178,9 +194,10 @@ class TestAStoreFromAnOlderRelease:
                 "api_keys.v2": 0,
                 "api_keys.v3": 2,
                 "api_keys.v4": 2,
+                "api_keys.v5": 2,
                 "api_keys.backfill_usage_bucket": 0,
             }
-            assert await _versions(store) == {1, 2, 3, 4}
+            assert await _versions(store) == {1, 2, 3, 4, 5}
         finally:
             await store.close()
 
@@ -233,7 +250,7 @@ class TestAFailingMigration:
         broken: list[Any] = [
             *keystore_module.VERSIONS,
             (
-                5,
+                6,
                 "a migration that cannot run",
                 ["INSERT INTO no_such_table (x) VALUES (1)"],
             ),
@@ -246,7 +263,7 @@ class TestAFailingMigration:
 
         reopened = await KeyStore.create(db)
         try:
-            assert await _versions(reopened) == {1, 2, 3, 4}, (
+            assert await _versions(reopened) == {1, 2, 3, 4, 5}, (
                 "the version that failed is not recorded"
             )
         finally:

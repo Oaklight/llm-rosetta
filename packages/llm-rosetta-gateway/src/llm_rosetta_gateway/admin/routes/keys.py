@@ -157,7 +157,6 @@ async def create_api_key(request: Any) -> Response:
 
     label = body.get("label", "")
     manual_key = body.get("key")
-    allowed_shims = body.get("allowed_shims")
     allowed_models, models_err = _key_models(body.get("allowed_models"))
     rate_limit, quota_err = _key_quota(body.get("rate_limit"))
     for field, error in (("allowed_models", models_err), ("rate_limit", quota_err)):
@@ -167,7 +166,6 @@ async def create_api_key(request: Any) -> Response:
     try:
         key_id, raw_key = await keystore.create_key(
             label=label,
-            allowed_shims=allowed_shims,
             allowed_models=allowed_models,
             rate_limit=rate_limit,
             manual_key=manual_key,
@@ -187,7 +185,7 @@ async def create_api_key(request: Any) -> Response:
 
 
 async def update_api_key(request: Any, **kwargs: Any) -> Response:
-    """Update an API key's label and/or allowed_shims."""
+    """Update an API key's label, model allowlist or rate limit."""
     keystore = _get_keystore(request)
     key_id = request.path_params["key_id"]
 
@@ -196,7 +194,6 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
         return err
 
     label = body.get("label")
-    allowed_shims = body.get("allowed_shims")
     allowed_models, models_err = _key_models(body.get("allowed_models"))
     rate_limit, quota_err = _key_quota(body.get("rate_limit"))
     for field, error in (("allowed_models", models_err), ("rate_limit", quota_err)):
@@ -206,7 +203,6 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
     if not await keystore.update(
         key_id,
         label=label,
-        allowed_shims=allowed_shims,
         allowed_models=allowed_models,
         rate_limit=None if body.get("rate_limit") is None else rate_limit,
     ):
@@ -215,8 +211,6 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
     result: dict[str, Any] = {"ok": True, "id": key_id}
     if label is not None:
         result["label"] = label
-    if allowed_shims is not None:
-        result["allowed_shims"] = allowed_shims
     if allowed_models is not None:
         # What the store now holds, not a spelling of it: `[]` and `["*"]` are
         # different keys, and a client that echoes this body back must not be
@@ -227,9 +221,7 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
     from llm_rosetta_gateway.ops.keys import OpsKeyUpdate
 
     changed = [
-        k
-        for k in ("label", "allowed_shims", "allowed_models", "rate_limit")
-        if body.get(k) is not None
+        k for k in ("label", "allowed_models", "rate_limit") if body.get(k) is not None
     ]
     _ops_ctx = getattr(request.app, "ops_ctx", None)
     if _ops_ctx is not None:

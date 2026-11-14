@@ -358,7 +358,9 @@ class TestRateLimitHook:
 
         state = self._make_state(enabled=True, per_key="1/m")
         hook = create_rate_limit_hook(state)
-        ctx = KeyContext(label="user-a", allowed_shims=frozenset())
+        ctx = KeyContext(
+            label="user-a",
+        )
         token = api_key_context_var.set(ctx)
         try:
             r1 = _run(hook(FakeRequest()))
