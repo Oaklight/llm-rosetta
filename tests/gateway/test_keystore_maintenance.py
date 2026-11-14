@@ -26,6 +26,8 @@ _STEPS = [
     "api_keys.adopt_pre_registry_schema",
     "api_keys.v1",
     "api_keys.v2",
+    "api_keys.v3",
+    "api_keys.v4",
     "api_keys.backfill_usage_bucket",
 ]
 
@@ -83,7 +85,7 @@ class TestAFreshStore:
         store = await KeyStore.create(tmp_path / "keys.db")
         try:
             assert await _columns(store) >= {"last_used", "usage_bucket"}
-            assert await _versions(store) == {1, 2}
+            assert await _versions(store) == {1, 2, 3, 4}
             assert store.maintenance is not None, (
                 "create() must keep what it ran, so an operator can read it"
             )
@@ -114,7 +116,7 @@ class TestAStoreFromAnOlderRelease:
         store = await KeyStore.create(db)
         try:
             assert await _columns(store) >= {"last_used", "usage_bucket"}
-            assert await _versions(store) == {1, 2}
+            assert await _versions(store) == {1, 2, 3, 4}
             rows = await store._conn.execute_fetchall(
                 "SELECT key_hash, usage_bucket FROM api_keys ORDER BY id"
             )
@@ -139,7 +141,7 @@ class TestAStoreFromAnOlderRelease:
             )
             assert changed["api_keys.v2"] == 0, "and v2 does not run again"
             assert changed["api_keys.v1"] > 0, "while v1 still has work to do"
-            assert await _versions(store) == {1, 2}
+            assert await _versions(store) == {1, 2, 3, 4}
         finally:
             await store.close()
 
@@ -152,6 +154,10 @@ class TestAStoreFromAnOlderRelease:
         other half of why the ledger is read per version and not as a ladder:
         here the adoption records 1 *and* 2, where a store carrying only
         ``usage_bucket`` records 2 while v1 still has work to do.
+
+        ``allowed_models`` and ``rate_limit`` are not among the columns this
+        release brought forward, so v3 and v4 each still alter the table and
+        record themselves: 2 apiece, one statement plus the ledger row.
         """
         db = tmp_path / "keys.db"
         _legacy_db(db, extra_columns="last_used TEXT, usage_bucket TEXT", rows=1)
@@ -170,9 +176,11 @@ class TestAStoreFromAnOlderRelease:
                 "api_keys.adopt_pre_registry_schema": 2,
                 "api_keys.v1": 0,
                 "api_keys.v2": 0,
+                "api_keys.v3": 2,
+                "api_keys.v4": 2,
                 "api_keys.backfill_usage_bucket": 0,
             }
-            assert await _versions(store) == {1, 2}
+            assert await _versions(store) == {1, 2, 3, 4}
         finally:
             await store.close()
 
@@ -203,9 +211,9 @@ class TestAStoreFromAnOlderRelease:
         again = await KeyStore.create(db)
         try:
             assert again.maintenance is not None
-            assert [r.changed for r in again.maintenance.results] == [0, 0, 0, 0], (
-                "every step of a store that is already current has nothing to do"
-            )
+            assert [r.changed for r in again.maintenance.results] == [0] * len(
+                _STEPS
+            ), "every step of a store that is already current has nothing to do"
             assert [r.ok for r in again.maintenance.results] == [True] * len(_STEPS)
         finally:
             await again.close()
@@ -225,7 +233,7 @@ class TestAFailingMigration:
         broken: list[Any] = [
             *keystore_module.VERSIONS,
             (
-                3,
+                5,
                 "a migration that cannot run",
                 ["INSERT INTO no_such_table (x) VALUES (1)"],
             ),
@@ -238,7 +246,7 @@ class TestAFailingMigration:
 
         reopened = await KeyStore.create(db)
         try:
-            assert await _versions(reopened) == {1, 2}, (
+            assert await _versions(reopened) == {1, 2, 3, 4}, (
                 "the version that failed is not recorded"
             )
         finally:

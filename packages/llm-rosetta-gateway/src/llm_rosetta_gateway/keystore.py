@@ -41,7 +41,52 @@ VERSIONS: list[tuple[int, str, list[str]]] = [
         "add api_keys.usage_bucket",
         ["ALTER TABLE api_keys ADD COLUMN usage_bucket TEXT"],
     ),
+    (
+        3,
+        "add api_keys.allowed_models",
+        [
+            "ALTER TABLE api_keys ADD COLUMN allowed_models TEXT NOT NULL DEFAULT '[\"*\"]'"
+        ],
+    ),
+    (
+        4,
+        "add api_keys.rate_limit",
+        ["ALTER TABLE api_keys ADD COLUMN rate_limit TEXT NOT NULL DEFAULT ''"],
+    ),
 ]
+
+
+def _quota(raw: str | None) -> str:
+    """A stored quota spec with its unreadable parts dropped.
+
+    The admin API validates before it stores; this guard is for a record the
+    column's earlier integer form wrote, or one edited by hand — a limit that
+    cannot be parsed is no limit, never a request-time error.
+    """
+    from ._vendor.ratelimit import parse_quota
+
+    kept: list[str] = []
+    for part in str(raw or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            parse_quota(part)
+        except ValueError:
+            continue
+        kept.append(part)
+    return ", ".join(kept)
+
+
+def _names(raw: str | None) -> frozenset[str]:
+    """A stored JSON list as a set; anything unreadable means "all"."""
+    try:
+        names = json.loads(raw or "")
+    except (json.JSONDecodeError, TypeError):
+        return frozenset({"*"})
+    if not isinstance(names, list):
+        return frozenset({"*"})
+    return frozenset(str(n) for n in names if str(n).strip()) or frozenset({"*"})
 
 
 @dataclass(frozen=True)
@@ -50,6 +95,11 @@ class KeyContext:
 
     label: str
     allowed_shims: frozenset[str]
+    #: Models this key may call; ``{"*"}`` is every model the gateway serves.
+    allowed_models: frozenset[str] = frozenset({"*"})
+    #: This key's own request quota, in the settings fields' ``N/unit`` form
+    #: (``"60/m"`` or ``"30/m, 500/h"``); empty means no per-key limit.
+    rate_limit: str = ""
     key_hash: str = ""
     # None means "not attributed to a credential" (internal token, anonymous).
     usage_bucket: str | None = None
@@ -175,21 +225,28 @@ class KeyStore:
     async def _refresh_cache(self) -> None:
         """Rebuild the in-memory hash → (id, KeyContext) lookup."""
         cursor = await self._conn.execute(
-            "SELECT id, key_hash, label, allowed_shims, usage_bucket FROM api_keys"
+            "SELECT id, key_hash, label, allowed_shims, allowed_models, rate_limit, "
+            "usage_bucket FROM api_keys"
         )
         rows = await cursor.fetchall()
         cache: dict[str, tuple[str, KeyContext]] = {}
-        for row_id, key_hash, label, shims_json, usage_bucket in rows:
-            try:
-                shims = frozenset(json.loads(shims_json))
-            except (json.JSONDecodeError, TypeError):
-                shims = frozenset({"*"})
+        for (
+            row_id,
+            key_hash,
+            label,
+            shims_json,
+            models_json,
+            rate_limit,
+            bucket,
+        ) in rows:
             cache[key_hash] = (
                 row_id,
                 KeyContext(
                     label=label,
-                    allowed_shims=shims,
-                    usage_bucket=usage_bucket or key_bucket(key_hash),
+                    allowed_shims=_names(shims_json),
+                    allowed_models=_names(models_json),
+                    rate_limit=_quota(rate_limit),
+                    usage_bucket=bucket or key_bucket(key_hash),
                 ),
             )
         self._cache = cache
@@ -293,6 +350,8 @@ class KeyStore:
         self,
         label: str = "",
         allowed_shims: list[str] | None = None,
+        allowed_models: list[str] | None = None,
+        rate_limit: str = "",
         manual_key: str | None = None,
     ) -> tuple[str, str]:
         """Create a new API key.
@@ -304,12 +363,22 @@ class KeyStore:
         raw_key = manual_key or _generate_key()
         key_hash = _hash_key(raw_key)
         shims = json.dumps(allowed_shims or ["*"])
+        models = json.dumps(allowed_models or ["*"])
         created = datetime.now(timezone.utc).isoformat()
         await self._conn.execute(
             "INSERT INTO api_keys "
-            "(id, key_hash, label, allowed_shims, created, usage_bucket) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (key_id, key_hash, label, shims, created, key_bucket(key_hash)),
+            "(id, key_hash, label, allowed_shims, allowed_models, rate_limit, "
+            "created, usage_bucket) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                key_id,
+                key_hash,
+                label,
+                shims,
+                models,
+                _quota(rate_limit),
+                created,
+                key_bucket(key_hash),
+            ),
         )
         await self._conn.commit()
         await self._refresh_cache()
@@ -318,11 +387,22 @@ class KeyStore:
     async def list_keys(self) -> list[dict[str, Any]]:
         """List all keys without secrets."""
         cursor = await self._conn.execute(
-            "SELECT id, label, allowed_shims, created, rotated, last_used FROM api_keys"
+            "SELECT id, label, allowed_shims, allowed_models, rate_limit, created, "
+            "rotated, last_used FROM api_keys"
         )
         rows = await cursor.fetchall()
         result = []
-        for row_id, label, shims_json, created, rotated, last_used in rows:
+        for row in rows:
+            (
+                row_id,
+                label,
+                shims_json,
+                models_json,
+                rate_limit,
+                created,
+                rotated,
+                last_used,
+            ) = row
             try:
                 shims = json.loads(shims_json)
             except (json.JSONDecodeError, TypeError):
@@ -331,6 +411,8 @@ class KeyStore:
                 "id": row_id,
                 "label": label,
                 "allowed_shims": shims,
+                "allowed_models": sorted(_names(models_json)),
+                "rate_limit": _quota(rate_limit),
                 "created": created,
             }
             if rotated:
@@ -380,8 +462,10 @@ class KeyStore:
         key_id: str,
         label: str | None = None,
         allowed_shims: list[str] | None = None,
+        allowed_models: list[str] | None = None,
+        rate_limit: str | None = None,
     ) -> bool:
-        """Update label and/or allowed_shims for a key.  Returns True if found."""
+        """Update a key's label, shims, model allowlist or rate limit."""
         parts: list[str] = []
         params: list[Any] = []
         if label is not None:
@@ -390,6 +474,12 @@ class KeyStore:
         if allowed_shims is not None:
             parts.append("allowed_shims = ?")
             params.append(json.dumps(allowed_shims))
+        if allowed_models is not None:
+            parts.append("allowed_models = ?")
+            params.append(json.dumps(allowed_models or ["*"]))
+        if rate_limit is not None:
+            parts.append("rate_limit = ?")
+            params.append(_quota(rate_limit))
         if not parts:
             return await self._key_exists(key_id)
         params.append(key_id)

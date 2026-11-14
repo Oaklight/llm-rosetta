@@ -324,9 +324,9 @@
 
   <!-- API Keys Tab -->
   <div class="tab-panel" id="tab-keys" role="tabpanel" aria-labelledby="tabBtn-keys">
-    <div class="section" id="keysAccessSection">
+    <div class="section is-collapsed" id="keysAccessSection">
       <div class="section-header access-head">
-        <button type="button" class="section-toggle" id="accessToggle" aria-expanded="true" aria-controls="keyExamplesArea" onclick="toggleAccessPanel()">
+        <button type="button" class="section-toggle" id="accessToggle" aria-expanded="false" aria-controls="keyExamplesArea" onclick="toggleAccessPanel()">
           <svg class="access-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
           <span data-i18n="keys.access">Connect</span>
         </button>
@@ -376,13 +376,13 @@
       <div class="table-scroll"><table id="keysTableEl">
         <thead><tr>
           <th style="width:3%"><input type="checkbox" class="row-check" onchange="selectAllKeys(this)"></th>
-          <th class="sortable" id="keySortLabel" onclick="sortKeys('label')" style="width:22%" data-i18n="col.label">Label</th>
-          <th class="sortable" id="keySortCreated" onclick="sortKeys('created')" style="width:12%" data-i18n="col.created">Created</th>
-          <th class="sortable" id="keySortLastUsed" onclick="sortKeys('last_used')" style="width:12%" data-i18n="col.lastUsed">Last Used</th>
-          <th class="sortable" id="keySortRequests" onclick="sortKeys('requests')" style="width:9%;text-align:right" data-i18n="col.requests">Requests</th>
-          <th class="sortable" id="keySortInput" onclick="sortKeys('input')" style="width:9%;text-align:right" data-i18n="tokenUsage.col.input">Input</th>
-          <th class="sortable" id="keySortOutput" onclick="sortKeys('output')" style="width:9%;text-align:right" data-i18n="tokenUsage.col.output">Output</th>
-          <th class="sortable" id="keySortTotal" onclick="sortKeys('total')" style="width:9%;text-align:right" data-i18n="tokenUsage.col.total">Total</th>
+          <th class="sortable" id="keySortLabel" onclick="sortKeys('label')" style="width:28%" data-i18n="col.label">Label</th>
+          <th class="sortable" id="keySortCreated" onclick="sortKeys('created')" style="width:11%" data-i18n="col.created">Created</th>
+          <th class="sortable" id="keySortLastUsed" onclick="sortKeys('last_used')" style="width:11%" data-i18n="col.lastUsed">Last Used</th>
+          <th class="sortable" id="keySortRequests" onclick="sortKeys('requests')" style="width:8%;text-align:right" data-i18n="col.requests">Requests</th>
+          <th class="sortable" id="keySortInput" onclick="sortKeys('input')" style="width:8%;text-align:right" data-i18n="tokenUsage.col.input">Input</th>
+          <th class="sortable" id="keySortOutput" onclick="sortKeys('output')" style="width:8%;text-align:right" data-i18n="tokenUsage.col.output">Output</th>
+          <th class="sortable" id="keySortTotal" onclick="sortKeys('total')" style="width:8%;text-align:right" data-i18n="tokenUsage.col.total">Total</th>
           <th style="text-align:right"></th>
         </tr></thead>
         <tbody id="keysTable"></tbody>
@@ -2005,6 +2005,24 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <label data-i18n="label.keyManual">Manual key (leave empty to auto-generate)</label>
       <input id="keyManual" placeholder="rsk-... (auto-generated if empty)" style="font-family:var(--mono)">
     </div>
+    <div class="form-group" id="keyModelsGroup">
+      <label data-i18n="label.keyModels">Allowed models (blank = every model)</label>
+      <div class="combo-field" id="keyModelsCombo">
+        <input id="keyModels" placeholder="gpt-4o, claude-3-5-sonnet" style="font-family:var(--mono)" autocomplete="off" oninput="validateKeyModels('keyModels')" onfocus="openKeyModelMenu('keyModels')">
+        <button type="button" class="combo-toggle" aria-haspopup="listbox" aria-expanded="false" aria-controls="keyModelsMenu" onclick="toggleKeyModelMenu('keyModels')" aria-label="Pick a model" data-i18n-aria-label="aria.pickModel">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="combo-panel" id="keyModelsMenu" role="listbox" aria-multiselectable="true" aria-label="Configured models" data-i18n-aria-label="aria.modelList"></div>
+      </div>
+      <p class="field-error" id="keyModelsError" hidden></p>
+      <p class="hint" data-i18n="hint.keyModels">Comma or space separated, or pick from the list. A request for any other model is refused with 403.</p>
+    </div>
+    <div class="form-group" id="keyRateGroup">
+      <label data-i18n="label.keyRate">Rate limit (blank = no limit)</label>
+      <input id="keyRate" placeholder="e.g. 60/m or 30/m, 500/h" style="font-family:var(--mono)" autocomplete="off" oninput="validateKeyRate('keyRate')">
+      <p class="field-error" id="keyRateError" hidden></p>
+      <p class="hint" data-i18n="hint.keyRate">N/unit, as in Settings. Enforced for this key even when global rate limiting is off.</p>
+    </div>
     <div class="panel-foot">
       <button class="btn" onclick="closeModal('keyModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="generateKey()" data-i18n="btn.generate">Generate</button>
@@ -2029,11 +2047,29 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 
 <!-- Edit Key Label Modal -->
 <div class="modal-overlay" id="keyLabelModal">
-  <div class="modal" style="width:380px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="keyLabelModalTitle">
+  <div class="modal" style="width:430px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="keyLabelModalTitle">
     <h3 data-i18n="modal.editKeyLabel" id="keyLabelModalTitle">Edit Key Label</h3>
     <div class="form-group">
       <label data-i18n="col.label">Label</label>
       <input id="keyLabelInput" placeholder="e.g. Production, Dev testing" data-i18n-placeholder="placeholder.keyLabel" onkeydown="onKeyLabelInputKeydown(event)">
+    </div>
+    <div class="form-group" id="keyModelsInputGroup">
+      <label data-i18n="label.keyModels">Allowed models (blank = every model)</label>
+      <div class="combo-field" id="keyModelsInputCombo">
+        <input id="keyModelsInput" placeholder="gpt-4o, claude-3-5-sonnet" style="font-family:var(--mono)" autocomplete="off" oninput="validateKeyModels('keyModelsInput')" onfocus="openKeyModelMenu('keyModelsInput')">
+        <button type="button" class="combo-toggle" aria-haspopup="listbox" aria-expanded="false" aria-controls="keyModelsInputMenu" onclick="toggleKeyModelMenu('keyModelsInput')" aria-label="Pick a model" data-i18n-aria-label="aria.pickModel">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="combo-panel" id="keyModelsInputMenu" role="listbox" aria-multiselectable="true" aria-label="Configured models" data-i18n-aria-label="aria.modelList"></div>
+      </div>
+      <p class="field-error" id="keyModelsInputError" hidden></p>
+      <p class="hint" data-i18n="hint.keyModels">Comma or space separated, or pick from the list. A request for any other model is refused with 403.</p>
+    </div>
+    <div class="form-group" id="keyRateInputGroup">
+      <label data-i18n="label.keyRate">Rate limit (blank = no limit)</label>
+      <input id="keyRateInput" placeholder="e.g. 60/m or 30/m, 500/h" style="font-family:var(--mono)" autocomplete="off" oninput="validateKeyRate('keyRateInput')">
+      <p class="field-error" id="keyRateInputError" hidden></p>
+      <p class="hint" data-i18n="hint.keyRate">N/unit, as in Settings. Enforced for this key even when global rate limiting is off.</p>
     </div>
     <div class="panel-foot">
       <button class="btn" onclick="closeModal('keyLabelModal')" data-i18n="btn.cancel">Cancel</button>

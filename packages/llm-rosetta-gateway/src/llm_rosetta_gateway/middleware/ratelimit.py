@@ -120,13 +120,40 @@ class RateLimitState:
     mix of old and new limiters.
     """
 
-    __slots__ = ("enabled", "exclude_prefixes", "trust_proxy", "_snap")
+    __slots__ = ("enabled", "exclude_prefixes", "trust_proxy", "_snap", "_key_limits")
 
     def __init__(self) -> None:
         self.enabled: bool = False
         self.exclude_prefixes: list[str] = ["/health", "/admin"]
         self.trust_proxy: bool = False
         self._snap: _LimiterSnapshot = _LimiterSnapshot(None, None, None, None)
+        #: (key identity, quota spec) → its windows.  A key whose limit changes
+        #: gets fresh windows rather than inheriting the old counts.
+        self._key_limits: dict[tuple[str, str], RateLimiter] = {}
+
+    def key_limiter(self, ctx: Any) -> RateLimiter:
+        """The windows for one key's own limit, built on first use.
+
+        The spec is the settings fields' ``N/unit`` form and may name several
+        windows (``"30/m, 500/h"``); each is a fixed window, so a key's limit
+        reads the same whatever algorithm the deployment-level limiting runs.
+        """
+        cache_key = (ctx.key_hash or ctx.label, ctx.rate_limit)
+        limiter = self._key_limits.get(cache_key)
+        if limiter is None:
+            parts = [q.strip() for q in str(ctx.rate_limit).split(",") if q.strip()]
+            limiters = [
+                FixedWindowLimiter(
+                    limit=int(parse_quota(part)["limit"]),
+                    window_seconds=float(parse_quota(part)["period"]),
+                )
+                for part in parts
+            ]
+            limiter = ThreadSafeLimiter(
+                limiters[0] if len(limiters) == 1 else CompositeLimiter(limiters)
+            )
+            self._key_limits[cache_key] = limiter
+        return limiter
 
     def rebuild(self, config: GatewayConfig) -> None:
         """Recreate limiters from the current config (counters reset)."""
@@ -275,6 +302,27 @@ def _check_limiter(
     return None, tightest
 
 
+def _check_key_quota(state: RateLimitState, path: str) -> Response | None:
+    """The 429 a key's own quota earns, or ``None``.
+
+    A key's limit is a property of the key, not of the deployment: it applies
+    whether or not global limiting is on, which is why it is checked before
+    the switch.
+    """
+    from .auth import api_key_context_var
+
+    ctx = api_key_context_var.get()
+    if ctx is None or not ctx.rate_limit:
+        return None
+    return _check_limiter(
+        state.key_limiter(ctx),
+        ctx.key_hash or ctx.label,
+        "per_key_record",
+        path,
+        None,
+    )[0]
+
+
 def create_rate_limit_hook(
     state: RateLimitState,
 ) -> Any:
@@ -286,9 +334,6 @@ def create_rate_limit_hook(
     from .auth import api_key_context_var
 
     async def rate_limit_hook(request: Any) -> Response | None:
-        if not state.enabled:
-            return None
-
         if request.method == "OPTIONS":
             return None
 
@@ -296,6 +341,13 @@ def create_rate_limit_hook(
         for prefix in state.exclude_prefixes:
             if path.startswith(prefix):
                 return None
+
+        denied = _check_key_quota(state, path)
+        if denied:
+            return denied
+
+        if not state.enabled:
+            return None
 
         # Read snapshot once — atomic under the GIL.
         snap = state._snap

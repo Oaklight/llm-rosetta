@@ -202,6 +202,27 @@ def _rule_facts(source_provider: str, body: dict[str, Any], request: Any):
     return facts_from_ir(ir, agents=tuple(agents))
 
 
+def model_allowed(kctx: Any, model: str) -> bool:
+    """Whether the authenticated key may call *model*.
+
+    ``None`` (no key context: open deployment or the internal token) and a
+    context whose allowlist holds ``*`` are unrestricted.
+
+    Args:
+        kctx: The request's :class:`KeyContext`, or None.
+        model: The model id the request names.
+
+    Returns:
+        True when the request may proceed.
+    """
+    if kctx is None:
+        return True
+    allowed = getattr(kctx, "allowed_models", None)
+    if not allowed or "*" in allowed:
+        return True
+    return model in allowed
+
+
 async def _handle_llm(
     request: Any,
     config: GatewayConfig,
@@ -236,6 +257,17 @@ async def _handle_llm(
     # provider selection needs it now, and the upstream credential and session
     # identity will need it again once the request has been converted.
     _kctx = api_key_context_var.get()
+    # A key may name the models it can call; `*` is every model the gateway
+    # serves.  Checked before the model lookup so a restricted key cannot use
+    # this route to discover the configured set.
+    if not model_allowed(_kctx, model):
+        resp = error_response_for_source(
+            source_provider,
+            403,
+            f"This API key is not allowed to use model '{model}'",
+        )
+        resp.headers["x-request-id"] = ctx.request_id
+        return resp
     if model not in config.models:
         return _unknown_model_response(config, source_provider, model, ctx.request_id)
     selection = config.selection_context(
