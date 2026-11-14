@@ -398,12 +398,8 @@ tr:hover td { background: var(--bg-hover); }
 .prov-argv { display:flex; flex-direction:column; gap:6px; }
 .prov-arg-row { display:flex; gap:6px; align-items:center; }
 .prov-arg-row input { flex:1; min-width:0; }
-button.prov-icon-btn {
-  appearance:none; cursor:pointer; border:1px solid var(--border); background:var(--surface);
-  color:var(--text-dim); border-radius:var(--radius-control); width:28px; height:28px; flex:none;
-  font-size:var(--fs-base); line-height:1; font-family:inherit;
-}
-button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
+/* The argv row's remove control is the shared bordered icon button; the row
+   is 28 px tall, which is what .icon-btn already is (#1535). */
 .prov-add-arg { margin-top:6px; }
 /* On the token scale rather than a bare `em`: a relative size here made the
    hint (0.8 × 16 = 12.8px) outgrow the card heading it explains. */
@@ -984,6 +980,9 @@ canvas { width: 100%; height: 160px; }
    The row carries the actions that only make sense for one provider of the
    model - its own on/off switch, routing weight, test and removal. */
 .provider-multi-btn { display: inline-flex; align-items: center; gap: 5px; }
+/* Decision (#1535): stays bespoke.  A tag is an 18 px uppercase label that
+   inventory sits in; this is a 10 px counter inside a 28 px button, sized to
+   the control it annotates. */
 .provider-multi-count {
   background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
   padding: 0 5px; font-size: 10px; font-family: var(--mono);
@@ -1502,9 +1501,10 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 .fetch-models-list label:hover { background:var(--bg-hover); }
 .fetch-models-list label:last-child { border-bottom:none; }
 .fetch-models-list input[type="checkbox"] { flex-shrink:0; }
-.fetch-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }
-.fetch-toolbar input { flex:1;min-width:120px;max-width:200px;font-family:var(--mono); }
-.fetch-toolbar .btn { flex-shrink:0; }
+/* The fetch dialog's row is the shared toolbar; only the field's own width
+   is local to it (#1535). */
+#fetchModelsContent .toolbar input { flex:1;min-width:120px;max-width:200px;font-family:var(--mono); }
+#fetchModelsContent .toolbar .btn { flex-shrink:0; }
 .fetch-count { font-size:12px;color:var(--text-dim); }
 .prefix-group { display:flex;align-items:center;gap:8px;margin:8px 0; }
 .prefix-group label { font-size:13px;white-space:nowrap; }
@@ -1546,13 +1546,12 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
   border-color:var(--accent);
   box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
 }
+/* The reveal is an inset seat, not a row control, so it keeps only its
+   placement; ink, radius and hover come from `.icon-btn`, which it also
+   wears (#1535). */
 button.login-reveal {
   position:absolute;top:0;right:0;height:100%;width:38px;padding:0;margin:0;
-  display:flex;align-items:center;justify-content:center;
-  background:none;border:none;color:var(--text-dim);cursor:pointer;
-  border-radius:var(--radius-control);
 }
-.login-reveal:hover { color:var(--text); }
 .login-reveal svg { width:16px;height:16px; }
 
 .login-caps {
@@ -2246,6 +2245,9 @@ button.lp-clear {
    that says so.  It is fixed to the viewport, so it stays put while a long
    model list scrolls, and it is hidden entirely when there is nothing to
    offer. */
+/* Decision (#1535): stays bespoke.  The tag family is inert labels; this is a
+   button fixed to the viewport corner, whose size follows the pointer target
+   rather than the text scale. */
 .update-badge {
   position: fixed; top: 14px; right: 18px; z-index: 60;
   display: inline-flex; align-items: center; gap: 6px;

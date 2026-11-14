@@ -65,7 +65,7 @@
       <label class="sr-only" for="loginPassword" data-i18n="login.passwordLabel">Password</label>
       <input id="loginPassword" type="password" name="password" autocomplete="current-password"
         data-i18n-placeholder="login.placeholder" placeholder="Password" aria-describedby="loginError" autofocus>
-      <button type="button" class="login-reveal" id="loginReveal" onclick="toggleLoginReveal()"
+      <button type="button" class="icon-btn login-reveal" id="loginReveal" onclick="toggleLoginReveal()"
         aria-label="Show password" data-i18n-aria-label="login.showPassword" aria-pressed="false" data-i18n-title="login.showPassword" title="Show password"></button>
     </div>
     <div class="login-caps" id="loginCapsLock" hidden data-i18n="login.capsLock">Caps Lock is on</div>
@@ -162,7 +162,7 @@
         <button class="btn btn-primary btn-sm" onclick="openShimsForAdd()" data-i18n="btn.addProvider">+ Add Provider</button>
         <button class="btn btn-sm" onclick="startBlankProvider()" data-i18n="btn.blankProvider">Start from scratch</button>
         <span id="freeProviderHost" style="display:contents">
-          <button class="btn btn-sm more-menu-toggle" id="freeProviderBtn" aria-haspopup="true" aria-expanded="false" onclick="toggleMoreMenu(this)">+ <span data-i18n="free.add">Free resource</span> &#9662;</button>
+          <button class="btn btn-sm" id="freeProviderBtn" aria-haspopup="true" aria-expanded="false" onclick="toggleMoreMenu(this)">+ <span data-i18n="free.add">Free resource</span> &#9662;</button>
           <div class="menu more-menu" id="freeProviderMenu" role="menu"></div>
         </span>
       </div>
@@ -803,7 +803,7 @@
             <span data-i18n="shim.showBuiltin">Built-in shims</span>
             <span class="toggle"><input type="checkbox" id="shimPageShowBuiltin" role="switch" checked onchange="renderShimsPage()"><span class="slider"></span></span>
           </label>
-          <span class="scope-badge server" data-i18n="scope.serverNow">Server config · saves on change</span>
+          <span class="scope-badge server"><span class="dot is-sm" aria-hidden="true"></span><span data-i18n="scope.serverNow">Server config · saves on change</span></span>
         </header>
         <div class="settings-group">
           <div class="settings-group-head">
@@ -920,7 +920,7 @@
       <section class="settings-pane is-active" id="settingsPane-appearance" role="tabpanel" aria-labelledby="settingsNav-appearance">
         <header class="settings-pane-head">
           <h3 data-i18n="settings.nav.appearance">Appearance</h3>
-          <span class="scope-badge local" data-i18n="scope.browser">This browser</span>
+          <span class="scope-badge local"><span class="dot is-sm" aria-hidden="true"></span><span data-i18n="scope.browser">This browser</span></span>
         </header>
     <div class="settings-group">
       <div class="settings-grid">
@@ -967,7 +967,7 @@
           <div class="settings-group-head">
             <div class="settings-group-title">
               <h4 data-i18n="label.customCss">Theme override</h4>
-              <span class="scope-badge server-save" data-i18n="scope.serverSave">Server config · saves on Save</span>
+              <span class="scope-badge server-save"><span class="dot is-sm" aria-hidden="true"></span><span data-i18n="scope.serverSave">Server config · saves on Save</span></span>
             </div>
             <p data-i18n="hint.customCss">CSS appended to the admin page after the built-in schemes, so it can restyle tokens or any element.</p>
           </div>
@@ -986,7 +986,7 @@
       <section class="settings-pane" id="settingsPane-behavior" role="tabpanel" aria-labelledby="settingsNav-behavior">
         <header class="settings-pane-head">
           <h3 data-i18n="settings.nav.behavior">Behavior</h3>
-          <span class="scope-badge server" data-i18n="scope.serverNow">Server config · saves on change</span>
+          <span class="scope-badge server"><span class="dot is-sm" aria-hidden="true"></span><span data-i18n="scope.serverNow">Server config · saves on change</span></span>
         </header>
     <div class="settings-group">
       <div class="settings-grid">
@@ -1037,7 +1037,7 @@
       <section class="settings-pane" id="settingsPane-rateLimit" role="tabpanel" aria-labelledby="settingsNav-rateLimit">
         <header class="settings-pane-head">
           <h3 data-i18n="settings.nav.rateLimit">Rate limiting</h3>
-          <span class="scope-badge server-save" data-i18n="scope.serverSave">Server config · saves on Save</span>
+          <span class="scope-badge server-save"><span class="dot is-sm" aria-hidden="true"></span><span data-i18n="scope.serverSave">Server config · saves on Save</span></span>
         </header>
     <!-- ── Rate Limiting ── -->
     <div class="settings-group">
@@ -1101,7 +1101,7 @@
       <section class="settings-pane" id="settingsPane-retention" role="tabpanel" aria-labelledby="settingsNav-retention">
         <header class="settings-pane-head">
           <h3 data-i18n="settings.nav.retention">Retention & cleanup</h3>
-          <span class="scope-badge server-save" data-i18n="scope.serverSave">Server config · saves on Save</span>
+          <span class="scope-badge server-save"><span class="dot is-sm" aria-hidden="true"></span><span data-i18n="scope.serverSave">Server config · saves on Save</span></span>
         </header>
     <div class="settings-group">
       <div class="settings-group-head">
@@ -1182,7 +1182,7 @@
       <section class="settings-pane" id="settingsPane-security" role="tabpanel" aria-labelledby="settingsNav-security">
         <header class="settings-pane-head">
           <h3 data-i18n="settings.nav.security">Security</h3>
-          <span class="scope-badge server" data-i18n="scope.serverNow">Server config · saves on change</span>
+          <span class="scope-badge server"><span class="dot is-sm" aria-hidden="true"></span><span data-i18n="scope.serverNow">Server config · saves on change</span></span>
         </header>
 
         <div class="settings-group">
@@ -1246,7 +1246,7 @@
           <div class="settings-group-head">
             <div class="settings-group-title">
               <h4 data-i18n="label.session">Sessions</h4>
-              <span class="scope-badge server" data-i18n="scope.serverNow">Server config · saves on change</span>
+              <span class="scope-badge server"><span class="dot is-sm" aria-hidden="true"></span><span data-i18n="scope.serverNow">Server config · saves on change</span></span>
             </div>
             <p data-i18n="hint.session">How long a signed-in browser stays signed in. A gateway restart ends every session.</p>
           </div>
@@ -1281,7 +1281,7 @@
       <section class="settings-pane" id="settingsPane-about" role="tabpanel" aria-labelledby="settingsNav-about">
         <header class="settings-pane-head">
           <h3 data-i18n="settings.nav.about">About</h3>
-          <span class="scope-badge local" data-i18n="scope.browser">This browser</span>
+          <span class="scope-badge local"><span class="dot is-sm" aria-hidden="true"></span><span data-i18n="scope.browser">This browser</span></span>
         </header>
     <!-- ── Config file ── -->
     <div class="settings-group" id="settingsConfigFileSection">
@@ -1813,7 +1813,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <div class="menu more-menu provider-picker-menu" id="fetchProviderMenu" role="listbox"></div>
     </div>
     <div id="fetchModelsContent" style="display:none">
-      <div class="fetch-toolbar">
+      <div class="toolbar">
         <input id="fetchModelSearch" placeholder="Filter models..." data-i18n-placeholder="label.filterModels" oninput="filterFetchedModels()">
         <button class="btn btn-sm" onclick="toggleAllFetched(true)" data-i18n="btn.selectAll">Select All</button>
         <button class="btn btn-sm" onclick="toggleAllFetched(false)" data-i18n="btn.deselectAll">Deselect All</button>

@@ -612,7 +612,7 @@ function _renderArgv(readonly) {
     if (!readonly && _credArgv.length > 1) {
       const del = document.createElement('button');
       del.type = 'button';
-      del.className = 'prov-icon-btn';
+      del.className = 'icon-btn is-bordered';
       del.textContent = '×';
       del.setAttribute('aria-label', t('prov.removeArg', {n: i + 1}));
       del.addEventListener('click', () => {

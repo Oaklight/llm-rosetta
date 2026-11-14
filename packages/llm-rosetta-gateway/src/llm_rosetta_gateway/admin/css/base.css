@@ -421,10 +421,10 @@ a { color: var(--accent); text-decoration: none; }
   border: 1px solid var(--border); color: var(--text-dim); background: var(--bg);
   white-space: nowrap;
 }
-.scope-badge::before {
-  content: ''; width: 6px; height: 6px; border-radius: 50%;
-  background: currentColor; opacity: .6;
-}
+/* The pip is the shared status dot, not a second copy of it: `.dot.is-sm`
+   draws the 6 px circle and inherits the badge's ink.  It has to be a real
+   child because `data-i18n` overwrites textContent (#1535). */
+.scope-badge .dot { opacity: .6; }
 .scope-badge.server {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
@@ -570,6 +570,9 @@ a { color: var(--accent); text-decoration: none; }
   align-items: center; gap: 8px; justify-content: start;
 }
 .settings-token-value select { width: 100%; justify-self: stretch; }
+/* Decision (#1535): stays bespoke.  It is a full-width, truncating monospace
+   field that has to hold one column width empty or filled; a tag shrinks to
+   its text and would drag the copy button around. */
 .settings-token-chip {
   font-family: var(--mono); font-size: 12px; color: var(--text);
   background: var(--bg-card); border: 1px solid var(--border);
