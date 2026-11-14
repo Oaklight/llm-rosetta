@@ -183,6 +183,29 @@ is what survives at 16–64 px; `--simplify` keeps the shapes and cuts the
 vertices, which is what a large rendering needs. `--min-area` and `--step` trim
 marks and combine with either.
 
+**Dialects.** The stone carries the same decree three times, and
+`json_incisions.py` sets three LLM request dialects into its three registers the
+same way — in the only alphabet the stone has. Every distinct character is
+mapped to one of the carved marks, so a character always looks the same and the
+result is cut from the stone's own vocabulary rather than from a typeface. The
+mapping is a hash, so the same inputs always give the same layer.
+
+```bash
+python design/logo/json_incisions.py \
+    --source ~/Downloads/rosettastone.svg \
+    --bands design/logo/references/dialects/chat_completions.json \
+            design/logo/references/dialects/messages.json \
+            design/logo/references/dialects/google_generate.json \
+    -o /tmp/dialects.svg
+```
+
+The three payloads in `references/dialects/` are small Chat Completions,
+Messages and `generateContent` requests for the same job; any text works, one
+to three files, one register each. The layer is written like the tracing's own
+carving — one path, same coordinate system — so `--incisions` and the page take
+it without a special case. Measured on the three shipped payloads: 26 rows, 661
+marks, 0.13 MB.
+
 ```bash
 cd design/logo
 

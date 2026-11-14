@@ -91,6 +91,19 @@ python design/logo/incisions.py ~/Downloads/rosettastone.svg \
 
 `--abstract` 放弃字形、保留质量与位置——16–64 px 下留下的正是这些；`--simplify` 保留字形、削减顶点——大尺寸渲染要的是这个。`--min-area` 与 `--step` 负责删减条数，可与两者叠加。
 
+**方言。** 石碑把同一段诏书刻了三遍，`json_incisions.py` 用同样的办法把三种 LLM 请求方言排进碑的三个区带——用的是这块石头唯一的字母表：每个不同字符固定映射到一个真实刻痕字形，所以同一个字符永远长得一样，成品是从石头自己的字形词汇里切出来的，而不是来自某套字体。映射由哈希决定，同样的输入永远得到同一层。
+
+```bash
+python design/logo/json_incisions.py \
+    --source ~/Downloads/rosettastone.svg \
+    --bands design/logo/references/dialects/chat_completions.json \
+            design/logo/references/dialects/messages.json \
+            design/logo/references/dialects/google_generate.json \
+    -o /tmp/dialects.svg
+```
+
+`references/dialects/` 里的三份载荷是同一条任务的 Chat Completions、Messages 与 `generateContent` 请求；任何文本都可以，一到三份文件，每份一个区带。产出的层与描摹本身的刻痕同格式——一条 path、同一坐标系——所以 `--incisions` 和页面直接就能用，不需要特殊分支。用随仓库的三份载荷实测：26 行、661 个刻痕、0.13 MB。
+
 ```bash
 cd design/logo
 
