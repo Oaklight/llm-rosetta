@@ -215,22 +215,17 @@ tr:hover td { background: var(--bg-hover); }
 #provCapChecks > label:hover { border-color: var(--text-dim); }
 #provCapChecks > label:has(input:checked) { border-color: var(--accent); background: var(--surface-2); }
 
-/* Capability tags are not status: square, outlined, mono, uppercase — the
-   epic keeps the pill for status alone, so a capability cannot be mistaken
-   for an outcome at a glance. */
-.cap-badge { position:relative;display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 7px;
-  border:1px solid color-mix(in srgb, currentColor 30%, transparent);border-radius:var(--radius-control);
-  background:color-mix(in srgb, currentColor 8%, transparent);
-  font-family:var(--mono);font-size:var(--fs-micro);font-weight:500;letter-spacing:var(--tracking-label);
-  text-transform:uppercase;line-height:1;margin:0 2px;vertical-align:middle; }
+/* Capability tags are not status, so they keep `.tag`'s square seat: the
+   epic reserves the pill for an outcome.  The box and the type are `.tag`'s;
+   only the capability colours are local. */
 /* A capability that no longer routes: greyed out, with an `!` overlay that
    names the type and carries the reason in its tooltip. */
-.cap-badge.is-off { filter:grayscale(1);opacity:.55; }
-.cap-badge-alert { position:absolute;top:-5px;right:-5px;width:13px;height:13px;border-radius:50%;background:var(--red);color:#fff;font-size:9px;font-weight:700;line-height:13px;text-align:center;box-shadow:0 0 0 2px var(--bg-card); }
-/* Icon-only capability badge: same height as the named ones, square. */
-#tab-models .mn-badges .cap-badge { padding:4px;border-radius:var(--radius-control);margin:0; }
-#tab-models .mn-badges .cap-badge svg { width:12px;height:12px; }
-.cap-badge svg { width:11px;height:11px;flex-shrink:0; }
+.tag.is-off { filter:grayscale(1);opacity:.55; }
+.tag-alert { position:absolute;top:-5px;right:-5px;width:13px;height:13px;border-radius:50%;background:var(--red);color:#fff;font-size:9px;font-weight:700;line-height:13px;text-align:center;box-shadow:0 0 0 2px var(--bg-card); }
+/* Icon-only capability tag: same height as the named ones, square. */
+#tab-models .mn-badges .tag { padding:4px;margin:0; }
+#tab-models .mn-badges .tag svg { width:12px;height:12px; }
+.tag svg { width:11px;height:11px;flex-shrink:0; }
 .cap-badge-llm { color:var(--tag-pos); }
 .cap-badge-embedding { color:var(--tag-info); }
 .cap-badge-rerank { color:var(--tag-warn); }
@@ -523,7 +518,7 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
   display: block; justify-self: start; max-width: 100%;
   text-overflow: ellipsis;
 }
-.provider-card .pc-badges .cap-badge { margin: 0; }
+.provider-card .pc-badges .tag { margin: 0; }
 .provider-card .pc-actions { margin-top: auto; padding-top: 12px; }
 .provider-card .pc-free-note {
   margin-top: 6px;
@@ -868,33 +863,41 @@ canvas { width: 100%; height: 160px; }
 .page-jump-group { display: inline-flex; align-items: center; gap: 6px; }
 .page-jump { width: 68px; text-align: center; }
 
-/* Status badge */
-/* Status tags are the one place the epic keeps a pill.  Outlined, not
-   filled: the fill is the text colour at 8%, so a variant only chooses its
-   colour and cannot drift into a second background recipe.  The colour is a
-   `--tag-*` ink rather than the semantic token (#1487): the ink is chosen to
+/* ── The tag ──────────────────────────────────────────────────────────
+   The 18px label for a status, a capability or a provenance.  One box:
+   mono micro capitals over a 1px current-colour frame and an 8 % fill of the
+   same ink, so a variant only chooses a colour and cannot drift into a second
+   background recipe.  Square by default; `.is-pill` is the status seat, the
+   one place the epic keeps a pill.  `.is-square` says the same thing where a
+   call site means "capability", so the shape reads as a decision.  The ink is
+   a `--tag-*` token rather than the semantic colour (#1487): it is chosen to
    clear 4.5:1 against its own composited fill, while `--pos`/`--neg`/... stay
    free to be a dot, a border, a danger fill or the focus ring. */
-.badge {
-  display: inline-flex; align-items: center; gap: 4px;
+.tag {
+  position: relative; display: inline-flex; align-items: center; gap: 4px;
   height: 18px; padding: 0 7px; vertical-align: middle;
   border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-control);
   background: color-mix(in srgb, currentColor 8%, transparent);
   font-family: var(--mono); font-size: var(--fs-micro); font-weight: 500;
   letter-spacing: var(--tracking-label); text-transform: uppercase; line-height: 1;
 }
-.badge-ok { color: var(--tag-pos); }
-.badge-error { color: var(--tag-neg); }
-.badge-warning { color: var(--tag-warn); }
-.badge-stream { color: var(--tag-accent); }
+.tag.is-pill { border-radius: var(--radius-pill); }
+.tag.is-square { border-radius: var(--radius-control); }
+/* A format name is an identifier, not a label: it keeps its own case and
+   weight, so `openai` does not read as an acronym. */
+.tag.is-plain { font-weight: 400; text-transform: none; letter-spacing: normal; }
+.tag-ok { color: var(--tag-pos); }
+.tag-error { color: var(--tag-neg); }
+.tag-warning { color: var(--tag-warn); }
+.tag-stream { color: var(--tag-accent); }
 
-/* Capability badges */
-.badge-cap { color: var(--text-dim); margin-right: 4px; }
-.badge-cap-vision { color: var(--tag-purple); }
-.badge-cap-tools { color: var(--tag-tools); }
-.badge-cap-embed { color: var(--tag-info); }
-.badge-cap-reasoning { color: var(--tag-neg); }
+/* Capability inks, worn by `.tag is-square` */
+.tag-cap { color: var(--text-dim); margin-right: 4px; }
+.tag-cap-vision { color: var(--tag-purple); }
+.tag-cap-tools { color: var(--tag-tools); }
+.tag-cap-embed { color: var(--tag-info); }
+.tag-cap-reasoning { color: var(--tag-neg); }
 
 /* Checkbox group */
 .checkbox-group { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
@@ -961,7 +964,6 @@ canvas { width: 100%; height: 160px; }
 .md-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .md-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-dim); }
 .md-caps { display: flex; gap: 4px; flex-wrap: wrap; }
-.md-caps .cap-badge { padding: 0 7px; border-radius: var(--radius-control); }
 .md-providers { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 /* The drawer's "one more lane" row: a full-width footer inside the provider
    box, so it reads as one more row of the same list. */
@@ -2788,6 +2790,8 @@ button.shim-update.unknown { color: var(--tag-warn); }
 }
 
 .shim-card-head { display: flex; align-items: center; gap: 10px; }
+/* The provenance tag must not shrink away beside a long shim name. */
+.shim-card-head > .tag { flex: 0 0 auto; }
 .shim-mark {
   flex: 0 0 30px; width: 30px; height: 30px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -2799,21 +2803,10 @@ button.shim-update.unknown { color: var(--tag-warn); }
 .shim-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shim-sub { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Same shape as the capability badge beside a provider name: 18px tall,
-   micro mono capitals, a border and fill tinted by the status colour. */
-.shim-origin {
-  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px;
-  height: 18px; padding: 0 7px; line-height: 1;
-  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-  border-radius: var(--radius-control);
-  background: color-mix(in srgb, currentColor 8%, transparent);
-  font-family: var(--mono); font-size: var(--fs-micro); font-weight: 500;
-  letter-spacing: var(--tracking-label); text-transform: uppercase;
-  color: var(--text-dim);
-}
-.shim-origin.is-builtin { color: var(--text-dim); }
-.shim-origin.is-path { color: var(--accent); }
-.shim-origin.is-remote { color: var(--orange); }
+/* The provenance tag is a capability tag with an origin ink. */
+.tag.is-builtin { color: var(--text-dim); }
+.tag.is-path { color: var(--accent); }
+.tag.is-remote { color: var(--orange); }
 
 .shim-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 /* A capability checkbox in the provider drawer carries the same icon as the
@@ -2821,15 +2814,7 @@ button.shim-update.unknown { color: var(--tag-warn); }
 .prov-cap-check .prov-cap-ico { display: inline-flex; align-items: center; }
 .prov-cap-check .prov-cap-ico svg { width: 13px; height: 13px; display: block; }
 
-.shim-chip {
-  display: inline-flex; align-items: center; height: 18px; padding: 0 7px; line-height: 1;
-  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
-  border-radius: var(--radius-control);
-  background: color-mix(in srgb, currentColor 8%, transparent);
-  font-family: var(--mono); font-size: var(--fs-micro);
-  color: var(--text-dim);
-}
-.shim-chip.is-type { color: var(--accent); }
+.tag.is-type { color: var(--accent); }
 
 .shim-usage { font-size: 12px; color: var(--text-muted); min-height: 14px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

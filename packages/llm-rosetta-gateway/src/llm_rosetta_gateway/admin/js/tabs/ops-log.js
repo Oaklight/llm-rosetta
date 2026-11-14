@@ -22,9 +22,9 @@ const EVENT_KEYS = {
 };
 
 const SEVERITY_BADGE = {
-  info: 'badge-ok',
-  warning: 'badge-warning',
-  error: 'badge-error',
+  info: 'tag-ok',
+  warning: 'tag-warning',
+  error: 'tag-error',
 };
 
 // ===================== Ops Log =====================
@@ -76,8 +76,8 @@ function renderOpsLog(entries, total) {
       const expandHint = hasDetails ? ' ▸' : '';
       let rows = `<tr data-ops-log-id="${esc(rowId)}" role="row"${rowCursor ? ` style="${rowCursor}"` : ''}${rowClick}${rowKeyboard}>
         <td class="ops-time" role="cell" aria-labelledby="thOpsTime">${time}</td>
-        <td class="ops-event" role="cell" aria-labelledby="thOpsEvent"><span class="badge badge-stream">${esc(label)}</span></td>
-        <td class="ops-severity" role="cell" aria-labelledby="thOpsSeverity"><span class="badge ${sevCls}">${esc(e.severity)}${expandHint}</span></td>
+        <td class="ops-event" role="cell" aria-labelledby="thOpsEvent"><span class="tag is-pill tag-stream">${esc(label)}</span></td>
+        <td class="ops-severity" role="cell" aria-labelledby="thOpsSeverity"><span class="tag is-pill ${sevCls}">${esc(e.severity)}${expandHint}</span></td>
         <td class="ops-message" role="cell" aria-labelledby="thOpsMessage">${esc(e.message)}</td>
         <td class="ops-source" role="cell" aria-labelledby="thOpsSource" style="font-size:12px;color:var(--text-dim)">${esc(e.source || '—')}</td>
       </tr>`;
