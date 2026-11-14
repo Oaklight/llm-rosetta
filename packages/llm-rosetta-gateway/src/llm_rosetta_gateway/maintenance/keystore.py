@@ -220,6 +220,9 @@ async def _restore_stranded_rebuild(conn: Any) -> int:
         f"INSERT INTO api_keys ({_REBUILD_COLUMNS}) "
         f"SELECT {_REBUILD_COLUMNS} FROM api_keys_v5"
     )
+    # The rows are back; the scratch copy is a second copy of every key hash
+    # and nothing reads it, so it goes in the same breath.
+    await conn.execute("DROP TABLE api_keys_v5")
     await conn.commit()
     logger.warning(
         "Restored %d key(s) an interrupted rebuild left in api_keys_v5", orphan_rows
