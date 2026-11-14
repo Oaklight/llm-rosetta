@@ -242,7 +242,13 @@ tr:hover td { background: var(--bg-hover); }
 .cap-badge-tools { color:var(--tag-tools); }
 .cap-badge-reasoning { color:var(--tag-lime); }
 /* Provider-model cross-navigation */
-.provider-link { color:inherit;cursor:pointer;text-decoration:none; }
+.provider-link {
+  color:inherit;cursor:pointer;text-decoration:none;
+  /* A real <button>, so the jump to the provider card is in the tab order and
+     activates on Enter/Space; the reset keeps it reading as the row's text. */
+  appearance:none;background:none;border:0;padding:0;font:inherit;text-align:left;
+  min-height:24px;
+}
 .provider-link:hover { text-decoration:underline;color:var(--accent); }
 /* Multi-provider collapsible list in model rows */
 .provider-list { margin-top:4px;padding-left:0; }
@@ -921,12 +927,12 @@ canvas { width: 100%; height: 160px; }
 .test-group { position: relative; display: inline-flex; }
 .test-group .btn-test {
   border-radius: var(--radius-control) 0 0 var(--radius-control); border-right: none;
-  color: var(--orange); font-weight: 600;
+  color: var(--ink-warn); font-weight: 600;
 }
 .test-group .btn-test:hover { background: color-mix(in srgb, var(--orange) 10%, transparent); }
 .test-group .btn-caret {
   border-radius: 0 var(--radius-control) var(--radius-control) 0; padding: 0 6px;
-  color: var(--orange);
+  color: var(--ink-warn);
 }
 .test-group .btn-caret:hover { background: color-mix(in srgb, var(--orange) 10%, transparent); }
 /* ── The menu ─────────────────────────────────────────────────────────
@@ -1397,7 +1403,7 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 
 /* Key rows: the pencil and the row actions stay quiet until the row is used. */
 #keysTable .icon-btn,
-#keysTable .key-actions-cell .btn { opacity:0; transition:opacity .12s ease; }
+#keysTable .key-actions-cell .btn { opacity:.55; transition:opacity .12s ease; }
 #keysTable tr:hover .icon-btn,
 #keysTable tr:focus-within .icon-btn,
 #keysTable tr:hover .key-actions-cell .btn,
@@ -1444,8 +1450,11 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 /* The row's Test and ⋯ stay out of the way until the pointer is on the row;
    the switch never hides, it is the row's state.  Touch has no hover, so it
    keeps both visible. */
+/* Dim until the row is hovered, never invisible: a pointer user who does not
+   hover (zoom, switch access, a screen magnifier) must still see that the
+   column holds actions (#1520). */
 #tab-models .model-actions-cell .test-group,
-#tab-models .model-actions-cell .more-menu-toggle { opacity:0; transition:opacity .12s ease; }
+#tab-models .model-actions-cell .more-menu-toggle { opacity:.55; transition:opacity .12s ease; }
 #tab-models tbody tr:hover .test-group,
 #tab-models tbody tr:focus-within .test-group,
 #tab-models tbody tr:hover .more-menu-toggle,
@@ -2559,7 +2568,7 @@ button.shim-update.unknown { color: var(--tag-warn); }
   font-family: var(--mono); font-size: 10.5px; color: var(--text-muted);
   white-space: nowrap; flex: none;
 }
-.routing-model-count.is-blocked { color: var(--red); }
+.routing-model-count.is-blocked { color: var(--ink-neg); }
 /* The lane count carries the whole answer on hover, so it has to look like a
    control, not like a label that happens to have a title. */
 .routing-model-count.is-laned { cursor: help; }

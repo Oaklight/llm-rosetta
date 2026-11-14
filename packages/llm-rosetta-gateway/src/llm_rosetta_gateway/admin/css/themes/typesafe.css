@@ -77,6 +77,13 @@
   --info: #0070f3;
   --info-bg: color-mix(in srgb, var(--info) 8%, var(--surface));
   --info-border: color-mix(in srgb, var(--info) 30%, transparent);
+  /* Text inks for the semantic colours: a semantic token is a fill or a
+     border colour, and at 10–13 px on a card it can fall under 4.5:1 — the
+     caret measured 4.32 in minimal light.  The ink mixes the token toward
+     the body text, so it darkens in light mode and lightens in dark mode
+     without a second value.  See #1520. */
+  --ink-neg: color-mix(in srgb, var(--neg) 82%, var(--text));
+  --ink-warn: color-mix(in srgb, var(--warn) 82%, var(--text));
   --purple: #7c3aed;
   --magenta: #d946ef;
   --cyan: #0891b2;
@@ -129,6 +136,13 @@
   --info: #3291ff;
   --info-bg: color-mix(in srgb, var(--info) 8%, var(--surface));
   --info-border: color-mix(in srgb, var(--info) 30%, transparent);
+  /* Text inks for the semantic colours: a semantic token is a fill or a
+     border colour, and at 10–13 px on a card it can fall under 4.5:1 — the
+     caret measured 4.32 in minimal light.  The ink mixes the token toward
+     the body text, so it darkens in light mode and lightens in dark mode
+     without a second value.  See #1520. */
+  --ink-neg: color-mix(in srgb, var(--neg) 82%, var(--text));
+  --ink-warn: color-mix(in srgb, var(--warn) 82%, var(--text));
   --purple: #a78bfa;
   --magenta: #f0abfc;
   --cyan: #22d3ee;
