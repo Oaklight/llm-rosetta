@@ -1,0 +1,28 @@
+name: zai--chat_completions
+model_type: llm
+format: chat_completions
+group_label: Z.ai
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.svg
+
+# International deployment of the GLM chat API; the domestic one is
+# ``zhipu--chat_completions``.  Measured 2026-11-13: GET /models lists the
+# catalogue, glm-4.6v-flash answers with ``reasoning_content``, and the free
+# ``glm-4.7-flash`` lane can answer 429 while the service is overloaded.
+connection:
+  base_url: https://api.z.ai/api/paas/v4
+request:
+  # Measured: temperature=2 is a 400 ("限制数值范围[0,1]"), so the range is
+  # clamped rather than passed through.  top_p=0 is accepted — unlike the
+  # domestic lane, nothing is declared for it.
+  ranges:
+    generation.temperature:
+      min: 0.0
+      max: 1.0
+      on_out_of_range: clamp
+reasoning:
+  # Measured: the thinking toggle answers 200.  ``n``, ``seed`` and
+  # ``logprobs`` also answer 200, so no strip transform is needed here —
+  # unlike the domestic lane, which rejects them.
+  thinking_modes:
+    enabled: enabled
+    disabled: disabled

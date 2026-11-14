@@ -805,7 +805,7 @@ class TestMirrorConfig:
             ("asksage", "asksage.tar.gz"),
             ("alcf", "alcf.tar.gz"),
             ("argo", "argo.tar.gz"),
-            ("opencode_zen_free", "opencode_zen_free.tar.gz"),
+            ("free", "free.tar.gz"),
         ],
     )
     def test_a_preset_carries_its_tag_and_mirror(
@@ -818,7 +818,9 @@ class TestMirrorConfig:
         """
         sources = parse_shims_section({"presets": [key]}, str(tmp_path / "c.jsonc"))
         remote = sources.remotes[0]
-        assert remote["ref"] == "v0.1.0"
+        # Each package pins its own tag: ``free`` shipped a second archive, so
+        # it is on v0.2.0 while the rest are still on their first.
+        assert remote["ref"].startswith("v")
         assert remote["path"].endswith("/providers")
         mirror = remote["mirror"]
         assert mirror["url_template"].endswith(f"@dist/{{ref}}/{archive}")

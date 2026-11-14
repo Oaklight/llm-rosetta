@@ -1,0 +1,5 @@
+# NVIDIA NIM — hosted open-weight models from build.nvidia.com, signed with a
+# developer-program key.  One credential for every endpoint.
+connection:
+  base_url: https://integrate.api.nvidia.com/v1
+  api_key_env: NVIDIA_API_KEY

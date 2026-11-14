@@ -26,6 +26,28 @@ def _load_shims():
     load_providers()
 
 
+@pytest.fixture()
+def keyless_shim():
+    """A keyless shim registered by this test module.
+
+    The built-in set ships no keyless shim any more, and the free packages
+    live outside the repository, so the mechanism gets one of its own.
+    """
+    from llm_rosetta.shims import register_shim
+    from llm_rosetta.shims.provider_shim import ConnectionConfig, ProviderShim
+
+    register_shim(
+        ProviderShim(
+            name="keyless-test",
+            format="chat_completions",
+            connection=ConnectionConfig(
+                base_url="https://keyless.example.com/v1", keyless=True
+            ),
+        )
+    )
+    return "keyless-test"
+
+
 PROVIDERS = {
     "chat_a": {
         "type": "openai_chat",
@@ -658,10 +680,15 @@ class TestAccountTiers:
 
         assert make("a").account_token("a") != make("b").account_token("b")
 
-    def test_keyless_does_not_group_with_a_keyed_peer(self, monkeypatch):
+    def test_keyless_does_not_group_with_a_keyed_peer(self, keyless_shim):
+        """Two providers on one shim are separate accounts when one is keyless.
+
+        No built-in shim is keyless any more — the free pools moved to
+        externally published packages — so the shim is registered here.
+        """
         providers = {
-            "free": {"shim": "kilo--chat_completions"},
-            "paid": {"shim": "kilo--chat_completions", "api_key": "sk-paid"},
+            "free": {"shim": keyless_shim},
+            "paid": {"shim": keyless_shim, "api_key": "sk-paid"},
         }
         config = _make_config(
             {"m": {"providers": ["free", "paid"]}},

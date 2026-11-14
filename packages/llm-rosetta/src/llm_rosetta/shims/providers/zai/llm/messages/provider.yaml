@@ -1,0 +1,23 @@
+name: zai--messages
+model_type: llm
+format: messages
+group_label: Z.ai
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.svg
+
+# z.ai serves an Anthropic-compatible Messages lane on a path of its own.
+# Measured 2026-11-13: /v1/messages answers 200 with either ``x-api-key`` or
+# ``Authorization: Bearer``, returns ``thinking`` blocks carrying a
+# ``signature``, and accepts ``thinking`` and ``output_config.effort``.
+connection:
+  base_url: https://api.z.ai/api/anthropic
+reasoning:
+  # GLM has no adaptive mode: mapping ``auto`` would send a value the lane
+  # does not define, so only the explicit toggle is declared.  ``effort_field``
+  # is named rather than omitted: an omitted one falls back to the loader
+  # default ``reasoning_effort`` instead of the Messages base cap, which is the
+  # silent-wrong-field trap #954 records.  Measured: an
+  # ``output_config.effort`` body answers 200.
+  thinking_modes:
+    enabled: enabled
+    disabled: disabled
+  effort_field: output_config.effort

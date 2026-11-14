@@ -1,0 +1,14 @@
+name: siliconflow--rerank
+model_type: rerank
+format: cohere
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/siliconcloud.svg
+
+# Measured 2026-11-13 against BAAI/bge-reranker-v2-m3: the Cohere request
+# shape (model/query/documents) is accepted and the answer is
+# ``results[].index/relevance_score``.
+connection:
+  base_url: https://api.siliconflow.cn/v1
+  default_path: /rerank
+  # Same typed catalogue as the chat leaf; the transform keeps the active
+  # ``subType: reranker`` slice (measured: 6 entries).
+  models_path: https://busy-bear.siliconflow.cn/api/v1/playground/comprehensive/all

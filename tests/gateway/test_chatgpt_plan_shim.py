@@ -294,6 +294,20 @@ class TestTheModelList:
 
         assert ids == ["a", "z"]
 
+    def test_a_nested_envelope_reaches_the_hook(self):
+        """SiliconFlow wraps its catalogue as ``{data: {models: [...]}}``.
+
+        The envelope is unwrapped before the hook sees it.  A hook handed the
+        dict instead would iterate its keys and produce nothing.
+        """
+        from llm_rosetta_gateway.admin.routes.config.upstream import _extract_model_ids
+
+        body = {"data": {"models": MODELS_BODY["models"]}}
+        ids, upstream = _extract_model_ids(body, "open_responses", SHIM, None)
+
+        assert ids == ["gpt-5.1-codex", "gpt-5.1"]
+        assert upstream == {}
+
     def test_without_the_hook_the_body_yields_nothing(self):
         """What the profile would look like if the transform were dropped."""
         from llm_rosetta_gateway.admin.routes.config.upstream import _extract_model_ids

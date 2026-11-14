@@ -1,0 +1,5 @@
+# Z.ai — Zhipu AI's international platform.  One credential serves every
+# lane; the paths differ per model type, so ``base_url`` stays on each leaf.
+connection:
+  base_url: https://api.z.ai/api/paas/v4
+  api_key_env: ZAI_API_KEY
