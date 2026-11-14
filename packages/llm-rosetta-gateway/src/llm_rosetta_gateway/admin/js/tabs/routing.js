@@ -295,15 +295,15 @@ function _sharePct(provider) {
 function _statePill(provider) {
   if (provider.state === 'blocked' || provider.state === 'rate_limited') {
     const hits = (provider.block && provider.block.refusals) || null;
-    return '<span class="badge badge-error">' +
+    return '<span class="tag is-pill tag-error">' +
       esc(hits ? t('routing.pill.blocked', { count: hits }) : t('routing.state.blocked')) +
       '</span>';
   }
   if (provider.state === 'sunk') {
-    return '<span class="badge badge-warning">' + esc(t('routing.pill.sunk')) + '</span>';
+    return '<span class="tag is-pill tag-warning">' + esc(t('routing.pill.sunk')) + '</span>';
   }
   if (provider.state === 'spent') {
-    return '<span class="badge">' + esc(t('routing.pill.spent')) + '</span>';
+    return '<span class="tag is-pill">' + esc(t('routing.pill.spent')) + '</span>';
   }
   return '';
 }
@@ -447,7 +447,7 @@ function _renderBoard() {
   const laneBlocks = _data.lane_blocks || {};
   const limited = Number(laneBlocks.count) || 0;
   const banner = limited
-    ? '<div class="routing-lane-blocks badge badge-error">' +
+    ? '<div class="routing-lane-blocks tag is-pill tag-error">' +
       esc(laneBlocks.until
         ? t(limited === 1 ? 'routing.laneBlockUntil' : 'routing.laneBlocksUntil', {
           count: limited,
@@ -689,7 +689,7 @@ function _renderDecisions() {
       : String(decision.status);
     const tone = Number(decision.status) >= 400 ? 'fail' : 'ok';
     const reason = decision.failover
-      ? '<span class="badge badge-warning">' +
+      ? '<span class="tag is-pill tag-warning">' +
         esc(t('routing.failover', { from: decision.failover.from || '?' })) + '</span>'
       : '<span class="routing-muted">—</span>';
     // Which lane served, when one provider is several upstream models (#1430):

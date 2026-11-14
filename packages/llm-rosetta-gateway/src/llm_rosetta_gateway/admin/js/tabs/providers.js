@@ -2267,7 +2267,7 @@ function _capBadgesHtml(caps, {compact = false, cfg = null} = {}) {
     const state = endpointState(cfg, c);
     const off = state === 'ok' ? '' : ' is-off';
     const alert = state === 'degraded'
-      ? '<span class="cap-badge-alert" aria-hidden="true">!</span>'
+      ? '<span class="tag-alert" aria-hidden="true">!</span>'
       : '';
     const why = state === 'degraded'
       ? _degradedDetail(degradedMarker(cfg, c), _degradedFallback(cfg))
@@ -2275,8 +2275,8 @@ function _capBadgesHtml(caps, {compact = false, cfg = null} = {}) {
     const title = why || (compact && icon ? label : '');
     const titleAttr = title ? ` title="${esc(title)}"` : '';
     return compact && icon
-      ? `<span class="cap-badge ${cls}${off}"${titleAttr}>${icon}${alert}</span>`
-      : `<span class="cap-badge ${cls}${off}"${titleAttr}>${icon}${esc(label)}${alert}</span>`;
+      ? `<span class="tag is-square ${cls}${off}"${titleAttr}>${icon}${alert}</span>`
+      : `<span class="tag is-square ${cls}${off}"${titleAttr}>${icon}${esc(label)}${alert}</span>`;
   }).join('');
 }
 

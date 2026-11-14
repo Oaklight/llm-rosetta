@@ -122,8 +122,8 @@ function renderLogs(entries, total) {
   } else {
     tbody.innerHTML = entries.map((e, idx) => {
       const time = new Date(e.timestamp).toLocaleString(undefined, {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
-      const statusCls = e.status_code < 400 ? 'badge-ok' : 'badge-error';
-      const modeBadge = e.is_stream ? `<span class="badge badge-stream">${t('stream.mode')}</span>` : '';
+      const statusCls = e.status_code < 400 ? 'tag-ok' : 'tag-error';
+      const modeBadge = e.is_stream ? `<span class="tag is-pill tag-stream">${t('stream.mode')}</span>` : '';
       const keyLabel = e.api_key_label || '—';
       const hasError = !!e.error_detail;
       // A field the gateway had to supply (the target required it and the
@@ -156,7 +156,7 @@ function renderLogs(entries, total) {
         <td class="log-mode" role="cell" aria-labelledby="thLogMode">${modeBadge}</td>
         <td class="log-key" role="cell" aria-labelledby="thLogApiKey">${esc(keyLabel)}</td>
         <td class="log-ip" role="cell" aria-labelledby="thLogClientIp">${esc(clientIp)}</td>
-        <td class="log-status" role="cell" aria-labelledby="thLogStatus"><span class="badge ${statusCls}">${e.status_code}${hasDetail ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump(${jsArg(e.id)})" title="${esc(t('btn.viewErrorDump'))}" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
+        <td class="log-status" role="cell" aria-labelledby="thLogStatus"><span class="tag is-pill ${statusCls}">${e.status_code}${hasDetail ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump(${jsArg(e.id)})" title="${esc(t('btn.viewErrorDump'))}" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
         <td class="log-tokens" role="cell" aria-labelledby="thLogTokens" style="font-size:12px">${e.total_tokens != null ? fmtTokens(e.total_tokens) : '—'}${e.cache_read_tokens ? `<br><span title="${t('token.cacheRead')}" style="color:var(--blue);font-size:10px;cursor:help">C↓ ${fmtTokens(e.cache_read_tokens)}</span>` : ''}${e.reasoning_tokens ? `<br><span title="${t('token.reasoning')}" style="color:var(--red);font-size:10px;cursor:help">R ${fmtTokens(e.reasoning_tokens)}</span>` : ''}</td>
         <td class="log-duration" role="cell" aria-labelledby="thLogDuration">${_durationCell(e)}${_tokensPerSecond(e)}</td>
       </tr>`;

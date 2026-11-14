@@ -34,7 +34,7 @@
  *   3. a literal `4px` corner on `.chip`                    → 3
  *   4. `.btn { height: 24px }`                              → 4
  *   5. `button.prov-icon-btn { height: 44px }`              → 4
- *   6. `.cap-badge .fake-btn { height: 40px }`              → 4
+ *   6. `.tag .fake-btn { height: 40px }`              → 4
  *   7. `.login-remember input { height: 60px }`             → 4
  *   8. `color-scheme: dark` on `.chip`                      → 6
  *   9. `color-scheme` inside a theme file                   → theme-contract
@@ -87,7 +87,7 @@ function declarations(body) {
 
 // A control *or* its option; a logo image, a dropdown panel and a card are
 // not controls and keep their own corner.
-const CONTROL = /\b(button|input|select|textarea)\b|\.(btn|chip|badge|cap-badge|seg-control|key-btn|chart-range-btn|pill-toggle|logo-select-trigger|logo-select-option|facet-chip)/;
+const CONTROL = /\b(button|input|select|textarea)\b|\.(btn|chip|tag|seg-control|key-btn|chart-range-btn|pill-toggle|logo-select-trigger|logo-select-option|facet-chip)/;
 const NOT_CONTROL = /-logo\b|-img\b|-panel\b/;
 
 const ALLOWED_RADII = new Set([
@@ -173,7 +173,7 @@ test('a control height is 28px, a tag is 18px, and nothing else', () => {
   // file covers what a stylesheet declares.
   const CASES = [
     [/-alert$/, '13px'],
-    [/\.(badge|cap-badge)\b/, '18px'],
+    [/\.tag\b/, '18px'],
     [/\.sr-select$/, '1px'],
     [/toggle-label input\[type="checkbox"\]$/, '20px'],
   ];
@@ -186,8 +186,8 @@ test('a control height is 28px, a tag is 18px, and nothing else', () => {
   // a 28px button, and letting a naming habit pass is how a guard stops
   // guarding.  A new entry needs a measurement and a reason, like the heights.
   const PARTS = new Map([
-    ['.cap-badge svg', 'the 11px glyph inside a capability tag'],
-    ['#tab-models .mn-badges .cap-badge svg', 'the same glyph, 12px in the model table'],
+    ['.tag svg', 'the 11px glyph inside a capability tag'],
+    ['#tab-models .mn-badges .tag svg', 'the same glyph, 12px in the model table'],
     ['.logo-select-img', 'the 16px glyph inside the logo trigger'],
   ]);
   const segments = (sel) => sel.trim().split(/[\s>+~]+/).filter(Boolean);
@@ -218,7 +218,7 @@ test('a control height is 28px, a tag is 18px, and nothing else', () => {
     for (const rule of rules(sheet.text)) {
       const parts = segments(rule.selector);
       // Any compound that names a control brings the rule into scope, not only
-      // the last one: `.cap-badge .fake-btn` sizes something inside a control
+      // the last one: `.tag .fake-btn` sizes something inside a control
       // and used to slip through because the subject was not a control.
       if (!parts.some((p) => CONTROL.test(p)) || NOT_CONTROL.test(rule.selector)) continue;
       if (rule.selector.includes('::') || PARTS.has(rule.selector)) continue;

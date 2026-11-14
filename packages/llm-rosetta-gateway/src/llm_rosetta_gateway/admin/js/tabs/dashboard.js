@@ -294,7 +294,7 @@ async function loadProfilingStatus() {
       badge.textContent = s.enabled
         ? t('profiling.remaining').replace('{n}', s.remaining)
         : t('label.off');
-      badge.classList.toggle('badge-ok', !!s.enabled);
+      badge.classList.toggle('tag-ok', !!s.enabled);
       // The stored text is a placeholder; reveal the badge only once the
       // server has answered, so a collapsed summary never claims OFF while
       // profiling is actually on.
@@ -415,7 +415,7 @@ async function loadCaptureStatus() {
       badge.textContent = s.enabled
         ? t('capture.remaining').replace('{n}', s.remaining)
         : t('label.off');
-      badge.classList.toggle('badge-ok', !!s.enabled);
+      badge.classList.toggle('tag-ok', !!s.enabled);
       // Same rule as the profiling badge: no state claim before the fetch.
       badge.style.visibility = 'visible';
     }
@@ -704,8 +704,8 @@ async function renderDumps() {
         <td class="dump-time" role="cell" aria-labelledby="dumpThTime">${time}</td>
         <td class="dump-model" role="cell" aria-labelledby="dumpThModel"><code>${esc(e.model||'-')}</code></td>
         <td class="dump-route" role="cell" aria-labelledby="dumpThSourceTarget">${esc(e.source_provider||'-')} → ${esc(e.target_provider||'-')}</td>
-        <td class="dump-phase" role="cell" aria-labelledby="dumpThPhase"><span class="badge badge-stream">${esc(e.error_phase||'-')}</span></td>
-        <td class="dump-status" role="cell" aria-labelledby="dumpThStatus"><span class="badge badge-error">${e.status_code||'-'}</span></td>
+        <td class="dump-phase" role="cell" aria-labelledby="dumpThPhase"><span class="tag is-pill tag-stream">${esc(e.error_phase||'-')}</span></td>
+        <td class="dump-status" role="cell" aria-labelledby="dumpThStatus"><span class="tag is-pill tag-error">${e.status_code||'-'}</span></td>
         <td class="dump-error" role="cell" aria-labelledby="dumpThError"><span class="dump-error-text" title="${esc(e.response_text||'')}">${esc(errPreview)}</span></td>
         <td class="dump-actions" role="cell" aria-labelledby="dumpThActions" style="white-space:nowrap">
           <button class="btn btn-sm" onclick="viewDump(${jsArg(e.dump_id||e.id)})" title="${esc(t('btn.view'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>

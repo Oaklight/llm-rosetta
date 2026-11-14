@@ -325,7 +325,7 @@ function openModelModal(model, provider, capabilities, upstreamModel, sourceMode
   _loadedReasoningOverride = configOverride;
   const srcBadge = document.getElementById('reasoningSourceBadge');
   srcBadge.textContent = reasoning.source || 'none';
-  srcBadge.className = 'badge badge-sm' + (reasoning.source === 'config' ? ' badge-cap-tools' : reasoning.source === 'model_override' ? ' badge-cap-reasoning' : '');
+  srcBadge.className = 'tag is-pill' + (reasoning.source === 'config' ? ' tag-cap-tools' : reasoning.source === 'model_override' ? ' tag-cap-reasoning' : '');
   // Update inherit option labels: show "value (inherited)" or just "(inherit)"
   const inh = t('label.inherited');
   const ttInherit = document.querySelector('#reasoningThinkingType option[value=""]');
@@ -755,7 +755,7 @@ function _providerMenuRows(name, info, disabledProviders) {
       </div>
       ${modelType === 'llm'
         ? _capPicker(name, p)
-        : `<span class="cap-badge ${_typeBadgeClass(modelType)}" title="${esc(typeLabelAlt(modelType))}">${_CAP_ICONS[modelType] || ''}</span>`}
+        : `<span class="tag is-square ${_typeBadgeClass(modelType)}" title="${esc(typeLabelAlt(modelType))}">${_CAP_ICONS[modelType] || ''}</span>`}
       ${laneWeightInputHtml({ model: name, provider: p.name, upstream, weight: w, title: t('label.weight') })}
       ${_testGroup(name, modelType, opts, p.name)}
       <button class="btn btn-sm pd-remove" title="${t('btn.remove')}" onclick="removeProviderFromModel(${jsArg(name)},${jsArg(p.name)},${jsArg(upstream)})">✕</button>
@@ -890,7 +890,7 @@ function _detailProviderRows(name, info, disabledProviders) {
 function _modelDetailHtml(name, info, disabledProviders) {
   const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
   const capList = caps.map(c =>
-    `<span class="cap-badge cap-badge-${c}" title="${esc(capLabel(c))}">${_capIcons[c] || ''}<span>${esc(capLabel(c))}</span></span>`,
+    `<span class="tag is-square cap-badge-${c}" title="${esc(capLabel(c))}">${_capIcons[c] || ''}<span>${esc(capLabel(c))}</span></span>`,
   ).join('');
   return `<div class="model-detail">
       <div class="md-row"><span class="md-label">${t('label.capabilities')}</span><span class="md-caps">${capList}</span></div>
@@ -1388,18 +1388,18 @@ function renderModels() {
       const cls = 'cap-badge-' + c;
       const icon = _capIcons[c] || '';
       const label = capLabel(c);
-      return `<span class="cap-badge ${cls}" title="${esc(label)}" aria-label="${esc(label)}">${icon}</span>`;
+      return `<span class="tag is-square ${cls}" title="${esc(label)}" aria-label="${esc(label)}">${icon}</span>`;
     }).join('') : '';
     const hasVision = caps.includes('vision');
     const hasTools = caps.includes('tools');
     const hasReasoning = caps.includes('reasoning');
     const typeBadgeCls = _typeBadgeClass(modelType);
-    const typeBadge = modelType === 'llm' ? '' : `<span class="cap-badge ${typeBadgeCls}" title="${esc(typeLabelAlt(modelType))}">${_CAP_ICONS[modelType] || ''}${esc(typeLabel(modelType))}</span>`;
+    const typeBadge = modelType === 'llm' ? '' : `<span class="tag is-square ${typeBadgeCls}" title="${esc(typeLabelAlt(modelType))}">${_CAP_ICONS[modelType] || ''}${esc(typeLabel(modelType))}</span>`;
     // The upstream name is the same string on nearly every row and the provider
     // menu already lists it per provider; it stays a tooltip here.
     const upstream = (typeof info === 'object' && info.upstream_model) ? info.upstream_model : '';
     const urlTpl = (typeof info === 'object' && info.url_template) ? info.url_template : '';
-    const urlTplTag = urlTpl ? ` <span class="cap-badge cap-badge-text" title="${t('label.urlTemplate')}: ${esc(urlTpl)}">⛓ url</span>` : '';
+    const urlTplTag = urlTpl ? ` <span class="tag is-square cap-badge-text" title="${t('label.urlTemplate')}: ${esc(urlTpl)}">⛓ url</span>` : '';
     return `<tr${rowDimmed ? ' class="model-disabled"' : ''} role="row"
       onclick="if(!event.target.closest('button,input,label,a,.more-menu,.provider-link'))openModelDrawer(${jsArg(name)})">
       <td class="col-check" role="cell" aria-labelledby="thModelSelect"><input type="checkbox" class="row-check" data-model="${esc(name)}" onchange="updateModelBulk()"></td>

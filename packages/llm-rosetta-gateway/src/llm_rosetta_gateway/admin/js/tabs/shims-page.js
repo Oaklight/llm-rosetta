@@ -131,7 +131,7 @@ function _matches(s, f) {
 function _originBadge(origin) {
   if (origin === 'builtin') return '';
   const label = origin === 'path' ? t('shimPage.originLocal') : t('shimPage.originExternal');
-  return `<span class="shim-origin is-${esc(origin)}">${esc(label)}</span>`;
+  return `<span class="tag is-square is-${esc(origin)}">${esc(label)}</span>`;
 }
 
 function _markStyle(text) {
@@ -162,8 +162,8 @@ function _formatRow(s) {
   const cls = esc(typeBadgeClass(kind));
   const type = kind
     ? (icon
-      ? `<span class="cap-badge ${cls}" title="${esc(typeLabelAlt(kind))}" aria-label="${esc(typeLabel(kind))}">${icon}</span>`
-      : `<span class="cap-badge ${cls}" title="${esc(typeLabelAlt(kind))}">${esc(typeLabel(kind))}</span>`)
+      ? `<span class="tag is-square ${cls}" title="${esc(typeLabelAlt(kind))}" aria-label="${esc(typeLabel(kind))}">${icon}</span>`
+      : `<span class="tag is-square ${cls}" title="${esc(typeLabelAlt(kind))}">${esc(typeLabel(kind))}</span>`)
     : '';
   return `
     <div class="shim-row${s.enabled === false ? ' is-off' : ''}">
@@ -239,10 +239,10 @@ export function toggleShimVendor(vendor) {
 }
 
 function _packageCard(p) {
-  const formats = (p.formats || []).map((f) => `<span class="shim-chip">${esc(f)}</span>`).join('');
+  const formats = (p.formats || []).map((f) => `<span class="tag is-plain">${esc(f)}</span>`).join('');
   const status = p.installed
-    ? '<span class="shim-origin is-builtin">' + esc(t('shimPage.installedBadge')) + '</span>'
-    : '<span class="shim-origin is-remote">' + esc(t('shimPage.availableBadge')) + '</span>';
+    ? '<span class="tag is-square is-builtin">' + esc(t('shimPage.installedBadge')) + '</span>'
+    : '<span class="tag is-square is-remote">' + esc(t('shimPage.availableBadge')) + '</span>';
   const link = _sourceLink(p.source_repo, 'shim-repo');
   return `
     <article class="shim-card" data-package="${esc(p.key)}">
@@ -250,7 +250,7 @@ function _packageCard(p) {
         <span class="shim-name">${esc(p.label)}</span>
         ${status}
       </div>
-      <div class="shim-chips">${formats || '<span class="shim-chip">—</span>'}</div>
+      <div class="shim-chips">${formats || '<span class="tag is-plain">—</span>'}</div>
       <div class="shim-usage">${esc(plural(p.shims.length, 'shimPage.shims', 'shimPage.shimOne'))}${link ? ' · ' + link : ''}</div>
       ${p.installed ? '' : `<p class="shim-trust" role="note">${esc(t('shimPage.trustWarning'))}</p>`}
       <div class="shim-card-actions">
