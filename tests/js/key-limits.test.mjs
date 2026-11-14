@@ -17,6 +17,7 @@ import { test } from 'node:test';
 import {
   MODEL_NAME_RE,
   badModelName,
+  keyLimitTags,
   modelTokens,
 } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/key-limits.js';
 import { validateQuotas } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/quota.js';
@@ -168,4 +169,36 @@ test("both save paths refuse on the validators' answer", () => {
     const post = body.search(/api\.(post|put)/);
     assert.ok(body.indexOf(guard[0]) < post, `${fn} refuses before it sends`);
   }
+});
+
+// The row's tags: a small dictionary stands in for i18n, so the shape is what
+// is under test rather than the wording.
+const dict = {
+  'keys.noModel': 'no model',
+  'keys.modelUnit': 'models',
+  'keys.modelUnitOne': 'model',
+  'label.keyModels': 'Allowed models',
+};
+const t = (key) => dict[key] ?? key;
+
+test('a key with every model shows no model tag', () => {
+  assert.deepEqual(keyLimitTags({allowed_models: ['*'], rate_limit: ''}, t), []);
+  assert.deepEqual(keyLimitTags({rate_limit: ''}, t), []);
+});
+
+test('a key with no model says so, rather than looking like every model', () => {
+  assert.deepEqual(keyLimitTags({allowed_models: [], rate_limit: ''}, t), [
+    {text: 'no model', title: 'Allowed models'},
+  ]);
+});
+
+test('a scoped key counts its models, one or many', () => {
+  assert.equal(keyLimitTags({allowed_models: ['m-a']}, t)[0].text, '1 model');
+  assert.equal(keyLimitTags({allowed_models: ['m-a', 'm-b']}, t)[0].text, '2 models');
+  assert.equal(keyLimitTags({allowed_models: ['m-a', 'm-b']}, t)[0].title, 'm-a, m-b');
+});
+
+test('a multi-window quota shows its first window and a count', () => {
+  const [tag] = keyLimitTags({allowed_models: ['*'], rate_limit: '30/m, 500/h'}, t);
+  assert.deepEqual(tag, {text: '30/m +1', title: '30/m, 500/h'});
 });
