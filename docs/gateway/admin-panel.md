@@ -10,7 +10,7 @@ Open **`http://localhost:8765/admin/`**.
 
 ## The console
 
-The console is a left rail of sections — **Dashboard**, **Providers**, **Models**, **Routing**, **API Keys**, **Observability** and **Jobs** — with the mode, language, settings and logout buttons in one row at the bottom, and a status bar along the bottom edge that reports the request counters. Across the top, a sticky status bar names the section you are in: its bracketed index and its page title (`[03] Models`), filled from the panel's own heading. The content sits on a 32px hairline grid. Below 900 px the rail folds into a horizontal strip, its active item marked by an underline; the top status bar stays.
+The console is a left rail of sections — **Dashboard**, **Providers**, **Models**, **Routing**, **API Keys**, **Observability** and **Jobs** — with the mode, language, settings and logout buttons in one row at the bottom, and a status bar along the bottom edge that reports the request counters. Across the top, a sticky status bar names the section you are in: its bracketed index and its page title (`[03] Models`), filled from the panel's own heading. The content sits on the page's own background. Below 900 px the rail folds into a horizontal strip, its active item marked by an underline; the top status bar stays.
 
 The rail's foot carries the clock. It shows the gateway's own wall time, not the browser's: `/health` reports the process's clock and zone, and a click on the time switches to the browser clock (the label says which one is showing, and the choice is remembered). The zone beside it is a second click target — the GMT offset (`GMT-5`) by default, the IANA name (`America/Chicago`) when switched; a name wider than the rail is trimmed with an ellipsis. A bare `/admin` opens the dashboard rather than resuming the last section; an explicit hash (`#providers`, `#models`) still deep-links. The logs section is `#observability`, and an old `#logs` bookmark opens it and is rewritten in the address bar. Opening a model pushes `#models/<id>`, keeping the list's filters in `?q=`; an observability view is `#observability/<view>`; a filtered list keeps its search in the address bar. Back, Forward and a reload land on the same page, and the browser tab's title names the page rather than only the product (`Models · llm-rosetta Gateway Console`), in the interface language.
 
@@ -18,7 +18,7 @@ The rail's foot carries the clock. It shows the gateway's own wall time, not the
 
 ### Panels and tables
 
-A page carries one title — the one in the status bar — and a heading below it names its container, never the page. A **board** title is a strip: `[ Per-Provider Breakdown ]`, `[ Error Dumps ]`, `[ Profiling ]`, `[ Content Capture ]`. The strip marks one board sitting under a page and above that board's own controls; it is set one step below the section scale, and its brackets are drawn by the stylesheet with an empty alternative text, so they are decoration — no translated string carries punctuation, a screen reader speaks the title alone, and the Chinese panel reads `[ 服务方统计 ]`.
+A page carries one title — the one in the status bar — and a heading below it names its container, never the page. A **board** title is a strip: `[ Per-Provider Breakdown ]` on the dashboard. The strip marks one board sitting under a page and above that board's own controls; it is set one step below the section scale, and its brackets are drawn by the stylesheet with an empty alternative text, so they are decoration — no translated string carries punctuation, a screen reader speaks the title alone, and the Chinese panel reads `[ 服务方统计 ]`. The Observability views carry no strip: the tab already names the view, so a second title under it was one name too many.
 
 Headings below a strip run at one section size (`h3`) and one group size (`h4`); a heading a component sizes itself, such as a modal title, keeps its size and takes the section weight. A group heading is the same size as the text it introduces and separates itself by weight and colour instead — no heading in the panel is smaller than its own description; a provider card's heading takes `--fs-sm` (12.5 px) because its field hints are that size, the same rule rather than an exception.
 
@@ -233,6 +233,8 @@ Saving the policy writes through `PUT /admin/api/routing/<model>`, which rebuild
 
 The **API Keys** section issues and revokes the keys that call `/v1/*`. Each key has a label, an allowed-shim list (`*` for any), a creation time and a last-used time. A new key is shown once, in full; the list keeps only its id and label. Deleting a key takes effect on the next request — no restart.
 
+Above the list, a collapsible **Connect** panel says how a tool reaches this gateway: the API (every format the catalog declares, grouped under its model type), the base URL, the model id, and a sample in ENV, curl, Python or Node — the ENV tab carries the Linux/macOS and Windows export lines. The values are templates (`<model-id>` where an id goes), so the panel reads the same on a gateway with one chat model and on one with every type; each value has its own copy control, and the sample block colours its tokens and copies from its top-right corner.
+
 ## Dashboard
 
 The **Dashboard** is the landing section and reports live traffic.
@@ -268,8 +270,8 @@ The **Dashboard** is the landing section and reports live traffic.
 | **Requests** | One row per proxied call — the request log |
 | **Ops Log** | Server-level events: lifecycle, config, keys, data mutations, security, health |
 | **Error Dumps** | The bodies behind a failed request |
-| **Profiling** | Toggle for the phase profiler |
-| **Capture** | Toggle for request/response capture |
+| **Profiling** | The phase profiler; opening the view arms it |
+| **Capture** | Request/response capture; opening the view arms it |
 
 ### Filters
 
