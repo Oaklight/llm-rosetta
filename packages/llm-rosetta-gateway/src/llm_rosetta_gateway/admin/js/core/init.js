@@ -16,6 +16,7 @@ import { loadMetrics, loadDumps, renderPersistence } from '../tabs/dashboard.js'
 import { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions } from '../tabs/logs.js';
 import { loadOpsLog, switchLogView, populateOpsLogFilters } from '../tabs/ops-log.js';
 import { renderShimSources } from '../tabs/shims.js';
+import { loadShimsPage } from '../tabs/shims-page.js';
 import { loadRouting, stopRoutingTimer } from '../tabs/routing.js';
 import '../components/test-runner.js';
 import { initLogoPicker } from '../components/logo-picker.js';
@@ -38,7 +39,11 @@ const _dt = (window.__branding && window.__branding.disabled_tabs) || [];
 // observability tab, so a config that disables one spelling disables it.
 function _tabEnabled(id) {
   const alias = id === 'logs' ? 'observability' : id === 'observability' ? 'logs' : id;
-  return _dt.indexOf(id) === -1 && _dt.indexOf(alias) === -1;
+  if (_dt.indexOf(id) !== -1 || _dt.indexOf(alias) !== -1) return false;
+  // The shims page is where a provider is added; its routes are guarded by
+  // the providers tab, so one cannot stay on without the other.
+  if (id === 'shims') return _dt.indexOf('providers') === -1;
+  return true;
 }
 function _logRefreshMs() { return S._dashboardRefreshMs > 0 ? S._dashboardRefreshMs : 5000; }
 
@@ -185,6 +190,7 @@ function activateTab(tab, opts = {}) {
   // while the operator stays on the page, so the sort runs again here.
   if (id === 'providers') { window.resetProviderListOrder?.(); }
   if (id === 'providers' || id === 'models') { loadConfig(); }
+  if (id === 'shims' && _tabEnabled('shims')) { loadShimsPage(); }
   if (id === 'routing') { loadRouting(); }
   if (id === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
   if (id === 'keys' && _tabEnabled('keys')) { loadKeys(); }
@@ -196,7 +202,8 @@ function activateTab(tab, opts = {}) {
 
 // ---- Settings groups ----
 // One pane at a time on the settings tab; the choice outlives the visit.
-const SETTINGS_PANES = ['appearance', 'behavior', 'rateLimit', 'retention', 'security', 'shims', 'about'];
+// 'shims' moved to its own page (#1526); a stored value for it falls back.
+const SETTINGS_PANES = ['appearance', 'behavior', 'rateLimit', 'retention', 'security', 'about'];
 const SETTINGS_PANE_KEY = 'llm-rosetta-settings-pane';
 
 function setSettingsPane(name) {
@@ -210,6 +217,23 @@ function setSettingsPane(name) {
   document.querySelectorAll('#tab-settings .settings-pane').forEach(p => {
     p.classList.toggle('is-active', p.id === 'settingsPane-' + name);
   });
+  // A stored pane that no longer exists (one moved to another page) would
+  // otherwise leave the whole tab blank: no pane is active, and the nav shows
+  // nothing selected either.  Fall back to the first pane rather than an
+  // empty screen, whatever produced the stale value.
+  if (!document.querySelector('#tab-settings .settings-pane.is-active')) {
+    const first = document.querySelector('#tab-settings .settings-pane');
+    if (first) {
+      first.classList.add('is-active');
+      name = first.id.replace('settingsPane-', '');
+      document.querySelectorAll('.settings-nav-btn').forEach(b => {
+        const on = b.dataset.pane === name;
+        b.classList.toggle('is-active', on);
+        b.setAttribute('aria-selected', String(on));
+        b.tabIndex = on ? 0 : -1;
+      });
+    }
+  }
   localStorage.setItem(SETTINGS_PANE_KEY, name);
 }
 window.setSettingsPane = setSettingsPane;

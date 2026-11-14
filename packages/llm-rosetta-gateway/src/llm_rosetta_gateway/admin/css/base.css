@@ -152,6 +152,23 @@ body.auth-pending > .db-footer { display: none !important; }
   border-left-color: var(--accent); border-bottom-color: transparent;
   box-shadow: none;
 }
+/* A sub-entry belongs to the row above it: Shims is where provider identity
+   is defined, so it hangs off Providers instead of standing as a peer.
+   Indented one step, and joined by an elbow drawn from the parent row's
+   bottom edge into the label. */
+.sidebar .tab.tab-sub {
+  margin-top: -4px; padding-left: 30px; font-size: 13px;
+}
+.sidebar .tab.tab-sub .tab-ico svg { width: 14px; height: 14px; }
+.sidebar .tab.tab-sub::before {
+  content: '';
+  position: absolute; left: 17px; top: -6px; bottom: 50%;
+  width: 8px;
+  border-left: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+  pointer-events: none;
+}
 .sidebar .tabs-spacer { display: none; }
 .sidebar .config-path {
   padding: 8px 10px 0; overflow: hidden;
@@ -485,9 +502,9 @@ a { color: var(--accent); text-decoration: none; }
 /* Free text in a settings row stops where reading stops. */
 .settings-popup-item textarea { max-width: 760px; }
 /* The shim pane builds its own blocks; keep them the same width. */
-#settingsPane-shims textarea,
-#settingsPane-shims input[type="text"] { max-width: 760px; }
-#settingsPane-shims select { max-width: 340px; }
+#shimPageSources textarea,
+#shimPageSources input[type="text"] { max-width: 760px; }
+#shimPageSources select { max-width: 340px; }
 /* A quota string needs room for "60/m or 30/m, 500/h", not a paragraph. */
 .settings-popup-item .quota-input-wrap input { max-width: 320px; }
 /* The hint under a control belongs to that control, not the row. */

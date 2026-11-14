@@ -50,6 +50,7 @@ from .shim_files import (
     delete_loaded_shim,
     get_loaded_shim,
     get_loaded_shims,
+    get_shim_catalog,
     post_shim_enabled,
     put_loaded_shim,
 )
@@ -174,6 +175,9 @@ def register_config_routes(app: Any) -> None:
     # Loaded shims: what is registered, and the local ones we may edit.
     app.route("/admin/api/config/shims", methods=["GET"])(
         _guard("providers", get_loaded_shims)
+    )
+    app.route("/admin/api/config/shims/catalog", methods=["GET"])(
+        _guard("providers", get_shim_catalog)
     )
     app.route("/admin/api/config/shims/<name>", methods=["GET"])(
         _guard("providers", get_loaded_shim)

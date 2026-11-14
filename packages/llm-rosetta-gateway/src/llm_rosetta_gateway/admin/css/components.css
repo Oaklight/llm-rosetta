@@ -1867,7 +1867,26 @@ button.lp-clear {
     padding: 4px 2px; font-size: 10px; line-height: 1.2;
     border-bottom: none; text-align: center;
   }
+  /* The rail lets a label wrap; a bottom-bar slot cannot.  The padding and
+     gap are restated with the rail's own prefix, or `.sidebar .tab`'s 10px
+     sides and 4px gaps would eat the slot.  The label is stretched across
+     what is left: a centred, content-sized flex item would shrink to an
+     ellipsis.  Seven destinations at 390px leave ~55px each, so the type is
+     a step smaller here than in the rail. */
+  .sidebar .tabs { gap: 0; }
+  .sidebar .tab { padding: 4px 2px; font-size: 9px; white-space: nowrap; }
+  .sidebar .tab .tab-label {
+    align-self: stretch; width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .tab-ico svg { width: 20px; height: 20px; }
+  /* The bottom bar gives every destination the same slot, so the rail's
+     indent and elbow are dropped here rather than squeezing the child.
+     The selector repeats the rail's prefix: `.sidebar .tab.tab-sub` would
+     otherwise outrank it. */
+  .sidebar .tab.tab-sub { margin-top: 0; padding: 4px 2px; font-size: 10px; }
+  .sidebar .tab.tab-sub .tab-ico svg { width: 20px; height: 20px; }
+  .sidebar .tab.tab-sub::before { display: none; }
   .tab.active { border-bottom: none; }
   .tab.active::after {
     content: '';
@@ -2570,99 +2589,236 @@ button.shim-update.unknown { color: var(--tag-warn); }
   .routing-dec-row > span:nth-child(5) { display: none; }
 }
 
-/* ── Add Provider chooser ─────────────────────────────────────────────
-   The catalogue shown before the form.  It is a list of what the gateway
-   can serve, so every row has to be readable at a glance: logo, name,
-   where it comes from, and how its credential arrives. */
+/* ── Shims page ───────────────────────────────────────────────────── */
 
-/* The header and the search field are fixed; only the rows scroll.  The
-   search field owns the divider, so a row clipped by the scrollport meets a
-   line rather than the input's own border — the earlier layout let a row
-   slide right up against the field and read as an overlap. */
-#providerPickModal > .modal {
-  display: flex; flex-direction: column;
-  max-height: 85vh; overflow: hidden;
-}
+.shims-page { display: flex; flex-direction: column; gap: 14px; }
+.shims-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.shims-title { display: flex; align-items: baseline; gap: 10px; }
+.shims-title h2 { margin: 0; font-size: 18px; }
+.shims-count { font-size: 12px; color: var(--text-dim); }
 
-.prov-pick-search {
-  flex: 0 0 auto;
-  padding: 0 0 10px;
-  background: var(--bg-card);
-  border-bottom: 1px solid var(--border);
-}
-.prov-pick-search input { width: 100%; }
+/* The view switch is the panel's standard segmented control, so the active
+   view reads the same here as on Providers, Models and the log views.  These
+   are <button>s, and the UA button face would paint a grey slab under every
+   unselected view; the shared rule only sets the border and padding. */
+.shims-seg { display: inline-flex; }
+.shims-seg > [data-view] { appearance: none; -webkit-appearance: none; border: 0; }
+.shims-seg > [data-view]:not(:last-child) { border-right: 1px solid var(--border); }
+.shims-seg > [data-view]:not(.active) { background: transparent; box-shadow: none; }
 
-.prov-pick-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  scrollbar-gutter: stable;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px 0 4px;
-}
+/* The toolbar is a sibling of the grid, not one of its items, so the grid's
+   own gap does not separate them: the filter row sat flush on the first card
+   and its focus ring overlapped it. */
+.shims-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 
-.prov-pick-row {
-  display: flex;
+/* Filters, then the count and the view switch, on one line; the lists take a
+   full-width row under them.  A grid rather than a flex row: the toolbar is
+   itself a flex container, and as a flex item it reported a 500px base size
+   and wrapped its own third control. */
+#tab-shims > .section {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
+  column-gap: 12px; row-gap: 12px;
+}
+/* Definite columns: the toolbar's own max-content was under-reported (500 for
+   three controls that need 580), which wrapped its last select inside itself. */
+#tab-shims > .section > .shims-toolbar {
+  grid-column: 1; grid-row: 1; margin: 0;
+  display: grid; grid-template-columns: 260px 150px 150px; align-items: center; gap: 10px;
+}
+#tab-shims > .section > .section-header { grid-column: 2; grid-row: 1; margin: 0; justify-content: flex-end; column-gap: 12px; }
+#tab-shims > .section > #shimGrid,
+#tab-shims > .section > #shimCatalogGrid,
+#tab-shims > .section > .shims-sources { grid-column: 1 / -1; }
+/* The two columns need ~965px of content: below that viewport width (the rail
+   takes 232) the header takes the first row and the filters the second. */
+@media (max-width: 1200px) {
+  #tab-shims > .section { grid-template-columns: minmax(0, 1fr); }
+  #tab-shims > .section > .section-header { grid-column: 1; grid-row: 1; }
+  #tab-shims > .section > .shims-toolbar {
+    grid-column: 1; grid-row: 2;
+    display: flex; flex-wrap: wrap;
+  }
+  #tab-shims > .section > .shims-toolbar input[type="search"] { flex: 1 1 260px; }
+}
+/* A full-width search box pushes the two filters to the far edge and reads
+   as a form header rather than a filter row; it is capped and the switches
+   hold the right end. */
+.shims-toolbar input[type="search"] { flex: 0 1 260px; min-width: 180px; }
+.shims-toolbar select { width: 150px; flex: 0 0 auto; }
+/* A bare checkbox sat flush against its label (no gap, block layout) and
+   the label kept the body's 16px while every control beside it is 11.5px.
+   The switch belongs to the Sources view: it chooses which source kinds the
+   inventory lists, not which entry is being searched for. */
+/* A switch in the page's own header, not a bare checkbox above the tab: it
+   chooses what the inventory lists, so it sits with the list's heading. */
+.shims-sources-toggle {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-left: auto; white-space: nowrap;
+  font-size: 12px; color: var(--text-dim); cursor: pointer;
+}
+.shims-sources-toggle .toggle { flex: 0 0 auto; }
+
+.shim-grid[hidden], .shims-toolbar[hidden], .shims-sources[hidden] { display: none; }
+
+.shim-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  align-items: start;
   gap: 10px;
-  width: 100%;
-  padding: 8px 10px;
-  text-align: left;
-  font: inherit;
-  color: var(--text);
+}
+/* Package cards are a comparison grid, so a row shares one height.  The
+   vendor grid is a disclosure list: stretching its cards would make an opened
+   neighbour look opened too. */
+#shimCatalogGrid { align-items: stretch; grid-auto-rows: 1fr; }
+
+/* ── Vendor card: one logo, one row per format ─────────────────────── */
+/* The card is a disclosure: its head is the whole click target, the rows
+   stay out of the way until the vendor is the one being worked on. */
+.shim-vendor-card {
+  display: flex; flex-direction: column;
   background: var(--bg-card);
   border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.shim-vendor-head {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; padding: 0; margin: 0;
+  background: none; border: 0; color: inherit; font: inherit;
+  text-align: left; cursor: pointer;
+}
+.shim-vendor-head:hover .shim-vendor-name { color: var(--accent); }
+.shim-vendor-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.shim-vendor-chevron {
+  flex: 0 0 auto; margin-left: auto; color: var(--text-dim);
+  transition: transform .15s ease;
+}
+.shim-vendor-card.is-open .shim-vendor-chevron { transform: rotate(180deg); }
+.shim-vendor-card.is-open .shim-vendor-head { padding-bottom: 6px; }
+.shim-rows { display: flex; flex-direction: column; }
+.shim-rows[hidden] { display: none; }
+.shim-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--hairline);
+}
+.shim-row.is-off { opacity: 0.55; filter: grayscale(1); }
+/* External code wears a warning and a way to read it.  A shim ships
+   auth.py / quota.py / transforms that run inside the gateway process, so
+   the panel must not present an external source as a neutral choice — and
+   the repository link is how the operator checks what they are trusting. */
+.shim-trust { margin: 0; font-size: 11px; line-height: 1.5; color: var(--text-dim); }
+.shim-repo { color: var(--accent); text-decoration: none; }
+.shim-repo:hover { text-decoration: underline; }
+.shim-warn {
+  flex: 0 0 auto; width: 15px; height: 15px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; line-height: 1;
+  background: var(--orange); color: #fff;
+}
+.shim-vendor-src {
+  display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
+  padding: 2px 0 8px; font-size: 11px;
+}
+.shim-vendor-src-label { color: var(--text-muted); }
+.shim-vendor-src-path { color: var(--text-dim); overflow-wrap: anywhere; }
+.shim-row-name {
+  flex: 1; min-width: 0;
+  font-size: 12.5px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.shim-row-add {
+  appearance: none; flex: 0 0 auto;
+  width: 22px; height: 22px; padding: 0; line-height: 1;
+  border: 1px solid var(--border); border-radius: 6px;
+  background: transparent; color: var(--text-dim);
+  font-size: 14px; cursor: pointer;
+}
+.shim-row-add:hover { background: var(--bg-hover); color: var(--text); }
+/* An off shim cannot become a provider type, so its "+" says so by being
+   unavailable rather than by opening a drawer that would fail to save. */
+.shim-row-add:disabled { opacity: .4; cursor: not-allowed; }
+.shim-row-add:disabled:hover { background: transparent; color: var(--text-dim); }
+
+.shim-card {
+  display: flex; flex-direction: column; gap: 10px;
+  height: 100%;
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.shim-card-head { display: flex; align-items: center; gap: 10px; }
+.shim-mark {
+  flex: 0 0 30px; width: 30px; height: 30px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 8px; background: var(--bg-hover);
+  font-weight: 700; font-size: 14px; color: var(--text-dim);
+}
+.shim-mark.is-pkg { font-size: 16px; }
+.shim-id { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.shim-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shim-sub { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Same shape as the capability badge beside a provider name: 18px tall,
+   micro mono capitals, a border and fill tinted by the status colour. */
+.shim-origin {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px;
+  height: 18px; padding: 0 7px; line-height: 1;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
   border-radius: var(--radius-control);
-  cursor: pointer;
-}
-
-.prov-pick-row:hover { background: var(--bg-hover); }
-.prov-pick-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-
-.prov-pick-logo {
-  flex: 0 0 24px;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.prov-pick-logo img { width: 24px; height: 24px; object-fit: contain; }
-
-.prov-pick-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
-.prov-pick-name {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.prov-pick-sub {
-  font-size: var(--fs-xs);
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.prov-pick-badge {
-  flex: 0 0 auto;
-  font-size: var(--fs-micro);
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--bg-hover);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  font-family: var(--mono); font-size: var(--fs-micro); font-weight: 500;
+  letter-spacing: var(--tracking-label); text-transform: uppercase;
   color: var(--text-dim);
 }
+.shim-origin.is-builtin { color: var(--text-dim); }
+.shim-origin.is-path { color: var(--accent); }
+.shim-origin.is-remote { color: var(--orange); }
 
-.prov-pick-empty { padding: 28px 16px; text-align: center; color: var(--text-muted); }
+.shim-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+/* A capability checkbox in the provider drawer carries the same icon as the
+   badge the card will show once it saves. */
+.prov-cap-check .prov-cap-ico { display: inline-flex; align-items: center; }
+.prov-cap-check .prov-cap-ico svg { width: 13px; height: 13px; display: block; }
 
-.prov-pick-foot { display: flex; justify-content: flex-end; padding: 0 16px 16px; }
-
-#providerPickModal > .modal { width: 520px; }
-#providerPickModal .drawer-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; margin: 0 0 16px;
+.shim-chip {
+  display: inline-flex; align-items: center; height: 18px; padding: 0 7px; line-height: 1;
+  border: 1px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  font-family: var(--mono); font-size: var(--fs-micro);
+  color: var(--text-dim);
 }
-#providerPickModal .drawer-head h3 { margin: 0; }
+.shim-chip.is-type { color: var(--accent); }
+
+.shim-usage { font-size: 12px; color: var(--text-muted); min-height: 14px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.shim-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
+.shim-note { font-size: 10.5px; color: var(--text-dim); }
+.shim-switch { width: 30px; height: 16px; accent-color: var(--accent); }
+.shim-empty { padding: 28px; text-align: center; color: var(--text-muted); grid-column: 1 / -1; }
+
+
+/* ── Shims page: vendor sections and logos ─────────────────────────── */
+
+.shim-vendor { margin-bottom: 18px; }
+.shim-vendor-logo {
+  flex: 0 0 16px; width: 16px; height: 16px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.shim-logo { width: 16px; height: 16px; object-fit: contain; }
+.shim-logo-fallback {
+  width: 16px; height: 16px; border-radius: 4px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+}
+.shim-vendor-name { font-size: 14px; font-weight: 600; }
+.shim-vendor-meta { font-size: 12px; color: var(--text-muted); }
+
+.shims-sources { display: flex; flex-direction: column; gap: 8px; }
+.shims-sources-head { margin-bottom: 4px; }

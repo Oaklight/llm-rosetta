@@ -67,11 +67,16 @@ def _yaml_meta(path: Path) -> dict[str, Any] | None:
     if not isinstance(cfg, dict) or not isinstance(cfg.get("name"), str):
         return None
     model_type = cfg.get("model_type") or "llm"
+    group = cfg.get("group")
     return {
         "name": cfg["name"],
         "model_type": model_type if isinstance(model_type, str) else "llm",
         "format": cfg.get("format") or cfg.get("base") or "",
         "display_name": cfg.get("display_name"),
+        # A manifest-backed shim names the vendor it belongs to; a disabled
+        # one is read from this index alone, and without the group it would
+        # surface as a vendor of its own.
+        "group": group if isinstance(group, str) else None,
     }
 
 
@@ -254,7 +259,7 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
         rows[name] = {
             "name": name,
             "display_name": entry.get("display_name"),
-            "group": None,
+            "group": entry.get("group"),
             "model_type": entry.get("model_type", "llm"),
             "format": entry.get("format", ""),
             "origin": origin,
@@ -418,6 +423,33 @@ async def get_loaded_shims(request: Any) -> Response:
     return JSONResponse(
         {"shims": _shim_rows(request), "manifests": manifest_rows(request)}
     )
+
+
+async def get_shim_catalog(request: Any) -> Response:
+    """Standalone shim packages, with what this gateway has loaded.
+
+    One entry per ``SHIM_SOURCE_PACKAGES`` record; ``installed`` is true when
+    at least one of the package's shims is registered, and ``installed_shims``
+    names those shims so the Available view can offer the first of them to the
+    Add Provider flow.  ``formats`` is the set of wire formats the package
+    covers, taken from the canonical ``<vendor>--<format>`` shim names.
+    """
+    from ....shims.catalog import SHIM_SOURCE_PACKAGES
+
+    loaded = {shim.name for shim in list_shims()}
+    packages = []
+    for pkg in SHIM_SOURCE_PACKAGES:
+        present = [name for name in pkg.shims if name in loaded]
+        formats = sorted({name.split("--", 1)[1] for name in pkg.shims if "--" in name})
+        packages.append(
+            {
+                **pkg.to_dict(),
+                "formats": formats,
+                "installed": bool(present),
+                "installed_shims": present,
+            }
+        )
+    return JSONResponse({"packages": packages})
 
 
 async def get_loaded_shim(request: Any, name: str) -> Response:

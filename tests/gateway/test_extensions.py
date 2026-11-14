@@ -169,6 +169,24 @@ class TestAdminSetup:
         assert hasattr(app, "admin_custom_head")
         assert "keys" in app.disabled_tabs  # ty: ignore[unresolved-attribute]
 
+    @pytest.mark.asyncio
+    async def test_disabling_providers_also_hides_the_shims_page(self):
+        """The shims page is a child of Providers, and its routes are theirs."""
+        ext = GatewayExtensions(disabled_tabs=["providers"])
+        app = await create_app(_minimal_cfg(), extensions=ext)
+        head = getattr(app, "admin_custom_head", "")
+        assert '.tab[data-tab="shims"], #tab-shims' in head
+        assert '"disabled_tabs": ["providers", "shims"]' in head
+
+    @pytest.mark.asyncio
+    async def test_the_shims_page_can_be_disabled_on_its_own(self):
+        """A deployment may offer Providers without the shim catalogue."""
+        ext = GatewayExtensions(disabled_tabs=["shims"])
+        app = await create_app(_minimal_cfg(), extensions=ext)
+        head = getattr(app, "admin_custom_head", "")
+        assert "#tab-shims" in head
+        assert "#tab-providers" not in head
+
 
 class TestCombinedExtensions:
     @pytest.mark.asyncio

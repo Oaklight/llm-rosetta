@@ -83,7 +83,16 @@ def _resolve_log_caps(config: GatewayConfig) -> tuple[int, int | None]:
 
 
 _VALID_TABS = frozenset(
-    {"providers", "models", "routing", "keys", "dashboard", "logs", "settings"}
+    {
+        "providers",
+        "shims",
+        "models",
+        "routing",
+        "keys",
+        "dashboard",
+        "logs",
+        "settings",
+    }
 )
 
 
@@ -218,9 +227,12 @@ async def setup_admin(
             Supply a custom implementation for non-JSONC formats
             (e.g. YAML in argo-proxy).
         disabled_tabs: Optional list of tab identifiers to hide from the
-            admin panel.  Valid values: ``"providers"``, ``"models"``,
-            ``"keys"``, ``"dashboard"``, ``"logs"``.  Disabled tabs are
-            hidden via CSS, their data-fetching JS functions are
+            admin panel.  Valid values: ``"providers"``, ``"shims"``,
+            ``"models"``, ``"routing"``, ``"keys"``, ``"dashboard"``,
+            ``"logs"``, ``"settings"``.  Disabling ``"providers"`` hides
+            ``"shims"`` too: the shims page is where a provider is added,
+            and its routes are guarded by the providers tab.  Disabled tabs
+            are hidden via CSS, their data-fetching JS functions are
             suppressed, and their API routes return 404.
         custom_head: Optional HTML fragment (``<style>``, ``<script>``,
             etc.) injected before ``</head>`` when serving the admin
@@ -335,16 +347,21 @@ async def setup_admin(
     app.capture_state = capture_state
     # Build custom_head: disabled-tab CSS + user fragment + branding injection
     parts: list[str] = []
-    if disabled:
-        selectors = ", ".join(
-            f'.tab[data-tab="{t}"], #tab-{t}' for t in sorted(disabled)
-        )
+    # The shims page is a child of Providers: it is where a provider is
+    # added, and its routes carry the providers guard, so hiding the parent
+    # has to take it too.  One set feeds the hide CSS and the branding the
+    # client reads.
+    hidden = set(disabled)
+    if "providers" in hidden:
+        hidden.add("shims")
+    if hidden:
+        selectors = ", ".join(f'.tab[data-tab="{t}"], #tab-{t}' for t in sorted(hidden))
         parts.append(f"<style>{selectors} {{ display: none !important; }}</style>")
     if custom_head:
         parts.append(custom_head)
     merged_branding = dict(branding) if branding else {}
-    if disabled:
-        merged_branding["disabled_tabs"] = sorted(disabled)
+    if hidden:
+        merged_branding["disabled_tabs"] = sorted(hidden)
         merged_branding["all_tabs"] = sorted(_VALID_TABS)
     if merged_branding:
         import json as _json
