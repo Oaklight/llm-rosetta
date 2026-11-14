@@ -15,6 +15,11 @@
 to one closed outline; the marks in `../out/` are parametric simplifications of
 it.
 
+The same file carries the carved text as 22,040 white paths over that outline.
+`../incisions.py` extracts them into a standalone layer (about 5.8 MB, generated
+on demand and not committed; see the README's *Inscription* section), which
+`simplify_path.py --incisions` and the page's 碑文 panel use to cut the mark.
+
 CC0 requires no attribution. Recording the chain is still worth doing, for two
 reasons: it answers "where did this shape come from" without re-deriving it, and
 it makes the licence claim checkable.
