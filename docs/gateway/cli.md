@@ -62,6 +62,102 @@ llm-rosetta-gateway add model gemini-2.0-flash --provider my-google
 |------|-------------|
 | `--provider` NAME | Target provider name |
 
+### `shims new [vendor]`
+
+Create the files for a new provider shim, then load them through the same loader
+a gateway uses:
+
+```bash
+llm-rosetta-gateway shims new                  # asks for every field
+llm-rosetta-gateway shims new acme --no-input \
+  --base-url https://api.acme.example/v1 --check
+```
+
+Run with no flags on a terminal it is a questionnaire — the scan root first, then
+vendor, model type, wire format, layout, base URL, credential variable, optional
+row label / logo / group title, and whether to add a transforms stub — and
+pressing Enter takes the value in brackets.  The root is asked first because
+everything after it follows what the package already does (see below).
+**Interactive is the default**; a value a flag already gave is not asked for
+again.  `--no-input` (implied when stdin is not a
+terminal) never prompts, so the same command works in a script.
+
+| Flag | Description |
+|------|-------------|
+| `--root DIR` | The directory a gateway scans; default `providers` |
+| `--model-type` | `llm` (default), `embeddings`, `rerank`, `decisions` |
+| `--format` | Wire format; the prompt and `--format`'s help list every format the model type registers, and an unregistered one is refused before anything is written |
+| `--layout` | `typed` (`<vendor>/llm/<format>`) or `flat` (`<vendor>/<format>`); the default follows the scan root's existing shape, else `typed` |
+| `--base-url` | Upstream base URL; a placeholder is written when omitted |
+| `--probe` | Check that `--base-url` answers, and print what it answered |
+| `--models-path` | Model-list URL or path, when it is not the default |
+| `--api-key-env` | Credential variable; default `<VENDOR>_API_KEY` |
+| `--display-name` | Row label inside the vendor group |
+| `--logo`, `--group`, `--group-label` | Vendor identity, written to the vendor manifest |
+| `--auto-logo` | Take the mark from the lobehub icon set on jsDelivr, found by vendor name; fails when there is no icon under that name |
+| `--localize-logo` | Save `--logo` into the package's `assets/` and reference its jsDelivr URL |
+| `--transform` | Also write a `transforms.py` stub |
+| `--vendor-manifest` | Write `<vendor>/provider.yaml` for the identity and credential every lane shares; the default is yes unless the scan root is a bundle of single-lane vendors |
+| `--no-vendor-manifest` | State every field on the leaf instead |
+| `--no-registry-manifest` | Do not touch the package's `shims.yaml` |
+| `--check` | Load the new leaf and report what it resolves to |
+
+When the vendor already has a `provider.yaml`, the credential and the vendor
+identity stay there and the leaf carries only its own fields.  When the scan root
+ships a `shims.yaml`, the new leaf is appended to it — that file is authoritative
+for a gateway, so a leaf it does not list never loads.
+
+**The scan root decides the shape.**  A root whose vendors are single leaf
+directories (`llm-rosetta-shim-free`: `kilo/provider.yaml` declaring a name) gets
+a flat leaf and no vendor manifest, because that package models each provider as
+its own top-level vendor.  A root whose vendors are manifests over `llm/` or
+`<type>/` directories (`google`: two chat dialects plus `embeddings/`) gets the
+typed layout.  A root that mixes the two has no convention to copy, so `typed`
+stays the default and the prompt asks instead of guessing.
+
+Three targets are refused before anything is written:
+
+- a vendor whose own `provider.yaml` is a shim — the loader reads that directory
+  as that one shim and never looks below it, so a second lane there would load
+  nowhere;
+- a shim name another file already declares, with the file named;
+- a vendor name the loader skips or misreads — an `_`/`.` prefix, or one of
+  `llm`, `embeddings`, `rerank`, `decisions`.
+
+A vendor that already holds lanes in the *other* layout is only noted: both
+shapes load under one vendor, the package just carries two.
+
+A pasted base URL is checked before it is written.  A trailing `/models` (what
+vendor consoles copy) is dropped, then `<base>/models` is requested without a
+credential: `200`, `401` or `403` prove the host answers on that path, and any
+other answer is reported with the base URL's own status so a wrong suffix shows
+up now rather than as an empty model list later.  The interactive mode always
+checks; in flag mode pass `--probe`.  A negative answer is a warning, not a
+refusal — the host may not be reachable from this machine.
+
+One <kbd>Ctrl</kbd>+<kbd>C</kbd> re-asks the current question; a second one
+cancels the run with exit code 130 and says whether anything was written.
+<kbd>Ctrl</kbd>+<kbd>D</kbd> cancels at once — there is no value to take from an
+ended stream, and every later prompt would read it ended too.  There is no
+traceback in any of the three cases.
+
+A mark lives in the package, not on someone else's host: when a logo URL is
+given, the interactive mode asks whether to download it into the package's
+`assets/` and point `logo:` at the jsDelivr copy of that file.  The package is
+identified from the scan root's git remote, so the URL is the one this repository
+will actually serve; a scan root outside a git repository keeps the URL as typed
+and says why.  `--localize-logo` does the same without the question.
+
+Before it asks, the vendor name is looked up in the lobehub icon set
+(`@lobehub/icons-static-svg` on jsDelivr) and a hit becomes the default answer —
+Enter takes it.  The whole name is tried first, then the leading segment and the
+name without a pool marker, so `opencode_zen_free` still finds `opencode`; each
+try is one `HEAD`, and an unreachable CDN ends the search rather than costing a
+timeout per name.  A URL that is already on jsDelivr is kept as typed, because
+there is nothing to copy: the mark is served from the CDN either way.
+`--auto-logo` does the lookup without the questionnaire and fails when there is
+no icon.
+
 ### `credential <provider>`
 
 Run a shim's interactive sign-in on this machine and emit the credential

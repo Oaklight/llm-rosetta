@@ -89,6 +89,9 @@ four AskSage dialects.
 
 ```yaml
 # alcf/provider.yaml
+logo: https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@main/assets/alcf.svg
+group: alcf            # one top-level group for three clusters
+group_label: ALCF
 connection:
   api_key_env: ALCF_API_KEY
   token_command: [python3, token.py]   # resolved against this file's directory
@@ -99,8 +102,15 @@ The merge is uniform: the manifest supplies the defaults, the leaf wins per
 field, and `headers` merges per key. A vendor whose lanes genuinely differ keeps
 the difference where it belongs — ALCF declares `base_url` per cluster, AskSage
 keeps `auth_header: x-access-tokens` on its `google_generate` leaf only.
-Anything a manifest cannot carry (`name`, `format`, `tools`, …) is refused at
-load time.
+
+Besides `connection:`, a manifest may declare the three fields that describe the
+*vendor* rather than one lane — `logo`, `group` and `group_label` — on the same
+terms. They are worth hoisting because each is identical across a vendor's
+leaves by construction: without `group`, the admin derives one from every shim
+name, so ALCF's `alcf_metis` / `alcf_minerva` / `alcf_sophia` would render as
+three top-level groups instead of one. A leaf may still state its own; anything
+else (`name`, `format`, `tools`, …) is refused at load time, because it is a
+shim's fact rather than the vendor's.
 
 The manifest is optional and may declare any subset. Without one, a vendor keeps
 declaring everything per leaf exactly as before, so an existing shim needs no
@@ -115,6 +125,30 @@ for an override — so `token.py` sits beside whichever file names it.
 `auth.py` follows the same rule: beside the vendor manifest it is the vendor's
 exchange, attached to every leaf; beside a leaf it belongs to that leaf. A
 vendor declares one exchange, and one leaf declaring another is a load error.
+
+**Scaffolding.** `llm-rosetta-gateway shims new` writes the files for a new
+shim — the leaf, the vendor manifest when the vendor has none, the package's
+`shims.yaml` entry when it ships one — and then loads the result through the real
+loader, so a shape no gateway could use fails there instead of at startup. With
+no flags on a terminal it asks for each field; **interactive is the default**,
+and `--no-input` plus flags does the same in a script. `--layout flat` produces
+the `<vendor>/<format>` shape and `--transform` adds a `transforms.py` stub.
+Inside a checkout, `scripts/dev/new_shim.py` is the same command with the
+built-in tree as its default root. A logo URL is offered for saving into the
+package's `assets/`, and what gets written is the jsDelivr URL of that file, so a
+shipped mark never points at the vendor's host. The wire format is picked from
+what the converter registry lists for the model type, and a pasted base URL is
+normalised and then asked whether it answers — a negative answer is a warning,
+not a refusal. An existing tree is read first: a package of single-lane vendors
+(`free`) gets a flat leaf and no vendor manifest, a manifest over `llm/` or
+`<type>/` directories (`google`) gets the typed layout, and a lane that would
+never load — below a directory that is itself a shim, under a name another file
+already declares, or under a vendor name the loader skips — is refused before
+anything is written. The mark is offered from the lobehub icon set on jsDelivr
+when the vendor name matches one, and a URL already on jsDelivr is left alone
+instead of being copied into `assets/`. Ctrl+C re-asks the current question once,
+a second press cancels, and Ctrl+D cancels at once. See
+[`shims new`](../gateway/cli.md#shims-new-vendor).
 
 **Per-type parameter defaults.** A non-chat shim may declare the request fields its vendor differs on, in a section named after its own model type:
 
@@ -494,6 +528,11 @@ another origin. A manifest that exists but cannot be honoured fails its source
 rather than falling back to scanning, because the fallback would parse exactly
 the tree the manifest bounded. A package without one is scanned as before, and
 selection still applies, by name.
+
+Built-in shims ship no manifest, and `include` / `exclude` do not reach them:
+the wheel fixes their set, so there is no external author whose edit a manifest
+would bound. `shims.disabled` — each row's switch in the panel — is the one that
+narrows them, and it also drops a declined shim from the registry at startup.
 
 #### Mirrors { #mirrors }
 
