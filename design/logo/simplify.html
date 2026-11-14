@@ -70,10 +70,9 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .big-wrap{position:relative;width:340px;height:340px;overflow:hidden;border-radius:10px;touch-action:none}
 .big{width:100%;height:100%;transform-origin:0 0}
 .big svg{width:100%;height:100%}
-/* The inscription sits in its own nested svg so it is parsed once per load;
- * it paints the panel colour and is clipped to the outline, so it reads as
- * grooving rather than as marks on top. */
-.inkLayer{pointer-events:none}
+/* The inscription lives in a hidden <svg><defs> and every view references it
+ * with <use>, so the 5.8 MB of path data is parsed once and never copied. */
+.inkDefs{position:absolute;width:0;height:0;overflow:hidden}
 .ink{fill:var(--panel)}
 /* The reference outline: a constant-width dash whatever the zoom or the export
  * size, so it reads as a measurement rather than as part of the mark. */
@@ -198,16 +197,22 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
       </div>
       <div class="panel">
         <h2>碑文</h2>
+        <label class="row">
+          <span class="k"><span>从网址载入</span></span>
+          <input type="text" id="incUrl" spellcheck="false"
+                 value="https://upload.wikimedia.org/wikipedia/commons/8/86/Rosetta_Stone.svg">
+        </label>
         <div class="actions">
+          <button id="incLoad">载入</button>
           <label class="hint" style="display:flex;align-items:center;gap:6px;margin:0">
-            载入刻痕层 <input type="file" id="incFile" accept=".svg,image/svg+xml">
+            或本地文件 <input type="file" id="incFile" accept=".svg,image/svg+xml">
           </label>
         </div>
         <label class="row">
           <span class="k"><span>显示碑文</span><b id="vInc">关</b></span>
           <input type="checkbox" id="incOn" disabled>
         </label>
-        <p class="hint" id="incHint">刻痕层由 incisions.py 从原版 SVG 生成（约 5.8 MB），只留在本机内存，刷新后要重新载入，也不会写进草稿。显示时它跟着形变与取景走，并裁在轮廓内；导出的 SVG 用 mask 挖出刻痕，换背景仍然成立。</p>
+        <p class="hint" id="incHint">原版 SVG（8.2 MB，Wikimedia，允许跨域）可以直接载入：脚本取走石头轮廓，其余路径就是刻痕。也可以载入 incisions.py 生成的层，或它在 jsDelivr 上的镜像（<code>cdn.jsdelivr.net/gh/…</code>）。层只留在本机内存，刷新后要重新载入，也不会写进草稿；显示时它跟着形变与取景走，裁在轮廓内，主视图和四个尺寸预览都带。</p>
       </div>
       <details class="panel">
         <summary>源路径 <small>（调试用）</small></summary>
@@ -1168,34 +1173,27 @@ const isPinned = (ri, src) =>
  * because a mask cuts the fill and therefore survives a different background,
  * while the preview paints the panel colour and needs the panel to be there. */
 const SVG_NS = "http://www.w3.org/2000/svg";
-let inkLayer = null, inkTr = null, inkClip = null;
+let inkDefsEl = null, inkClip = null;
 
-function buildInkLayer() {
-  inkLayer = document.createElementNS(SVG_NS, "svg");
-  inkLayer.setAttribute("class", "inkLayer");
-  inkLayer.innerHTML =
+/* The layer lives in one hidden <svg><defs> for the whole page: #inkSrc is the
+ * geometry, parsed once, and #inkClip is the outline it is cut to, rewritten on
+ * every render.  Everything that shows the mark — the canvas and every size
+ * preview — references them with <use>, so the path data is never copied. */
+function buildInkDefs() {
+  if (inkDefsEl) inkDefsEl.remove();
+  inkDefsEl = document.createElementNS(SVG_NS, "svg");
+  inkDefsEl.setAttribute("class", "inkDefs");
+  inkDefsEl.innerHTML =
     '<defs><clipPath id="inkClip" clipPathUnits="userSpaceOnUse">'
     + '<polygon id="inkClipPoly" points=""/></clipPath></defs>'
-    + '<g id="inkTr"><g clip-path="url(#inkClip)">'
-    + `<path class="ink" d="${state.inc.d}"/></g></g>`;
-  inkTr = inkLayer.querySelector("#inkTr");
-  inkClip = inkLayer.querySelector("#inkClipPoly");
+    + `<path id="inkSrc" d="${state.inc.d}"/>`;
+  document.body.appendChild(inkDefsEl);
+  inkClip = inkDefsEl.querySelector("#inkClipPoly");
 }
 
 function syncInk() {
-  const host = $("big").querySelector("svg");
-  if (!host) return;
-  if (!state.inc || !state.incOn) {
-    if (inkLayer && inkLayer.parentNode) inkLayer.remove();
-    return;
-  }
-  if (!inkLayer) buildInkLayer();
-  const dotsGroup = host.querySelector("g.dots");
-  if (dotsGroup) host.insertBefore(inkLayer, dotsGroup);
-  else host.appendChild(inkLayer);
-  inkLayer.setAttribute("viewBox", built.viewBox);
-  inkTr.setAttribute("transform",
-    `translate(${fmt(built.tx, 3)},${fmt(built.ty, 3)}) scale(${fmt(built.k, 5)})`);
+  if (!state.inc || !state.incOn) return;
+  if (!inkDefsEl) buildInkDefs();
   const ring = built.deformed[0] || [];
   inkClip.setAttribute("points",
     ring.map(p => `${fmt(p[0], 2)},${fmt(p[1], 2)}`).join(" "));
@@ -1269,8 +1267,13 @@ function svgFor(size, opts = {}) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.viewBox}" width="${size}" height="${size}" color="var(--grid)">`
        + inkDefs + head + grid
        + `<g transform="translate(${fmt(b.tx, 3)},${fmt(b.ty, 3)}) scale(${fmt(b.k, 5)})">${polys}${origPaths}</g>`
-       // The dots keep their own group so the inscription can be inserted
-       // between it and the fill: above the mark, below the clickable vertices.
+       // The carving sits above the fill and below the vertices.  A <use>
+       // reference keeps this string small however large the layer is; the
+       // export inlines a mask instead, because it has to stand alone.
+       + (state.incOn && state.inc && !opts.forExport
+          ? `<g transform="translate(${fmt(b.tx, 3)},${fmt(b.ty, 3)}) scale(${fmt(b.k, 5)})">`
+            + '<g clip-path="url(#inkClip)"><use href="#inkSrc" class="ink"/></g></g>'
+          : "")
        + `<g class="dots" transform="translate(${fmt(b.tx, 3)},${fmt(b.ty, 3)}) scale(${fmt(b.k, 5)})">${dots}</g>`
        + `</svg>`;
 }
@@ -1752,21 +1755,47 @@ $("file").addEventListener("change", async (e) => {
 
 $("resetAll").addEventListener("click", resetAll);
 
-$("incFile").addEventListener("change", async (e) => {
-  const f = e.target.files[0]; if (!f) return;
-  const root = new DOMParser().parseFromString(await f.text(), "image/svg+xml");
-  if (root.querySelector("parsererror")) { toast("刻痕层解析失败"); return; }
-  const ds = [...root.querySelectorAll("path")].map(p => p.getAttribute("d")).filter(Boolean);
-  if (!ds.length) { toast("文件里没有 path"); return; }
-  state.inc = { d: ds.join(""), viewBox: root.documentElement.getAttribute("viewBox") || "0 0 600 600" };
-  state.incName = f.name;
+/* Accept either the original tracing or a layer incisions.py wrote.
+ *
+ * The original draws the stone outline first and the carving after it; a layer
+ * holds the carving alone.  The order is the only reliable marker — the longest
+ * path in the original is a carved glyph (7.3 KB) and not the outline (4.7 KB),
+ * so dropping "the longest" drops a mark and paints the stone as the carving. */
+function takeIncisions(text, name) {
+  const root = new DOMParser().parseFromString(text, "image/svg+xml");
+  if (root.querySelector("parsererror")) throw new Error("不是有效的 SVG");
+  const ds = [...root.querySelectorAll("path")]
+    .map(p => p.getAttribute("d")).filter(Boolean);
+  if (!ds.length) throw new Error("文件里没有 path");
+  const carve = ds.length > 1 ? ds.slice(1) : ds;
+  state.inc = {
+    d: carve.join(""),
+    viewBox: root.documentElement.getAttribute("viewBox") || "0 0 600 600"
+  };
+  state.incName = name;
   state.incOn = true;
-  inkLayer = null;                       // the d changed: rebuild on next render
+  inkDefsEl = null;                     // the d changed: rebuild the defs
   $("incOn").disabled = false;
   $("incOn").checked = true;
   $("vInc").textContent = "开";
   render();
-  toast(`已载入 ${ds.length} 条刻痕（${(state.inc.d.length / 1e6).toFixed(2)} MB）`);
+  toast(`已载入 ${carve.length} 条刻痕（${(state.inc.d.length / 1e6).toFixed(2)} MB）`);
+}
+
+$("incFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try { takeIncisions(await f.text(), f.name); }
+  catch (err) { toast("载入失败：" + err.message); }
+});
+$("incLoad").addEventListener("click", async () => {
+  const url = $("incUrl").value.trim();
+  if (!url) return;
+  try {
+    toast("正在下载…");
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    takeIncisions(await res.text(), url.split("/").pop() || "incisions.svg");
+  } catch (err) { toast("载入失败：" + err.message); }
 });
 $("incOn").addEventListener("change", (e) => {
   state.incOn = e.target.checked;

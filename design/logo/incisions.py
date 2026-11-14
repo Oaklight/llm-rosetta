@@ -30,10 +30,14 @@ No third-party dependencies.
 from __future__ import annotations
 
 import argparse
+import math
 import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import simplify_path as S  # noqa: E402  (sibling tool, same directory)
 
 NUM = re.compile(r"-?(?:\d+\.\d+|\d+\.|\.\d+|\d+)(?:[eE][-+]?\d+)?")
 
@@ -91,6 +95,106 @@ def rect_path(el: ET.Element, precision: int) -> str:
     h = float(el.get("height", 0.0))
     f = f"{{:.{precision}f}}"
     return f"M{f.format(x)},{f.format(y)}h{f.format(w)}v{f.format(h)}h-{f.format(w)}z"
+
+
+def ring_area(ring: list[tuple[float, float]]) -> float:
+    """Unsigned area of one flattened ring (shoelace)."""
+    total = 0.0
+    for i in range(len(ring)):
+        x0, y0 = ring[i]
+        x1, y1 = ring[(i + 1) % len(ring)]
+        total += x0 * y1 - x1 * y0
+    return abs(total) / 2.0
+
+
+def mark_area(rings: list[list[tuple[float, float]]]) -> float:
+    return sum(ring_area(r) for r in rings if len(r) >= 3)
+
+
+def mark_centre(rings: list[list[tuple[float, float]]]) -> tuple[float, float]:
+    """Bounding-box centre of one mark."""
+    xs = [p[0] for r in rings for p in r]
+    ys = [p[1] for r in rings for p in r]
+    return ((min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0)
+
+
+def abstract_square(rings: list[list[tuple[float, float]]], precision: int) -> str:
+    """One square of the same area for one mark.
+
+    At icon sizes a carved glyph is a few pixels across; what survives is the
+    texture of rows of marks, not their shape.  A square of equal area keeps the
+    mass and the position and costs about twenty bytes.
+    """
+    area = mark_area(rings)
+    cx, cy = mark_centre(rings)
+    half = math.sqrt(area) / 2.0 if area > 0 else 0.0
+    f = f"{{:.{precision}f}}"
+
+    def v(x: float) -> str:
+        text = f.format(x)
+        return text
+
+    return f"M{v(cx - half)},{v(cy - half)}h{v(2 * half)}v{v(2 * half)}h{v(-2 * half)}z"
+
+
+def simplify_mark(
+    rings: list[list[tuple[float, float]]], points: int, precision: int
+) -> str:
+    """Each mark's outline cut to a few vertices, as path data."""
+    out = []
+    for ring in rings:
+        if len(ring) < 3:
+            continue
+        red = S.reduce_to_budget(
+            ring, min(points, len(ring)), "visvalingam", True, frozenset(), 10.0
+        )
+        if len(red) < 3:
+            continue
+        pts = " ".join(
+            f"{value:.{precision}f},{value2:.{precision}f}" for value, value2 in red
+        )
+        out.append("M" + pts.replace(" ", "L") + "Z")
+    return "".join(out)
+
+
+def cook(
+    raw: list[str],
+    *,
+    precision: int,
+    tolerance: float,
+    simplify_points: int,
+    abstract: bool,
+    min_area: float,
+    step: int,
+) -> tuple[list[str], int]:
+    """Turn the raw marks into the layer's subpaths.
+
+    ``--min-area`` and ``--step`` trim; ``--simplify`` and ``--abstract`` shrink
+    what is left.  The exact mode never flattens, so a layer nobody asked to
+    reduce stays the tracing it came from.
+    """
+    out: list[str] = []
+    kept = 0
+    for index, d in enumerate(raw):
+        if step > 1 and index % step:
+            continue
+        if min_area > 0 or simplify_points or abstract:
+            try:
+                rings = S.flatten(S.parse_path(d), tolerance)
+            except Exception:
+                continue
+            if min_area > 0 and mark_area(rings) < min_area:
+                continue
+            if abstract:
+                out.append(abstract_square(rings, precision))
+            elif simplify_points:
+                out.append(simplify_mark(rings, simplify_points, precision))
+            else:
+                out.append(d)
+        else:
+            out.append(d)
+        kept += 1
+    return out, kept
 
 
 def extract(src: Path, drop_first: bool, precision: int) -> tuple[list[str], str]:
@@ -156,6 +260,38 @@ def build_parser() -> argparse.ArgumentParser:
         default=2,
         help="coordinate decimals, -1 to leave the numbers as written (default: 2)",
     )
+    p.add_argument(
+        "--tolerance",
+        type=float,
+        default=0.1,
+        help="flattening tolerance for --min-area / --simplify / --abstract (default: 0.1)",
+    )
+    p.add_argument(
+        "--min-area",
+        type=float,
+        default=0.0,
+        metavar="A",
+        help="drop marks whose area is below A (source units squared)",
+    )
+    p.add_argument(
+        "--step",
+        type=int,
+        default=1,
+        metavar="N",
+        help="keep every Nth mark (default: 1, keep all)",
+    )
+    p.add_argument(
+        "--simplify",
+        type=int,
+        default=0,
+        metavar="POINTS",
+        help="cut each mark's outline to at most POINTS vertices",
+    )
+    p.add_argument(
+        "--abstract",
+        action="store_true",
+        help="replace each mark with a square of the same area (texture at icon sizes)",
+    )
     p.add_argument("--stats", action="store_true", help="print counts and bytes")
     return p
 
@@ -165,11 +301,30 @@ def main(argv: list[str] | None = None) -> int:
     paths, view_box = extract(args.src, not args.keep_silhouette, args.precision)
     if not paths:
         raise SystemExit(f"no path elements found in {args.src}")
+    total = len(paths)
+    paths, kept = cook(
+        paths,
+        precision=args.precision,
+        tolerance=args.tolerance,
+        simplify_points=args.simplify,
+        abstract=args.abstract,
+        min_area=args.min_area,
+        step=args.step,
+    )
+    if not paths:
+        raise SystemExit("every mark was filtered out; relax --min-area/--step")
     svg = build(paths, view_box)
     if args.stats:
         data = sum(len(p) for p in paths)
+        mode = (
+            "abstract"
+            if args.abstract
+            else f"simplify {args.simplify}"
+            if args.simplify
+            else "exact"
+        )
         print(
-            f"{len(paths)} paths, {data / 1e6:.2f} MB of path data, "
+            f"{kept}/{total} marks, {mode}, {data / 1e6:.2f} MB of path data, "
             f"{len(svg) / 1e6:.2f} MB of SVG, viewBox {view_box}"
         )
     if args.out:
