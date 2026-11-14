@@ -12,7 +12,7 @@ Argo is Argonne National Laboratory's internal API gateway, providing access to 
     ```
 
     The package registers the same canonical names, so provider configs do not
-    change. **Settings → Shim Sources** offers the source as a preset. See
+    change. **Gateway → Shims → Available** offers the package as a card. See
     [Standalone shim packages](../shims.md#standalone-shim-packages).
 
 ## Endpoints

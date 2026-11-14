@@ -704,16 +704,16 @@ now ships in the keyless free-endpoint package, under an unchanged shim name.
 Their packages register the same canonical shim names, so a provider's `shim`
 value does not change — only the source declaration is new.
 
-**Preload a package by clicking it.** **Settings → Shims** opens one dropdown
-of every known standalone package, each row carrying its name and shim count
-with the repository on hover; free resources are listed above paid packages.
-Clicking a row adds or removes it from `shims.presets` — but nothing is written
-until **Save**, which is why the pane keeps a guide beside the picker and an
-*Unsaved changes* note next to the button. Save writes the same
-comma-separated list of keys you can also write by hand. A key the running
-catalog does not know gets no row, but it stays in the declaration and the
-trigger still names it, so a config written against a newer catalog is not
-silently rewritten.
+**Install a package from its card.** **Gateway → Shims → Available** shows one
+card per known standalone package, each with a tier chip — **free**, **paid**
+or **subscription** — its shim count and the repository on hover. Free
+resources sort above the rest, and the toolbar's tier dropdown narrows the grid
+to one tier. Ticking shims on a card and pressing **Install** adds the key to
+`shims.presets` and writes the selection beside it; a card that is already
+installed shows *loaded* / *not loaded* per shim and offers **Update**,
+**Add provider** and **Remove**. A key the running catalog does not know has no
+card, but it stays in the declaration and the startup warning still names it,
+so a config written against a newer catalog is not silently rewritten.
 
 **Check whether a remote has moved.** A remote source is fetched once and
 pinned to the commit it came from, so a later run reuses that commit even when
@@ -759,11 +759,19 @@ because none of them is tagged yet: a remote without a `ref` resolves `HEAD` to
 a commit once and records it in the cache stamp. Once they are tagged, pin the
 tag — see [Ref resolution](../gateway/configuration.md#external-shim-sources).
 
-**Settings → Shim Sources** offers every catalog package in one dropdown — a
-row per package, free resources first — and saving writes `presets` or the
-expanded remote to the config. A config that still names one of these shims without a
+**Gateway → Shims → Available** offers every catalog package as a card, free
+resources first, and installing one writes `presets` plus the selection to the
+config. A config that still names one of these shims without a
 declared source gets a startup error naming the package, the preset and the
 expanded remote; once the source loads, the error goes away.
+
+**CI keeps the catalog in step.** `scripts/dev/check_shim_catalog.py` lists the
+`llm-rosetta-shim-*` and `llm-rosetta-shims-*` repositories the account
+publishes, compares them with `SHIM_SOURCE_PACKAGES`, and prints the entry to
+paste when a package is missing or its `repo` has moved. It runs in the
+`shim-catalog` CI job on every push (with a token, so a private repository is
+seen too) and exits non-zero on drift, so a published package cannot go
+unlisted for a release.
 
 Legacy spellings do **not** resolve to a shim any more: `argo--openai_chat`,
 `argo--anthropic` and `argo--openai_responses` were aliases of the built-in
@@ -823,7 +831,7 @@ Override the `default_base_url` in your gateway config:
 ```
 
 !!! note
-    The default URL (`https://apps.inside.anl.gov/argoapi/`) is only reachable from within the ANL network. The three Argo shims ship in the standalone [`llm-rosetta-shim-argo`](https://github.com/Oaklight/llm-rosetta-shim-argo) package — declare `"shims": {"presets": ["argo"]}` and the names in your config keep working. **Settings → Shim Sources** offers that source as a preset.
+    The default URL (`https://apps.inside.anl.gov/argoapi/`) is only reachable from within the ANL network. The three Argo shims ship in the standalone [`llm-rosetta-shim-argo`](https://github.com/Oaklight/llm-rosetta-shim-argo) package — declare `"shims": {"presets": ["argo"]}` and the names in your config keep working. **Gateway → Shims → Available** offers that package as a card.
 
 ## Reasoning Configuration
 

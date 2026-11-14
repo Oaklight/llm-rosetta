@@ -8,7 +8,7 @@ ALCF (Argonne Leadership Computing Facility) Inference Service is supported thro
     [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf)
     package. Declare it with `shims.presets` (or the equivalent
     `shims.remotes` entry) and the names below keep working.
-    **Settings → Shim Sources** offers the same entry as a one-click preset.
+    **Gateway → Shims → Available** offers the same entry as a one-click install.
 
     ```jsonc
     "shims": { "presets": ["alcf"] }
