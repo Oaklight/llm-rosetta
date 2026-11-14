@@ -14,6 +14,12 @@
   --bg:#0b0f16; --panel:#111823; --fg:#e2e8f0; --dim:#94a3b8; --line:#1e293b;
   --accent:#6ea8fe; --chip:#182130; --grid:#e2e8f0;
 }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]):not([data-theme="dark"]){
+    --bg:#0b0f16; --panel:#111823; --fg:#e2e8f0; --dim:#94a3b8; --line:#1e293b;
+    --accent:#6ea8fe; --chip:#182130; --grid:#e2e8f0;
+  }
+}
 *{box-sizing:border-box}
 body{margin:0;font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
   background:var(--bg);color:var(--fg);min-height:100vh}
@@ -21,14 +27,31 @@ header{display:flex;align-items:center;gap:14px;padding:18px 24px;border-bottom:
 header h1{font-size:16px;margin:0;font-weight:650;letter-spacing:-.01em}
 header p{margin:0;color:var(--dim);font-size:12.5px}
 header .spacer{flex:1}
-main{display:grid;grid-template-columns:340px minmax(0,1fr);gap:20px;padding:20px 24px;align-items:start}
-@media (max-width:960px){main{grid-template-columns:1fr}}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+main{display:grid;grid-template-columns:320px minmax(0,1fr) 320px;gap:16px;padding:16px 20px;align-items:start}
+.col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.col .panel + .panel{margin-top:0}
+@media (max-width:1500px){
+  main{grid-template-columns:320px minmax(0,1fr)}
+  .left{grid-column:1;grid-row:1 / span 3}
+  .center{grid-column:2;grid-row:1}
+  .right{grid-column:2;grid-row:2}
+}
+@media (max-width:980px){
+  main{grid-template-columns:1fr}
+  .left,.center,.right{grid-column:1;grid-row:auto}
+  .center{order:-1}
+}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px}
 .panel + .panel{margin-top:14px}
-.panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:0 0 12px}
-label.row{display:block;margin-bottom:13px}
+.panel summary{cursor:pointer;list-style:none;font-size:12px;text-transform:uppercase;
+  letter-spacing:.06em;color:var(--dim);margin:0}
+.panel summary::-webkit-details-marker{display:none}
+.panel summary::before{content:"▸ "}.panel[open] summary::before{content:"▾ "}
+.panel[open] summary{margin-bottom:10px}
+.panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:0 0 10px}
+label.row{display:block;margin-bottom:9px}
 label.row:last-child{margin-bottom:0}
-.k{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px}
+.k{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:4px}
 .k b{font-variant-numeric:tabular-nums;font-weight:600}
 .k small{color:var(--dim);font-weight:400}
 input[type=range]{width:100%;accent-color:var(--accent)}
@@ -38,12 +61,12 @@ textarea{min-height:80px;resize:vertical;font-family:ui-monospace,SFMono-Regular
 .seg{display:flex;gap:6px;flex-wrap:wrap}
 .seg button{flex:1;min-width:78px}
 button{background:var(--chip);color:var(--fg);border:1px solid var(--line);border-radius:8px;
-  padding:7px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+  padding:6px 9px;font:inherit;font-size:12.5px;cursor:pointer}
 button:hover{border-color:var(--accent)}
 button.on{background:var(--accent);border-color:var(--accent);color:#fff}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.stage{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;display:grid;place-items:center}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;place-items:center}
 .big-wrap{position:relative;width:340px;height:340px;overflow:hidden;border-radius:10px;touch-action:none}
 .big{width:100%;height:100%;transform-origin:0 0}
 .big svg{width:100%;height:100%}
@@ -54,7 +77,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .view-bar b{color:var(--fg)}
 .view-bar button{padding:3px 10px;font-size:11.5px}
 .view-bar .hint{margin:0}
-.sizes{display:flex;gap:16px;align-items:end;justify-content:center;margin-top:18px;flex-wrap:wrap}
+.sizes{display:flex;gap:16px;align-items:end;justify-content:center;margin-top:14px;flex-wrap:wrap}
 .sizes figure{margin:0;text-align:center}
 .sizes figcaption{font-size:11px;color:var(--dim);margin-top:6px;font-variant-numeric:tabular-nums}
 .sizes .box{display:grid;place-items:center;border:1px dashed var(--line);border-radius:10px;padding:6px}
@@ -91,183 +114,180 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
 </header>
 
 <main>
-  <section>
-    <div class="panel">
-      <h2>简化</h2>
-      <label class="row">
-        <span class="k"><span>顶点预算</span><b id="vPoints">48</b></span>
-        <input type="range" id="points" min="6" max="96" step="1" value="48">
-        <small class="hint">64 以上肉眼几乎无差别；真正的差别在形变。</small>
-      </label>
-      <label class="row">
-        <span class="k"><span>结构锚点 <small>不可删除</small></span><b id="vAnchor">12</b></span>
-        <input type="range" id="anchor" min="0" max="28" step="1" value="12">
-      </label>
-      <label class="row">
-        <span class="k"><span>锚点来源</span></span>
-        <select id="anchorMode">
-          <option value="area">按面积（大弧线）</option>
-          <option value="corner">按转角（尖角）</option>
-          <option value="depth">按凹陷深度（缺口）</option>
-          <option value="hybrid">混合（面积 + 深度）</option>
-        </select>
-      </label>
-      <label class="row">
-        <span class="k"><span>算法</span></span>
-        <select id="method">
-          <option value="visvalingam">Visvalingam（按面积）</option>
-          <option value="douglas">Douglas–Peucker（按偏离）</option>
-        </select>
-      </label>
-      <label class="row">
-        <span class="k"><span>曲线精度</span><b id="vTol">0.05</b></span>
-        <input type="range" id="tol" min="0.02" max="0.60" step="0.01" value="0.05">
-      </label>
-    </div>
-
-    <div class="panel">
-      <h2>形变</h2>
-      <label class="row">
-        <span class="k"><span>旋转</span><b id="vRot">0°</b></span>
-        <input type="range" id="rotate" min="-20" max="20" step="0.5" value="0">
-      </label>
-      <label class="row">
-        <span class="k"><span>横向拉伸</span><b id="vAspect">1.00</b></span>
-        <input type="range" id="aspect" min="0.75" max="1.25" step="0.01" value="1">
-      </label>
-      <label class="row">
-        <span class="k"><span>膨胀 / 收缩</span><b id="vInflate">0.00</b></span>
-        <input type="range" id="inflate" min="-0.08" max="0.08" step="0.005" value="0">
-      </label>
-      <label class="row">
-        <span class="k"><span>圆角平滑</span><b id="vSmooth">0</b></span>
-        <input type="range" id="smooth" min="0" max="4" step="1" value="0">
-      </label>
-      <label class="row">
-        <span class="k"><span>对称化</span><b id="vSym">0%</b></span>
-        <input type="range" id="sym" min="0" max="1" step="0.02" value="0">
-      </label>
-      <label class="row">
-        <span class="k"><span>网格化 <small>0 = 关</small></span><b id="vSnap">0</b></span>
-        <input type="range" id="snap" min="0" max="28" step="1" value="0">
-      </label>
-    </div>
-
-    <div class="panel">
-      <h2>取景与画布</h2>
-      <label class="row">
-        <span class="k"><span>取景</span></span>
-        <div class="seg">
-          <button id="frameSquare" class="on">方形画布</button>
-          <button id="frameTight">紧贴外框</button>
-        </div>
-      </label>
-      <label class="row">
-        <span class="k"><span>光学尺寸 scale</span><b id="vScale">0.88</b></span>
-        <input type="range" id="scale" min="0.40" max="1.00" step="0.005" value="0.88">
-      </label>
-      <label class="row">
-        <span class="k"><span>画布边长</span><b id="vCanvas">600</b></span>
-        <input type="range" id="canvas" min="200" max="1024" step="8" value="600">
-        <small class="hint">画布只改导出坐标系与网格刻度，屏幕上的视觉大小由 scale 决定。</small>
-      </label>
-      <label class="row">
-        <span class="k"><span>紧贴内边距</span><b id="vPad">0.04</b></span>
-        <input type="range" id="pad" min="0" max="0.16" step="0.01" value="0.04">
-      </label>
-      <label class="row">
-        <span class="k"><span>显示</span></span>
-        <div class="seg">
-          <button id="tGrid" class="on">网格</button>
-          <button id="tDots" class="on">顶点</button>
-        </div>
-      </label>
-      <label class="row">
-        <span class="k"><span>填充色（浅色 / 深色）</span></span>
-        <div class="seg">
-          <input type="text" id="fill" value="#1e293b" aria-label="浅色填充">
-          <input type="text" id="darkFill" value="#ededed" aria-label="深色填充">
-        </div>
-      </label>
-    </div>
-
-    <div class="panel">
-      <h2>预设</h2>
-      <div class="seg">
-        <button data-preset="app">应用图标</button>
-        <button data-preset="favicon">favicon</button>
-        <button data-preset="readme">README</button>
-        <button data-preset="docs">docs</button>
-      </div>
-      <p class="hint">点击实心顶点 = 添加锚点；点击橙色锚点 = 取消。空心点为候选点（当前预算下未进入轮廓），也可点选。</p>
-    </div>
-
-    <div class="panel">
-      <h2>导出</h2>
-      <div class="actions">
-        <button class="primary" id="dl">下载 SVG</button>
-        <button id="copySvg">复制 SVG</button>
-        <button id="copyCli">复制等价命令</button>
-      </div>
-      <div class="actions">
-        <button id="saveDraft">保存草稿</button>
-        <button id="loadDraft" disabled>载入草稿</button>
-        <button id="exportDraft">导出草稿</button>
-        <button id="importDraft">导入草稿</button>
-      </div>
-      <input type="file" id="draftFile" accept="application/json,.json" hidden>
-      <p class="hint" id="draftHint">草稿存在本机浏览器，换电脑请用导出 / 导入。</p>
-    </div>
-  </section>
-
-  <section>
-    <div class="stage">
-      <div class="big-wrap" id="bigWrap">
-        <div class="big" id="big"></div>
-      </div>
-      <div class="view-bar" id="viewBar">
-        <span>视图 <b id="zoomPct">100%</b></span>
-        <button id="zoomReset" title="缩放与平移复位">重置视图</button>
-        <span class="hint">Ctrl+滚轮缩放，拖动平移，双击复位</span>
-      </div>
-      <div class="sizes" id="sizes"></div>
-      <div class="stats">
-        <span>源点 <b id="sIn">—</b></span>
-        <span>输出顶点 <b id="sOut">—</b></span>
-        <span>固定 <b id="sPin">—</b></span>
-        <span>SVG <b id="sBytes">—</b></span>
-        <span>viewBox <b id="sVb">—</b></span>
-        <span>网格 <b id="sCell">—</b></span>
-      </div>
-    </div>
-
-    <div class="panel">
-      <h2>已发布副本对照</h2>
-      <table>
-        <thead><tr><th>位置</th><th>scale</th><th>取景</th><th>填充</th><th>备注</th></tr></thead>
-        <tbody>
-          <tr><td>README</td><td class="num">0.835</td><td>600 方框</td><td><code>#1e293b / #ededed</code></td><td>深浅两份文件字节相同</td></tr>
-          <tr><td>docs 站头</td><td class="num">0.934</td><td>600 方框</td><td><code>currentColor</code></td><td>跟随页面主题</td></tr>
-          <tr><td>docs favicon</td><td class="num">0.934</td><td>600 方框</td><td><code>#1a1a1a / #ededed</code></td><td>—</td></tr>
-          <tr><td>gateway favicon</td><td class="num">裁剪</td><td><code>30 15 490 500</code></td><td><code>#666</code></td><td>底部被切掉约 78 单位</td></tr>
-          <tr><td>gateway 顶栏</td><td class="num">裁剪</td><td><code>30 15 490 500</code></td><td><code>currentColor</code></td><td>同上</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="panel">
-      <h2>源路径</h2>
-      <textarea id="src" spellcheck="false"></textarea>
-      <div class="actions">
-        <button id="applySrc">应用</button>
-        <button id="resetSrc">恢复内置石形</button>
-        <button id="clearPins">清除手动锚点</button>
-        <label class="hint" style="display:flex;align-items:center;gap:6px;margin:0">
-          载入 SVG <input type="file" id="file" accept=".svg,image/svg+xml">
+  <div class="col left">
+      <div class="panel">
+        <h2>简化</h2>
+        <label class="row">
+          <span class="k"><span>顶点预算</span><b id="vPoints">48</b></span>
+          <input type="range" id="points" min="6" max="96" step="1" value="48">
+          <small class="hint">64 以上肉眼几乎无差别；真正的差别在形变。</small>
+        </label>
+        <label class="row">
+          <span class="k"><span>结构锚点 <small>不可删除</small></span><b id="vAnchor">12</b></span>
+          <input type="range" id="anchor" min="0" max="28" step="1" value="12">
+        </label>
+        <label class="row">
+          <span class="k"><span>锚点来源</span></span>
+          <select id="anchorMode">
+            <option value="area">按面积（大弧线）</option>
+            <option value="corner">按转角（尖角）</option>
+            <option value="depth">按凹陷深度（缺口）</option>
+            <option value="hybrid">混合（面积 + 深度）</option>
+          </select>
+        </label>
+        <label class="row">
+          <span class="k"><span>算法</span></span>
+          <select id="method">
+            <option value="visvalingam">Visvalingam（按面积）</option>
+            <option value="douglas">Douglas–Peucker（按偏离）</option>
+          </select>
+        </label>
+        <label class="row">
+          <span class="k"><span>曲线精度</span><b id="vTol">0.05</b></span>
+          <input type="range" id="tol" min="0.02" max="0.60" step="0.01" value="0.05">
         </label>
       </div>
-    </div>
-  </section>
+      <div class="panel">
+        <h2>预设</h2>
+        <div class="seg">
+          <button data-preset="app">应用图标</button>
+          <button data-preset="favicon">favicon</button>
+          <button data-preset="readme">README</button>
+          <button data-preset="docs">docs</button>
+        </div>
+        <p class="hint">点击实心顶点 = 添加锚点；点击橙色锚点 = 取消。空心点为候选点（当前预算下未进入轮廓），也可点选。</p>
+      </div>
+      <div class="panel">
+        <h2>导出</h2>
+        <div class="actions">
+          <button class="primary" id="dl">下载 SVG</button>
+          <button id="copySvg">复制 SVG</button>
+          <button id="copyCli">复制等价命令</button>
+        </div>
+        <div class="actions">
+          <button id="saveDraft">保存草稿</button>
+          <button id="loadDraft" disabled>载入草稿</button>
+          <button id="exportDraft">导出草稿</button>
+          <button id="importDraft">导入草稿</button>
+        </div>
+        <input type="file" id="draftFile" accept="application/json,.json" hidden>
+        <p class="hint" id="draftHint">草稿存在本机浏览器，换电脑请用导出 / 导入。</p>
+      </div>
+      <details class="panel">
+        <summary>源路径 <small>（调试用）</small></summary>
+        <textarea id="src" spellcheck="false"></textarea>
+        <div class="actions">
+          <button id="applySrc">应用</button>
+          <button id="resetSrc">恢复内置石形</button>
+          <button id="clearPins">清除手动锚点</button>
+          <label class="hint" style="display:flex;align-items:center;gap:6px;margin:0">
+            载入 SVG <input type="file" id="file" accept=".svg,image/svg+xml">
+          </label>
+        </div>
+      </div>
+  </div>
+
+  <div class="col center">
+      <div class="stage">
+        <div class="big-wrap" id="bigWrap">
+          <div class="big" id="big"></div>
+        </div>
+        <div class="view-bar" id="viewBar">
+          <span>视图 <b id="zoomPct">100%</b></span>
+          <button id="zoomReset" title="缩放与平移复位">重置视图</button>
+          <span class="hint">Ctrl+滚轮缩放，拖动平移，双击复位</span>
+        </div>
+        <div class="sizes" id="sizes"></div>
+        <div class="stats">
+          <span>源点 <b id="sIn">—</b></span>
+          <span>输出顶点 <b id="sOut">—</b></span>
+          <span>固定 <b id="sPin">—</b></span>
+          <span>SVG <b id="sBytes">—</b></span>
+          <span>viewBox <b id="sVb">—</b></span>
+          <span>网格 <b id="sCell">—</b></span>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>已发布副本对照</h2>
+        <table>
+          <thead><tr><th>位置</th><th>scale</th><th>取景</th><th>填充</th><th>备注</th></tr></thead>
+          <tbody>
+            <tr><td>README</td><td class="num">0.835</td><td>600 方框</td><td><code>#1e293b / #ededed</code></td><td>深浅两份文件字节相同</td></tr>
+            <tr><td>docs 站头</td><td class="num">0.934</td><td>600 方框</td><td><code>currentColor</code></td><td>跟随页面主题</td></tr>
+            <tr><td>docs favicon</td><td class="num">0.934</td><td>600 方框</td><td><code>#1a1a1a / #ededed</code></td><td>—</td></tr>
+            <tr><td>gateway favicon</td><td class="num">裁剪</td><td><code>30 15 490 500</code></td><td><code>#666</code></td><td>底部被切掉约 78 单位</td></tr>
+            <tr><td>gateway 顶栏</td><td class="num">裁剪</td><td><code>30 15 490 500</code></td><td><code>currentColor</code></td><td>同上</td></tr>
+          </tbody>
+        </table>
+      </div>
+  </div>
+
+  <div class="col right">
+      <div class="panel">
+        <h2>形变</h2>
+        <label class="row">
+          <span class="k"><span>旋转</span><b id="vRot">0°</b></span>
+          <input type="range" id="rotate" min="-20" max="20" step="0.5" value="0">
+        </label>
+        <label class="row">
+          <span class="k"><span>横向拉伸</span><b id="vAspect">1.00</b></span>
+          <input type="range" id="aspect" min="0.75" max="1.25" step="0.01" value="1">
+        </label>
+        <label class="row">
+          <span class="k"><span>膨胀 / 收缩</span><b id="vInflate">0.00</b></span>
+          <input type="range" id="inflate" min="-0.08" max="0.08" step="0.005" value="0">
+        </label>
+        <label class="row">
+          <span class="k"><span>圆角平滑</span><b id="vSmooth">0</b></span>
+          <input type="range" id="smooth" min="0" max="4" step="1" value="0">
+        </label>
+        <label class="row">
+          <span class="k"><span>对称化</span><b id="vSym">0%</b></span>
+          <input type="range" id="sym" min="0" max="1" step="0.02" value="0">
+        </label>
+        <label class="row">
+          <span class="k"><span>网格化 <small>0 = 关</small></span><b id="vSnap">0</b></span>
+          <input type="range" id="snap" min="0" max="28" step="1" value="0">
+        </label>
+      </div>
+      <div class="panel">
+        <h2>取景与画布</h2>
+        <label class="row">
+          <span class="k"><span>取景</span></span>
+          <div class="seg">
+            <button id="frameSquare" class="on">方形画布</button>
+            <button id="frameTight">紧贴外框</button>
+          </div>
+        </label>
+        <label class="row">
+          <span class="k"><span>光学尺寸 scale</span><b id="vScale">0.88</b></span>
+          <input type="range" id="scale" min="0.40" max="1.00" step="0.005" value="0.88">
+        </label>
+        <label class="row">
+          <span class="k"><span>画布边长</span><b id="vCanvas">600</b></span>
+          <input type="range" id="canvas" min="200" max="1024" step="8" value="600">
+          <small class="hint">画布只改导出坐标系与网格刻度，屏幕上的视觉大小由 scale 决定。</small>
+        </label>
+        <label class="row">
+          <span class="k"><span>紧贴内边距</span><b id="vPad">0.04</b></span>
+          <input type="range" id="pad" min="0" max="0.16" step="0.01" value="0.04">
+        </label>
+        <label class="row">
+          <span class="k"><span>显示</span></span>
+          <div class="seg">
+            <button id="tGrid" class="on">网格</button>
+            <button id="tDots" class="on">顶点</button>
+          </div>
+        </label>
+        <label class="row">
+          <span class="k"><span>填充色（浅色 / 深色）</span></span>
+          <div class="seg">
+            <input type="text" id="fill" value="#1e293b" aria-label="浅色填充">
+            <input type="text" id="darkFill" value="#ededed" aria-label="深色填充">
+          </div>
+        </label>
+      </div>
+  </div>
 </main>
 <div class="toast" id="toast"></div>
 
@@ -763,6 +783,21 @@ function build() {
   return built;
 }
 
+function isDarkTheme() {
+  const explicit = document.documentElement.getAttribute("data-theme");
+  if (explicit === "dark") return true;
+  if (explicit === "light") return false;
+  return !!(window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+}
+
+// The preview paints with the resolved fill of the current theme, so a dark
+// page shows the light mark and a light page the dark one. The exported SVG
+// keeps the media query instead, so the file adapts wherever it is used.
+function markFill(forExport) {
+  if (forExport) return null;
+  return isDarkTheme() ? (state.darkFill || state.fill) : state.fill;
+}
+
 const isPinned = (ri, src) =>
   (state.pins.has(src) || built.autoByRing[ri].has(src)) && !state.unpins.has(src);
 
@@ -771,7 +806,13 @@ function svgFor(size, opts = {}) {
   const b = built;
   const vb = b.viewBox.split(" ");
   const unit = parseFloat(vb[2]) / 10;
-  const head = `<style>.m{fill:${state.fill}}@media(prefers-color-scheme:dark){.m{fill:${state.darkFill}}}`
+  const fill = markFill(!!opts.forExport);
+  const markCss = fill !== null
+    ? `.m{fill:${fill}}`
+    : (state.darkFill
+        ? `.m{fill:${state.fill}}@media(prefers-color-scheme:dark){.m{fill:${state.darkFill}}}`
+        : `.m{fill:${state.fill}}`);
+  const head = `<style>${markCss}`
              + `.dot{fill:var(--accent)}.ghost{fill:none;stroke:var(--grid);stroke-opacity:.45}`
              + `.pin{fill:#e8890c;stroke:#fff}.pin-ghost{fill:none;stroke:#e8890c}</style>`;
   let grid = "";
@@ -823,7 +864,7 @@ function render() {
   $("sOut").textContent = built.outN;
   $("sPin").textContent = built.dots.reduce((acc, ring, ri) =>
     acc + ring.filter((_, i) => isPinned(ri, built.dotSrcs[ri][i])).length, 0);
-  $("sBytes").textContent = `${new Blob([svgFor(600)]).size} B`;
+  $("sBytes").textContent = `${new Blob([svgFor(600, { forExport: true })]).size} B`;
   $("sVb").textContent = built.viewBox;
   const cell = parseFloat(built.viewBox.split(" ")[2]) / 10;
   $("sCell").textContent = state.tight ? "—" : fmt(cell, 2) + " / 格";
@@ -1078,7 +1119,7 @@ document.querySelectorAll("[data-preset]").forEach(btn => btn.addEventListener("
 }));
 
 $("dl").addEventListener("click", () => {
-  const blob = new Blob([svgFor(state.tight ? 512 : state.canvas)], { type: "image/svg+xml" });
+  const blob = new Blob([svgFor(state.tight ? 512 : state.canvas, { forExport: true })], { type: "image/svg+xml" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = `rosetta-mark-${state.points}.svg`;
@@ -1086,7 +1127,7 @@ $("dl").addEventListener("click", () => {
   URL.revokeObjectURL(a.href);
 });
 $("copySvg").addEventListener("click", async () => {
-  await navigator.clipboard.writeText(svgFor(state.tight ? 512 : state.canvas));
+  await navigator.clipboard.writeText(svgFor(state.tight ? 512 : state.canvas, { forExport: true }));
   toast("SVG 已复制");
 });
 $("copyCli").addEventListener("click", async () => {
@@ -1148,9 +1189,14 @@ $("draftFile").addEventListener("change", async (e) => {
   e.target.value = "";
 });
 $("themeBtn").addEventListener("click", () => {
-  const cur = document.documentElement.getAttribute("data-theme");
-  document.documentElement.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
+  document.documentElement.setAttribute("data-theme", isDarkTheme() ? "light" : "dark");
+  render();
 });
+if (window.matchMedia) {
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => {
+    if (!document.documentElement.getAttribute("data-theme")) render();
+  });
+}
 
 pullUI();
 render();
