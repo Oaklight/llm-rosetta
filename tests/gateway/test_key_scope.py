@@ -156,3 +156,60 @@ async def test_an_unscoped_key_still_reads_the_whole_listing(unscoped):
 
     assert status == 200
     assert b'"m-a"' in payload and b'"m-b"' in payload
+
+
+class TestTheAdminAnswersWhatItStored:
+    async def test_an_empty_allowlist_comes_back_empty(self, tmp_path):
+        keys_db = tmp_path / "keys.db"
+        store = await KeyStore.create(keys_db)
+        await store.close()
+        config = GatewayConfig(
+            {
+                "providers": PROVIDERS,
+                "models": MODELS,
+                "server": {
+                    "data_dir": str(tmp_path / "data"),
+                    "api_keys_db": str(keys_db),
+                },
+            }
+        )
+        app = await create_app(config)
+        listener = await asyncio.start_server(app._handle_connection, "127.0.0.1", 0)
+        port = listener.sockets[0].getsockname()[1]
+
+        async def post(path, body, method="POST"):
+            import json
+
+            raw = json.dumps(body).encode()
+            head = [
+                f"{method} {path} HTTP/1.1",
+                "Host: test",
+                "Connection: close",
+                f"Content-Length: {len(raw)}",
+                "Content-Type: application/json",
+            ]
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.write("\r\n".join(head).encode() + b"\r\n\r\n" + raw)
+            await writer.drain()
+            data = await reader.read()
+            writer.close()
+            _, _, payload = data.partition(b"\r\n\r\n")
+            return json.loads(payload or b"{}")
+
+        try:
+            created = await post(
+                "/admin/api/keys", {"label": "empty", "allowed_models": []}
+            )
+            assert created["key"]["allowed_models"] == []
+            key_id = created["key"]["id"]
+            updated = await post(
+                f"/admin/api/keys/{key_id}",
+                {"label": "renamed", "allowed_models": []},
+                method="PUT",
+            )
+            # The answer repeats what the store holds: `[]` is a key that may
+            # call no model, and `["*"]` is the opposite.
+            assert updated["allowed_models"] == []
+        finally:
+            listener.close()
+            await listener.wait_closed()
