@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import zlib
+from dataclasses import replace
 
 import pytest
 
@@ -539,6 +540,12 @@ class TestDumpQueryFilters:
             status_code=500,
             duration_ms=10.0,
         )
+        # The search is a case-insensitive substring of the dump id and the
+        # request_log_id, and create() takes a uuid4 hex.  A random id draws
+        # "abc" about once in a hundred and forty runs, which matched the row
+        # that is supposed to stay out of the result.  The id is pinned to
+        # something hex-legal and free of those letters.
+        log_entry = replace(log_entry, id="e" + "0" * 31)
         await persistence.insert_log_entries([log_entry.to_dict()])
         await self._insert(persistence, dump_id="dump-abc")
         await self._insert(persistence, dump_id="dump-def", request_log_id=log_entry.id)
