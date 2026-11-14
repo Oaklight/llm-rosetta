@@ -104,6 +104,39 @@ An entry whose key slot holds the literal `token_command` — a label the previo
 
 A provider save or an enable builds the affected providers in memory before anything is written. A document the loader rejects returns 400 and leaves the config file untouched, instead of reporting "Config saved but reload failed" after the damage.
 
+## Shims { #shims }
+
+**Shims** sits under **Providers** in the rail, because a provider is a shim plus a credential. Three views of one catalogue:
+
+| View | Holds |
+|------|-------|
+| **Installed** | Every registered shim, grouped by vendor — one card per vendor, one row per format — with its model type tag, the providers using it and a switch that declares it enabled or disabled |
+| **Available** | The standalone packages this build knows about, with their formats, whether each is installed, and an install action |
+| **Sources** | Where shims load from: the built-in switch, the `presets` / `remotes` / `paths` editors, and each source's state |
+
+A vendor's shims share one logo and one heading; a row stays one per shim, because enable, add-provider and the switch act on a shim. The filter box narrows by shim, vendor and format, and a vendor is LLM-first then alphabetical.
+
+**Add provider from a row.** The **+** on a shim row and **Add provider** on a package card open the provider form with the id suggested from the vendor (unique against the configured providers), the shim's own base URL, the shim selected, and the capability it serves ticked — an LLM shim in the type tree, any other in its endpoint section. The id rule and the capability tick live in one function, so every entry point lands in a form that can be saved.
+
+**Sources** carries the top-level `shims` section (see [External Shim Sources](configuration.md#external-shim-sources)): **Directories** (one per line), **Preload presets** (a dropdown of catalog packages), **Remotes** (a JSON array), and the remaining knobs — cache directory, re-fetch TTL and fail-startup-on-a-bad-source. **Save** persists the section and re-applies it, so a source removed here stops loading without a restart; **Refetch** forces every remote to be downloaded again, bypassing its cache and `refresh` mode; **Check now** re-reads each remote's commit from GitHub and refreshes the update badges. A source that fails is reported here without stopping the gateway.
+
+**Available.** The grid lists every standalone shim package the gateway knows about, each card carrying its name, shim count, formats and cost with the repository on hover — free resources above paid packages. **Install** appends the package's key to `shims.presets` and reloads the sources; a package already installed says so and offers **Add provider** instead. The trust warning shown at install time is the same one the sources view keeps: a package installs code, not a manifest.
+
+**Preload presets.** The dropdown lists the same packages; clicking a row toggles its key in `shims.presets`, and nothing is written until **Save**, which is why the pane keeps a one-line guide beside the picker and an *Unsaved changes* note next to the button. A key expands server-side, and an explicit remote overrides its preset when the URLs match; a declared key this catalog does not know has no row, stays in the declaration and is named by the trigger. See [Standalone shim packages](../guide/shims.md#standalone-shim-packages).
+
+**Loaded shims.** The installed view lists every registered shim, grouped by the source it came from — the group head carries the source's state, resolved ref, count, any failure, and the update verdict: *Up to date*, *Update `<old>` → `<new>`* (clicking runs a full refetch of every remote source) or *Check failed*, with the API error on hover. The verdict compares the commit the source was fetched at with the commit its declared ref — or the default branch, for a source with no `ref` — points at now; the answer is cached for five minutes. A shim in a declared local directory can be opened, edited and deleted here; an edit that does not load is rolled back to the previous file, and deletion is refused while a configured provider still names the shim. A shim can also be **disabled** and re-enabled through `shims.disabled` — a declaration rather than a deletion, so the same definition comes back. Built-in and remote shims are read-only, with the reason on the row; so is a definition sitting at the root of a declared source, because the loader does not read it and removing "its directory" would take the whole source.
+
+**Vendor manifests.** A `<vendor>/provider.yaml` with no identity is a vendor manifest: the connection defaults every shim below it inherits, field by field. The inventory draws it as its own row above the shims it feeds, labelled `manifest`. Opening it shows the file beside an inheritance panel — one row per field, and one per header because `headers` merges per key — naming the shims that inherit the field and the ones that override it. While the text is edited the panel re-runs the merge against every leaf, marks the fields the edit touches and counts the shims whose effective values would change, so a `base_url` edit shows that it reaches every leaf which does not declare its own. Saving writes the file, reloads the shim sources, and names the shims whose effective values changed. An edit is validated against the manifest shape of the provider schema, so a file that grows a `name` is refused instead of becoming a shim; a manifest from a built-in or remote source is read-only with the same reason a shim there carries. A manifest is not a shim: it has no name, and it never appears in a provider picker.
+
+**Removal advisories.** Below the inventory, the advisories name each provider in the config whose shim is going away, the release that removes it and the source that replaces it — with an **Add the replacement source** action that appends it to the remotes list. The list is derived per request from the config and the load report, so it is current without a restart.
+
+![Shims page — installed](images/admin-shims.png)
+
+!!! warning
+    A declared shim directory or archive runs third-party Python
+    (`transforms.py`) at load time. Only add sources you trust, and prefer
+    pinning a tag or commit SHA.
+
 ## Models
 
 The **Models** section is the model routing table: every configured model, the capabilities it declares, and the provider that serves it.
@@ -358,27 +391,6 @@ The **global proxy URL** lives here rather than on the Providers page: it is ser
 - **Stay signed in for** — the persistent-cookie lifetime a remembered sign-in gets (`server.admin_session.remember_days`, default 30, `0` = the login page does not offer it). A remembered session ignores the idle window and ends at its own lifetime.
 
 Both apply on the next request, and both are reported by `/admin/api/auth-check` before sign-in, so the login card can say which one is in force.
-
-### Shims { #shim-sources }
-
-The **Shims** pane declares external sources and lists what loaded.
-
-![Settings — shims](images/admin-shims.png)
-
-**Declared sources** — the top-level `shims` section (see [External Shim Sources](configuration.md#external-shim-sources)): **Directories** (one per line), **Preload presets** (a dropdown of catalog packages), **Remotes** (a JSON array), and the remaining knobs — cache directory, re-fetch TTL and fail-startup-on-a-bad-source. **Save** persists the section and re-applies it, so a source removed here stops loading without a restart; **Refetch** forces every remote to be downloaded again, bypassing its cache and `refresh` mode; **Check now** re-reads each remote's commit from GitHub and refreshes the update badges. A source that fails is reported here without stopping the gateway.
-
-**Preload presets.** The dropdown lists every standalone shim package the gateway knows about, each row carrying its name and shim count with the repository on hover — free resources above paid packages. Clicking a row toggles its key in `shims.presets`; nothing is written until **Save**, which is why the pane keeps a one-line guide beside the picker and an *Unsaved changes* note next to the button. A key expands server-side, and an explicit remote overrides its preset when the URLs match; a declared key this catalog does not know has no row, stays in the declaration and is named by the trigger. See [Standalone shim packages](../guide/shims.md#standalone-shim-packages).
-
-**Loaded shims.** Below the sources, the inventory lists every registered shim, grouped by the source it came from — the group head carries the source's state, resolved ref, count, any failure, and the update verdict: *Up to date*, *Update `<old>` → `<new>`* (clicking runs a full refetch of every remote source) or *Check failed*, with the API error on hover. The verdict compares the commit the source was fetched at with the commit its declared ref — or the default branch, for a source with no `ref` — points at now; the answer is cached for five minutes. A shim in a declared local directory can be opened, edited and deleted here; an edit that does not load is rolled back to the previous file, and deletion is refused while a configured provider still names the shim. A shim can also be **disabled** and re-enabled through `shims.disabled` — a declaration rather than a deletion, so the same definition comes back. Built-in and remote shims are read-only, with the reason on the row; so is a definition sitting at the root of a declared source, because the loader does not read it and removing "its directory" would take the whole source.
-
-**Vendor manifests.** A `<vendor>/provider.yaml` with no identity is a vendor manifest: the connection defaults every shim below it inherits, field by field. The inventory draws it as its own row above the shims it feeds, labelled `manifest`. Opening it shows the file beside an inheritance panel — one row per field, and one per header because `headers` merges per key — naming the shims that inherit the field and the ones that override it. While the text is edited the panel re-runs the merge against every leaf, marks the fields the edit touches and counts the shims whose effective values would change, so a `base_url` edit shows that it reaches every leaf which does not declare its own. Saving writes the file, reloads the shim sources, and names the shims whose effective values changed. An edit is validated against the manifest shape of the provider schema, so a file that grows a `name` is refused instead of becoming a shim; a manifest from a built-in or remote source is read-only with the same reason a shim there carries. A manifest is not a shim: it has no name, and it never appears in a provider picker.
-
-**Removal advisories.** Below the inventory, the advisories name each provider in the config whose shim is going away, the release that removes it and the source that replaces it — with an **Add the replacement source** action that appends it to the remotes list. The list is derived per request from the config and the load report, so it is current without a restart.
-
-!!! warning
-    A declared shim directory or archive runs third-party Python
-    (`transforms.py`) at load time. Only add sources you trust, and prefer
-    pinning a tag or commit SHA.
 
 ## Themes
 

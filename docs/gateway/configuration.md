@@ -192,7 +192,7 @@ the presets carry no `token_env`. A
 provider config that still names one of these shims without a declared source
 fails at startup with an error naming the package, the preset and the expanded
 remote. The admin panel's preset catalog (see
-[Admin Panel → Shim Sources](admin-panel.md#shim-sources)) offers the same
+[Admin Panel → Shim Sources](admin-panel.md#shims)) offers the same
 entries with one click.
 
 !!! warning "Declared sources run code"
