@@ -106,6 +106,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 
 ### 变更
+- **错误转储导出改为流式，不再在内存里构建整个归档**（issue [#1544](https://github.com/Oaklight/llm-rosetta/issues/1544)）：admin 的导出先把筛选出的每一条转储读进一个列表，再返回一个已经写好的 `tar.gz`，因此在有数万条转储的库上，归档与条目列表会同时驻留内存。现在按 `(timestamp, id)` 的 keyset 分页读取（与列表相同的走法），边读边写入 `metadata.json`，并把归档按 member 逐个写入响应（以及 CLI 的输出文件）。`metadata.json` 仍是单个 member，其压缩后的大小是唯一剩下的常驻项；除此之外，下载到的归档与原来逐字节相同。路由在提交响应前先读出第一块，因此存储读取失败时仍返回 JSON 错误，而不是一个被截断的下载。
 - **密钥的 `allowed_shims` 列已移除**（PR [#1554](https://github.com/Oaklight/llm-rosetta/pull/1554)）：该字段会被存储、由 admin API 返回、默认为 `["*"]`，但请求路径从不读取，且空列表在 create 与 update 上含义不同（分别为 `["*"]` 与 `[]`）。作用域按模型划分，并在所有接受 `model` 的路由上执行；将来可能增加按 provider 的作用域，但不会按 shim —— 同一个 shim 背后可能有多个 provider 条目。`keys.db` 的 v5 迁移删除该列（既有密钥与数据不受影响），新建库不再创建该列，仍发送该字段的 admin 客户端会按未发送处理。
 - **各行的内容前置，可观测视图即开关**（[#1502](https://github.com/Oaklight/llm-rosetta/issues/1502) §13，PR [#1554](https://github.com/Oaklight/llm-rosetta/pull/1554)）：页面自己的操作（计数、抓取、添加、生成）跟着搜索行，不再单占一个只放隐藏标题的表头行；提供方页的类型切换与状态筛选分成两行。`[ 错误转储 ]` / `[ 性能剖析 ]` / `[ 内容截取 ]` 的 strip 标题已去掉——页签已经写明视图——两个 Enable 按钮也去掉：进入视图即按配置的请求数开始采集。页面的 32 px 细网格也一并去掉。
 - **地址栏描述当前页面**（[#1521](https://github.com/Oaklight/llm-rosetta/issues/1521)，PR [#1551](https://github.com/Oaklight/llm-rosetta/pull/1551)）：`#tab`、`#tab/id`、`?q=` 与 Observability 的视图 id 都会被解析，用 `pushState` 写入，并在前进、后退与刷新时还原；文档标题写明当前页面而不只是产品名，并跟随界面语言。旧的 `#logs` 书签仍能打开 Observability。
