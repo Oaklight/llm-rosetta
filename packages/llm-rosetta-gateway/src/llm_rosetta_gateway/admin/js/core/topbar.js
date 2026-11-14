@@ -57,13 +57,20 @@ export function topbarTitle(headingText, tabLabel, fallback = '') {
  * Two pinned tabs used to read "llm-rosetta Gateway Console", which is the
  * product, not the page (#1521).
  *
+ * The product half follows the interface language, like the rail's own
+ * subtitle, so a Chinese page does not end in an English brand.
+ *
  * @param {string} pageTitle The section's visible title.
  * @param {string} [brand]
  * @returns {string}
  */
-export function documentTitle(pageTitle, brand = 'llm-rosetta Gateway Console') {
+export function documentTitle(pageTitle, brand) {
+  const translated = typeof window !== 'undefined' && window.t
+    ? window.t('brand.admin')
+    : 'Gateway Console';
+  const product = brand || ('llm-rosetta ' + translated);
   const page = (pageTitle || '').trim();
-  return page ? page + ' \u00b7 ' + brand : brand;
+  return page ? page + ' \u00b7 ' + product : product;
 }
 
 /** Fill the topbar from the active tab and panel. */
