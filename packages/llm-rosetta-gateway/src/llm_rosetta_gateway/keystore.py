@@ -387,7 +387,7 @@ class KeyStore:
         raw_key = manual_key or _generate_key()
         key_hash = _hash_key(raw_key)
         shims = json.dumps(allowed_shims or ["*"])
-        models = json.dumps(allowed_models or ["*"])
+        models = json.dumps(["*"] if allowed_models is None else allowed_models)
         created = datetime.now(timezone.utc).isoformat()
         await self._conn.execute(
             "INSERT INTO api_keys "
@@ -500,7 +500,7 @@ class KeyStore:
             params.append(json.dumps(allowed_shims))
         if allowed_models is not None:
             parts.append("allowed_models = ?")
-            params.append(json.dumps(allowed_models or ["*"]))
+            params.append(json.dumps(allowed_models))
         if rate_limit is not None:
             parts.append("rate_limit = ?")
             params.append(_quota(rate_limit))

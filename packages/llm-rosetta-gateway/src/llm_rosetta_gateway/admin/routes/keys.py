@@ -56,7 +56,10 @@ def _key_models(raw: Any) -> tuple[list[str] | None, str | None]:
         if not _MODEL_NAME.match(name):
             return None, f"Invalid model name '{name}'"
         models.append(name)
-    return models or ["*"], None
+    # An empty value is "no model", the state a damaged record reads as; the
+    # way to say "every model" is `*`, which the panel sends.  Omitting the
+    # field leaves the stored value alone (the `None` branch above).
+    return models, None
 
 
 def _key_quota(raw: Any) -> tuple[str, str | None]:
