@@ -120,7 +120,7 @@ declare the differences.
 | `Transform` primitives | `shims/transforms.py` | `strip_fields`, `rename_field`, `set_defaults` |
 | Built-in shims | `shims/providers/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type (49 built in) |
 | Vendor manifest | `shims/providers/<vendor>/provider.yaml` | Optional per-vendor defaults every leaf inherits: `connection:` (the credential) plus the vendor's own `logo` / `group` / `group_label`; `auth.py` sits beside it |
-| External shim sources | `llm_rosetta_gateway/shims/` | Directory/archive loaders, standalone catalog, scheduled removals |
+| External shim sources | `llm_rosetta_gateway/shims/` | Directory/archive loaders, standalone catalog (with its free / paid / subscription tier), scheduled removals |
 
 ### Gateway
 
@@ -258,6 +258,7 @@ scripts/
 │   ├── extract_google_types.py
 │   ├── extract_tool_choice_types.py
 │   ├── new_shim.py              # Scaffold a shim (leaf + vendor manifest + shims.yaml entry)
+│   ├── check_shim_catalog.py    # Compare SHIM_SOURCE_PACKAGES with the published shim repos
 │   ├── scan_sdk_types.py
 │   ├── merge-pr.sh
 │   ├── public_api_diff.py        # public-API break check (knows both layouts)
