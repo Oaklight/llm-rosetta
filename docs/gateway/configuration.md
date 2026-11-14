@@ -166,7 +166,7 @@ stale。不掩盖的只有两类 —— `sha256` 不符，以及 body 不是可�
 （显式键优先），因此随后叠加固定的 `ref` 或 `sha256` 时不会丢掉 catalog 中的 `path`。发布的
 仓库都是公开的，预设不带 `token_env`。若提供方配置仍使用这些 shim 却没有声明源，启动时会得到
 一条错误，指明包名、预设与展开后的 remote。管理面板的预设目录（见
-[管理面板 → Shim 源](admin-panel.md#shim-sources)）可一键添加同样的条目。
+[管理面板 → Shim 源](admin-panel.md#shims)）可一键添加同样的条目。
 
 !!! warning "声明的源会执行代码"
     shim 目录可以携带 `transforms.py`，它会在 shim 加载时被执行 —— 与 `pip install`
