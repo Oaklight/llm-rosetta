@@ -710,8 +710,18 @@ or **subscription** — its shim count and the repository on hover. Free
 resources sort above the rest, and the toolbar's tier dropdown narrows the grid
 to one tier. Ticking shims on a card and pressing **Install** adds the key to
 `shims.presets` and writes the selection beside it; a card that is already
-installed shows *loaded* / *not loaded* per shim and offers **Update**,
-**Add provider** and **Remove**. A key the running catalog does not know has no
+installed shows *loaded* / *not loaded* per shim and offers **Save
+selection**, **Add provider** and **Remove**. Cards are closed by default and
+carry the vendors' marks on their head, so the package is recognisable before
+its rows are opened.
+
+**Upgrading is separate from saving.** An installed card states the commit its
+source was fetched at (`installed <sha>`) and the commit the last check read
+(`latest <sha>`). **Upgrade** appears only when the two differ, and the server
+re-derives the verdict before it acts: a call made while they agree writes
+nothing and refetches nothing, so a stale page or a hand-built request cannot
+move a source that is already current. The check itself is the same one the
+Sources view runs, cached for five minutes. A key the running catalog does not know has no
 card, but it stays in the declaration and the startup warning still names it,
 so a config written against a newer catalog is not silently rewritten.
 
