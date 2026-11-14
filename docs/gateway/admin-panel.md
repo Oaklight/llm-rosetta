@@ -10,7 +10,7 @@ Open **`http://localhost:8765/admin/`**.
 
 ## The console
 
-The console is a left rail of sections — **Dashboard**, **Providers**, **Models**, **API Keys** and **Observability** — with the mode, language, settings and logout buttons in one row at the bottom, and a status bar along the bottom edge that reports the request counters. Across the top, a sticky status bar names the section you are in: its bracketed index and its page title (`[03] Model Routing`), filled from the panel's own heading. The content sits on a 32px hairline grid. Below 900 px the rail folds into a horizontal strip, its active item marked by an underline; the top status bar stays.
+The console is a left rail of sections — **Dashboard**, **Providers**, **Models**, **Routing**, **API Keys**, **Observability** and **Jobs** — with the mode, language, settings and logout buttons in one row at the bottom, and a status bar along the bottom edge that reports the request counters. Across the top, a sticky status bar names the section you are in: its bracketed index and its page title (`[03] Model Routing`), filled from the panel's own heading. The content sits on a 32px hairline grid. Below 900 px the rail folds into a horizontal strip, its active item marked by an underline; the top status bar stays.
 
 The rail's foot carries the clock. It shows the gateway's own wall time, not the browser's: `/health` reports the process's clock and zone, and a click on the time switches to the browser clock (the label says which one is showing, and the choice is remembered). The zone beside it is a second click target — the GMT offset (`GMT-5`) by default, the IANA name (`America/Chicago`) when switched; a name wider than the rail is trimmed with an ellipsis. A bare `/admin` opens the dashboard rather than resuming the last section; an explicit hash (`#providers`, `#models`) still deep-links. The logs section is `#observability`, and an old `#logs` bookmark opens it and is rewritten in the address bar.
 
@@ -226,7 +226,7 @@ The **Dashboard** is the landing section and reports live traffic.
 
 ## Observability
 
-**Observability** is one panel with six views of the same traffic.
+**Observability** is one panel with five views of the same traffic.
 
 ![Observability — requests](images/admin-observability.png)
 
@@ -237,7 +237,6 @@ The **Dashboard** is the landing section and reports live traffic.
 | **Error Dumps** | The bodies behind a failed request |
 | **Profiling** | Toggle for the phase profiler |
 | **Capture** | Toggle for request/response capture |
-| **Jobs** | Background deletions and rebuilds: progress, cancel, retry |
 
 ### Filters
 
@@ -317,7 +316,9 @@ Both thresholds apply independently — whichever triggers first wins.
 
 ### Background jobs
 
-A destructive action no longer blocks the panel. Clearing the request log, a cleanup by age or date range, a trim to the retention caps and a VACUUM all return immediately with a job id; the **Jobs** view shows each one as it runs.
+A destructive action no longer blocks the panel. Clearing the request log, a cleanup by age or date range, a trim to the retention caps and a VACUUM all return immediately with a job id; the **Jobs** page shows each one as it runs.
+
+**Jobs** is its own rail section rather than a view of Observability. The routes behind it belong to the observability panel, so disabling Observability hides **Jobs** as well.
 
 - The rows a clear or cleanup targets stop being returned by every read the moment the job is queued, so the lists and the counts update immediately. The rows themselves are deleted in batches afterwards.
 - Progress is per row (`5,000 / 20,000 rows`), and every batch is a point where the job can stop: **Cancel** takes effect between batches, never mid-statement. A cancel before anything was deleted restores the rows; a cancel after a partial delete keeps them hidden and offers **Resume**.
