@@ -266,7 +266,6 @@ class TestProxyWiring:
     async def test_internal_token_records_the_sentinel_bucket(self, pm):
         ctx = KeyContext(
             label=INTERNAL_LABEL,
-            allowed_shims=frozenset({"*"}),
             key_hash="abc",
             usage_bucket=INTERNAL_USAGE_BUCKET,
         )

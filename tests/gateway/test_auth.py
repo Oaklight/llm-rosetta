@@ -411,7 +411,6 @@ class TestKeyContextTracking:
         _, ctx = await _run_and_get_context(hook, req)
         assert ctx is not None
         assert ctx.label == "internal"
-        assert ctx.allowed_shims == frozenset({"*"})
         # The admin panel's test traffic is usage like any other, so it is
         # attributed — otherwise the dashboard counts it and the key panel
         # silently does not.

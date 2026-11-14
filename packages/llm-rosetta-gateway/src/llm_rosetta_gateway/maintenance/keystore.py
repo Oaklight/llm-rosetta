@@ -31,6 +31,7 @@ result, and it only ever runs for a store that has no ledger at all.
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timezone
 from functools import partial
 from typing import Any
@@ -56,7 +57,12 @@ COLUMN_OF: dict[int, str] = {
     2: "usage_bucket",
     3: "allowed_models",
     4: "rate_limit",
+    5: "allowed_shims",
 }
+
+#: The versions that *removed* their column.  For these the evidence in a
+#: pre-ledger file is the column's absence, not its presence.
+DROPS: frozenset[int] = frozenset({5})
 
 _CREATE_LEDGER = """CREATE TABLE IF NOT EXISTS schema_version (
     version    INTEGER PRIMARY KEY,
@@ -113,7 +119,8 @@ async def _adopt_pre_registry_schema(context: StepContext) -> int:
     columns = await _columns(conn)
     recorded = 0
     for version, column in sorted(COLUMN_OF.items()):
-        if column in columns:
+        present = column in columns
+        if present != (version in DROPS):
             await conn.execute(
                 "INSERT OR IGNORE INTO schema_version (version, applied_at) "
                 "VALUES (?, ?)",
@@ -151,10 +158,18 @@ async def _apply_migration(
     columns = await _columns(conn)
     executed = 0
     for sql in statements:
-        # ``ADD COLUMN`` has no ``IF NOT EXISTS``; the columns are read once
-        # rather than per statement, so the guard costs one query.
-        if any(f"ADD COLUMN {column}" in sql for column in columns):
-            continue
+        # ``ADD COLUMN`` has no ``IF NOT EXISTS`` and ``DROP COLUMN`` has no
+        # ``IF EXISTS``; the columns are read once rather than per statement,
+        # so the guards cost one query.  A fresh store starts from this code's
+        # own CREATE TABLE, which has neither the added nor the dropped column,
+        # so it skips both.
+        column = _ddl_column(sql)
+        if column is not None:
+            added, dropped = column
+            if added and added in columns:
+                continue
+            if dropped and dropped not in columns:
+                continue
         await conn.execute(sql)
         executed += 1
     await conn.execute(
@@ -188,6 +203,22 @@ async def _backfill_usage_bucket(context: StepContext) -> int:
     if rows:
         await conn.commit()
     return len(rows)
+
+
+_ALTER_COLUMN = re.compile(r"\b(ADD|DROP) COLUMN (\w+)", re.IGNORECASE)
+
+
+def _ddl_column(sql: str) -> tuple[str | None, str | None] | None:
+    """The (added, dropped) column one ``ALTER TABLE`` names, or None.
+
+    Only the single-column alters this store uses pass through here; anything
+    else runs unexamined, as it did before.
+    """
+    match = _ALTER_COLUMN.search(sql)
+    if match is None:
+        return None
+    kind, column = match.group(1).upper(), match.group(2)
+    return (column, None) if kind == "ADD" else (None, column)
 
 
 async def _columns(conn: Any) -> set[str]:

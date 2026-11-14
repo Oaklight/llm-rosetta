@@ -335,7 +335,6 @@ def create_auth_hook(auth_state: AuthState) -> Any:
             api_key_context_var.set(
                 KeyContext(
                     label=INTERNAL_LABEL,
-                    allowed_shims=frozenset({"*"}),
                     key_hash=hashlib.sha256(key.encode()).hexdigest(),
                     usage_bucket=INTERNAL_USAGE_BUCKET,
                 )

@@ -146,7 +146,7 @@ async def test_a_damaged_allowlist_denies_rather_than_widens(tmp_path: Any) -> N
 
 
 def test_the_allowlist_is_a_set_on_a_frozen_context() -> None:
-    ctx = KeyContext(label="x", allowed_shims=frozenset({"*"}))
+    ctx = KeyContext(label="x")
     assert ctx.allowed_models == frozenset({"*"})
 
 
@@ -175,7 +175,6 @@ async def test_the_cap_refuses_the_request_over_it() -> None:
 
     ctx = KeyContext(
         label="tight",
-        allowed_shims=frozenset({"*"}),
         rate_limit="2/m",
         key_hash="k" * 64,
     )
@@ -205,9 +204,7 @@ async def test_a_changed_cap_starts_a_fresh_window() -> None:
     state.rebuild(cast(Any, _NoConfig()))
     hook = create_rate_limit_hook(state)
 
-    tight = KeyContext(
-        label="t", allowed_shims=frozenset({"*"}), rate_limit="1/m", key_hash="a" * 64
-    )
+    tight = KeyContext(label="t", rate_limit="1/m", key_hash="a" * 64)
     token = api_key_context_var.set(tight)
     try:
         assert await hook(_Req()) is None
@@ -215,9 +212,7 @@ async def test_a_changed_cap_starts_a_fresh_window() -> None:
     finally:
         api_key_context_var.reset(token)
 
-    loose = KeyContext(
-        label="t", allowed_shims=frozenset({"*"}), rate_limit="5/m", key_hash="a" * 64
-    )
+    loose = KeyContext(label="t", rate_limit="5/m", key_hash="a" * 64)
     token = api_key_context_var.set(loose)
     try:
         # A new limit is a new window, not the old one's spent quota.
@@ -234,9 +229,7 @@ def test_idle_key_windows_are_pruned(monkeypatch: Any) -> None:
 
     state = RateLimitState()
     state.rebuild(cast(Any, _NoConfig()))
-    first = KeyContext(
-        label="a", allowed_shims=frozenset({"*"}), rate_limit="1/m", key_hash="a" * 64
-    )
+    first = KeyContext(label="a", rate_limit="1/m", key_hash="a" * 64)
     state.key_limiter(first)
     assert len(state._key_limits) == 1
 
@@ -245,9 +238,7 @@ def test_idle_key_windows_are_pruned(monkeypatch: Any) -> None:
         "llm_rosetta_gateway.middleware.ratelimit.time.monotonic", lambda: later
     )
     state.rebuild(cast(Any, _NoConfig()))
-    second = KeyContext(
-        label="b", allowed_shims=frozenset({"*"}), rate_limit="1/m", key_hash="b" * 64
-    )
+    second = KeyContext(label="b", rate_limit="1/m", key_hash="b" * 64)
     state.key_limiter(second)
 
     assert list(state._key_limits) == [("b" * 64, "1/m")]
@@ -263,7 +254,6 @@ def test_pruning_keeps_a_window_that_is_still_open(monkeypatch: Any) -> None:
     start = time.monotonic()
     daily = KeyContext(
         label="daily",
-        allowed_shims=frozenset({"*"}),
         rate_limit="2/d",
         key_hash="d" * 64,
     )
@@ -278,7 +268,6 @@ def test_pruning_keeps_a_window_that_is_still_open(monkeypatch: Any) -> None:
     state.key_limiter(
         KeyContext(
             label="other",
-            allowed_shims=frozenset({"*"}),
             rate_limit="1/m",
             key_hash="o" * 64,
         )
@@ -304,7 +293,6 @@ async def test_every_window_of_a_quota_is_enforced() -> None:
 
     ctx = KeyContext(
         label="two-windows",
-        allowed_shims=frozenset({"*"}),
         rate_limit="5/m, 2/h",
         key_hash="b" * 64,
     )

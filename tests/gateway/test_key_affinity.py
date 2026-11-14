@@ -309,11 +309,13 @@ class TestKeyContextKeyHash:
     def test_default_empty(self):
         from llm_rosetta_gateway.keystore import KeyContext
 
-        ctx = KeyContext(label="test", allowed_shims=frozenset())
+        ctx = KeyContext(
+            label="test",
+        )
         assert ctx.key_hash == ""
 
     def test_explicit_hash(self):
         from llm_rosetta_gateway.keystore import KeyContext
 
-        ctx = KeyContext(label="test", allowed_shims=frozenset(), key_hash="abc123")
+        ctx = KeyContext(label="test", key_hash="abc123")
         assert ctx.key_hash == "abc123"
