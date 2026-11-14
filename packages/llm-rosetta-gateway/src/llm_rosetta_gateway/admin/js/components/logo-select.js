@@ -23,6 +23,7 @@
  */
 
 import { esc } from '../core/utils.js';
+import { logoUrl } from '../core/html.js';
 
 const _instances = new Map();
 
@@ -47,7 +48,7 @@ function _renderPanel(inst) {
   inst.panel.innerHTML = inst.items.map((item, i) => {
     const selected = item.value === inst.input.value;
     const logo = item.logo
-      ? `<img class="logo-select-img" src="${esc(item.logo)}" alt="">`
+      ? `<img class="logo-select-img" src="${esc(logoUrl(item.logo))}" alt="" onerror="this.style.visibility='hidden'">`
       : '<span class="logo-select-img logo-select-img-empty"></span>';
     return `<div class="logo-select-option${selected ? ' selected' : ''}" role="option"
       id="${inst.id}-opt-${i}" data-index="${i}" aria-selected="${selected}">

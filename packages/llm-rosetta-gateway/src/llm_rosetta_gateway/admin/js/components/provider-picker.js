@@ -4,6 +4,7 @@
  *  provider from a roster renders the same menu: a logo, then the name.
  */
 import { S } from '../core/state.js';
+import { logoUrl } from '../core/html.js';
 import { esc } from '../core/utils.js';
 import { _providerLogo } from '../tabs/models.js';
 
@@ -11,7 +12,7 @@ import { _providerLogo } from '../tabs/models.js';
 export function providerLogoHtml(name, cls = 'pp-logo') {
   const logo = _providerLogo(name);
   return logo
-    ? `<img class="${cls}" src="${esc(logo)}" alt="">`
+    ? `<img class="${cls}" src="${esc(logoUrl(logo))}" alt="" onerror="this.style.display='none'">`
     : `<span class="${cls} pp-logo-empty"></span>`;
 }
 

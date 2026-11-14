@@ -11,7 +11,7 @@ import { mergeReasoningOverride } from '../core/reasoning-override.js';
 import { providerRowsHtml, syncPickerBtn, openPickerMenu } from '../components/provider-picker.js';
 import { laneGripHtml, laneSwitchHtml, laneWeightInputHtml } from '../components/provider-row.js';
 import { findLane, laneBody, laneKey, laneLabel } from '../core/lanes.js';
-import { jsArg } from '../core/html.js';
+import { jsArg, logoUrl } from '../core/html.js';
 import { openDialog, closeDialog } from '../core/dialog.js';
 
 // ── helpers (module-private) ──
@@ -39,7 +39,7 @@ function _getModelType(info) {
 /** The provider's logo, for a lane row; empty when the provider has none. */
 function _pmLogo(name) {
   const logo = _providerLogo(name);
-  return logo ? `<img class="pm-logo" src="${esc(logo)}" alt="">` : '';
+  return logo ? `<img class="pm-logo" src="${esc(logoUrl(logo))}" alt="" onerror="this.style.display='none'">` : '';
 }
 
 function _typeBadgeClass(typeName) {

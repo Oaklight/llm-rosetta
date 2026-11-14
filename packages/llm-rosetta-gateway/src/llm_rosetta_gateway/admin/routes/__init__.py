@@ -25,6 +25,7 @@ from ._shared import (  # noqa: F401  (re-exported for backward compat)
     _reload_gateway_config,
     _sync_auth_middleware,
 )
+from .logos import get_logo
 from .auth import (
     admin_check,
     admin_login,
@@ -139,6 +140,8 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/", methods=["GET"])(serve_admin_html)
     app.route("/admin/static/<path:path>", methods=["GET"])(serve_admin_static)
     app.route("/favicon.ico", methods=["GET"])(serve_favicon)
+    # Provider logos, through the gateway and not the browser (#1522)
+    app.route("/admin/api/logo", methods=["GET"])(get_logo)
     # Admin auth
     app.route("/admin/api/login", methods=["POST"])(admin_login)
     app.route("/admin/api/auth-check", methods=["GET"])(admin_check)

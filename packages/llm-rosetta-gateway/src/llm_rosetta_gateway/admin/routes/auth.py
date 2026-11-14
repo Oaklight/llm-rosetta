@@ -93,7 +93,29 @@ async def serve_favicon(request: Any) -> Response:
 
 
 # Cached static assets (CSS/JS) — populated on first request per path.
-_static_cache: dict[str, tuple[bytes, str]] = {}
+# `(data, content_type, etag, gzipped)`; the compressed copy is built on the
+# first request that accepts gzip, not for every file at startup (#1522).
+_static_cache: dict[str, tuple[bytes, str, str, bytes | None]] = {}
+
+
+def _etag_for(data: bytes) -> str:
+    """A strong validator for one file's bytes."""
+    import hashlib
+
+    return '"' + hashlib.sha256(data).hexdigest()[:20] + '"'
+
+
+def _accepts_gzip(request: Any) -> bool:
+    return "gzip" in (getattr(request, "headers", {}) or {}).get("accept-encoding", "")
+
+
+def _not_modified(request: Any, etag: str) -> bool:
+    """Whether the client already holds this exact body."""
+    return etag in (getattr(request, "headers", {}) or {}).get("if-none-match", "")
+
+
+def _compressible(content_type: str) -> bool:
+    return content_type.startswith(("text/", "application/javascript", "image/svg"))
 
 
 async def serve_admin_html(request: Any) -> Response:
@@ -108,34 +130,71 @@ async def serve_admin_html(request: Any) -> Response:
         if custom_head:
             html = html.replace("</head>", f"{custom_head}\n</head>", 1)
         _admin_html_cache[cache_key] = html
+    html = _admin_html_cache[cache_key]
+    data = html.encode("utf-8")
+    etag = _etag_for(data)
+    headers = {
+        "Cache-Control": "no-cache",
+        "ETag": etag,
+        "Vary": "Accept-Encoding",
+        "X-Content-Type-Options": "nosniff",
+    }
+    if _not_modified(request, etag):
+        return Response(body=b"", status_code=304, headers=headers)
+    if _accepts_gzip(request):
+        import gzip
+
+        data = gzip.compress(data, compresslevel=6)
+        headers["Content-Encoding"] = "gzip"
     return Response(
-        body=_admin_html_cache[cache_key],
+        body=data,
         status_code=200,
         content_type="text/html; charset=utf-8",
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "X-Content-Type-Options": "nosniff",
-        },
+        headers=headers,
     )
 
 
 async def serve_admin_static(request: Any, **kwargs: Any) -> Response:
-    """Serve a static CSS/JS file from the admin package."""
+    """Serve a static CSS/JS file from the admin package.
+
+    The panel's own file is the only place these bytes live, so a reload can
+    revalidate instead of downloading everything again: the response carries an
+    ETag, a conditional request gets a 304, and text is compressed when the
+    client accepts it.  The in-process cache means the bytes only change on a
+    restart, which is exactly what an ETag says (#1522).
+    """
     subpath: str = request.path_params["path"]
     if subpath not in _static_cache:
         try:
-            _static_cache[subpath] = load_static_file(subpath)
+            data, content_type = load_static_file(subpath)
         except FileNotFoundError:
             return Response(body=b"Not Found", status_code=404)
-    data, content_type = _static_cache[subpath]
+        _static_cache[subpath] = (data, content_type, _etag_for(data), None)
+    data, content_type, etag, gzipped = _static_cache[subpath]
+    headers = {
+        # Revalidate every time: the operator restarts the gateway to change a
+        # file, and a stale panel is worse than one conditional request.
+        "Cache-Control": "no-cache",
+        "ETag": etag,
+        "Vary": "Accept-Encoding",
+        "X-Content-Type-Options": "nosniff",
+    }
+    if _not_modified(request, etag):
+        return Response(body=b"", status_code=304, headers=headers)
+    body = data
+    if _compressible(content_type) and _accepts_gzip(request):
+        if gzipped is None:
+            import gzip
+
+            gzipped = gzip.compress(data, compresslevel=6)
+            _static_cache[subpath] = (data, content_type, etag, gzipped)
+        body = gzipped
+        headers["Content-Encoding"] = "gzip"
     return Response(
-        body=data,
+        body=body,
         status_code=200,
         content_type=content_type,
-        headers={
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "X-Content-Type-Options": "nosniff",
-        },
+        headers=headers,
     )
 
 
