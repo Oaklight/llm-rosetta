@@ -476,8 +476,14 @@ function keepVisvalingam(pts, target, closed, pinned) {
   const push = (i, s) => { if (alive[i] && removable(i)) heap.push([triArea(pts[prev[i]], pts[i], pts[next[i]]), i, s]); };
   for (let i = 0; i < n; i++) push(i, 0);
   const pop = () => {
+    // Ties break on the index, like Python's heap of (area, index, stamp):
+    // with a coarse --tolerance many vertices cost exactly the same, and the
+    // two engines have to remove the same one or they pick different anchors.
     let bi = 0;
-    for (let i = 1; i < heap.length; i++) if (heap[i][0] < heap[bi][0]) bi = i;
+    for (let i = 1; i < heap.length; i++) {
+      if (heap[i][0] < heap[bi][0]
+          || (heap[i][0] === heap[bi][0] && heap[i][1] < heap[bi][1])) bi = i;
+    }
     return heap.splice(bi, 1)[0];
   };
   let remaining = n;
