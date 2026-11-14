@@ -2150,6 +2150,11 @@ window.resetProviderListOrder = resetProviderListOrder;
 function onProviderSearch() {
   _pinnedOrder = null;
   renderProviders();
+  // The search is part of the address, so a reload or a shared link restores
+  // it (#1521).
+  if (S.currentTab === 'providers') {
+    window.writeRoute?.({ params: { q: (document.getElementById('providerSearch')?.value || '').trim() } });
+  }
 }
 window.onProviderSearch = onProviderSearch;
 

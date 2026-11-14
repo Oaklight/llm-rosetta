@@ -25,14 +25,13 @@ import { initTypePicker } from '../components/type-picker.js';
 import { initUpdates } from './updates.js';
 import { syncTopbarTitle } from './topbar.js';
 import { installThemeFallback, populateSchemeSelect } from './themes.js';
+import { parseHash, buildHash } from './route.js';
 
 // A #dump/<id> link is its own screen in this app, so the session check that
 // guards every other screen guards it too.  Captured before any tab
 // activation rewrites the hash.
-const _dumpRoute = (() => {
-  const h = location.hash.replace(/^#/, '');
-  return h.startsWith('dump/') ? decodeURIComponent(h.slice(5)) : null;
-})();
+const _initialRoute = parseHash(location.hash);
+const _dumpRoute = _initialRoute.tab === 'dump' ? _initialRoute.id : null;
 
 // Disabled tabs from branding — skip data fetching for these
 const _dt = (window.__branding && window.__branding.disabled_tabs) || [];
@@ -102,6 +101,8 @@ function initApp(prefetchedConfig) {
   // session existed and its fetch was refused.
   loadConfig(prefetchedConfig).then(() => {
     if (S.currentTab === 'routing') loadRouting();
+    // A `#models/<id>` link can only be resolved once the config is here.
+    _applyRoute();
   }).catch(() => { /* the models tab reports it */ });
   initUpdates();
   if (_tabEnabled('keys')) { loadKeys(); loadLogKeyLabels(); }
@@ -192,11 +193,20 @@ function activateTab(tab, opts = {}) {
   if (!_dumpRoute) {
     // A user switch is a navigation step, so Back returns to where they were.
     // The initial paint and Back/Forward themselves replace instead of pushing.
+    // `opts.hash` carries a route the caller already resolved (an id or
+    // filters); a plain tab switch writes the bare tab and drops them.
+    const hash = opts.hash || '#' + id;
     if (opts.push !== false && id !== prevId) {
-      history.pushState({tab: id}, '', '#' + id);
+      history.pushState({tab: id}, '', hash);
     } else {
-      history.replaceState({tab: id}, '', '#' + id);
+      history.replaceState({tab: id}, '', hash);
     }
+  }
+  // The observability tab's real pages are its five views, so its URL names
+  // one; a plain `#observability` gains the current view (#1521).
+  if (id === 'observability' && !_dumpRoute && !parseHash(location.hash).id) {
+    const view = S._logView || 'requests';
+    try { history.replaceState({ tab: id }, '', '#observability/' + view); } catch { /* file:// */ }
   }
   stopTimers();
   if (id === 'dashboard' && _tabEnabled('dashboard')) { loadMetrics(); S.dashboardTimer = (S._dashboardRefreshMs > 0 ? setInterval(loadMetrics, S._dashboardRefreshMs) : null); }
@@ -299,30 +309,82 @@ document.querySelectorAll('.tab[role="tab"]').forEach(tab => {
 // A bare /admin is the front door — it lands on the dashboard every time
 // rather than resuming whatever the last session had open; #models and the
 // like still deep-link.
-const _hashTab = location.hash.replace('#', '');
 // `#logs` was this tab's URL before the rail item was named after the page;
-// an old bookmark still lands on it.
-const _hashTabId = _hashTab === 'logs' ? 'observability' : _hashTab;
+// parseHash maps it, so an old bookmark still lands on it.
+const _hashTabId = _initialRoute.tab;
 const _initialTab = document.querySelector(`.tab[data-tab="${_hashTabId}"]`) ? _hashTabId : 'dashboard';
 const _savedTab = document.querySelector(`.tab[data-tab="${_initialTab}"]`);
-if (_savedTab) activateTab(_savedTab, {push: false});
-// A bookmarked `#logs` opens the renamed tab; rewrite the address bar so a
-// reload or a copied link carries the current name.
-if (_hashTab !== _hashTabId && S.currentTab === _hashTabId) {
-  try { history.replaceState(null, '', '#' + _hashTabId); } catch { /* file:// */ }
+// The first paint writes the route back in its canonical spelling: `buildHash`
+// maps `#logs` to `#observability`, and an id or filter a deep link carried
+// survives the activation instead of being replaced by the bare tab.
+if (_savedTab) activateTab(_savedTab, {push: false, hash: buildHash(_initialRoute)});
+
+/**
+ * Apply the page the address bar names to what is on screen.
+ *
+ * Tabs own their own screens, so the shell only hands the route over: the
+ * models tab opens or closes the drawer and restores its filters, the
+ * observability tab shows the view.  Called on load, on Back/Forward and after
+ * a tab is activated from the hash.
+ */
+function _applyRoute() {
+  const route = parseHash(location.hash);
+  const q = route.params.q || '';
+  if (route.tab === 'models') window.applyModelRoute?.(route);
+  else if (route.tab === 'observability') window.applyLogRoute?.(route.id);
+  else if (route.tab === 'providers') {
+    const el = document.getElementById('providerSearch');
+    if (el && el.value !== q) el.value = q;
+    window.onProviderSearch?.();
+  } else if (route.tab === 'keys') {
+    const el = document.getElementById('keySearch');
+    if (el && el.value !== q) el.value = q;
+    window.renderKeys?.();
+  } else if (route.tab === 'routing') {
+    const el = document.getElementById('routingModelSearch');
+    if (el && el.value !== q) el.value = q;
+    window.refreshRoutingList?.();
+  }
 }
 
+/**
+ * Rewrite the current route in place — the filters use this, so typing in a
+ * search box updates the address bar without adding a history step.
+ *
+ * @param {{id?: string|null, params?: Record<string,string>}} patch
+ *   `id: null` drops the id; an omitted key keeps what the bar already says.
+ */
+function writeRoute(patch) {
+  const route = parseHash(location.hash);
+  const id = patch && 'id' in patch ? (patch.id || '') : route.id;
+  const params = { ...route.params, ...((patch && patch.params) || {}) };
+  for (const [key, value] of Object.entries(params)) if (!value) delete params[key];
+  const hash = buildHash({ tab: S.currentTab || route.tab, id, params });
+  if (hash !== location.hash) {
+    try { history.replaceState({ tab: S.currentTab }, '', hash); } catch { /* file:// */ }
+  }
+}
+window.writeRoute = writeRoute;
+
 window.addEventListener('popstate', () => {
-  const hash = location.hash.replace('#', '');
-  const tab = document.querySelector(`.tab[data-tab="${hash}"]`);
-  if (tab && hash !== S.currentTab) activateTab(tab, {push: false});
+  const route = parseHash(location.hash);
+  if (route.tab === 'dump') { window.openDumpPage?.(route.id); return; }
+  const tab = document.querySelector(`.tab[data-tab="${route.tab}"]`);
+  if (tab && route.tab !== S.currentTab) {
+    activateTab(tab, { push: false, hash: location.hash });
+  }
+  _applyRoute();
+  window.closeDumpPage?.();
 });
 
 window.addEventListener('hashchange', () => {
-  const h = location.hash.replace(/^#/, '');
-  if (h.startsWith('dump/')) { window.openDumpPage?.(decodeURIComponent(h.slice(5))); }
-  else { window.closeDumpPage?.(); }
+  const route = parseHash(location.hash);
+  if (route.tab === 'dump') window.openDumpPage?.(route.id);
+  else window.closeDumpPage?.();
+  _applyRoute();
 });
+
+window.applyRoute = _applyRoute;
 
 // ── Keyboard navigation ──
 //

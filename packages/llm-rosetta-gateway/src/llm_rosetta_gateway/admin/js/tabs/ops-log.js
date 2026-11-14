@@ -182,9 +182,22 @@ async function populateOpsLogFilters() {
  *  used to sit in the dashboard, where a single bad request was hard to find. */
 const LOG_VIEWS = ['requests', 'ops', 'dumps', 'profiling', 'capture'];
 
-function switchLogView(view) {
-  if (S._logView === view) return;
+function switchLogView(view, opts = {}) {
+  if (!LOG_VIEWS.includes(view)) view = 'requests';
+  if (S._logView === view && !opts.force) return;
   S._logView = view;
+  // Each view is the tab's own page, so it lives in the address bar; Back
+  // steps through the views the operator visited (#1521).
+  if (S.currentTab === 'observability') {
+    const hash = '#observability/' + view;
+    if (location.hash !== hash) {
+      try {
+        if (opts.push === false) history.replaceState({ tab: 'observability' }, '', hash);
+        else history.pushState({ tab: 'observability' }, '', hash);
+      } catch { /* file:// */ }
+    }
+  }
+
   for (const name of LOG_VIEWS) {
     const el = document.getElementById('logView-' + name);
     if (el) el.style.display = name === view ? '' : 'none';
@@ -222,11 +235,27 @@ function switchLogView(view) {
   window.startLogTimers?.();
 }
 
+/**
+ * Apply an observability route: show the view it names.
+ *
+ * An id this build does not serve is replaced by the default view, so a stale
+ * link lands on a page instead of an empty panel.
+ *
+ * @param {string} id The view the hash carries, or '' for the default.
+ */
+function applyLogRoute(id) {
+  if (id && LOG_VIEWS.includes(id)) { switchLogView(id, { force: true, push: false }); return; }
+  if (id) {
+    try { history.replaceState({ tab: 'observability' }, '', '#observability/' + (S._logView || 'requests')); } catch { /* file:// */ }
+  }
+}
+window.applyLogRoute = applyLogRoute;
+
 // ===================== Exports =====================
 
 Object.assign(window, {
   loadOpsLog, renderOpsLog, toggleOpsLogRow, changeOpsLogPage, jumpToOpsLogPage,
-  resetOpsLogFilters, switchLogView, populateOpsLogFilters,
+  resetOpsLogFilters, switchLogView, populateOpsLogFilters, applyLogRoute,
 });
 
 export { loadOpsLog, switchLogView, populateOpsLogFilters };

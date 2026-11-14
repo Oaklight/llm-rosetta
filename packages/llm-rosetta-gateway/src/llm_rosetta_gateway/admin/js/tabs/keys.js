@@ -199,6 +199,10 @@ function clearKeySearch() {
 }
 
 function renderKeys() {
+  // The search is part of the address (#1521).
+  if (S.currentTab === 'keys') {
+    window.writeRoute?.({ params: { q: (document.getElementById('keySearch')?.value || '').trim() } });
+  }
   // Re-rendered here too so a language switch relabels the tier control.
   renderKeyUsageControl();
   const tbody = document.getElementById('keysTable');

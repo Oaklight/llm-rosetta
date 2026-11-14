@@ -577,7 +577,9 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 #providerTable th:first-child, #providerTable td:first-child { padding-left: 16px; }
 #providerTable .pc-col-cap, #providerTable .pc-col-toggle { text-align: center; }
 #providerTable .pc-col-num {
-  text-align: right; font-variant-numeric: tabular-nums; color: var(--text);
+  /* The count starts on the heading's line, like every other column in this
+     table: right-aligning it left a gap the heading never explains. */
+  text-align: left; font-variant-numeric: tabular-nums; color: var(--text);
 }
 #providerTable .pc-badges { justify-content: center; flex-wrap: nowrap; }
 #providerTable .pc-toggle { position: relative; }

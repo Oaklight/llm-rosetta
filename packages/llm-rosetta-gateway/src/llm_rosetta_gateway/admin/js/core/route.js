@@ -32,7 +32,12 @@ export function parseHash(hash) {
   const [path, query] = raw.split('?');
   const [tabRaw = '', ...rest] = path.split('/');
   const tab = TAB_ALIASES[tabRaw] || tabRaw || DEFAULT_TAB;
-  const id = decodeURIComponent(rest.join('/'));
+  // A hash is user input, and `decodeURIComponent` throws on a stray `%`.
+  // Parsing runs during module evaluation, so an exception here would abort
+  // the console before it painted: a mangled bookmark becomes a dead panel.
+  // The undecodable text is still the id the operator typed (#1521 review).
+  let id = rest.join('/');
+  try { id = decodeURIComponent(id); } catch { /* keep the raw text */ }
   const params = {};
   for (const [key, value] of new URLSearchParams(query || '')) {
     if (ROUTE_PARAMS.includes(key) && value !== '') params[key] = value;

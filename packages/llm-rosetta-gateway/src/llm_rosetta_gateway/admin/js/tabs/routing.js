@@ -82,6 +82,9 @@ function clearRoutingSearch() {
 function _renderModelList() {
   const el = document.getElementById('routingModelList');
   if (!el) return;
+  if (S.currentTab === 'routing') {
+    window.writeRoute?.({ params: { q: (document.getElementById('routingModelSearch')?.value || '').trim() } });
+  }
   const names = _visibleModels();
   if (!names.length) {
     // A search that matches nothing is not an empty config (#1519).
@@ -1072,4 +1075,5 @@ Object.assign(window, {
   applyRoutingPreset,
   saveRouting,
   clearRoutingSearch,
+  refreshRoutingList: _renderModelList,
 });

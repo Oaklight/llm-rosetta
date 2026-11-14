@@ -886,7 +886,9 @@ async function openDumpPage(dumpId) {
 function closeDumpPage() {
   const page = document.getElementById('dumpPage');
   if (page) page.hidden = true;
-  document.title = t('app.title');
+  // Back to the tab's own title, not the product's: the dump page had the
+  // title to itself, and every tab has one now (#1521).
+  window.syncTopbarTitle?.();
   _dumpPageEntry = null;
 }
 

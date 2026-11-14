@@ -1,11 +1,12 @@
 // models.js — Model management: modal, CRUD, rendering, filtering, bulk ops
 import { S, _CAP_ICONS } from '../core/state.js';
 import { filteredEmptyRowHtml } from '../core/empty.js';
+import { parseHash, buildHash } from '../core/route.js';
 import { t, capLabel, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, showToast, closeModal, esc, inlineConfirm, closeMenus, openMenu, isFreeEntry, freeEntryLabel, providerTypeName, withBusyButton } from '../core/utils.js';
 import { syncAriaSort } from '../core/sort.js';
 import { syncChipState } from '../core/chips.js';
-import { initLogoSelect, setLogoSelectOptions } from '../components/logo-select.js';
+import { initLogoSelect, setLogoSelectOptions, syncLogoSelect } from '../components/logo-select.js';
 import { mergeReasoningOverride } from '../core/reasoning-override.js';
 import { providerRowsHtml, syncPickerBtn, openPickerMenu } from '../components/provider-picker.js';
 import { laneGripHtml, laneSwitchHtml, laneWeightInputHtml } from '../components/provider-row.js';
@@ -837,13 +838,30 @@ function setModelDrawerPane(which) {
 }
 window.setModelDrawerPane = setModelDrawerPane;
 
-function openModelDrawer(name) {
+function openModelDrawer(name, opts = {}) {
   _drawerModel = name;
   _setDrawerPane('detail');
   _syncModelDrawer();
   _openDrawer();
+  // The drawer is a page of this tab: its own history step, so Back closes it
+  // before it leaves the tab, and the URL can be copied or reloaded (#1521).
+  if (opts.push !== false) {
+    try {
+      history.pushState({ tab: 'models', id: name }, '', buildHash({ tab: 'models', id: name, params: _filterParams() }));
+    } catch { /* file:// */ }
+  }
 }
 window.openModelDrawer = openModelDrawer;
+
+/** The filters as the address bar carries them. */
+function _filterParams() {
+  const params = {};
+  const q = (document.getElementById('modelSearch')?.value || '').trim();
+  if (q) params.q = q;
+  const provider = document.getElementById('modelProviderFilter')?.value || '';
+  if (provider) params.provider = provider;
+  return params;
+}
 
 function closeModelDrawer() {
   const el = document.getElementById('modelDrawer');
@@ -862,8 +880,45 @@ function closeModelDrawer() {
     _focusBeforeDrawer.focus();
   }
   _focusBeforeDrawer = null;
+  // Closing the drawer leaves the tab's own route; replacing rather than
+  // pushing keeps Back meaningful (it goes to whatever preceded the tab).
+  const route = parseHash(location.hash);
+  if (route.tab === 'models' && route.id) {
+    try {
+      history.replaceState({ tab: 'models' }, '', buildHash({ tab: 'models', params: route.params }));
+    } catch { /* file:// */ }
+  }
 }
 window.closeModelDrawer = closeModelDrawer;
+
+/**
+ * Apply the models route: the filters it names, and the drawer it opens.
+ *
+ * The shell calls this on load, on Back/Forward and after a hash-driven tab
+ * switch.  An id this config does not hold is an empty state, not a blank
+ * drawer.
+ *
+ * @param {{id: string, params: Record<string,string>}} route
+ */
+function applyModelRoute(route) {
+  const search = document.getElementById('modelSearch');
+  if (search && search.value !== (route.params.q || '')) search.value = route.params.q || '';
+  const provider = document.getElementById('modelProviderFilter');
+  if (provider && provider.value !== (route.params.provider || '')) {
+    provider.value = route.params.provider || '';
+    syncLogoSelect('modelProviderFilter');
+  }
+  renderModels();
+  if (!route.id) { closeModelDrawer(); return; }
+  const models = (S.configData && S.configData.models) || {};
+  if (!Object.prototype.hasOwnProperty.call(models, route.id)) {
+    showToast(t('model.notFound', { name: route.id }), 'error');
+    try { history.replaceState({ tab: 'models' }, '', buildHash({ tab: 'models', params: route.params })); } catch { /* file:// */ }
+    return;
+  }
+  openModelDrawer(route.id, { push: false });
+}
+window.applyModelRoute = applyModelRoute;
 
 /** Provider rows: the dropdown's rows for a multi entry, a plain one otherwise.
  *
@@ -1254,6 +1309,13 @@ function _checkRoutingLoops() {
 }
 
 function renderModels() {
+  // The search box is part of the page's address: a reload, a shared link and
+  // Back all restore what was typed.  While a drawer id owns the bar, the
+  // filters stay out of it.
+  const route = parseHash(location.hash);
+  if (route.tab === 'models' && !route.id && S.currentTab === 'models') {
+    window.writeRoute?.({ params: _filterParams() });
+  }
   // Rebuild type seg-controls from server metadata on each render
   // (cheap DOM update, ensures newly registered types appear immediately)
   _buildTypeSegControls();

@@ -51,6 +51,21 @@ export function topbarTitle(headingText, tabLabel, fallback = '') {
   return '';
 }
 
+/**
+ * The browser tab's title: the page's own name, then the product.
+ *
+ * Two pinned tabs used to read "llm-rosetta Gateway Console", which is the
+ * product, not the page (#1521).
+ *
+ * @param {string} pageTitle The section's visible title.
+ * @param {string} [brand]
+ * @returns {string}
+ */
+export function documentTitle(pageTitle, brand = 'llm-rosetta Gateway Console') {
+  const page = (pageTitle || '').trim();
+  return page ? page + ' \u00b7 ' + brand : brand;
+}
+
 /** Fill the topbar from the active tab and panel. */
 export function syncTopbarTitle() {
   const title = document.getElementById('topbarTitle');
@@ -67,14 +82,17 @@ export function syncTopbarTitle() {
   // observability board's two) are sub-sections and are not the page title.
   const heading = panel?.querySelector(':scope > .section > .section-header > h2');
 
+  let pageTitle = '';
   if (title) {
     const fallback = tabId === 'settings'
       ? (window.t?.('modal.settings') || 'Settings')
       : '';
-    title.textContent = topbarTitle(
+    pageTitle = topbarTitle(
       heading?.textContent, activeTab?.querySelector('.tab-label')?.textContent, fallback,
     );
+    title.textContent = pageTitle;
   }
+  if (typeof document !== 'undefined') document.title = documentTitle(pageTitle);
   if (index) {
     // The settings tab is in the rail but hidden; it keeps its position so the
     // numbers do not renumber when the operator opens it.
