@@ -237,24 +237,36 @@ class TestAnInterruptedRebuild:
 
     async def test_keys_stranded_by_an_older_build_are_put_back(self, tmp_path):
         """A file written before the rebuild was transactional: the scratch
-        table holds the keys, the live table is empty.  The next open must not
-        read that as "v5 already applied" and serve nothing."""
+        table holds the keys, the live one was recreated empty by bootstrap —
+        its missing column reads as "v5 applied", so the step is skipped.  The
+        keys must come back, and the scratch copy of their hashes must not.
+        """
         db = tmp_path / "keys.db"
         store = await KeyStore.create(db)
         try:
             await store.create_key(label="one", manual_key="key-one")
+            # The scratch table as that build left it: the v4 columns, no
+            # allowed_shims, holding the rows the live table lost.
             await store._conn.execute(
-                "ALTER TABLE api_keys ADD COLUMN allowed_shims TEXT NOT NULL "
-                "DEFAULT '[\"*\"]'"
+                "CREATE TABLE api_keys_v5 (id TEXT PRIMARY KEY, "
+                "key_hash TEXT NOT NULL UNIQUE, label TEXT NOT NULL DEFAULT '', "
+                "created TEXT NOT NULL, rotated TEXT, last_used TEXT, "
+                "usage_bucket TEXT, allowed_models TEXT NOT NULL DEFAULT '[\"*\"]', "
+                "rate_limit TEXT NOT NULL DEFAULT '')"
             )
-            # The scratch table as that build left it, then the live one emptied.
             await store._conn.execute(
-                "CREATE TABLE api_keys_v5 AS SELECT * FROM api_keys"
+                f"INSERT INTO api_keys_v5 ({self._COLS}) SELECT {self._COLS} FROM api_keys"
             )
+            # And the live table as bootstrap recreates it: current schema,
+            # no rows.  This is the shape that made the step skip.
+            await store._conn.execute("DROP TABLE api_keys")
             await store._conn.execute(
-                "ALTER TABLE api_keys_v5 DROP COLUMN allowed_shims"
+                "CREATE TABLE api_keys (id TEXT PRIMARY KEY, "
+                "key_hash TEXT NOT NULL UNIQUE, label TEXT NOT NULL DEFAULT '', "
+                "created TEXT NOT NULL, rotated TEXT, last_used TEXT, "
+                "usage_bucket TEXT, allowed_models TEXT NOT NULL DEFAULT '[\"*\"]', "
+                "rate_limit TEXT NOT NULL DEFAULT '')"
             )
-            await store._conn.execute("DELETE FROM api_keys")
             await store._conn.execute("DELETE FROM schema_version WHERE version = 5")
             await store._conn.commit()
         finally:
@@ -262,12 +274,25 @@ class TestAnInterruptedRebuild:
 
         reopened = await KeyStore.create(db)
         try:
-            assert "api_keys_v5" not in await _tables(reopened)
-            assert "allowed_shims" not in await _columns(reopened)
+            assert "api_keys_v5" not in await _tables(reopened), (
+                "the rescued copy is not left lying around"
+            )
             assert reopened.validate("key-one") is not None, "the key came back"
             assert 5 in await _versions(reopened)
-        finally:
+
+            # A rescue that only worked once would be a new way to fail on the
+            # boot after the repair.
             await reopened.close()
+            again = await KeyStore.create(db)
+            try:
+                assert "api_keys_v5" not in await _tables(again)
+                assert again.validate("key-one") is not None
+            finally:
+                await again.close()
+        except Exception:
+            if reopened._conn is not None:
+                await reopened.close()
+            raise
 
     async def test_a_rebuild_that_fails_rolls_back_whole(self, tmp_path):
         """The transaction is the guard: without it, a statement failing after
