@@ -72,6 +72,20 @@ async def test_the_limits_round_trip_through_the_store(tmp_path: Any) -> None:
 
 
 @pytest.mark.asyncio
+async def test_an_empty_list_stores_no_model_and_an_omitted_one_stores_every(
+    tmp_path: Any,
+) -> None:
+    store = await KeyStore.create(tmp_path / "keys.db")
+    _, empty_raw = await store.create_key(label="none", allowed_models=[])
+    _, omitted_raw = await store.create_key(label="omit")
+    empty = store.validate(empty_raw)
+    omitted = store.validate(omitted_raw)
+    assert empty is not None and omitted is not None
+    assert empty[1].allowed_models == frozenset()
+    assert omitted[1].allowed_models == frozenset({"*"})
+
+
+@pytest.mark.asyncio
 async def test_a_blank_quota_clears_the_limit(tmp_path: Any) -> None:
     store = await KeyStore.create(tmp_path / "keys.db")
     key_id, raw = await store.create_key(rate_limit="60/m")
@@ -318,6 +332,10 @@ def test_the_admin_refuses_a_malformed_limit_before_storing_it() -> None:
     # The panel sends ["*"] back for "every model", so the validator accepts it.
     assert _key_models(["*"]) == (["*"], None)
     assert _key_models(["*", "gpt-4o"]) == (["*"], None)
+    # An empty value is the same state a damaged record reads as, so the write
+    # side does not spell "every model" that way; omitting the field does.
+    assert _key_models([]) == ([], None)
+    assert _key_models("") == ([], None)
 
     assert _key_quota("") == ("", None)
     assert _key_quota("30/m, 500/h") == ("30/m, 500/h", None)
