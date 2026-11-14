@@ -147,24 +147,25 @@ function bodyOf(source, name) {
   return source.slice(start, end);
 }
 
-/** True when *needle* appears in *body* before *before*. */
-function before(body, needle, marker) {
-  const at = body.indexOf(needle);
-  const then = body.indexOf(marker);
-  return at >= 0 && then >= 0 && at < then;
-}
+/**
+ * The guard itself: both validators must be called inside the `if` that
+ * returns, so a `false` from either stops the request.  A version that called
+ * them without the `if` would pass a test that only counted call order.
+ */
+const GUARD = /if \(!validateKeyModels\('([A-Za-z]+)'\) \|\| !validateKeyRate\('([A-Za-z]+)'\)\) return;/;
 
-test('both save paths validate before they send anything', () => {
+test("both save paths refuse on the validators' answer", () => {
   const source = fs.readFileSync(KEYS_JS, 'utf8');
-  const create = bodyOf(source, '_generateKey');
-  assert.ok(before(create, "validateKeyModels('keyModels')", 'api.post'),
-    'the new-key dialog refuses a bad field before the POST');
-  assert.ok(before(create, "validateKeyRate('keyRate')", 'api.post'),
-    'the new-key dialog refuses a bad quota before the POST');
-
-  const edit = bodyOf(source, '_saveKeyLabel');
-  assert.ok(before(edit, "validateKeyModels('keyModelsInput')", 'api.put'),
-    'the edit dialog refuses a bad field before the PUT');
-  assert.ok(before(edit, "validateKeyRate('keyRateInput')", 'api.put'),
-    'the edit dialog refuses a bad quota before the PUT');
+  for (const [fn, models, rate] of [
+    ['_generateKey', 'keyModels', 'keyRate'],
+    ['_saveKeyLabel', 'keyModelsInput', 'keyRateInput'],
+  ]) {
+    const body = bodyOf(source, fn);
+    const guard = body.match(GUARD);
+    assert.ok(guard, `${fn} guards on both validators`);
+    assert.equal(guard[1], models, `${fn} validates its models field`);
+    assert.equal(guard[2], rate, `${fn} validates its rate field`);
+    const post = body.search(/api\.(post|put)/);
+    assert.ok(body.indexOf(guard[0]) < post, `${fn} refuses before it sends`);
+  }
 });

@@ -128,10 +128,11 @@ class RateLimitState:
         self.exclude_prefixes: list[str] = ["/health", "/admin"]
         self.trust_proxy: bool = False
         self._snap: _LimiterSnapshot = _LimiterSnapshot(None, None, None, None)
-        #: (key identity, quota spec) → its windows and when they were last
-        #: used.  A key whose limit changes gets fresh windows rather than
-        #: inheriting the old counts; a key that stops calling is pruned.
-        self._key_limits: dict[tuple[str, str], tuple[RateLimiter, float]] = {}
+        #: (key identity, quota spec) → its windows, when they were last used
+        #: and how long the longest one runs.  A key whose limit changes gets
+        #: fresh windows rather than inheriting the old counts; a key that
+        #: stops calling is pruned once its own window has closed.
+        self._key_limits: dict[tuple[str, str], tuple[RateLimiter, float, float]] = {}
 
     #: How long an idle key's windows are kept.  Pruning is what keeps a
     #: deleted key from holding a limiter for the process lifetime.
@@ -151,11 +152,13 @@ class RateLimitState:
         entry = self._key_limits.get(cache_key)
         if entry is None:
             limiters = []
+            periods: list[float] = []
             for part in str(ctx.rate_limit).split(","):
                 part = part.strip()
                 if not part:
                     continue
                 parsed = parse_quota(part)  # once per part
+                periods.append(float(parsed["period"]))
                 limiters.append(
                     FixedWindowLimiter(
                         limit=int(parsed["limit"]),
@@ -165,19 +168,24 @@ class RateLimitState:
             limiter: RateLimiter = ThreadSafeLimiter(
                 limiters[0] if len(limiters) == 1 else CompositeLimiter(limiters)
             )
-            entry = (limiter, now)
+            entry = (limiter, now, max(periods))
             self._key_limits[cache_key] = entry
             self._prune_key_limits(now)
         else:
-            self._key_limits[cache_key] = (entry[0], now)
+            self._key_limits[cache_key] = (entry[0], now, entry[2])
         return entry[0]
 
     def _prune_key_limits(self, now: float) -> None:
-        """Drop the windows of keys idle for longer than ``KEY_LIMIT_IDLE_S``."""
+        """Drop the windows of keys whose own window closed while they idled.
+
+        ``KEY_LIMIT_IDLE_S`` is a floor, not the rule: a ``2/d`` key is idle
+        for most of its window, and dropping those counters would hand the
+        cap back.  An entry goes only once its longest window has rolled over.
+        """
         stale = [
             key
-            for key, (_, seen) in self._key_limits.items()
-            if now - seen > self.KEY_LIMIT_IDLE_S
+            for key, (_, seen, window) in self._key_limits.items()
+            if now - seen > max(self.KEY_LIMIT_IDLE_S, window)
         ]
         for key in stale:
             del self._key_limits[key]
