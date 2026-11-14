@@ -375,4 +375,5 @@ Feel free to discuss the project via
 ## License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file
-for details.
+for details. The name and the logo marks are brand assets and are covered
+separately by [TRADEMARKS.md](TRADEMARKS.md).

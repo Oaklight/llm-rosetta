@@ -1,0 +1,36 @@
+LLM-Rosetta mark: terms of use
+
+Copyright (c) 2025 Peng Ding. All rights reserved, apart from the permissions
+below.
+
+These files (the traced outline, the generated SVGs, and the page and script in
+this folder) carry the LLM-Rosetta mark and belong to the project. The source
+code of the project is MIT licensed; that license does not cover these files.
+
+You may:
+
+- use the mark to refer to the LLM-Rosetta project, in articles, tutorials,
+  talks, documentation, package listings and screenshots;
+- copy and redistribute these files unchanged, with this notice, as part of a
+  fork or a mirror of this repository;
+- use the mark in a non-commercial project built on LLM-Rosetta, with a visible
+  note that the project is not the official LLM-Rosetta.
+
+You may not:
+
+- use this mark, or a confusingly similar one, as the logo, icon or name of
+  your own product, company, service or hosted offering;
+- use it in a commercial product, service or marketing, or in any way that
+  suggests endorsement by Peng Ding or the LLM-Rosetta maintainers;
+- claim authorship or ownership of the mark, register it as a trademark, or
+  register a confusingly similar one;
+- redistribute a modified version of the mark without saying that it is
+  modified.
+
+The outline was traced from File:Rosetta Stone.svg on Wikimedia Commons, which
+its author released under CC0 1.0 (recorded in references/SOURCE.md). CC0
+covers that source image, not these files. What these terms protect is the
+specific simplified geometry, framing and files, not the shape of an ancient
+stone.
+
+For permission, open an issue in https://github.com/Oaklight/llm-rosetta.
