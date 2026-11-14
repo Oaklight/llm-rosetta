@@ -670,10 +670,12 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
   background:#fff;border-radius:4px;padding:1px;box-sizing:content-box;
 }
 
+/* A rounded rectangle, not a pill: the panel's corners are square (2–6px)
+   and a 20px pill was the one shape on the page that disagreed. */
 .toggle { position:relative;display:inline-block;width:36px;height:20px; }
 .toggle input { opacity:0;width:0;height:0; }
-.toggle .slider { position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:20px;transition:.2s; }
-.toggle .slider::before { content:'';position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s; }
+.toggle .slider { position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:4px;transition:.2s; }
+.toggle .slider::before { content:'';position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#fff;border-radius:2px;transition:.2s; }
 .toggle input:checked + .slider { background:var(--accent); }
 .toggle input:checked + .slider::before { transform:translateX(16px); }
 .key-cell { display: flex; align-items: center; gap: 4px; }
@@ -2741,6 +2743,19 @@ button.shim-update.unknown { color: var(--tag-warn); }
    unavailable rather than by opening a drawer that would fail to save. */
 .shim-row-add:disabled { opacity: .4; cursor: not-allowed; }
 .shim-row-add:disabled:hover { background: transparent; color: var(--text-dim); }
+
+/* A lane row names its provider in the same shape as the provider cards: the
+   vendor's mark, then the name. */
+.pm-idline { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+/* The table's provider link is an inline-block with an id's worth of weight,
+   so the mark spaces itself rather than relying on a flex gap. */
+.pm-logo { width: 14px; height: 14px; flex: 0 0 14px; object-fit: contain; vertical-align: -2px; margin-right: 6px; }
+.pm-idline .pm-logo { margin-right: 0; }
+/* The table's own rule puts this link on `inline-block`, which has more
+   weight than the bare class, so the row layout is stated with the cell. */
+.provider-link-logo,
+.model-provider-cell .provider-link-logo { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.provider-link-logo > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .shim-card {
   display: flex; flex-direction: column; gap: 10px;
