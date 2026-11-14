@@ -45,9 +45,9 @@
 
 ## 各 shim 修正了什么
 
-- **推理字段。** Kilo、LLM7 与 OVHcloud 把推理文本放在 `message.reasoning` /
-  `delta.reasoning`，而转换器读取 `reasoning_content`。三者各带一个改名转换，
-  在响应不含推理时是空操作。
+- **推理字段。** LLM7 与 OVHcloud 把推理文本放在 `message.reasoning` /
+  `delta.reasoning`，而转换器读取 `reasoning_content`。两者各带一个改名转换，
+  在响应不含推理时是空操作。Kilo 的免费线路不带改名：它的推理字段尚未实测。
 - **模型清单。** Kilo 与 OpenCode 的目录把付费模型与免费模型列在一起，因此它们的
   `model_list_transform` 只保留免费子集。LLM7 的目录带类型与档位。OVHcloud 的目录
   没有类型字段，整份提供。
