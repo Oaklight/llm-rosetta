@@ -1,5 +1,6 @@
 // models.js — Model management: modal, CRUD, rendering, filtering, bulk ops
 import { S, _CAP_ICONS } from '../core/state.js';
+import { filteredEmptyRowHtml } from '../core/empty.js';
 import { t, capLabel, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, showToast, closeModal, esc, inlineConfirm, closeMenus, openMenu, isFreeEntry, freeEntryLabel, providerTypeName, withBusyButton } from '../core/utils.js';
 import { syncAriaSort } from '../core/sort.js';
@@ -1368,7 +1369,8 @@ function renderModels() {
   countEl.textContent = t('model.count', {shown: entries.length, total: totalCount});
 
   if (entries.length === 0) {
-    tbody.innerHTML = `<tr role="row"><td colspan="6" role="cell" class="model-empty">${t('empty.models')}</td></tr>`;
+    // Rows exist — this page is filtered, and says so, with the way back.
+    tbody.innerHTML = filteredEmptyRowHtml('resetModelFilters()', 6);
     return;
   }
 

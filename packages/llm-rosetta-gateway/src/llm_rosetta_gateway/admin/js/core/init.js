@@ -420,9 +420,19 @@ document.getElementById('filterOpsEventType').addEventListener('change', () => {
 document.getElementById('filterOpsSeverity').addEventListener('change', () => { S.opsLogOffset = 0; S.expandedOpsLogRows.clear(); loadOpsLog(); });
 document.getElementById('filterOpsSource').addEventListener('change', () => { S.opsLogOffset = 0; S.expandedOpsLogRows.clear(); loadOpsLog(); });
 
-// Close modal on overlay click
+// Close modal on overlay click — unless the dialog says otherwise.  A scrim
+// click must not throw away input the operator typed, and the one dialog that
+// shows a secret in full closes only on its own button (#1519):
+// `data-scrim-close="never"` refuses every scrim click, `"pristine"` allows
+// one only while the form still holds what it opened with.
 document.querySelectorAll('.modal-overlay').forEach(m => {
-  m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); });
+  m.addEventListener('click', e => {
+    if (e.target !== m) return;
+    const rule = m.dataset.scrimClose || '';
+    if (rule === 'never') return;
+    if (rule === 'pristine' && !(window.providerFormPristine ? window.providerFormPristine() : true)) return;
+    closeModal(m.id);
+  });
 });
 
 // Close popups/modals on Escape key. Modal dialogs register their own

@@ -24,6 +24,8 @@ import { degradedEndpoints, categoryKey, endpointState, degradedMarker, provider
 import { routingRows, blockRow } from '../core/quota-lines.js';
 import { shimHintText } from '../core/shim-hint.js';
 import { jsArg } from '../core/html.js';
+import { filteredEmptyHtml } from '../core/empty.js';
+import { providerFormError } from '../core/form-validate.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -1640,8 +1642,12 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
   // Reset to Basic on every open; the type closure is never re-run by a tab
   // switch, so choosing a type here and then visiting Auth changes nothing.
   _wireCredentialFields();
+  _wireProviderFieldValidation();
   setProviderPane('basic');
   openModal('providerModal');
+  // Taken after every field has its value: the scrim may close the form only
+  // while it still holds what it opened with (#1519).
+  _providerFormSnapshot = _providerFormState();
   // When editing, fetch the real (unmasked) key
   if (name && S._credentialVisible) {
     api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/key`).then(res => {
@@ -2147,6 +2153,15 @@ function onProviderSearch() {
 }
 window.onProviderSearch = onProviderSearch;
 
+/** The reset the filtered-empty message offers. */
+function clearProviderSearch() {
+  const input = document.getElementById('providerSearch');
+  if (input) input.value = '';
+  S._providerFilter = 'all';
+  S._providerStatus = 'all';
+  onProviderSearch();
+}
+
 // Below this width a row layout has no room left, so list view falls back to
 // cards. The preference is still remembered — only the class is dropped.
 const _LIST_VIEW_MIN_WIDTH = 700;
@@ -2192,6 +2207,17 @@ function _setProvidersMessageInGrid(text) {
   const grid = document.getElementById('providerGrid');
   if (grid) grid.innerHTML = `<p style="color:var(--text-dim)">${esc(text)}</p>`;
   _applyProviderView();
+}
+
+/** The filtered-empty message: markup, because it carries the reset control. */
+function _setProvidersMessageHtml(html) {
+  if (_isListView()) {
+    _setProviderMarkup(`<tr><td class="provider-empty" colspan="5">${html}</td></tr>`);
+  } else {
+    const grid = document.getElementById('providerGrid');
+    if (grid) grid.innerHTML = `<p style="color:var(--text-dim)">${html}</p>`;
+    _applyProviderView();
+  }
 }
 
 _listViewViable.addEventListener('change', () => renderProviders());
@@ -2395,7 +2421,7 @@ function renderProviders() {
   const shimDefaults = Object.fromEntries(registeredShims.map(s => [s.name, s]));
 
   if (entries.length === 0) {
-    _setProvidersMessage(t('empty.searchResults'));
+    _setProvidersMessageHtml(filteredEmptyHtml('clearProviderSearch()'));
     return;
   }
 
@@ -2548,6 +2574,67 @@ function renderProviders() {
 
 // ── Provider CRUD ───────────────────────────────────────────────────
 
+/** The focus target and the mark for each field the form can name. */
+const _PROVIDER_FIELD_TARGETS = {
+  name: '#provName',
+  base_url: '#provBaseUrl',
+  type: '#typePickerTrigger',
+  capability: '#provCapChecks input',
+};
+
+/** Report the first invalid field: say it, mark it, and put the cursor on it. */
+function _rejectProviderField(problem) {
+  showToast(t(problem.key), 'error');
+  const el = document.querySelector(_PROVIDER_FIELD_TARGETS[problem.field] || '');
+  if (!el) return;
+  // The capability boxes are four inputs behind one label; mark every box of
+  // the group so the message points at the group, and focus the first.
+  const targets = problem.field === 'capability'
+    ? [...document.querySelectorAll(_PROVIDER_FIELD_TARGETS.capability)]
+    : [el];
+  for (const target of targets) {
+    target.setAttribute('aria-invalid', 'true');
+    target.closest('.form-group, .prov-cap-check')?.classList.add('is-invalid');
+  }
+  el.focus?.();
+}
+
+/** Remove the marks as soon as the operator touches the field again. */
+function _wireProviderFieldValidation() {
+  const clear = (el) => {
+    el.removeAttribute('aria-invalid');
+    el.closest('.form-group, .prov-cap-check')?.classList.remove('is-invalid');
+  };
+  for (const el of document.querySelectorAll(
+    '#provName, #provBaseUrl, #provCapChecks input, #typePickerTrigger')) {
+    if (el.dataset.validationWired) continue;
+    el.dataset.validationWired = '1';
+    el.addEventListener('input', () => clear(el));
+    el.addEventListener('change', () => clear(el));
+  }
+}
+
+/** The editable state of the form, as one string, for the scrim rule. */
+function _providerFormState() {
+  const parts = [];
+  for (const el of document.querySelectorAll('#providerModal input, #providerModal select, #providerModal textarea')) {
+    if (!el.id) continue;
+    parts.push(el.type === 'checkbox' || el.type === 'radio' ? `${el.id}:${el.checked}` : `${el.id}:${el.value}`);
+  }
+  return parts.join('|');
+}
+
+let _providerFormSnapshot = '';
+
+/** Whether the open provider form is untouched since it opened. */
+function providerFormPristine() {
+  const overlay = document.getElementById('providerModal');
+  // A closed form has nothing to lose: the scrim rule only guards an *open*
+  // dialog, and this predicate is asked only for the click on that dialog.
+  if (!overlay || !overlay.classList.contains('open')) return true;
+  return _providerFormState() === _providerFormSnapshot;
+}
+
 function saveProvider() {
   // One Save click, one PUT: the button is held until the answer arrives.
   return withBusyButton(document.querySelector('#providerModal .panel-foot .btn-primary'), _saveProvider);
@@ -2560,11 +2647,21 @@ async function _saveProvider() {
   const apiKey = _getKeyFieldValue();
   const proxy = document.getElementById('provProxy').value.trim();
   const isLlm = document.getElementById('provCapLlm').checked;
-  // Nothing selected saves a provider that serves nothing: name it and stop.
   const anyCap = (S.configData?.model_types || []).some(
     d => document.getElementById(`provCap${_capitalize(d.name)}`)?.checked);
-  if (!anyCap) { showToast(t('error.noCapability'), 'error'); return; }
-  if (!name || (isLlm && !provType)) { showToast(t('error.fieldsRequired'), 'error'); return; }
+  // One rule decides which field is reported, in the order the operator
+  // filled the form: the message names the field they are on, and the mark
+  // and the focus go there rather than to the submit button.
+  const problem = providerFormError({
+    name,
+    baseUrl,
+    type: provType,
+    isLlm,
+    anyCap,
+    existing: Object.keys((S.configData && S.configData.providers) || {}),
+    editing: _editingProviderName,
+  });
+  if (problem) { _rejectProviderField(problem); return; }
   const urlTemplate = document.getElementById('provUrlTemplate').value.trim();
   const streamUrlTemplate = document.getElementById('provStreamUrlTemplate').value.trim();
   const body = {base_url: baseUrl, proxy};
@@ -2872,11 +2969,11 @@ async function loadConfig(prefetchedData) {
 // ── Window bindings ─────────────────────────────────────────────────
 
 Object.assign(window, {
-  openProviderModal, openShimsForAdd, startBlankProvider, startProviderFromShim,
+  openProviderModal, openShimsForAdd, startBlankProvider, startProviderFromShim, clearProviderSearch,
   toggleProvCapSection, toggleModalKeyVisibility, copyModalKey,
   _syncKeyField, _promoteToMultiKey, _addKeyEntry, _removeKeyEntry,
   switchProviderFilter, setProviderView, renderProviders,
-  saveProvider, deleteProvider, onDeleteConfirmInput, onDeleteConfirmClick,
+  saveProvider, deleteProvider, providerFormPristine, onDeleteConfirmInput, onDeleteConfirmClick,
   confirmDeleteProvider, toggleProvider, editProvider, copyProviderEntry,
   saveServerSettings, runNetDiag, loadConfig,
   goToModelsForProvider, goToProviderFromModel, testProviderConnectivity,
