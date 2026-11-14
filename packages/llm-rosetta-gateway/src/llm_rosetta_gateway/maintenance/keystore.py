@@ -139,6 +139,7 @@ async def _apply_migration(
     version: int,
     description: str,
     statements: list[str],
+    drops: str | None = None,
 ) -> int:
     """Apply one versioned migration, and say what it took to do it.
 
@@ -156,6 +157,15 @@ async def _apply_migration(
         return 0
     logger.info("Applying keys.db migration v%d: %s", version, description)
     columns = await _columns(conn)
+    if drops is not None and drops not in columns:
+        # A store this code created never had the column, so the version's
+        # work is already done; only the ledger row is missing.
+        await conn.execute(
+            "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
+            (version, datetime.now(timezone.utc).isoformat()),
+        )
+        await conn.commit()
+        return 1
     executed = 0
     for sql in statements:
         # ``ADD COLUMN`` has no ``IF NOT EXISTS`` and ``DROP COLUMN`` has no
@@ -164,12 +174,8 @@ async def _apply_migration(
         # own CREATE TABLE, which has neither the added nor the dropped column,
         # so it skips both.
         column = _ddl_column(sql)
-        if column is not None:
-            added, dropped = column
-            if added and added in columns:
-                continue
-            if dropped and dropped not in columns:
-                continue
+        if column is not None and column in columns:
+            continue
         await conn.execute(sql)
         executed += 1
     await conn.execute(
@@ -205,20 +211,18 @@ async def _backfill_usage_bucket(context: StepContext) -> int:
     return len(rows)
 
 
-_ALTER_COLUMN = re.compile(r"\b(ADD|DROP) COLUMN (\w+)", re.IGNORECASE)
+_ALTER_COLUMN = re.compile(r"\bADD COLUMN (\w+)", re.IGNORECASE)
 
 
-def _ddl_column(sql: str) -> tuple[str | None, str | None] | None:
-    """The (added, dropped) column one ``ALTER TABLE`` names, or None.
+def _ddl_column(sql: str) -> str | None:
+    """The column an ``ALTER TABLE ... ADD COLUMN`` names, or None.
 
-    Only the single-column alters this store uses pass through here; anything
-    else runs unexamined, as it did before.
+    A version that *removes* a column is guarded once for the whole version
+    instead: its absence is the whole question, and a rebuild is several
+    statements that only make sense together.
     """
     match = _ALTER_COLUMN.search(sql)
-    if match is None:
-        return None
-    kind, column = match.group(1).upper(), match.group(2)
-    return (column, None) if kind == "ADD" else (None, column)
+    return match.group(1) if match else None
 
 
 async def _columns(conn: Any) -> set[str]:
@@ -261,6 +265,7 @@ def build_registry() -> Registry:
                 version=version,
                 description=description,
                 statements=statements,
+                drops=COLUMN_OF.get(version) if version in DROPS else None,
             ),
         )
         for version, description, statements in VERSIONS

@@ -53,12 +53,40 @@ VERSIONS: list[tuple[int, str, list[str]]] = [
         "add api_keys.rate_limit",
         ["ALTER TABLE api_keys ADD COLUMN rate_limit TEXT NOT NULL DEFAULT ''"],
     ),
+    # v5 rebuilds the table rather than `ALTER TABLE ... DROP COLUMN`: the
+    # drop refuses when an index names the column and needs SQLite 3.35.5,
+    # and this step is mandatory — a refusal would be a boot failure over a
+    # column the code no longer reads.  `key_hash` stays UNIQUE, so the table
+    # keeps the one index it had; any other index on this store is gone after
+    # the rebuild, and none exists.
     (
         5,
         "drop api_keys.allowed_shims",
-        ["ALTER TABLE api_keys DROP COLUMN allowed_shims"],
+        [
+            "DROP TABLE IF EXISTS api_keys_v5",
+            """CREATE TABLE api_keys_v5 (
+                id          TEXT PRIMARY KEY,
+                key_hash    TEXT NOT NULL UNIQUE,
+                label       TEXT NOT NULL DEFAULT '',
+                created     TEXT NOT NULL,
+                rotated     TEXT,
+                last_used   TEXT,
+                usage_bucket TEXT,
+                allowed_models TEXT NOT NULL DEFAULT '["*"]',
+                rate_limit  TEXT NOT NULL DEFAULT ''
+            )""",
+            "INSERT INTO api_keys_v5 (id, key_hash, label, created, rotated, "
+            "last_used, usage_bucket, allowed_models, rate_limit) "
+            "SELECT id, key_hash, label, created, rotated, last_used, "
+            "usage_bucket, allowed_models, rate_limit FROM api_keys",
+            "DROP TABLE api_keys",
+            "ALTER TABLE api_keys_v5 RENAME TO api_keys",
+        ],
     ),
 ]
+
+#: ``VERSIONS`` statements are ``ALTER``/``CREATE``/``INSERT`` on this store's
+#: own table only: the runner inspects each one for the column it adds.
 
 
 def _quota(raw: str | None) -> str:
