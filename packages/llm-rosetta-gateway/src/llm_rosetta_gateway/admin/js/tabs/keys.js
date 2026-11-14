@@ -256,7 +256,7 @@ function renderKeys() {
     return `<tr role="row">
       <td class="col-check" role="cell"><input type="checkbox" class="row-check key-check" data-key="${esc(k.id)}" onchange="updateKeyBulk()"${(S._selectedKeyIds || new Set()).has(String(k.id)) ? ' checked' : ''}></td>
       <td class="key-label-cell" role="cell" aria-labelledby="keySortLabel"><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
-        <button class="key-btn" style="margin-left:4px" onclick="editKeyLabel(${jsArg(k.id)})" title="${esc(t('btn.edit'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>${sharedMark}</td>
+        <button class="icon-btn" style="margin-left:4px" onclick="editKeyLabel(${jsArg(k.id)})" title="${esc(t('btn.edit'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>${sharedMark}</td>
       <td class="key-created-cell" role="cell" aria-labelledby="keySortCreated" data-label="${esc(t('col.created'))}" title="${createdFull}">${created}</td>
       <td class="key-lastused-cell" role="cell" aria-labelledby="keySortLastUsed" data-label="${esc(t('col.lastUsed'))}" title="${lastUsedFull}">${lastUsed}</td>
       <td class="key-requests-cell" role="cell" aria-labelledby="keySortRequests" data-label="${esc(t('col.requests'))}" title="${usageTip}">${reqs}</td>
