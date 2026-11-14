@@ -75,6 +75,9 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
  * grooving rather than as marks on top. */
 .inkLayer{pointer-events:none}
 .ink{fill:var(--panel)}
+/* The reference outline: a constant-width dash whatever the zoom or the export
+ * size, so it reads as a measurement rather than as part of the mark. */
+.orig{fill:none;stroke:#e02424;stroke-width:1.5;stroke-dasharray:5 3;vector-effect:non-scaling-stroke}
 .big-wrap.zoomed{cursor:grab}
 .big-wrap.zoomed.dragging{cursor:grabbing}
 .view-bar{display:flex;gap:10px;align-items:center;margin-top:14px;font-size:11.5px;
@@ -235,6 +238,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
         <div class="stats">
           <span>源点 <b id="sIn">—</b></span>
           <span>输出顶点 <b id="sOut">—</b></span>
+          <span>原版偏差 <b id="sDev">—</b></span>
           <span>固定 <b id="sPin">—</b></span>
           <span>SVG <b id="sBytes">—</b></span>
           <span>viewBox <b id="sVb">—</b></span>
@@ -310,6 +314,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
           <div class="seg">
             <button id="tGrid" class="on">网格</button>
             <button id="tDots" class="on">顶点</button>
+            <button id="tOrig">原版</button>
           </div>
         </label>
         <label class="row">
@@ -824,6 +829,7 @@ const state = {
   sharp: new Set(),     // 锐 places: no rounding, extra vertices nearby
   round: new Set(),     // 圆 places: extra rounding nearby
   mode: "pin",          // what a left click places: pin | sharp | round
+  overlay: false,       // draw the outline this mark was traced from
   centerRef: "bbox",    // export alignment: bbox (中心) or centroid (重心)
   inc: null,            // carved inscription: { d, viewBox } once loaded
   incOn: false,         // draw it inside the outline
@@ -1048,6 +1054,12 @@ function build() {
   let dots = rotateRing(dotRings, state.rotate, pivot);
   dots = stretchRing(dots, state.aspect, pivot);
   dots = inflateRing(dots, state.inflate, pivot);
+  // The outline this mark was traced from, through the same knobs.  Flattened
+  // at --tolerance, so what the overlay shows is the geometry the reduction
+  // actually started from, not the 126 cubic segments it approximates.
+  let orig = rotateRing(dense, state.rotate, pivot);
+  orig = stretchRing(orig, state.aspect, pivot);
+  orig = inflateRing(orig, state.inflate, pivot);
 
   const [bx0, by0, bx1, by1] = bbox(deformed);
   const w = bx1 - bx0, h = by1 - by0;
@@ -1088,9 +1100,46 @@ function build() {
   built = { deformed, srcs, dots, dotSrcs, autoByRing, fracs: fracsByRing,
             pinsByRing: pinByRing, lockByRing,
             sharpByRing, roundByRing, pivotNow, centred, lockedAt,
-            viewBox, tx, ty, k, totalIn,
+            viewBox, tx, ty, k, totalIn, orig,
+            // Deviation is measured only while the overlay is on: it walks
+            // every flattened vertex against every emitted segment.
+            origDev: state.overlay ? outlineDeviation(orig, deformed) : null,
             outN: deformed.reduce((a, r) => a + r.length, 0) };
   return built;
+}
+
+/* How far the mark sits from the outline it was traced from.
+ *
+ * Measured at the flattened (original) vertices against the emitted polyline,
+ * so a dense reference and a coarse budget compare honestly: the max says what
+ * the worst excursion is, the mean what the silhouette spends on average.
+ * Returned in the pre-framing units; multiply by ``built.k`` for canvas units.
+ */
+function outlineDeviation(origRings, outRings) {
+  let max = 0, sum = 0, n = 0;
+  origRings.forEach((ring, ri) => {
+    const out = outRings[ri] || [];
+    const m = out.length;
+    if (m < 2) return;
+    for (const p of ring) {
+      let best = Infinity;
+      for (let i = 0; i < m; i++) {
+        best = Math.min(best, segDistance(p, out[i], out[(i + 1) % m]));
+      }
+      max = Math.max(max, best);
+      sum += best;
+      n++;
+    }
+  });
+  return { max, mean: n ? sum / n : 0 };
+}
+
+function segDistance(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  const len = dx * dx + dy * dy;
+  const t = len ? Math.max(0, Math.min(1,
+    ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / len)) : 0;
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
 }
 
 function isDarkTheme() {
@@ -1190,6 +1239,11 @@ function svgFor(size, opts = {}) {
   }
   const polys = b.deformed.map(r =>
     `<polygon class="m"${inkMask} points="${r.map(p => `${fmt(p[0], 2)},${fmt(p[1], 2)}`).join(" ")}"/>`).join("");
+  // The reference outline goes under the dots: it is context, not a control.
+  const origPaths = state.overlay && b.orig
+    ? b.orig.map(r => `<path class="orig" d="M${
+        r.map(p => `${fmt(p[0], 2)},${fmt(p[1], 2)}`).join("L")}Z"/>`).join("")
+    : "";
   let dots = "";
   if (opts.dots && state.dots) {
     const rad = (parseFloat(vb[2]) / Math.max(size, 1)) * (opts.dotPx || 3.2);
@@ -1214,7 +1268,7 @@ function svgFor(size, opts = {}) {
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.viewBox}" width="${size}" height="${size}" color="var(--grid)">`
        + inkDefs + head + grid
-       + `<g transform="translate(${fmt(b.tx, 3)},${fmt(b.ty, 3)}) scale(${fmt(b.k, 5)})">${polys}</g>`
+       + `<g transform="translate(${fmt(b.tx, 3)},${fmt(b.ty, 3)}) scale(${fmt(b.k, 5)})">${polys}${origPaths}</g>`
        // The dots keep their own group so the inscription can be inserted
        // between it and the fill: above the mark, below the clickable vertices.
        + `<g class="dots" transform="translate(${fmt(b.tx, 3)},${fmt(b.ty, 3)}) scale(${fmt(b.k, 5)})">${dots}</g>`
@@ -1232,6 +1286,9 @@ function render() {
     </figure>`).join("");
   $("sIn").textContent = built.totalIn;
   $("sOut").textContent = built.outN;
+  $("sDev").textContent = built.origDev
+    ? `${fmt(built.origDev.max * built.k, 2)} / ${fmt(built.origDev.mean * built.k, 2)}`
+    : "—";
   $("sPin").textContent = built.dots.reduce((acc, ring, ri) =>
     acc + ring.filter((_, i) => isPinned(ri, built.dotSrcs[ri][i])).length, 0);
   $("sBytes").textContent = (state.incOn && state.inc)
@@ -1358,6 +1415,7 @@ function pullUI() {
   $("frameTight").classList.toggle("on", state.tight);
   $("tGrid").classList.toggle("on", state.grid);
   $("tDots").classList.toggle("on", state.dots);
+  $("tOrig").classList.toggle("on", state.overlay);
   syncLabels();
 }
 
@@ -1645,6 +1703,7 @@ $("frameSquare").addEventListener("click", () => { state.tight = false; pullUI()
 $("frameTight").addEventListener("click", () => { state.tight = true; pullUI(); render(); });
 $("tGrid").addEventListener("click", () => { state.grid = !state.grid; pullUI(); render(); });
 $("tDots").addEventListener("click", () => { state.dots = !state.dots; pullUI(); render(); });
+$("tOrig").addEventListener("click", () => { state.overlay = !state.overlay; pullUI(); render(); });
 
 document.querySelectorAll("[data-preset]").forEach(btn => btn.addEventListener("click", () => {
   const p = btn.dataset.preset;
