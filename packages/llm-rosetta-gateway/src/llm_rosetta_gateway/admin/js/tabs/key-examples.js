@@ -14,6 +14,7 @@ import { t, typeLabel } from '../core/i18n.js';
 import { api, esc, copyText } from '../core/utils.js';
 import { jsArg } from '../core/html.js';
 import { buildSnippets, buildShell, snippetLangs } from '../core/api-examples.js';
+import { codeBlockHtml } from '../core/code-block.js';
 
 const OPEN_KEY = 'llm-rosetta-access-open';
 const MODEL_TEMPLATE = '<model-id>';
@@ -189,7 +190,7 @@ function _fillAndRender() {
       <span class="access-label">${esc(t('keys.accessSamples'))}</span>
       <div class="access-control access-sample-controls">${langSeg}${platformSeg}</div>
     </div>
-    <pre class="code-block example-code"><code id="accessCode">${esc(code)}</code></pre>
+    ${codeBlockHtml(code, lang === 'node' ? 'js' : lang, {label: t('btn.copy'), className: 'example-code'})}
     <p class="hint access-hint access-foot">${esc(t('keys.accessFoot'))}</p>
   </div>`;
 }

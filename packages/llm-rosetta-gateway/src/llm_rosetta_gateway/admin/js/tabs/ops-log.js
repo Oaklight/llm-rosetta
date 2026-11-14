@@ -225,10 +225,14 @@ function switchLogView(view, opts = {}) {
     window.invalidateDumpCache?.();
     window.renderDumps?.();
   } else if (view === 'profiling') {
+    // The view is the switch: entering it arms collection, so there is no
+    // Enable button and no "did I leave it on?" state (#1502 §13).
     window.loadProfilingStatus?.();
+    window.ensureProfiling?.();
     window.loadProfilingResults?.();
   } else if (view === 'capture') {
     window.loadCaptureStatus?.();
+    window.ensureCapture?.();
     window.loadCaptureResults?.();
   }
   // The shared starter respects the pause state and the active view.

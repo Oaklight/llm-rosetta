@@ -277,17 +277,10 @@ body.auth-pending > .db-footer { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .app-shell, .login-box { transition: none; }
 }
-/* The content column keeps a maximum width, and a 32px hairline grid runs
-   behind it.  `background-attachment: local` ties the grid to the content, so
-   it scrolls with the page instead of sliding under a fixed viewport. */
-.content {
-  max-width: 1600px;
-  background-image:
-    repeating-linear-gradient(90deg, var(--grid-line) 0 1px, transparent 1px 32px),
-    repeating-linear-gradient(0deg, var(--grid-line) 0 1px, transparent 1px 32px);
-  background-attachment: local;
-}
-:root { --grid-line: color-mix(in srgb, var(--hairline) 55%, transparent); }
+/* The content column keeps a maximum width and nothing else: a 32px hairline
+   grid used to run behind it, and it competed with the content it was meant
+   to sit under. */
+.content { max-width: 1600px; }
 /* The rail is the console's left edge and runs to the window bottom, so the
    status bar starts beside it (components.css) and its four buttons sit at
    the very foot of the column, not above a reserved strip. */
@@ -723,28 +716,19 @@ body::before {
    `content` alternative text is empty, so assistive technology speaks the
    title and not the punctuation. */
 :is(
-  #breakdownSection > div,
-  #errorDumpSection > div,
-  #profilingSection > summary,
-  #captureSection > summary
+  #breakdownSection > div
 ) > h2 {
   display: inline-flex; align-items: baseline; gap: 6px;
   font-size: var(--fs-sm); font-weight: 600; letter-spacing: var(--tracking-label);
   color: var(--text);
 }
 :is(
-  #breakdownSection > div,
-  #errorDumpSection > div,
-  #profilingSection > summary,
-  #captureSection > summary
+  #breakdownSection > div
 ) > h2::before {
   content: '[' / ''; color: var(--text-muted); font-weight: 400;
 }
 :is(
-  #breakdownSection > div,
-  #errorDumpSection > div,
-  #profilingSection > summary,
-  #captureSection > summary
+  #breakdownSection > div
 ) > h2::after {
   content: ']' / ''; color: var(--text-muted); font-weight: 400;
 }

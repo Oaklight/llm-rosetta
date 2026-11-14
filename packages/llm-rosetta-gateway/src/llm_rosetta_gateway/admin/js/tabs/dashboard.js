@@ -287,7 +287,6 @@ async function loadProfilingStatus() {
     const s = await api.get('/admin/api/profiling/status');
     S._profilingEnabled = s.enabled;
     const badge = document.getElementById('profilingBadge');
-    const btn = document.getElementById('profilingToggleBtn');
     if (badge) {
       // The badge is a tag: the theme's `--tag-pos` ink and its 8 % fill
       // paint it.  An inline solid fill with a literal white ink read 3.77:1
@@ -301,7 +300,6 @@ async function loadProfilingStatus() {
       // profiling is actually on.
       badge.style.visibility = 'visible';
     }
-    if (btn) btn.textContent = s.enabled ? t('profiling.disable') : t('profiling.enable');
     const cb = document.getElementById('profilingTracing');
     if (cb && s.enabled) cb.checked = !!s.tracing;
   } catch (e) { /* ignore */ }
@@ -341,18 +339,21 @@ async function loadProfilingResults() {
   } catch (e) { /* ignore */ }
 }
 
-async function toggleProfiling() {
-  // Every mutating call answers with a result now; both branches must look at
-  // it, or a refused toggle reads as success until the next status poll.
-  if (S._profilingEnabled) {
-    const res = await api.post('/admin/api/profiling/disable');
-    if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
-  } else {
-    const n = parseInt(document.getElementById('profilingCount')?.value || '5', 10);
-    const tracing = !!document.getElementById('profilingTracing')?.checked;
-    const res = await api.post('/admin/api/profiling/enable', { requests: Math.max(1, Math.min(100, n)), tracing });
-    if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
-  }
+/**
+ * Arm profiling for the next N requests.
+ *
+ * The view is the switch: opening Profiling means "collect", so there is no
+ * Enable button to press first and no state to leave behind.  A refusal is
+ * still reported — the badge would otherwise claim ON.
+ */
+async function ensureProfiling() {
+  if (S._profilingEnabled) return;
+  const n = parseInt(document.getElementById('profilingCount')?.value || '5', 10);
+  const tracing = !!document.getElementById('profilingTracing')?.checked;
+  const res = await api.post('/admin/api/profiling/enable', {
+    requests: Math.max(1, Math.min(100, Number.isFinite(n) ? n : 5)), tracing,
+  });
+  if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
   await loadProfilingStatus();
 }
 
@@ -410,7 +411,6 @@ async function loadCaptureStatus() {
     const s = await api.get('/admin/api/capture/status');
     S._captureEnabled = s.enabled;
     const badge = document.getElementById('captureBadge');
-    const btn = document.getElementById('captureToggleBtn');
     if (badge) {
       // Same rule as the profiling badge: the tag recipe paints it.
       badge.textContent = s.enabled
@@ -457,15 +457,14 @@ async function loadCaptureResults() {
   } catch (e) { /* ignore */ }
 }
 
-async function toggleCapture() {
-  if (S._captureEnabled) {
-    const res = await api.post('/admin/api/capture/disable');
-    if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
-  } else {
-    const n = parseInt(document.getElementById('captureCount')?.value || '5', 10);
-    const res = await api.post('/admin/api/capture/enable', { requests: Math.max(1, Math.min(100, n)) });
-    if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
-  }
+/** Arm content capture for the next N requests; see {@link ensureProfiling}. */
+async function ensureCapture() {
+  if (S._captureEnabled) return;
+  const n = parseInt(document.getElementById('captureCount')?.value || '5', 10);
+  const res = await api.post('/admin/api/capture/enable', {
+    requests: Math.max(1, Math.min(100, Number.isFinite(n) ? n : 5)),
+  });
+  if (!res.ok) { showToast(res.error || t('toast.error'), 'error'); return; }
   await loadCaptureStatus();
 }
 
@@ -1724,9 +1723,9 @@ async function bulkDeleteDumps() {
 
 Object.assign(window, {
   loadMetrics, loadProfilingStatus, loadProfilingResults,
-  toggleProfiling, clearProfilingResults, viewFlamegraph,
+  ensureProfiling, clearProfilingResults, viewFlamegraph,
   downloadFlamegraph, downloadAllFlamegraphs,
-  loadCaptureStatus, loadCaptureResults, toggleCapture,
+  loadCaptureStatus, loadCaptureResults, ensureCapture,
   clearCaptureResults, viewCapture, downloadCapture, downloadAllCaptures,
   loadDumps, renderDumps, invalidateDumpCache, viewDump, downloadDump, downloadAllDumps,
   selectAllFilteredDumps, invertDumpSelection,

@@ -13,6 +13,7 @@ import { laneGripHtml, laneSwitchHtml, laneWeightInputHtml } from '../components
 import { findLane, laneBody, laneKey, laneLabel } from '../core/lanes.js';
 import { jsArg, logoUrl } from '../core/html.js';
 import { openDialog, closeDialog } from '../core/dialog.js';
+import { typeOptionHtml, typeMark } from '../core/type-switch.js';
 
 // ── helpers (module-private) ──
 
@@ -72,12 +73,17 @@ function _buildTypeSegControls() {
   _syncModalTypeSeg(document.getElementById('modelModalTypeSeg'), typeNames);
 }
 
+const domain0 = (el) => el.dataset.domain || '';
+
 function _syncFilterTypeSeg(seg, typeNames) {
   if (!seg) return;
   const domains = ['all', ...typeNames];
   const items = Array.from(seg.querySelectorAll(':scope > *'));
   const sameSet = items.length === domains.length &&
-    items.every((el, i) => el.dataset.domain === domains[i]);
+    items.every((el, i) => el.dataset.domain === domains[i] &&
+      // A switch built before the config arrived has no marks; it has to be
+      // rebuilt, not just relabelled.
+      (domain0(el) === 'all' || el.querySelector('.seg-icon')));
   if (sameSet) {
     items.forEach((el, i) => {
       const domain = domains[i];
@@ -85,7 +91,8 @@ function _syncFilterTypeSeg(seg, typeNames) {
       el.classList.toggle('active', active);
       el.setAttribute('aria-checked', active ? 'true' : 'false');
       el.setAttribute('tabindex', active ? '0' : '-1');
-      const span = el.querySelector('span');
+      // The label, not the mark: the first span is the type's own glyph now.
+      const span = el.querySelector('span:not(.seg-icon)');
       if (span) span.textContent = domain === 'all' ? t('filter.all') : typeLabel(domain);
     });
     return;
@@ -93,10 +100,16 @@ function _syncFilterTypeSeg(seg, typeNames) {
   seg.innerHTML = domains.map((domain) => {
     const active = S._modelDomain === domain;
     // A model type is named in the vocabulary the preference picks; `All` is
-    // ordinary interface text and keeps data-i18n.
+    // ordinary interface text and keeps data-i18n.  The mark is the type's
+    // own, from the shared type-switch module, so this switch and the
+    // Providers one read the same (#1502 §13).
     const attrs = domain === 'all' ? 'data-i18n="filter.all"' : `data-type-name="${esc(domain)}"`;
     const label = domain === 'all' ? t('filter.all') : typeLabel(domain);
-    return `<div class="${active ? 'active' : ''}" role="radio" data-domain="${esc(domain)}" aria-checked="${active}" tabindex="${active ? '0' : '-1'}" onclick="switchModelDomain(this,${jsArg(domain)})"><span ${attrs}>${esc(label)}</span></div>`;
+    const mark = domain === 'all' ? '' : typeMark(domain);
+    return `<div${active ? ' class="active"' : ''} role="radio" data-domain="${esc(domain)}"`
+      + ` aria-checked="${active}" tabindex="${active ? '0' : '-1'}"`
+      + ` onclick="switchModelDomain(this,${jsArg(domain)})">${mark}`
+      + `<span ${attrs}>${esc(label)}</span></div>`;
   }).join('');
 }
 
@@ -148,14 +161,17 @@ function _syncModalTypeSeg(seg, typeNames) {
     // The radios own the selection (openModelModal sets it), so only refresh
     // the labels, which is what a language switch needs.
     items.forEach((el, i) => {
-      const span = el.querySelector('span');
+      const span = el.querySelector('span:not(.seg-icon)');
       if (span) span.textContent = typeLabel(typeNames[i]);
     });
     return;
   }
-  seg.innerHTML = typeNames.map((name, i) => {
-    return `<div class="${i === 0 ? 'active' : ''}" onclick="segModelType(this,${jsArg(name)})"><input type="radio" name="modelType" value="${esc(name)}"${i === 0 ? ' checked' : ''} onchange="segModelType(this)"><span data-type-name="${esc(name)}">${esc(typeLabel(name))}</span></div>`;
-  }).join('');
+  seg.innerHTML = typeNames.map((name, i) => typeOptionHtml(name, {
+    checked: i === 0,
+    mode: 'radio',
+    divAttrs: `onclick="segModelType(this,${jsArg(name)})"`,
+    inputAttrs: 'onchange="segModelType(this)"',
+  })).join('');
 }
 
 // ── Model modal ──
