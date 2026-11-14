@@ -237,6 +237,8 @@ A key may also carry two limits of its own, and the list shows them as tags besi
 
 Both fields are validated when you save: the field that fails turns red and names the reason beneath it, and nothing is sent until both pass. The admin API validates the same two fields, so a value that reaches the store is one that parses.
 
+The model scope holds on all three routes that take a `model` — the chat endpoints, `/v1/responses/compact` and `/v1/messages/count_tokens` — and `/v1/models` (Google's version too) answers only the models the key may call. A window allows at least one request: `0/m` is not "no limit" but a refusal of everything, so it is rejected with a hint to leave the field blank, which is how you say none.
+
 Above the list, a collapsible **Connect** panel says how a tool reaches this gateway: the API (every format the catalog declares, grouped under its model type), the base URL, the model id, and a sample in ENV, curl, Python or Node — the ENV tab carries the Linux/macOS and Windows export lines. The values are templates (`<model-id>` where an id goes), so the panel reads the same on a gateway with one chat model and on one with every type; each value has its own copy control, and the sample block colours its tokens and copies from its top-right corner.
 
 ## Dashboard

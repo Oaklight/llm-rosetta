@@ -59,6 +59,12 @@ without installing anything into the gateway image.
   // its remote below; an explicit remote with the same URL overrides the preset.
   "presets": ["alcf"],
 
+  // Optional, keyed by preset: install only part of a package. Entries are shim
+  // names or * patterns; exclude wins over include; an empty include means "no
+  // restriction", so "none" is written as exclude of the whole set.
+  "include": { "alcf": ["alcf_metis--chat_completions"] },
+  "exclude": { "argo": ["argo--messages"] },
+
   // Scanned for <vendor>/<type>/provider.yaml (the built-in shape), or the older
   // <name>/provider.yaml (flat) and <group>/<leaf>/provider.yaml (grouped) shapes.
   // Relative entries are anchored to the directory containing this config file.
@@ -88,6 +94,16 @@ without installing anything into the gateway image.
 the shape the built-in shims use; the older shapes still load unchanged — a
 `provider.yaml` directly in a child (`my-provider/provider.yaml`) or one group
 level (`vendor/messages/provider.yaml`, `vendor/chat_completions/provider.yaml`).
+
+**Selection.** `include` / `exclude` are optional and keyed by preset; a
+`remotes[]` entry may carry the same two keys inline. They are applied after a
+leaf's `provider.yaml` is parsed and before its `transforms.py` is imported, so
+a declined shim costs neither its module nor its registration. An `include` that
+matches nothing warns at startup and fails only under `strict`; an `exclude`
+naming a shim that is gone is a no-op. A package can declare what it ships in a
+`shims.yaml` at the root of the directory its `path` names, and a manifest that
+is present is authoritative — unlisted directories are never read. It is data,
+not code: relative paths only, no URLs, so it cannot redirect the fetch.
 
 **Remote fetches are git-less.** GitHub repository URLs are rewritten to their
 codeload tarball endpoint; any other host works by giving an explicit archive

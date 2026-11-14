@@ -450,6 +450,51 @@ which refuses it, so a config written by a newer build still starts on an
 older one. A malformed section (a `presets` string, say) is refused when the
 config loads rather than at startup.
 
+#### Selecting part of a package { #selection }
+
+A package is loaded whole by default. Two optional maps narrow that without
+touching the package, keyed by preset:
+
+```jsonc
+"shims": {
+  "presets": ["free"],
+  "include": { "free": ["llm7--chat_completions"] },
+  "exclude": { "alcf": ["alcf_sophia--chat_completions"] }
+}
+```
+
+Entries are shim names or `*` patterns (`asksage--*`). An empty `include` means
+"no restriction", not "nothing"; `exclude` wins over `include`. An explicit
+`remotes[]` entry may carry `include` / `exclude` inline. Selection is applied
+after a leaf's `provider.yaml` is parsed and before its `transforms.py` is
+imported, so a declined shim costs neither its module nor its registration.
+
+An `include` that matches nothing warns at startup, naming what the source did
+load, and fails only under `shims.strict: true`. An `exclude` naming a shim that
+is gone is a no-op. A provider that needs a declined shim fails with the usual
+unknown-shim error, so the failure lands on whatever needed it.
+
+Selection is name-based, so it needs the names. A package can declare them with
+a `shims.yaml` at the root of the directory its `path` names:
+
+```yaml
+version: 1
+shims:
+  - name: llm7--chat_completions
+    path: providers/llm7
+  - name: ovhcloud--chat_completions
+    path: providers/ovhcloud
+```
+
+A manifest that is present is authoritative: only what it lists is loaded, and
+an unlisted directory is never read — so an author who does not maintain it
+loses only their own new shims. Its paths are relative to the scan root and
+cannot escape it, and it carries no URLs, so it cannot point the loader at
+another origin. A manifest that exists but cannot be honoured fails its source
+rather than falling back to scanning, because the fallback would parse exactly
+the tree the manifest bounded. A package without one is scanned as before, and
+selection still applies, by name.
+
 #### Mirrors { #mirrors }
 
 A remote source dies wherever its host is unreachable: `github.com` behind a
