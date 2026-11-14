@@ -84,6 +84,7 @@ async def retry_job(request: Any, **kwargs: Any) -> Response:
             {"error": "Only a failed or cancelled job can be retried"},
             status_code=409,
         )
+    manager.wake()
     return JSONResponse({"ok": True, "status": "queued"})
 
 
@@ -97,6 +98,7 @@ async def resume_job(request: Any, **kwargs: Any) -> Response:
         return JSONResponse(
             {"error": "Only a cancelled job can be resumed"}, status_code=409
         )
+    manager.wake()
     return JSONResponse({"ok": True, "status": "queued"})
 
 

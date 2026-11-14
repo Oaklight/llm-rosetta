@@ -66,6 +66,17 @@ async def test_a_dedupe_key_returns_the_active_job(store):
     assert third.id != first.id
 
 
+def test_the_store_names_the_database_it_writes(store, pm):
+    """The worker places its instance lock beside this path."""
+    assert store.db_path == pm.db_path
+
+
+def test_a_store_without_a_file_names_none():
+    from llm_rosetta_gateway.jobs.store import JobStore
+
+    assert JobStore(object()).db_path is None
+
+
 async def test_claim_takes_one_job_at_a_time(store):
     await store.enqueue("data.clear", priority=100)
     low = await store.enqueue("data.clear", priority=10)
@@ -182,6 +193,31 @@ async def test_recovery_requeues_an_expired_lease(store, pm):
         "SELECT lease_owner FROM jobs WHERE id = ?", (job.id,)
     )
     assert row[0] is None
+
+
+async def test_recovery_at_startup_takes_a_live_foreign_lease(store, pm):
+    """A crash-restart inside the lease window must not strand the job.
+
+    The lease is still valid for a minute, so an expiry-only sweep leaves the
+    row `running` with its rows hidden and no worker deleting them.
+    """
+    job = await store.enqueue(
+        "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
+    )
+    await pm.connection.execute(
+        "UPDATE jobs SET status = 'running', lease_owner = 'a-dead-process', "
+        "lease_expires_at = '9999-01-01T00:00:00+00:00' WHERE id = ?",
+        (job.id,),
+    )
+    await pm.connection.commit()
+
+    assert await store.recover() == 0
+    assert (await store.get(job.id)).status == JOB_RUNNING
+
+    assert await store.recover(owner="this-process") == 1
+    recovered = await store.get(job.id)
+    assert recovered.status == JOB_QUEUED
+    assert pm.visibility.ranges("request_log") == [(MIN_TS, MAX_TS)]
 
 
 async def test_recovery_fails_a_job_out_of_attempts(store, pm):

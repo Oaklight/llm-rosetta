@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 from .model import (
@@ -48,6 +50,53 @@ _HEARTBEAT_INTERVAL = 15.0
 #: How long an idle worker sleeps before looking for work again.  New work also
 #: wakes it immediately.
 _WAIT_SECONDS = 30.0
+#: The file whose exclusive lock says "this process owns the job queue here".
+INSTANCE_LOCK_NAME = ".jobs.lock"
+#: How often the lane re-checks for work that a statement blocked.
+_CLAIM_RETRY_SECONDS = 1.0
+#: How often an interrupted run is looked for while the process is up.
+_RECOVERY_INTERVAL = 30.0
+
+
+def _acquire_instance_lock(data_dir: Path) -> int | None:
+    """Take the queue's instance lock, or report that someone else holds it.
+
+    Startup recovery takes a lease away from its owner, which assumes this
+    process is the only one running jobs in this database.  The lock turns
+    that assumption into something the code checks: a second gateway on the
+    same data directory cannot take a live job away from the first, and says
+    so instead.  POSIX only; where ``fcntl`` is missing the assumption holds
+    by convention and the caller logs it.
+    """
+    try:
+        import fcntl
+    except ImportError:  # pragma: no cover - Windows
+        return None
+    path = data_dir / INSTANCE_LOCK_NAME
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return None
+    return fd
+
+
+def _release_instance_lock(fd: int | None) -> None:
+    """Drop the lock; closing the descriptor is what actually frees it."""
+    if fd is None:
+        return
+    try:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_UN)
+    except (ImportError, OSError):  # pragma: no cover - best effort
+        pass
+    finally:
+        try:
+            os.close(fd)
+        except OSError:  # pragma: no cover
+            pass
 
 
 class JobContext:
@@ -165,6 +214,7 @@ class JobManager:
         lanes: dict[str, int] | None = None,
         lease_seconds: float = DEFAULT_LEASE_SECONDS,
         wait_seconds: float = _WAIT_SECONDS,
+        recovery_interval: float = _RECOVERY_INTERVAL,
     ) -> None:
         self.store = JobStore(persistence)
         self.registry = JobRegistry(default_handlers())
@@ -174,6 +224,7 @@ class JobManager:
         self._lanes = dict(lanes or {LANE_SQLITE: 1})
         self._lease = lease_seconds
         self._wait = wait_seconds
+        self._recovery_interval = recovery_interval
         self._tasks: list[asyncio.Task[None]] = []
         self._cancel: dict[str, asyncio.Event] = {}
         self._wake = asyncio.Event()
@@ -181,20 +232,50 @@ class JobManager:
         self.recovered = 0
         self.orphaned_ranges = 0
         self._last_prune = 0.0
+        self._lock_fd: int | None = None
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
+    def _data_dir(self) -> Path | None:
+        """Where this manager's database lives; the lock sits beside it.
+
+        ``None`` when the store has no file: there is nothing for a second
+        process to contend over, so there is nothing to lock, and falling
+        back to the current directory would make two unrelated managers
+        fight over one file.
+        """
+        db_path = self.store.db_path
+        return Path(db_path).parent if db_path else None
+
     async def start(self) -> None:
         """Repair orphaned ranges, recover interrupted jobs, start the lanes."""
         self.orphaned_ranges = await self.store.sweep_orphan_ranges()
-        self.recovered = await self.store.recover()
+        # Taking a live lease away from its owner is only correct when this
+        # process is the only one running jobs in this database, so the
+        # assumption is checked rather than declared: whoever holds the
+        # instance lock may sweep foreign leases, everyone else waits for the
+        # lease to expire like a peer would.
+        data_dir = self._data_dir()
+        self._lock_fd = _acquire_instance_lock(data_dir) if data_dir else None
+        if data_dir is not None and self._lock_fd is None:
+            logger.warning(
+                "Jobs: another process holds %s; startup recovery is limited "
+                "to expired leases",
+                INSTANCE_LOCK_NAME,
+            )
+        self.recovered = await self.store.recover(
+            owner=self.owner if self._lock_fd is not None else None
+        )
         if self.recovered:
             logger.info(
                 "Jobs: %d interrupted job(s) returned to the queue", self.recovered
             )
         self._stopping = False
+        self._tasks.append(
+            asyncio.create_task(self._recovery_loop(), name="jobs-recovery")
+        )
         for lane, concurrency in self._lanes.items():
             for index in range(max(1, concurrency)):
                 self._tasks.append(
@@ -212,6 +293,8 @@ class JobManager:
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
         self._tasks.clear()
+        _release_instance_lock(self._lock_fd)
+        self._lock_fd = None
 
     # ------------------------------------------------------------------
     # Public operations
@@ -235,6 +318,15 @@ class JobManager:
             return 0
         self._last_prune = now
         return await self.store.prune(keep)
+
+    def wake(self) -> None:
+        """Tell the lanes to look for work now, not at the next timeout.
+
+        Retry and resume change a row's state from a request handler, which
+        the lane has no way to observe; without this the job waits out the
+        30-second poll first.
+        """
+        self._wake.set()
 
     async def cancel(self, job_id: str) -> tuple[bool, str | None]:
         """Ask a job to stop; a running one stops at its next checkpoint."""
@@ -264,15 +356,69 @@ class JobManager:
     # ------------------------------------------------------------------
 
     async def _lane_loop(self, lane: str) -> None:
+        """Claim and run, and survive anything that is not a shutdown.
+
+        A lane that dies on a transient error — a locked database, a failed
+        finish — stops the whole queue until the process restarts, which is
+        invisible on the board: jobs sit `queued` with nothing to click.  So a
+        failure is logged and retried, and only cancellation ends the loop.
+        """
         while not self._stopping:
-            job = await self.store.claim(lane, self.owner, lease_seconds=self._lease)
+            # Clear before claiming, not after: a wake that arrives while the
+            # claim is in flight (a retry landing on an idle lane) has to
+            # survive into the wait, or the job sits out the whole poll.
+            self._wake.clear()
+            try:
+                job = await self.store.claim(
+                    lane, self.owner, lease_seconds=self._lease
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Jobs: %s lane could not claim", lane)
+                await asyncio.sleep(_CLAIM_RETRY_SECONDS)
+                continue
             if job is None:
                 await self._wait_for_work()
                 continue
-            await self._run(job)
+            try:
+                await self._run(job)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Jobs: %s lane could not finish %s", lane, job.id)
+                await asyncio.sleep(_CLAIM_RETRY_SECONDS)
+
+    async def _recovery_loop(self) -> None:
+        """Look for an interrupted run while the process is up.
+
+        Startup is not the only moment a lease can expire: a worker can be
+        killed by the OS, and a deployment that grew a second process would
+        lose it the same way.  One UPDATE every half minute costs nothing.
+        """
+        while not self._stopping:
+            await asyncio.sleep(self._recovery_interval)
+            if self._stopping:
+                return
+            try:
+                # A job this process is executing is not an interrupted run:
+                # a heartbeat stall past the lease must not hand a live
+                # destructive handler a second copy of itself.
+                recovered = await self.store.recover(skip=tuple(self._cancel))
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Jobs: recovery sweep failed")
+                continue
+            if recovered:
+                logger.warning(
+                    "Jobs: %d interrupted job(s) returned to the queue", recovered
+                )
+                self._wake.set()
 
     async def _wait_for_work(self) -> None:
-        self._wake.clear()
+        # The caller cleared the event before it claimed; clearing here would
+        # drop a wake that arrived in between.
         try:
             await asyncio.wait_for(self._wake.wait(), timeout=self._wait)
         except TimeoutError:
@@ -321,13 +467,21 @@ class JobManager:
                     deleted=ctx.deleted,
                 )
             else:
-                await self.store.finish(
+                wrote = await self.store.finish(
                     job.id,
                     self.owner,
                     JOB_SUCCEEDED,
                     result=result or ctx.partial_result() or None,
                     deleted=ctx.deleted,
                 )
+                if not wrote:
+                    # The row belongs to recovery now: this run's result is
+                    # discarded, and the board will show the other run's.
+                    logger.warning(
+                        "Jobs: %s finished after its lease moved; the result "
+                        "was discarded",
+                        job.id,
+                    )
         finally:
             self._cancel.pop(job.id, None)
             self._wake.set()

@@ -44,6 +44,15 @@ class JobStore:
     def __init__(self, persistence: Any) -> None:
         self._p = persistence
 
+    @property
+    def db_path(self) -> str | None:
+        """The database file behind this store, when it has one.
+
+        The worker places its instance lock beside it, so the path belongs on
+        the store rather than on the private persistence handle.
+        """
+        return getattr(self._p, "db_path", None)
+
     # ------------------------------------------------------------------
     # Enqueue
     # ------------------------------------------------------------------
@@ -475,13 +484,41 @@ class JobStore:
             await self._p.reload_visibility()
         return len(rows)
 
-    async def recover(self) -> int:
-        """Return running jobs whose lease expired to the queue.
+    async def recover(
+        self, *, owner: str | None = None, skip: Sequence[str] = ()
+    ) -> int:
+        """Return interrupted jobs to the queue.
+
+        A lease that expired is an interrupted run.  Passing *owner* widens
+        the sweep to rows leased by anyone else: a process that has just
+        started cannot own a row it never claimed, so at startup those are
+        interrupted too.  Without that, a crash-restart inside the 60-second
+        lease leaves the job `running` — rows hidden, no worker deleting them,
+        and nothing but a second restart to free it.
+
+        *skip* leaves rows alone: the caller passes the jobs it is running
+        right now, which are not interrupted even if their lease lapsed.
 
         A job that has already used its attempts becomes failed instead: it
         would otherwise be claimed, killed and requeued forever.
         """
         now = now_iso()
+        foreign = " OR lease_owner IS NOT ?" if owner is not None else ""
+        untouched = ""
+        if skip:
+            untouched = " AND id NOT IN (" + ", ".join("?" for _ in skip) + ")"
+        params: list[Any] = [
+            JOB_CANCELLED,
+            JOB_FAILED,
+            JOB_QUEUED,
+            now,
+            now,
+            JOB_RUNNING,
+            now,
+        ]
+        if owner is not None:
+            params.append(owner)
+        params.extend(skip)
         async with self._p.transaction() as conn:
             # A job the operator cancelled while it ran has its terminal state
             # decided already.  Requeueing it would run to completion work that
@@ -504,16 +541,11 @@ class JobStore:
                 "WHEN cancel_requested = 1 THEN ? "
                 "WHEN attempts >= max_attempts THEN ? ELSE NULL END "
                 "WHERE status = ? "
-                "AND (lease_expires_at IS NULL OR lease_expires_at < ?)",
-                (
-                    JOB_CANCELLED,
-                    JOB_FAILED,
-                    JOB_QUEUED,
-                    now,
-                    now,
-                    JOB_RUNNING,
-                    now,
-                ),
+                "AND (lease_expires_at IS NULL OR lease_expires_at < ?"
+                + foreign
+                + ")"
+                + untouched,
+                params,
             )
         return cur.rowcount
 
