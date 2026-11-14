@@ -140,6 +140,27 @@ instead. The two differ on this stone because it is wider at the bottom: at
 bakes the choice with 居中, which also moves any red anchors' recorded points so
 they stay on the vertices they were marked on.
 
+**Inscription.** The Commons file is the stone plus the carved text: one black
+outline and 22,040 white paths on top of it. `incisions.py` pulls those paths
+out into a standalone layer in the same coordinate system:
+
+```bash
+python design/logo/incisions.py ~/Downloads/rosettastone.svg \
+    -o /tmp/rosetta-incisions.svg
+```
+
+The layer is 5.8 MB at two decimals, three orders of magnitude larger than every
+shipped copy of the mark together, so it is generated on demand and never
+committed. `simplify_path.py --incisions FILE` cuts the mark with it: the data
+becomes a `<mask>` the polygon is filled through, so the grooves show whatever
+the file sits on instead of a colour that only matches one background, and they
+follow the mark because they live in the same user space as the outline. The
+page has the same thing behind 碑文: load the layer, tick 显示碑文, and it follows
+the deformation and the framing, clipped to the outline. It is memory-only —
+a reload asks for the file again, and it is not written into the draft, which
+would blow the `localStorage` quota. At icon sizes the carving reads as
+texture, not as letters.
+
 ```bash
 cd design/logo
 

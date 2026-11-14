@@ -70,6 +70,11 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .big-wrap{position:relative;width:340px;height:340px;overflow:hidden;border-radius:10px;touch-action:none}
 .big{width:100%;height:100%;transform-origin:0 0}
 .big svg{width:100%;height:100%}
+/* The inscription sits in its own nested svg so it is parsed once per load;
+ * it paints the panel colour and is clipped to the outline, so it reads as
+ * grooving rather than as marks on top. */
+.inkLayer{pointer-events:none}
+.ink{fill:var(--panel)}
 .big-wrap.zoomed{cursor:grab}
 .big-wrap.zoomed.dragging{cursor:grabbing}
 .view-bar{display:flex;gap:10px;align-items:center;margin-top:14px;font-size:11.5px;
@@ -187,6 +192,19 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
         </div>
         <input type="file" id="draftFile" accept="application/json,.json" hidden>
         <p class="hint" id="draftHint">草稿存在本机浏览器，换电脑请用导出 / 导入。</p>
+      </div>
+      <div class="panel">
+        <h2>碑文</h2>
+        <div class="actions">
+          <label class="hint" style="display:flex;align-items:center;gap:6px;margin:0">
+            载入刻痕层 <input type="file" id="incFile" accept=".svg,image/svg+xml">
+          </label>
+        </div>
+        <label class="row">
+          <span class="k"><span>显示碑文</span><b id="vInc">关</b></span>
+          <input type="checkbox" id="incOn" disabled>
+        </label>
+        <p class="hint" id="incHint">刻痕层由 incisions.py 从原版 SVG 生成（约 5.8 MB），只留在本机内存，刷新后要重新载入，也不会写进草稿。显示时它跟着形变与取景走，并裁在轮廓内；导出的 SVG 用 mask 挖出刻痕，换背景仍然成立。</p>
       </div>
       <details class="panel">
         <summary>源路径 <small>（调试用）</small></summary>
@@ -806,7 +824,10 @@ const state = {
   sharp: new Set(),     // 锐 places: no rounding, extra vertices nearby
   round: new Set(),     // 圆 places: extra rounding nearby
   mode: "pin",          // what a left click places: pin | sharp | round
-  centerRef: "bbox"     // export alignment: bbox (中心) or centroid (重心)
+  centerRef: "bbox",    // export alignment: bbox (中心) or centroid (重心)
+  inc: null,            // carved inscription: { d, viewBox } once loaded
+  incOn: false,         // draw it inside the outline
+  incName: ""           // file name, for the equivalent command
 };
 let built = null;
 const $ = (id) => document.getElementById(id);
@@ -1090,11 +1111,60 @@ function markFill(forExport) {
 const isPinned = (ri, src) =>
   !!built.pinsByRing[ri] && built.pinsByRing[ri].has(src);
 
+/* ----------------------------- inscription -------------------------- */
+/* The carved layer is about 5.8 MB of path data, so it is parsed exactly
+ * once: one nested <svg> is built when the file is loaded and re-attached to
+ * the canvas on every render (moving the same node costs nothing), with only
+ * its transform and its clip updated.  The export builds a <mask> instead,
+ * because a mask cuts the fill and therefore survives a different background,
+ * while the preview paints the panel colour and needs the panel to be there. */
+const SVG_NS = "http://www.w3.org/2000/svg";
+let inkLayer = null, inkTr = null, inkClip = null;
+
+function buildInkLayer() {
+  inkLayer = document.createElementNS(SVG_NS, "svg");
+  inkLayer.setAttribute("class", "inkLayer");
+  inkLayer.innerHTML =
+    '<defs><clipPath id="inkClip" clipPathUnits="userSpaceOnUse">'
+    + '<polygon id="inkClipPoly" points=""/></clipPath></defs>'
+    + '<g id="inkTr"><g clip-path="url(#inkClip)">'
+    + `<path class="ink" d="${state.inc.d}"/></g></g>`;
+  inkTr = inkLayer.querySelector("#inkTr");
+  inkClip = inkLayer.querySelector("#inkClipPoly");
+}
+
+function syncInk() {
+  const host = $("big").querySelector("svg");
+  if (!host) return;
+  if (!state.inc || !state.incOn) {
+    if (inkLayer && inkLayer.parentNode) inkLayer.remove();
+    return;
+  }
+  if (!inkLayer) buildInkLayer();
+  const dotsGroup = host.querySelector("g.dots");
+  if (dotsGroup) host.insertBefore(inkLayer, dotsGroup);
+  else host.appendChild(inkLayer);
+  inkLayer.setAttribute("viewBox", built.viewBox);
+  inkTr.setAttribute("transform",
+    `translate(${fmt(built.tx, 3)},${fmt(built.ty, 3)}) scale(${fmt(built.k, 5)})`);
+  const ring = built.deformed[0] || [];
+  inkClip.setAttribute("points",
+    ring.map(p => `${fmt(p[0], 2)},${fmt(p[1], 2)}`).join(" "));
+}
+
 /* -------------------------------- render --------------------------- */
 function svgFor(size, opts = {}) {
   const b = built;
   const vb = b.viewBox.split(" ");
   const unit = parseFloat(vb[2]) / 10;
+  const withInk = !!(opts.forExport && opts.ink !== false && state.incOn && state.inc);
+  const inkMask = withInk ? ' mask="url(#inkMask)"' : "";
+  const inkDefs = withInk
+    ? '<defs><mask id="inkMask" maskUnits="objectBoundingBox" x="-0.1" y="-0.1"'
+      + ' width="1.2" height="1.2" maskContentUnits="userSpaceOnUse">'
+      + '<rect x="-1000" y="-1000" width="3000" height="3000" fill="#fff"/>'
+      + `<path fill="#000" d="${state.inc.d}"/></mask></defs>`
+    : "";
   const fill = markFill(!!opts.forExport);
   const markCss = fill !== null
     ? `.m{fill:${fill}}`
@@ -1119,7 +1189,7 @@ function svgFor(size, opts = {}) {
          + `<rect x="0" y="0" width="${vb[2]}" height="${vb[3]}" fill="none" stroke-opacity=".38"/></g>`;
   }
   const polys = b.deformed.map(r =>
-    `<polygon class="m" points="${r.map(p => `${fmt(p[0], 2)},${fmt(p[1], 2)}`).join(" ")}"/>`).join("");
+    `<polygon class="m"${inkMask} points="${r.map(p => `${fmt(p[0], 2)},${fmt(p[1], 2)}`).join(" ")}"/>`).join("");
   let dots = "";
   if (opts.dots && state.dots) {
     const rad = (parseFloat(vb[2]) / Math.max(size, 1)) * (opts.dotPx || 3.2);
@@ -1143,14 +1213,18 @@ function svgFor(size, opts = {}) {
     dots = `<g>${circles.join("")}</g>`;
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.viewBox}" width="${size}" height="${size}" color="var(--grid)">`
-       + head + grid
-       + `<g transform="translate(${fmt(b.tx, 3)},${fmt(b.ty, 3)}) scale(${fmt(b.k, 5)})">${polys}${dots}</g>`
+       + inkDefs + head + grid
+       + `<g transform="translate(${fmt(b.tx, 3)},${fmt(b.ty, 3)}) scale(${fmt(b.k, 5)})">${polys}</g>`
+       // The dots keep their own group so the inscription can be inserted
+       // between it and the fill: above the mark, below the clickable vertices.
+       + `<g class="dots" transform="translate(${fmt(b.tx, 3)},${fmt(b.ty, 3)}) scale(${fmt(b.k, 5)})">${dots}</g>`
        + `</svg>`;
 }
 
 function render() {
   build();
   $("big").innerHTML = svgFor(340, { dots: true, dotPx: 4.2 });
+  syncInk();
   $("sizes").innerHTML = [128, 64, 32, 16].map(s => `
     <figure>
       <div class="box" style="width:${s + 12}px;height:${s + 12}px">${svgFor(s)}</div>
@@ -1160,7 +1234,10 @@ function render() {
   $("sOut").textContent = built.outN;
   $("sPin").textContent = built.dots.reduce((acc, ring, ri) =>
     acc + ring.filter((_, i) => isPinned(ri, built.dotSrcs[ri][i])).length, 0);
-  $("sBytes").textContent = `${new Blob([svgFor(600, { forExport: true })]).size} B`;
+  $("sBytes").textContent = (state.incOn && state.inc)
+    ? `${new Blob([svgFor(600, { forExport: true, ink: false })]).size} B + 碑文 `
+      + `${(state.inc.d.length / 1e6).toFixed(2)} MB`
+    : `${new Blob([svgFor(600, { forExport: true })]).size} B`;
   $("sVb").textContent = built.viewBox;
   const cell = parseFloat(built.viewBox.split(" ")[2]) / 10;
   $("sCell").textContent = state.tight ? "—" : fmt(cell, 2) + " / 格";
@@ -1316,6 +1393,7 @@ function cliCommand() {
   if (state.centerRef === "centroid") parts.push("--center centroid");
   if (state.sharp.size) parts.push(`--sharp ${[...state.sharp].sort((a,b)=>a-b).map(u => "u" + u).join(",")}`);
   if (state.round.size) parts.push(`--round ${[...state.round].sort((a,b)=>a-b).map(u => "u" + u).join(",")}`);
+  if (state.incOn && state.inc) parts.push(`--incisions '${state.incName || "incisions.svg"}'`);
   if (state.fill !== "#1e293b") parts.push(`--fill '${state.fill}'`);
   if (state.darkFill !== "#ededed") parts.push(`--dark-fill '${state.darkFill}'`);
   return parts.join(" ");
@@ -1614,6 +1692,28 @@ $("file").addEventListener("change", async (e) => {
 });
 
 $("resetAll").addEventListener("click", resetAll);
+
+$("incFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const root = new DOMParser().parseFromString(await f.text(), "image/svg+xml");
+  if (root.querySelector("parsererror")) { toast("刻痕层解析失败"); return; }
+  const ds = [...root.querySelectorAll("path")].map(p => p.getAttribute("d")).filter(Boolean);
+  if (!ds.length) { toast("文件里没有 path"); return; }
+  state.inc = { d: ds.join(""), viewBox: root.documentElement.getAttribute("viewBox") || "0 0 600 600" };
+  state.incName = f.name;
+  state.incOn = true;
+  inkLayer = null;                       // the d changed: rebuild on next render
+  $("incOn").disabled = false;
+  $("incOn").checked = true;
+  $("vInc").textContent = "开";
+  render();
+  toast(`已载入 ${ds.length} 条刻痕（${(state.inc.d.length / 1e6).toFixed(2)} MB）`);
+});
+$("incOn").addEventListener("change", (e) => {
+  state.incOn = e.target.checked;
+  $("vInc").textContent = state.incOn ? "开" : "关";
+  render();
+});
 
 $("saveDraft").addEventListener("click", () => {
   try {

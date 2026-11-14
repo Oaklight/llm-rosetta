@@ -954,14 +954,28 @@ def emit_svg(
     dark_fill: str | None = "#ededed",
     as_: str = "polygon",
     precision: int = 1,
+    inscriptions: str | None = None,
 ) -> str:
-    """Render the rings as one SVG with a theme-aware fill."""
+    """Render the rings as one SVG with a theme-aware fill.
+
+    *inscriptions* is the cooked path data of the carved layer.  It becomes a
+    ``<mask>`` that the mark is cut with, not a painted layer: the grooves are
+    holes through the fill, so they show whatever the file sits on instead of a
+    colour that only matches this page.
+    """
     tx, ty, k = framing.transform
     vb = framing.viewbox.split()
     out = [
         '<svg xmlns="http://www.w3.org/2000/svg" '
         f'viewBox="{framing.viewbox}" width="{vb[2]}" height="{vb[3]}">'
     ]
+    if inscriptions:
+        out.append(
+            '<defs><mask id="ink" maskUnits="objectBoundingBox" x="-0.1" '
+            'y="-0.1" width="1.2" height="1.2" maskContentUnits="userSpaceOnUse">'
+            '<rect x="-1000" y="-1000" width="3000" height="3000" fill="#fff"/>'
+            f'<path fill="#000" d="{inscriptions}"/></mask></defs>'
+        )
     if dark_fill:
         out.append(
             f"<style>.mark{{fill:{fill}}}"
@@ -974,18 +988,21 @@ def emit_svg(
         )
     out.append(f"<g{transform}>")
     fill_attr = "" if dark_fill else f' fill="{fill}"'
+    mask_attr = ' mask="url(#ink)"' if inscriptions else ""
     for ring in rings:
         if as_ == "polygon":
             coords = " ".join(
                 f"{fmt(p[0], precision)},{fmt(p[1], precision)}" for p in ring
             )
-            out.append(f'<polygon class="mark" points="{coords}"{fill_attr}/>')
+            out.append(
+                f'<polygon class="mark" points="{coords}"{fill_attr}{mask_attr}/>'
+            )
         else:
             d = f"M{fmt(ring[0][0], precision)},{fmt(ring[0][1], precision)}"
             d += "".join(
                 f"L{fmt(p[0], precision)},{fmt(p[1], precision)}" for p in ring[1:]
             )
-            out.append(f'<path class="mark" d="{d}Z"{fill_attr}/>')
+            out.append(f'<path class="mark" d="{d}Z"{fill_attr}{mask_attr}/>')
     out.extend(("</g>", "</svg>"))
     return "\n".join(out) + "\n"
 
@@ -1019,6 +1036,19 @@ def path_data_from_svg(path: Path) -> str:
     if not candidates:
         raise SystemExit(f"no path or polygon data found in {path}")
     return max(candidates, key=len)
+
+
+def incisions_from_svg(path: Path) -> str:
+    """All path data of a layer, joined.
+
+    Every element the layer holds starts its own subpath with ``M``, so joining
+    the ``d`` attributes keeps them apart without a separator.
+    """
+    root = ET.fromstring(path.read_text())
+    data = "".join(el.get("d", "") for el in root.iter() if el.get("d"))
+    if not data:
+        raise SystemExit(f"no path data found in {path}")
+    return data
 
 
 def ring_fractions(pts: list[Point]) -> list[float]:
@@ -1288,6 +1318,15 @@ def build_parser() -> argparse.ArgumentParser:
         help=("圆 places: two extra rounding passes around them, on top of --smooth"),
     )
     p.add_argument(
+        "--incisions",
+        type=Path,
+        metavar="FILE",
+        help=(
+            "carved-inscription layer written by incisions.py; the mark is cut "
+            "with it as a mask"
+        ),
+    )
+    p.add_argument(
         "--tolerance",
         type=float,
         default=0.05,
@@ -1369,6 +1408,7 @@ def main(argv: list[str] | None = None) -> int:
     sharp_refs = parse_anchors(args.sharp)
     round_refs = parse_anchors(args.round)
     lock_refs = parse_locks(args.lock)
+    inscriptions = incisions_from_svg(args.incisions) if args.incisions else None
     out_path: Path | None = args.out
     if out_path is None and not args.stats:
         out_path = Path("-")
@@ -1440,6 +1480,7 @@ def main(argv: list[str] | None = None) -> int:
             dark_fill=args.dark_fill or None,
             as_=args.as_,
             precision=args.precision,
+            inscriptions=inscriptions,
         )
         if args.stats:
             n_out = sum(len(r) for r in rings)
