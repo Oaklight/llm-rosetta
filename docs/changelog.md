@@ -9,6 +9,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ## [未发布]
 
 ### 新增
+- **石形简化器支持红色绝对锚点**（[#1541](https://github.com/Oaklight/llm-rosetta/issues/1541)，[#1542](https://github.com/Oaklight/llm-rosetta/pull/1542)）：在画布上右键顶点即可标成红色锚点——和橙色锚点一样不会被简化掉，而且固定在画布坐标上：旋转、拉伸、scale 怎么动，整块图形平移回去让它保持在原位。圆角平滑也保留这个角而不切掉，这正是此前锚点"莫名消失"的原因；画布内右键不再弹出浏览器菜单，点击会吸附到 16 px 内最近的顶点。重置视图会把画布重新居中，红色锚点按居中后的布局重新取点而不是被清掉。命令行对应 `--lock "IDX@X,Y;..."`，越界下标现在直接报错而不是静默无效。
 - **名称与石形标记的使用条款**（[#1533](https://github.com/Oaklight/llm-rosetta/pull/1533)）：[`TRADEMARKS.md`](https://github.com/Oaklight/llm-rosetta/blob/master/TRADEMARKS.md) 说明名称与标记可以怎样使用、哪些情形需要许可，以及 fork 必须换成自己的名称；`design/logo/LICENSE` 覆盖标记文件本身——源图是 CC0，但这些文件不是；根目录的 MIT 许可证补充了适用范围：覆盖代码、测试与文档，品牌资产由上述两个文件管理。
 - **单一来源的石形标记与参数化工具**（[#1530](https://github.com/Oaklight/llm-rosetta/pull/1530)，[#1529](https://github.com/Oaklight/llm-rosetta/issues/1529)）：`design/logo/` 现在保存描摹路径作为唯一来源、它的出处（对 Wikimedia Commons 上一个 CC0 文件的算法描摹，记录在 `references/SOURCE.md`），以及纯标准库的简化脚本和交互页面；顶点预算、结构锚点、形变与取景这几个参数即可重新生成所有已发布的副本。README 的`prefers-color-scheme` 深浅两份此前内容完全相同，现在各自渲染正确的标记；网关 favicon 的裁剪问题已记录，将在单独 PR 中修复。
 - **删除类管理操作改为后台任务**（[#1515](https://github.com/Oaklight/llm-rosetta/issues/1515)，[#1516](https://github.com/Oaklight/llm-rosetta/pull/1516)）：清空请求日志、按天数或日期范围清理、裁剪到保留上限、VACUUM 与计数器重建都立即返回 `202` 和任务 id，由后台 worker 执行。任务排队的那一刻，目标记录就不再被任何读取返回，随后按批次删除并报告进度，批次之间可以取消；Observability 新增 **Jobs** 视图，显示每个任务的状态、操作与结果。清理记录不再重置 Dashboard 的请求总数 —— 顶部读累计值，页脚继续显示日志当前保留的行数。
