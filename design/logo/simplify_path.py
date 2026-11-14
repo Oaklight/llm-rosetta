@@ -643,25 +643,53 @@ def reduce_to_budget(
     raise ValueError(f"unknown method {method!r}")
 
 
+def chaikin_src(
+    pts: list[Point],
+    src: list[int],
+    passes: int,
+    closed: bool,
+    locked: frozenset[int] = frozenset(),
+) -> tuple[list[Point], list[int]]:
+    """Corner cutting that carries each vertex's source index along.
+
+    *locked* holds source indices whose corners stay sharp: the vertex itself
+    is kept and only its two incident edges are cut.  Without that exemption a
+    red anchor stops being a vertex of the result after the first pass, which
+    is why a pinned point drifts off the outline once smoothing is on.
+    """
+    ring = list(pts)
+    tags = list(src)
+    if closed and len(ring) > 1 and ring[0] == ring[-1]:
+        ring, tags = ring[:-1], tags[:-1]
+    for _ in range(passes):
+        n = len(ring)
+        if n < 3:
+            break
+        out: list[Point] = []
+        out_tags: list[int] = []
+        for i in range(n if closed else n - 1):
+            j = (i + 1) % n
+            a, b = ring[i], ring[j]
+            if tags[i] not in locked:
+                out.append((0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]))
+                out_tags.append(tags[i])
+            if tags[j] in locked:
+                out.append(b)
+            else:
+                out.append((0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]))
+            out_tags.append(tags[j])
+        ring, tags = out, out_tags
+    if closed and ring:
+        ring.append(ring[0])
+        tags.append(tags[0])
+    return ring, tags
+
+
 def chaikin(pts: list[Point], passes: int, closed: bool = True) -> list[Point]:
     """Corner cutting; *passes* rounds the polygon, 0 leaves it sharp."""
     if passes <= 0 or len(pts) < 3:
         return list(pts)
-    ring = list(pts)
-    if closed and ring[0] == ring[-1]:
-        ring = ring[:-1]
-    for _ in range(passes):
-        out: list[Point] = []
-        n = len(ring)
-        pairs = range(n) if closed else range(n - 1)
-        for i in pairs:
-            a, b = ring[i], ring[(i + 1) % n]
-            out.append((0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]))
-            out.append((0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]))
-        ring = out
-    if closed:
-        ring.append(ring[0])
-    return ring
+    return chaikin_src(pts, list(range(len(pts))), passes, closed)[0]
 
 
 # --------------------------------------------------------------------------
@@ -885,6 +913,59 @@ def path_data_from_svg(path: Path) -> str:
     return max(candidates, key=len)
 
 
+def parse_locks(text: str) -> dict[int, Point]:
+    """Parse ``--lock`` entries: ``IDX@X,Y``, several separated by ``;``.
+
+    ``IDX`` is a flattened source index, the same index ``--pin`` takes, and
+    ``X,Y`` is the canvas position that vertex is held at.
+    """
+    locks: dict[int, Point] = {}
+    for item in text.split(";"):
+        item = item.strip()
+        if not item:
+            continue
+        idx, sep, xy = item.partition("@")
+        try:
+            if not sep:
+                raise ValueError
+            x, y = xy.split(",")
+            locks[int(idx)] = (float(x), float(y))
+        except ValueError as exc:
+            raise SystemExit(
+                f"--lock entry {item!r} is not IDX@X,Y (for example 120@312.5,244)"
+            ) from exc
+    return locks
+
+
+def apply_locks(
+    rings: list[list[Point]],
+    tags_by_ring: list[list[int]],
+    locks: dict[int, Point],
+    framing: Framing,
+) -> None:
+    """Shift the whole mark so red anchors land on their recorded canvas points.
+
+    The shift is one translation for the whole mark, so it never changes the
+    geometry around a locked vertex.  Several locks average their error: an
+    affine knob (rotate, aspect, scale) cannot satisfy two fixed points at
+    once, and the average is the least surprising compromise.
+    """
+    if not locks:
+        return
+    tx, ty, k = framing.transform
+    dx = dy = 0.0
+    seen: set[int] = set()
+    for ring, tags in zip(rings, tags_by_ring):
+        for (x, y), tag in zip(ring, tags):
+            if tag in locks and tag not in seen:
+                seen.add(tag)
+                target = locks[tag]
+                dx += target[0] - (x * k + tx)
+                dy += target[1] - (y * k + ty)
+    if seen:
+        framing.transform = (tx + dx / len(seen), ty + dy / len(seen), k)
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Flatten and simplify an SVG silhouette into a clean polygon.",
@@ -943,6 +1024,15 @@ def build_parser() -> argparse.ArgumentParser:
         default="",
         metavar="IDX,...",
         help="auto-anchor indices to suppress, per subpath (from simplify.html)",
+    )
+    p.add_argument(
+        "--lock",
+        default="",
+        metavar="IDX@X,Y;...",
+        help=(
+            "red anchors: keep vertex IDX and hold it at canvas point X,Y "
+            "(from simplify.html, right-click)"
+        ),
     )
     p.add_argument(
         "--tolerance",
@@ -1014,6 +1104,17 @@ def main(argv: list[str] | None = None) -> int:
     budgets = [int(x) for x in str(args.points).replace(" ", "").split(",") if x]
     manual_pin = frozenset(int(x) for x in args.pin.split(",") if x.strip())
     manual_unpin = frozenset(int(x) for x in args.unpin.split(",") if x.strip())
+    locks = parse_locks(args.lock)
+    locked = frozenset(locks)
+    # A lock names a vertex of the source ring, so an index past the end is a
+    # typo, not a lock that quietly does nothing.
+    longest = max((len(r) for r in dense), default=0)
+    stray = sorted(i for i in locks if not 0 <= i < longest)
+    if stray:
+        raise SystemExit(
+            f"--lock index {stray[0]} is outside the flattened outline "
+            f"(0..{longest - 1})"
+        )
     out_path: Path | None = args.out
     if out_path is None and not args.stats:
         out_path = Path("-")
@@ -1021,24 +1122,32 @@ def main(argv: list[str] | None = None) -> int:
     last_svg = ""
     for budget in budgets:
         rings: list[list[Point]] = []
+        tags_by_ring: list[list[int]] = []
         for ring, is_closed in zip(dense, closed):
             share = max(3, round(budget * len(ring) / max(total_in, 1)))
             pinned = (
-                frozenset(
+                (
                     structural_anchors(ring, args.anchor, is_closed, args.anchor_mode)
                     | manual_pin
                 )
                 - manual_unpin
-            )
+            ) | locked
             reduced = reduce_to_budget(
                 ring, share, args.method, is_closed, pinned, args.fidelity
             )
-            rings.append(chaikin(reduced, args.smooth, is_closed))
+            # Carry each kept vertex's dense index through smoothing so a red
+            # anchor can still be located after the vertex count changes.
+            by_point = {p: i for i, p in enumerate(ring)}
+            tags = [by_point.get(p, -1) for p in reduced]
+            pts, tags = chaikin_src(reduced, tags, args.smooth, is_closed, locked)
+            rings.append(pts)
+            tags_by_ring.append(tags)
         rings = deform(rings, args)
         framing = Framing(
             canvas=args.canvas, scale=args.scale, tight=args.tight, pad=args.pad
         )
         rings = framing.apply(rings)
+        apply_locks(rings, tags_by_ring, locks, framing)
         last_svg = emit_svg(
             rings,
             framing,
