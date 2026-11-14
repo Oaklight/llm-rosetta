@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import heapq
+import json
 import math
 import re
 import sys
@@ -990,7 +991,7 @@ def emit_svg(
     fill: str = "#1e293b",
     dark_fill: str | None = "#ededed",
     as_: str = "polygon",
-    precision: int = 1,
+    precision: int = 2,
     inscriptions: str | None = None,
     overlay: list[list[Point]] | None = None,
 ) -> str:
@@ -1300,6 +1301,16 @@ def build_parser() -> argparse.ArgumentParser:
     src = p.add_mutually_exclusive_group(required=True)
     src.add_argument("input", nargs="?", type=Path, help="SVG file to read")
     src.add_argument("--d", metavar="PATH_DATA", help="path data passed inline")
+    src.add_argument(
+        "--draft",
+        type=Path,
+        metavar="JSON",
+        help=(
+            "a draft exported by simplify.html: every other flag is taken from "
+            "it, so the CLI runs the page's parameters instead of re-deriving "
+            "them"
+        ),
+    )
     p.add_argument("-o", "--out", type=Path, help="output SVG (default: stdout)")
     p.add_argument(
         "--points", default="64", help="vertex budget, or a comma list (default: 64)"
@@ -1448,7 +1459,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--dark-fill", default="#ededed", help="dark-mode fill; empty = single fill"
     )
     p.add_argument(
-        "--precision", type=int, default=1, help="coordinate decimals (default: 1)"
+        "--precision", type=int, default=2, help="coordinate decimals (default: 2)"
     )
     p.add_argument(
         "--stats", action="store_true", help="print vertex counts and byte sizes"
@@ -1456,8 +1467,85 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def apply_draft(args: argparse.Namespace, argv: list[str]) -> None:
+    """Fill every parameter from a draft the page exported.
+
+    The page is where a design is made, so its draft is the input this tool
+    runs: the same numbers, the same anchors, the same places.  A flag given on
+    the command line wins over the draft, which is how a copy that differs only
+    in its fill (the docs half, the favicon grey) is produced from the same
+    draft.  A draft from version 1 recorded pins as flattened indices; they are
+    converted to outline fractions here, which is what later versions store.
+    """
+    data = json.loads(args.draft.read_text())
+    version = data.get("v")
+    if version not in (1, 2, 3):
+        raise SystemExit(f"unsupported draft version {version!r} in {args.draft}")
+    src = data.get("src")
+    if not isinstance(src, str) or not src.strip():
+        raise SystemExit(f"draft {args.draft} carries no source path")
+    args.d = src
+    args.input = None
+
+    params = data.get("params") or {}
+    given = {a.lstrip("-").replace("-", "_") for a in argv if a.startswith("--")}
+    for key, attr in (
+        ("points", "points"),
+        ("anchor", "anchor"),
+        ("anchorMode", "anchor_mode"),
+        ("method", "method"),
+        ("tol", "tolerance"),
+        ("fidelity", "fidelity"),
+        ("rotate", "rotate"),
+        ("aspect", "aspect"),
+        ("inflate", "inflate"),
+        ("smooth", "smooth"),
+        ("scale", "scale"),
+        ("canvas", "canvas"),
+        ("pad", "pad"),
+        ("tight", "tight"),
+        ("fill", "fill"),
+        ("darkFill", "dark_fill"),
+    ):
+        if key in params and attr not in given and key not in given:
+            setattr(args, attr, params[key])
+    args.points = str(args.points)
+    if data.get("centerRef") in ("bbox", "centroid") and "center" not in given:
+        args.center = data["centerRef"]
+
+    def as_u(value: float) -> str:
+        return f"u{float(value):.6f}"
+
+    if version == 1:
+        dense = flatten(parse_path(args.d), args.tolerance)
+        fracs = ring_fractions(dense[0])
+        pins = [fracs[int(i)] for i in data.get("pins", []) if int(i) < len(fracs)]
+        unpins = [fracs[int(i)] for i in data.get("unpins", []) if int(i) < len(fracs)]
+    else:
+        pins = [float(v) for v in data.get("pins", [])]
+        unpins = [float(v) for v in data.get("unpins", [])]
+    # The reference lists are named as flags too, so they follow the same rule
+    # as the numbers: a flag on the command line replaces the draft's list.
+    if "pin" not in given:
+        args.pin = ",".join(as_u(v) for v in pins)
+    if "unpin" not in given:
+        args.unpin = ",".join(as_u(v) for v in unpins)
+    if "sharp" not in given:
+        args.sharp = ",".join(as_u(v) for v in data.get("sharp", []))
+    if "round" not in given:
+        args.round = ",".join(as_u(v) for v in data.get("round", []))
+    if "lock" not in given:
+        args.lock = ";".join(
+            f"{as_u(u)}@{float(x):.2f},{float(y):.2f}"
+            for u, x, y in (data.get("locks") or [])
+        )
+
+
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
     args = build_parser().parse_args(argv)
+    if args.draft is not None:
+        apply_draft(args, argv)
     d = args.d if args.d is not None else path_data_from_svg(args.input)
 
     dense = flatten(parse_path(d), args.tolerance)
@@ -1503,14 +1591,27 @@ def main(argv: list[str] | None = None) -> int:
             rounded = [v if kind == "u" else fracs[int(v)] for kind, v in round_refs]
             ring_budgets = region_budgets(fracs, args.smooth, sharp, rounded)
             share = max(3, round(budget * len(ring) / max(total_in, 1)))
+            # A 锐 or 圆 place is kept like a hand-placed anchor: the page draws
+            # both as a marker and protects both, so the CLI has to as well or
+            # the two engines reduce the ring differently.  The region's detail
+            # vertices are added after --unpin, as the page adds them after it
+            # removes the unpinned ones: an unpinned vertex can still be the
+            # centre of a 锐 place, and the page keeps it then.
+            place_pins = {index_at_fraction(fracs, u) for u in sharp + rounded}
             pinned = (
                 (
-                    structural_anchors(ring, args.anchor, is_closed, args.anchor_mode)
-                    | manual_pin
-                    | region_pins(fracs, sharp)
+                    (
+                        structural_anchors(
+                            ring, args.anchor, is_closed, args.anchor_mode
+                        )
+                        | manual_pin
+                        | place_pins
+                    )
+                    - manual_unpin
                 )
-                - manual_unpin
-            ) | locked
+                | locked
+                | region_pins(fracs, sharp)
+            )
             reduced = reduce_to_budget(
                 ring, share, args.method, is_closed, pinned, args.fidelity
             )
@@ -1518,11 +1619,16 @@ def main(argv: list[str] | None = None) -> int:
             # anchor can still be located after the vertex count changes.
             by_point = {p: i for i, p in enumerate(ring)}
             tags = [by_point.get(p, -1) for p in reduced]
-            budgets = [
+            # Not ``budgets``: that name holds the requested vertex counts, and
+            # this list is one pass count per kept vertex.  Overwriting it made
+            # every export look like a multi-budget run and gain a "-48" suffix.
+            vertex_budgets = [
                 ring_budgets[t] if 0 <= t < len(ring_budgets) else args.smooth
                 for t in tags
             ]
-            pts, tags = chaikin_budgeted(reduced, tags, budgets, is_closed, locked)
+            pts, tags = chaikin_budgeted(
+                reduced, tags, vertex_budgets, is_closed, locked
+            )
             rings.append(pts)
             tags_by_ring.append(tags)
         rings = deform(rings, args, lock_pivot(rings, tags_by_ring, locks))
