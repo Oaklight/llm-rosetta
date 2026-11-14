@@ -6,6 +6,7 @@
 // (`PUT /admin/api/routing/<model>`), which rebuilds the config — so a value
 // the parser refuses comes back as the parser's own message.
 import { S } from '../core/state.js';
+import { filteredEmptyHtml } from '../core/empty.js';
 import { t } from '../core/i18n.js';
 import { api, esc, showToast } from '../core/utils.js';
 import { ROUTING_PRESETS, matchPreset, presetBlock } from '../core/routing-presets.js';
@@ -71,12 +72,23 @@ function _visibleModels() {
   return _models().filter((name) => !needle || name.toLowerCase().includes(needle));
 }
 
+/** The reset the filtered-empty message offers. */
+function clearRoutingSearch() {
+  const input = document.getElementById('routingModelSearch');
+  if (input) input.value = '';
+  _renderModelList();
+}
+
 function _renderModelList() {
   const el = document.getElementById('routingModelList');
   if (!el) return;
   const names = _visibleModels();
   if (!names.length) {
-    el.innerHTML = '<div class="routing-model-empty">' + esc(t('routing.noModels')) + '</div>';
+    // A search that matches nothing is not an empty config (#1519).
+    const filtered = _models().length > 0;
+    el.innerHTML = '<div class="routing-model-empty">'
+      + (filtered ? filteredEmptyHtml('clearRoutingSearch()') : esc(t('routing.noModels')))
+      + '</div>';
     return;
   }
   el.innerHTML = names.map((name) => {
@@ -1059,4 +1071,5 @@ Object.assign(window, {
   loadRouting,
   applyRoutingPreset,
   saveRouting,
+  clearRoutingSearch,
 });

@@ -1,4 +1,5 @@
 import { S } from '../core/state.js';
+import { filteredEmptyRowHtml } from '../core/empty.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, closeModal, openModal, esc, fmtTokens, inlineConfirm, withBusyButton } from '../core/utils.js';
 import { syncAriaSort, sortByKey } from '../core/sort.js';
@@ -190,6 +191,13 @@ function _syncKeySortHeaders() {
   syncAriaSort(headers, S._keysSortKey, S._keysSortDir);
 }
 
+/** The reset the filtered-empty message offers. */
+function clearKeySearch() {
+  const input = document.getElementById('keySearch');
+  if (input) input.value = '';
+  renderKeys();
+}
+
 function renderKeys() {
   // Re-rendered here too so a language switch relabels the tier control.
   renderKeyUsageControl();
@@ -235,7 +243,8 @@ function renderKeys() {
     return;
   }
   if (keys.length === 0 && extraRows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--text-dim)">${t('keys.noMatch')}</td></tr>`;
+    // The list holds keys; the search does not match them (#1519).
+    tbody.innerHTML = filteredEmptyRowHtml('clearKeySearch()', 9);
     return;
   }
   const usageKeys = (S.keyUsage && S.keyUsage.keys) || {};
@@ -456,7 +465,7 @@ Object.assign(window, {
   loadKeys, loadLogKeyLabels, renderKeys, openKeyModal,
   generateKey, copyCreatedKey, deleteKey, rotateKey, editKeyLabel,
   onKeyLabelInputKeydown, saveKeyLabel,
-  backfillKeysLastUsed, setKeyUsageWindow, sortKeys, setKeySortKey, toggleKeySortDir,
+  backfillKeysLastUsed, setKeyUsageWindow, sortKeys, setKeySortKey, toggleKeySortDir, clearKeySearch,
 });
 
 export { loadKeys, loadLogKeyLabels, renderKeys, setKeyUsageWindow };

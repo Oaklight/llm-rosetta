@@ -1582,7 +1582,7 @@ button.login-pref-btn {
    already carries the table's padding. */
 .empty, .empty-state,
 .shim-empty, .model-empty, .provider-empty, .routing-model-empty,
-.update-empty, .tp-empty, .lp-empty {
+.empty-filtered, .update-empty, .tp-empty, .lp-empty {
   padding: 28px 16px; color: var(--text-muted); text-align: center;
   font-size: 13px; line-height: 1.5;
 }
@@ -1597,6 +1597,16 @@ button.login-pref-btn {
 }
 .empty-icon, .empty-state-icon { margin-bottom: 10px; color: inherit; opacity: 0.5; }
 .empty-text, .empty-state-text { font-size: inherit; line-height: inherit; }
+
+/* The way out of a filter (#1519).  It sits inside the message, so it is a
+   text action rather than a button — but it is still a control: 24 px tall,
+   the touch floor #1523 sets, and focusable. */
+.empty-clear {
+  appearance: none; background: none; border: 0; padding: 0 2px;
+  min-height: 24px; font: inherit; color: var(--accent);
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.empty-clear:hover { color: color-mix(in srgb, var(--accent) 75%, var(--text)); }
 
 /* Responsive */
 @media (max-width: 768px) {
