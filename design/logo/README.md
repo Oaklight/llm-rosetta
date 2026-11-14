@@ -132,6 +132,13 @@ Interaction:
   geometry.
 - **重置** in the header restores every parameter, clears manual anchors and
   resets the view.
+- the **主题** toggle repaints the preview with that theme's fill, so a dark
+  page shows the light mark and a light page the dark one — the same pairing
+  the archived SVGs use. Exported files keep the `prefers-color-scheme` media
+  query instead, so they adapt wherever they land.
+- the controls sit in three columns on a wide screen (simplify / preview /
+  deform), collapse to two below 1500 px and to one below 980 px, and the
+  source-path panel is collapsed until opened.
 - the canvas-size slider only changes the export coordinate space; the visual
   size on screen is the `scale` knob.
 
