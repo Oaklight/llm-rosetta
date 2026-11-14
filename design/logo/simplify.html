@@ -162,7 +162,15 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
           <button data-preset="readme">README</button>
           <button data-preset="docs">docs</button>
         </div>
-        <p class="hint">左键点顶点 = 橙色锚点（保证不被简化）；右键点顶点 = 红色绝对锚点（保留顶点并固定画布位置；锚点按轮廓位置记录，改曲线精度不会跑）。再点一次取消，空心点也可点选。</p>
+        <p class="hint">左键按当前模式落点：锚点（橙，保证不被简化）/ 锐（蓝，不圆角并保留更多顶点）/ 圆（青，额外圆角）。右键 = 红色绝对锚点（保留顶点并固定画布位置；锚点按轮廓位置记录，改曲线精度不会跑）。再点一次取消，空心点也可点选。</p>
+        <label class="row">
+          <span class="k"><span>左键模式</span></span>
+          <div class="seg">
+            <button id="modePin" class="on">锚点</button>
+            <button id="modeSharp">锐</button>
+            <button id="modeRound">圆</button>
+          </div>
+        </label>
       </div>
       <div class="panel">
         <h2>导出</h2>
@@ -202,6 +210,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
         <div class="view-bar" id="viewBar">
           <span>视图 <b id="zoomPct">100%</b></span>
           <button id="zoomReset" title="缩放与平移复位，并把画布重新居中">重置视图</button>
+          <button id="recenter" title="按当前居中基准把图形放回画布中心">居中</button>
           <span class="hint">Ctrl+滚轮缩放，拖动平移，双击复位</span>
         </div>
         <div class="sizes" id="sizes"></div>
@@ -266,6 +275,13 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
           <span class="k"><span>画布边长</span><b id="vCanvas">600</b></span>
           <input type="range" id="canvas" min="200" max="1024" step="8" value="600">
           <small class="hint">画布只改导出坐标系与网格刻度，屏幕上的视觉大小由 scale 决定。</small>
+        </label>
+        <label class="row">
+          <span class="k"><span>居中基准</span></span>
+          <div class="seg">
+            <button id="centerBbox" class="on">中心</button>
+            <button id="centerCentroid">重心</button>
+          </div>
         </label>
         <label class="row">
           <span class="k"><span>紧贴内边距</span><b id="vPad">0.04</b></span>
@@ -679,24 +695,42 @@ function chaikin(pts, passes, closed) {
  * vertex: the corner stays sharp and only its two incident edges are cut.
  * Without that, smoothing leaves the pinned point off the outline. */
 function chaikinSrc(pts, src, passes, closed, locked) {
-  if (passes <= 0 || pts.length < 3) return [pts.slice(), src.slice()];
+  if (passes <= 0) return [pts.slice(), src.slice()];
+  return chaikinBudgeted(pts, src, pts.map(() => passes), closed, locked);
+}
+
+/* Per-vertex budget of cutting passes.  Budget 0 keeps the corner exactly,
+ * budget 1 is one round of cutting; --smooth is the default and the 锐 / 圆
+ * places override it locally.  Locked vertices are always budget 0. */
+function chaikinBudgeted(pts, src, budgets, closed, locked) {
   let ring = pts.slice(), tags = src.slice();
-  if (closed && ring[0][0] === ring[ring.length-1][0] && ring[0][1] === ring[ring.length-1][1]) {
-    ring.pop(); tags.pop();
+  let budget = budgets.map((b, i) => locked.has(src[i]) ? 0 : b);
+  if (closed && ring.length > 1 &&
+      ring[0][0] === ring[ring.length-1][0] && ring[0][1] === ring[ring.length-1][1]) {
+    ring.pop(); tags.pop(); budget.pop();
   }
-  for (let k = 0; k < passes; k++) {
-    const out = [], outTags = [], n = ring.length, last = closed ? n : n - 1;
-    for (let i = 0; i < last; i++) {
+  const top = budget.length ? Math.max(...budget) : 0;
+  for (let k = 1; k <= top; k++) {
+    const n = ring.length;
+    if (n < 3) break;
+    const out = [], outTags = [], outBudget = [];
+    for (let i = 0; i < (closed ? n : n - 1); i++) {
       const j = (i + 1) % n, a = ring[i], b = ring[j];
-      if (!locked.has(tags[i])) {
+      // A rounded vertex becomes the cut point just after it; a sharp one
+      // keeps its exact position.
+      if (budget[i] >= k) {
         out.push([0.75*a[0] + 0.25*b[0], 0.75*a[1] + 0.25*b[1]]);
-        outTags.push(tags[i]);
+        outTags.push(tags[i]); outBudget.push(budget[i]);
+      } else {
+        out.push([a[0], a[1]]);
+        outTags.push(tags[i]); outBudget.push(budget[i]);
       }
-      if (locked.has(tags[j])) out.push([b[0], b[1]]);
-      else out.push([0.25*a[0] + 0.75*b[0], 0.25*a[1] + 0.75*b[1]]);
-      outTags.push(tags[j]);
+      if (budget[j] >= k) {
+        out.push([0.25*a[0] + 0.75*b[0], 0.25*a[1] + 0.75*b[1]]);
+        outTags.push(tags[j]); outBudget.push(budget[j]);
+      }
     }
-    ring = out; tags = outTags;
+    ring = out; tags = outTags; budget = outBudget;
   }
   if (closed && ring.length) { ring.push(ring[0]); tags.push(tags[0]); }
   return [ring, tags];
@@ -768,7 +802,11 @@ const state = {
   fill: "#1e293b", darkFill: "#ededed", grid: true, dots: true,
   pins: new Set(),      // left-clicked: always kept
   unpins: new Set(),    // left-clicked off: auto anchor suppressed
-  locks: new Map()      // right-clicked: kept, and held at a canvas point
+  locks: new Map(),     // right-clicked: kept, and held at a canvas point
+  sharp: new Set(),     // 锐 places: no rounding, extra vertices nearby
+  round: new Set(),     // 圆 places: extra rounding nearby
+  mode: "pin",          // what a left click places: pin | sharp | round
+  centerRef: "bbox"     // export alignment: bbox (中心) or centroid (重心)
 };
 let built = null;
 const $ = (id) => document.getElementById(id);
@@ -777,6 +815,32 @@ const $ = (id) => document.getElementById(id);
  * unpinned by clicking it.  Candidate dots include vertices the current budget
  * would drop, so an unpinned anchor can be clicked back on at any budget. */
 
+
+/* Area centroid of the filled shape.  It is not the bounding-box centre: the
+ * stone is wider at the bottom, so its mass sits below the middle and the two
+ * alignments read differently on a shelf. */
+function areaCentroid(rings) {
+  let best = null, bestA = 0;
+  for (const ring of rings) {
+    const base = isRing(ring) ? ring.slice(0, -1) : ring;
+    const n = base.length;
+    if (n < 3) continue;
+    let a = 0, cx = 0, cy = 0;
+    for (let i = 0; i < n; i++) {
+      const [x0, y0] = base[i], [x1, y1] = base[(i + 1) % n];
+      const cross = x0 * y1 - x1 * y0;
+      a += cross; cx += (x0 + x1) * cross; cy += (y0 + y1) * cross;
+    }
+    a *= 0.5;
+    if (a !== 0 && Math.abs(a) > Math.abs(bestA)) {
+      bestA = a; best = [cx / (6 * a), cy / (6 * a)];
+    }
+  }
+  if (best) return best;
+  const all = rings.flat();
+  return [all.reduce((s, p) => s + p[0], 0) / all.length,
+          all.reduce((s, p) => s + p[1], 0) / all.length];
+}
 
 /* Centroid of the red anchors in *rings*, or null when none are locked.  Each
  * ring carries its source indices and its own locked-index set, so a locked
@@ -829,11 +893,59 @@ function indexAtFraction(fracs, u) {
 }
 const roundU = (u) => Math.round(u * 1e6) / 1e6;
 
+/* A marked place keeps its effect at full strength within REGION_CORE of the
+ * outline and fades to the global setting by REGION_REACH. */
+const REGION_CORE = 0.015, REGION_REACH = 0.045;
+
+function arcDistance(fracs, u) {
+  return fracs.map(f => { const d = Math.abs(f - u); return Math.min(d, 1 - d); });
+}
+function fade(d) {
+  if (d <= REGION_CORE) return 1;
+  if (d >= REGION_REACH) return 0;
+  return (REGION_REACH - d) / (REGION_REACH - REGION_CORE);
+}
+/* Per-vertex cutting budget: a 锐 place drops to 0 passes at its centre, a 圆
+ * place rises to base + 2, both fading back to base over the window. */
+function regionBudgets(fracs, base, sharp, rounded, extra = 2) {
+  const b = fracs.map(() => base);
+  for (const u of sharp) {
+    const d = arcDistance(fracs, u);
+    for (let i = 0; i < b.length; i++) {
+      const t = fade(d[i]);
+      b[i] = b[i] * (1 - t) + 0 * t;
+    }
+  }
+  for (const u of rounded) {
+    const d = arcDistance(fracs, u);
+    for (let i = 0; i < b.length; i++) {
+      const t = fade(d[i]);
+      b[i] = b[i] * (1 - t) + (base + extra) * t;
+    }
+  }
+  return b.map(v => Math.max(0, Math.round(v)));
+}
+/* Extra vertices to keep around a 锐 place: the marked vertex itself, every
+ * 2nd inside the core, every 4th in the fade band. */
+function regionPins(fracs, sharp, step = 2) {
+  const out = new Set();
+  for (const u of sharp) {
+    out.add(indexAtFraction(fracs, u));
+    const d = arcDistance(fracs, u);
+    for (let i = 0; i < fracs.length; i++) {
+      if (d[i] <= REGION_CORE) { if (i % step === 0) out.add(i); }
+      else if (d[i] < REGION_REACH && i % (step * 2) === 0) out.add(i);
+    }
+  }
+  return out;
+}
+
 function build() {
   const dense = flatten(parsePath(state.src), state.tol);
   const totalIn = dense.reduce((a, r) => a + r.length, 0);
   const rings = [], srcs = [], dotRings = [], dotSrcs = [];
   const autoByRing = [], fracsByRing = [], pinByRing = [], lockByRing = [];
+  const sharpByRing = [], roundByRing = [];
 
   dense.forEach((ring, ri) => {
     const isClosed = isRing(ring);
@@ -844,14 +956,21 @@ function build() {
     const lockIdx = new Map(
       [...state.locks.entries()].map(([u, t]) => [indexAtFraction(fracs, u), t])
     );
+    const sharpUs = [...state.sharp], roundUs = [...state.round];
     const auto = structuralAnchors(ring, state.anchor, isClosed, state.anchorMode);
-    const pins = new Set([...auto, ...pinIdx, ...lockIdx.keys()].filter(i => i >= 0 && i < ring.length));
+    const sharpIdx = new Set(sharpUs.map(u => indexAtFraction(fracs, u)));
+    const roundIdx = new Set(roundUs.map(u => indexAtFraction(fracs, u)));
+    const pins = new Set([...auto, ...pinIdx, ...lockIdx.keys(),
+                          ...regionPins(fracs, sharpUs), ...roundIdx]
+                         .filter(i => i >= 0 && i < ring.length));
     unpinIdx.forEach(i => pins.delete(i));
     lockIdx.forEach((_, i) => { if (i >= 0 && i < ring.length) pins.add(i); });
     autoByRing.push(auto);
     fracsByRing.push(fracs);
     pinByRing.push(pins);
     lockByRing.push(lockIdx);
+    sharpByRing.push(sharpIdx);
+    roundByRing.push(roundIdx);
 
     const keepSet = new Set(reduceTo(ring, budget, state.method, isClosed, pins, state.fidelity));
     const keep = [...keepSet];
@@ -861,7 +980,10 @@ function build() {
         (pts[0][0] !== pts[pts.length-1][0] || pts[0][1] !== pts[pts.length-1][1])) {
       pts.push(pts[0]); src.push(src[0]);
     }
-    if (state.smooth > 0) [pts, src] = chaikinSrc(pts, src, state.smooth, isClosed, new Set(lockIdx.keys()));
+    const ringBudgets = regionBudgets(fracs, state.smooth, sharpUs, roundUs);
+    const budgets = src.map(t => (t >= 0 && t < ringBudgets.length) ? ringBudgets[t] : state.smooth);
+    if (state.smooth > 0 || Math.max(...ringBudgets) > 0)
+      [pts, src] = chaikinBudgeted(pts, src, budgets, isClosed, new Set(lockIdx.keys()));
 
     // Candidate dots: what a generous budget keeps, plus everything pinned.
     const generous = new Set(reduceTo(ring, Math.max(budget, 64), state.method, isClosed, pins, state.fidelity));
@@ -910,9 +1032,19 @@ function build() {
     tx = tX - pivotNow[0] * k;
     ty = tY - pivotNow[1] * k;
   }
+  const lockedAt = { tx, ty };          // position forced by the red anchors
+  // What the export is aligned by.  重心 puts the filled shape's mass on the
+  // canvas centre instead of its bounding box.
+  if (state.centerRef === "centroid") {
+    const side = parseFloat(viewBox.split(" ")[2]);
+    const c = areaCentroid(deformed);
+    tx = side / 2 - c[0] * k;
+    ty = side / 2 - c[1] * k;
+  }
 
   built = { deformed, srcs, dots, dotSrcs, autoByRing, fracs: fracsByRing,
-            pinsByRing: pinByRing, lockByRing, pivotNow, centred,
+            pinsByRing: pinByRing, lockByRing,
+            sharpByRing, roundByRing, pivotNow, centred, lockedAt,
             viewBox, tx, ty, k, totalIn,
             outN: deformed.reduce((a, r) => a + r.length, 0) };
   return built;
@@ -950,7 +1082,8 @@ function svgFor(size, opts = {}) {
   const head = `<style>${markCss}`
              + `.dot{fill:var(--accent)}.ghost{fill:none;stroke:var(--grid);stroke-opacity:.45}`
              + `.pin{fill:#e8890c;stroke:#fff}.pin-ghost{fill:none;stroke:#e8890c}`
-             + `.lock{fill:#e02424;stroke:#fff}</style>`;
+             + `.lock{fill:#e02424;stroke:#fff}`
+             + `.sharp{fill:#7c3aed;stroke:#fff}.roundpin{fill:#0f766e;stroke:#fff}</style>`;
   let grid = "";
   if (state.grid) {
     const lines = [];
@@ -976,9 +1109,12 @@ function svgFor(size, opts = {}) {
         const idx = src[i];
         const pinned = isPinned(ri, idx);
         const on = inPoly[ri] ? inPoly[ri].includes(idx) : true;
-        const cls = built.lockByRing[ri] && built.lockByRing[ri].has(idx) ? "lock"
+        const clsState = built.lockByRing[ri] && built.lockByRing[ri].has(idx) ? "lock"
+                  : built.sharpByRing[ri] && built.sharpByRing[ri].has(idx) ? "sharp"
+                  : built.roundByRing[ri] && built.roundByRing[ri].has(idx) ? "roundpin"
                   : pinned ? (on ? "pin" : "pin-ghost")
                   : (on ? "dot" : "ghost");
+        const cls = clsState;
         circles.push(`<circle class="${cls}" data-ri="${ri}" data-src="${idx}" cx="${fmt(ring[i][0], 2)}" cy="${fmt(ring[i][1], 2)}" r="${fmt(rad, 2)}" stroke-width="${fmt(rad * 0.55, 2)}"/>`);
       }
     });
@@ -1033,6 +1169,15 @@ function render() {
       state.pins.delete(u);
       state.unpins.add(u);
       toast("已取消绝对锚点");
+    } else if (state.mode === "sharp" || state.mode === "round") {
+      // 锐 / 圆 places replace each other, and either is also kept.
+      const own = state.mode === "sharp" ? state.sharp : state.round;
+      const other = state.mode === "sharp" ? state.round : state.sharp;
+      if (own.has(u)) { own.delete(u); }
+      else {
+        own.add(u); other.delete(u);
+        state.unpins.delete(u);
+      }
     } else if (isPinned(ri, src)) {
       state.pins.delete(u);
       state.unpins.add(u);
@@ -1088,6 +1233,11 @@ function syncLabels() {
 
 function pullUI() {
   $("points").value = state.points;
+  $("modePin").classList.toggle("on", state.mode === "pin");
+  $("modeSharp").classList.toggle("on", state.mode === "sharp");
+  $("modeRound").classList.toggle("on", state.mode === "round");
+  $("centerBbox").classList.toggle("on", state.centerRef === "bbox");
+  $("centerCentroid").classList.toggle("on", state.centerRef === "centroid");
   $("anchor").value = state.anchor;
   $("anchorMode").value = state.anchorMode;
   $("tol").value = state.tol;
@@ -1141,6 +1291,9 @@ function cliCommand() {
       .join(";");
     parts.push(`--lock "${spec}"`);
   }
+  if (state.centerRef === "centroid") parts.push("--center centroid");
+  if (state.sharp.size) parts.push(`--sharp ${[...state.sharp].sort((a,b)=>a-b).map(u => "u" + u).join(",")}`);
+  if (state.round.size) parts.push(`--round ${[...state.round].sort((a,b)=>a-b).map(u => "u" + u).join(",")}`);
   if (state.fill !== "#1e293b") parts.push(`--fill '${state.fill}'`);
   if (state.darkFill !== "#ededed") parts.push(`--dark-fill '${state.darkFill}'`);
   return parts.join(" ");
@@ -1164,25 +1317,42 @@ function applyZoom() {
 
 function resetZoom() { zoom.z = 1; zoom.x = 0; zoom.y = 0; applyZoom(); }
 
-/* Red anchors can push the mark off the canvas centre, because holding a
- * vertex at a fixed canvas point moves everything else.  重置视图 puts the
- * anchor group where bbox centring would have put it, without dropping any. */
-function rebaseLocks() {
-  if (!state.locks.size) return;
+/* Put the mark where the chosen alignment says it belongs, before exporting.
+ * Without red anchors the framing already does this; with them the pivot has to
+ * be solved for, because the anchors, not the bounding box, decide where the
+ * mark sits.  The recorded canvas points move with it, so every lock keeps
+ * pointing at the vertex it was marked on. */
+function recenter() {
   const b = build();
-  if (!b.pivotNow) return;
-  const px = b.pivotNow[0] * b.k + b.centred.tx;
-  const py = b.pivotNow[1] * b.k + b.centred.ty;
-  const targets = [...state.locks.values()];
-  const tX = targets.reduce((s, t) => s + t[0], 0) / targets.length;
-  const tY = targets.reduce((s, t) => s + t[1], 0) / targets.length;
-  const dx = px - tX, dy = py - tY;
-  state.locks = new Map(
-    [...state.locks].map(([u, t]) => [u, [t[0] + dx, t[1] + dy]])
-  );
+  const label = state.centerRef === "centroid" ? "重心" : "中心";
+  if (state.locks.size && b.pivotNow) {
+    const side = parseFloat(b.viewBox.split(" ")[2]);
+    const pvx = b.pivotNow[0], pvy = b.pivotNow[1];
+    let rx, ry;                        // where the mark's own reference sits
+    if (state.centerRef === "centroid") {
+      [rx, ry] = areaCentroid(b.deformed);
+    } else {
+      const [x0, y0, x1, y1] = bbox(b.deformed);
+      rx = (x0 + x1) / 2; ry = (y0 + y1) / 2;
+    }
+    // pivot target that lands the reference on the canvas centre
+    const tX = side / 2 - (rx - pvx) * b.k;
+    const tY = side / 2 - (ry - pvy) * b.k;
+    const targets = [...state.locks.values()];
+    const mx = targets.reduce((a, t) => a + t[0], 0) / targets.length;
+    const my = targets.reduce((a, t) => a + t[1], 0) / targets.length;
+    const dx = tX - mx, dy = tY - my;
+    if (dx || dy) {
+      state.locks = new Map(
+        [...state.locks].map(([u, t]) => [u, [t[0] + dx, t[1] + dy]])
+      );
+    }
+  }
+  render();
+  toast(`已按${label}居中`);
 }
 
-function resetView() { resetZoom(); rebaseLocks(); render(); }
+function resetView() { resetZoom(); recenter(); }
 
 $("bigWrap").addEventListener("wheel", (e) => {
   if (!e.ctrlKey && !e.metaKey) return;      // plain wheel keeps scrolling the page
@@ -1236,7 +1406,7 @@ const DEFAULTS = {
   points: 48, anchor: 12, anchorMode: "area", method: "visvalingam", tol: 0.05,
   rotate: 0, aspect: 1, inflate: 0, smooth: 0,
   scale: 0.88, canvas: 600, pad: 0.04, tight: false,
-  fill: "#1e293b", darkFill: "#ededed", grid: true, dots: true
+  fill: "#1e293b", darkFill: "#ededed", grid: true, dots: true, mode: "pin", centerRef: "bbox"
 };
 
 function resetAll() {
@@ -1244,6 +1414,8 @@ function resetAll() {
   state.pins.clear();
   state.unpins.clear();
   state.locks.clear();
+  state.sharp.clear();
+  state.round.clear();
   state.src = STONE;
   $("src").value = STONE;
   resetZoom();
@@ -1259,7 +1431,7 @@ const DRAFT_KEY = "rosetta.stoneDraft.v1";
 
 function snapshot() {
   return {
-    v: 2,
+    v: 3,
     savedAt: new Date().toISOString(),
     src: state.src,
     params: {
@@ -1274,12 +1446,16 @@ function snapshot() {
     locks: [...state.locks.entries()]
       .sort((a, b) => a[0] - b[0])
       .map(([u, t]) => [u, t[0], t[1]]),
+    sharp: [...state.sharp].sort((a, b) => a - b),
+    round: [...state.round].sort((a, b) => a - b),
+    mode: state.mode,
+    centerRef: state.centerRef,
     zoom: { z: zoom.z, x: zoom.x, y: zoom.y }
   };
 }
 
 function restore(draft) {
-  if (!draft || (draft.v !== 1 && draft.v !== 2)) throw new Error("草稿格式无法识别");
+  if (!draft || (draft.v !== 1 && draft.v !== 2 && draft.v !== 3)) throw new Error("草稿格式无法识别");
   const params = draft.params || {};
   for (const k of Object.keys(DEFAULTS)) {
     if (params[k] !== undefined) state[k] = params[k];
@@ -1296,6 +1472,12 @@ function restore(draft) {
   const asU = (v) => draft.v === 1 ? roundU(fracs[v] ?? 0) : Number(v);
   state.pins = new Set((Array.isArray(draft.pins) ? draft.pins : []).map(asU));
   state.unpins = new Set((Array.isArray(draft.unpins) ? draft.unpins : []).map(asU));
+  state.sharp = new Set((Array.isArray(draft.sharp) ? draft.sharp : []).map(u => Number(u)));
+  state.round = new Set((Array.isArray(draft.round) ? draft.round : []).map(u => Number(u)));
+  if (draft.mode === "sharp" || draft.mode === "round" || draft.mode === "pin")
+    state.mode = draft.mode;
+  if (draft.centerRef === "bbox" || draft.centerRef === "centroid")
+    state.centerRef = draft.centerRef;
   state.locks = new Map(
     (Array.isArray(draft.locks) ? draft.locks : [])
       .filter(e => Array.isArray(e) && e.length === 3)
@@ -1346,6 +1528,12 @@ bind("smooth", "smooth");
 bind("scale", "scale"); bind("canvas", "canvas"); bind("pad", "pad");
 
 $("anchorMode").addEventListener("change", e => { state.anchorMode = e.target.value; render(); });
+$("modePin").addEventListener("click", () => { state.mode = "pin"; pullUI(); });
+$("modeSharp").addEventListener("click", () => { state.mode = "sharp"; pullUI(); });
+$("modeRound").addEventListener("click", () => { state.mode = "round"; pullUI(); });
+$("centerBbox").addEventListener("click", () => { state.centerRef = "bbox"; pullUI(); render(); });
+$("centerCentroid").addEventListener("click", () => { state.centerRef = "centroid"; pullUI(); render(); });
+$("recenter").addEventListener("click", (e) => { e.stopPropagation(); recenter(); });
 $("method").addEventListener("change", e => {
   state.method = e.target.value;
   pullUI();
@@ -1387,20 +1575,20 @@ $("copyCli").addEventListener("click", async () => {
 
 $("src").value = state.src;
 $("applySrc").addEventListener("click", () => {
-  try { state.src = $("src").value.trim(); state.pins.clear(); state.locks.clear(); render(); toast("已应用"); }
+  try { state.src = $("src").value.trim(); state.pins.clear(); state.locks.clear(); state.sharp.clear(); state.round.clear(); render(); toast("已应用"); }
   catch (e) { toast("解析失败：" + e.message); }
 });
 $("resetSrc").addEventListener("click", () => {
-  state.src = STONE; $("src").value = STONE; state.pins.clear(); state.unpins.clear(); state.locks.clear(); render(); toast("已恢复内置石形");
+  state.src = STONE; $("src").value = STONE; state.pins.clear(); state.unpins.clear(); state.locks.clear(); state.sharp.clear(); state.round.clear(); render(); toast("已恢复内置石形");
 });
-$("clearPins").addEventListener("click", () => { state.pins.clear(); state.unpins.clear(); state.locks.clear(); render(); toast("已清空手动锚点"); });
+$("clearPins").addEventListener("click", () => { state.pins.clear(); state.unpins.clear(); state.locks.clear(); state.sharp.clear(); state.round.clear(); render(); toast("已清空局部标记"); });
 $("file").addEventListener("change", async (e) => {
   const f = e.target.files[0]; if (!f) return;
   const root = new DOMParser().parseFromString(await f.text(), "image/svg+xml");
   const ds = [...root.querySelectorAll("path")].map(p => p.getAttribute("d")).filter(Boolean);
   if (!ds.length) { toast("文件里没有 path"); return; }
   state.src = ds.sort((a, b) => b.length - a.length)[0];
-  state.pins.clear(); state.unpins.clear(); state.locks.clear(); $("src").value = state.src; render(); toast("已载入 " + f.name);
+  state.pins.clear(); state.unpins.clear(); state.locks.clear(); state.sharp.clear(); state.round.clear(); $("src").value = state.src; render(); toast("已载入 " + f.name);
 });
 
 $("resetAll").addEventListener("click", resetAll);
