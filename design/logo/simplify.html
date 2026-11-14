@@ -106,7 +106,7 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
   </svg>
   <div>
     <h1>石形简化器</h1>
-    <p>在原型上做形变：顶点预算、结构锚点、旋转 / 拉伸 / 膨胀 / 网格化。</p>
+    <p>在原型上做形变：顶点预算、结构锚点、旋转 / 拉伸 / 膨胀。</p>
   </div>
   <div class="spacer"></div>
   <button id="resetAll" title="所有参数恢复默认，并清除手动锚点与缩放">重置</button>
@@ -140,7 +140,13 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
           <select id="method">
             <option value="visvalingam">Visvalingam（按面积）</option>
             <option value="douglas">Douglas–Peucker（按偏离）</option>
+            <option value="fidelity">保真 trim（按最大偏差）</option>
+            <option value="decimate">保真削减（边折叠）</option>
           </select>
+        </label>
+        <label class="row" id="fidelityRow">
+          <span class="k"><span>保真偏差 <small>trim 时的最大误差</small></span><b id="vFid">0.020</b></span>
+          <input type="range" id="fidelity" min="0.002" max="0.05" step="0.001" value="0.02">
         </label>
         <label class="row">
           <span class="k"><span>曲线精度</span><b id="vTol">0.05</b></span>
@@ -240,14 +246,6 @@ code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
         <label class="row">
           <span class="k"><span>圆角平滑</span><b id="vSmooth">0</b></span>
           <input type="range" id="smooth" min="0" max="4" step="1" value="0">
-        </label>
-        <label class="row">
-          <span class="k"><span>对称化</span><b id="vSym">0%</b></span>
-          <input type="range" id="sym" min="0" max="1" step="0.02" value="0">
-        </label>
-        <label class="row">
-          <span class="k"><span>网格化 <small>0 = 关</small></span><b id="vSnap">0</b></span>
-          <input type="range" id="snap" min="0" max="28" step="1" value="0">
         </label>
       </div>
       <div class="panel">
@@ -400,6 +398,11 @@ function flatten(subpaths, tol) {
 const triArea = (a, b, c) => Math.abs((b[0]-a[0])*(c[1]-a[1]) - (c[0]-a[0])*(b[1]-a[1])) / 2;
 const isRing = (pts) => pts.length > 2 &&
   Math.hypot(pts[0][0]-pts[pts.length-1][0], pts[0][1]-pts[pts.length-1][1]) <= 1e-6;
+function bboxSize(pts) {
+  const [x0, y0, x1, y1] = bbox([pts]);
+  return [x1 - x0, y1 - y0];
+}
+
 function bbox(rings) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
   for (const r of rings) for (const p of r) {
@@ -557,8 +560,101 @@ function structuralAnchors(pts, count, closed, mode) {
   return new Set(keepVisvalingam(pts, count, closed, new Set()));
 }
 
-function reduceTo(pts, target, method, closed, pinned) {
+// Binary heap ordered on (cost, index, stamp), the same ordering heapq gives
+// Python, so both implementations collapse ties in the same order.
+function heapLess(x, y) {
+  return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+}
+class MinHeap {
+  constructor() { this.a = []; }
+  get size() { return this.a.length; }
+  push(item) {
+    const a = this.a;
+    a.push(item);
+    let i = a.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (heapLess(a[p], a[i]) <= 0) break;
+      [a[p], a[i]] = [a[i], a[p]];
+      i = p;
+    }
+  }
+  pop() {
+    const a = this.a, top = a[0], last = a.pop();
+    if (a.length) {
+      a[0] = last;
+      let i = 0;
+      for (;;) {
+        const l = 2 * i + 1, r = l + 1;
+        let m = i;
+        if (l < a.length && heapLess(a[l], a[m]) < 0) m = l;
+        if (r < a.length && heapLess(a[r], a[m]) < 0) m = r;
+        if (m === i) break;
+        [a[m], a[i]] = [a[i], a[m]];
+        i = m;
+      }
+    }
+    return top;
+  }
+}
+
+function keepDecimate(pts, target, tol, closed, pinned) {
   const n = pts.length;
+  if (n <= 3) return [...Array(n).keys()];
+  const prev = pts.map((_, i) => (i - 1 + n) % n);
+  const next = pts.map((_, i) => (i + 1) % n);
+  const alive = new Array(n).fill(true);
+  const leftArc = pts.map(() => []);
+  const stamps = new Array(n).fill(0);
+  if (!closed) { prev[0] = 0; next[n - 1] = n - 1; }
+  const removable = (i) => !pinned.has(i) && (closed || (i !== 0 && i !== n - 1));
+  const arcBetween = (i) => leftArc[i].concat([i], leftArc[next[i]]);
+  const costOf = (i) => {
+    const a = pts[prev[i]], b = pts[next[i]];
+    let m = 0;
+    for (const j of arcBetween(i)) m = Math.max(m, segDist(pts[j], a, b));
+    return m;
+  };
+  const heap = new MinHeap();
+  const push = (i) => {
+    if (alive[i] && removable(i)) heap.push([costOf(i), i, stamps[i]]);
+  };
+  for (let i = 0; i < n; i++) push(i);
+  let remaining = n;
+  while (heap.size && remaining > 3) {
+    const [cost, i, stamp] = heap.pop();
+    if (!alive[i] || stamps[i] !== stamp) continue;
+    if (cost > tol) break;
+    const arc = arcBetween(i);
+    const p = prev[i], q = next[i];
+    alive[i] = false;
+    leftArc[q] = arc;
+    next[p] = q;
+    prev[q] = p;
+    remaining -= 1;
+    if (target < n && remaining <= target) break;
+    for (const j of [p, q]) if (alive[j]) { stamps[j] += 1; push(j); }
+  }
+  const out = [];
+  for (let i = 0; i < n; i++) if (alive[i]) out.push(i);
+  return out;
+}
+
+function reduceTo(pts, target, method, closed, pinned, fidelity = 0.02) {
+  const n = pts.length;
+  if (n <= 3) return [...Array(n).keys()];
+  if (method === "fidelity") {
+    // Trim every vertex that can go within a bounded outline error; the
+    // pinned vertices split the ring into independent arcs and are kept.
+    const [w, h] = bboxSize(pts);
+    return keepDouglas(pts, Math.max(fidelity, 1e-9) * Math.max(w, h), closed, pinned);
+  }
+  if (method === "decimate") {
+    // Greedy edge collapse, re-costed after every removal, bounded by the same
+    // error; the budget stops it early when it is the tighter constraint.
+    const [w, h] = bboxSize(pts);
+    return keepDecimate(pts, target, Math.max(fidelity, 1e-9) * Math.max(w, h), closed, pinned);
+  }
   if (target >= n || target < 3) return [...Array(n).keys()];
   if (pinned.size >= target) return [...pinned].sort((a, b) => a - b);
   if (method === "visvalingam") return keepVisvalingam(pts, target, closed, pinned);
@@ -637,45 +733,11 @@ function inflateRing(rings, amount) {
     return out;
   });
 }
-function symmetrizeRing(rings, w) {
-  if (w <= 0) return rings;
-  const [x0, , x1] = bbox(rings);
-  const axis = (x0 + x1) / 2;
-  return rings.map(ring => {
-    const closed = isRing(ring);
-    const base = closed ? ring.slice(0, -1) : ring.slice();
-    const n = base.length, out = [];
-    for (let i = 0; i < n; i++) {
-      const [x, y] = base[i];
-      const [mx, my] = base[n - 1 - i];
-      out.push([(1-w)*x + w*(2*axis - mx), (1-w)*y + w*my]);
-    }
-    if (closed) out.push(out[0]);
-    return out;
-  });
-}
-function snapRing(rings, cells) {
-  if (cells < 2) return rings;
-  const [x0, y0, x1, y1] = bbox(rings);
-  const step = Math.max(x1 - x0, y1 - y0) / cells;
-  if (step <= 0) return rings;
-  return rings.map(ring => {
-    const closed = isRing(ring);
-    const snapped = ring.map(([x, y]) => [
-      x0 + Math.round((x - x0) / step) * step,
-      y0 + Math.round((y - y0) / step) * step
-    ]);
-    if (!closed) return snapped;
-    const body = dedupe(snapped.slice(0, -1), 1e-9);
-    body.push(body[0]);
-    return body;
-  });
-}
 
 /* -------------------------------- state ---------------------------- */
 const state = {
   src: STONE, points: 48, anchor: 12, anchorMode: "area", method: "visvalingam",
-  tol: 0.05, rotate: 0, aspect: 1, inflate: 0, smooth: 0, sym: 0, snap: 0,
+  tol: 0.05, fidelity: 0.02, rotate: 0, aspect: 1, inflate: 0, smooth: 0,
   scale: 0.88, canvas: 600, pad: 0.04, tight: false,
   fill: "#1e293b", darkFill: "#ededed", grid: true, dots: true,
   pins: new Set(),      // clicked on: always kept
@@ -687,35 +749,7 @@ const $ = (id) => document.getElementById(id);
 /* Each ring keeps a parallel source-index array so a vertex can be pinned or
  * unpinned by clicking it.  Candidate dots include vertices the current budget
  * would drop, so an unpinned anchor can be clicked back on at any budget. */
-function snapTracked(rings, srcs, cells) {
-  const [x0, y0, x1, y1] = bbox(rings);
-  const step = Math.max(x1 - x0, y1 - y0) / cells;
-  if (!(step > 0)) return rings;
-  return rings.map((ring, ri) => {
-    const src = srcs[ri], out = [], outSrc = src ? [] : null;
-    for (let i = 0; i < ring.length; i++) {
-      const [x, y] = ring[i];
-      const q = [x0 + Math.round((x - x0) / step) * step,
-                 y0 + Math.round((y - y0) / step) * step];
-      const prev = out[out.length - 1];
-      if (prev && Math.hypot(prev[0] - q[0], prev[1] - q[1]) < 1e-9) continue;
-      out.push(q);
-      if (outSrc) outSrc.push(src[i]);
-    }
-    if (outSrc) srcs[ri] = outSrc;
-    return out;
-  });
-}
 
-function snapPlain(rings, cells) {
-  const [x0, y0, x1, y1] = bbox(rings);
-  const step = Math.max(x1 - x0, y1 - y0) / cells;
-  if (!(step > 0)) return rings;
-  return rings.map(ring => ring.map(([x, y]) => [
-    x0 + Math.round((x - x0) / step) * step,
-    y0 + Math.round((y - y0) / step) * step
-  ]));
-}
 
 function build() {
   const dense = flatten(parsePath(state.src), state.tol);
@@ -731,7 +765,7 @@ function build() {
     state.unpins.forEach(i => pins.delete(i));
     autoByRing.push(auto);
 
-    const keepSet = new Set(reduceTo(ring, budget, state.method, isClosed, pins));
+    const keepSet = new Set(reduceTo(ring, budget, state.method, isClosed, pins, state.fidelity));
     let pts = [...keepSet].map(i => ring[i]);
     let src = [...keepSet];
     if (isClosed && pts.length >= 3 &&
@@ -741,7 +775,7 @@ function build() {
     if (state.smooth > 0) { pts = chaikin(pts, state.smooth, isClosed); src = null; }
 
     // Candidate dots: what a generous budget keeps, plus everything pinned.
-    const generous = new Set(reduceTo(ring, Math.max(budget, 64), state.method, isClosed, pins));
+    const generous = new Set(reduceTo(ring, Math.max(budget, 64), state.method, isClosed, pins, state.fidelity));
     const candidates = new Set([...generous, ...keepSet, ...pins, ...auto]);
     const dotsIdx = [...candidates].filter(i => i >= 0 && i < ring.length).sort((a, b) => a - b);
     dotRings.push(dotsIdx.map(i => ring[i]));
@@ -753,15 +787,9 @@ function build() {
   let deformed = rotateRing(rings, state.rotate);
   deformed = stretchRing(deformed, state.aspect);
   deformed = inflateRing(deformed, state.inflate);
-  deformed = symmetrizeRing(deformed, state.sym);
   let dots = rotateRing(dotRings, state.rotate);
   dots = stretchRing(dots, state.aspect);
   dots = inflateRing(dots, state.inflate);
-  dots = symmetrizeRing(dots, state.sym);
-  if (state.snap >= 2) {
-    deformed = snapTracked(deformed, srcs, state.snap);
-    dots = snapPlain(dots, state.snap);
-  }
 
   const [bx0, by0, bx1, by1] = bbox(deformed);
   const w = bx1 - bx0, h = by1 - by0;
@@ -889,12 +917,11 @@ function syncLabels() {
   $("vPoints").textContent = state.points;
   $("vAnchor").textContent = state.anchor;
   $("vTol").textContent = state.tol.toFixed(2);
+  $("vFid").textContent = state.fidelity.toFixed(3);
   $("vRot").textContent = state.rotate.toFixed(1) + "°";
   $("vAspect").textContent = state.aspect.toFixed(2);
   $("vInflate").textContent = state.inflate.toFixed(3);
   $("vSmooth").textContent = state.smooth;
-  $("vSym").textContent = Math.round(state.sym * 100) + "%";
-  $("vSnap").textContent = state.snap;
   $("vScale").textContent = state.scale.toFixed(3);
   $("vCanvas").textContent = state.canvas;
   $("vPad").textContent = state.pad.toFixed(2);
@@ -905,12 +932,14 @@ function pullUI() {
   $("anchor").value = state.anchor;
   $("anchorMode").value = state.anchorMode;
   $("tol").value = state.tol;
+  $("fidelity").value = state.fidelity;
+  const byFidelity = state.method === "fidelity";
+  $("points").disabled = byFidelity;
+  $("fidelityRow").style.opacity = byFidelity ? "1" : ".55";
   $("rotate").value = state.rotate;
   $("aspect").value = state.aspect;
   $("inflate").value = state.inflate;
   $("smooth").value = state.smooth;
-  $("sym").value = state.sym;
-  $("snap").value = state.snap;
   $("scale").value = state.scale;
   $("canvas").value = state.canvas;
   $("pad").value = state.pad;
@@ -925,19 +954,25 @@ function pullUI() {
 }
 
 function cliCommand() {
-  const parts = ["python design/logo/simplify_path.py", "design/logo/out/rosetta-icon-docs.svg", "-o out/mark.svg"];
-  parts.push(`--points ${state.points}`, `--anchor ${state.anchor}`);
+  const parts = ["python design/logo/simplify_path.py", "design/logo/references/rosetta-stone-path.txt", "-o out/mark.svg"];
+  if (state.method === "fidelity") {
+    parts.push("--method fidelity", `--fidelity ${state.fidelity.toFixed(3)}`);
+  } else if (state.method === "decimate") {
+    parts.push("--method decimate", `--points ${state.points}`,
+               `--fidelity ${state.fidelity.toFixed(3)}`);
+  } else {
+    parts.push(`--points ${state.points}`);
+  }
+  parts.push(`--anchor ${state.anchor}`);
   if (state.anchorMode !== "area") parts.push(`--anchor-mode ${state.anchorMode}`);
   if (state.tight) parts.push("--tight", `--pad ${state.pad.toFixed(2)}`);
   else parts.push(`--scale ${state.scale.toFixed(3)}`, `--canvas ${state.canvas}`);
-  if (state.method !== "visvalingam") parts.push(`--method ${state.method}`);
+  if (state.method === "douglas") parts.push("--method douglas");
   if (state.smooth) parts.push(`--smooth ${state.smooth}`);
   if (state.tol !== 0.05) parts.push(`--tolerance ${state.tol.toFixed(2)}`);
   if (state.rotate) parts.push(`--rotate ${state.rotate}`);
   if (state.aspect !== 1) parts.push(`--aspect ${state.aspect.toFixed(2)}`);
   if (state.inflate) parts.push(`--inflate ${state.inflate.toFixed(3)}`);
-  if (state.sym) parts.push(`--symmetrize ${state.sym.toFixed(2)}`);
-  if (state.snap) parts.push(`--snap ${state.snap}`);
   if (state.pins.size) parts.push(`--pin ${[...state.pins].sort((a,b)=>a-b).join(",")}`);
   if (state.unpins.size) parts.push(`--unpin ${[...state.unpins].sort((a,b)=>a-b).join(",")}`);
   if (state.fill !== "#1e293b") parts.push(`--fill '${state.fill}'`);
@@ -1003,7 +1038,7 @@ $("zoomReset").addEventListener("click", (e) => { e.stopPropagation(); resetZoom
 /* ------------------------------ defaults --------------------------- */
 const DEFAULTS = {
   points: 48, anchor: 12, anchorMode: "area", method: "visvalingam", tol: 0.05,
-  rotate: 0, aspect: 1, inflate: 0, smooth: 0, sym: 0, snap: 0,
+  rotate: 0, aspect: 1, inflate: 0, smooth: 0,
   scale: 0.88, canvas: 600, pad: 0.04, tight: false,
   fill: "#1e293b", darkFill: "#ededed", grid: true, dots: true
 };
@@ -1033,7 +1068,7 @@ function snapshot() {
     params: {
       points: state.points, anchor: state.anchor, anchorMode: state.anchorMode,
       method: state.method, tol: state.tol, rotate: state.rotate, aspect: state.aspect,
-      inflate: state.inflate, smooth: state.smooth, sym: state.sym, snap: state.snap,
+      inflate: state.inflate, smooth: state.smooth,
       scale: state.scale, canvas: state.canvas, pad: state.pad, tight: state.tight,
       fill: state.fill, darkFill: state.darkFill, grid: state.grid, dots: state.dots
     },
@@ -1094,13 +1129,17 @@ function bind(id, key, after = syncLabels) {
   const el = $(id);
   el.addEventListener("input", () => { state[key] = parseFloat(el.value); after(); render(); });
 }
-bind("points", "points"); bind("anchor", "anchor"); bind("tol", "tol");
+bind("points", "points"); bind("anchor", "anchor"); bind("tol", "tol"); bind("fidelity", "fidelity");
 bind("rotate", "rotate"); bind("aspect", "aspect"); bind("inflate", "inflate");
-bind("smooth", "smooth"); bind("sym", "sym"); bind("snap", "snap");
+bind("smooth", "smooth");
 bind("scale", "scale"); bind("canvas", "canvas"); bind("pad", "pad");
 
 $("anchorMode").addEventListener("change", e => { state.anchorMode = e.target.value; render(); });
-$("method").addEventListener("change", e => { state.method = e.target.value; render(); });
+$("method").addEventListener("change", e => {
+  state.method = e.target.value;
+  pullUI();
+  render();
+});
 $("fill").addEventListener("input", e => { state.fill = e.target.value; render(); });
 $("darkFill").addEventListener("input", e => { state.darkFill = e.target.value; render(); });
 $("frameSquare").addEventListener("click", () => { state.tight = false; pullUI(); render(); });
@@ -1110,8 +1149,8 @@ $("tDots").addEventListener("click", () => { state.dots = !state.dots; pullUI();
 
 document.querySelectorAll("[data-preset]").forEach(btn => btn.addEventListener("click", () => {
   const p = btn.dataset.preset;
-  if (p === "app") Object.assign(state, { points: 48, anchor: 12, scale: 0.88, tight: false, smooth: 0, rotate: 0, aspect: 1, inflate: 0, sym: 0, snap: 0, fill: "#1e293b", darkFill: "#ededed" });
-  if (p === "favicon") Object.assign(state, { points: 28, anchor: 10, tight: true, pad: 0.04, smooth: 0, rotate: 0, aspect: 1, inflate: 0, sym: 0, snap: 0, fill: "#666666", darkFill: "#ededed" });
+  if (p === "app") Object.assign(state, { points: 48, anchor: 12, scale: 0.88, tight: false, smooth: 0, rotate: 0, aspect: 1, inflate: 0, fill: "#1e293b", darkFill: "#ededed" });
+  if (p === "favicon") Object.assign(state, { points: 28, anchor: 10, tight: true, pad: 0.04, smooth: 0, rotate: 0, aspect: 1, inflate: 0, fill: "#666666", darkFill: "#ededed" });
   if (p === "readme") Object.assign(state, { points: 96, anchor: 16, scale: 0.835, tight: false, smooth: 0, fill: "#1e293b", darkFill: "#ededed" });
   if (p === "docs") Object.assign(state, { points: 96, anchor: 16, scale: 0.934, tight: false, smooth: 0, fill: "#1a1a1a", darkFill: "#ededed" });
   pullUI(); render();

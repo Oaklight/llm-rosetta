@@ -44,10 +44,22 @@ README 的深浅两份过去是逐字节相同的，`prefers-color-scheme` 切�
 
 1. 解析路径；自适应展平三次曲线（`--tolerance`）；
 2. 选取结构锚点（`--anchor`、`--anchor-mode area|corner|depth|hybrid`）；
-3. 在不丢锚点的前提下压到预算（`--points`、`--method visvalingam|douglas`）；
+3. 在不丢锚点的前提下压到顶点预算（`--points`、`--method visvalingam|douglas`）、
+   按最大偏差裁剪（`--method fidelity`、`--fidelity`），或在同一误差上限下做边折叠
+   （`--method decimate`）；
 4. 可选的 Chaikin 圆角（`--smooth`）；
-5. 形变：`--rotate`、`--aspect`、`--inflate`、`--symmetrize`、`--snap`；
+5. 形变：`--rotate`、`--aspect`、`--inflate`；
 6. 取景：方形画布（`--canvas`、`--scale`）或紧贴方形（`--tight`、`--pad`）。
+
+`--method fidelity` 不使用顶点预算。它删掉所有“删掉后轮廓偏差仍不超过 `--fidelity`
+× 原轮廓最长边”的顶点，误差是逐点对未简化路径测量的。被固定的顶点原样保留，并把
+环切成若干独立弧段，所以标记能守住选定的角，其余轮廓跟随保真设置。当顶点数应当由
+形状决定、而不是反过来时，用它。
+
+`--method decimate` 对应三维网格的保形削减：反复折叠代价最小的边，每次折叠后重算两个
+邻居的代价，任何会让轮廓偏离超过 `--fidelity` 的折叠都拒绝。顶点预算仍然有效，哪个先
+到就停。填充图形内部没有三角形可减，所以折叠作用在轮廓上；在石头上，同样误差下它与
+`--method fidelity` 只差一两个顶点，分布略均匀，因为代价是每次折叠后全局重算的。
 
 锚点模式对顶点的排序依据不同。`area` 用删掉该点会损失的三角形面积（偏好大的外凸弧线），`corner` 用转角（偏好尖角），`depth` 用到凸包内部的深度（偏好凹陷，因为凹口正是轮廓离开凸包的地方），`hybrid` 一半按面积、其余按深度补齐。在这条轮廓上，展平后有 46% 的顶点局部是反折，但 `area` 只选出 12 个中的 1 个，`corner` 选出 7 个，`depth` 选出 12 个且全部不在凸包上。
 

@@ -10,8 +10,7 @@ to a vertex budget, and re-frames the result from a few explicit numbers:
 * ``--scale``   optical size: the mark's longest side as a fraction of the canvas
 * ``--canvas``  square canvas side
 * ``--smooth``  optional Chaikin corner-cutting passes
-* ``--rotate`` / ``--aspect`` / ``--inflate`` / ``--snap`` / ``--symmetrize``
-  deformation of the prototype shape (see ``deform``)
+* ``--rotate`` / ``--aspect`` / ``--inflate`` deformation of the prototype shape
 * ``--method``  ``visvalingam`` (area) or ``douglas`` (deviation)
 
 The same parameters drive ``simplify.html``, the interactive page next to this
@@ -519,15 +518,108 @@ def simplify_douglas(pts: list[Point], tol: float, closed: bool = True) -> list[
     return _apply_keep(pts, _keep_douglas(pts, tol, closed), closed)
 
 
+def _keep_decimate(  # noqa: C901
+    pts: list[Point],
+    target: int,
+    tol: float,
+    closed: bool,
+    pinned: frozenset[int],
+) -> list[int]:
+    """Greedy edge collapse with a chain-aware shape error.
+
+    Each surviving vertex owns the arc between it and its predecessor, kept as
+    the original points that arc replaced. Removing a vertex re-costs its
+    neighbours against the merged arc, and a collapse is allowed only while the
+    new edge stays within *tol* of every sample it replaces. Stop when the
+    budget is met or the cheapest remaining collapse would exceed *tol*.
+
+    This is the two-dimensional counterpart of mesh decimation: the same
+    greedy edge-collapse order and the same shape bound, applied to the outline
+    instead of a triangulated interior (a filled logo has no interior).
+    """
+    n = len(pts)
+    if n <= 3:
+        return list(range(n))
+
+    prev = [(i - 1) % n for i in range(n)]
+    nxt = [(i + 1) % n for i in range(n)]
+    alive = [True] * n
+    # left_arc[v]: original vertices strictly between prev[v] and v.
+    left_arc: list[list[int]] = [[] for _ in range(n)]
+    stamps = [0] * n
+    if not closed:
+        prev[0], nxt[-1] = 0, n - 1
+
+    def removable(i: int) -> bool:
+        if i in pinned:
+            return False
+        return closed or i not in (0, n - 1)
+
+    def arc_between(i: int) -> list[int]:
+        return left_arc[i] + [i] + left_arc[nxt[i]]
+
+    def cost_of(i: int) -> float:
+        a, b = pts[prev[i]], pts[nxt[i]]
+        return max(_seg_dist(pts[j], a, b) for j in arc_between(i))
+
+    heap: list[tuple[float, int, int]] = []
+
+    def push(i: int) -> None:
+        if alive[i] and removable(i):
+            heapq.heappush(heap, (cost_of(i), i, stamps[i]))
+
+    for i in range(n):
+        push(i)
+
+    remaining = n
+    while heap and remaining > 3:
+        cost, i, stamp = heapq.heappop(heap)
+        if not alive[i] or stamps[i] != stamp:
+            continue
+        if cost > tol:
+            break
+        alive[i] = False
+        p, q = prev[i], nxt[i]
+        left_arc[q] = arc_between(i)
+        nxt[p], prev[q] = q, p
+        remaining -= 1
+        if target < n and remaining <= target:
+            break
+        for j in (p, q):
+            if alive[j]:
+                stamps[j] += 1
+                push(j)
+
+    return [i for i in range(n) if alive[i]]
+
+
 def reduce_to_budget(
     pts: list[Point],
     target: int,
     method: str,
     closed: bool = True,
     pinned: frozenset[int] = frozenset(),
+    fidelity: float = 0.02,
 ) -> list[Point]:
-    """Reduce *pts* to about *target* vertices, never dropping *pinned* ones."""
+    """Reduce *pts* to about *target* vertices, never dropping *pinned* ones.
+
+    ``method="fidelity"`` ignores *target*: it trims every vertex that can go
+    without moving the outline more than *fidelity* times the longest side, so
+    the vertex count follows the shape instead of a budget.  The pinned
+    vertices are kept exactly and split the ring into independent arcs.
+    """
     n = len(pts)
+    if n <= 3:
+        return list(pts)
+    if method == "fidelity":
+        width, height = _bbox_size(pts)
+        eps = max(fidelity, 1e-9) * max(width, height)
+        return _apply_keep(pts, _keep_douglas(pts, eps, closed, pinned), closed)
+    if method == "decimate":
+        width, height = _bbox_size(pts)
+        eps = max(fidelity, 1e-9) * max(width, height)
+        keep = _keep_decimate(pts, target, eps, closed, pinned)
+        return _apply_keep(pts, keep, closed)
     if target >= n or target < 3:
         return list(pts)
     if len(pinned) >= target:
@@ -651,71 +743,11 @@ def inflate(rings: list[list[Point]], amount: float) -> list[list[Point]]:
     return out
 
 
-def symmetrize(rings: list[list[Point]], weight: float) -> list[list[Point]]:
-    """Blend each vertex toward its mirror partner; 1.0 = mirror-symmetric."""
-    if weight <= 0.0:
-        return rings
-    x0, _, x1, _ = _bbox(rings)
-    axis = (x0 + x1) / 2.0
-    out: list[list[Point]] = []
-    for ring in rings:
-        closed = is_ring(ring)
-        base = ring[:-1] if closed else ring
-        n = len(base)
-        result: list[Point] = []
-        for i, (x, y) in enumerate(base):
-            mx, my = 2.0 * axis - base[n - 1 - i][0], base[n - 1 - i][1]
-            result.append(
-                ((1.0 - weight) * x + weight * mx, (1.0 - weight) * y + weight * my)
-            )
-        if closed:
-            result.append(result[0])
-        out.append(result)
-    return out
-
-
-def snap(rings: list[list[Point]], cells: int) -> list[list[Point]]:
-    """Quantize vertices to a grid of *cells* across the longest side.
-
-    Gives the silhouette designed, straight-cut edges instead of a traced curve.
-    """
-    if cells < 2:
-        return rings
-    x0, y0, x1, y1 = _bbox(rings)
-    step = max(x1 - x0, y1 - y0) / cells
-    if step <= 0.0:
-        return rings
-    out: list[list[Point]] = []
-    for ring in rings:
-        closed = is_ring(ring)
-        snapped = [
-            (x0 + round((x - x0) / step) * step, y0 + round((y - y0) / step) * step)
-            for x, y in ring
-        ]
-        out.append(
-            _dedupe_preserve_closure(snapped, 1e-9)
-            if closed
-            else _dedupe(snapped, 1e-9)
-        )
-    return out
-
-
-def _dedupe_preserve_closure(ring: list[Point], eps: float) -> list[Point]:
-    """Drop consecutive duplicates but keep the ring closed."""
-    if len(ring) < 4:
-        return ring
-    body = _dedupe(ring[:-1], eps)
-    body.append(body[0])
-    return body
-
-
 def deform(rings: list[list[Point]], args: argparse.Namespace) -> list[list[Point]]:
     """Apply the deformation knobs in a fixed, reproducible order."""
     rings = rotate(rings, args.rotate)
     rings = stretch(rings, args.aspect)
     rings = inflate(rings, args.inflate)
-    rings = symmetrize(rings, args.symmetrize)
-    rings = snap(rings, args.snap)
     return rings
 
 
@@ -868,12 +900,25 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--method",
-        choices=("visvalingam", "douglas"),
+        choices=("visvalingam", "douglas", "fidelity", "decimate"),
         default="visvalingam",
-        help="reduction algorithm (default: visvalingam)",
+        help=(
+            "reduction algorithm: visvalingam or douglas cut to --points; "
+            "fidelity trims to --fidelity and ignores --points; decimate "
+            "collapses edges greedily, bounded by both (default: visvalingam)"
+        ),
     )
     p.add_argument(
         "--smooth", type=int, default=0, help="Chaikin passes, 0 = sharp (default: 0)"
+    )
+    p.add_argument(
+        "--fidelity",
+        type=float,
+        default=0.02,
+        help=(
+            "max outline error for --method fidelity, as a fraction of the "
+            "longest side (default: 0.02)"
+        ),
     )
     p.add_argument(
         "--anchor",
@@ -919,18 +964,6 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.0,
         help="grow/shrink, fraction of the longest side (default: 0)",
-    )
-    p.add_argument(
-        "--symmetrize",
-        type=float,
-        default=0.0,
-        help="blend toward a mirror shape, 0..1 (default: 0)",
-    )
-    p.add_argument(
-        "--snap",
-        type=int,
-        default=0,
-        help="quantize to N grid cells across the longest side (default: 0 = off)",
     )
     p.add_argument(
         "--canvas", type=float, default=600.0, help="square canvas side (default: 600)"
@@ -997,7 +1030,9 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 - manual_unpin
             )
-            reduced = reduce_to_budget(ring, share, args.method, is_closed, pinned)
+            reduced = reduce_to_budget(
+                ring, share, args.method, is_closed, pinned, args.fidelity
+            )
             rings.append(chaikin(reduced, args.smooth, is_closed))
         rings = deform(rings, args)
         framing = Framing(
@@ -1014,8 +1049,13 @@ def main(argv: list[str] | None = None) -> int:
         )
         if args.stats:
             n_out = sum(len(r) for r in rings)
+            label = (
+                f"fid {args.fidelity:g}"
+                if args.method == "fidelity"
+                else f"{budget:>4} pts"
+            )
             print(
-                f"{budget:>4} pts: {total_in} flattened -> {n_out} vertices, "
+                f"{label}: {total_in} flattened -> {n_out} vertices, "
                 f"{len(last_svg)} bytes, viewBox {framing.viewbox}",
                 file=sys.stderr,
             )

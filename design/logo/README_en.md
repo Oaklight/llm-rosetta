@@ -72,11 +72,29 @@ parameters:
 1. parse the path; flatten cubics adaptively (`--tolerance`);
 2. pick structural anchors (`--anchor`, `--anchor-mode area|corner|depth|hybrid`);
 3. reduce to the budget (`--points`, `--method visvalingam|douglas`) without
-   dropping an anchor;
+   dropping an anchor, trim to a bounded error (`--method fidelity`,
+   `--fidelity`), or collapse edges under the same bound (`--method
+   decimate`);
 4. optional Chaikin rounding (`--smooth`);
-5. deform: `--rotate`, `--aspect`, `--inflate`, `--symmetrize`, `--snap`;
+5. deform: `--rotate`, `--aspect`, `--inflate`;
 6. frame: square canvas (`--canvas`, `--scale`) or tight square (`--tight`,
    `--pad`).
+
+`--method fidelity` ignores the vertex budget. It removes every vertex that can
+go while the outline stays within `--fidelity` times the longest side of the
+original, measured vertex by vertex against the unsimplified path. Pinned
+vertices are kept exactly and split the ring into independent arcs, so a mark
+keeps its chosen corners and the rest of the outline follows the fidelity
+setting. Use it when the count should follow the shape rather than the other
+way round.
+
+`--method decimate` is the mesh-decimation analogue: it collapses the cheapest
+edge, re-costs the two neighbours, and repeats, refusing any collapse that
+would move the outline beyond `--fidelity`. The vertex budget still applies, so
+whichever limit binds first wins. A filled logo has no interior to triangulate,
+so the collapse runs on the outline; on the stone it lands within a vertex or
+two of `--method fidelity` at the same error, with a slightly more even
+distribution because the cost is re-evaluated globally after every collapse.
 
 The anchor modes rank a vertex differently. `area` uses the triangle a removal
 would lose (favours the big convex sweeps), `corner` uses the turning angle
