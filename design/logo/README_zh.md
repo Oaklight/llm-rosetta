@@ -12,31 +12,55 @@ CC0 不要求署名，所以这个标记本身不附带任何许可义务。形�
 
 ## 标准参数
 
-| 用途 | 文件 | points | anchors | 取景 | 填充 |
-| --- | --- | --- | --- | --- | --- |
-| 应用图标 | `out/rosetta-icon.svg` | 48 | 12 | 600 画布，scale 0.88 | `#1e293b` / `#ededed` |
-| README 深色 | `out/rosetta-icon-github.svg` | 48 | 12 | 600 画布，scale 0.88 | `#1e293b` / `#ededed` |
-| README 浅色 | `out/rosetta-icon-docs.svg` | 48 | 12 | 600 画布，scale 0.88 | 仅 `#1e293b` |
-| favicon | `out/favicon.svg` | 28 | 10 | 紧贴方形，pad 0.04 | `#666666` / `#ededed` |
+设计就是一份草稿：`references/rosetta-draft.json` 是页面「导出草稿」写出的东西，两个前端都跑它。命令行用 `--draft` 读入，重新生成一份副本不必把十几个参数重打一遍，也就不会打错。
 
-`points` 是顶点预算。`anchors` 是永远不能被简化掉的结构顶点数量，按“删掉它会损失多少三角形面积”排序。超过约 64 个顶点后，标记在视觉上就不再变化，所以决定小尺寸标记是否可读的，是保留下来的是哪些顶点。
+```bash
+cd design/logo
+python simplify_path.py --draft references/rosetta-draft.json -o out/rosetta-icon.svg
+python simplify_path.py --draft references/rosetta-draft.json -o out/rosetta-icon-github.svg
+python simplify_path.py --draft references/rosetta-draft.json --dark-fill '' -o out/rosetta-icon-docs.svg
+python simplify_path.py --draft references/rosetta-draft.json --fill '#666666' -o out/favicon.svg
+```
+
+`--draft` 旁边一起写的参数会覆盖草稿，四份副本的差别因此只在填充色上。草稿要求 15 个顶点（保护先把预算盖过）、15 个结构锚点、`--tolerance 0.52` 展平、一轮 `--smooth 1` 圆角、4% 内边距的紧贴方形取景；另外带 7 个固定点、3 个取消点、4 个红色锚点、2 个锐点和 6 个圆点，全部按轮廓上的位置命名。
+
+| 用途 | 文件 | 填充 |
+| --- | --- | --- |
+| 应用图标 | `out/rosetta-icon.svg` | `#1e293b` / `#ededed` |
+| README 深色 | `out/rosetta-icon-github.svg` | `#1e293b` / `#ededed` |
+| README 浅色 | `out/rosetta-icon-docs.svg` | 仅 `#1e293b` |
+| favicon | `out/favicon.svg` | `#666666` / `#ededed` |
+
+`points` 是顶点预算。`anchors` 是永远不能被简化掉的结构顶点数量，按“删掉它会损失多少三角形面积”排序。在这份草稿上起作用的是保护而不是预算：15 个结构锚点、7 个固定点、4 个红色锚点和锐点的细节合计 34 个顶点（展平后共 263 个），比预算要的 15 个还多，所以简化把这 34 个全部留下，再经过一轮圆角就是文件里的 128 个点。
 
 ## 已发布副本（实测）
 
-| 位置 | 文件 | 取景 | 填充 |
-| --- | --- | --- | --- |
-| README（中/英） | `design/logo/out/rosetta-icon-{github,docs}.svg` | 600 方框，scale 0.88 | `#1e293b` / `#ededed`；docs 仅浅色 |
-| 各包 README | `out/rosetta-icon-github.svg` | 600 方框，scale 0.88 | `#1e293b` / `#ededed` |
-| docs 站头 | `docs_{en,zh}/docs/images/rosetta_stone.svg` | 600 方框，scale 0.934 | `currentColor` |
-| docs favicon | `docs_{en,zh}/docs/images/favicon.svg` | 600 方框，scale 0.934 | `#1a1a1a` / `#ededed` |
-| 网关 favicon | `admin/routes/auth.py` 的 `_FAVICON_SVG` | viewBox `30 15 490 500` | `#666` |
-| 网关侧栏/顶栏 | `admin/admin.html` 内联 `<svg>` | viewBox `30 15 490 500` | `currentColor` |
+| 位置 | 文件 | 填充 |
+| --- | --- | --- |
+| README（中/英） | `design/logo/out/rosetta-icon-{github,docs}.svg` | `#1e293b` / `#ededed`；docs 仅浅色 |
+| 各包 README | `out/rosetta-icon-github.svg` | `#1e293b` / `#ededed` |
+| docs 站头 | `docs_{en,zh}/docs/images/rosetta_stone.svg` | `currentColor` |
+| docs favicon | `docs_{en,zh}/docs/images/favicon.svg` | `#1a1a1a` / `#ededed` |
+| 网关 favicon | `admin/routes/auth.py` 的 `_FAVICON_SVG` | `#666666` / `#ededed`，紧贴方形 `635.22` |
+| 网关侧栏/顶栏 | `admin/admin.html` 内联 `<svg>` | `currentColor`，600 方框 |
+
+README、favicon 和 docs 这三处都由它生成，差别只在填充色，docs 的两份落在 docs 工作树里：
+
+```bash
+python design/logo/simplify_path.py \
+    --draft design/logo/references/rosetta-draft.json \
+    --fill 'currentColor' --dark-fill '' -o docs_en/docs/images/rosetta_stone.svg
+python design/logo/simplify_path.py \
+    --draft design/logo/references/rosetta-draft.json \
+    --fill '#1a1a1a' -o docs_en/docs/images/favicon.svg
+# docs_zh/docs/images/ 下同样两份
+```
 
 README 的深浅两份过去是逐字节相同的，`prefers-color-scheme` 切换会渲染同一个文件两次。现在浅色那份是纯浅色文件，深色那份保留自己的 media query。各包的 README 直接引用深色文件，它们仍能自行适应。
 
-网关 favicon 裁剪到 viewBox `30 15 490 500`，而轮廓的 y 范围是 3.3..593.0，所以石头底部约 78 单位（13%）被切掉。这就是网关 favicon 与 README 标记对不上的原因。换成 `out/favicon.svg`（紧贴方形、4% 内边距）属于网关代码改动，留给单独的 PR。
+网关是例外。它的 favicon 已经是紧贴方形（`635.22`），但用的是旧的 48 点描摹；`admin.html` 里那两处内联标记仍是 600 方框。三处都没有草稿的 128 个点。换过来属于网关代码改动，留给单独的 PR。
 
-`out/favicon-gateway.svg` 是网关当前实际提供内容的存档副本，这样裁剪在仓库里可见，而不只是藏在 `auth.py` 的一段字节串里。
+`out/favicon-gateway.svg` 是网关当前实际提供内容的存档副本，这样它实际发布的标记在仓库里可见，而不只是藏在 `auth.py` 的一段字节串里。
 
 ## 工具
 
@@ -61,13 +85,13 @@ README 的深浅两份过去是逐字节相同的，`prefers-color-scheme` 切�
 到就停。填充图形内部没有三角形可减，所以折叠作用在轮廓上；在石头上，同样误差下它与
 `--method fidelity` 只差一两个顶点，分布略均匀，因为代价是每次折叠后全局重算的。
 
-锚点模式对顶点的排序依据不同。`area` 用删掉该点会损失的三角形面积（偏好大的外凸弧线），`corner` 用转角（偏好尖角），`depth` 用到凸包内部的深度（偏好凹陷，因为凹口正是轮廓离开凸包的地方），`hybrid` 一半按面积、其余按深度补齐。在这条轮廓上，展平后有 46% 的顶点局部是反折，但 `area` 只选出 12 个中的 1 个，`corner` 选出 7 个，`depth` 选出 12 个且全部不在凸包上。
+锚点模式对顶点的排序依据不同。`area` 用删掉该点会损失的三角形面积（偏好大的外凸弧线），`corner` 用转角（偏好尖角），`depth` 用到凸包内部的深度（偏好凹陷，因为凹口正是轮廓离开凸包的地方），`hybrid` 一半按面积、其余按深度补齐。在随仓库的 `--tolerance 0.52` 下，263 个展平顶点里有 212 个是凹陷，但 `area` 的 15 个里只有 4 个落在凹陷，`corner` 8 个，`depth` 15 个全部。
 
 红色锚点在命令行里写成 `--lock "u0.3738@214.01,85.47"`。引用的是**轮廓长度的比例**，不是顶点下标：下标在 `--tolerance` 改变展平密度后指向完全不同的位置，这正是锚点会在轮廓上乱跳的原因。`--pin` 用同一种引用，纯整数仍按旧的下标形式读。锁定会把这个顶点拉进结果（即使预算要丢掉它），`214.01,85.47` 是它被固定住的画布坐标。形变滑块以红色锚点的重心为原点旋转、拉伸、膨胀，所以拖滑块时动的是轮廓其余部分，锚点原地不动；取景再把这个重心映射回标注时的画布点。多个锚点用 `;` 分隔。
 
-**局部质感。** `--sharp u0.10` 与 `--round u0.60` 只改轮廓某一段的转角处理，而不是全图。锐点中心不做圆角，这一段保持描摹时的原样，并额外保留标记点以及附近每隔一个顶点——轮廓上约 3% 的一段顶点数大约翻倍；这些额外顶点只参与减点保护，且锐点这一段不提供任何候选顶点——页面上只有那个紫色标记，所以不会被圆点挤满。圆点则在 `--smooth` 之上再加两轮圆角。两者都沿轮廓在 4.5% 的距离内渐变回全局值，所以是过渡而不是突变。页面用「左键模式」（锚点 / 锐 / 圆）标注，分别画成紫色和青色。在石头上按 `--points 48 --smooth 2` 实测：`u0.10` 附近 60 单位内由 14 个顶点变成 31 个，`u0.60` 附近由 13 个变成 40 个，而被标记的顶点本身仍停在描摹位置，误差 0.0001 画布单位。
+**局部质感。** `--sharp u0.10` 与 `--round u0.60` 只改轮廓某一段的转角处理，而不是全图。锐点中心不做圆角，这一段保持描摹时的原样，并额外保留标记点以及附近每隔一个顶点——轮廓上约 3% 的一段顶点数大约翻倍；这些额外顶点只参与减点保护，且锐点这一段不提供任何候选顶点——页面上只有那个紫色标记，所以不会被圆点挤满。圆点则在 `--smooth` 之上再加两轮圆角。两者都沿轮廓在 4.5% 的距离内渐变回全局值，所以是过渡而不是突变。页面用「左键模式」（锚点 / 锐 / 圆）标注，分别画成紫色和青色。在随仓库的草稿上，这两种处理占掉了标记的大部分细节：在 `--draft` 旁边写 `--sharp ''` 去掉两个锐点，128 个顶点只剩 82 个；写 `--round ''` 去掉六个圆点，只剩 42 个。这两个参数是替换草稿里的列表而不是叠加，对比就是这么得到的。
 
-**居中。** `--center bbox`（默认）把外接框放到画布中心，`--center centroid` 放的是填充图形的面积重心。两者在这块石头上不一样，因为它下宽上窄：`--points 48 --scale 0.88` 下，按外框居中的版本重心在 `(292.1, 313.1)`，低了 13 个单位；按重心居中的版本外框中心在 `(307.9, 286.9)`。页面用「居中基准」（中心 / 重心）切换，导出前点「居中」把它落定——红色锚点记录的画布点会一起平移，所以仍然贴在原来的顶点上。
+**居中。** `--center bbox`（默认）把外接框放到画布中心，`--center centroid` 放的是填充图形的面积重心。两者在这块石头上不一样，因为它下宽上窄：按草稿的取景，外框中心是 `(317.4, 317.4)`，而填充图形的重心在 `(308.2, 331.5)`，低了 14 个单位、偏左 9 个。页面用「居中基准」（中心 / 重心）切换，导出前点「居中」把它落定——红色锚点记录的画布点会一起平移，所以仍然贴在原来的顶点上。
 
 **碑文。** Commons 那份文件是石头加刻字：一条黑色轮廓，上面叠着 22,040 条白色路径。`incisions.py` 把这些路径单独抽成一层，坐标系与轮廓相同：
 
@@ -107,22 +131,6 @@ python design/logo/json_incisions.py \
 ```bash
 cd design/logo
 
-# 应用图标
-python simplify_path.py references/rosetta-stone-path.txt \
-    -o out/rosetta-icon.svg --points 48 --anchor 12 --scale 0.88
-
-# README 两份：纯浅色 + 自适应
-python simplify_path.py references/rosetta-stone-path.txt \
-    -o out/rosetta-icon-docs.svg --points 48 --anchor 12 --scale 0.88 \
-    --fill '#1e293b' --dark-fill ''
-python simplify_path.py references/rosetta-stone-path.txt \
-    -o out/rosetta-icon-github.svg --points 48 --anchor 12 --scale 0.88
-
-# favicon：紧贴方形、4% 内边距、跟随主题
-python simplify_path.py references/rosetta-stone-path.txt \
-    -o out/favicon.svg --points 28 --anchor 10 --tight --pad 0.04 \
-    --fill '#666666'
-
 # 几个预算的开销对比
 python simplify_path.py references/rosetta-stone-path.txt --points 16,32,48,64 --stats
 ```
@@ -130,6 +138,8 @@ python simplify_path.py references/rosetta-stone-path.txt --points 16,32,48,64 -
 ## 草稿与局域网使用
 
 页面把草稿存在 `localStorage`（保存草稿 / 载入草稿），以便下次继续；导出草稿 / 导入草稿 用来在机器之间搬移这份 JSON。草稿包含全部参数、源路径、手工锚点的固定与取消，以及视图缩放。
+
+同一个文件也是命令行的输入：`--draft FILE` 读入它，写在 `--draft` 旁边的参数覆盖草稿里的值，所以四份已发布副本的差别只在填充色。设计由页面决定，命令行负责重放。
 
 让别人从局域网里的另一台机器打开页面：
 

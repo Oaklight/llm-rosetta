@@ -25,43 +25,77 @@ clear rights further down that the uploader never held.
 
 ## Canonical parameters
 
-| Use | File | points | anchors | framing | fill |
-| --- | --- | --- | --- | --- | --- |
-| App icon | `out/rosetta-icon.svg` | 48 | 12 | 600 canvas, scale 0.88 | `#1e293b` / `#ededed` |
-| README, dark half | `out/rosetta-icon-github.svg` | 48 | 12 | 600 canvas, scale 0.88 | `#1e293b` / `#ededed` |
-| README, light half | `out/rosetta-icon-docs.svg` | 48 | 12 | 600 canvas, scale 0.88 | `#1e293b` only |
-| Favicon | `out/favicon.svg` | 28 | 10 | tight square, pad 0.04 | `#666666` / `#ededed` |
+The design is a draft: `references/rosetta-draft.json` is what the page's
+导出草稿 writes, and both front-ends run it. The CLI takes it with `--draft`, so
+regenerating a copy does not mean re-typing a dozen flags — and cannot mean
+re-typing them wrong.
+
+```bash
+cd design/logo
+python simplify_path.py --draft references/rosetta-draft.json -o out/rosetta-icon.svg
+python simplify_path.py --draft references/rosetta-draft.json -o out/rosetta-icon-github.svg
+python simplify_path.py --draft references/rosetta-draft.json --dark-fill '' -o out/rosetta-icon-docs.svg
+python simplify_path.py --draft references/rosetta-draft.json --fill '#666666' -o out/favicon.svg
+```
+
+A flag given beside `--draft` wins over the draft, which is how the four copies
+differ only in fill. The draft asks for 15 points, keeps 15 structural anchors,
+flattens at `--tolerance 0.52`, rounds once with `--smooth 1`, and frames tight
+with 4% padding; it also carries seven pins, three unpins, four red anchors, two
+锐 places and six 圆 places, all named by their position on the outline.
+
+| Use | File | fill |
+| --- | --- | --- |
+| App icon | `out/rosetta-icon.svg` | `#1e293b` / `#ededed` |
+| README, dark half | `out/rosetta-icon-github.svg` | `#1e293b` / `#ededed` |
+| README, light half | `out/rosetta-icon-docs.svg` | `#1e293b` only |
+| Favicon | `out/favicon.svg` | `#666666` / `#ededed` |
 
 `points` is the vertex budget. `anchors` is the number of structural vertices
 that may never be simplified away, ranked by the triangle area a removal would
-cost. Above about 64 vertices the mark stops changing visibly, so what separates
-a readable small mark from a poor one is which vertices survive.
+cost. On this draft the protection binds before the budget does: the 15
+structural anchors, 7 pins, 4 red anchors and the 锐 places' detail come to 34
+of the 263 flattened vertices, more than the 15 the budget asks for, so the
+reduction keeps all 34 and one rounding pass turns them into the 128 points the
+file carries.
 
 ## Shipped copies, measured
 
-| Location | File | Framing | Fill |
-| --- | --- | --- | --- |
-| README (en/zh) | `design/logo/out/rosetta-icon-{github,docs}.svg` | 600 box, scale 0.88 | `#1e293b` / `#ededed`; docs light only |
-| Package READMEs | `out/rosetta-icon-github.svg` | 600 box, scale 0.88 | `#1e293b` / `#ededed` |
-| Docs header | `docs_{en,zh}/docs/images/rosetta_stone.svg` | 600 box, scale 0.934 | `currentColor` |
-| Docs favicon | `docs_{en,zh}/docs/images/favicon.svg` | 600 box, scale 0.934 | `#1a1a1a` / `#ededed` |
-| Gateway favicon | `admin/routes/auth.py` `_FAVICON_SVG` | viewBox `30 15 490 500` | `#666` |
-| Gateway sidebar/header | `admin/admin.html` inline `<svg>` | viewBox `30 15 490 500` | `currentColor` |
+| Location | File | Fill |
+| --- | --- | --- |
+| README (en/zh) | `design/logo/out/rosetta-icon-{github,docs}.svg` | `#1e293b` / `#ededed`; docs light only |
+| Package READMEs | `out/rosetta-icon-github.svg` | `#1e293b` / `#ededed` |
+| Docs header | `docs_{en,zh}/docs/images/rosetta_stone.svg` | `currentColor` |
+| Docs favicon | `docs_{en,zh}/docs/images/favicon.svg` | `#1a1a1a` / `#ededed` |
+| Gateway favicon | `admin/routes/auth.py` `_FAVICON_SVG` | `#666666` / `#ededed`, tight at viewBox `635.22` |
+| Gateway sidebar/header | `admin/admin.html` inline `<svg>` | `currentColor`, `600` box |
+
+The README, favicon and docs copies are generated from it, with the fill as
+the only difference, and the docs files land in the docs worktrees:
+
+```bash
+python design/logo/simplify_path.py \
+    --draft design/logo/references/rosetta-draft.json \
+    --fill 'currentColor' --dark-fill '' -o docs_en/docs/images/rosetta_stone.svg
+python design/logo/simplify_path.py \
+    --draft design/logo/references/rosetta-draft.json \
+    --fill '#1a1a1a' -o docs_en/docs/images/favicon.svg
+# the same two into docs_zh/docs/images/
+```
 
 The README pair used to be byte-identical, so the `prefers-color-scheme` switch
 rendered the same file twice. The light half is now a light-only file and the
 dark half keeps its own media query. The package READMEs reference the dark
 file directly, and they still adapt on their own.
 
-The gateway favicon crops to viewBox `30 15 490 500` while the outline spans
-y 3.3..593.0, so the bottom ~78 units (13%) of the stone are cut off. That is
-why the gateway favicon does not match the README mark. Replacing it with
-`out/favicon.svg` (tight square, 4% padding) changes gateway code and is left
-for its own PR.
+The gateway is the exception. Its favicon is framed tight (`635.22`) but from
+the older 48-point trace, and the two inline marks in `admin.html` still sit in
+the 600 box, so none of the three carries the draft's 128 points. Replacing
+them is a gateway code change and is left for its own PR.
 
 `out/favicon-gateway.svg` is a tracked copy of exactly what the gateway serves
-today, so the crop stays visible in the repository instead of living only in a
-byte string inside `auth.py`.
+today, so the mark it ships stays visible in the repository instead of living
+only in a byte string inside `auth.py`.
 
 ## Tooling
 
@@ -100,9 +134,9 @@ The anchor modes rank a vertex differently. `area` uses the triangle a removal
 would lose (favours the big convex sweeps), `corner` uses the turning angle
 (favours sharp jags), `depth` uses the distance inside the convex hull (favours
 dents, since a hollow is where the outline leaves the hull), and `hybrid` takes
-half from area and fills the rest by depth. On this outline 46% of the
-flattened vertices are locally reflex, yet `area` selects 1 of 12, `corner`
-7 of 12, and `depth` 12 of 12, all non-hull.
+half from area and fills the rest by depth. At the shipped `--tolerance 0.52`,
+212 of the 263 flattened vertices are dents, yet `area` spends only 4 of its 15
+picks on one, `corner` 8, and `depth` all 15.
 
 Red anchors reach the CLI as `--lock "u0.3738@214.01,85.47"`. The reference is a
 fraction of the outline length, not a vertex index: an index names a different
@@ -126,17 +160,18 @@ adds two passes on top of
 `--smooth`. Both fade back to the global value by 4.5% of the outline, measured
 along it, so the two treatments blend rather than switch. The page marks them
 with the 左键模式 control (锚点 / 锐 / 圆) and draws them violet and teal.
-Measured at `--points 48 --smooth 2` on the stone: 14 vertices within 60 units
-of `u0.10` become 31 with `--sharp u0.10`, and 13 near `u0.60` become 40 with
-`--round u0.60`, while the marked vertex itself stays at its traced position to
-0.0001 canvas units.
+On the shipped draft the two treatments account for most of the mark's detail:
+`--sharp ''` beside `--draft` drops the two 锐 places and leaves 82 of the 128
+vertices, and `--round ''` drops the six 圆 places and leaves 42. Those two
+flags replace the draft's lists rather than add to them, which is how the
+comparison is made.
 
 **Centring.** `--center bbox` (the default) puts the bounding box on the canvas
 centre; `--center centroid` puts the filled shape's area centroid there
-instead. The two differ on this stone because it is wider at the bottom: at
-`--points 48 --scale 0.88` the box-centred mark has its centroid at
-`(292.1, 313.1)`, 13 units low, while the centroid-centred mark has its box at
-`(307.9, 286.9)`. The page switches between them with 居中基准 (中心 / 重心) and
+instead. The two differ on this stone because it is wider at the bottom:
+framed the way the draft frames it, the box centre is `(317.4, 317.4)` and the
+filled shape's centroid is `(308.2, 331.5)`, 14 units lower and 9 to the left.
+The page switches between them with 居中基准 (中心 / 重心) and
 bakes the choice with 居中, which also moves any red anchors' recorded points so
 they stay on the vertices they were marked on.
 
@@ -209,22 +244,6 @@ marks, 0.13 MB.
 ```bash
 cd design/logo
 
-# app icon
-python simplify_path.py references/rosetta-stone-path.txt \
-    -o out/rosetta-icon.svg --points 48 --anchor 12 --scale 0.88
-
-# README pair: light-only half + self-adapting half
-python simplify_path.py references/rosetta-stone-path.txt \
-    -o out/rosetta-icon-docs.svg --points 48 --anchor 12 --scale 0.88 \
-    --fill '#1e293b' --dark-fill ''
-python simplify_path.py references/rosetta-stone-path.txt \
-    -o out/rosetta-icon-github.svg --points 48 --anchor 12 --scale 0.88
-
-# favicon: tight square, 4% padding, theme-aware
-python simplify_path.py references/rosetta-stone-path.txt \
-    -o out/favicon.svg --points 28 --anchor 10 --tight --pad 0.04 \
-    --fill '#666666'
-
 # cost of several budgets
 python simplify_path.py references/rosetta-stone-path.txt --points 16,32,48,64 --stats
 ```
@@ -235,6 +254,10 @@ The page keeps a draft in `localStorage` (保存草稿 / 载入草稿) so a sess
 be resumed, and 导出草稿 / 导入草稿 move that JSON between machines. The draft
 holds every parameter, the source path, manual anchor pins and unpins, and the
 view zoom.
+
+The same file is the CLI's input. `--draft FILE` loads it, and a flag written
+beside `--draft` overrides the draft's value, so the four shipped copies differ
+only in fill. The page therefore decides the design, and the CLI replays it.
 
 To let someone else open the page from another machine on the LAN:
 
