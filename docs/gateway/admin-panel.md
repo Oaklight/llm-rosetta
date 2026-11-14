@@ -233,6 +233,10 @@ Saving the policy writes through `PUT /admin/api/routing/<model>`, which rebuild
 
 The **API Keys** section issues and revokes the keys that call `/v1/*`. Each key has a label, an allowed-shim list (`*` for any), a creation time and a last-used time. A new key is shown once, in full; the list keeps only its id and label. Deleting a key takes effect on the next request — no restart.
 
+A key may also carry two limits of its own, and the list shows them as tags beside its label. **Allowed models** is a list: the field offers the models this deployment routes as a picker, and a name typed in is just as good, so a key can outlive the model it was written for. A request for any other model is refused with `403`. **Rate limit** takes the same `N/unit` string as the settings fields (`60/m`, or `30/m, 500/h` for more than one window), and every window counts separately — the minute's allowance does not buy back the hour's. A key's limit is a property of the key, not of the deployment: it is enforced whether or not **Server → Rate limiting** is on.
+
+Both fields are validated when you save: the field that fails turns red and names the reason beneath it, and nothing is sent until both pass. The admin API validates the same two fields, so a value that reaches the store is one that parses.
+
 Above the list, a collapsible **Connect** panel says how a tool reaches this gateway: the API (every format the catalog declares, grouped under its model type), the base URL, the model id, and a sample in ENV, curl, Python or Node — the ENV tab carries the Linux/macOS and Windows export lines. The values are templates (`<model-id>` where an id goes), so the panel reads the same on a gateway with one chat model and on one with every type; each value has its own copy control, and the sample block colours its tokens and copies from its top-right corner.
 
 ## Dashboard
