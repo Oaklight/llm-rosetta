@@ -5,7 +5,7 @@ import { api, showToast, closeModal, openModal, esc, fmtTokens, inlineConfirm, w
 import { syncAriaSort, sortByKey } from '../core/sort.js';
 import { jsArg } from '../core/html.js';
 import { keysEmptyMessageKey } from '../core/posture.js';
-import { badModelName, modelTokens } from '../core/key-limits.js';
+import { badModelName, keyLimitTags, modelTokens } from '../core/key-limits.js';
 import { validateQuotas } from '../core/quota.js';
 
 // ===================== API Keys Tab =====================
@@ -208,19 +208,9 @@ function clearKeySearch() {
  * reader does not have to open the dialog (#1502 §13).
  */
 function _keyLimitsMark(k) {
-  const parts = [];
-  const models = (k.allowed_models || ['*']).filter(m => m !== '*');
-  if (models.length) {
-    parts.push(`<span class="tag is-plain" title="${esc(models.join(', '))}">${models.length} ${esc(t(models.length === 1 ? 'keys.modelUnitOne' : 'keys.modelUnit'))}</span>`);
-  }
-  if (k.rate_limit) {
-    // The row has one line for a spec that may name two windows: the tightest
-    // shown, the whole string in the tooltip.
-    const quotas = String(k.rate_limit).split(',').map(q => q.trim()).filter(Boolean);
-    const shown = quotas[0] + (quotas.length > 1 ? ` +${quotas.length - 1}` : '');
-    parts.push(`<span class="tag is-plain" title="${esc(k.rate_limit)}">${esc(shown)}</span>`);
-  }
-  return parts.join(' ');
+  return keyLimitTags(k, t)
+    .map(({text, title}) => `<span class="tag is-plain" title="${esc(title)}">${esc(text)}</span>`)
+    .join(' ');
 }
 
 function renderKeys() {
