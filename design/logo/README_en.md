@@ -104,14 +104,16 @@ half from area and fills the rest by depth. On this outline 46% of the
 flattened vertices are locally reflex, yet `area` selects 1 of 12, `corner`
 7 of 12, and `depth` 12 of 12, all non-hull.
 
-Red anchors reach the CLI as `--lock "85@497.09,267.21"`. `85` is an index into
-the flattened source ring, the same numbering `--pin` takes and not a position
-in the simplified output, so the vertex may not be in the result yet: a lock
-forces it in, dropping another vertex to keep the budget. `497.09,267.21` is
-the canvas point it is held at. Several locks are separated by `;`. The
-correction is one translation of the whole mark, so the geometry around a
-locked vertex is untouched; with more than one lock the remaining error is
-averaged.
+Red anchors reach the CLI as `--lock "u0.3738@214.01,85.47"`. The reference is a
+fraction of the outline length, not a vertex index: an index names a different
+place as soon as `--tolerance` changes the flattening, which is what used to
+move an anchor around the shape. `--pin` takes the same reference, and a bare
+integer is still read as the old index form. A locked vertex is forced into the
+result even when the budget would drop it; `214.01,85.47` is the canvas point it
+is held at. The deformation knobs turn and grow around the centroid of the red
+anchors, so dragging one moves the rest of the outline and leaves the anchors
+where they are, and the framing maps that centroid back onto the recorded canvas
+point; several locks are separated by `;`.
 
 ```bash
 cd design/logo
@@ -164,10 +166,12 @@ Interaction:
   so an anchor can come off and go back on at any budget.
 - right-click near a vertex for a red anchor; the click snaps to the nearest
   one within a few pixels, and the browser menu never opens over the canvas.
-  It is kept like an orange one and it also stays put on the canvas: the whole
-  mark shifts so that vertex lands back on the point where you marked it,
-  whatever the deform knobs do. Its corner stays sharp through smoothing too.
-  Right-click again, or click the red dot, to release it.
+  It is stored as a position on the outline, so changing 曲线精度 leaves it on
+  the same part of the shape instead of jumping to another vertex. It is kept
+  like an orange one and it is also held in place: the deformation knobs turn
+  and grow around the anchors' centroid, and that centroid is mapped back to
+  the canvas point it had when you marked it. Its corner stays sharp through
+  smoothing too. Right-click again, or click the red dot, to release it.
 - Ctrl and the wheel zoom the preview around the cursor. Dragging pans once
   zoomed; at 100% the mark already fills the frame, so a drag says so instead
   of moving it. A double click or the 重置视图 button resets the view. The reset
