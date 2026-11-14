@@ -579,7 +579,6 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 #providerTable .pc-models { cursor: pointer; color: var(--text); }
 #providerTable .pc-models:hover { color: var(--accent); }
 .pc-row-warning { margin-left: 6px; color: var(--tag-warn); }
-.provider-empty { color: var(--text-dim); padding: 16px 12px; }
 /* Row buttons stay quiet until the row is under the pointer. */
 #providerTable .pc-actions .btn {
   padding: 3px 10px; font-size: 12px;
@@ -656,7 +655,6 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 .tp-child .tp-name { color:var(--text); }
 .tp-guide { flex-shrink:0;font-family:var(--mono);color:var(--border); }
 .tp-base { margin-left:2px;font-size:11px;color:var(--text-muted);font-family:var(--mono); }
-.tp-empty { padding:14px 10px;font-size:13px;color:var(--text-dim);text-align:center; }
 /* Dark mode: seat logo images on a light chip rather than inverting them —
    inverting keeps monochrome vendor marks legible but shifts full-colour
    logos (e.g. a dark vendor mark) to wrong hues. */
@@ -1182,7 +1180,6 @@ canvas { width: 100%; height: 160px; }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .shim-row-actions { display: flex; gap: 6px; flex-shrink: 0; }
-.shim-empty { font-size: 12px; color: var(--text-dim); padding: 6px 0; }
 
 /* A vendor manifest heads the leaves it feeds. */
 .shim-vendor {
@@ -1455,7 +1452,6 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
   padding-left:11px;
 }
 #tab-models .model-actions-cell { text-align:right;white-space:nowrap;position:relative; }
-#tab-models .model-empty { color:var(--text-dim); }
 .provider-detail-grid { display:grid;grid-template-columns:minmax(100px,auto) 56px 1fr auto;gap:8px;align-items:center;font-size:12px; }
 .model-count, .provider-count { font-size:12px;color:var(--text-dim);margin-left:auto; }
 
@@ -1563,15 +1559,29 @@ button.login-pref-btn {
 .login-pref-btn svg { width:14px;height:14px;display:block; }
 .login-pref-btn:hover { color:var(--text); }
 
-/* Empty states */
+/* ── Empty state ──────────────────────────────────────────────────────
+   One component: a centred line in muted ink, with room around it.  The
+   legacy class names are aliases, so a call site moves over by dropping its
+   own class rather than by changing the look first.
+   `.is-compact` is a menu or a list row; `.is-row` is a table cell, which
+   already carries the table's padding. */
+.empty, .empty-state,
+.shim-empty, .model-empty, .provider-empty, .routing-model-empty,
+.update-empty, .tp-empty, .lp-empty {
+  padding: 28px 16px; color: var(--text-muted); text-align: center;
+  font-size: 13px; line-height: 1.5;
+}
+.empty.is-compact,
+.update-empty, .routing-model-empty, .tp-empty, .lp-empty {
+  padding: 16px 12px; font-size: 12.5px;
+}
+.empty.is-row { padding: 10px 12px; }
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 40px 20px; color: var(--text-dim); text-align: center;
+  padding: 40px 20px; color: var(--text-dim);
 }
-.empty-state-icon {
-  margin-bottom: 10px; color: var(--text-dim); opacity: 0.5;
-}
-.empty-state-text { font-size: 13px; line-height: 1.5; }
+.empty-icon, .empty-state-icon { margin-bottom: 10px; color: inherit; opacity: 0.5; }
+.empty-text, .empty-state-text { font-size: inherit; line-height: inherit; }
 
 /* Responsive */
 @media (max-width: 768px) {
@@ -1739,8 +1749,7 @@ button.lp-clear {
 }
 .lp-label { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .lp-more { padding:6px 10px;font-size:11px;color:var(--text-dim);text-align:center; }
-.lp-empty { padding:16px 10px;font-size:13px;color:var(--text-dim);text-align:center; }
-.lp-custom-hint { padding:0 10px 10px;font-size:11px;color:var(--text-muted);text-align:center; }
+.lp-custom-hint { padding: 0 10px 10px; }
 
 /* Compact logo picker (icon button mode) */
 .lp-compact { display:inline-flex;align-items:flex-start;gap:4px;position:relative; }
@@ -2226,8 +2235,7 @@ button.lp-clear {
   font-size: 12px; color: var(--text-dim); margin-bottom: 6px;
 }
 .update-row code { color: var(--text); font-family: var(--mono); }
-.update-note { font-size: 12px; color: var(--text-dim); margin: 8px 0 0; }
-.update-empty { font-size: 12px; color: var(--text-dim); }
+.update-note { margin: 8px 0 0; }
 .update-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .update-actions .btn { text-decoration: none; }
 .update-close {
@@ -2571,7 +2579,6 @@ button.shim-update.unknown { color: var(--tag-warn); }
 .routing-model-stack i.is-zero { opacity: 0.22; }
 .routing-model-stack i.is-zero.is-bad { opacity: 0.5; }
 .routing-model-stack i.is-zero:hover { opacity: 0.6; }
-.routing-model-empty { padding: 10px; font-size: 12px; color: var(--text-muted); }
 .routing-split[hidden] { display: none; }
 /* The board needs about 700 px for its six columns.  Once the model list has
    taken its 264, the policy card moves under the board instead of squeezing
@@ -2725,7 +2732,7 @@ button.shim-update.unknown { color: var(--tag-warn); }
    auth.py / quota.py / transforms that run inside the gateway process, so
    the panel must not present an external source as a neutral choice — and
    the repository link is how the operator checks what they are trusting. */
-.shim-trust { margin: 0; font-size: 11px; line-height: 1.5; color: var(--text-dim); }
+.shim-trust { margin: 0; }
 .shim-repo { color: var(--accent); text-decoration: none; }
 .shim-repo:hover { text-decoration: underline; }
 .shim-warn {
@@ -2828,8 +2835,7 @@ button.shim-update.unknown { color: var(--tag-warn); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .shim-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
-.shim-note { font-size: 10.5px; color: var(--text-dim); }
-.shim-empty { padding: 28px; text-align: center; color: var(--text-muted); grid-column: 1 / -1; }
+.shim-empty { grid-column: 1 / -1; }
 
 
 /* ── Shims page: vendor sections and logos ─────────────────────────── */

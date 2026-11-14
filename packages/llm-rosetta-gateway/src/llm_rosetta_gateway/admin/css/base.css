@@ -368,7 +368,7 @@ a { color: var(--accent); text-decoration: none; }
   margin: 0 0 2px; font-size: var(--fs-xs); font-weight: 600;
   color: var(--text-muted); letter-spacing: var(--tracking-label);
 }
-.settings-group-head p { margin: 0; font-size: 11.5px; color: var(--text-dim); }
+.settings-group-head p { margin: 0; }
 /* A group can carry its own scope badge when it differs from its pane's; it
    sits on the same right edge as the pane badge. */
 .settings-group-title {
@@ -508,10 +508,20 @@ a { color: var(--accent); text-decoration: none; }
 /* A quota string needs room for "60/m or 30/m, 500/h", not a paragraph. */
 .settings-popup-item .quota-input-wrap input { max-width: 320px; }
 /* The hint under a control belongs to that control, not the row. */
-.field-hint { margin: 4px 0 0; font-size: 11px; color: var(--text-dim); line-height: 1.45; }
+/* ── Hint text ─────────────────────────────────────────────────────────
+   The one line of muted explanation under a control.  Everything that is a
+   hint wears `.hint`; the older class names are aliases so a call site can
+   move over without its text changing size first. */
+.hint,
+.field-hint, .shim-hint, .shim-trust, .shim-note,
+.pc-free-note, .update-note, .lp-custom-hint,
+.settings-group-head p {
+  margin: 4px 0 0; font-size: 11px; color: var(--text-dim); line-height: 1.45;
+}
+.hint.is-note { color: var(--text-muted); }
 /* A shim's own note sits under the Base URL row.  One line: short notes read
    inline, a long one truncates and the element's `title` carries the rest. */
-.shim-hint { margin: -2px 0 12px; font-size: 11px; color: var(--text-dim); line-height: 1.45; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.shim-hint { margin: -2px 0 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .settings-popup-item textarea { width: 100%; font-family: var(--mono); }
 .shim-remote-add { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
 .shim-remote-add select { flex: 1; }
