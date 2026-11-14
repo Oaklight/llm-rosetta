@@ -849,13 +849,6 @@ canvas { width: 100%; height: 160px; }
 .chart-tip.show { display: block; }
 .chart-tip-head { font-family: var(--mono); font-weight: 600; margin-bottom: 2px; }
 
-/* Filters */
-.filters { display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-
-
-/* Log view switch + auto-refresh pause */
-.log-view-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-
 /* Pagination */
 .pagination { display: flex; align-items: center; gap: 12px; margin-top: 16px; justify-content: center; flex-wrap: wrap; }
 .pagination .info { font-size: 13px; color: var(--text-dim); }
@@ -1289,12 +1282,15 @@ th.sortable.desc::after { content:'\25BC';opacity:.8; }
    container and overlap the neighbouring header. */
 th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px; }
 
-/* Provider / Model search & filter toolbars */
-.provider-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }
-/* One facet per row, its label beside the control — the shape the
-   observability filters use.  A row wraps as a whole, so a label never
-   separates from the chips it names. */
-.model-toolbar { display:flex;flex-direction:column;gap:8px;margin-bottom:10px; }
+/* ── The toolbar ──────────────────────────────────────────────────────
+   The row of filters and actions above a list: one flex row that wraps, so a
+   narrow screen stacks the controls instead of clipping them.  `.is-stacked`
+   is the two-row form the models and keys panels use — search first, then one
+   facet per row, so a label never separates from the chips it names.  A page
+   that needs a different grid (the shims panel) overrides `display` at its
+   own id; the spacing stays here. */
+.toolbar { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+.toolbar.is-stacked { flex-direction:column; align-items:stretch; gap:8px; margin-bottom:10px; }
 .mt-row { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
 .facet-label {
   font-size:11px; text-transform:uppercase; letter-spacing:.04em;
@@ -1302,7 +1298,7 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 }
 /* One label column, so the controls start at the same x in every row — the
    alignment the observability filters get from equal-width Chinese labels. */
-.model-toolbar .facet-label { flex:0 0 68px; }
+#tab-models .toolbar .facet-label { flex:0 0 68px; }
 .facet-sep { width:1px; height:16px; background:var(--border); margin:0 6px; }
 .facet-chips { display:flex; align-items:center; gap:2px; flex-wrap:wrap; }
 .facet-chips > div {
@@ -1314,15 +1310,22 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 .facet-chips > div.active {
   background:var(--surface); color:var(--text); border-color:var(--border);
 }
-/* The dump filters are a row of selects, not the models panel's two-row
-   toolbar; they borrowed its class before the split. */
-.dump-toolbar { display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap; }
-
-.dump-toolbar input { flex:1;min-width:120px;font-family:var(--mono); }
+/* The dump filters are a row of selects, not the model panel's two-row form. */
+#dumpToolbar input { flex:1;min-width:120px;font-family:var(--mono); }
 /* The id box is a lookup, not a filter over the list: it keeps its size. */
-.dump-toolbar #dumpIdSearch { flex: 0 0 190px; }
-.model-toolbar input, .provider-toolbar input { flex:1;min-width:180px;max-width:300px;font-family:var(--mono); }
-.model-toolbar #modelSearch { max-width: 280px; }
+#dumpToolbar #dumpIdSearch { flex: 0 0 190px; }
+#providerToolbar input, #tab-models .toolbar input { flex:1;min-width:180px;max-width:300px;font-family:var(--mono); }
+#modelSearch { max-width: 280px; }
+/* On a phone the search box takes its own row, so the button group after it
+   does not wrap mid-way, and the count moves to the left of the buttons.  The
+   selectors out-specify the box sizing above by one id, so the full width
+   wins over the 180-300px window that keeps a wide screen tidy. */
+@media (max-width: 768px) {
+  #tab-models .toolbar #modelSearch,
+  #providerToolbar #providerSearch { flex: 1 1 100%; max-width: none; }
+  #providerToolbar .provider-count { margin-right: auto; }
+  #tab-keys .toolbar #keySearch { flex: 1 1 100%; max-width: none; }
+}
 
 
 /* Provider filter — a custom listbox, because a native <select> cannot
@@ -1362,7 +1365,6 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 #tab-models table { table-layout:fixed; }
 
 /* API keys toolbar: usage tiers on the left, search/count on the right. */
-.key-toolbar { display:flex;flex-direction:column;gap:10px;margin-bottom:12px; }
 .key-toolbar-label { font-size:13px;color:var(--text-dim); }
 /* The usage-range tiers are chips with the same weight as the model facets,
    and carry a visually hidden radio so arrow keys still work. */
@@ -1379,8 +1381,6 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 .facet-chips input { position:absolute;opacity:0;width:0;height:0; }
 /* A select that a chip row stands in for: kept for its handlers, never seen. */
 .sr-select { position:absolute;width:1px;height:1px;opacity:0;pointer-events:none; }
-.filters { display:flex; flex-direction:column; gap:8px; margin-bottom:10px; }
-.filters .mt-row { flex-wrap:wrap; }
 
 /* Key rows: the pencil and the row actions stay quiet until the row is used. */
 #keysTable .key-btn,
@@ -1408,8 +1408,8 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
    the toolbar grows the same sort select + direction toggle as Models. */
 .key-sort-mobile { display:none;align-items:center;gap:6px; }
 #keySortDirBtn { min-width:34px; }
-.key-toolbar #keySearch { flex:1;min-width:160px;max-width:280px;font-family:var(--mono); }
-.key-toolbar .key-count { font-size:12px;color:var(--text-dim);white-space:nowrap; }
+#keySearch { flex:1;min-width:160px;max-width:280px;font-family:var(--mono); }
+.key-count { font-size:12px;color:var(--text-dim);white-space:nowrap; }
 
 
 /* Provider breakdown grid */
@@ -1614,19 +1614,12 @@ button.login-pref-btn {
   .seg-control::-webkit-scrollbar { display: none; }
   .seg-control > * { flex: 0 0 auto; padding: 8px 14px; white-space: nowrap; }
 
-  /* Toolbars: let search take its own row so buttons stop wrapping
-     mid-group. */
-  .model-toolbar, .provider-toolbar { align-items: center; }
-  .model-toolbar #modelSearch,
-  .provider-toolbar #providerSearch { flex: 1 1 100%; max-width: none; }
-  .provider-toolbar .provider-count { margin-right: auto; }
-
   /* Comfortable touch targets. 16px form text also prevents iOS from
      zooming the page when an input receives focus. */
   .btn-sm { padding: 6px 10px; min-height: 30px; }
   .tab { min-height: 40px; display: flex; align-items: center; }
-  .model-toolbar input, .model-toolbar select,
-  .provider-toolbar input, .provider-toolbar select,
+  #tab-models .toolbar input, #tab-models .toolbar select,
+  #providerToolbar input, #providerToolbar select,
   .modal input, .modal select, .login-box input { font-size: 16px; }
 
   /* Tables keep legible columns and scroll inside their wrapper instead
@@ -1634,8 +1627,6 @@ button.login-pref-btn {
   #tab-models table { min-width: 860px; }
   #tab-keys table, #tab-observability table { min-width: 760px; }
   #tab-dashboard table { min-width: 780px; }
-
-  .key-toolbar #keySearch { flex: 1 1 100%; max-width: none; margin-left: 0; }
 }
 
 /* DB status footer */
@@ -2205,7 +2196,7 @@ button.lp-clear {
 }
 .dp-section pre.is-error { color: var(--red); }
 @media (max-width: 720px) {
-  .dump-toolbar #dumpIdSearch { flex: 1 1 100%; }
+  #dumpIdSearch { flex: 1 1 100%; }
   .dp-actions { flex-wrap: wrap; }
 }
 
@@ -2634,7 +2625,6 @@ button.shim-update.unknown { color: var(--tag-warn); }
 /* The toolbar is a sibling of the grid, not one of its items, so the grid's
    own gap does not separate them: the filter row sat flush on the first card
    and its focus ring overlapped it. */
-.shims-toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 
 /* Filters, then the count and the view switch, on one line; the lists take a
    full-width row under them.  A grid rather than a flex row: the toolbar is
@@ -2648,7 +2638,7 @@ button.shim-update.unknown { color: var(--tag-warn); }
 }
 /* Definite columns: the toolbar's own max-content was under-reported (500 for
    three controls that need 580), which wrapped its last select inside itself. */
-#tab-shims > .section > .shims-toolbar {
+#tab-shims > .section > .toolbar {
   grid-column: 1; grid-row: 1; margin: 0;
   display: grid; grid-template-columns: 260px 150px 150px; align-items: center; gap: 10px;
 }
@@ -2661,17 +2651,17 @@ button.shim-update.unknown { color: var(--tag-warn); }
 @media (max-width: 1200px) {
   #tab-shims > .section { grid-template-columns: minmax(0, 1fr); }
   #tab-shims > .section > .section-header { grid-column: 1; grid-row: 1; }
-  #tab-shims > .section > .shims-toolbar {
+  #tab-shims > .section > .toolbar {
     grid-column: 1; grid-row: 2;
     display: flex; flex-wrap: wrap;
   }
-  #tab-shims > .section > .shims-toolbar input[type="search"] { flex: 1 1 260px; }
+  #tab-shims > .section > .toolbar input[type="search"] { flex: 1 1 260px; }
 }
 /* A full-width search box pushes the two filters to the far edge and reads
    as a form header rather than a filter row; it is capped and the switches
    hold the right end. */
-.shims-toolbar input[type="search"] { flex: 0 1 260px; min-width: 180px; }
-.shims-toolbar select { width: 150px; flex: 0 0 auto; }
+#shimPageToolbar input[type="search"] { flex: 0 1 260px; min-width: 180px; }
+#shimPageToolbar select { width: 150px; flex: 0 0 auto; }
 /* A bare checkbox sat flush against its label (no gap, block layout) and
    the label kept the body's 16px while every control beside it is 11.5px.
    The switch belongs to the Sources view: it chooses which source kinds the
@@ -2685,7 +2675,7 @@ button.shim-update.unknown { color: var(--tag-warn); }
 }
 .shims-sources-toggle .toggle { flex: 0 0 auto; }
 
-.shim-grid[hidden], .shims-toolbar[hidden], .shims-sources[hidden] { display: none; }
+.shim-grid[hidden], #shimPageToolbar[hidden], .shims-sources[hidden] { display: none; }
 
 .shim-grid {
   display: grid;
