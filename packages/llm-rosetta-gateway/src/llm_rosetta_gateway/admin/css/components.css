@@ -2890,4 +2890,43 @@ button.shim-update.unknown { color: var(--tag-warn); }
   font-size: 11px;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
+
+/* ===================== API key samples =====================
+   The connect panel: one labelled row per thing a tool's settings page asks
+   for, so the value and where it goes are read in one line. */
+.access-head { padding: 0; }
+.section-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: none; border: 0; padding: 4px 0; margin: 0;
+  color: var(--text); font-size: var(--fs-xs); font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase; cursor: pointer;
+}
+.section-toggle:hover { color: var(--accent); }
+.access-caret { transition: transform .15s; }
+.is-collapsed .access-caret { transform: rotate(-90deg); }
+.access-groups { display: flex; flex-direction: column; gap: 6px; }
+.access-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.access-group-label {
+  font-size: 11px; color: var(--text-muted); min-width: 72px;
+}
+.access-panel { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); padding: 14px 16px; }
+.access-row { display: grid; grid-template-columns: 84px minmax(0, 1fr); column-gap: 14px; align-items: start; padding: 6px 0; }
+.access-label { font-size: var(--fs-xs); color: var(--text-dim); padding-top: 7px; }
+.access-control { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.access-control select { min-width: 260px; max-width: 340px; }
+.access-value {
+  display: inline-block; padding: 5px 10px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--radius-control);
+  font: 11.5px var(--mono); color: var(--text); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+}
+.access-hint { grid-column: 2; margin: 2px 0 0; font-size: 11px; color: var(--text-dim); line-height: 1.45; }
+.access-row-samples { padding-top: 10px; }
+.access-sample-controls { flex-wrap: wrap; }
+.access-foot { grid-column: 1 / -1; margin-top: 10px; }
+.example-code {
+  margin: 10px 0 0; padding: 12px; background: var(--bg);
+  font: 11.5px/1.55 var(--mono); color: var(--text);
+  overflow: auto; max-height: 60vh; white-space: pre;
+  border: 1px solid var(--border); border-radius: var(--radius-control);
 }

@@ -12,6 +12,7 @@ import { loadConfig, renderProviders, applyProviderHealth } from '../tabs/provid
 import { renderModels } from '../tabs/models.js';
 import '../components/fetch-models.js';
 import { loadKeys, loadLogKeyLabels, renderKeys } from '../tabs/keys.js';
+import { _applyOpen } from '../tabs/key-examples.js';
 import { loadMetrics, loadDumps, renderPersistence } from '../tabs/dashboard.js';
 import { loadLogs, renderLogs, updateFilterOptions, updateKeyFilterOptions } from '../tabs/logs.js';
 import { loadOpsLog, switchLogView, populateOpsLogFilters } from '../tabs/ops-log.js';
@@ -231,7 +232,12 @@ function activateTab(tab, opts = {}) {
   if (id === 'shims' && _tabEnabled('shims')) { loadShimsPage(); }
   if (id === 'routing') { loadRouting(); }
   if (id === 'providers') { S.healthTimer = setInterval(applyProviderHealth, 30000); }
-  if (id === 'keys' && _tabEnabled('keys')) { loadKeys(); }
+  if (id === 'keys' && _tabEnabled('keys')) {
+    loadKeys();
+    // The connect panel is part of this page, always; a visit that left it
+    // collapsed lands back on it collapsed.
+    _applyOpen();
+  }
   if (id === 'jobs' && _tabEnabled('jobs')) { window.startJobsBoard?.(); }
   if (id === 'settings') {
     setSettingsPane(localStorage.getItem(SETTINGS_PANE_KEY) || 'appearance');
