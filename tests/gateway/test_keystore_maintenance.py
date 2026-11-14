@@ -101,6 +101,30 @@ class TestAFreshStore:
         finally:
             await store.close()
 
+    async def test_a_store_with_an_index_on_the_column_is_brought_forward(
+        self, tmp_path
+    ):
+        """The rebuild does not care that the column is indexed; the ALTER
+        would refuse, and this step is mandatory."""
+        db = tmp_path / "keys.db"
+        _legacy_db(db, rows=1)
+        conn = sqlite3.connect(db)
+        try:
+            conn.execute("CREATE INDEX idx_shims ON api_keys(allowed_shims)")
+            conn.commit()
+        finally:
+            conn.close()
+
+        store = await KeyStore.create(db)
+        try:
+            assert "allowed_shims" not in await _columns(store)
+            assert await store._conn.execute_fetchall("SELECT id FROM api_keys") == [
+                ("key0",)
+            ]
+            assert await _versions(store) == {1, 2, 3, 4, 5}
+        finally:
+            await store.close()
+
     async def test_the_migrations_are_what_added_the_columns(self, tmp_path):
         """Not the CREATE TABLE: the same route serves a fresh store and an old."""
         store = await KeyStore.create(tmp_path / "keys.db")
@@ -115,6 +139,32 @@ class TestAFreshStore:
             assert changed["api_keys.v5"] == 0, (
                 "so the adoption already recorded it and v5 does not run"
             )
+        finally:
+            await store.close()
+
+
+class TestARebuildThatHasNothingToDo:
+    async def test_an_absent_dropped_column_only_records_the_version(self, tmp_path):
+        """Defence in depth: the adoption step normally records v5 first, so a
+        store this code created never runs the rebuild.  If the ledger row is
+        missing anyway, the version must record itself without touching rows.
+        """
+        from llm_rosetta_gateway.maintenance.keystore import _apply_migration
+        from llm_rosetta_gateway.observability.maintenance import StepContext
+
+        store = await KeyStore.create(tmp_path / "keys.db")
+        try:
+            await store._conn.execute("DELETE FROM schema_version WHERE version = 5")
+            await store._conn.commit()
+            changed = await _apply_migration(
+                StepContext(keystore=store),
+                version=5,
+                description="drop api_keys.allowed_shims",
+                statements=["INSERT INTO no_such_table (x) VALUES (1)"],
+                drops="allowed_shims",
+            )
+            assert changed == 1, "one ledger row and no statement"
+            assert 5 in await _versions(store)
         finally:
             await store.close()
 
@@ -194,7 +244,7 @@ class TestAStoreFromAnOlderRelease:
                 "api_keys.v2": 0,
                 "api_keys.v3": 2,
                 "api_keys.v4": 2,
-                "api_keys.v5": 2,
+                "api_keys.v5": 6,
                 "api_keys.backfill_usage_bucket": 0,
             }
             assert await _versions(store) == {1, 2, 3, 4, 5}
