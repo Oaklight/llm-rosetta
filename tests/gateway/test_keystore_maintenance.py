@@ -294,6 +294,64 @@ class TestAnInterruptedRebuild:
                 await reopened.close()
             raise
 
+    async def test_a_missing_live_table_is_finished_from_the_scratch_copy(
+        self, tmp_path
+    ):
+        """The shape bootstrap leaves: no live table, an empty ledger, and the
+        keys only in the scratch copy.  A missing column must not read as
+        "done" here, or the gateway opens with no keys and no error."""
+        db = tmp_path / "keys.db"
+        store = await KeyStore.create(db)
+        try:
+            await store.create_key(label="one", manual_key="key-one")
+            # The rebuild got as far as the copy, then the live table went.
+            await store._conn.execute(
+                f"CREATE TABLE api_keys_v5 AS SELECT {self._COLS} FROM api_keys"
+            )
+            await store._conn.execute("DROP TABLE api_keys")
+            # A file with no ledger at all is what bootstrap-plus-death leaves;
+            # clear it to make the adoption step the one that decides.
+            await store._conn.execute("DELETE FROM schema_version")
+            await store._conn.commit()
+        finally:
+            await store.close()
+
+        reopened = await KeyStore.create(db)
+        try:
+            assert "api_keys_v5" not in await _tables(reopened)
+            assert reopened.validate("key-one") is not None, "the key came back"
+            assert await _columns(reopened) >= {"allowed_models", "rate_limit"}
+            assert 5 in await _versions(reopened)
+        finally:
+            await reopened.close()
+
+    async def test_a_five_column_live_table_is_replaced_by_the_scratch_copy(
+        self, tmp_path
+    ):
+        """Ledger at 1..4 with no live table: bootstrap's five-column table is
+        what v5 finds, so the scratch copy is renamed into place rather than
+        copied into it."""
+        db = tmp_path / "keys.db"
+        store = await KeyStore.create(db)
+        try:
+            await store.create_key(label="one", manual_key="key-one")
+            await store._conn.execute(
+                f"CREATE TABLE api_keys_v5 AS SELECT {self._COLS} FROM api_keys"
+            )
+            await store._conn.execute("DROP TABLE api_keys")
+            await store._conn.execute("DELETE FROM schema_version WHERE version = 5")
+            await store._conn.commit()
+        finally:
+            await store.close()
+
+        reopened = await KeyStore.create(db)
+        try:
+            assert "api_keys_v5" not in await _tables(reopened)
+            assert reopened.validate("key-one") is not None
+            assert await _columns(reopened) >= {"last_used", "allowed_models"}
+        finally:
+            await reopened.close()
+
     async def test_a_rebuild_that_fails_rolls_back_whole(self, tmp_path):
         """The transaction is the guard: without it, a statement failing after
         the drop leaves a live table with no rows."""
