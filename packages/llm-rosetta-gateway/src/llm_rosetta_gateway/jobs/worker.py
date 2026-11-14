@@ -238,10 +238,16 @@ class JobManager:
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def _data_dir(self) -> Path:
-        """Where this manager's database lives; the lock sits beside it."""
-        db_path = getattr(self.store._p, "db_path", None)
-        return Path(db_path).parent if db_path else Path(".")
+    def _data_dir(self) -> Path | None:
+        """Where this manager's database lives; the lock sits beside it.
+
+        ``None`` when the store has no file: there is nothing for a second
+        process to contend over, so there is nothing to lock, and falling
+        back to the current directory would make two unrelated managers
+        fight over one file.
+        """
+        db_path = self.store.db_path
+        return Path(db_path).parent if db_path else None
 
     async def start(self) -> None:
         """Repair orphaned ranges, recover interrupted jobs, start the lanes."""
@@ -251,8 +257,9 @@ class JobManager:
         # assumption is checked rather than declared: whoever holds the
         # instance lock may sweep foreign leases, everyone else waits for the
         # lease to expire like a peer would.
-        self._lock_fd = _acquire_instance_lock(self._data_dir())
-        if self._lock_fd is None:
+        data_dir = self._data_dir()
+        self._lock_fd = _acquire_instance_lock(data_dir) if data_dir else None
+        if data_dir is not None and self._lock_fd is None:
             logger.warning(
                 "Jobs: another process holds %s; startup recovery is limited "
                 "to expired leases",

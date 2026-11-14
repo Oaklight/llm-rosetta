@@ -66,6 +66,17 @@ async def test_a_dedupe_key_returns_the_active_job(store):
     assert third.id != first.id
 
 
+def test_the_store_names_the_database_it_writes(store, pm):
+    """The worker places its instance lock beside this path."""
+    assert store.db_path == pm.db_path
+
+
+def test_a_store_without_a_file_names_none():
+    from llm_rosetta_gateway.jobs.store import JobStore
+
+    assert JobStore(object()).db_path is None
+
+
 async def test_claim_takes_one_job_at_a_time(store):
     await store.enqueue("data.clear", priority=100)
     low = await store.enqueue("data.clear", priority=10)

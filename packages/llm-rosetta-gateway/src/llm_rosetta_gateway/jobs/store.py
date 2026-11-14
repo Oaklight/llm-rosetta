@@ -44,6 +44,15 @@ class JobStore:
     def __init__(self, persistence: Any) -> None:
         self._p = persistence
 
+    @property
+    def db_path(self) -> str | None:
+        """The database file behind this store, when it has one.
+
+        The worker places its instance lock beside it, so the path belongs on
+        the store rather than on the private persistence handle.
+        """
+        return getattr(self._p, "db_path", None)
+
     # ------------------------------------------------------------------
     # Enqueue
     # ------------------------------------------------------------------

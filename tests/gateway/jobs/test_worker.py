@@ -205,6 +205,13 @@ async def test_a_wake_that_lands_during_claim_is_not_lost(pm, monkeypatch):
         await manager.stop()
 
 
+def test_a_manager_without_a_database_file_guards_nothing():
+    """No file means no peer to fence off: no lock, and no path to invent."""
+    manager = JobManager(object())
+
+    assert manager._data_dir() is None
+
+
 async def test_a_second_manager_does_not_steal_a_live_lease(pm):
     """Startup recovery takes foreign leases only when it owns the queue.
 
