@@ -965,6 +965,39 @@ class TestExportErrorDumps:
         await pm.close()
 
     @pytest.mark.asyncio
+    async def test_export_holds_the_same_rows_as_a_filtered_list(self, tmp_path):
+        """A status filter exports what the list shows, not the whole store."""
+        import io
+        import tarfile
+
+        pm = await PersistenceManager.create(str(tmp_path))
+        rows = [
+            ("ok-1", "2026-08-01T00:00:00Z", 200),
+            ("err-1", "2026-08-02T00:00:00Z", 500),
+            ("err-2", "2026-08-03T00:00:00Z", 502),
+        ]
+        for dump_id, ts, status in rows:
+            await pm._conn.execute(
+                "INSERT INTO error_dumps (id, timestamp, model, source_provider, "
+                "target_provider, provider_name, status_code) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (dump_id, ts, "gpt-4o", "oc", "oc", "openai", status),
+            )
+        await pm._conn.commit()
+
+        listed, total = await pm.query_error_dumps(status_min=500, limit=100)
+        data = await pm.export_error_dumps(status_min=500)
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+            f = tar.extractfile("metadata.json")
+            assert f is not None
+            exported = json.loads(f.read())
+
+        assert total == 2
+        assert sorted(row["id"] for row in listed) == ["err-1", "err-2"]
+        assert sorted(row["id"] for row in exported) == ["err-1", "err-2"]
+        await pm.close()
+
+    @pytest.mark.asyncio
     async def test_export_empty(self, tmp_path):
         """export_error_dumps returns valid empty archive when no matches."""
         import io

@@ -2213,13 +2213,30 @@ class PersistenceManager:
         }
 
     async def export_error_dumps(
-        self, *, start: str | None = None, end: str | None = None
+        self,
+        *,
+        model: str | None = None,
+        model_search: str | None = None,
+        error_phase: str | None = None,
+        provider: str | None = None,
+        status_min: int | None = None,
+        status_max: int | None = None,
+        start: str | None = None,
+        end: str | None = None,
+        q: str | None = None,
     ) -> bytes:
-        """Export error dumps in a date range as tar.gz bytes.
+        """Export the dumps the filters keep as tar.gz bytes.
+
+        The same builder the list uses, so an export of a filtered list holds
+        exactly the rows that list shows — a 206-row status filter exports
+        206 dumps, not the whole store.
 
         Args:
+            model/model_search/error_phase/provider/status_min/status_max:
+                The list's filters.
             start: ISO timestamp lower bound (inclusive). None = no lower bound.
             end: ISO timestamp upper bound (inclusive). None = no upper bound.
+            q: Free text over the id and the request-log id.
 
         Returns:
             In-memory tar.gz archive with metadata.json and bodies/<hash>.bin.
@@ -2227,24 +2244,17 @@ class PersistenceManager:
         import io
         import tarfile
 
-        where_clauses: list[str] = []
-        params: list[str] = []
-        if start:
-            where_clauses.append("timestamp >= ?")
-            params.append(start)
-        if end:
-            where_clauses.append("timestamp <= ?")
-            params.append(end)
-
-        vis_sql, vis_params = self._visible("error_dumps", since=start, until=end)
-        if vis_sql:
-            where_clauses.append(vis_sql)
-            params.extend(vis_params)
-
-        where_sql = ""
-        if where_clauses:
-            where_sql = "WHERE " + " AND ".join(where_clauses)
-
+        where_sql, params = self._dump_filter_sql(
+            model=model,
+            model_search=model_search,
+            error_phase=error_phase,
+            provider=provider,
+            status_min=status_min,
+            status_max=status_max,
+            start=start,
+            end=end,
+            q=q,
+        )
         cols = (
             "id, request_log_id, timestamp, model, source_provider, "
             "target_provider, provider_name, status_code, error_phase, "
