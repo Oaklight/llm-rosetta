@@ -899,7 +899,7 @@ function _renderPolicy() {
     '<button type="button" class="btn btn-primary btn-sm routing-save" onclick="saveRouting()">' +
     esc(t('routing.save')) + '</button>' +
     '<div class="routing-rules-head">' + esc(t('routing.json')) + '</div>' +
-    '<pre class="routing-json">' + esc(JSON.stringify(block, null, 2)) + '</pre>';
+    '<pre class="code-block routing-json">' + esc(JSON.stringify(block, null, 2)) + '</pre>';
   el.querySelectorAll('.routing-preset').forEach((chip) => {
     chip.addEventListener('click', () => applyRoutingPreset(chip.dataset.preset));
     chip.addEventListener('keydown', (event) => {

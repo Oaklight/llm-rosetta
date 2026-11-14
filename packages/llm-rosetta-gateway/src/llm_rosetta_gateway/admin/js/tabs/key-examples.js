@@ -124,7 +124,7 @@ function _row(label, control, hint, copy) {
   return `<div class="access-row">
     <span class="access-label">${esc(label)}</span>
     <div class="access-control">${control}${copyBtn}</div>
-    ${hint ? `<p class="access-hint">${hint}</p>` : ''}
+    ${hint ? `<p class="hint access-hint">${hint}</p>` : ''}
   </div>`;
 }
 
@@ -189,8 +189,8 @@ function _fillAndRender() {
       <span class="access-label">${esc(t('keys.accessSamples'))}</span>
       <div class="access-control access-sample-controls">${langSeg}${platformSeg}</div>
     </div>
-    <pre class="example-code"><code id="accessCode">${esc(code)}</code></pre>
-    <p class="access-hint access-foot">${esc(t('keys.accessFoot'))}</p>
+    <pre class="code-block example-code"><code id="accessCode">${esc(code)}</code></pre>
+    <p class="hint access-hint access-foot">${esc(t('keys.accessFoot'))}</p>
   </div>`;
 }
 
