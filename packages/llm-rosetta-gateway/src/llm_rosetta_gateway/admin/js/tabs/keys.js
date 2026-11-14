@@ -5,6 +5,7 @@ import { api, showToast, closeModal, openModal, esc, fmtTokens, inlineConfirm, w
 import { syncAriaSort, sortByKey } from '../core/sort.js';
 import { jsArg } from '../core/html.js';
 import { keysEmptyMessageKey } from '../core/posture.js';
+import { badModelName, modelTokens } from '../core/key-limits.js';
 import { validateQuotas } from '../core/quota.js';
 
 // ===================== API Keys Tab =====================
@@ -394,13 +395,6 @@ function _modelChoices() {
   return Object.keys((S.configData && S.configData.models) || {}).sort();
 }
 
-/** The field's tokens, split the way the server splits them. */
-function _modelTokens(raw) {
-  return String(raw || '').split(/[,\s]+/).map(x => x.trim()).filter(Boolean);
-}
-
-const _MODEL_NAME_RE = /^[A-Za-z0-9._:\-/@+]+$/;
-
 function _markKeyField(id, message) {
   const input = document.getElementById(id);
   const group = document.getElementById(id + 'Group');
@@ -416,12 +410,8 @@ function _clearKeyField(id) { _markKeyField(id, null); }
 
 /** True when the models field may be saved; marks it when it may not. */
 function validateKeyModels(id) {
-  const tokens = _modelTokens(document.getElementById(id).value);
-  const bad = tokens.find(m => m !== '*' && !_MODEL_NAME_RE.test(m));
-  if (bad) {
-    return _markKeyField(id, t('keys.badModel', {name: bad}));
-  }
-  return _markKeyField(id, null);
+  const bad = badModelName(document.getElementById(id).value);
+  return _markKeyField(id, bad ? t('keys.badModel', {name: bad}) : null);
 }
 
 /** True when the rate field may be saved; marks it when it may not. */
@@ -434,7 +424,7 @@ function _renderKeyModelMenu(inputId) {
   const input = document.getElementById(inputId);
   const menu = document.getElementById(inputId + 'Menu');
   if (!input || !menu) return;
-  const picked = new Set(_modelTokens(input.value));
+  const picked = new Set(modelTokens(input.value));
   const names = _modelChoices();
   menu.innerHTML = names.length
     ? names.map(n => `<label class="combo-option"><input type="checkbox" value="${esc(n)}" ${picked.has(n) ? 'checked' : ''} data-menu-for="${esc(inputId)}" onchange="pickKeyModel(this)"><span>${esc(n)}</span></label>`).join('')
@@ -471,7 +461,7 @@ function pickKeyModel(box) {
   const inputId = box.dataset.menuFor;
   const input = document.getElementById(inputId);
   if (!input) return;
-  const tokens = _modelTokens(input.value).filter(m => m !== box.value);
+  const tokens = modelTokens(input.value).filter(m => m !== box.value);
   if (box.checked) tokens.push(box.value);
   input.value = tokens.join(', ');
   validateKeyModels(inputId);

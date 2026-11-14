@@ -61,7 +61,8 @@ def _quota(raw: str | None) -> str:
 
     The admin API validates before it stores; this guard is for a record the
     column's earlier integer form wrote, or one edited by hand — a limit that
-    cannot be parsed is no limit, never a request-time error.
+    cannot be parsed is no limit, never a request-time error.  A dropped part
+    is logged: it is the one change to a limit that would otherwise be silent.
     """
     from ._vendor.ratelimit import parse_quota
 
@@ -71,11 +72,34 @@ def _quota(raw: str | None) -> str:
         if not part:
             continue
         try:
-            parse_quota(part)
+            parsed = parse_quota(part)
         except ValueError:
+            logger.warning("Dropping unreadable rate limit %r from a key record", part)
+            continue
+        if parsed["limit"] < 1:
+            logger.warning("Dropping a zero rate limit %r from a key record", part)
             continue
         kept.append(part)
     return ", ".join(kept)
+
+
+def _model_names(raw: str | None) -> frozenset[str]:
+    """A stored model allowlist, with "nothing readable" meaning no model.
+
+    Unlike the shim list, this is an authorization control: a column that
+    cannot be read must not widen a key to every model, so it denies instead.
+    An explicit ``[]`` says the same thing — there is a stored state for "this
+    key may call no model", and it is the one a damaged record lands in.
+    """
+    try:
+        names = json.loads(raw or "")
+    except (json.JSONDecodeError, TypeError):
+        logger.warning("Key allowlist is unreadable; the key may call no model")
+        return frozenset()
+    if not isinstance(names, list):
+        logger.warning("Key allowlist is not a list; the key may call no model")
+        return frozenset()
+    return frozenset(str(n) for n in names if str(n).strip())
 
 
 def _names(raw: str | None) -> frozenset[str]:
@@ -244,7 +268,7 @@ class KeyStore:
                 KeyContext(
                     label=label,
                     allowed_shims=_names(shims_json),
-                    allowed_models=_names(models_json),
+                    allowed_models=_model_names(models_json),
                     rate_limit=_quota(rate_limit),
                     usage_bucket=bucket or key_bucket(key_hash),
                 ),
@@ -411,7 +435,7 @@ class KeyStore:
                 "id": row_id,
                 "label": label,
                 "allowed_shims": shims,
-                "allowed_models": sorted(_names(models_json)),
+                "allowed_models": sorted(_model_names(models_json)),
                 "rate_limit": _quota(rate_limit),
                 "created": created,
             }

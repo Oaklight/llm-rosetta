@@ -48,6 +48,11 @@ def _key_models(raw: Any) -> tuple[list[str] | None, str | None]:
         name = str(part).strip()
         if not name or name in models:
             continue
+        if name == "*":
+            # The stored spelling of "every model".  The panel sends it back
+            # unchanged when the operator picks nothing, so it has to be one
+            # of the values this validator accepts.
+            return ["*"], None
         if not _MODEL_NAME.match(name):
             return None, f"Invalid model name '{name}'"
         models.append(name)
@@ -70,10 +75,17 @@ def _key_quota(raw: Any) -> tuple[str, str | None]:
     parts = [part.strip() for part in text.split(",") if part.strip()]
     for part in parts:
         try:
-            parse_quota(part)
+            parsed = parse_quota(part)
         except ValueError:
             return text, (
                 f"Invalid rate limit '{part}': use N/unit, e.g. 60/m or 30/m, 500/h"
+            )
+        if parsed["limit"] < 1:
+            # A window of zero is not "no limit" — it refuses every request —
+            # and the fixed-window limiter refuses to be built with it.
+            return text, (
+                f"Rate limit '{part}' must allow at least one request; "
+                "leave the field blank for no limit"
             )
     return ", ".join(parts), None
 

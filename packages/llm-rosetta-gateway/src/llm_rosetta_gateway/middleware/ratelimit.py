@@ -27,6 +27,7 @@ import contextvars
 import logging
 import math
 import re
+import time
 from typing import TYPE_CHECKING, Any
 
 from llm_rosetta_gateway._vendor.httpserver import Response
@@ -127,9 +128,14 @@ class RateLimitState:
         self.exclude_prefixes: list[str] = ["/health", "/admin"]
         self.trust_proxy: bool = False
         self._snap: _LimiterSnapshot = _LimiterSnapshot(None, None, None, None)
-        #: (key identity, quota spec) → its windows.  A key whose limit changes
-        #: gets fresh windows rather than inheriting the old counts.
-        self._key_limits: dict[tuple[str, str], RateLimiter] = {}
+        #: (key identity, quota spec) → its windows and when they were last
+        #: used.  A key whose limit changes gets fresh windows rather than
+        #: inheriting the old counts; a key that stops calling is pruned.
+        self._key_limits: dict[tuple[str, str], tuple[RateLimiter, float]] = {}
+
+    #: How long an idle key's windows are kept.  Pruning is what keeps a
+    #: deleted key from holding a limiter for the process lifetime.
+    KEY_LIMIT_IDLE_S = 3600.0
 
     def key_limiter(self, ctx: Any) -> RateLimiter:
         """The windows for one key's own limit, built on first use.
@@ -137,23 +143,44 @@ class RateLimitState:
         The spec is the settings fields' ``N/unit`` form and may name several
         windows (``"30/m, 500/h"``); each is a fixed window, so a key's limit
         reads the same whatever algorithm the deployment-level limiting runs.
+        A spec with ``burst`` keeps only its limit: a fixed window has no
+        burst to spend.
         """
+        now = time.monotonic()
         cache_key = (ctx.key_hash or ctx.label, ctx.rate_limit)
-        limiter = self._key_limits.get(cache_key)
-        if limiter is None:
-            parts = [q.strip() for q in str(ctx.rate_limit).split(",") if q.strip()]
-            limiters = [
-                FixedWindowLimiter(
-                    limit=int(parse_quota(part)["limit"]),
-                    window_seconds=float(parse_quota(part)["period"]),
+        entry = self._key_limits.get(cache_key)
+        if entry is None:
+            limiters = []
+            for part in str(ctx.rate_limit).split(","):
+                part = part.strip()
+                if not part:
+                    continue
+                parsed = parse_quota(part)  # once per part
+                limiters.append(
+                    FixedWindowLimiter(
+                        limit=int(parsed["limit"]),
+                        window_seconds=float(parsed["period"]),
+                    )
                 )
-                for part in parts
-            ]
-            limiter = ThreadSafeLimiter(
+            limiter: RateLimiter = ThreadSafeLimiter(
                 limiters[0] if len(limiters) == 1 else CompositeLimiter(limiters)
             )
-            self._key_limits[cache_key] = limiter
-        return limiter
+            entry = (limiter, now)
+            self._key_limits[cache_key] = entry
+            self._prune_key_limits(now)
+        else:
+            self._key_limits[cache_key] = (entry[0], now)
+        return entry[0]
+
+    def _prune_key_limits(self, now: float) -> None:
+        """Drop the windows of keys idle for longer than ``KEY_LIMIT_IDLE_S``."""
+        stale = [
+            key
+            for key, (_, seen) in self._key_limits.items()
+            if now - seen > self.KEY_LIMIT_IDLE_S
+        ]
+        for key in stale:
+            del self._key_limits[key]
 
     def rebuild(self, config: GatewayConfig) -> None:
         """Recreate limiters from the current config (counters reset)."""
@@ -169,6 +196,7 @@ class RateLimitState:
         self.exclude_prefixes = list(config.rate_limit_exclude)
         self.trust_proxy = config.rate_limit_trust_proxy
         self.enabled = config.rate_limit_enabled
+        self._prune_key_limits(time.monotonic())
         if self.enabled:
             dims = []
             if snap.gl:

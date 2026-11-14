@@ -42,14 +42,25 @@ export function quotaToPayload(raw) {
 }
 
 /**
- * Validate a whole field: every part must parse.
+ * Validate a whole field: every part must parse and allow at least one request.
  * Returns {ok, parts, error} — error names the offending part.
+ *
+ * The floor is the gateway's own: a window of zero is not "no limit" — it
+ * refuses every request — and the limiter refuses to be built with it, so a
+ * blank field is the way to say "none".
  */
 export function validateQuotas(raw) {
   const parts = splitQuotas(raw);
   for (const part of parts) {
     const p = parseQuota(part);
     if (p && p.error) return {ok: false, parts, error: `"${part}": ${p.error}`};
+    if (p && p.limit < 1) {
+      return {
+        ok: false,
+        parts,
+        error: `"${part}": allow at least one request, or leave the field blank`,
+      };
+    }
   }
   return {ok: true, parts, error: null};
 }
