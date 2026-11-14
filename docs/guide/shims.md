@@ -399,6 +399,35 @@ remote；同一 URL 的显式 remote 会合并到预设上（显式键优先）�
 
 未知 preset 默认跳过并告警，`shims.strict` 为 `true` 时改为拒绝 —— 因此较新版本写出的配置仍能在较旧版本上启动。配置段形状错误（例如把 `presets` 写成字符串）会在加载配置时被拒绝，而不是等到启动时。
 
+#### 只装包的一部分 { #selection }
+
+默认整个包装载。两个可选映射可以收窄它，按 preset 键书写，不需要改动包本身：
+
+```jsonc
+"shims": {
+  "presets": ["free"],
+  "include": { "free": ["llm7--chat_completions"] },
+  "exclude": { "alcf": ["alcf_sophia--chat_completions"] }
+}
+```
+
+条目是 shim 名字或 `*` 通配（如 `asksage--*`）。空的 `include` 表示「不限制」而不是「什么都不装」；`exclude` 优先于 `include`。显式 `remotes[]` 条目也可以内联 `include` / `exclude`。选择发生在叶子 `provider.yaml` 解析之后、`transforms.py` 导入之前，所以被排除的 shim 既不导入模块也不注册。
+
+匹配不到任何 shim 的 `include` 会在启动时告警，并列出该源实际装载了什么；只有 `shims.strict` 为 `true` 时才升级为失败。`exclude` 指名一个已经不存在的 shim 是无操作。真正用到被排除 shim 的 provider 会以原有的 unknown-shim 错误失败，失败落在需要它的地方。
+
+选择是按名字的，所以需要知道名字。包可以在其 `path` 所指目录的根部用 `shims.yaml` 声明：
+
+```yaml
+version: 1
+shims:
+  - name: llm7--chat_completions
+    path: providers/llm7
+  - name: ovhcloud--chat_completions
+    path: providers/ovhcloud
+```
+
+清单存在即权威：只装载它列出的条目，未列出的目录根本不会被读取 —— 因此不维护清单的作者只会失去自己新增的 shim。其中的路径相对于扫描根，不能越出，也不含任何 URL，所以它无法把加载器指向另一个来源。清单存在但无法执行时，该源直接失败，而不是退回扫描 —— 退回扫描恰好会解析清单想要限制的那棵树。没有清单的包仍按原来的方式扫描，选择照样按名字生效。
+
 #### 镜像 { #mirrors }
 
 按 URL 声明的远程源，在宿主够不着的地方会直接死掉：防火墙后的 `github.com`、正在维护的

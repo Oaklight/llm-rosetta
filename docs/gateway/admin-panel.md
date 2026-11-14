@@ -238,6 +238,8 @@ Embedding 模型只显示单一的 Test 按钮，因为只有一种测试适用�
 
 保存时两个字段都会校验：不通过的字段变红，并在下方给出原因，两项都通过之前不会发出请求。admin API 对同样两个字段做同样的校验，因此能存进库的值一定是能解析的值。
 
+模型范围在这三条接受 `model` 的路由上都会生效：`/v1/chat/completions` 等对话端点、`/v1/responses/compact` 与 `/v1/messages/count_tokens`；`/v1/models`（含 Google 版本）也只返回该密钥可调用的模型。速率限制的窗口至少为 1 次请求——`0/m` 不是「不限」，而是拒绝一切，因此会被拒绝并提示留空；留空才表示不限。
+
 列表上方是一个可折叠的 **Connect** 面板，说明工具如何接入本网关：API（catalog 声明的全部格式，按模型类型分组）、Base URL、模型 id，以及 ENV、curl、Python、Node 四种示例——ENV 页签包含 Linux/macOS 与 Windows 两种导出写法。取值都是模板（模型位置写 `<model-id>`），因此无论部署只有一个 chat 模型还是全部类型，面板读起来一致；每个取值都有自己的复制按钮，示例代码块带语法着色，右上角有复制控件。
 
 ## 仪表盘（Dashboard）
