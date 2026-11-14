@@ -411,7 +411,7 @@
       <h3 data-i18n="confirm.clearDumps" id="clearDumpsModalTitle">Clear All Error Dumps</h3>
       <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px" data-i18n-html="confirm.clearDumpsHint">This will permanently delete all error dump records. Type <strong style="color:var(--red)">CLEAR</strong> to confirm.</p>
       <input type="text" id="clearDumpsInput" oninput="onClearDumpsInput()" placeholder="Type CLEAR" data-i18n-placeholder="confirm.typeClear" style="width:100%;font-family:var(--mono)">
-      <div class="modal-actions">
+      <div class="panel-foot">
         <button class="btn" onclick="closeModal('clearDumpsModal')" data-i18n="btn.cancel">Cancel</button>
         <button class="btn btn-danger" id="clearDumpsBtn" onclick="confirmClearDumps()" disabled data-i18n="btn.clearAll">Clear All</button>
       </div>
@@ -428,7 +428,7 @@
         <span style="color:var(--text-dim)">—</span>
         <input type="date" id="exportEndDate" style="flex:1">
       </div>
-      <div class="modal-actions">
+      <div class="panel-foot">
         <button class="btn" onclick="closeModal('exportDumpsModal')" data-i18n="btn.cancel">Cancel</button>
         <button class="btn btn-primary" onclick="doExportDumps()" data-i18n="btn.export">Export</button>
       </div>
@@ -1277,8 +1277,8 @@
 
 <!-- Provider Modal -->
 <div class="modal-overlay" id="providerModal">
-  <div class="modal modal-wide" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="providerModalTitle">
-    <div class="drawer-head">
+  <div class="modal modal-wide is-drawer" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="providerModalTitle">
+    <div class="panel-head">
       <h3 id="providerModalTitle" data-i18n="modal.addProvider">Add Provider</h3>
       <button type="button" class="drawer-close" aria-label="Close" data-i18n-aria-label="btn.close" onclick="closeModal('providerModal')">&#10005;</button>
     </div>
@@ -1571,7 +1571,7 @@
       </details>
     </div>
 
-    <div class="modal-actions">
+    <div class="panel-foot">
       <button class="btn" onclick="closeModal('providerModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="saveProvider()" data-i18n="btn.save">Save</button>
     </div>
@@ -1583,7 +1583,7 @@
 <div class="drawer-scrim" id="modelDrawerScrim" hidden></div>
 <aside class="model-drawer" id="modelDrawer" role="dialog" aria-modal="true" tabindex="-1"
   aria-labelledby="drawerTitle" aria-hidden="true">
-  <div class="md-head">
+  <div class="panel-head">
     <code class="md-name" id="drawerTitle"></code>
     <button class="btn btn-sm md-close" onclick="closeModelDrawer()" data-i18n="btn.close" aria-label="Close">Close</button>
   </div>
@@ -1749,7 +1749,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       </div>
     </div>
 
-    <div class="modal-actions">
+    <div class="panel-foot">
       <button class="btn" onclick="closeModelDrawer()" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="saveModel()" data-i18n="btn.save">Save</button>
     </div>
@@ -1758,8 +1758,8 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
 
 <!-- Fetch Models Modal -->
 <div class="modal-overlay" id="fetchModelsModal">
-  <div class="modal modal-wide" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="fetchModelsModalTitle">
-    <div class="drawer-head">
+  <div class="modal modal-wide is-drawer" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="fetchModelsModalTitle">
+    <div class="panel-head">
       <h3 data-i18n="modal.fetchModels" id="fetchModelsModalTitle">Fetch Models from Provider</h3>
       <button type="button" class="drawer-close" aria-label="Close" data-i18n-aria-label="btn.close" onclick="closeModal('fetchModelsModal')">&#10005;</button>
     </div>
@@ -1806,7 +1806,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       Loading models...
     </div>
     <div id="fetchModelsError" style="display:none;color:var(--red);padding:8px 0;font-size:13px"></div>
-    <div class="modal-actions">
+    <div class="panel-foot">
       <button class="btn" onclick="closeModal('fetchModelsModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" id="fetchAddBtn" onclick="bulkAddFetchedModels()" disabled data-i18n="btn.applyChanges">Apply Changes</button>
     </div>
@@ -1857,7 +1857,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
         oninput="onCleanupConfirmInput()" style="font-family:monospace"
         placeholder="CLEANUP" data-i18n-placeholder="confirm.typeToConfirm">
     </div>
-    <div class="modal-actions">
+    <div class="panel-foot">
       <button class="btn" onclick="closeModal('cleanupConfirmModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-danger-fill" id="cleanupConfirmBtn" onclick="onCleanupConfirmClick()" disabled
         data-i18n="btn.cleanup">Cleanup</button>
@@ -1875,7 +1875,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <input id="deleteConfirmInput" autocomplete="off" spellcheck="false"
         oninput="onDeleteConfirmInput()" style="font-family:monospace">
     </div>
-    <div class="modal-actions">
+    <div class="panel-foot">
       <button class="btn" onclick="closeModal('deleteConfirmModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-danger-fill" id="deleteConfirmBtn" onclick="onDeleteConfirmClick()" disabled
         data-i18n="btn.delete">Delete</button>
@@ -1891,7 +1891,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <label data-i18n="test.matryoshkaDimPrompt">Enter dimensions for matryoshka embedding:</label>
       <input id="matryoshkaDim" type="number" min="1" value="256" style="margin-top:6px" onkeydown="if(event.key==='Enter')confirmMatryoshka()">
     </div>
-    <div class="modal-actions">
+    <div class="panel-foot">
       <button class="btn" onclick="closeModal('matryoshkaModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="confirmMatryoshka()" data-i18n="btn.ok">OK</button>
     </div>
@@ -1916,7 +1916,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <summary data-i18n="test.rawResponse">Raw Response</summary>
       <div class="detail-body" id="testResBody"></div>
     </details>
-    <div class="modal-actions">
+    <div class="panel-foot">
       <button class="btn" onclick="closeModal('testModal')" data-i18n="btn.close">Close</button>
     </div>
   </div>
@@ -1937,7 +1937,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       </div>
       <div class="shim-inherit-list" id="shimModalInheritList"></div>
     </div>
-    <div class="modal-actions">
+    <div class="panel-foot">
       <button class="btn" onclick="copyShimYaml()" data-i18n="btn.copyDefinition">Copy</button>
       <button class="btn" onclick="closeModal('shimModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" id="shimModalSave" onclick="saveShimModal()" data-i18n="btn.save">Save</button>
@@ -1955,7 +1955,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <label data-i18n="label.keyManual">Manual key (leave empty to auto-generate)</label>
       <input id="keyManual" placeholder="rsk-... (auto-generated if empty)" style="font-family:var(--mono)">
     </div>
-    <div class="modal-actions">
+    <div class="panel-foot">
       <button class="btn" onclick="closeModal('keyModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="generateKey()" data-i18n="btn.generate">Generate</button>
     </div>
@@ -1971,7 +1971,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <input id="createdKeyValue" readonly style="flex:1;font-family:var(--mono)">
       <button class="btn btn-sm" onclick="copyCreatedKey()" data-i18n="btn.copy">Copy</button>
     </div>
-    <div class="modal-actions" style="margin-top:16px">
+    <div class="panel-foot">
       <button class="btn btn-primary" onclick="closeModal('keyCreatedModal')" data-i18n="btn.close">Close</button>
     </div>
   </div>
@@ -1985,7 +1985,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <label data-i18n="col.label">Label</label>
       <input id="keyLabelInput" placeholder="e.g. Production, Dev testing" data-i18n-placeholder="placeholder.keyLabel" onkeydown="onKeyLabelInputKeydown(event)">
     </div>
-    <div class="modal-actions">
+    <div class="panel-foot">
       <button class="btn" onclick="closeModal('keyLabelModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" onclick="saveKeyLabel()" data-i18n="btn.save">Save</button>
     </div>
@@ -2052,7 +2052,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
   <div class="modal" style="width:640px;max-width:92vw" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="changelogTitle">
     <h3 id="changelogTitle"></h3>
     <div class="changelog-body" id="changelogBody"></div>
-    <div class="modal-actions">
+    <div class="panel-foot">
       <a class="changelog-full" id="changelogFullLink" target="_blank" rel="noopener" data-i18n="update.docsLink">Full changelog</a>
       <button type="button" class="btn" onclick="dismissChangelog()" data-i18n="update.dontShow">Don't show again</button>
       <button type="button" class="btn btn-primary" onclick="closeChangelog()" data-i18n="btn.close">Close</button>

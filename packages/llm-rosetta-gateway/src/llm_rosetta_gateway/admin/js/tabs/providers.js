@@ -2550,7 +2550,7 @@ function renderProviders() {
 
 function saveProvider() {
   // One Save click, one PUT: the button is held until the answer arrives.
-  return withBusyButton(document.querySelector('#providerModal .modal-actions .btn-primary'), _saveProvider);
+  return withBusyButton(document.querySelector('#providerModal .panel-foot .btn-primary'), _saveProvider);
 }
 
 async function _saveProvider() {

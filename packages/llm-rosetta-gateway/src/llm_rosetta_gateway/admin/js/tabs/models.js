@@ -1440,7 +1440,7 @@ function renderModels() {
 // ── Model CRUD ──
 
 function saveModel() {
-  return withBusyButton(document.querySelector('#modelDrawer .modal-actions .btn-primary'), _saveModel);
+  return withBusyButton(document.querySelector('#modelDrawer .panel-foot .btn-primary'), _saveModel);
 }
 
 async function _saveModel() {
