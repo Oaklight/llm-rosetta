@@ -9,6 +9,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ## [未发布]
 
 ### 新增
+- **单一来源的石形标记与参数化工具**（[#1530](https://github.com/Oaklight/llm-rosetta/pull/1530)，[#1529](https://github.com/Oaklight/llm-rosetta/issues/1529)）：`design/logo/` 现在保存描摹路径作为唯一来源、它的出处（对 Wikimedia Commons 上一个 CC0 文件的算法描摹，记录在 `references/SOURCE.md`），以及纯标准库的简化脚本和交互页面；顶点预算、结构锚点、形变与取景这几个参数即可重新生成所有已发布的副本。README 的`prefers-color-scheme` 深浅两份此前内容完全相同，现在各自渲染正确的标记；网关 favicon 的裁剪问题已记录，将在单独 PR 中修复。
 - **删除类管理操作改为后台任务**（[#1515](https://github.com/Oaklight/llm-rosetta/issues/1515)，[#1516](https://github.com/Oaklight/llm-rosetta/pull/1516)）：清空请求日志、按天数或日期范围清理、裁剪到保留上限、VACUUM 与计数器重建都立即返回 `202` 和任务 id，由后台 worker 执行。任务排队的那一刻，目标记录就不再被任何读取返回，随后按批次删除并报告进度，批次之间可以取消；Observability 新增 **Jobs** 视图，显示每个任务的状态、操作与结果。清理记录不再重置 Dashboard 的请求总数 —— 顶部读累计值，页脚继续显示日志当前保留的行数。
 - **ChatGPT 计划车道的浏览器登录**（[#1498](https://github.com/Oaklight/llm-rosetta/pull/1498)）：提供方抽屉的**认证**页可以在新标签页里发起 OpenAI 授权，再把回调 URL 贴回来完成登录。PKCE verifier、state 与 nonce 保存在该提供方私有的状态目录，挑战一次有效；面板只提交回调 URL，从不提交 token。授权码用签发方在回调里返回的 `oaiapp_…` 客户端 id 交换（用注册占位符会得到 `400 invalid_client`），完成登录后恢复受跟踪的刷新生命周期、退出登录时停止；厂商清单声明 `token_refresh_interval: 2880`，因此 3600 秒的 token 会提前十二分钟续期。这类账号返回的模型列表是厂商给出的权益子集。
 - **提供方抽屉的凭据展示更易读**（[#1501](https://github.com/Oaklight/llm-rosetta/pull/1501)）：到期时间显示为本地时间，点击在到期时间与倒计时之间切换 —— 该值是一个真正的按钮，键盘可达，且所选的视图在刷新后保留。过长的账号标识中间省略，完整值放在 title 里；一行提示说明网关是否会自动续期；"配置中的命令"不再是与登录并列的来源卡片，而是来源标题旁的**覆盖**按钮：启用时它是屏幕上唯一的卡片，**取消覆盖**回到 shim 自带的来源，基础页则只陈述当前生效的那一个来源，不再提供选择器。
