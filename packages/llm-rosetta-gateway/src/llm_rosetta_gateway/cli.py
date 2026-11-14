@@ -486,6 +486,18 @@ def _cmd_shims_preset(args: argparse.Namespace) -> None:
             print(f"Shim preset '{args.preset}' is not enabled")
 
 
+def _cmd_shims_new(args: argparse.Namespace) -> None:
+    """Scaffold a new shim — the one command that writes files, not config.
+
+    It touches no gateway config: the files it writes belong to a provider
+    package, which a gateway reads through ``shims.paths`` or a remote.  The
+    exit code is the scaffolder's, so a failed load check reaches the shell.
+    """
+    from llm_rosetta.shims.scaffold import run
+
+    raise SystemExit(run(args))
+
+
 def _write_record_file(path: str, text: str) -> None:
     """Write the record so only its owner can read it.
 
@@ -625,6 +637,8 @@ def _dispatch_subcommand(args: argparse.Namespace, sub: Any) -> bool:
         if args.shim_action in {"enable-preset", "disable-preset"}:
             args.action = "enable" if args.shim_action == "enable-preset" else "disable"
             _cmd_shims_preset(args)
+        elif args.shim_action == "new":
+            _cmd_shims_new(args)
         else:
             sub.choices["shims"].print_help()
         return True
@@ -872,6 +886,15 @@ def main() -> None:  # noqa: C901
         preset_parser = shim_sub.add_parser(action, help=help_text)
         preset_parser.add_argument("preset", help="Preset name, e.g. argo")
         preset_parser.add_argument("--config", default=None, help="Path to config file")
+
+    # ``shims new`` — the same flags the repository's scripts/dev/new_shim.py
+    # offers; the module owns them, so the two entry points cannot drift.
+    from llm_rosetta.shims.scaffold import add_arguments as _add_scaffold_args
+
+    new_parser = shim_sub.add_parser(
+        "new", help="Create the files for a new provider shim"
+    )
+    _add_scaffold_args(new_parser, default_root="providers")
 
     # ``credential`` subcommand
     cred_parser = sub.add_parser(

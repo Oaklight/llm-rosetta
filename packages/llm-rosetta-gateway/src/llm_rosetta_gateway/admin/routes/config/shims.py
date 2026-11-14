@@ -98,7 +98,7 @@ def _merge_shim_sources_body(
     knobs clear on a falsy value, and empty sub-keys are dropped so the
     section stays tidy.
     """
-    for key in ("paths", "remotes", "presets", "disabled"):
+    for key in ("paths", "remotes", "presets", "disabled", "include", "exclude"):
         if body.get(key) is not None:
             section[key] = body[key]
     for key, empty in (
@@ -113,7 +113,15 @@ def _merge_shim_sources_body(
             section.pop(key, None)
         else:
             section[key] = value
-    for key in ("paths", "remotes", "presets", "disabled", "cache_dir"):
+    for key in (
+        "paths",
+        "remotes",
+        "presets",
+        "disabled",
+        "include",
+        "exclude",
+        "cache_dir",
+    ):
         if key in section and not section[key]:
             section.pop(key)
     return section

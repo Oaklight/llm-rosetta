@@ -85,15 +85,24 @@ def _unknown_preset_error(key: str) -> ValueError:
 
 
 def _resolve_presets(
-    raw_presets: list[Any], *, on_unknown: str = "raise"
+    raw_presets: list[Any],
+    *,
+    include: Mapping[str, tuple[str, ...]] | None = None,
+    exclude: Mapping[str, tuple[str, ...]] | None = None,
+    on_unknown: str = "raise",
 ) -> list[dict[str, Any]]:
     """Expand ``shims.presets`` keys into their catalogue remotes.
 
     Duplicates collapse to the first mention, so the same archive is not
-    listed twice.
+    listed twice.  A key that carries a selection in ``shims.include`` /
+    ``shims.exclude`` takes it with it: the preset key is the selection's only
+    name, so folding the two here is what keeps the config free of a second
+    lookup the operator would have to keep in step.
 
     Args:
         raw_presets: The declared keys.
+        include: The ``shims.include`` selections, keyed by preset.
+        exclude: The ``shims.exclude`` selections, keyed by preset.
         on_unknown: ``"raise"`` (the admin save path, where the operator can
             correct the body) or ``"skip"`` (startup, where a key this build
             does not ship must not keep the gateway from running — it may come
@@ -104,6 +113,8 @@ def _resolve_presets(
         ValueError: On a non-string key, or an unknown key when *on_unknown*
             is ``"raise"``.
     """
+    include = include or {}
+    exclude = exclude or {}
     remotes: list[dict[str, Any]] = []
     seen_urls: set[str] = set()
     for key in raw_presets:
@@ -124,9 +135,91 @@ def _resolve_presets(
         remote = package.remote
         url = remote.get("url")
         if url and url not in seen_urls:
+            if include.get(key):
+                remote = {**remote, "include": list(include[key])}
+            if exclude.get(key):
+                remote = {**remote, "exclude": list(exclude[key])}
             remotes.append(remote)
             seen_urls.add(url)
     return remotes
+
+
+def _resolve_selection_map(
+    value: Any, *, where: str, on_unknown: str
+) -> dict[str, tuple[str, ...]]:
+    """Parse one keyed selection map — ``shims.include`` or ``shims.exclude``.
+
+    The key is a preset key, so a selection cannot attach itself to a source the
+    operator did not name, and an unknown key is refused where the save path can
+    still correct it (the rule ``shims.presets`` already follows).
+
+    Args:
+        value: The declared mapping, or ``None``.
+        where: The config key, for the error and the log line.
+        on_unknown: ``"raise"`` or ``"skip"`` for a key this build does not ship.
+
+    Returns:
+        The selected patterns per preset key, in declaration order.
+
+    Raises:
+        ValueError: On a non-mapping value, a non-string key, an unknown key
+            when *on_unknown* is ``"raise"``, or a malformed pattern list.
+    """
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError(f"config: '{where}' must be an object keyed by preset")
+    selections: dict[str, tuple[str, ...]] = {}
+    for key, patterns in value.items():
+        if not isinstance(key, str) or not key:
+            raise ValueError(f"config: '{where}' keys must be preset names")
+        if get_source_package(key) is None:
+            if on_unknown == "skip":
+                logger.warning(
+                    "config: '%s' names unknown preset %r and is skipped; "
+                    "this build ships: %s",
+                    where,
+                    key,
+                    _known_preset_keys(),
+                )
+                continue
+            raise ValueError(
+                f"config: '{where}' names unknown shim preset {key!r}; "
+                f"known presets: {_known_preset_keys()}"
+            )
+        if isinstance(patterns, str):
+            raise ValueError(
+                f"config: '{where}.{key}' must be an array of non-empty shim names"
+            )
+        if not isinstance(patterns, (list, tuple)) or any(
+            not isinstance(pattern, str) or not pattern for pattern in patterns
+        ):
+            raise ValueError(
+                f"config: '{where}.{key}' must be an array of non-empty shim names"
+            )
+        selections[key] = tuple(patterns)
+    return selections
+
+
+def _warn_selection_without_preset(
+    raw_presets: list[Any],
+    include: Mapping[str, tuple[str, ...]],
+    exclude: Mapping[str, tuple[str, ...]],
+) -> None:
+    """Warn about a selection keyed to a preset the document does not declare.
+
+    Not an error — the document may be mid-edit, and the key is meaningful the
+    moment the preset is added — but silently doing nothing is exactly the
+    failure a subset selection exists to avoid.
+    """
+    declared = {key for key in raw_presets if isinstance(key, str)}
+    for key in (*include, *exclude):
+        if key not in declared:
+            logger.warning(
+                "config: 'shims' selects from preset %r, which 'shims.presets' "
+                "does not declare; the selection has no effect",
+                key,
+            )
 
 
 def _resolve_paths(raw_paths: Any, config_dir: str | None) -> list[str]:
@@ -206,6 +299,17 @@ def _validate_remote_specs(remotes: Sequence[Mapping[str, Any]]) -> None:
         ValueError: If a remote's ``path`` or ``mirror`` declaration is invalid.
     """
     for index, entry in enumerate(remotes):
+        for key in ("include", "exclude"):
+            patterns = entry.get(key)
+            if patterns is None:
+                continue
+            if not isinstance(patterns, (list, tuple)) or any(
+                not isinstance(pattern, str) or not pattern for pattern in patterns
+            ):
+                raise ValueError(
+                    f"config: 'shims.remotes[{index}].{key}' must be an array of "
+                    "non-empty shim names"
+                )
         try:
             normalize_subpath(entry.get("path"), where="'path'")
         except ValueError as exc:
@@ -318,8 +422,18 @@ def parse_shims_section(
     raw_presets = section.get("presets") or []
     if not isinstance(raw_presets, list):
         raise ValueError("config: 'shims.presets' must be an array")
+    include = _resolve_selection_map(
+        section.get("include"), where="shims.include", on_unknown=mode
+    )
+    exclude = _resolve_selection_map(
+        section.get("exclude"), where="shims.exclude", on_unknown=mode
+    )
+    _warn_selection_without_preset(raw_presets, include, exclude)
     remotes = _resolve_remotes(
-        section.get("remotes") or [], _resolve_presets(raw_presets, on_unknown=mode)
+        section.get("remotes") or [],
+        _resolve_presets(
+            raw_presets, include=include, exclude=exclude, on_unknown=mode
+        ),
     )
     _validate_remote_specs(remotes)
     _validate_knobs(section)

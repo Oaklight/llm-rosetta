@@ -2420,6 +2420,36 @@ button.shim-update.unknown { color: var(--tag-warn); }
 /* A selected package's warning, under the picker. */
 .shim-preset-note { color: var(--tag-warn); }
 
+/* The per-shim picker inside an Available card: the card's own grid, so the
+   rows sit with the formats they belong to rather than under a picker. */
+.shim-card-shims { display: grid; gap: 1px; margin: 8px 0 2px; }
+.shim-card-shims .shim-preset-shim { font-size: 11.5px; }
+.shim-card-shims .field-hint { margin: 4px 0 0; }
+
+/* A selected package's shims, each one a checkbox, under its note.
+   The loaded/not-loaded badge is the load report's word, not a guess, so it is
+   dimmed until it has one to show. */
+.shim-preset-shims { display: grid; gap: 10px; margin-top: 8px; }
+.shim-preset-group {
+  display: grid; gap: 2px; padding: 8px 10px;
+  border: 1px solid var(--border); border-radius: 8px;
+}
+.shim-preset-group-head {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-weight: 600; color: var(--text-dim);
+  margin-bottom: 2px;
+}
+.shim-preset-group-head .tp-base { margin-left: auto; font-weight: 400; }
+.shim-preset-shim {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; font-family: var(--font-mono, monospace);
+  padding: 2px 0; cursor: pointer;
+}
+.shim-preset-shim.off { opacity: 0.55; }
+.shim-preset-name { flex: 1; }
+.shim-preset-state { font-family: var(--font-sans, inherit); font-size: 11px; color: var(--text-dim); }
+.shim-preset-shim.off .shim-preset-state { color: var(--tag-warn); }
+
 /* A preset row that carries a note: the sentence takes the second line. */
 .tp-item.tp-has-note { flex-wrap: wrap; row-gap: 2px; }
 .tp-item.tp-has-note .tp-note {
@@ -2951,6 +2981,8 @@ button.shim-update.unknown { color: var(--tag-warn); }
 .shim-sub { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* The provenance tag is a capability tag with an origin ink. */
+.tag.is-free { color: var(--green); }
+.tag.is-subscription { color: var(--accent, var(--orange)); }
 .tag.is-builtin { color: var(--text-dim); }
 .tag.is-path { color: var(--accent); }
 .tag.is-remote { color: var(--orange); }

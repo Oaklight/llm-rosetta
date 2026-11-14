@@ -45,8 +45,9 @@ import threading
 import time
 import uuid
 import zipfile
+from fnmatch import fnmatch
 from urllib.parse import quote, urlsplit
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, cast
@@ -59,6 +60,8 @@ from llm_rosetta.shims.provider_shim import (
     unregister_shim,
 )
 from llm_rosetta.shims.providers import load_providers, load_providers_from_dir
+
+from .manifest import MANIFEST_FILENAME, ShimManifestError, read_shim_manifest
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +172,14 @@ class ShimSourceStatus:
             expanded mirror template when ``leg`` is ``"mirror"``).
         unreachable: Whether the source failed because no leg could be
             reached, as opposed to a server answer or a bad archive.
+        include: The ``include`` selection the source's declaration carried,
+            as written (exact names and ``*`` globs).
+        exclude: The ``exclude`` selection, as written.
+        unmatched: ``include`` patterns that selected nothing from this
+            source.  A name the package stopped shipping lands here, which is
+            how a stale config is visible instead of silently empty.
+        manifest_shims: The shim names the source's ``shims.yaml`` declares.
+            Empty when it ships no manifest, which is the legacy scan layout.
     """
 
     kind: Literal["path", "remote"]
@@ -189,6 +200,10 @@ class ShimSourceStatus:
     leg: Literal["primary", "mirror"] | None = None
     archive_url: str | None = None
     unreachable: bool = False
+    include: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
+    unmatched: tuple[str, ...] = ()
+    manifest_shims: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe view for the admin API."""
@@ -211,6 +226,10 @@ class ShimSourceStatus:
             "leg": self.leg,
             "archive_url": self.archive_url,
             "unreachable": self.unreachable,
+            "include": list(self.include),
+            "exclude": list(self.exclude),
+            "unmatched": list(self.unmatched),
+            "manifest_shims": list(self.manifest_shims),
         }
 
 
@@ -360,6 +379,21 @@ def rebuild_shims(
         detail = "; ".join(f"{s.kind} {s.location}: {s.error}" for s in failures)
         raise ShimSourceError(f"failed to load shim source(s): {detail}")
 
+    # An ``include`` that selected nothing is a config fact rather than a
+    # source failure — the rest of the source loaded — so it is reported on the
+    # status and only stops a strict load.
+    unmatched = [
+        (status.location, pattern)
+        for status in statuses
+        for pattern in status.unmatched
+    ]
+    if strict and unmatched:
+        detail = "; ".join(
+            f"{location}: include {pattern!r} matched no shim"
+            for location, pattern in unmatched
+        )
+        raise ShimSourceError(f"shim selection matched nothing: {detail}")
+
     return report
 
 
@@ -376,7 +410,9 @@ def resolve_remote(
 
     The spec keys are: ``url`` (required), ``name``, ``ref``, ``path``,
     ``archive`` (``auto`` / ``tar.gz`` / ``zip``), ``sha256``, ``token_env``,
-    ``refresh`` (``auto`` / ``always`` / ``never``) and ``mirror``.
+    ``refresh`` (``auto`` / ``always`` / ``never``), ``mirror``, and
+    ``include`` / ``exclude`` — shim names or ``*`` patterns to keep and to
+    drop, both optional, empty meaning "load everything the source ships".
 
     A ``mirror`` is a second URL for the same source — a template string or an
     object with ``url_template`` and its own ``sha256``.  It is consulted only
@@ -487,6 +523,8 @@ def _resolve_remote_source(
             token_env=parsed.token_env,
             leg=_stamp_leg(cached),
             archive_url=cached.get("archive_url"),
+            include=parsed.include,
+            exclude=parsed.exclude,
         )
     except Exception as exc:
         logger.warning("Shim remote %s: %s", location, exc)
@@ -508,6 +546,8 @@ def _scan_status(status: ShimSourceStatus) -> ShimSourceStatus:
         resolved_ref=status.resolved_ref,
         ref=status.ref,
         token_env=status.token_env,
+        include=status.include,
+        exclude=status.exclude,
     )
     return replace(scanned, leg=status.leg, archive_url=status.archive_url)
 
@@ -534,6 +574,10 @@ class _RemoteSpec:
     #: ``subpath``: the legs need different paths only when the archives they
     #: serve are laid out differently.
     mirror_subpath: str | None = None
+    #: Selection carried from the declaration: exact names and ``*`` globs to
+    #: keep, and to drop.  Both empty means "load everything the source ships".
+    include: tuple[str, ...] = ()
+    exclude: tuple[str, ...] = ()
 
 
 def normalize_subpath(value: Any, *, where: str) -> str:
@@ -726,6 +770,8 @@ def _parse_remote_spec(
         )
     name = spec.get("name") or _derive_name(url, github)
     ref = spec.get("ref") or None
+    include = _parse_selection(spec.get("include"), where="'include'")
+    exclude = _parse_selection(spec.get("exclude"), where="'exclude'")
     root = Path(cache_root)
     key = _cache_key(name, url, ref)
     return _RemoteSpec(
@@ -744,7 +790,37 @@ def _parse_remote_spec(
         mirror_sha256=mirror_sha256,
         mirror_token_env=mirror_token_env,
         mirror_subpath=mirror_subpath,
+        include=include,
+        exclude=exclude,
     )
+
+
+def _parse_selection(value: Any, *, where: str) -> tuple[str, ...]:
+    """Normalize an ``include`` / ``exclude`` declaration.
+
+    Args:
+        value: The declared value: ``None``, a single name, or a list of them.
+        where: The config key, for the error message.
+
+    Returns:
+        The declared patterns, in declaration order.  Empty when nothing was
+        declared, which means "no restriction" for ``include``.
+
+    Raises:
+        ShimSourceError: On a non-string entry, or a blank one.
+    """
+    if value is None:
+        return ()
+    if not isinstance(value, (list, tuple)):
+        raise ShimSourceError(f"remote source {where} must be a list of shim names")
+    patterns: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item:
+            raise ShimSourceError(
+                f"remote source {where} entries must be non-empty strings"
+            )
+        patterns.append(item)
+    return tuple(patterns)
 
 
 def _needs_fetch(
@@ -856,55 +932,129 @@ def _scan_dir(
     resolved_ref: str | None = None,
     ref: str | None = None,
     token_env: str | None = None,
+    include: tuple[str, ...] = (),
+    exclude: tuple[str, ...] = (),
 ) -> ShimSourceStatus:
-    """Run the loader over *directory* and fold the result into a status."""
+    """Run the loader over *directory* and fold the result into a status.
+
+    A source that ships ``shims.yaml`` is loaded exactly as it declares: entries
+    the manifest does not list are never read.  A source without one is scanned
+    as before, and the selection still applies — by name, against each parsed
+    leaf.
+
+    Where the manifest names the paths, the selection is resolved *before* the
+    scan: entries it drops are removed from the allowed paths, so their
+    ``provider.yaml`` is not opened.  The name predicate is the second gate,
+    and the only one a manifest-less source has.
+    """
+    base: dict[str, Any] = {
+        "kind": kind,
+        "location": location,
+        "name": name,
+        "resolved_dir": str(directory),
+        "from_cache": from_cache,
+        "stale": stale,
+        "fetched_at": fetched_at,
+        "resolved_ref": resolved_ref,
+        "ref": ref,
+        "token_env": token_env,
+        "include": include,
+        "exclude": exclude,
+    }
     if not directory.is_dir():
         return ShimSourceStatus(
-            kind=kind,
-            location=location,
-            name=name,
+            **base,
             ok=False,
-            resolved_dir=str(directory),
-            from_cache=from_cache,
-            stale=stale,
-            fetched_at=fetched_at,
-            resolved_ref=resolved_ref,
-            ref=ref,
-            token_env=token_env,
             error=f"not a directory: {directory}",
         )
+
     try:
-        shims = load_providers_from_dir(directory, on_error="warn")
+        manifest = read_shim_manifest(directory)
+    except ShimManifestError as exc:
+        # A manifest that cannot be honoured is not a reason to scan the tree it
+        # meant to bound: that fallback would parse exactly what it excluded.
+        return ShimSourceStatus(
+            **base,
+            ok=False,
+            error=f"{MANIFEST_FILENAME}: {exc}",
+        )
+
+    keep = _selection_predicate(include, exclude)
+    only_paths: set[str] | None = None
+    if manifest is not None:
+        only_paths = {entry.path for entry in manifest.entries if keep(entry.name)}
+
+    try:
+        shims = load_providers_from_dir(
+            directory,
+            on_error="warn",
+            only_paths=only_paths,
+            keep_names=keep,
+        )
     except Exception as exc:
         return ShimSourceStatus(
-            kind=kind,
-            location=location,
-            name=name,
+            **base,
             ok=False,
-            resolved_dir=str(directory),
-            from_cache=from_cache,
-            stale=stale,
-            fetched_at=fetched_at,
-            resolved_ref=resolved_ref,
-            ref=ref,
-            token_env=token_env,
             error=f"{type(exc).__name__}: {exc}",
         )
+
     names = tuple(s.name for s in shims)
+    unmatched = _unmatched_includes(include, names)
+    for pattern in unmatched:
+        logger.warning(
+            "Shim source %s: include %r matched no shim; it loads: %s",
+            location,
+            pattern,
+            ", ".join(names) or "nothing",
+        )
+    if manifest is not None:
+        declared = set(manifest.names)
+        for shim_name in names:
+            if shim_name not in declared:
+                logger.warning(
+                    "Shim source %s: %s declares no shim named %r, but the "
+                    "entry's path loads one; fix the manifest",
+                    location,
+                    MANIFEST_FILENAME,
+                    shim_name,
+                )
     return ShimSourceStatus(
-        kind=kind,
-        location=location,
-        name=name,
+        **base,
         ok=True,
         shim_count=len(names),
         shim_names=names,
-        resolved_dir=str(directory),
-        from_cache=from_cache,
-        stale=stale,
-        fetched_at=fetched_at,
-        resolved_ref=resolved_ref,
-        ref=ref,
-        token_env=token_env,
+        unmatched=unmatched,
+        manifest_shims=manifest.names if manifest is not None else (),
+    )
+
+
+def _selection_predicate(
+    include: Collection[str], exclude: Collection[str]
+) -> Callable[[str], bool]:
+    """Build the name predicate an ``include``/``exclude`` pair declares.
+
+    An empty ``include`` selects everything, and ``exclude`` wins over
+    ``include``: an operator who names both meant to drop, not to keep.  Both
+    sides are ``fnmatch`` patterns, so an exact name and ``vendor_*`` are
+    spelled the same way.
+    """
+
+    def keep(shim_name: str) -> bool:
+        if include and not any(fnmatch(shim_name, p) for p in include):
+            return False
+        return not any(fnmatch(shim_name, p) for p in exclude)
+
+    return keep
+
+
+def _unmatched_includes(
+    include: Collection[str], loaded: Collection[str]
+) -> tuple[str, ...]:
+    """The ``include`` patterns that selected none of *loaded*."""
+    return tuple(
+        pattern
+        for pattern in include
+        if not any(fnmatch(loaded_name, pattern) for loaded_name in loaded)
     )
 
 

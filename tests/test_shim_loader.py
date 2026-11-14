@@ -98,6 +98,24 @@ class TestLoadTransforms:
         assert len(to_t) == 1
         assert mod is not None
 
+    def test_a_callable_export_is_refused_at_load(self, tmp_path: Path):
+        """A function where a tuple belongs must fail here, not at request time.
+
+        The pipeline iterates these exports, so ``def
+        response_body_transforms():`` loads cleanly and then raises on the
+        first response.  The shape the scaffolder once wrote was exactly that,
+        which is why the loader now checks it.
+        """
+        tf = tmp_path / "transforms.py"
+        tf.write_text(
+            textwrap.dedent("""\
+            def response_body_transforms():
+                return ()
+        """)
+        )
+        with pytest.raises(TypeError, match="must be a tuple of transforms"):
+            _load_transforms(tmp_path)
+
 
 class TestLoadProviders:
     """Integration tests for load_providers directory scanner."""
@@ -1348,14 +1366,57 @@ class TestVendorManifest:
             load_providers_from_dir(tmp_path)
 
     def test_a_manifest_may_not_carry_shim_facts(self, tmp_path):
-        """A manifest is connection defaults only; anything else is a mistake."""
+        """A manifest is vendor defaults; a shim's own facts are a mistake."""
         self._vendor(
             tmp_path,
             "tools:\n  custom_tools: true\n",
             {"a": self._leaf("a")},
         )
 
-        with pytest.raises(ValueError, match="vendor manifest may declare only"):
+        with pytest.raises(ValueError, match="vendor manifest may declare"):
+            load_providers_from_dir(tmp_path)
+
+    def test_the_manifest_supplies_the_vendor_identity(self, tmp_path):
+        """Mark and grouping describe the vendor, so they are declared once."""
+        self._vendor(
+            tmp_path,
+            "logo: https://example.com/acme.svg\ngroup: acme\ngroup_label: ACME\n",
+            {"a": self._leaf("a"), "b": self._leaf("b")},
+        )
+
+        shims = load_providers_from_dir(tmp_path)
+
+        assert [s.logo for s in shims] == ["https://example.com/acme.svg"] * 2
+        assert [s.group for s in shims] == ["acme", "acme"]
+        assert [s.group_label for s in shims] == ["ACME", "ACME"]
+
+    def test_a_leaf_overrides_the_vendor_identity(self, tmp_path):
+        """A lane may still state its own mark, and keeps it."""
+        self._vendor(
+            tmp_path,
+            "logo: https://example.com/acme.svg\ngroup: acme\n",
+            {"a": self._leaf("a"), "b": self._leaf("b", extra="")},
+        )
+        (tmp_path / "acme" / "b" / "provider.yaml").write_text(
+            "name: acme_b\nmodel_type: llm\nformat: chat_completions\n"
+            "logo: https://example.com/acme-b.svg\n"
+        )
+
+        by_name = {s.name: s for s in load_providers_from_dir(tmp_path)}
+
+        assert by_name["acme_a"].logo == "https://example.com/acme.svg"
+        assert by_name["acme_b"].logo == "https://example.com/acme-b.svg"
+        assert by_name["acme_b"].group == "acme"
+
+    @pytest.mark.parametrize("key", ["logo", "group", "group_label"])
+    def test_a_vendor_field_must_be_a_string(self, tmp_path, key):
+        self._vendor(
+            tmp_path,
+            f"{key}: [1, 2]\n",
+            {"a": self._leaf("a")},
+        )
+
+        with pytest.raises(ValueError, match=f"{key} must be a string"):
             load_providers_from_dir(tmp_path)
 
     def test_a_manifest_connection_key_must_be_known(self, tmp_path):
@@ -1442,8 +1503,17 @@ class TestBuiltinVendorManifests:
 
 
 def _snapshot_rows() -> list[dict]:
-    """The registry facts a directory move must not change."""
+    """The registry facts a directory move must not change.
+
+    Built-ins only.  ``load_providers()`` also runs every installed
+    ``llm_rosetta.shim_providers`` entry point, so the registry it returns
+    depends on which shim packages happen to be installed — and this test is
+    about the tree, not the machine.  A plugin shim is identified by the
+    distribution that registered it; regenerating the snapshot on a machine
+    with a plugin installed must not add its rows.
+    """
     from llm_rosetta.shims import list_shims
+    from llm_rosetta.shims.providers import plugin_source
 
     load_providers()
     return [
@@ -1460,6 +1530,7 @@ def _snapshot_rows() -> list[dict]:
             "free_source": s.free_source,
         }
         for s in sorted(list_shims(), key=lambda s: s.name)
+        if plugin_source(s.name) is None
     ]
 
 
@@ -1485,6 +1556,27 @@ class TestBuiltinRegistrySnapshot:
             pytest.skip("snapshot regenerated")
         expected = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
         assert actual == expected
+
+    def test_an_installed_plugin_is_not_recorded(self, monkeypatch):
+        """The snapshot records the tree, so a plugin row must never land in it.
+
+        Regenerating on a machine with a shim package installed is how the
+        three ``opendesign--*`` rows got in, and every clean run then saw a
+        registry one plugin short of the snapshot.  Filtering by the
+        distribution that registered the shim is what keeps the two runs
+        equal; this proves the filter is applied, not merely written.
+        """
+        from llm_rosetta.shims import providers as providers_mod
+
+        real = providers_mod.plugin_source
+        monkeypatch.setattr(
+            providers_mod,
+            "plugin_source",
+            lambda n: "fake-shim 1.0" if n == "openai--chat_completions" else real(n),
+        )
+        names = [row["name"] for row in _snapshot_rows()]
+        assert names, "the tree still has shims"
+        assert "openai--chat_completions" not in names
 
 
 class TestModelTypeDirectories:

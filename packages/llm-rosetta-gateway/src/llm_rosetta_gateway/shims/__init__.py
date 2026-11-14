@@ -19,6 +19,14 @@ from .catalog import (
     legacy_shim_migration_advice,
     source_package_advice,
 )
+from .manifest import (
+    MANIFEST_FILENAME,
+    MANIFEST_VERSION,
+    ShimManifest,
+    ShimManifestEntry,
+    ShimManifestError,
+    read_shim_manifest,
+)
 from .removals import (
     SHIM_REMOVALS,
     RemovalReference,
@@ -40,6 +48,8 @@ from .sources import (
 )
 
 __all__ = [
+    "MANIFEST_FILENAME",
+    "MANIFEST_VERSION",
     "SHIM_REMOVALS",
     "SHIM_SOURCE_PACKAGES",
     "canonical_shim_for",
@@ -50,6 +60,9 @@ __all__ = [
     "ShimArchiveMismatch",
     "ShimArchiveUnusable",
     "ShimLoadReport",
+    "ShimManifest",
+    "ShimManifestEntry",
+    "ShimManifestError",
     "ShimRemoval",
     "ShimRemovalAdvisory",
     "ShimSourceError",
@@ -59,6 +72,7 @@ __all__ = [
     "find_source_package",
     "get_source_package",
     "parse_version",
+    "read_shim_manifest",
     "rebuild_shims",
     "removals_due",
     "resolve_remote",

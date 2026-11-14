@@ -806,6 +806,12 @@
         <option value="rerank">Rerank</option>
         <option value="decisions">Decisions</option>
       </select>
+      <select id="shimTierFilter" onchange="renderShimsPage()" aria-label="Resource tier" data-i18n-aria-label="shimPage.tierFilter">
+        <option value="" data-i18n="shimPage.allTiers">All tiers</option>
+        <option value="free" data-i18n="shimPage.free">Free</option>
+        <option value="paid" data-i18n="shimPage.paid">Paid</option>
+        <option value="subscription" data-i18n="shimPage.subscription">Subscription</option>
+      </select>
     </div>
 
     <div id="shimGrid" class="shim-grid"></div>
@@ -829,24 +835,6 @@
               <div>
                 <textarea id="shimPathsInput" rows="2" spellcheck="false" placeholder="/config/shims&#10;./local-shims"></textarea>
                 <p class="field-hint" data-i18n="label.shimPathHint"></p>
-              </div>
-            </div>
-            <div class="settings-popup-item">
-              <label data-i18n="label.shimPresets">Preload presets</label>
-              <div>
-                <p class="field-hint field-hint-above" data-i18n="shim.guide"></p>
-                <div class="type-picker" id="shimPresetPicker">
-                  <button type="button" id="shimPresetTrigger" class="type-picker-trigger" aria-haspopup="listbox" aria-expanded="false">
-                    <span id="shimPresetLabel" class="tp-trigger-label tp-placeholder"></span>
-                    <svg class="type-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                  </button>
-                  <div class="menu type-picker-dropdown" id="shimPresetDropdown">
-                    <div class="tp-list" id="shimPresetList" role="listbox" aria-multiselectable="true"></div>
-                  </div>
-                </div>
-                <input type="hidden" id="shimPresetsInput">
-                <p class="field-hint" data-i18n="label.shimPresetsHint"></p>
-                <p class="field-hint shim-preset-note" id="shimPresetNote" hidden></p>
               </div>
             </div>
             <div class="settings-popup-item">
