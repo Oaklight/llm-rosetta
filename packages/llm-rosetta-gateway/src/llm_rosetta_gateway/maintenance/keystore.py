@@ -150,7 +150,10 @@ async def _apply_migration(
     reports 1: the version row.
 
     A migration already recorded returns 0 without touching the store, which is
-    what makes a second open a no-op.
+    what makes a second open a no-op.  A version that rebuilds the table
+    (``drops`` names the column it removes) runs inside one transaction, so an
+    interrupted rebuild comes back as the file was rather than as a table with
+    no rows.
     """
     conn = context.keystore._conn
     if await _recorded(conn, version):
@@ -166,25 +169,43 @@ async def _apply_migration(
         )
         await conn.commit()
         return 1
+    if drops is not None:
+        # A rebuild is several statements that only make sense together, and
+        # SQLite autocommits DDL outside an explicit transaction.  Left to
+        # itself, a process death between "drop the old table" and "rename the
+        # new one" would leave a live table with no rows and the keys in a
+        # table nothing reads.  One transaction makes the window nothing: the
+        # file comes back as it was, and the next open runs the step again.
+        await conn.execute("BEGIN IMMEDIATE")
+    try:
+        executed = await _run_statements(conn, statements, columns)
+        await conn.execute(
+            "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
+            (version, datetime.now(timezone.utc).isoformat()),
+        )
+        await conn.commit()
+    except Exception:
+        if drops is not None:
+            await conn.rollback()
+        raise
+    logger.info("Keys.db migration v%d applied", version)
+    return executed + 1
+
+
+async def _run_statements(conn: Any, statements: list[str], columns: set[str]) -> int:
+    """Execute one version's statements, skipping an ``ADD COLUMN`` already there."""
     executed = 0
     for sql in statements:
-        # ``ADD COLUMN`` has no ``IF NOT EXISTS`` and ``DROP COLUMN`` has no
-        # ``IF EXISTS``; the columns are read once rather than per statement,
-        # so the guards cost one query.  A fresh store starts from this code's
-        # own CREATE TABLE, which has neither the added nor the dropped column,
-        # so it skips both.
+        # ``ADD COLUMN`` has no ``IF NOT EXISTS``; the columns are read once
+        # rather than per statement, so the guard costs one query.  A store
+        # that already has the column (adopted by an earlier release, or
+        # edited by hand) skips the statement and is not charged for it.
         column = _ddl_column(sql)
         if column is not None and column in columns:
             continue
         await conn.execute(sql)
         executed += 1
-    await conn.execute(
-        "INSERT INTO schema_version (version, applied_at) VALUES (?, ?)",
-        (version, datetime.now(timezone.utc).isoformat()),
-    )
-    await conn.commit()
-    logger.info("Keys.db migration v%d applied", version)
-    return executed + 1
+    return executed
 
 
 async def _backfill_usage_bucket(context: StepContext) -> int:

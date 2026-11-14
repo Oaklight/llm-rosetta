@@ -62,6 +62,13 @@ async def _columns(store: KeyStore) -> set[str]:
     return {row[1] for row in await cursor.fetchall()}
 
 
+async def _tables(store: KeyStore) -> set[str]:
+    rows = await store._conn.execute_fetchall(
+        "SELECT name FROM sqlite_master WHERE type = 'table'"
+    )
+    return {row[0] for row in rows}
+
+
 async def _versions(store: KeyStore) -> set[int]:
     rows = await store._conn.execute_fetchall("SELECT version FROM schema_version")
     return {row[0] for row in rows}
@@ -165,6 +172,102 @@ class TestARebuildThatHasNothingToDo:
             )
             assert changed == 1, "one ledger row and no statement"
             assert 5 in await _versions(store)
+        finally:
+            await store.close()
+
+
+class TestAnInterruptedRebuild:
+    #: What the rebuild copies: the v4 columns, without the one being dropped.
+    _COLS = (
+        "id, key_hash, label, created, rotated, last_used, usage_bucket, "
+        "allowed_models, rate_limit"
+    )
+
+    async def test_a_rebuild_that_dies_midway_leaves_the_file_as_it_was(self, tmp_path):
+        """The v5 statements are one transaction: a process death between the
+        drop and the rename comes back as the v4 table, never as an empty one
+        with the keys stranded in a table nothing reads."""
+        db = tmp_path / "keys.db"
+        store = await KeyStore.create(db)
+        try:
+            await store.create_key(label="one", manual_key="key-one")
+            await store.create_key(label="two", manual_key="key-two")
+            # Put the file back to a v4 shape: the column, no v5 in the ledger.
+            await store._conn.execute(
+                "ALTER TABLE api_keys ADD COLUMN allowed_shims TEXT NOT NULL "
+                "DEFAULT '[\"*\"]'"
+            )
+            await store._conn.execute("DELETE FROM schema_version WHERE version = 5")
+            await store._conn.commit()
+        finally:
+            await store.close()
+
+        # The rebuild's statements, up to the drop, then a close without a
+        # commit — what a death inside the transaction leaves behind.
+        conn = sqlite3.connect(db)
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                "CREATE TABLE api_keys_v5 (id TEXT PRIMARY KEY, "
+                "key_hash TEXT NOT NULL UNIQUE, label TEXT NOT NULL DEFAULT '', "
+                "created TEXT NOT NULL, rotated TEXT, last_used TEXT, "
+                "usage_bucket TEXT, allowed_models TEXT NOT NULL DEFAULT '[\"*\"]', "
+                "rate_limit TEXT NOT NULL DEFAULT '')"
+            )
+            conn.execute(
+                f"INSERT INTO api_keys_v5 ({self._COLS}) SELECT {self._COLS} FROM api_keys"
+            )
+            conn.execute("DROP TABLE api_keys")
+        finally:
+            conn.close()
+
+        reopened = await KeyStore.create(db)
+        try:
+            assert "api_keys_v5" not in await _tables(reopened)
+            assert "allowed_shims" not in await _columns(reopened)
+            rows = await reopened._conn.execute_fetchall(
+                "SELECT label FROM api_keys ORDER BY label"
+            )
+            assert [row[0] for row in rows] == ["one", "two"], (
+                "the keys are still there"
+            )
+            assert reopened.validate("key-one") is not None
+        finally:
+            await reopened.close()
+
+    async def test_a_rebuild_that_fails_rolls_back_whole(self, tmp_path):
+        """The transaction is the guard: without it, a statement failing after
+        the drop leaves a live table with no rows."""
+        from llm_rosetta_gateway.keystore import VERSIONS
+        from llm_rosetta_gateway.maintenance.keystore import _apply_migration
+        from llm_rosetta_gateway.observability.maintenance import StepContext
+
+        db = tmp_path / "keys.db"
+        store = await KeyStore.create(db)
+        try:
+            await store.create_key(label="one", manual_key="key-one")
+            await store._conn.execute(
+                "ALTER TABLE api_keys ADD COLUMN allowed_shims TEXT NOT NULL "
+                "DEFAULT '[\"*\"]'"
+            )
+            await store._conn.execute("DELETE FROM schema_version WHERE version = 5")
+            await store._conn.commit()
+
+            rebuild = next(s for v, _d, s in VERSIONS if v == 5)
+            with pytest.raises(sqlite3.OperationalError):
+                await _apply_migration(
+                    StepContext(keystore=store),
+                    version=5,
+                    description="drop api_keys.allowed_shims",
+                    statements=[*rebuild, "INSERT INTO no_such_table (x) VALUES (1)"],
+                    drops="allowed_shims",
+                )
+
+            assert "api_keys_v5" not in await _tables(store), "nothing half-built"
+            assert "allowed_shims" in await _columns(store), "the v4 table is back"
+            rows = await store._conn.execute_fetchall("SELECT label FROM api_keys")
+            assert [row[0] for row in rows] == ["one"]
+            assert 5 not in await _versions(store), "and the step will run again"
         finally:
             await store.close()
 
