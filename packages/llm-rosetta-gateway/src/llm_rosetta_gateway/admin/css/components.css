@@ -200,6 +200,18 @@ tr:hover td { background: var(--bg-hover); }
 .seg-icon svg { width: 14px; height: 14px; margin-right: 6px; }
 /* The provider switch leads its row instead of sitting in the page header. */
 .provider-seg { flex: 0 0 auto; }
+/* A segmented control does not wrap, and five type options with their marks
+   are wider than a phone: the switch scrolls inside its own row rather than
+   pushing the page sideways. */
+@media (max-width: 700px) {
+  .provider-seg {
+    max-width: 100%; overflow-x: auto; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 14px), transparent);
+  }
+  .provider-seg::-webkit-scrollbar { display: none; }
+  .provider-seg > * { flex: 0 0 auto; }
+}
 /* Keyboard focus.  Some groups are role="radio" divs, others wrap a visually
    hidden <input type=radio> that is 0x0 — a ring on the input would be
    invisible, so it goes on the option box (:has handles the input case).  On
@@ -1338,7 +1350,10 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 /* In a toolbar each row takes the line: a pair of switches on one line read
    as one control (#1502 §13). */
 .mt-row { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
-.toolbar > .mt-row { flex: 1 1 100%; }
+/* `min-width: 0` is what lets the row shrink to the toolbar: a flex item's
+   auto minimum is its content, and a five-option switch is wider than a
+   phone. */
+.toolbar > .mt-row { flex: 1 1 100%; min-width: 0; }
 .facet-label {
   font-size:11px; text-transform:uppercase; letter-spacing:.04em;
   color:var(--text-dim); margin-right:2px;
