@@ -25,7 +25,7 @@ export function providerLogoHtml(name, cls = 'pp-logo') {
 export function providerRowsHtml(names, onclickJs, muted = new Set()) {
   return names.map(name => {
     const off = muted.has(name) ? ' pm-off' : '';
-    return `<div class="more-menu-item pp-row${off}" role="option" data-provider="${esc(name)}"
+    return `<div class="menu-item pp-row${off}" role="option" data-provider="${esc(name)}"
         onclick="${onclickJs(name)}">${providerLogoHtml(name)}<span class="pp-name">${esc(name)}</span></div>`;
   }).join('');
 }

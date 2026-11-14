@@ -372,7 +372,7 @@ function updateFilterOptions() {
       providers, n => `selectLogProvider(${jsArg(n)})`,
     );
     const empty = document.createElement('div');
-    empty.className = 'more-menu-item pp-row';
+    empty.className = 'menu-item pp-row';
     empty.dataset.provider = '';
     empty.innerHTML = `<span class="pp-name">${t('filter.allProviders')}</span>`;
     empty.onclick = () => selectLogProvider('');

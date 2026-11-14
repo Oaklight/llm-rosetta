@@ -1346,7 +1346,7 @@ function renderFreeSourceButtons() {
   host.style.display = shims.length ? 'contents' : 'none';
   menu.innerHTML = shims.map(s => {
     const label = `${shimBrand(s)} ${t('free.suffix')}`;
-    return `<div class="more-menu-item" role="menuitem" data-free-shim="${esc(s.name)}" aria-label="${esc(label)}" onclick="closeMenus();openFreeProvider(${jsArg(s.name)})">${esc(label)}</div>`;
+    return `<div class="menu-item" role="menuitem" data-free-shim="${esc(s.name)}" aria-label="${esc(label)}" onclick="closeMenus();openFreeProvider(${jsArg(s.name)})">${esc(label)}</div>`;
   }).join('');
 }
 
@@ -1727,7 +1727,7 @@ function _buildProvEndpointSections() {
               <span id="provEndpointLabel_${desc.name}" class="tp-trigger-label tp-placeholder"></span>
               <svg class="type-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
             </button>
-            <div class="type-picker-dropdown" id="provEndpointDropdown_${desc.name}">
+            <div class="menu type-picker-dropdown" id="provEndpointDropdown_${desc.name}">
               <div class="tp-list" id="provEndpointList_${desc.name}" role="listbox"></div>
             </div>
           </div>
@@ -2470,12 +2470,12 @@ function renderProviders() {
           <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editProvider(${jsArg(name)})">${t('btn.edit')}</button>
           <button class="btn btn-sm btn-test-conn" aria-label="${t('btn.test')} ${esc(name)}" onclick="testProviderConnectivity(${jsArg(name)})">${t('btn.test')}</button>
           <button class="btn btn-sm more-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.more')} ${esc(name)}" onclick="toggleMoreMenu(this)">&#8943;</button>
-          <div class="more-menu" role="menu">
-            <div class="more-menu-item" role="menuitem" onclick="closeMenus();copyProviderEntry(${jsArg(name)})">${t('btn.clone')}</div>
-            ${isFree ? `<div class="more-menu-item" role="menuitem" onclick="closeMenus();refreshFreeModels(${jsArg(name)})">${t('btn.refreshModels')}</div>` : ''}
-            <div class="more-menu-item" role="menuitem" onclick="closeMenus();showProviderQuota(${jsArg(name)})">${t('btn.quota')}</div>
-            <div class="more-menu-sep"></div>
-            <div class="more-menu-item danger" role="menuitem" onclick="closeMenus();deleteProvider(${jsArg(name)})">${t('btn.delete')}</div>
+          <div class="menu more-menu" role="menu">
+            <div class="menu-item" role="menuitem" onclick="closeMenus();copyProviderEntry(${jsArg(name)})">${t('btn.clone')}</div>
+            ${isFree ? `<div class="menu-item" role="menuitem" onclick="closeMenus();refreshFreeModels(${jsArg(name)})">${t('btn.refreshModels')}</div>` : ''}
+            <div class="menu-item" role="menuitem" onclick="closeMenus();showProviderQuota(${jsArg(name)})">${t('btn.quota')}</div>
+            <div class="menu-sep"></div>
+            <div class="menu-item is-danger" role="menuitem" onclick="closeMenus();deleteProvider(${jsArg(name)})">${t('btn.delete')}</div>
           </div>
         </div>`;
     return {
