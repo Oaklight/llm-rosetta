@@ -268,13 +268,26 @@ tr:hover td { background: var(--bg-hover); }
 .btn-reset { height:28px;padding:0 10px;font-size:var(--fs-xs);color:var(--text-dim);border:1px solid var(--border);border-radius:var(--radius-control);background:var(--surface);cursor:pointer;display:none;align-items:center;gap:4px;transition:color .15s,border-color .15s; }
 .btn-reset:hover { color:var(--red);border-color:var(--red); }
 .btn-reset.visible { display:inline-flex; }
+/* ── The dot ──────────────────────────────────────────────────────────
+   A round status mark, 8px by default.  `.is-sm` is the dense 6px mark that
+   sits beside a row of capability names; `.is-lg` is the 15px warning badge
+   that carries a glyph.  The colour is the call site's — a semantic class
+   paints the background — and the default is the text ink, so a capability
+   dot can take its colour from the tag class beside it. */
+.dot {
+  display: inline-block; flex: none; width: 8px; height: 8px; flex-shrink: 0;
+  border-radius: 50%; background: currentColor; padding: 0; margin: 0;
+  box-sizing: border-box; vertical-align: middle;
+}
+.dot.is-sm { width: 6px; height: 6px; }
+.dot.is-lg { width: 15px; height: 15px; display: inline-flex; align-items: center; justify-content: center; }
+
 /* Endpoint config sections in provider modal */
 .endpoint-section { margin-top:12px;padding:12px;background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:var(--radius);display:none; }
 .endpoint-section.visible { display:block; }
 #provLlmSection.visible { border-left-color:var(--accent);background:color-mix(in srgb, var(--accent) 2%, transparent); }
 /* Non-LLM endpoint section colors are injected dynamically by _injectTypeStyles() */
 .endpoint-section .section-label { font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;display:flex;align-items:center;gap:6px; }
-.endpoint-section .section-label .dot { width:8px;height:8px;border-radius:50%;display:inline-block; }
 /* Per-endpoint enable switch: keeps the endpoint's configuration and stops
    routing to it, so the label sits on the section's own header line. */
 .endpoint-section .endpoint-enabled { margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;text-transform:none;letter-spacing:0;cursor:pointer; }
@@ -808,10 +821,6 @@ code.copyable:hover { background: var(--bg-hover); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 .conn-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; font-family: var(--mono); }
-.conn-ok, .conn-fail, .conn-warn {
-  flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; display: inline-block;
-  position: relative; top: -1px;
-}
 .conn-ok { background: var(--green); }
 .conn-fail { background: var(--red); }
 .conn-warn { background: var(--orange); }
@@ -1102,18 +1111,13 @@ canvas { width: 100%; height: 160px; }
   border: 1px solid var(--border); border-radius: var(--radius-control);
   background: var(--bg-card); padding: 2px 5px; cursor: pointer;
 }
-/* One 5 px circle per capability, in its badge's colour: four of them still
+/* One 6px circle per capability, in its badge's colour: four of them still
    leave the provider name the room it needs.  `currentColor` picks the colour
    up from the cap-badge-* class beside it, so there is one definition. */
-.cap-dot {
-  display: inline-block; flex: none; width: 6px; height: 6px;
-  border-radius: 50%; background: currentColor; padding: 0; margin: 0;
-  box-sizing: border-box; vertical-align: middle;
-}
 /* Text is the neutral capability, and a dim grey at 6 px reads as an empty
    slot on white; it takes the body text colour instead. */
-.cap-dot.cap-badge-text { background: var(--text); }
-.cap-dot.is-inherit { background: transparent; border: 1px solid var(--text-muted); }
+.dot.cap-badge-text { background: var(--text); }
+.dot.is-inherit { background: transparent; border: 1px solid var(--text-muted); }
 .cap-menu-toggle:hover { border-color: var(--text-dim); }
 .cap-menu { min-width: 150px; }
 .cap-menu-label { color: var(--text); }
@@ -1275,7 +1279,7 @@ canvas { width: 100%; height: 160px; }
 /* Network diagnostics */
 .net-diag { display:flex;gap:8px;align-items:center;flex-wrap:wrap; }
 .net-diag .diag-item { font-size:12px;padding:3px 8px;border-radius:var(--radius);background:var(--bg);border:1px solid var(--border);display:inline-flex;align-items:center;gap:4px; }
-.net-diag .diag-dot { width:8px;height:8px;border-radius:50%;background:var(--text-dim);flex-shrink:0; }
+.net-diag .diag-dot { background:var(--text-dim); }
 .net-diag .diag-dot.ok { background:var(--green); }
 .net-diag .diag-dot.fail { background:var(--red); }
 .net-diag .diag-dot.loading { background:var(--accent);animation:pulse 1s infinite; }
@@ -2216,7 +2220,7 @@ button.lp-clear {
 }
 .update-badge:hover { border-color: var(--accent); }
 .update-badge[hidden], .update-popover[hidden] { display: none; }
-.update-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.update-dot { background: var(--accent); }
 
 .update-popover {
   position: fixed; top: 48px; right: 18px; z-index: 61; width: 300px; padding: 14px;
@@ -2725,12 +2729,6 @@ button.shim-update.unknown { color: var(--tag-warn); }
 .shim-trust { margin: 0; }
 .shim-repo { color: var(--accent); text-decoration: none; }
 .shim-repo:hover { text-decoration: underline; }
-.shim-warn {
-  flex: 0 0 auto; width: 15px; height: 15px; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 700; line-height: 1;
-  background: var(--orange); color: #fff;
-}
 .shim-vendor-src {
   display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap;
   padding: 2px 0 8px; font-size: 11px;
