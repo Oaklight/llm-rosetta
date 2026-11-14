@@ -18,7 +18,9 @@ import {
   MODEL_NAME_RE,
   badModelName,
   keyLimitTags,
+  keyLimitsMarkHtml,
   modelTokens,
+  modelsForSave,
 } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/key-limits.js';
 import { validateQuotas } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/quota.js';
 
@@ -201,4 +203,31 @@ test('a scoped key counts its models, one or many', () => {
 test('a multi-window quota shows its first window and a count', () => {
   const [tag] = keyLimitTags({allowed_models: ['*'], rate_limit: '30/m, 500/h'}, t);
   assert.deepEqual(tag, {text: '30/m +1', title: '30/m, 500/h'});
+});
+
+test('the row markup escapes what it puts in an attribute', () => {
+  const html = keyLimitsMarkHtml({allowed_models: ['a"b<c>']}, t);
+  assert.equal(html, '<span class="tag is-plain" title="a&quot;b&lt;c&gt;">1 model</span>');
+  assert.equal(keyLimitsMarkHtml({allowed_models: ['*']}, t), '');
+  assert.match(
+    keyLimitsMarkHtml({allowed_models: [], rate_limit: '30/m, 500/h'}, t),
+    /title="Allowed models">no model<\/span> <span class="tag is-plain" title="30\/m, 500\/h">30\/m \+1<\/span>/,
+  );
+});
+
+test('an untouched models field sends back what it loaded', () => {
+  // Stored [] and stored ["*"] both open as a blank field; only the loaded
+  // value tells them apart, and a label-only save must not widen the key.
+  assert.deepEqual(modelsForSave('', []), []);
+  assert.deepEqual(modelsForSave('', ['*']), ['*']);
+  assert.deepEqual(modelsForSave('', undefined), ['*']);
+  assert.deepEqual(modelsForSave('m-a', ['m-a']), ['m-a']);
+  assert.deepEqual(modelsForSave('m-a, m-b', ['m-b', 'm-a']), ['m-b', 'm-a']);
+});
+
+test('an edited models field is read as written', () => {
+  assert.deepEqual(modelsForSave('m-b', []), ['m-b']);
+  assert.deepEqual(modelsForSave('m-b', ['*']), ['m-b']);
+  // Clearing the field is the explicit "every model" the label promises.
+  assert.deepEqual(modelsForSave('', ['m-a']), ['*']);
 });

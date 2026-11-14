@@ -5,7 +5,7 @@ import { api, showToast, closeModal, openModal, esc, fmtTokens, inlineConfirm, w
 import { syncAriaSort, sortByKey } from '../core/sort.js';
 import { jsArg } from '../core/html.js';
 import { keysEmptyMessageKey } from '../core/posture.js';
-import { badModelName, keyLimitTags, modelTokens } from '../core/key-limits.js';
+import { badModelName, keyLimitsMarkHtml, modelTokens, modelsForSave } from '../core/key-limits.js';
 import { validateQuotas } from '../core/quota.js';
 
 // ===================== API Keys Tab =====================
@@ -208,9 +208,7 @@ function clearKeySearch() {
  * reader does not have to open the dialog (#1502 §13).
  */
 function _keyLimitsMark(k) {
-  return keyLimitTags(k, t)
-    .map(({text, title}) => `<span class="tag is-plain" title="${esc(title)}">${esc(text)}</span>`)
-    .join(' ');
+  return keyLimitsMarkHtml(k, t);
 }
 
 function renderKeys() {
@@ -513,6 +511,7 @@ async function _doDeleteKey(id, label) {
 // The row's label span is the source of truth: embedding the label in the
 // onclick attribute would need JS-string escaping on top of HTML escaping.
 let _editingKeyId = null;
+let _editingModels = null;
 
 function editKeyLabel(id) {
   _editingKeyId = id;
@@ -521,6 +520,10 @@ function editKeyLabel(id) {
   const input = document.getElementById('keyLabelInput');
   input.value = current === '—' ? '' : current;
   const key = ((S.keysData && S.keysData.keys) || []).find(k => String(k.id) === String(id)) || {};
+  // Kept so an untouched field sends back what it loaded: storing `[]` and
+  // `["*"]` both render as an empty field, and only the loaded value knows
+  // which one this key holds.
+  _editingModels = Array.isArray(key.allowed_models) ? key.allowed_models : ['*'];
   const models = (key.allowed_models || ['*']).filter(m => m !== '*');
   document.getElementById('keyModelsInput').value = models.join(', ');
   document.getElementById('keyRateInput').value = key.rate_limit || '';
@@ -548,10 +551,13 @@ async function _saveKeyLabel() {
   if (!_editingKeyId) return;
   if (!validateKeyModels('keyModelsInput') || !validateKeyRate('keyRateInput')) return;
   const label = document.getElementById('keyLabelInput').value.trim();
-  const models = _parseModels(document.getElementById('keyModelsInput').value);
+  const models = modelsForSave(
+    document.getElementById('keyModelsInput').value,
+    _editingModels,
+  );
   const res = await api.put(`/admin/api/keys/${encodeURIComponent(_editingKeyId)}`, {
     label,
-    allowed_models: models.length ? models : ['*'],
+    allowed_models: models,
     rate_limit: document.getElementById('keyRateInput').value.trim(),
   });
   if (res.ok) {
