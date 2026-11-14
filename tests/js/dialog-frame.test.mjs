@@ -171,7 +171,7 @@ test('the role is on the panel, the overlay is presentational', () => {
     assert.ok(!/role=|aria-modal/.test(attrs),
       `overlay "${attrs.trim()}" carries dialog semantics; they belong on the panel`);
   }
-  const panels = [...html.matchAll(/<div class="modal(?: modal-(?:wide|yaml))?"([^>]*)>/g)];
+  const panels = [...html.matchAll(/<div class="modal(?: modal-(?:wide|yaml))?(?: is-drawer)?"([^>]*)>/g)];
   assert.equal(panels.length, 14, 'expected one panel per overlay');
   for (const [, attrs] of panels) {
     assert.match(attrs, /role="dialog"/);

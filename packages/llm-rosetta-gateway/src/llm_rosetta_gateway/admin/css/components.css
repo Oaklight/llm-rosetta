@@ -708,10 +708,15 @@ code.copyable:hover { background: var(--bg-hover); }
    draw the control ring: a 2px accent box around a whole drawer is noise. */
 .modal:focus-visible { outline: none; }
 .modal {
+  /* Padding is a panel fact: a centred dialog is 24px on every side, a
+     drawer narrows to 16/20, and the head and foot cancel it so their
+     hairline reaches the panel edge. */
+  --panel-pad-y: 24px; --panel-pad-x: 24px;
   background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--card-radius); padding: 24px; width: 440px; max-width: 90vw;
-  max-height: 85vh; overflow-y: auto;
+  border-radius: var(--card-radius); padding: var(--panel-pad-y) var(--panel-pad-x);
+  width: 440px; max-width: 90vw; max-height: 85vh; overflow-y: auto;
 }
+.modal.is-drawer { --panel-pad-y: 16px; --panel-pad-x: 20px; }
 .modal h3 { margin-bottom: 16px; font-size: 16px; }
 /* Add and edit flows slide in from the right, like the model panel: the list
    stays in view, the page does not jump, and the panel can be as tall as the
@@ -727,27 +732,34 @@ code.copyable:hover { background: var(--bg-hover); }
 }
 #providerModal.open > .modal,
 #fetchModelsModal.open > .modal { transform: translateX(0); }
-/* The panel scrolls, so its title and its buttons travel with the content:
-   a Save button 900px below the first field is a Save button nobody sees. */
-#providerModal .drawer-head, #fetchModelsModal .drawer-head {
-  position: sticky; top: -24px; z-index: 3;
+/* ── The panel head and foot ──────────────────────────────────────────
+   A dialog scrolls its own body, so a title or an action bar that does not
+   stick is one the reader scrolls away from: a Save button 900px below the
+   first field is a Save button nobody sees.  Both bars carry one hairline and
+   cancel the body padding with a negative margin, so the edge runs to the
+   panel's border.  The padding they cancel is the panel's token, so a drawer
+   gets the same bar at its narrower width. */
+.panel-head {
+  position: sticky; top: calc(-1 * var(--panel-pad-y)); z-index: 3;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  margin: -24px -24px 16px; padding: 16px 20px 12px 24px;
+  margin: calc(-1 * var(--panel-pad-y)) calc(-1 * var(--panel-pad-x)) 16px;
+  padding: 16px 20px 12px;
   background: var(--bg-card); border-bottom: 1px solid var(--border);
 }
-#providerModal .drawer-head h3, #fetchModelsModal .drawer-head h3 { margin: 0; }
+.panel-head h3 { margin: 0; }
+.panel-foot {
+  position: sticky; bottom: calc(-1 * var(--panel-pad-y)); z-index: 3;
+  display: flex; justify-content: flex-end; gap: 8px;
+  margin: 16px calc(-1 * var(--panel-pad-x)) calc(-1 * var(--panel-pad-y));
+  padding: 12px 20px;
+  background: var(--bg-card); border-top: 1px solid var(--border);
+}
 .drawer-close {
   appearance: none; border: 0; background: transparent; color: var(--text-dim);
   width: 28px; height: 28px; padding: 0; line-height: 1;
   border-radius: var(--radius-control); font-size: var(--fs-base); cursor: pointer;
 }
 .drawer-close:hover { background: var(--bg-hover); color: var(--text); }
-#providerModal > .modal > .modal-actions,
-#fetchModelsModal > .modal > .modal-actions {
-  position: sticky; bottom: -24px; z-index: 3;
-  margin: 16px -24px -24px; padding: 12px 24px;
-  background: var(--bg-card); border-top: 1px solid var(--border);
-}
 @media (max-width: 700px) {
   /* Full width: no free corner is left to round. */
   #providerModal > .modal, #fetchModelsModal > .modal { width: 100vw; border-radius: 0; }
@@ -778,7 +790,6 @@ code.copyable:hover { background: var(--bg-hover); }
 .multi-key-footer { display:flex;align-items:center;gap:8px;margin-top:4px; }
 .multi-key-footer .key-count { font-size:11px;color:var(--text-dim); }
 .multi-key-footer .btn { font-size:11px;padding:2px 8px; }
-.modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 
 /* Toast */
 .toast {
@@ -976,7 +987,8 @@ canvas { width: 100%; height: 160px; }
   position: fixed; top: 0; right: 0; bottom: 0; width: var(--drawer-w); max-width: 100vw;
   z-index: 60; background: var(--bg-card); border-left: 1px solid var(--border);
   border-radius: var(--card-radius) 0 0 var(--card-radius);
-  padding: 16px 20px; overflow-y: auto;
+  --panel-pad-y: 16px; --panel-pad-x: 20px;
+  padding: var(--panel-pad-y) var(--panel-pad-x); overflow-y: auto;
   transform: translateX(100%); transition: transform .18s ease;
 }
 .model-drawer.open { transform: translateX(0); }
@@ -994,7 +1006,6 @@ canvas { width: 100%; height: 160px; }
    away. */
 #tab-models tbody tr.model-row-active { background: var(--bg-hover); }
 #tab-models tbody tr.model-row-active > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
-.md-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
 .md-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
 .md-pane[hidden] { display: none; }
 .md-tabs { display:flex; gap:2px; border-bottom:1px solid var(--border); margin:-4px 0 14px; }
@@ -1006,7 +1017,6 @@ canvas { width: 100%; height: 160px; }
 .md-tab:hover { color:var(--text); }
 .md-tab.active { color:var(--text); border-bottom-color:var(--accent); }
 
-#modelDrawer .modal-actions { margin-top: 16px; }
 /* Shortcut sheet, from ? */
 .shortcut-help {
   position: fixed; inset: 0; z-index: 300; display: flex;

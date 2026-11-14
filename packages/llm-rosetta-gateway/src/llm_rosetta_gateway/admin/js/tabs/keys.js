@@ -333,8 +333,8 @@ window.selectAllKeys = selectAllKeys;
 window.updateKeyBulk = updateKeyBulk;
 window.bulkDeleteKeys = bulkDeleteKeys;
 
-const _keyModalPrimary = () => document.querySelector('#keyModal .modal-actions .btn-primary');
-const _keyLabelModalPrimary = () => document.querySelector('#keyLabelModal .modal-actions .btn-primary');
+const _keyModalPrimary = () => document.querySelector('#keyModal .panel-foot .btn-primary');
+const _keyLabelModalPrimary = () => document.querySelector('#keyLabelModal .panel-foot .btn-primary');
 
 function openKeyModal() {
   document.getElementById('keyLabel').value = '';
