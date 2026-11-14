@@ -146,6 +146,164 @@ async def test_start_recovers_a_job_interrupted_by_the_last_process(pm):
         await second.stop()
 
 
+async def test_a_lane_survives_a_failing_claim(pm, monkeypatch):
+    """A transient database error must not end the queue until a restart.
+
+    A dead lane is invisible on the board: the jobs stay `queued` with nothing
+    to click and no error anywhere the operator looks.
+    """
+    manager = JobManager(pm, handlers={"demo.ok": _ok})
+    real_claim = manager.store.claim
+    calls = {"n": 0}
+
+    async def flaky(lane, owner, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("database is locked")
+        return await real_claim(lane, owner, **kwargs)
+
+    monkeypatch.setattr(manager.store, "claim", flaky)
+    monkeypatch.setattr("llm_rosetta_gateway.jobs.worker._CLAIM_RETRY_SECONDS", 0.01)
+    job = await manager.enqueue("demo.ok")
+
+    await manager.start()
+    try:
+        await _wait_status(manager.store, job.id, "succeeded", timeout=5)
+    finally:
+        await manager.stop()
+
+
+async def test_a_wake_that_lands_during_claim_is_not_lost(pm, monkeypatch):
+    """The wait must not clear an event the claim raced with.
+
+    A retry can land while the lane is inside `claim()`; clearing the event
+    after the claim drops it and the job then waits out the whole poll.
+    """
+    manager = JobManager(pm, handlers={"demo.ok": _ok}, wait_seconds=2.0)
+    real_claim = manager.store.claim
+    fired = {"done": False}
+    job_id: dict[str, str] = {}
+
+    async def claim_that_races(lane, owner, **kwargs):
+        job = await real_claim(lane, owner, **kwargs)
+        if job is None and not fired["done"]:
+            fired["done"] = True
+            enqueued = await manager.store.enqueue("demo.ok")
+            job_id["id"] = enqueued.id
+            manager.wake()
+        return job
+
+    monkeypatch.setattr(manager.store, "claim", claim_that_races)
+    await manager.start()
+    try:
+        deadline = time.monotonic() + 1.0
+        while time.monotonic() < deadline and "id" not in job_id:
+            await asyncio.sleep(0.01)
+        assert "id" in job_id, "the racing enqueue never ran"
+        await _wait_status(manager.store, job_id["id"], "succeeded", timeout=1.0)
+    finally:
+        await manager.stop()
+
+
+async def test_a_second_manager_does_not_steal_a_live_lease(pm):
+    """Startup recovery takes foreign leases only when it owns the queue.
+
+    A second gateway on the same data directory is the case the lock exists
+    for: taking its peer's live job would run a destructive handler twice.
+    """
+    first = JobManager(pm, handlers={"demo.ok": _ok})
+    await first.start()
+    try:
+        job = await first.store.enqueue("data.clear", lane="network")
+        await pm.connection.execute(
+            "UPDATE jobs SET status = 'running', lease_owner = 'other-process', "
+            "lease_expires_at = '9999-01-01T00:00:00+00:00' WHERE id = ?",
+            (job.id,),
+        )
+        await pm.connection.commit()
+
+        second = JobManager(pm, handlers={"demo.ok": _ok})
+        await second.start()
+        try:
+            assert second.recovered == 0
+            still_running = await second.store.get(job.id)
+            assert still_running is not None and still_running.status == "running"
+        finally:
+            await second.stop()
+    finally:
+        await first.stop()
+
+    # With the first gone the lock is free, and the next start may take it.
+    third = JobManager(pm, handlers={"demo.ok": _ok})
+    await third.start()
+    try:
+        assert third.recovered == 1
+        requeued = await third.store.get(job.id)
+        assert requeued is not None and requeued.status == "queued"
+    finally:
+        await third.stop()
+
+
+async def test_the_sweep_leaves_this_process_own_job_alone(pm):
+    """A heartbeat stall is not an interrupted run.
+
+    The handler here has no checkpoint, so nothing stops it when its lease
+    lapses; the sweep has to recognise the row as busy rather than hand the
+    same destructive work to a second copy.
+    """
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def _blocking(ctx):
+        started.set()
+        await release.wait()
+        return {"deleted": 1}
+
+    manager = JobManager(pm, handlers={"demo.block": _blocking}, recovery_interval=0.02)
+    await manager.start()
+    try:
+        job = await manager.enqueue("demo.block")
+        await asyncio.wait_for(started.wait(), timeout=1)
+        await pm.connection.execute(
+            "UPDATE jobs SET lease_expires_at = '2000-01-01T00:00:00+00:00' "
+            "WHERE id = ?",
+            (job.id,),
+        )
+        await pm.connection.commit()
+
+        await asyncio.sleep(0.2)  # several sweeps
+        during = await manager.store.get(job.id)
+        assert during is not None and during.status == "running"
+
+        release.set()
+        await _wait_status(manager.store, job.id, "succeeded", timeout=2)
+        finished = await manager.store.get(job.id)
+        assert finished is not None and finished.attempts == 1
+    finally:
+        await manager.stop()
+
+
+async def test_a_stalled_run_is_swept_while_the_process_is_up(pm):
+    """Recovery is not only a startup step.
+
+    The row sits in the `network` lane so the sqlite lane cannot claim it and
+    the assertion stays about the sweep rather than the worker.
+    """
+    manager = JobManager(pm, handlers={"demo.ok": _ok}, recovery_interval=0.02)
+    await manager.start()
+    try:
+        job = await manager.store.enqueue("demo.ok", lane="network")
+        await pm.connection.execute(
+            "UPDATE jobs SET status = 'running', lease_owner = 'dead', "
+            "lease_expires_at = '2000-01-01T00:00:00+00:00' WHERE id = ?",
+            (job.id,),
+        )
+        await pm.connection.commit()
+        await _wait_status(manager.store, job.id, "queued", timeout=5)
+    finally:
+        await manager.stop()
+
+
 async def test_drain_runs_every_queued_job(pm):
     manager = JobManager(pm, handlers={"demo.ok": _ok})
     for _ in range(3):

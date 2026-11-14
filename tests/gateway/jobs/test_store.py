@@ -184,6 +184,31 @@ async def test_recovery_requeues_an_expired_lease(store, pm):
     assert row[0] is None
 
 
+async def test_recovery_at_startup_takes_a_live_foreign_lease(store, pm):
+    """A crash-restart inside the lease window must not strand the job.
+
+    The lease is still valid for a minute, so an expiry-only sweep leaves the
+    row `running` with its rows hidden and no worker deleting them.
+    """
+    job = await store.enqueue(
+        "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
+    )
+    await pm.connection.execute(
+        "UPDATE jobs SET status = 'running', lease_owner = 'a-dead-process', "
+        "lease_expires_at = '9999-01-01T00:00:00+00:00' WHERE id = ?",
+        (job.id,),
+    )
+    await pm.connection.commit()
+
+    assert await store.recover() == 0
+    assert (await store.get(job.id)).status == JOB_RUNNING
+
+    assert await store.recover(owner="this-process") == 1
+    recovered = await store.get(job.id)
+    assert recovered.status == JOB_QUEUED
+    assert pm.visibility.ranges("request_log") == [(MIN_TS, MAX_TS)]
+
+
 async def test_recovery_fails_a_job_out_of_attempts(store, pm):
     job = await store.enqueue("data.clear", max_attempts=1)
     await store.claim("sqlite", "owner")

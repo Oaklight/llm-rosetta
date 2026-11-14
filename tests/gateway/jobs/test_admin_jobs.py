@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from typing import Any
 
 import pytest
@@ -53,6 +55,77 @@ async def test_listing_reports_the_active_count(manager):
     assert body["active"] == 1
     assert {job["kind"] for job in body["jobs"]} == {"data.clear", "data.trim"}
     assert all("payload" in job for job in body["jobs"])
+
+
+async def test_retry_wakes_the_lane(manager, monkeypatch):
+    """Without the wake the job waits out the lane's 30-second poll."""
+    woken: list[bool] = []
+    monkeypatch.setattr(manager, "wake", lambda: woken.append(True))
+    await manager.enqueue("data.clear")
+    claimed = await manager.store.claim("sqlite", "owner")
+    await manager.store.finish(claimed.id, "owner", "failed", error="boom")
+
+    response = await routes.retry_job(_Request(_App(manager), job_id=claimed.id))
+
+    assert _body(response)["status"] == "queued"
+    assert woken == [True]
+
+
+async def test_retry_is_picked_up_without_waiting_out_the_poll(pm):
+    """The latency the wake exists for, measured through the route.
+
+    A spy proves the call, not the effect; this drives a real lane with a
+    2-second poll and requires the retried job to finish well inside it.
+    """
+    calls = {"n": 0}
+
+    async def flaky(ctx):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ValueError("first run fails")
+        return {"deleted": 1}
+
+    lane_manager = JobManager(pm, handlers={"demo.flaky": flaky}, wait_seconds=2.0)
+    await lane_manager.start()
+    try:
+        job = await lane_manager.enqueue("demo.flaky")
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            current = await lane_manager.store.get(job.id)
+            assert current is not None
+            if current.status == "failed":
+                break
+            await asyncio.sleep(0.01)
+
+        started = time.monotonic()
+        await routes.retry_job(_Request(_App(lane_manager), job_id=job.id))
+        deadline = time.monotonic() + 1.5
+        status = "queued"
+        while time.monotonic() < deadline:
+            current = await lane_manager.store.get(job.id)
+            assert current is not None
+            status = current.status
+            if status == "succeeded":
+                break
+            await asyncio.sleep(0.01)
+        elapsed = time.monotonic() - started
+        assert status == "succeeded", f"retry left the job {status}"
+        assert elapsed < 1.0, f"retry waited {elapsed:.2f}s with a 2s poll"
+    finally:
+        await lane_manager.stop()
+
+
+async def test_resume_wakes_the_lane(manager, monkeypatch):
+    woken: list[bool] = []
+    monkeypatch.setattr(manager, "wake", lambda: woken.append(True))
+    await manager.enqueue("data.clear")
+    claimed = await manager.store.claim("sqlite", "owner")
+    await manager.store.finish(claimed.id, "owner", "cancelled", deleted=1)
+
+    response = await routes.resume_job(_Request(_App(manager), job_id=claimed.id))
+
+    assert _body(response)["status"] == "queued"
+    assert woken == [True]
 
 
 async def test_an_unknown_job_is_a_404(manager):
