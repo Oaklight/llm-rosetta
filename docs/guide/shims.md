@@ -539,8 +539,8 @@ preset (explicit keys win).
 
 LLM-Rosetta ships with 49 built-in provider shims, one directory per shim under
 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`. `list_shims()` prints the live set; this is
-that set. The ALCF, AskSage, Argo, OpenCode free-lane, Open Design and keyless
-free-endpoint shims ship as standalone packages — see
+that set. The ALCF, AskSage, Argo, Open Design and keyless free-endpoint shims
+ship as standalone packages — see
 [Standalone shim packages](#standalone-shim-packages).
 
 | Name | Format | Default Base URL | API Key Env | Transforms |
@@ -557,7 +557,7 @@ free-endpoint shims ship as standalone packages — see
 | `groq--chat_completions` | `chat_completions` | `https://api.groq.com/openai/v1` | `GROQ_API_KEY` | renames `reasoning` → `reasoning_content` |
 | `jina--embedding` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
 | `jina--rerank` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
-| `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | *(keyless)* | — |
+| `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | `KILO_API_KEY` | — |
 | `minimax--chat_completions` | `chat_completions` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | strips `logprobs`, `top_logprobs`, `seed`, `stop`; injects `reasoning_split`; parses `think` tags |
 | `minimax--embedding` | `minimax` | `https://api.minimaxi.com` | `MINIMAX_API_KEY` | — |
 | `minimax--messages` | `messages` | `https://api.minimaxi.com/anthropic` | `MINIMAX_API_KEY` | — |
@@ -601,22 +601,22 @@ here; every shim's full declaration is in its own `transforms.py`.
 
 ### Standalone shim packages
 
-Six shim sets live in their own repositories rather than in core:
+Five shim sets live in their own repositories rather than in core:
 
 | Package | Shim names | Repository |
 |---------|------------|------------|
 | ALCF | `alcf_metis--chat_completions`, `alcf_minerva--chat_completions`, `alcf_sophia--chat_completions` | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
 | Argo | `argo--chat_completions`, `argo--messages`, `argo--open_responses` | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
 | AskSage | `asksage--chat_completions`, `asksage--messages`, `asksage--open_responses`, `asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
-| OpenCode Zen free lane | `opencode_zen_free--chat_completions` | [llm-rosetta-shim-opencode-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-free) |
 | Open Design | `opendesign--chat_completions`, `opendesign--open_responses`, `opendesign--messages` | [llm-rosetta-shim-opendesign](https://github.com/Oaklight/llm-rosetta-shim-opendesign) |
-| Keyless free endpoints | `ovhcloud--chat_completions`, `llm7--chat_completions` | [llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free) |
+| Keyless free endpoints | `kilo_free--chat_completions`, `llm7--chat_completions`, `opencode_zen_free--chat_completions`, `ovhcloud--chat_completions` | [llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free) |
 
 ALCF and AskSage were introduced during the 0.14.0 development cycle and never
 appeared in a stable release's built-in set; Argo had shipped built in since
 v0.6.3. All three left core in 0.14.0. The OpenCode free lane left core after
 0.14 because the upstream gate changes independently of a release cycle — see
-[OpenCode](providers/opencode.md#public-free-lane) for its measured status.
+[OpenCode](providers/opencode.md#public-free-lane) for its measured status; it
+now ships in the keyless free-endpoint package, under an unchanged shim name.
 Their packages register the same canonical shim names, so a provider's `shim`
 value does not change — only the source declaration is new.
 

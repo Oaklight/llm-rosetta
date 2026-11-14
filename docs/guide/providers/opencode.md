@@ -90,12 +90,13 @@ Quota](../quota.md).
 
 The keyless `/zen/v1` pool is a separate shim,
 `opencode_zen_free--chat_completions`, and it ships as a standalone package
-rather than in core: [llm-rosetta-shim-opencode-free](https://github.com/Oaklight/llm-rosetta-shim-opencode-free).
-Declare the package before using the name:
+rather than in core: [llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free).
+That package also carries the Kilo, LLM7 and OVHcloud free pools. Declare the
+package before using the name:
 
 ```jsonc
 {
-  "shims": { "presets": ["opencode_zen_free"] },
+  "shims": { "presets": ["free"] },
   "providers": {
     "zen-free": { "type": "opencode_zen_free--chat_completions" }
   },
@@ -104,6 +105,10 @@ Declare the package before using the name:
   }
 }
 ```
+
+The shim name is unchanged, so a config written for the earlier
+`opencode_zen_free` preset keeps working after the declaration is switched to
+`free`.
 
 No API key is required: the lane's credential is the literal word `public`,
 which the shim sends as `Authorization: Bearer public`. The upstream refuses a

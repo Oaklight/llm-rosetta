@@ -28,11 +28,12 @@ Per-provider guides covering shim configuration, transforms, authentication, and
 | [Argo](argo.md) | `argo--*` | multiple | Standalone package; Argonne internal gateway |
 | [AskSage](asksage.md) | `asksage--*` | multiple | Standalone package; multi-format aggregator |
 | [ALCF](alcf.md) | `alcf_<cluster>--chat_completions` | `chat_completions` | Standalone package; Globus OAuth, token_command |
-| [Kilo](kilo.md) | `kilo--chat_completions` | `chat_completions` | Free pool, keyless |
+| [Kilo](kilo.md) | `kilo--chat_completions` | `chat_completions` | Paid lane in core; free pool in the `free` package |
 | [OpenCode](opencode.md) | `opencode--*` | multiple | Go subscription / Zen balance |
 | [Open Design](opendesign.md) | `opendesign--*` | multiple | Standalone package; model gateway |
 | [Plan (ChatGPT)](openai_chatgpt.md) | `openai_chatgpt--open_responses` | `open_responses` | ChatGPT plan route; sign-in instead of an API key |
+| [Keyless free endpoints](free.md) | `kilo_free--*`, `llm7--*`, `opencode_zen_free--*`, `ovhcloud--*` | `chat_completions` | Standalone package; no account needed |
 
-The Argo, AskSage, ALCF, Open Design and OpenCode free-lane shims ship as standalone packages — declare their source with `shims.presets` (or **Settings → Shim Sources**) before using their names. See [Standalone shim packages](../shims.md#standalone-shim-packages).
+The Argo, AskSage, ALCF, Open Design and keyless free-endpoint shims ship as standalone packages — declare their source with `shims.presets` (or **Settings → Shim Sources**) before using their names. See [Standalone shim packages](../shims.md#standalone-shim-packages).
 
 For general shim concepts and custom shim registration, see [Provider Shims](../shims.md).

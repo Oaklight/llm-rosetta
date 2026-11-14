@@ -155,6 +155,7 @@ nav:
               - Kilo: guide/providers/kilo.md
               - OpenCode: guide/providers/opencode.md
               - Plan (ChatGPT): guide/providers/openai_chatgpt.md
+              - Keyless free endpoints: guide/providers/free.md
           - Reasoning / Thinking: guide/reasoning.md
           - Provider Reasoning Behavior: guide/provider-reasoning.md
       - Examples:
