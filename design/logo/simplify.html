@@ -960,19 +960,25 @@ function build() {
     const auto = structuralAnchors(ring, state.anchor, isClosed, state.anchorMode);
     const sharpIdx = new Set(sharpUs.map(u => indexAtFraction(fracs, u)));
     const roundIdx = new Set(roundUs.map(u => indexAtFraction(fracs, u)));
-    const pins = new Set([...auto, ...pinIdx, ...lockIdx.keys(),
-                          ...regionPins(fracs, sharpUs), ...roundIdx]
-                         .filter(i => i >= 0 && i < ring.length));
-    unpinIdx.forEach(i => pins.delete(i));
-    lockIdx.forEach((_, i) => { if (i >= 0 && i < ring.length) pins.add(i); });
+    // Two sets on purpose: *marked* is what the user placed and therefore what
+    // is drawn and clickable; *protect* also carries the extra vertices a 锐
+    // place keeps for detail.  Drawing those as anchors buried the outline in
+    // dots that could not be turned off.
+    const marked = new Set([...auto, ...pinIdx, ...lockIdx.keys(),
+                            ...sharpIdx, ...roundIdx]
+                           .filter(i => i >= 0 && i < ring.length));
+    unpinIdx.forEach(i => marked.delete(i));
+    lockIdx.forEach((_, i) => { if (i >= 0 && i < ring.length) marked.add(i); });
+    const protect = new Set([...marked, ...regionPins(fracs, sharpUs)]
+                            .filter(i => i >= 0 && i < ring.length));
     autoByRing.push(auto);
     fracsByRing.push(fracs);
-    pinByRing.push(pins);
+    pinByRing.push(marked);
     lockByRing.push(lockIdx);
     sharpByRing.push(sharpIdx);
     roundByRing.push(roundIdx);
 
-    const keepSet = new Set(reduceTo(ring, budget, state.method, isClosed, pins, state.fidelity));
+    const keepSet = new Set(reduceTo(ring, budget, state.method, isClosed, protect, state.fidelity));
     const keep = [...keepSet];
     let pts = keep.map(i => ring[i]);
     let src = keep.slice();
@@ -986,8 +992,8 @@ function build() {
       [pts, src] = chaikinBudgeted(pts, src, budgets, isClosed, new Set(lockIdx.keys()));
 
     // Candidate dots: what a generous budget keeps, plus everything pinned.
-    const generous = new Set(reduceTo(ring, Math.max(budget, 64), state.method, isClosed, pins, state.fidelity));
-    const candidates = new Set([...generous, ...keepSet, ...pins, ...auto]);
+    const generous = new Set(reduceTo(ring, Math.max(budget, 64), state.method, isClosed, protect, state.fidelity));
+    const candidates = new Set([...generous, ...keepSet, ...marked, ...auto]);
     const dotsIdx = [...candidates].filter(i => i >= 0 && i < ring.length).sort((a, b) => a - b);
     dotRings.push(dotsIdx.map(i => ring[i]));
     dotSrcs.push(dotsIdx);
