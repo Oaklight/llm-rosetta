@@ -9,6 +9,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ## [未发布]
 
 ### 新增
+- **石形简化器可以按外框或按质量居中导出**（议题 [#1555](https://github.com/Oaklight/llm-rosetta/issues/1555)，PR [#1556](https://github.com/Oaklight/llm-rosetta/pull/1556)）：此前取景总是把外接框放到画布中心，而红色锚点会把图形拉偏，除了删掉锚点没有别的办法拉回来。`--center bbox`（默认）保持原行为，`--center centroid` 改为把填充图形的面积重心放到画布中心。两者在这块石头上不一样，因为它下宽上窄——`--points 48 --scale 0.88` 下，按外框居中的版本重心在 `(292.1, 313.1)`，低了 13 个单位；按重心居中的版本外框中心在 `(307.9, 286.9)`。页面新增「居中基准」（中心 / 重心）与「居中」按钮：它解出让所选基准落在画布中心所需的锚点目标，并把所有已记录的锁定点平移同一个量，所以被红色锚点拉偏的图形可以居中而不丢锚点；「重置视图」也走同一个函数。没有锚点或锁定时，所有已发布资源仍逐字节不变。
 - **API 密钥页新增 Connect 面板**（PR [#1553](https://github.com/Oaklight/llm-rosetta/pull/1554)）：此前该页只说明如何认证。列表上方的可折叠面板给出 API（catalog 中的全部格式，按模型类型分组）、Base URL、模型 id，以及 ENV、curl、Python、Node 四种示例——ENV 页签包含 Linux/macOS 与 Windows 两种导出写法。取值都是模板，因此单模型部署与全类型部署读起来一致，每个取值都有自己的复制按钮。
 - **代码块带语法着色，右上角可复制**（PR [#1553](https://github.com/Oaklight/llm-rosetta/pull/1554)）：`core/code-block.js` 是一个按语言分组的轻量词法器（shell、Python、JS、JSON），每一段都先转义；代码块是一个框体，右上角只有图标的复制控件。示例与路由规则检查器都已使用。
 - **统一的模型类型切换，带类型图标**（PR [#1553](https://github.com/Oaklight/llm-rosetta/pull/1554)）：提供方页与模型页此前各写一套，现在都用 `core/type-switch.js`，LLM、Embeddings、Rerank、Decisions 均带各自图标。
