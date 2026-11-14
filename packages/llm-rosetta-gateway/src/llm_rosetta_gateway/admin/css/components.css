@@ -185,11 +185,21 @@ tr:hover td { background: var(--bg-hover); }
   }
 }
 .seg-control { display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-control);overflow:hidden; }
-.seg-control > * { display:flex;align-items:center;height:28px;padding:0 16px;font-size:var(--fs-xs);font-weight:500;cursor:pointer;border-right:1px solid var(--border);transition:background .15s,color .15s;user-select:none;color:var(--text-dim);text-transform:none;letter-spacing:0;margin:0; }
+/* An option owns no box of its own: a <button>, a <label> and a role="radio"
+   div have to look the same inside the frame.  Without the reset a <button>
+   keeps the UA's grey fill, which is how the Samples switch came out as a row
+   of separate buttons while the shims switch (a patched call site) did not
+   (#1502 §13). */
+.seg-control > * { display:flex;align-items:center;height:28px;padding:0 16px;font-size:var(--fs-xs);font-weight:500;cursor:pointer;appearance:none;-webkit-appearance:none;border:0;border-right:1px solid var(--border);background:transparent;transition:background .15s,color .15s;user-select:none;color:var(--text-dim);text-transform:none;letter-spacing:0;margin:0; }
 .seg-control > *:last-child { border-right:none; }
 .seg-control > *:hover { background:var(--surface-2); color:var(--text); }
 .seg-control input { position:absolute;opacity:0;width:0;height:0;pointer-events:auto; }
 .seg-control > *.active { background:var(--accent);color:var(--accent-on); }
+/* An option may carry its type's mark before its label. */
+.seg-icon { display: inline-flex; align-items: center; }
+.seg-icon svg { width: 14px; height: 14px; margin-right: 6px; }
+/* The provider switch leads its row instead of sitting in the page header. */
+.provider-seg { flex: 0 0 auto; }
 /* Keyboard focus.  Some groups are role="radio" divs, others wrap a visually
    hidden <input type=radio> that is 0x0 — a ring on the input would be
    invisible, so it goes on the option box (:has handles the input case).  On
@@ -707,6 +717,10 @@ tr:hover td { background: var(--bg-hover); }
 .toggle.is-sm .slider::before { height: 10px; width: 10px; }
 .toggle.is-sm input:checked + .slider::before { transform: translateX(14px); }
 
+/* A page's own actions ride its search row rather than a header of their own:
+   a header holding only a hidden title and these buttons left a band of empty
+   page above the list (#1502 §13). */
+.page-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: 0 0 auto; }
 .key-cell { display: flex; align-items: center; gap: 4px; }
 .key-cell code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .key-actions { display: flex; gap: 2px; flex-shrink: 0; }
@@ -1321,7 +1335,10 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
    own id; the spacing stays here. */
 .toolbar { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
 .toolbar.is-stacked { flex-direction:column; align-items:stretch; gap:8px; margin-bottom:10px; }
+/* In a toolbar each row takes the line: a pair of switches on one line read
+   as one control (#1502 §13). */
 .mt-row { display:flex;align-items:center;gap:8px;flex-wrap:wrap; }
+.toolbar > .mt-row { flex: 1 1 100%; }
 .facet-label {
   font-size:11px; text-transform:uppercase; letter-spacing:.04em;
   color:var(--text-dim); margin-right:2px;
@@ -1619,6 +1636,11 @@ button.login-pref-btn {
 .empty.is-compact,
 .update-empty, .routing-model-empty, .tp-empty, .lp-empty {
   padding: 16px 12px; font-size: 12.5px;
+}
+/* The sentence and its way out keep the component's type even inside a table
+   cell, whose own font-size would otherwise set 16 px on both (#1502 §13). */
+.empty-filtered-text, .empty-filtered .empty-clear {
+  font-size: 13px; font-weight: 400; line-height: 1.5;
 }
 .empty.is-row { padding: 10px 12px; }
 .empty-state {
@@ -2551,6 +2573,28 @@ button.shim-update.unknown { color: var(--tag-warn); }
 /* The routing inspector's JSON is read-only context: dimmer, capped height. */
 .routing-json { color: var(--text-dim); max-height: 220px; }
 
+/* A block is a frame with its copy control in the corner — icon only, so the
+   corner never changes width and the code never re-wraps under a label. */
+.code-block-wrap { position: relative; }
+.code-block-wrap > .code-block { padding-right: 44px; }
+.code-copy {
+  position: absolute; top: 4px; right: 4px; width: 26px; height: 26px;
+  color: var(--text-muted);
+}
+.code-block-wrap:hover .code-copy,
+.code-copy:focus-visible { color: var(--text); }
+/* Token inks: one meaning each, taken from the scheme so a new theme needs no
+   highlighter of its own. */
+.tok-str { color: var(--green-deep); }
+.tok-key { color: var(--cyan); }
+.tok-num { color: var(--magenta); }
+.tok-kw { color: var(--purple); }
+.tok-lit { color: var(--purple); }
+.tok-dec { color: var(--warn); }
+.tok-flag { color: var(--cyan); }
+.tok-var { color: var(--warn); }
+.tok-com { color: var(--text-muted); font-style: italic; }
+
 .routing-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px; }
 .routing-card:empty { display: none; }
 
@@ -2664,10 +2708,8 @@ button.shim-update.unknown { color: var(--tag-warn); }
    view reads the same here as on Providers, Models and the log views.  These
    are <button>s, and the UA button face would paint a grey slab under every
    unselected view; the shared rule only sets the border and padding. */
-.shims-seg { display: inline-flex; }
-.shims-seg > [data-view] { appearance: none; -webkit-appearance: none; border: 0; }
-.shims-seg > [data-view]:not(:last-child) { border-right: 1px solid var(--border); }
-.shims-seg > [data-view]:not(.active) { background: transparent; box-shadow: none; }
+/* The shims switch is the plain component again: its local reset (appearance,
+   border, transparent fill) now lives in `.seg-control > *`. */
 
 /* The toolbar is a sibling of the grid, not one of its items, so the grid's
    own gap does not separate them: the filter row sat flush on the first card

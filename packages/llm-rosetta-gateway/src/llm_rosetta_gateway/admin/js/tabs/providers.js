@@ -26,6 +26,7 @@ import { shimHintText } from '../core/shim-hint.js';
 import { jsArg, logoUrl } from '../core/html.js';
 import { filteredEmptyHtml } from '../core/empty.js';
 import { providerFormError } from '../core/form-validate.js';
+import { typeOptionHtml } from '../core/type-switch.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -1918,15 +1919,16 @@ function _buildProviderSegControls() {
   const allDiv = seg.querySelector(':scope > div:first-child');
   while (seg.lastChild && seg.lastChild !== allDiv) seg.removeChild(seg.lastChild);
   for (const desc of S.configData?.model_types || []) {
-    const div = document.createElement('div');
-    div.setAttribute('role', 'radio');
-    div.setAttribute('aria-checked', S._providerFilter === desc.name ? 'true' : 'false');
-    div.setAttribute('tabindex', S._providerFilter === desc.name ? '0' : '-1');
-    if (S._providerFilter === desc.name) div.className = 'active';
     // A listener, not an attribute string: an apostrophe in a type name would
-    // otherwise end the literal this compiles from (issue #1394).
+    // otherwise end the literal this compiles from (issue #1394).  The option
+    // itself, mark included, comes from the shared type-switch builder.
+    const holder = document.createElement('div');
+    holder.innerHTML = typeOptionHtml(desc.name, {
+      checked: S._providerFilter === desc.name,
+      label: esc(typeLabel(desc.name)),
+    });
+    const div = holder.firstElementChild;
     div.addEventListener('click', () => switchProviderFilter(div, desc.name));
-    div.innerHTML = `<span data-type-name="${esc(desc.name)}">${esc(typeLabel(desc.name))}</span>`;
     seg.appendChild(div);
   }
 }

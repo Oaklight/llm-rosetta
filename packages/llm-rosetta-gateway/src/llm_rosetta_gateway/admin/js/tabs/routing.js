@@ -13,6 +13,7 @@ import { ROUTING_PRESETS, matchPreset, presetBlock } from '../core/routing-prese
 import { laneGripHtml, laneSwitchHtml } from '../components/provider-row.js';
 import { providerLogoHtml } from '../components/provider-picker.js';
 import { loadConfig } from './providers.js';
+import { codeBlockHtml } from '../core/code-block.js';
 
 let _data = null;
 let _timer = null;
@@ -899,7 +900,7 @@ function _renderPolicy() {
     '<button type="button" class="btn btn-primary btn-sm routing-save" onclick="saveRouting()">' +
     esc(t('routing.save')) + '</button>' +
     '<div class="routing-rules-head">' + esc(t('routing.json')) + '</div>' +
-    '<pre class="code-block routing-json">' + esc(JSON.stringify(block, null, 2)) + '</pre>';
+    codeBlockHtml(JSON.stringify(block, null, 2), 'json', {className: 'routing-json'});
   el.querySelectorAll('.routing-preset').forEach((chip) => {
     chip.addEventListener('click', () => applyRoutingPreset(chip.dataset.preset));
     chip.addEventListener('keydown', (event) => {
