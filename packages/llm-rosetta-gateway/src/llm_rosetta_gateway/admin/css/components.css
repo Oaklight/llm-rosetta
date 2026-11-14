@@ -611,8 +611,7 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 .type-picker-chevron { flex-shrink:0;color:var(--text-dim); }
 .type-picker-dropdown {
   display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;
-  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);
-  box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:60;max-height:340px;overflow-y:auto;
+  max-height:340px;overflow-y:auto;
 }
 .type-picker-dropdown.open { display:block; }
 /* Flipped above the trigger when the modal's scroll box leaves too little
@@ -909,38 +908,43 @@ canvas { width: 100%; height: 160px; }
   color: var(--orange);
 }
 .test-group .btn-caret:hover { background: color-mix(in srgb, var(--orange) 10%, transparent); }
-.test-menu {
-  display: none; position: fixed;
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
-  /* Above the fixed DB status footer (z-index 50), below the modals. */
-  min-width: 180px; z-index: 60; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+/* ── The menu ─────────────────────────────────────────────────────────
+   A floating list of commands.  The frame is one recipe — card surface, 1px
+   edge, the panel corner, one shadow — and each call site keeps only its
+   positioning (`fixed` beside a row trigger, `absolute` under a picker), its
+   display toggle and its own height.  `.is-dense` is the inset row a menu
+   that carries its own 4px padding uses. */
+.menu {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0, 0, 0, .15);
+  z-index: 60;
 }
-.test-menu.open { display: block; }
-.test-menu-item {
+.menu-item {
+  display: flex; align-items: center; gap: 8px;
   padding: 8px 14px; font-size: 13px; cursor: pointer; white-space: nowrap;
 }
-.test-menu-item:hover { background: var(--bg-hover); }
-.test-menu-item:first-child { border-radius: var(--radius) var(--radius) 0 0; }
-.test-menu-item:last-child { border-radius: 0 0 var(--radius) var(--radius); }
-.test-menu-item.disabled { color: var(--text-dim); opacity: 0.4; cursor: not-allowed; pointer-events: none; }
-.test-menu-item.disabled:hover { background: none; }
+.menu-item:hover { background: var(--bg-hover); }
+.menu-item.is-danger { color: var(--red); }
+.menu-item.is-danger:hover { background: var(--red-subtle); }
+.menu-item.is-disabled { color: var(--text-dim); opacity: .4; cursor: not-allowed; pointer-events: none; }
+.menu-item.is-disabled:hover { background: none; }
+.menu-item input { margin: 0; }
+.menu-sep { border-top: 1px solid var(--border); margin: 2px 0; }
+.menu.is-dense { padding: 4px; }
+.menu.is-dense .menu-item { padding: 5px 8px; font-size: 12px; border-radius: var(--radius-control); }
+/* Above the fixed DB status footer (z-index 50), below the modals; the
+   frame's z-index is the menu's.  Clipped so a hover fill follows the
+   panel corner. */
+.test-menu { display: none; position: fixed; min-width: 180px; overflow: hidden; }
+.test-menu.open { display: block; }
 
 /* Row actions "⋯" menu.  Fixed-positioned: the models table lives in a
    `.table-scroll` box whose `overflow-x:auto` also clips vertically, so a
    menu anchored below the last rows would be cut off entirely.  models.js
    sets `top`/`right` from the trigger's rect and flips it above the trigger
    when the viewport has no room below. */
-.more-menu {
-  display: none; position: fixed; min-width: 110px; z-index: 60;
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.12); overflow: hidden;
-}
+.more-menu { display: none; position: fixed; min-width: 110px; overflow: hidden; }
 .more-menu.open { display: block; }
-.more-menu-item { padding: 7px 14px; font-size: 13px; cursor: pointer; white-space: nowrap; }
-.more-menu-item:hover { background: var(--bg-hover); }
-.more-menu-item.danger { color: var(--red); }
-.more-menu-item.danger:hover { background: var(--red-subtle); }
-.more-menu-sep { border-top: 1px solid var(--border); margin: 2px 0; }
 
 /* Multi-provider cell: one button, and a menu with a row per provider.
    The row carries the actions that only make sense for one provider of the
@@ -1100,13 +1104,7 @@ canvas { width: 100%; height: 160px; }
 .cap-dot.cap-badge-text { background: var(--text); }
 .cap-dot.is-inherit { background: transparent; border: 1px solid var(--text-muted); }
 .cap-menu-toggle:hover { border-color: var(--text-dim); }
-.cap-menu { min-width: 150px; padding: 4px; }
-.cap-menu-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 5px 8px; border-radius: var(--radius-control); cursor: pointer; font-size: 12px;
-}
-.cap-menu-row:hover { background: var(--bg-hover); }
-.cap-menu-row input { margin: 0; }
+.cap-menu { min-width: 150px; }
 .cap-menu-label { color: var(--text); }
 .cap-badge-inherit { color: var(--text-muted); }
 .provider-menu-row .pd-remove { padding: 1px 6px; opacity: 0.4; }
@@ -1260,7 +1258,7 @@ canvas { width: 100%; height: 160px; }
 
 /* Tooltip */
 .hint-icon { display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--border);color:var(--text-dim);font-size:11px;font-weight:700;cursor:help;position:relative;vertical-align:middle;margin-left:4px;flex-shrink:0; }
-.hint-icon .hint-popup { display:none;position:fixed;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px;font-size:12px;font-weight:400;line-height:1.5;color:var(--text);white-space:normal;width:280px;z-index:1000;box-shadow:0 4px 12px rgba(0,0,0,.15);pointer-events:auto; }
+.hint-icon .hint-popup { display:none;position:fixed;padding:8px 10px;font-size:12px;font-weight:400;line-height:1.5;color:var(--text);white-space:normal;width:280px;z-index:1000;pointer-events:auto; }
 .hint-icon .hint-popup.hint-visible { display:block; }
 
 /* Network diagnostics */
@@ -1714,8 +1712,6 @@ button.lp-clear {
 .lp-clear:hover { color:var(--red); }
 .lp-dropdown {
   display:none;position:absolute;top:100%;left:0;right:0;margin-top:4px;
-  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);
-  box-shadow:0 8px 24px rgba(0,0,0,0.15);z-index:60;
   max-height:280px;overflow-y:auto;
 }
 .lp-dropdown.open { display:block; }
@@ -2218,10 +2214,7 @@ button.lp-clear {
 .update-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 
 .update-popover {
-  position: fixed; top: 48px; right: 18px; z-index: 61; width: 300px;
-  padding: 14px; border-radius: var(--radius);
-  border: 1px solid var(--border); background: var(--card-bg);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
+  position: fixed; top: 48px; right: 18px; z-index: 61; width: 300px; padding: 14px;
 }
 .update-row {
   display: flex; justify-content: space-between; gap: 12px;

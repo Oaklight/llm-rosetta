@@ -133,7 +133,7 @@
 <!-- The update bubble appears only when the server's probe found a newer
      release; it sits above the page in the content corner. -->
 <div class="update-badge" id="updateBadge" role="button" tabindex="0" hidden data-i18n-title="update.hint" onclick="toggleUpdatePopover()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleUpdatePopover();}"><span class="update-dot" aria-hidden="true"></span><span id="updateBadgeText"></span></div>
-<div class="update-popover" id="updatePopover" hidden><button type="button" class="update-close" onclick="closeUpdatePopover()" aria-label="Close" data-i18n-aria-label="btn.close">&times;</button><div id="updatePopoverBody"></div></div>
+<div class="menu update-popover" id="updatePopover" hidden><button type="button" class="update-close" onclick="closeUpdatePopover()" aria-label="Close" data-i18n-aria-label="btn.close">&times;</button><div id="updatePopoverBody"></div></div>
 <div class="content">
   <!-- Providers Tab -->
   <div class="tab-panel active" id="tab-providers" role="tabpanel" aria-labelledby="tabBtn-providers">
@@ -160,7 +160,7 @@
         <button class="btn btn-sm" onclick="startBlankProvider()" data-i18n="btn.blankProvider">Start from scratch</button>
         <span id="freeProviderHost" style="display:contents">
           <button class="btn btn-sm more-menu-toggle" id="freeProviderBtn" aria-haspopup="true" aria-expanded="false" onclick="toggleMoreMenu(this)">+ <span data-i18n="free.add">Free resource</span> &#9662;</button>
-          <div class="more-menu" id="freeProviderMenu" role="menu"></div>
+          <div class="menu more-menu" id="freeProviderMenu" role="menu"></div>
         </span>
       </div>
       <div class="provider-list" id="providerListWrap" hidden>
@@ -504,7 +504,7 @@
             <span class="pp-value" data-i18n="filter.allProviders">All Providers</span>
             <span aria-hidden="true">&#9662;</span>
           </button>
-          <div class="more-menu provider-picker-menu" id="logProviderMenu" role="listbox"></div>
+          <div class="menu more-menu provider-picker-menu" id="logProviderMenu" role="listbox"></div>
           <span class="facet-label" data-i18n="col.model">Model</span>
           <select id="filterModel"><option value="" data-i18n="filter.allModels">All Models</option></select>
           <span class="facet-label" data-i18n="col.apiKey">API Key</span>
@@ -823,7 +823,7 @@
                     <span id="shimPresetLabel" class="tp-trigger-label tp-placeholder"></span>
                     <svg class="type-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                   </button>
-                  <div class="type-picker-dropdown" id="shimPresetDropdown">
+                  <div class="menu type-picker-dropdown" id="shimPresetDropdown">
                     <div class="tp-list" id="shimPresetList" role="listbox" aria-multiselectable="true"></div>
                   </div>
                 </div>
@@ -974,7 +974,7 @@
           <label class="toggle-label">
             <span class="toggle"><input type="checkbox" id="settingsCredentialVisible" role="switch" aria-checked="false" onchange="this.setAttribute('aria-checked',this.checked);updateCvLabel(this.checked);saveSettingsField('credentialVisible',this.checked)"><span class="slider"></span></span>
             <span id="cvLabel" data-i18n="label.disabled">Disabled</span>
-          </label><span class="hint-icon">i<span class="hint-popup" style="width:320px;text-align:left" data-i18n-html="hint.credentialReveal"></span></span>
+          </label><span class="hint-icon">i<span class="menu hint-popup" style="width:320px;text-align:left" data-i18n-html="hint.credentialReveal"></span></span>
         </div>
       </div>
     </div>
@@ -985,7 +985,7 @@
           </div>
           <div class="settings-fields">
             <div class="settings-popup-item">
-              <label data-i18n="label.proxyUrl">Proxy URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
+              <label data-i18n="label.proxyUrl">Proxy URL<span class="hint-icon">?<span class="menu hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
               <div class="settings-token-value">
                 <input type="text" id="globalProxy" placeholder="e.g. http://127.0.0.1:7890" data-i18n-placeholder="placeholder.proxy" spellcheck="false">
                 <button class="btn btn-sm" onclick="saveServerSettings()" data-i18n="btn.save">Save</button>
@@ -1303,7 +1303,7 @@
               <img class="lp-trigger-img" id="logoPickerPreviewImg" src="" alt="" style="display:none">
             </button>
             <button type="button" class="lp-clear lp-clear-compact" id="logoPickerClear" title="Clear" data-i18n-title="btn.clear" style="display:none">&times;</button>
-            <div class="lp-dropdown" id="logoPickerDropdown">
+            <div class="menu lp-dropdown" id="logoPickerDropdown">
               <div class="lp-search-row">
                 <input id="logoPickerInput" type="text" placeholder="Search icons or paste URL…" data-i18n-placeholder="logo.searchIcons" autocomplete="off">
               </div>
@@ -1322,18 +1322,18 @@
 
       <div class="form-row align-end">
         <div class="form-group" style="flex:0 0 69%">
-          <label data-i18n="label.baseUrl">Base URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
+          <label data-i18n="label.baseUrl">Base URL<span class="hint-icon">?<span class="menu hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
           <input id="provBaseUrl" placeholder="https://api.openai.com/v1">
         </div>
         <div class="form-group" style="flex:0 0 31%">
-          <label data-i18n="label.modelsListingPath">Models Listing Path<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.modelsPath">A relative path appended to Base URL (e.g. /v1/models), or a full URL (https://...) when the model list endpoint is at a different host or path than the inference endpoint.</span></span></label>
+          <label data-i18n="label.modelsListingPath">Models Listing Path<span class="hint-icon">?<span class="menu hint-popup" data-i18n="hint.modelsPath">A relative path appended to Base URL (e.g. /v1/models), or a full URL (https://...) when the model list endpoint is at a different host or path than the inference endpoint.</span></span></label>
           <input id="provModelsPath" placeholder="/v1/models">
         </div>
       </div>
       <div class="shim-hint" id="provShimHint" hidden></div>
       <div class="form-row align-end">
         <div class="form-group" style="flex:0 0 69%">
-          <label data-i18n="label.proxyUrl">Proxy URL<span class="hint-icon">?<span class="hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
+          <label data-i18n="label.proxyUrl">Proxy URL<span class="hint-icon">?<span class="menu hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>
           <input id="provProxy" placeholder="e.g. http://127.0.0.1:7890" data-i18n-placeholder="placeholder.proxy">
         </div>
         <div class="form-group" style="flex:0 0 31%">
@@ -1384,7 +1384,7 @@
                 <span id="typePickerLabel" class="tp-trigger-label tp-placeholder"></span>
                 <svg class="type-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
-              <div class="type-picker-dropdown" id="typePickerDropdown">
+              <div class="menu type-picker-dropdown" id="typePickerDropdown">
                 <div class="tp-view-toggle" role="tablist">
                   <button type="button" data-view="top" role="tab" aria-selected="true" data-i18n="label.typeViewTop">Top level</button>
                   <button type="button" data-view="tree" role="tab" aria-selected="false" data-i18n="label.typeViewTree">Tree</button>
@@ -1410,17 +1410,17 @@
         </div>
         <div class="form-group">
           <div class="checkbox-group">
-            <label><input type="checkbox" id="provCustomTools"> <span data-i18n="label.supportsCustomTools">Supports custom tool definitions</span></label><span class="hint-icon">i<span class="hint-popup" style="width:340px;text-align:left" data-i18n-html="hint.customTools">Whether this provider's API natively accepts <code>{type: &quot;custom&quot;}</code> tool definitions.<br><br><b>When enabled:</b> custom tools pass through as-is.<br><b>When disabled:</b> custom tools are downgraded to function wrappers with a synthesized JSON schema, then restored on the response path.<br><br>Only OpenAI's official API supports custom tools natively. Third-party Chat Completions providers (DeepSeek, Moonshot, etc.) typically do not.<br><br><a href="https://web.archive.org/web/20260806000546/https://developers.openai.com/api/docs/guides/function-calling#custom-tools" target="_blank" style="color:var(--accent)">OpenAI Function Calling docs &rarr;</a></span></span>
+            <label><input type="checkbox" id="provCustomTools"> <span data-i18n="label.supportsCustomTools">Supports custom tool definitions</span></label><span class="hint-icon">i<span class="menu hint-popup" style="width:340px;text-align:left" data-i18n-html="hint.customTools">Whether this provider's API natively accepts <code>{type: &quot;custom&quot;}</code> tool definitions.<br><br><b>When enabled:</b> custom tools pass through as-is.<br><b>When disabled:</b> custom tools are downgraded to function wrappers with a synthesized JSON schema, then restored on the response path.<br><br>Only OpenAI's official API supports custom tools natively. Third-party Chat Completions providers (DeepSeek, Moonshot, etc.) typically do not.<br><br><a href="https://web.archive.org/web/20260806000546/https://developers.openai.com/api/docs/guides/function-calling#custom-tools" target="_blank" style="color:var(--accent)">OpenAI Function Calling docs &rarr;</a></span></span>
           </div>
         </div>
         <div class="form-group">
           <div class="checkbox-group">
-            <label><input type="checkbox" id="provHoistSystem" checked> <span data-i18n="label.hoistSystemMessages">Hoist late system messages</span></label><span class="hint-icon">i<span class="hint-popup" style="width:340px;text-align:left" data-i18n-html="hint.hoistSystem">Rewrite mid-conversation system/developer messages as user-role envelopes (<code>[System: ...]</code>) to preserve the prompt cache prefix.<br><br><b>When enabled:</b> late system messages are hoisted — leading ones move to the system instruction, mid-conversation ones become user messages. This keeps the cacheable prefix stable and avoids silent message loss on some providers.<br><br><b>When disabled:</b> system messages are left in their original positions. This may break prompt caching or cause message loss on providers that reject non-leading system messages.</span></span>
+            <label><input type="checkbox" id="provHoistSystem" checked> <span data-i18n="label.hoistSystemMessages">Hoist late system messages</span></label><span class="hint-icon">i<span class="menu hint-popup" style="width:340px;text-align:left" data-i18n-html="hint.hoistSystem">Rewrite mid-conversation system/developer messages as user-role envelopes (<code>[System: ...]</code>) to preserve the prompt cache prefix.<br><br><b>When enabled:</b> late system messages are hoisted — leading ones move to the system instruction, mid-conversation ones become user messages. This keeps the cacheable prefix stable and avoids silent message loss on some providers.<br><br><b>When disabled:</b> system messages are left in their original positions. This may break prompt caching or cause message loss on providers that reject non-leading system messages.</span></span>
           </div>
         </div>
         <div class="form-group">
           <div class="checkbox-group">
-            <label><input type="checkbox" id="provPreflightTokens"> <span data-i18n="label.preflightTokenCount">Preflight token count</span></label><span class="hint-icon">i<span class="hint-popup" style="width:340px;text-align:left" data-i18n-html="hint.preflightTokens">Send a cheap non-streaming request (<code>max_tokens=1</code>) before each streaming request to obtain exact <code>input_tokens</code> in the Anthropic-format <code>message_start</code> event.<br><br><b>When enabled:</b> adds one extra API round-trip (~0.5–1s) and bills input tokens twice. Only fires for cross-format streaming (source ≠ target).<br><br><b>When disabled:</b> <code>input_tokens</code> will be 0 in <code>message_start</code> for non-Anthropic upstreams (usage is still reported at stream end).<br><br>Can also be toggled per-request via the <code>X-Rosetta-Preflight-Tokens</code> header.</span></span>
+            <label><input type="checkbox" id="provPreflightTokens"> <span data-i18n="label.preflightTokenCount">Preflight token count</span></label><span class="hint-icon">i<span class="menu hint-popup" style="width:340px;text-align:left" data-i18n-html="hint.preflightTokens">Send a cheap non-streaming request (<code>max_tokens=1</code>) before each streaming request to obtain exact <code>input_tokens</code> in the Anthropic-format <code>message_start</code> event.<br><br><b>When enabled:</b> adds one extra API round-trip (~0.5–1s) and bills input tokens twice. Only fires for cross-format streaming (source ≠ target).<br><br><b>When disabled:</b> <code>input_tokens</code> will be 0 in <code>message_start</code> for non-Anthropic upstreams (usage is still reported at stream end).<br><br>Can also be toggled per-request via the <code>X-Rosetta-Preflight-Tokens</code> header.</span></span>
           </div>
         </div>
         <div class="form-group" style="max-width:200px">
@@ -1617,7 +1617,7 @@
                   onclick="toggleModelProviderPicker(this)">
             <span class="pp-value"></span><span aria-hidden="true">&#9662;</span>
           </button>
-          <div class="more-menu provider-picker-menu" id="modelProviderMenu" role="listbox"></div>
+          <div class="menu more-menu provider-picker-menu" id="modelProviderMenu" role="listbox"></div>
           <div id="modelMultiProviderHint" style="display:none;font-size:11px;color:var(--text-dim);margin-top:4px"></div>
         </div>
       </div>
@@ -1672,7 +1672,7 @@
       <div class="form-group">
         <label data-i18n="label.systemOptions">System Message</label>
         <div class="checkbox-group">
-          <label><input type="checkbox" id="flattenSystem"> <span data-i18n="label.flattenSystem">Flatten system content</span></label><span class="hint-icon">i<span class="hint-popup" style="width:320px;text-align:left" data-i18n-html="hint.flattenSystem">Converts structured system content to a plain string.<br><br><b>Before:</b><br><code>[{"type":"text","text":"You are..."},{"type":"text","text":"Rules:..."}]</code><br><br><b>After:</b><br><code>"You are...
+          <label><input type="checkbox" id="flattenSystem"> <span data-i18n="label.flattenSystem">Flatten system content</span></label><span class="hint-icon">i<span class="menu hint-popup" style="width:320px;text-align:left" data-i18n-html="hint.flattenSystem">Converts structured system content to a plain string.<br><br><b>Before:</b><br><code>[{"type":"text","text":"You are..."},{"type":"text","text":"Rules:..."}]</code><br><br><b>After:</b><br><code>"You are...
 Rules:..."</code><br><br>Some upstream providers don't support content arrays in system messages.</span></span>
         </div>
       </div>
@@ -1680,7 +1680,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
       <div class="form-group">
         <label data-i18n="label.failover">Failover</label>
         <div class="checkbox-group">
-          <label><input type="checkbox" id="failoverOnError"> <span data-i18n="label.failoverOnError">Try another provider on a refusal</span></label><span class="hint-icon">i<span class="hint-popup" style="width:360px;text-align:left" data-i18n-html="hint.failoverOnError">When this model has several providers, a refusal moves the request to the next one once: an upstream <code>402</code>/<code>429</code>, or <code>408</code>, <code>500</code>, <code>502</code>-<code>504</code>, <code>520</code>-<code>524</code> or <code>529</code>. These never demote a credential. Turning this off trades availability for a warmer prompt cache — the second provider is another cache and possibly another model build.</span></span>
+          <label><input type="checkbox" id="failoverOnError"> <span data-i18n="label.failoverOnError">Try another provider on a refusal</span></label><span class="hint-icon">i<span class="menu hint-popup" style="width:360px;text-align:left" data-i18n-html="hint.failoverOnError">When this model has several providers, a refusal moves the request to the next one once: an upstream <code>402</code>/<code>429</code>, or <code>408</code>, <code>500</code>, <code>502</code>-<code>504</code>, <code>520</code>-<code>524</code> or <code>529</code>. These never demote a credential. Turning this off trades availability for a warmer prompt cache — the second provider is another cache and possibly another model build.</span></span>
         </div>
       </div>
       <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
@@ -1774,7 +1774,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
         <span class="pp-value" data-i18n="label.selectOne">Select one</span>
         <span aria-hidden="true">&#9662;</span>
       </button>
-      <div class="more-menu provider-picker-menu" id="fetchProviderMenu" role="listbox"></div>
+      <div class="menu more-menu provider-picker-menu" id="fetchProviderMenu" role="listbox"></div>
     </div>
     <div id="fetchModelsContent" style="display:none">
       <div class="fetch-toolbar">
