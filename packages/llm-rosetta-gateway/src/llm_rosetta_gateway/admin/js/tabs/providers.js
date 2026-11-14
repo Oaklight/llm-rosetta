@@ -1994,14 +1994,14 @@ function _renderMultiKeys(keys) {
   keys.forEach((k, i) => {
     html += `<div class="multi-key-row">
       <input type="${inputType}" value="${esc(k)}" data-key-idx="${i}" placeholder="${t('label.apiKeyN', {n: i + 1})}">
-      <button type="button" class="key-btn" onclick="_removeKeyEntry(${i})" title="${esc(t('btn.remove'))}">${delSvg}</button>
+      <button type="button" class="icon-btn" onclick="_removeKeyEntry(${i})" title="${esc(t('btn.remove'))}">${delSvg}</button>
     </div>`;
   });
   html += '</div>';
   html += `<div class="multi-key-footer">
     <button type="button" class="btn btn-sm" onclick="_addKeyEntry()">+ ${t('label.addKey')}</button>
-    <button type="button" class="key-btn" onclick="toggleModalKeyVisibility()" title="${esc(t('btn.toggleVisibility'))}">${eyeSvg}</button>
-    <button type="button" class="key-btn" onclick="copyModalKey()" title="${esc(t('btn.copy'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+    <button type="button" class="icon-btn" onclick="toggleModalKeyVisibility()" title="${esc(t('btn.toggleVisibility'))}">${eyeSvg}</button>
+    <button type="button" class="icon-btn" onclick="copyModalKey()" title="${esc(t('btn.copy'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
     <span class="key-count">${t('label.keyCount', {count: keys.length})}</span>
   </div>`;
   box.innerHTML = html;
@@ -2469,7 +2469,7 @@ function renderProviders() {
     const actionsHtml = `<div class="pc-actions">
           <button class="btn btn-sm" aria-label="${t('btn.edit')} ${esc(name)}" onclick="editProvider(${jsArg(name)})">${t('btn.edit')}</button>
           <button class="btn btn-sm btn-test-conn" aria-label="${t('btn.test')} ${esc(name)}" onclick="testProviderConnectivity(${jsArg(name)})">${t('btn.test')}</button>
-          <button class="btn btn-sm more-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.more')} ${esc(name)}" onclick="toggleMoreMenu(this)">&#8943;</button>
+          <button class="icon-btn more-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.more')} ${esc(name)}" onclick="toggleMoreMenu(this)">&#8943;</button>
           <div class="menu more-menu" role="menu">
             <div class="menu-item" role="menuitem" onclick="closeMenus();copyProviderEntry(${jsArg(name)})">${t('btn.clone')}</div>
             ${isFree ? `<div class="menu-item" role="menuitem" onclick="closeMenus();refreshFreeModels(${jsArg(name)})">${t('btn.refreshModels')}</div>` : ''}

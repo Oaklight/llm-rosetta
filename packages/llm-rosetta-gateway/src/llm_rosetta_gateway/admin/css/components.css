@@ -683,14 +683,21 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 .key-cell { display: flex; align-items: center; gap: 4px; }
 .key-cell code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .key-actions { display: flex; gap: 2px; flex-shrink: 0; }
-/* Measured: the key row is already 49px tall, so a 28px button changes
-   nothing there — it takes the button scale like every other button. */
-.key-btn {
+/* ── The icon button ──────────────────────────────────────────────────
+   One 28px square for an action that is only a glyph.  The quiet seat is the
+   default — a row action, a close X; `.is-bordered` is the framed seat a
+   picker trigger wears.  A call site owns only the glyph's size and its
+   spacing. */
+.icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
-  background: none; border: none; cursor: pointer; padding: 0 6px; height: 28px;
-  color: var(--text-dim); font-size: var(--fs-xs); line-height: 1; border-radius: var(--radius-control);
+  width: 28px; height: 28px; padding: 0; flex: 0 0 auto;
+  border: 0; background: none; border-radius: var(--radius-control);
+  color: var(--text-dim); font-size: var(--fs-base); line-height: 1; cursor: pointer;
 }
-.key-btn:hover { color: var(--accent); background: var(--bg-hover); }
+.icon-btn:hover { background: var(--bg-hover); color: var(--text); }
+.icon-btn.is-danger:hover { color: var(--red); }
+.icon-btn.is-bordered { border: 1px solid var(--border); background: var(--surface); }
+.icon-btn.is-bordered:hover { border-color: var(--text-dim); }
 code.copyable { cursor: pointer; transition: background 0.15s; }
 code.copyable:hover { background: var(--bg-hover); }
 
@@ -754,12 +761,6 @@ code.copyable:hover { background: var(--bg-hover); }
   padding: 12px 20px;
   background: var(--bg-card); border-top: 1px solid var(--border);
 }
-.drawer-close {
-  appearance: none; border: 0; background: transparent; color: var(--text-dim);
-  width: 28px; height: 28px; padding: 0; line-height: 1;
-  border-radius: var(--radius-control); font-size: var(--fs-base); cursor: pointer;
-}
-.drawer-close:hover { background: var(--bg-hover); color: var(--text); }
 @media (max-width: 700px) {
   /* Full width: no free corner is left to round. */
   #providerModal > .modal, #fetchModelsModal > .modal { width: 100vw; border-radius: 0; }
@@ -786,7 +787,7 @@ code.copyable:hover { background: var(--bg-hover); }
 .multi-key-row { display:flex;gap:4px;align-items:center; }
 .multi-key-row input { flex:1;font-family:var(--mono); }
 .multi-key-row input:focus { border-color:var(--accent); }
-.multi-key-row .key-btn { flex-shrink:0; }
+.multi-key-row .icon-btn { flex-shrink:0; }
 .multi-key-footer { display:flex;align-items:center;gap:8px;margin-top:4px; }
 .multi-key-footer .key-count { font-size:11px;color:var(--text-dim); }
 .multi-key-footer .btn { font-size:11px;padding:2px 8px; }
@@ -1391,14 +1392,14 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
 .sr-select { position:absolute;width:1px;height:1px;opacity:0;pointer-events:none; }
 
 /* Key rows: the pencil and the row actions stay quiet until the row is used. */
-#keysTable .key-btn,
+#keysTable .icon-btn,
 #keysTable .key-actions-cell .btn { opacity:0; transition:opacity .12s ease; }
-#keysTable tr:hover .key-btn,
-#keysTable tr:focus-within .key-btn,
+#keysTable tr:hover .icon-btn,
+#keysTable tr:focus-within .icon-btn,
 #keysTable tr:hover .key-actions-cell .btn,
 #keysTable tr:focus-within .key-actions-cell .btn { opacity:1; }
 @media (hover: none) {
-  #keysTable .key-btn, #keysTable .key-actions-cell .btn { opacity:1; }
+  #keysTable .icon-btn, #keysTable .key-actions-cell .btn { opacity:1; }
 }
 /* A long label must clip, not push the dates off the row. */
 #keysTable .key-label-cell { overflow:hidden; }
@@ -1752,12 +1753,6 @@ button.lp-clear {
 
 /* Compact logo picker (icon button mode) */
 .lp-compact { display:inline-flex;align-items:flex-start;gap:4px;position:relative; }
-.lp-trigger {
-  width:28px;height:28px;border:1px solid var(--border);border-radius:var(--radius-control);
-  background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center;
-  padding:0;transition:border-color 0.15s;
-}
-.lp-trigger:hover { border-color:var(--text-dim); }
 /* Measured: a 24px glyph leaves 1px of frame inside a 28px button; 18 keeps
    the 5px inset the 36px box had. */
 .lp-trigger-img { width:18px;height:18px;object-fit:contain; }

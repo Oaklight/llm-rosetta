@@ -192,27 +192,27 @@ body.auth-pending > .db-footer { display: none !important; }
 .sb-clock-v { display: flex; align-items: baseline; gap: 4px; min-width: 0; }
 .sb-clock-zone { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .85; }
 .sb-actions { display: flex; gap: 2px; }
-.sb-actions .btn { flex: 1; min-width: 0; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 /* The foot of the rail is icon-only and borderless: a box around each of four
-   40px buttons reads as a toolbar the panel does not have.  The rules are
-   scoped to `.sb-actions` so they outrank the generic `.btn` (loaded after
-   this file), which would otherwise paint a border and a card background. */
-.sb-actions .sb-icon-btn {
-  position: relative; padding: 0; font-size: 12px; line-height: 1;
-  border: none; background: transparent; color: var(--text-dim);
+   40px buttons reads as a toolbar the panel does not have.  Each icon button
+   fills its quarter of the row, so this scoped layout rule wins over the
+   component's 28px square; the hover stays flat because a rail is not a
+   toolbar. */
+.sb-actions .icon-btn {
+  position: relative; flex: 1 1 0; width: auto; min-width: 0;
+  font-size: 12px; border: 0; background: transparent;
 }
-.sb-actions .sb-icon-btn:hover { background: transparent; color: var(--text); }
-.sb-actions .sb-icon-btn.sb-icon-danger:hover { color: var(--red); }
+.sb-actions .icon-btn:hover { background: transparent; color: var(--text); }
+.sb-actions .icon-btn.is-danger:hover { color: var(--red); }
 /* Settings lives in the foot, not the tab list, so the gear is what says the
    panel is open.  The marker is the rail's accent bar turned horizontal: in
    the minimal scheme `--accent` is the text colour, so a colour change alone
    would not be visible. */
-.sb-actions .sb-icon-btn.is-active::after {
+.sb-actions .icon-btn.is-active::after {
   content: ''; position: absolute; left: 12px; right: 12px; bottom: 3px;
   height: 2px; border-radius: 2px; background: var(--accent);
   pointer-events: none;
 }
-.sb-actions .sb-icon-btn svg { width: 16px; height: 16px; display: block; margin: 0 auto; }
+.sb-actions .icon-btn svg { width: 16px; height: 16px; display: block; margin: 0 auto; }
 .app-main { min-width: 0; }
 
 /* ── Status bar (the page's topbar) ───────────────────────────────────────
