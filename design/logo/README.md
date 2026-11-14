@@ -74,6 +74,14 @@ parameters:
 6. frame: square canvas (`--canvas`, `--scale`) or tight square (`--tight`,
    `--pad`).
 
+The anchor modes rank a vertex differently. `area` uses the triangle a removal
+would lose (favours the big convex sweeps), `corner` uses the turning angle
+(favours sharp jags), `depth` uses the distance inside the convex hull (favours
+dents, since a hollow is where the outline leaves the hull), and `hybrid` takes
+half from area and fills the rest by depth. On this outline 46% of the
+flattened vertices are locally reflex, yet `area` selects 1 of 12, `corner`
+7 of 12, and `depth` 12 of 12, all non-hull.
+
 ```bash
 cd design/logo
 
@@ -140,27 +148,16 @@ Interaction:
 
 ## Copyright
 
-Not legal advice. Copyright and trademark are separate questions, and only the
-first is settled here.
-
 The source file is
 [File:Rosetta Stone.svg](https://commons.wikimedia.org/wiki/File:Rosetta_Stone.svg),
 released by its author under CC0 1.0, so the trace carries no attribution or
-share-alike obligation. The artifact's age does not settle this. The mark is a
+share-alike obligation. The artifact's age does not settle this: the mark is a
 trace of a specific image, and a trace is normally a derivative of that image.
 CC0 is why that chain ends in no obligations. See `references/SOURCE.md` for
 the recorded chain and its one caveat.
 
-Trademark is a separate question. "Rosetta Stone" is a registered mark for
-language software, and Apple's Rosetta is an established mark for translation
-layers. A stone silhouette is generic enough that neither blocks us today, but
-this is the axis to watch if the project is ever commercialised or the mark is
-registered.
-
-The anchor modes rank a vertex differently. `area` uses the triangle a removal
-would lose (favours the big convex sweeps), `corner` uses the turning angle
-(favours sharp jags), `depth` uses the distance inside the convex hull (favours
-dents, since a hollow is where the outline leaves the hull), and `hybrid` takes
-half from area and fills the rest by depth. On this outline 46% of the
-flattened vertices are locally reflex, yet `area` selects 1 of 12, `corner`
-7 of 12, and `depth` 12 of 12, all non-hull.
+The files in this folder are not CC0. They are the project's mark. Their terms
+are in [`LICENSE`](LICENSE) in this folder and in
+[`TRADEMARKS.md`](../../TRADEMARKS.md). In short: use them to refer to the
+project, keep the notice, do not use them as the branding of a product or
+service, and do not claim or register them as your own.

@@ -336,4 +336,4 @@ llm-comply -u https://your-gateway/v1 -k $API_KEY -m your-model --format openai-
 
 ## 许可证
 
-本项目使用 MIT 许可证——详见 [LICENSE](LICENSE)。
+本项目使用 MIT 许可证——详见 [LICENSE](LICENSE)。项目名称与 logo 标记属于品牌资产，另见 [TRADEMARKS.md](TRADEMARKS.md)。
