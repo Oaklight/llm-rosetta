@@ -156,6 +156,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **Google SDK 形状把 `system_instruction` 移入 `config`**（issue [#936](https://github.com/Oaklight/llm-rosetta/issues/936)）：直接构造 Google `GenerateContentConfig` 的调用方需要移动该字段。
 
 ### 修复
+- **锐点不再把它的细节顶点画成锚点**（议题 [#1558](https://github.com/Oaklight/llm-rosetta/issues/1558)，PR [#1559](https://github.com/Oaklight/llm-rosetta/pull/1559)）：锐点为了保留细节会多保留下附近的顶点，而这些顶点此前和用户锚点放在同一个集合里，于是被标注的一段轮廓挤满了橙色圆点，既挡住边缘也挡住真正选中的锚点，点掉也没用——每次重建都会重新加回来。现在「保护集合」与「显示集合」分开：区域顶点只参与简化、以普通候选点显示，只有用户亲手放的才是锚点。在 `--points 48 --smooth 2` 加一个锐点实测：12 个锚点仍是 12 个、另有 1 个紫色锐点，候选空心点回到没有锐点时的 16 个（此前 39 个），导出的多边形不变。
 - **容量填满是稳态；未知转储是空状态**（[#1502](https://github.com/Oaklight/llm-rosetta/issues/1502) §13，PR [#1554](https://github.com/Oaklight/llm-rosetta/pull/1554)）：状态栏把 `50000/50000 (100%)` 涂成危险色——滚动上限本来就该是满的——现在红色只表示超过上限，四分之三起为琥珀色。`#dump/<未知 id>` 此前是一个正文带错误、复制/下载仍作用于上一个转储的页面；现在是面板的空状态且按钮禁用，并用序号防止较慢的那次打开覆盖较新的结果。
 - **开关旋钮跟随轨道墨色**（PR [#1554](https://github.com/Oaklight/llm-rosetta/pull/1554)）：暗色下选中态是 `#ededed` 轨道配纯白旋钮——对比度 1.15:1，糊成一块。旋钮选中时取 `--accent-on`、未选中取 `--text-dim`：minimal 亮色 17.93 / 6.50、暗色 17.94 / 5.94，emerald 与 TypeSafe 也都在 5:1 以上。
 - **分段控件的选项不再自带框体**（PR [#1554](https://github.com/Oaklight/llm-rosetta/pull/1554)）：组件只管间距与分隔线，填充与边框留给浏览器，于是 `<button>` 子项保留 UA 灰色皮肤（示例切换看起来像四个独立按钮），而 `<label>` 子项是透明的。重置规则现在写在 `.seg-control > *` 里。
