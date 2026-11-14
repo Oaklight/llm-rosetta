@@ -231,3 +231,22 @@ test('an edited models field is read as written', () => {
   // Clearing the field is the explicit "every model" the label promises.
   assert.deepEqual(modelsForSave('', ['m-a']), ['*']);
 });
+
+test('the dialog hands the loaded list to the save', () => {
+  // The pure function is pinned above; what it is given is the other half of
+  // the round trip.  Forgetting the loaded value here re-opens the widen with
+  // no other test in the suite noticing.
+  const source = fs.readFileSync(KEYS_JS, 'utf8');
+  const open = bodyOf(source, 'editKeyLabel');
+  assert.match(
+    open,
+    /_editingModels = Array\.isArray\(key\.allowed_models\) \? key\.allowed_models : \['\*'\]/,
+    'the dialog keeps the list it loaded',
+  );
+  const save = bodyOf(source, '_saveKeyLabel');
+  assert.match(
+    save,
+    /modelsForSave\(\s*document\.getElementById\('keyModelsInput'\)\.value,\s*_editingModels,?\s*\)/,
+    'the save sends the loaded list back',
+  );
+});
