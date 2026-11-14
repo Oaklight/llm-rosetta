@@ -702,14 +702,19 @@ def _centroid(rings: list[list[Point]]) -> Point:
     return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
 
 
-def rotate(rings: list[list[Point]], deg: float) -> list[list[Point]]:
-    """Rotate every ring about the bounding-box centre, in degrees."""
+def rotate(
+    rings: list[list[Point]], deg: float, origin: Point | None = None
+) -> list[list[Point]]:
+    """Rotate every ring about *origin*, or the bounding-box centre."""
     if deg == 0.0:
         return rings
     a = math.radians(deg)
     ca, sa = math.cos(a), math.sin(a)
-    x0, y0, x1, y1 = _bbox(rings)
-    cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+    if origin is None:
+        x0, y0, x1, y1 = _bbox(rings)
+        cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+    else:
+        cx, cy = origin
     return [
         [
             (cx + (x - cx) * ca - (y - cy) * sa, cy + (x - cx) * sa + (y - cy) * ca)
@@ -719,27 +724,35 @@ def rotate(rings: list[list[Point]], deg: float) -> list[list[Point]]:
     ]
 
 
-def stretch(rings: list[list[Point]], aspect: float) -> list[list[Point]]:
-    """Scale x by *aspect* about the centre; y stays put."""
+def stretch(
+    rings: list[list[Point]], aspect: float, origin: Point | None = None
+) -> list[list[Point]]:
+    """Scale x by *aspect* about *origin*, or the bounding-box centre."""
     if aspect == 1.0:
         return rings
-    x0, y0, x1, y1 = _bbox(rings)
-    cx = (x0 + x1) / 2.0
+    if origin is None:
+        x0, y0, x1, y1 = _bbox(rings)
+        cx = (x0 + x1) / 2.0
+    else:
+        cx = origin[0]
     return [[(cx + (x - cx) * aspect, y) for x, y in r] for r in rings]
 
 
-def inflate(rings: list[list[Point]], amount: float) -> list[list[Point]]:
+def inflate(
+    rings: list[list[Point]], amount: float, origin: Point | None = None
+) -> list[list[Point]]:
     """Push each vertex along its normal by *amount* times the longest side.
 
-    Positive grows the silhouette, negative shrinks it.  Normals are oriented
-    away from the centroid, so winding order does not matter.
+    Positive grows the silhouette, negative shrinks it.  Normals point away
+    from *origin*, or from the centroid when no origin is given, so winding
+    order does not matter.
     """
     if amount == 0.0:
         return rings
     x0, y0, x1, y1 = _bbox(rings)
     size = max(x1 - x0, y1 - y0) or 1.0
     d = amount * size
-    cx, cy = _centroid(rings)
+    cx, cy = origin if origin is not None else _centroid(rings)
     out: list[list[Point]] = []
     for ring in rings:
         closed = is_ring(ring)
@@ -771,11 +784,20 @@ def inflate(rings: list[list[Point]], amount: float) -> list[list[Point]]:
     return out
 
 
-def deform(rings: list[list[Point]], args: argparse.Namespace) -> list[list[Point]]:
-    """Apply the deformation knobs in a fixed, reproducible order."""
-    rings = rotate(rings, args.rotate)
-    rings = stretch(rings, args.aspect)
-    rings = inflate(rings, args.inflate)
+def deform(
+    rings: list[list[Point]], args: argparse.Namespace, pivot: Point | None = None
+) -> list[list[Point]]:
+    """Apply the deformation knobs in a fixed, reproducible order.
+
+    *pivot* is the point the knobs turn and grow around.  It defaults to the
+    bounding-box centre (rotation, stretch) and the vertex centroid (inflate);
+    red anchors pass their centroid instead, so a mark with locked points
+    rotates and grows around them rather than around its own middle and then
+    being shifted back into place.
+    """
+    rings = rotate(rings, args.rotate, pivot)
+    rings = stretch(rings, args.aspect, pivot)
+    rings = inflate(rings, args.inflate, pivot)
     return rings
 
 
@@ -809,7 +831,19 @@ class Framing:
     )
     viewbox: str = ""
 
-    def apply(self, rings: list[list[Point]]) -> list[list[Point]]:
+    def apply(
+        self,
+        rings: list[list[Point]],
+        pivot: Point | None = None,
+        target: Point | None = None,
+    ) -> list[list[Point]]:
+        """Place the mark in the canvas.
+
+        Without *pivot* the mark is centred by its bounding box.  With a
+        *pivot* and *target* the transform is set so that the pivot lands on
+        the target instead, which is how a red anchor keeps its canvas point
+        while the scale knob changes.
+        """
         x0, y0, x1, y1 = _bbox(rings)
         w, h = x1 - x0, y1 - y0
         if self.tight:
@@ -818,13 +852,20 @@ class Framing:
             side = max(w, h) * (1.0 + 2.0 * self.pad)
             self.transform = (-x0 + (side - w) / 2.0, -y0 + (side - h) / 2.0, 1.0)
             self.viewbox = f"0 0 {fmt(side)} {fmt(side)}"
-            return rings
-        side = max(w, h) or 1.0
-        k = (self.canvas * self.scale) / side
-        tx = (self.canvas - w * k) / 2.0 - x0 * k
-        ty = (self.canvas - h * k) / 2.0 - y0 * k
-        self.transform = (tx, ty, k)
-        self.viewbox = f"0 0 {fmt(self.canvas)} {fmt(self.canvas)}"
+        else:
+            side = max(w, h) or 1.0
+            k = (self.canvas * self.scale) / side
+            tx = (self.canvas - w * k) / 2.0 - x0 * k
+            ty = (self.canvas - h * k) / 2.0 - y0 * k
+            self.transform = (tx, ty, k)
+            self.viewbox = f"0 0 {fmt(self.canvas)} {fmt(self.canvas)}"
+        if pivot is not None and target is not None:
+            k = self.transform[2]
+            self.transform = (
+                target[0] - pivot[0] * k,
+                target[1] - pivot[1] * k,
+                k,
+            )
         return rings
 
 
@@ -913,57 +954,116 @@ def path_data_from_svg(path: Path) -> str:
     return max(candidates, key=len)
 
 
-def parse_locks(text: str) -> dict[int, Point]:
-    """Parse ``--lock`` entries: ``IDX@X,Y``, several separated by ``;``.
+def ring_fractions(pts: list[Point]) -> list[float]:
+    """Normalised arc-length position of each vertex, 0 at the first one.
 
-    ``IDX`` is a flattened source index, the same index ``--pin`` takes, and
-    ``X,Y`` is the canvas position that vertex is held at.
+    A vertex index means nothing across flattening tolerances: the same index
+    lands on a different part of the outline as soon as ``--tolerance``
+    changes, which moved anchors around the shape.  A fraction of the outline
+    length names the same place at every density.
     """
-    locks: dict[int, Point] = {}
+    ring = pts[:-1] if is_ring(pts) else list(pts)
+    n = len(ring)
+    if n == 0:
+        return []
+    steps = [
+        math.hypot(ring[(i + 1) % n][0] - ring[i][0], ring[(i + 1) % n][1] - ring[i][1])
+        for i in range(n)
+    ]
+    total = sum(steps) or 1.0
+    out: list[float] = []
+    acc = 0.0
+    for step in steps:
+        out.append(acc / total)
+        acc += step
+    return out
+
+
+def index_at_fraction(fracs: list[float], u: float) -> int:
+    """Index of the vertex closest to arc position *u*."""
+    return min(range(len(fracs)), key=lambda i: abs(fracs[i] - u))
+
+
+def parse_anchor_token(token: str) -> tuple[str, float]:
+    """Read one anchor reference: ``u0.35`` is a fraction, ``120`` an index.
+
+    The index form is what the page emitted before anchors were tied to the
+    outline length; it still works but only at the tolerance it was recorded
+    with.
+    """
+    token = token.strip()
+    if token[:1] in ("u", "U"):
+        return "u", float(token[1:])
+    return "i", float(int(token))
+
+
+def parse_anchors(text: str) -> list[tuple[str, float]]:
+    """Parse a comma list of anchor references."""
+    return [parse_anchor_token(t) for t in text.split(",") if t.strip()]
+
+
+def resolve_anchors(
+    fracs: list[float], refs: list[tuple[str, float]]
+) -> frozenset[int]:
+    """Turn anchor references into indices of the current flattened ring."""
+    return frozenset(
+        index_at_fraction(fracs, v) if kind == "u" else int(v) for kind, v in refs
+    )
+
+
+def parse_locks(text: str) -> dict[tuple[str, float], Point]:
+    """Parse ``--lock`` entries: ``REF@X,Y``, several separated by ``;``.
+
+    ``REF`` is ``u0.35`` (a fraction of the outline length) or a bare index,
+    the same reference ``--pin`` takes, and ``X,Y`` is the canvas position that
+    vertex is held at.
+    """
+    locks: dict[tuple[str, float], Point] = {}
     for item in text.split(";"):
         item = item.strip()
         if not item:
             continue
-        idx, sep, xy = item.partition("@")
+        ref, sep, xy = item.partition("@")
         try:
             if not sep:
                 raise ValueError
             x, y = xy.split(",")
-            locks[int(idx)] = (float(x), float(y))
+            locks[parse_anchor_token(ref)] = (float(x), float(y))
         except ValueError as exc:
             raise SystemExit(
-                f"--lock entry {item!r} is not IDX@X,Y (for example 120@312.5,244)"
+                f"--lock entry {item!r} is not REF@X,Y (for example u0.35@312.5,244)"
             ) from exc
     return locks
 
 
-def apply_locks(
-    rings: list[list[Point]],
-    tags_by_ring: list[list[int]],
-    locks: dict[int, Point],
-    framing: Framing,
-) -> None:
-    """Shift the whole mark so red anchors land on their recorded canvas points.
+def lock_pivot(
+    rings: list[list[Point]], tags_by_ring: list[list[int]], locks: dict[int, Point]
+) -> Point | None:
+    """The centroid of the locked vertices, in the coordinates of *rings*.
 
-    The shift is one translation for the whole mark, so it never changes the
-    geometry around a locked vertex.  Several locks average their error: an
-    affine knob (rotate, aspect, scale) cannot satisfy two fixed points at
-    once, and the average is the least surprising compromise.
+    This is what the deformation knobs turn and grow around, so a locked point
+    stays where it is instead of being pulled back by a translation afterwards.
     """
     if not locks:
-        return
-    tx, ty, k = framing.transform
-    dx = dy = 0.0
+        return None
+    pts: list[Point] = []
     seen: set[int] = set()
     for ring, tags in zip(rings, tags_by_ring):
         for (x, y), tag in zip(ring, tags):
             if tag in locks and tag not in seen:
                 seen.add(tag)
-                target = locks[tag]
-                dx += target[0] - (x * k + tx)
-                dy += target[1] - (y * k + ty)
-    if seen:
-        framing.transform = (tx + dx / len(seen), ty + dy / len(seen), k)
+                pts.append((x, y))
+    if not pts:
+        return None
+    return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
+
+
+def lock_target(locks: dict[int, Point]) -> Point | None:
+    """The canvas point the lock centroid is held at: the mean of the targets."""
+    if not locks:
+        return None
+    pts = list(locks.values())
+    return (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts))
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1102,19 +1202,9 @@ def main(argv: list[str] | None = None) -> int:
     total_in = sum(len(r) for r in dense)
 
     budgets = [int(x) for x in str(args.points).replace(" ", "").split(",") if x]
-    manual_pin = frozenset(int(x) for x in args.pin.split(",") if x.strip())
-    manual_unpin = frozenset(int(x) for x in args.unpin.split(",") if x.strip())
-    locks = parse_locks(args.lock)
-    locked = frozenset(locks)
-    # A lock names a vertex of the source ring, so an index past the end is a
-    # typo, not a lock that quietly does nothing.
-    longest = max((len(r) for r in dense), default=0)
-    stray = sorted(i for i in locks if not 0 <= i < longest)
-    if stray:
-        raise SystemExit(
-            f"--lock index {stray[0]} is outside the flattened outline "
-            f"(0..{longest - 1})"
-        )
+    pin_refs = parse_anchors(args.pin)
+    unpin_refs = parse_anchors(args.unpin)
+    lock_refs = parse_locks(args.lock)
     out_path: Path | None = args.out
     if out_path is None and not args.stats:
         out_path = Path("-")
@@ -1123,7 +1213,26 @@ def main(argv: list[str] | None = None) -> int:
     for budget in budgets:
         rings: list[list[Point]] = []
         tags_by_ring: list[list[int]] = []
+        locks: dict[int, Point] = {}
+        locked: frozenset[int] = frozenset()
         for ring, is_closed in zip(dense, closed):
+            fracs = ring_fractions(ring)
+            # Anchors are named on the outline, so resolve them against this
+            # ring: the indices they land on change with --tolerance, the
+            # places they name do not.
+            manual_pin = resolve_anchors(fracs, pin_refs)
+            manual_unpin = resolve_anchors(fracs, unpin_refs)
+            locks = {
+                index_at_fraction(fracs, v) if kind == "u" else int(v): target
+                for (kind, v), target in lock_refs.items()
+            }
+            stray = sorted(i for i in locks if not 0 <= i < len(ring))
+            if stray:
+                raise SystemExit(
+                    f"--lock refers to {stray[0]}, outside the flattened "
+                    f"outline (0..{len(ring) - 1})"
+                )
+            locked = frozenset(locks)
             share = max(3, round(budget * len(ring) / max(total_in, 1)))
             pinned = (
                 (
@@ -1142,12 +1251,13 @@ def main(argv: list[str] | None = None) -> int:
             pts, tags = chaikin_src(reduced, tags, args.smooth, is_closed, locked)
             rings.append(pts)
             tags_by_ring.append(tags)
-        rings = deform(rings, args)
+        rings = deform(rings, args, lock_pivot(rings, tags_by_ring, locks))
         framing = Framing(
             canvas=args.canvas, scale=args.scale, tight=args.tight, pad=args.pad
         )
-        rings = framing.apply(rings)
-        apply_locks(rings, tags_by_ring, locks, framing)
+        rings = framing.apply(
+            rings, lock_pivot(rings, tags_by_ring, locks), lock_target(locks)
+        )
         last_svg = emit_svg(
             rings,
             framing,
