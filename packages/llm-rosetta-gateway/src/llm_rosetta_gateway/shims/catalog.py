@@ -23,7 +23,7 @@ spellings; the two lists are kept in step by a test here.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -59,6 +59,11 @@ class ShimSourcePackage:
             for that tag, so a primary that followed ``main`` could drift away
             from them.  ``None`` keeps the pre-archive behaviour (an omitted
             ref is resolved to a commit and pinned in the cache stamp).
+        logos: The vendor marks the package's leaves declare, keyed by the
+            vendor name (the shim name before ``--``).  The Available view
+            draws them before the package is fetched, when there is no
+            ``provider.yaml`` on disk to read a mark from; a vendor absent here
+            falls back to the initials tile the Installed view uses.
         mirror: The ``shims.remotes[].mirror`` entry, once the package
             publishes a tagged archive.  ``sha256`` is a per-release constant:
             bump it here when the archive is rebuilt.  ``path`` is the
@@ -79,6 +84,7 @@ class ShimSourcePackage:
     note: dict[str, str] | None = None
     ref: str | None = None
     mirror: dict[str, Any] | None = None
+    logos: dict[str, str] = field(default_factory=dict)
 
     @property
     def tier(self) -> str:
@@ -132,8 +138,30 @@ class ShimSourcePackage:
             "shims": list(self.shims),
             "free": self.free,
             "tier": self.tier,
+            "logos": dict(self.logos),
             "note": self.note,
         }
+
+
+def repo_key(url: str | None) -> str:
+    """Normalise a repository URL so two spellings of it compare equal.
+
+    A declaration may carry a trailing slash or a ``.git`` suffix, and GitHub
+    answers with or without them; the source list, the update check and the
+    catalog all name the same repository, so they key on this form.
+
+    Args:
+        url: A repository URL, or ``None``.
+
+    Returns:
+        The lowercased URL without a trailing slash or ``.git`` suffix.
+    """
+    if not url:
+        return ""
+    out = url.strip().rstrip("/")
+    if out.endswith(".git"):
+        out = out[:-4]
+    return out.lower()
 
 
 def get_source_package(key: str) -> ShimSourcePackage | None:
@@ -297,6 +325,14 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         # ``path`` names ``providers`` rather than ``"."``: the archive
         # strips its single top-level directory, and a future release that
         # wraps the providers tree must not stop this config loading.
+        # The mark is the vendor manifest's, repeated so Available can draw
+        # it before the package is fetched.
+        logos={
+            "alcf": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf"
+                "@main/assets/alcf.svg"
+            ),
+        },
         ref="v0.3.1",
         mirror={
             "url_template": (
@@ -332,6 +368,14 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         # ``path`` names ``providers`` rather than ``"."``: the archive
         # strips its single top-level directory, and a future release that
         # wraps the providers tree must not stop this config loading.
+        # The vendor's own wordmark, cut from the banner it publishes and
+        # traced to a path (it is a 24px raster: no font to embed).
+        logos={
+            "argo": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argo"
+                "@c1925c14f35170aa4f839c7fb8b97de58c2d4bee/assets/argo.svg"
+            ),
+        },
         ref="v0.3.0",
         mirror={
             "url_template": (
@@ -361,6 +405,18 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         ),
         # Keyless, so the picker groups them under free resources.
         free=True,
+        # LLM7 declares no mark of its own, so its tile falls back to initials.
+        logos={
+            "kilo_free": (
+                "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg"
+                "@latest/icons/kilocode.svg"
+            ),
+            "opencode_zen_free": (
+                "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg"
+                "@latest/icons/opencode.svg"
+            ),
+            "ovhcloud": "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ovh.svg",
+        },
         note={
             "en": (
                 "Anonymous free tiers with no contract: Kilo serves only its "
@@ -409,6 +465,15 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
             "asksage--anthropic",
             "asksage--openai_responses",
         ),
+        # The vendor manifest carries the owl; the catalogue repeats it so the
+        # Available card, and a loaded package whose archive predates the
+        # declaration, both draw a mark instead of initials.
+        logos={
+            "asksage": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-asksage"
+                "@main/assets/asksage.png"
+            ),
+        },
         # The archive lives on the orphan ``dist`` branch, one directory
         # per tag (#1412); the CDN URL is a template, not the only host.
         # ``sha256`` is the published digest of the v0.3.0 archive: bump it
@@ -438,6 +503,12 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         ),
         # The vendor manifest carries the mark, so every lane shows it; the
         # package needs a core that reads manifest identity (0.14.0.dev31+).
+        logos={
+            "opendesign": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-opendesign"
+                "@main/assets/opendesign.svg"
+            ),
+        },
         # ``sha256`` is the published digest of the v0.1.1 archive: bump it
         # together with ``ref`` when a new archive is released.
         ref="v0.1.1",

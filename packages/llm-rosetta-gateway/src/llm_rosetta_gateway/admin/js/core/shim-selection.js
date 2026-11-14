@@ -61,3 +61,42 @@ export function selectionMaps(section, key, checked, total) {
   delete exclude[key];
   return { include, exclude };
 }
+
+/**
+ * A commit shortened the way git prints it; a tag stays as declared.
+ *
+ * A remote source is pinned to a commit SHA, but a preset may pin a tag, and
+ * then the pin is that tag.  Truncating a tag would hide which release the
+ * gateway runs, so only an all-hex string is cut.
+ *
+ * @param {string|null} ref - The pinned ref, or a repository head.
+ * @returns {string} Seven characters for a SHA, the ref itself otherwise.
+ */
+export function shortRef(ref) {
+  if (!ref) return '';
+  return /^[0-9a-f]{7,40}$/i.test(ref) ? ref.slice(0, 7) : ref;
+}
+
+/**
+ * The mark for one vendor of a catalogue package.
+ *
+ * A catalogue record keys its marks by the vendor the manifest names, while a
+ * shim name carries the lane's own prefix — `alcf_metis--…` belongs to the
+ * `alcf` mark — so the leading segment is tried before giving up.  A package
+ * with exactly one mark paints it on every lane, which is what a manifest
+ * above the lanes means.
+ *
+ * @param {{logos?: object}} pkg - A catalogue entry.
+ * @param {string} vendor - The vendor name taken from a shim name.
+ * @param {string|null} [known] - The mark the inventory holds, if any.
+ * @returns {string|null} A URL, or null when the vendor has no mark.
+ */
+export function packageLogoUrl(pkg, vendor, known = null) {
+  const logos = (pkg && pkg.logos) || {};
+  if (logos[vendor]) return logos[vendor];
+  const head = String(vendor).split('_')[0];
+  if (logos[head]) return logos[head];
+  if (known) return known;
+  const keys = Object.keys(logos);
+  return keys.length === 1 ? logos[keys[0]] : null;
+}

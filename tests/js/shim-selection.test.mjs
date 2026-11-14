@@ -11,7 +11,9 @@ import assert from 'node:assert/strict';
 import {
   hasPattern,
   keptShims,
+  packageLogoUrl,
   selectionMaps,
+  shortRef,
 } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/shim-selection.js';
 
 const SHIMS = ['kilo_free--chat_completions', 'llm7--chat_completions', 'ovhcloud--chat_completions'];
@@ -74,4 +76,33 @@ test('a pattern is recognised, so the card can say the list is not its own', () 
   assert.equal(hasPattern(['llm7--*']), true);
   assert.equal(hasPattern([SHIMS[0]]), false);
   assert.equal(hasPattern([]), false);
+});
+
+test('a SHA is shortened the way git prints it, a tag is not', () => {
+  assert.equal(shortRef('e4913f57e8c8acaf57c4b419050bcaa0aa989c70'), 'e4913f5');
+  // A preset may pin a tag; truncating it would hide which release runs.
+  assert.equal(shortRef('v0.3.0'), 'v0.3.0');
+  assert.equal(shortRef(null), '');
+  assert.equal(shortRef(''), '');
+});
+
+test('a cluster-qualified lane borrows its vendor manifest mark', () => {
+  const alcf = { logos: { alcf: 'alcf.svg' } };
+  // The shim name carries the lane, the mark belongs to the vendor.
+  assert.equal(packageLogoUrl(alcf, 'alcf_metis'), 'alcf.svg');
+});
+
+test('an exact vendor mark wins over the leading segment', () => {
+  const free = { logos: { kilo_free: 'kilocode.svg', ovhcloud: 'ovh.svg' } };
+  assert.equal(packageLogoUrl(free, 'kilo_free'), 'kilocode.svg');
+  assert.equal(packageLogoUrl(free, 'llm7'), null);
+});
+
+test('a single-mark package paints it on every lane', () => {
+  const opendesign = { logos: { opendesign: 'od.svg' } };
+  assert.equal(packageLogoUrl(opendesign, 'anything'), 'od.svg');
+});
+
+test('the inventory mark is the fallback when the catalogue is silent', () => {
+  assert.equal(packageLogoUrl({ logos: {} }, 'kilo_free', 'from-inventory.svg'), 'from-inventory.svg');
 });

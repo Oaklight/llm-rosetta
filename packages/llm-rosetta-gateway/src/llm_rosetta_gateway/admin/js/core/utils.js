@@ -261,6 +261,17 @@ function showToastHtml(trustedHtml, type = 'success') {
   _renderToast(type, 5000, el => { el.innerHTML = trustedHtml; });
 }
 
+/** Drop whatever toast is showing, without waiting for its timer.
+
+A call made before the session existed leaves its refusal on screen; once the
+operator is signed in that line is about a state the page no longer has.
+*/
+function clearToast() {
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+  const el = document.getElementById('toast');
+  if (el) { el.className = 'toast'; el.textContent = ''; }
+}
+
 // ===================== Modal =====================
 // The dialog rules (scroll lock, Tab trap, Escape) live in `dialog.js`,
 // shared with the model side panel.  This module keeps only what is specific
@@ -474,13 +485,13 @@ function rowToggleKey(event, row) {
 
 Object.assign(window, {
   setScheme, setMode, setTheme, api, doLogout, copyText, copyProviderEntry,
-  showToast, showToastHtml, openModal, closeModal, inlineConfirm, esc, formatDuration, rowToggleKey,
+  showToast, showToastHtml, clearToast, openModal, closeModal, inlineConfirm, esc, formatDuration, rowToggleKey,
   fmtBytesShort, fmtBytesLong, fmtTokens, closeMenus,
   _startInactivityTracking, _stopInactivityTracking,
 });
 
 export {
-  setScheme, setMode, setTheme, _adminHeaders, api, showToast, showToastHtml, openModal, closeModal,
+  setScheme, setMode, setTheme, _adminHeaders, api, showToast, showToastHtml, clearToast, openModal, closeModal,
   copyText, copyProviderEntry, esc, formatDuration,
   fmtBytesShort, fmtBytesLong, fmtTokens,
   inlineConfirm, closeMenus, openMenu, positionMenu, doLogout, withBusyButton,
