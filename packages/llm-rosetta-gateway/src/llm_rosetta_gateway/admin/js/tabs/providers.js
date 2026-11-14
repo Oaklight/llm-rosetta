@@ -19,7 +19,7 @@ import {
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect, createTypePicker } from '../components/type-picker.js';
 import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand } from '../core/shim-tree.js';
-import { providerPickRows, suggestedProviderName, pickDestination } from '../core/provider-pick.js';
+import { suggestedProviderName, pickDestination } from '../core/provider-pick.js';
 import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, orderedProviders, nonLlmFormatType } from '../core/provider-endpoints.js';
 import { routingRows, blockRow } from '../core/quota-lines.js';
 import { shimHintText } from '../core/shim-hint.js';
@@ -1361,50 +1361,31 @@ let _keyFieldVisible = false; // track visibility toggle for multi-key inputs
 // ── Provider modal ──────────────────────────────────────────────────
 
 /**
- * The first step of Add Provider: every shim the gateway can serve.
- *
- * The form itself can build any provider, but it cannot tell an operator
- * which vendors exist.  The chooser makes the catalogue visible before
- * anything is typed; "Start from scratch" still opens the blank form, and so
- * does a gateway that registered no shim at all.
+ * Add Provider starts on the shims page: a provider is a shim plus a key, and
+ * the shims page already groups the shims by vendor with their "+" per format.
+ * A chooser dialog would show the same catalogue a page earlier.
  */
-function openProviderPicker() {
-  const shims = (S.configData && S.configData.registered_shims) || [];
-  if (!shims.length) { openProviderModal(); return; }
-  const box = document.getElementById('providerPickSearch');
-  if (box) box.value = '';
-  renderProviderPickList();
-  openModal('providerPickModal');
-  if (box) setTimeout(() => box.focus(), 0);
+function openShimsForAdd() {
+  window.goToTab?.('shims');
+  window.setShimsView?.('installed');
 }
 
-/** Repaint the chooser's rows for the current search text. */
-function renderProviderPickList() {
-  const host = document.getElementById('providerPickList');
-  if (!host) return;
-  const shims = (S.configData && S.configData.registered_shims) || [];
-  const query = document.getElementById('providerPickSearch')?.value || '';
-  const rows = providerPickRows(shims, query);
-  if (!rows.length) {
-    host.innerHTML = `<div class="prov-pick-empty">${esc(t('prov.pickEmpty'))}</div>`;
-    return;
-  }
-  host.innerHTML = rows.map(r => `
-    <button type="button" class="prov-pick-row" role="option" data-shim="${esc(r.name)}" onclick="pickProviderShim(${jsArg(r.name)})">
-      <span class="prov-pick-logo">${r.logo ? `<img src="${esc(r.logo)}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}</span>
-      <span class="prov-pick-text">
-        <span class="prov-pick-name">${esc(r.title)}</span>
-        <span class="prov-pick-sub">${esc(r.subtitle)}</span>
-      </span>
-      ${r.badges.map(b => `<span class="prov-pick-badge">${esc(b)}</span>`).join('')}
-    </button>`).join('');
-}
-
-/** Open the form for one chosen shim, with a free name and its defaults. */
-function pickProviderShim(name) {
+/**
+ * Open the form for one shim row on the shims page: its vendor name, its own
+ * URL, and the control that can hold it.
+ *
+ * This is the whole of what the Add Provider chooser used to decide, and the
+ * page now calls it with the row the operator clicked.  The name is suggested
+ * against the configured ids, and the capability tick is what shows the
+ * control holding the pick: the LLM type tree for a chat shim, the endpoint
+ * section for the rest.  Without it the prefill is invisible and Save is
+ * refused for "no capability".
+ *
+ * @param {string} name The shim id, from `registered_shims`.
+ */
+function startProviderFromShim(name) {
   const shims = (S.configData && S.configData.registered_shims) || [];
   const shim = shims.find(s => s.name === name);
-  closeModal('providerPickModal');
   if (!shim) { openProviderModal(); return; }
   const taken = Object.keys((S.configData && S.configData.providers) || {});
   const suggested = suggestedProviderName(shim, taken);
@@ -1413,9 +1394,6 @@ function pickProviderShim(name) {
   // edit, unlike a bare format's hint placeholder.
   openProviderModal(suggested, shim.default_base_url || '', '', '',
     control === 'llm' ? shim.name : '', { isNew: true });
-  // The capability tick is what shows the control holding the pick: the LLM
-  // section for a chat shim, the endpoint section for the rest.  Without it
-  // the prefill is invisible and Save is refused for "no capability".
   _selectPickedCapability(type, control === 'llm' ? '' : shim.name);
 }
 
@@ -1432,9 +1410,8 @@ function _selectPickedCapability(type, shimName) {
   if (picker && picker.has(shimName)) picker.select(shimName);
 }
 
-/** Skip the chooser and open the blank form. */
+/** A provider whose type is not in any shim (a private gateway, a stand-in). */
 function startBlankProvider() {
-  closeModal('providerPickModal');
   openProviderModal();
 }
 
@@ -1446,6 +1423,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
   document.getElementById('providerModalTitle').textContent = _editingProviderName ? t('modal.editProvider') : t('modal.addProvider');
   document.getElementById('provName').value = name || '';
   document.getElementById('provName').readOnly = false;
+
 
   const registeredShims = (S.configData && S.configData.registered_shims) || [];
   const baseFormats = (S.configData && S.configData.base_formats) || [];
@@ -1590,7 +1568,9 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
   const _selShim = shimMap[getSelectedValue()] || {};
   maxToolDescEl.placeholder = _selShim.max_tool_description_length || '';
   document.getElementById('provModelsPath').value = (provCfg && provCfg.models_path) || '';
-  setLogoPickerValue((provCfg && provCfg.logo) || '');
+  // A new provider opened from the chooser, the shims page or the free-source
+  // menu starts with the vendor's logo; an edit keeps what the entry stores.
+  setLogoPickerValue((provCfg && provCfg.logo) || (isNew && (_selShim.logo || '')) || '');
   if (window._detectedHostIp) document.getElementById('provProxy').placeholder = t('placeholder.proxyHost', {host: window._detectedHostIp});
   // Generate capability checkboxes from model_types metadata
   // A new provider starts with nothing selected: which capabilities it serves
@@ -1699,7 +1679,13 @@ function _buildProvCapCheckboxes() {
     const label = document.createElement('label');
     label.id = `provCap${_capitalize(desc.name)}Wrap`;
     const labelText = typeLabel(desc.name);
-    label.innerHTML = `<input type="checkbox" id="provCap${_capitalize(desc.name)}" onchange="toggleProvCapSection()"> <span>${esc(labelText)}</span>`;
+    // The icon is the one the capability badges carry, so the checkbox and the
+    // badge a saved provider shows are recognisably the same thing.
+    const icon = desc.icon_svg || _CAP_ICONS[desc.name] || '';
+    label.classList.add('prov-cap-check');
+    label.innerHTML = `<input type="checkbox" id="provCap${_capitalize(desc.name)}" onchange="toggleProvCapSection()">`
+      + (icon ? `<span class="prov-cap-ico" aria-hidden="true">${icon}</span>` : '')
+      + ` <span>${esc(labelText)}</span>`;
     container.appendChild(label);
   }
 }
@@ -2886,7 +2872,7 @@ async function loadConfig(prefetchedData) {
 // ── Window bindings ─────────────────────────────────────────────────
 
 Object.assign(window, {
-  openProviderModal, openProviderPicker, renderProviderPickList, pickProviderShim, startBlankProvider,
+  openProviderModal, openShimsForAdd, startBlankProvider, startProviderFromShim,
   toggleProvCapSection, toggleModalKeyVisibility, copyModalKey,
   _syncKeyField, _promoteToMultiKey, _addKeyEntry, _removeKeyEntry,
   switchProviderFilter, setProviderView, renderProviders,

@@ -1,9 +1,11 @@
 /**
- * The Add Provider chooser's list and suggested id.
+ * Where a shim row on the Shims page lands, and what the Add form calls it.
  *
- * A provider the chooser drops cannot be added from the screen at all, and a
- * suggestion that collides silently overwrites an existing entry — both are
- * invisible in a browser test that only checks that something rendered.
+ * The chooser dialog these rules came from is gone; the rules are not.  A
+ * non-LLM row routed to the LLM type tree opens a form that cannot hold it,
+ * and a suggestion that collides silently overwrites an existing entry —
+ * neither is visible in a browser test that only checks that something
+ * rendered.
  *
  * Run with `make test-js` (or `node --test tests/js/`).
  */
@@ -16,9 +18,6 @@ import { fileURLToPath } from 'node:url';
 
 import {
   pickDestination,
-  providerPickRows,
-  shimBadges,
-  shimSubtitle,
   suggestedProviderName,
 } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/provider-pick.js';
 
@@ -58,70 +57,6 @@ const SHIMS = [
   },
 ];
 
-test('every shim becomes a row, sorted by vendor', () => {
-  const rows = providerPickRows(SHIMS);
-  assert.deepEqual(
-    rows.map((r) => r.title),
-    ['Argo', 'Openai', 'Opencode', 'Openrouter'],
-  );
-});
-
-test('the row names the format, and the model type above llm', () => {
-  const rows = providerPickRows(SHIMS);
-  const byName = Object.fromEntries(rows.map((r) => [r.name, r]));
-  assert.match(byName['openrouter--chat_completions'].subtitle, /chat_completions/);
-  assert.match(byName['argo--embeddings'].subtitle, /embeddings/);
-  assert.doesNotMatch(byName['openrouter--chat_completions'].subtitle, /llm/);
-});
-
-test('the subtitle names the format, which tells same-vendor rows apart', () => {
-  assert.equal(shimSubtitle(SHIMS[0]), 'chat_completions');
-  assert.equal(shimSubtitle(SHIMS[1]), 'open_responses');
-  assert.equal(shimSubtitle(SHIMS[3]), 'openai · embeddings');
-});
-
-test('a search matches title, id, format and vendor, case-insensitively', () => {
-  const names = (q) => providerPickRows(SHIMS, q).map((r) => r.name);
-  assert.deepEqual(names('openrouter'), ['openrouter--chat_completions']);
-  assert.deepEqual(names('RESPONSES'), ['openai--open_responses']);
-  assert.deepEqual(names('embeddings'), ['argo--embeddings']);
-  assert.deepEqual(names('open'), [
-    'argo--embeddings',
-    'openai--open_responses',
-    'opencode_go--messages',
-    'openrouter--chat_completions',
-  ]);
-});
-
-test('a badge is searchable, because it is on the row', () => {
-  const names = (q) => providerPickRows(SHIMS, q).map((r) => r.name);
-  // A row shows `free` / `keyless` / `oauth` on screen; a query for any of
-  // them must find the rows that display it.
-  assert.deepEqual(names('free'), ['opencode_go--messages']);
-  assert.deepEqual(names('keyless'), ['opencode_go--messages']);
-  assert.deepEqual(names('oauth'), ['argo--embeddings']);
-});
-
-test('an empty query lists everything', () => {
-  assert.equal(providerPickRows(SHIMS, '').length, SHIMS.length);
-  assert.equal(providerPickRows(SHIMS, '   ').length, SHIMS.length);
-});
-
-test('a query that matches nothing yields no rows', () => {
-  assert.deepEqual(providerPickRows(SHIMS, 'zzzz-no-such-provider'), []);
-});
-
-test('an entry without a name is dropped, not rendered blank', () => {
-  assert.deepEqual(providerPickRows([{ format: 'messages' }]), []);
-});
-
-test('badges say how the credential arrives and whether it costs', () => {
-  const byName = Object.fromEntries(SHIMS.map((s) => [s.name, s]));
-  assert.deepEqual(shimBadges(byName['opencode_go--messages']), ['free', 'keyless']);
-  assert.deepEqual(shimBadges(byName['argo--embeddings']), ['oauth']);
-  assert.deepEqual(shimBadges(byName['openai--open_responses']), []);
-});
-
 test('the suggested id is the vendor, lower-cased and addressable', () => {
   assert.equal(suggestedProviderName(SHIMS[0]), 'openrouter');
   assert.equal(suggestedProviderName(SHIMS[1]), 'openai');
@@ -158,10 +93,7 @@ test('a de-duplicated id fits the same length limit as an original', () => {
 
 test('uniqueness compares the way the config loader does, lower-cased', () => {
   // A config holding `OpenRouter` already owns `openrouter`.
-  assert.equal(
-    suggestedProviderName(SHIMS[0], ['OpenRouter']),
-    'openrouter-2',
-  );
+  assert.equal(suggestedProviderName(SHIMS[0], ['OpenRouter']), 'openrouter-2');
   // And a de-duplicated id that exists in another case is taken too.
   assert.equal(
     suggestedProviderName(SHIMS[0], ['openrouter', 'OPENROUTER-2']),
@@ -196,11 +128,11 @@ const providersSrc = readFileSync(
   'utf8',
 );
 const pickFn = providersSrc.slice(
-  providersSrc.indexOf('function pickProviderShim('),
-  providersSrc.indexOf('function startBlankProvider('),
+  providersSrc.indexOf('function startProviderFromShim('),
+  providersSrc.indexOf('function _selectPickedCapability('),
 );
 
-test('a picked shim opens the form as a create, not an edit', () => {
+test('a shim row opens the form as a create, not an edit', () => {
   // `_editingProviderName` is what decides create-or-overwrite; a prefill
   // passed without `isNew` would edit whatever already holds that id.
   assert.match(
@@ -213,11 +145,26 @@ test('a picked shim opens the form as a create, not an edit', () => {
     /_editingProviderName = isNew \? null : /,
     'openProviderModal must honour isNew',
   );
+  // The shims page is the only entry point now, and both of its buttons have
+  // to go through this function rather than open the form directly.
+  const shimsPage = readFileSync(
+    join(
+      here,
+      '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/tabs/shims-page.js',
+    ),
+    'utf8',
+  );
+  assert.doesNotMatch(shimsPage, /openProviderModal\(/);
+  assert.equal(
+    (shimsPage.match(/onclick="startProviderFromShim\(/g) || []).length,
+    2,
+    'both Add buttons (row and vendor header) call the same entry point',
+  );
 });
 
-test('a pick reveals the control that holds it', () => {
-  // The capability checkbox is what shows the section: unticked, an LLM pick
-  // leaves the type tree invisible and Save answers "no capability".
+test('a shim row reveals the control that holds it', () => {
+  // The capability checkbox is what shows the section: unticked, a pick
+  // leaves the control invisible and Save answers "no capability".
   assert.match(pickFn, /_selectPickedCapability\(type, control === 'llm' \? '' : shim\.name\)/);
   const selectFn = providersSrc.slice(
     providersSrc.indexOf('function _selectPickedCapability('),

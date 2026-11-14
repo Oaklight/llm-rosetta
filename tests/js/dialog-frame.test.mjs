@@ -17,8 +17,8 @@
  *    overlay — carries `role="dialog"`, `aria-modal="true"` and a label;
  * 7. the model side panel is a dialog surface too: not inside a `.modal-overlay`
  *    (it is an `<aside>` with its own scrim), but with the same role, the same
- *    frame and the same behaviour, so the panel has 16 dialog surfaces in all:
- *    thirteen centred dialogs, two overlay drawers and one side panel.
+ *    frame and the same behaviour, so the panel has 15 dialog surfaces in all:
+ *    twelve centred dialogs, two overlay drawers and one side panel.
  *
  * Modal behaviour (focus, scroll lock, Escape, backdrop) is JS and is checked
  * in the browser by the P5 measurement run, not here.
@@ -166,13 +166,13 @@ test('the model side panel takes the same frame and the same role', () => {
 test('the role is on the panel, the overlay is presentational', () => {
   const html = readFileSync(join(ADMIN, 'admin.html'), 'utf8');
   const overlays = [...html.matchAll(/<div class="modal-overlay"([^>]*)>/g)];
-  assert.equal(overlays.length, 15, `expected the 15 overlays, found ${overlays.length}`);
+  assert.equal(overlays.length, 14, `expected the 14 overlays, found ${overlays.length}`);
   for (const [, attrs] of overlays) {
     assert.ok(!/role=|aria-modal/.test(attrs),
       `overlay "${attrs.trim()}" carries dialog semantics; they belong on the panel`);
   }
   const panels = [...html.matchAll(/<div class="modal(?: modal-(?:wide|yaml))?"([^>]*)>/g)];
-  assert.equal(panels.length, 15, 'expected one panel per overlay');
+  assert.equal(panels.length, 14, 'expected one panel per overlay');
   for (const [, attrs] of panels) {
     assert.match(attrs, /role="dialog"/);
     assert.match(attrs, /aria-modal="true"/);
@@ -185,9 +185,9 @@ test('the role is on the panel, the overlay is presentational', () => {
     assert.ok(html.includes(`id="${id}"`), `aria-labelledby="${id}" names no element`);
   }
   // The total the docs quote: 13 centred dialogs + 2 overlay drawers inside
-  // the 15 overlays, plus the model side panel, which is its own element.
+  // the 14 overlays, plus the model side panel, which is its own element.
   const sidePanels = [...html.matchAll(/<aside class="model-drawer"[^>]*>/g)];
   assert.equal(sidePanels.length, 1, 'expected the one model side panel');
-  assert.equal(overlays.length + sidePanels.length, 16,
-    '16 dialog surfaces: 15 overlays and the model side panel');
+  assert.equal(overlays.length + sidePanels.length, 15,
+    '15 dialog surfaces: 14 overlays and the model side panel');
 });
