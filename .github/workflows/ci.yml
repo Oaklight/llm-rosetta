@@ -83,6 +83,30 @@ jobs:
       - name: Check scheduled shim removals
         run: make check-shim-removals
 
+  shim-catalog:
+    # The Available view of the Shims page is a hand-written catalogue
+    # (`SHIM_SOURCE_PACKAGES`), so a package repository created after the last
+    # edit is invisible to every operator until someone remembers it exists.
+    # This job lists the account's `llm-rosetta-shim-*` repositories, diffs
+    # them against the catalogue, and fails with the entry to paste — the
+    # reminder is a red check, not a review comment.  It reads the public
+    # repository list, so no secret beyond the workflow token is involved.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Compare the catalogue with the published packages
+        # The script adds both package source trees to ``sys.path`` itself, so
+        # nothing has to be installed for it to import the catalogue.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/dev/check_shim_catalog.py
+
   docs-build:
     # The docs live on two orphan branches, and Read the Docs builds them by
     # running *their* .readthedocs.yaml: a pre_build that clones this

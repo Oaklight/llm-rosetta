@@ -75,6 +75,14 @@ check-shim-removals:
 	@echo "Shim removals check complete."
 
 
+# Fail when a shim package the account publishes is missing from the catalogue,
+# or its repository URL has moved.  Needs network; CI runs it with a token.
+check-shim-catalog:
+	@echo "Comparing the shim catalogue with the published packages..."
+	python scripts/dev/check_shim_catalog.py
+	@echo "Shim catalogue check complete."
+
+
 # ──────────────────────────────────────────────
 # Public API compatibility
 # ──────────────────────────────────────────────
@@ -457,4 +465,4 @@ help:
 	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint bench lint-fix test test-js theme-matrix test-integration test-gateway check-shim-removals check-public-api build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
+.PHONY: all lint bench lint-fix test test-js theme-matrix test-integration test-gateway check-shim-removals check-shim-catalog check-public-api build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
