@@ -84,6 +84,9 @@ packages/llm-rosetta/src/llm_rosetta/shims/providers/
 
 ```yaml
 # alcf/provider.yaml
+logo: https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@main/assets/alcf.svg
+group: alcf            # 三个集群共用一个顶层分组
+group_label: ALCF
 connection:
   api_key_env: ALCF_API_KEY
   token_command: [python3, token.py]   # 相对路径按本文件所在目录解析
@@ -92,8 +95,13 @@ connection:
 
 合并规则统一：清单提供默认值，叶子逐字段覆盖，`headers` 按 key 合并。lane 之间确实不同
 的厂商把差异留在该留的地方 —— ALCF 每个集群各自声明 `base_url`，AskSage 只在
-`google_generate` 叶子上保留 `auth_header: x-access-tokens`。清单不能携带的字段
-（`name`、`format`、`tools` 等）在加载时会被拒绝。
+`google_generate` 叶子上保留 `auth_header: x-access-tokens`。
+
+除 `connection:` 之外，清单还可以声明三个描述**厂商**而非某条 lane 的字段 —— `logo`、
+`group`、`group_label` —— 合并规则相同。它们值得上移，因为按构造它们在一个厂商的所有叶子上
+必然相同：没有 `group` 时，admin 会从每个 shim 名字推导一个，于是 ALCF 的 `alcf_metis` /
+`alcf_minerva` / `alcf_sophia` 会渲染成三个顶层分组而不是一个。叶子仍然可以声明自己的值；
+其它字段（`name`、`format`、`tools` 等）在加载时会被拒绝，因为它们属于某个 shim 而不是厂商。
 
 清单是可选的，也可以只声明一部分。没有清单时，厂商照旧在每个叶子里声明全部内容，已有的
 shim 不需要任何改动。叶子也可以为某条 lane 覆盖凭据字段；内置树只把凭据放在清单里，并有
@@ -104,6 +112,21 @@ shim 不需要任何改动。叶子也可以为某条 lane 覆盖凭据字段；
 
 `auth.py` 遵循同样的规则：与厂商清单放在一起时它是厂商的交换，附加到每个叶子；放在叶子里
 时它属于该叶子。一个厂商只声明一个交换，某个叶子再声明一个会加载失败。
+
+**脚手架。** `llm-rosetta-gateway shims new` 写出新 shim 所需的文件 —— 叶子、厂商还没有清单
+时的厂商清单、包提供 `shims.yaml` 时的那条登记 —— 然后用真实的 loader 装载一遍，所以网关
+用不了的形状在这里失败，而不是等到启动。在终端上不带 flag 时它逐项询问；**交互是默认
+模式**，`--no-input` 加 flag 则是脚本里的同一件事。`--layout flat` 产生
+`<vendor>/<format>` 形状，`--transform` 追加 `transforms.py` 桩。在仓库检出里，
+`scripts/dev/new_shim.py` 就是同一条命令，只是默认根指向内置树。给出 logo URL 时它会问是否
+存进包的 `assets/`，写进配置的是该文件的 jsDelivr URL，因此发布出去的标志图不指向厂商主机。
+线上格式从 converter registry 为该模型类型列出的格式中挑选；粘贴进来的 base URL 会先规范化，
+再检查是否可达 —— 不可达只是警告，不是拒绝。已有的树会被先读一遍：单厂商 bundle（`free`）得到
+flat 叶子且不写厂商清单，「清单 + `llm/` 或 `<type>/` 目录」（`google`）得到 typed 布局；而对于
+永远不会被加载的 lane —— 位于本身就是一个 shim 的目录之下、名字已被别的文件声明、或厂商名会被
+loader 跳过 —— 在写任何文件之前就拒绝。标志图会从 jsDelivr 上的 lobehub 图标集里按厂商名查找并
+作为默认值；已经在 jsDelivr 上的 URL 原样保留，不再复制进 `assets/`。按一次 Ctrl+C 重新询问
+当前问题，再按一次取消，Ctrl+D 立即取消。详见 [`shims new`](../gateway/cli.md#shims-new-vendor)。
 
 **按类型声明的参数默认值。** 非 chat shim 可以在以自身模型类型命名的段里，声明该 vendor 真正有差异的请求字段：
 
@@ -427,6 +450,8 @@ shims:
 ```
 
 清单存在即权威：只装载它列出的条目，未列出的目录根本不会被读取 —— 因此不维护清单的作者只会失去自己新增的 shim。其中的路径相对于扫描根，不能越出，也不含任何 URL，所以它无法把加载器指向另一个来源。清单存在但无法执行时，该源直接失败，而不是退回扫描 —— 退回扫描恰好会解析清单想要限制的那棵树。没有清单的包仍按原来的方式扫描，选择照样按名字生效。
+
+内置 shim 没有清单，`include` / `exclude` 也不作用于它们：wheel 固定了它们的集合，不存在会悄悄改动它的外部作者，也就没有需要清单去划的边界。收窄内置集合用 `shims.disabled` —— 面板里每行的开关 —— 它在启动时把被拒绝的 shim 从注册表中移除。
 
 #### 镜像 { #mirrors }
 

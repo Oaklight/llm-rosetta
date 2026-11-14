@@ -106,6 +106,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 
 
 ### 变更
+- **密钥的 `allowed_shims` 列已移除**（PR [#1554](https://github.com/Oaklight/llm-rosetta/pull/1554)）：该字段会被存储、由 admin API 返回、默认为 `["*"]`，但请求路径从不读取，且空列表在 create 与 update 上含义不同（分别为 `["*"]` 与 `[]`）。作用域按模型划分，并在所有接受 `model` 的路由上执行；将来可能增加按 provider 的作用域，但不会按 shim —— 同一个 shim 背后可能有多个 provider 条目。`keys.db` 的 v5 迁移删除该列（既有密钥与数据不受影响），新建库不再创建该列，仍发送该字段的 admin 客户端会按未发送处理。
 - **各行的内容前置，可观测视图即开关**（[#1502](https://github.com/Oaklight/llm-rosetta/issues/1502) §13，PR [#1554](https://github.com/Oaklight/llm-rosetta/pull/1554)）：页面自己的操作（计数、抓取、添加、生成）跟着搜索行，不再单占一个只放隐藏标题的表头行；提供方页的类型切换与状态筛选分成两行。`[ 错误转储 ]` / `[ 性能剖析 ]` / `[ 内容截取 ]` 的 strip 标题已去掉——页签已经写明视图——两个 Enable 按钮也去掉：进入视图即按配置的请求数开始采集。页面的 32 px 细网格也一并去掉。
 - **地址栏描述当前页面**（[#1521](https://github.com/Oaklight/llm-rosetta/issues/1521)，PR [#1551](https://github.com/Oaklight/llm-rosetta/pull/1551)）：`#tab`、`#tab/id`、`?q=` 与 Observability 的视图 id 都会被解析，用 `pushState` 写入，并在前进、后退与刷新时还原；文档标题写明当前页面而不只是产品名，并跟随界面语言。旧的 `#logs` 书签仍能打开 Observability。
 - **控制台自己掌握体积、缓存与第三方请求**（[#1522](https://github.com/Oaklight/llm-rosetta/issues/1522)，PR [#1551](https://github.com/Oaklight/llm-rosetta/pull/1551)）：提供方 Logo 改由网关经 `/admin/api/logo` 获取，该路由只接受配置里出现的站点，因此打开面板不会联系任何第三方。静态资源带 `ETag`、`Cache-Control: no-cache`、`Vary: Accept-Encoding` 与 gzip，内容未变时返回 `304`；覆盖索引（第 16 号迁移）加上每应用 5 秒缓存；在 20 万行请求日志上实测（30 天窗口内约 15 万行，强制两种执行计划，7 次热读取中位数），用量聚合从 352 ms 降到 150 ms，冷启动首读从 436 ms 降到 241 ms。该索引在这个规模下构建一次耗时 0.18 s。
