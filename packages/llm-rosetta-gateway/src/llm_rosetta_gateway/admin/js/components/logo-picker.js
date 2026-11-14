@@ -7,10 +7,13 @@
  */
 
 import { t } from '../core/i18n.js';
+import { logoUrl } from '../core/html.js';
 
 const _ICON_PKG = '@lobehub/icons-static-svg';
 const _CDN_BASE = 'https://cdn.jsdelivr.net/npm';
 const _ICON_URL = (name) => `${_CDN_BASE}/${_ICON_PKG}@latest/icons/${name}.svg`;
+/** What an `<img>` points at: the gateway's copy, not the CDN's (#1522). */
+const _ICON_SRC = (name) => logoUrl(_ICON_URL(name));
 
 const _POPULAR_ICONS = [
   'openai', 'anthropic', 'claude', 'google', 'gemini',
@@ -108,8 +111,14 @@ function _openDropdown() {
   dd.classList.add('open');
   _renderDropdown();
   setTimeout(() => document.getElementById('logoPickerInput')?.focus(), 50);
-  if (!_allIcons) _fetchAllIcons().then(() => { if (_pickerOpen) _renderDropdown(); });
 }
+
+/** Load the full icon catalogue — the one action that contacts jsDelivr. */
+export function loadLogoCatalog() {
+  if (_allIcons?.length) return;
+  _fetchAllIcons().then(() => { if (_pickerOpen) _renderDropdown(); });
+}
+window.loadLogoCatalog = loadLogoCatalog;
 
 function _closeDropdown() {
   _pickerOpen = false;
@@ -134,7 +143,7 @@ function _renderDropdown() {
     html += '<div class="lp-section-label">' + t('logo.popular') + '</div><div class="lp-grid">';
     for (const n of pop) {
       const cls = (n === _selectedName ? ' lp-active' : '') + (idx === _highlightIdx ? ' lp-highlight' : '');
-      html += `<div class="lp-item${cls}" data-icon="${n}" data-idx="${idx}"><img class="lp-thumb" src="${_ICON_URL(n)}" alt="" loading="lazy"><span class="lp-label">${_esc(n)}</span></div>`;
+      html += `<div class="lp-item${cls}" data-icon="${n}" data-idx="${idx}"><img class="lp-thumb" src="${_ICON_SRC(n)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><span class="lp-label">${_esc(n)}</span></div>`;
       idx++;
     }
     html += '</div>';
@@ -143,11 +152,15 @@ function _renderDropdown() {
     html += '<div class="lp-section-label">' + t('logo.other') + '</div><div class="lp-grid">';
     for (const n of capped) {
       const cls = (n === _selectedName ? ' lp-active' : '') + (idx === _highlightIdx ? ' lp-highlight' : '');
-      html += `<div class="lp-item${cls}" data-icon="${n}" data-idx="${idx}"><img class="lp-thumb" src="${_ICON_URL(n)}" alt="" loading="lazy"><span class="lp-label">${_esc(n)}</span></div>`;
+      html += `<div class="lp-item${cls}" data-icon="${n}" data-idx="${idx}"><img class="lp-thumb" src="${_ICON_SRC(n)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><span class="lp-label">${_esc(n)}</span></div>`;
       idx++;
     }
     html += '</div>';
     if (other.length > MAX) html += `<div class="lp-more">${t('logo.more', {n: other.length - MAX})}</div>`;
+  }
+  if (!_allIcons) {
+    html += `<button type="button" class="btn btn-sm lp-load" onclick="loadLogoCatalog()">${t('logo.loadCatalogue')}</button>`
+      + `<div class="lp-custom-hint">${t('logo.catalogueHint')}</div>`;
   }
   if (!pop.length && !capped.length) {
     html += query
@@ -183,7 +196,7 @@ function _syncUI() {
 
   const url = _selectedName ? _ICON_URL(_selectedName) : _customUrl;
   if (url) {
-    img.src = url;
+    img.src = logoUrl(url);
     img.style.display = '';
     if (placeholder) placeholder.style.display = 'none';
     clear.style.display = '';

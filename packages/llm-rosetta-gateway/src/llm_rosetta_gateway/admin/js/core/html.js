@@ -38,3 +38,22 @@ export function jsArg(v) {
   const literal = JSON.stringify(v === undefined ? null : v);
   return literal.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
 }
+
+
+/**
+ * Point a logo at the gateway rather than at the host that holds it.
+ *
+ * The panel used to load provider logos from `cdn.jsdelivr.net` and from
+ * whatever host a deployment's entries name, so a page load talked to third
+ * parties and an air-gapped install showed broken images.  The gateway now
+ * fetches them once and serves them from its own origin (#1522); a relative
+ * path — a logo shipped inside the panel — is left alone.
+ *
+ * @param {string} src
+ * @returns {string}
+ */
+export function logoUrl(src) {
+  const value = String(src || '');
+  if (!/^https?:\/\//i.test(value)) return value;
+  return '/admin/api/logo?src=' + encodeURIComponent(value);
+}

@@ -23,7 +23,7 @@ import { suggestedProviderName, pickDestination } from '../core/provider-pick.js
 import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, orderedProviders, nonLlmFormatType } from '../core/provider-endpoints.js';
 import { routingRows, blockRow } from '../core/quota-lines.js';
 import { shimHintText } from '../core/shim-hint.js';
-import { jsArg } from '../core/html.js';
+import { jsArg, logoUrl } from '../core/html.js';
 import { filteredEmptyHtml } from '../core/empty.js';
 import { providerFormError } from '../core/form-validate.js';
 
@@ -2469,7 +2469,7 @@ function renderProviders() {
     const logoHtml = autoDisabled
       ? `<span class="pc-logo pc-logo-warning" role="img" aria-label="${esc(t('provider.autoDisabled'))}" title="${esc(autoWarningHover)}">&#9888;</span>`
       : logo
-        ? `<img class="pc-logo" src="${esc(logo)}" alt="">`
+        ? `<img class="pc-logo" src="${esc(logoUrl(logo))}" alt="" onerror="this.style.display='none'">`
         : '<span class="pc-logo pc-logo-empty"></span>';
     const shim = shimDefaults[typeName] || {};
     // The card names the provider and its capabilities only: the wire format

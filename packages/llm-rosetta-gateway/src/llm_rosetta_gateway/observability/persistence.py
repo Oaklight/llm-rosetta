@@ -597,6 +597,19 @@ class PersistenceManager:
                 "AND status IN ('queued', 'running')",
             ],
         ),
+        (
+            # The usage report aggregates the widest window and then folds
+            # dozens of conditional sums.  A covering index lets SQLite read the
+            # whole answer from the index instead of the table: measured on a
+            # 200 000-row log, 429 ms became 226 ms (#1522).
+            16,
+            "cover the per-key usage aggregate with one index",
+            [
+                "CREATE INDEX IF NOT EXISTS idx_rl_usage ON request_log("
+                "timestamp, api_key_bucket, api_key_label, model_type, "
+                "input_tokens, output_tokens, total_tokens)",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:

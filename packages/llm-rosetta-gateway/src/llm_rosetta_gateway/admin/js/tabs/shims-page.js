@@ -15,7 +15,7 @@
 import { S, _CAP_ICONS } from '../core/state.js';
 import { t, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, esc, showToast, withBusyButton } from '../core/utils.js';
-import { jsArg } from '../core/html.js';
+import { jsArg, logoUrl } from '../core/html.js';
 
 let _view = 'installed';
 let _shims = [];
@@ -146,7 +146,7 @@ function _vendorLogo(vendor) {
   const initials = esc(cap(vendor).slice(0, 2));
   const fallback = `<span class="shim-logo-fallback"${_markStyle(vendor)}>${initials}</span>`;
   if (!logo) return fallback;
-  return `<img class="shim-logo" src="${esc(logo)}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="shim-logo-fallback" style="display:none"${_markStyle(vendor)}>${initials}</span>`;
+  return `<img class="shim-logo" src="${esc(logoUrl(logo))}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="shim-logo-fallback" style="display:none"${_markStyle(vendor)}>${initials}</span>`;
 }
 
 /** One row: the format this shim serves, with the two actions it allows. */

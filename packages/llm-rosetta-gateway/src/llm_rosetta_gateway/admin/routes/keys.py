@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from collections.abc import Mapping
 from typing import Any
 
@@ -46,6 +48,14 @@ async def get_key_usage(request: Any) -> Response:
     keystore = _get_keystore(request)
     persistence = getattr(request.app, "persistence", None)
 
+    # The panel asks for this on tab paint and again on every window switch,
+    # and the answer is one pass over the widest usage window.  Five seconds of
+    # memory makes the switch free without making the numbers stale to the eye
+    # (#1522); the cache lives on the app, so it cannot outlive its store.
+    cached = getattr(request.app, "_usage_payload", None)
+    if cached and time.monotonic() - cached[0] < 5.0:
+        return JSONResponse(cached[1])
+
     keys = await keystore.usage_keys()
     subjects = [
         (key["usage_bucket"], key["label"]) for key in keys if key["usage_bucket"]
@@ -62,7 +72,9 @@ async def get_key_usage(request: Any) -> Response:
         internal_subject=INTERNAL_USAGE_BUCKET,
         internal_label=INTERNAL_LABEL,
     )
-    return JSONResponse(report.to_payload(key_ids))
+    payload = report.to_payload(key_ids)
+    request.app._usage_payload = (time.monotonic(), payload)
+    return JSONResponse(payload)
 
 
 async def create_api_key(request: Any) -> Response:
