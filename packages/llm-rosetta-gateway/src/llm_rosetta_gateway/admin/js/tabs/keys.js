@@ -5,6 +5,7 @@ import { api, showToast, closeModal, openModal, esc, fmtTokens, inlineConfirm, w
 import { syncAriaSort, sortByKey } from '../core/sort.js';
 import { jsArg } from '../core/html.js';
 import { keysEmptyMessageKey } from '../core/posture.js';
+import { validateQuotas } from '../core/quota.js';
 
 // ===================== API Keys Tab =====================
 
@@ -198,6 +199,29 @@ function clearKeySearch() {
   renderKeys();
 }
 
+/**
+ * What a key is limited to, beside its label.
+ *
+ * A restriction is invisible until a request is refused, and the row is where
+ * the operator looks first: one tag per limit, named rather than counted so a
+ * reader does not have to open the dialog (#1502 §13).
+ */
+function _keyLimitsMark(k) {
+  const parts = [];
+  const models = (k.allowed_models || ['*']).filter(m => m !== '*');
+  if (models.length) {
+    parts.push(`<span class="tag is-plain" title="${esc(models.join(', '))}">${models.length} ${esc(t(models.length === 1 ? 'keys.modelUnitOne' : 'keys.modelUnit'))}</span>`);
+  }
+  if (k.rate_limit) {
+    // The row has one line for a spec that may name two windows: the tightest
+    // shown, the whole string in the tooltip.
+    const quotas = String(k.rate_limit).split(',').map(q => q.trim()).filter(Boolean);
+    const shown = quotas[0] + (quotas.length > 1 ? ` +${quotas.length - 1}` : '');
+    parts.push(`<span class="tag is-plain" title="${esc(k.rate_limit)}">${esc(shown)}</span>`);
+  }
+  return parts.join(' ');
+}
+
 function renderKeys() {
   // The search is part of the address (#1521).
   if (S.currentTab === 'keys') {
@@ -268,7 +292,7 @@ function renderKeys() {
       : '';
     return `<tr role="row">
       <td class="col-check" role="cell"><input type="checkbox" class="row-check key-check" data-key="${esc(k.id)}" onchange="updateKeyBulk()"${(S._selectedKeyIds || new Set()).has(String(k.id)) ? ' checked' : ''}></td>
-      <td class="key-label-cell" role="cell" aria-labelledby="keySortLabel"><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>
+      <td class="key-label-cell" role="cell" aria-labelledby="keySortLabel"><span class="key-label-text" id="label-${k.id}">${esc(k.label || '—')}</span>${_keyLimitsMark(k)}
         <button class="icon-btn" style="margin-left:4px" onclick="editKeyLabel(${jsArg(k.id)})" title="${esc(t('btn.edit'))}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>${sharedMark}</td>
       <td class="key-created-cell" role="cell" aria-labelledby="keySortCreated" data-label="${esc(t('col.created'))}" title="${createdFull}">${created}</td>
       <td class="key-lastused-cell" role="cell" aria-labelledby="keySortLastUsed" data-label="${esc(t('col.lastUsed'))}" title="${lastUsedFull}">${lastUsed}</td>
@@ -352,18 +376,130 @@ const _keyLabelModalPrimary = () => document.querySelector('#keyLabelModal .pane
 function openKeyModal() {
   document.getElementById('keyLabel').value = '';
   document.getElementById('keyManual').value = '';
+  document.getElementById('keyModels').value = '';
+  document.getElementById('keyRate').value = '';
+  _clearKeyField('keyModels');
+  _clearKeyField('keyRate');
   openModal('keyModal');
 }
+
+// ---- The two limit fields -------------------------------------------------
+// Models: a text field that also lists what this deployment routes, so a name
+// is picked or typed; anything in between is allowed on purpose — a key may
+// outlive the model it was written for.  Rate: the settings fields' quota
+// strings.  Both validate on save and refuse it when they fail.
+
+/** The model names this deployment routes, for the picker. */
+function _modelChoices() {
+  return Object.keys((S.configData && S.configData.models) || {}).sort();
+}
+
+/** The field's tokens, split the way the server splits them. */
+function _modelTokens(raw) {
+  return String(raw || '').split(/[,\s]+/).map(x => x.trim()).filter(Boolean);
+}
+
+const _MODEL_NAME_RE = /^[A-Za-z0-9._:\-/@+]+$/;
+
+function _markKeyField(id, message) {
+  const input = document.getElementById(id);
+  const group = document.getElementById(id + 'Group');
+  const err = document.getElementById(id + 'Error');
+  const bad = !!message;
+  if (input) input.setAttribute('aria-invalid', bad ? 'true' : 'false');
+  if (group) group.classList.toggle('is-invalid', bad);
+  if (err) { err.textContent = message || ''; err.hidden = !bad; }
+  return !bad;
+}
+
+function _clearKeyField(id) { _markKeyField(id, null); }
+
+/** True when the models field may be saved; marks it when it may not. */
+function validateKeyModels(id) {
+  const tokens = _modelTokens(document.getElementById(id).value);
+  const bad = tokens.find(m => m !== '*' && !_MODEL_NAME_RE.test(m));
+  if (bad) {
+    return _markKeyField(id, t('keys.badModel', {name: bad}));
+  }
+  return _markKeyField(id, null);
+}
+
+/** True when the rate field may be saved; marks it when it may not. */
+function validateKeyRate(id) {
+  const v = validateQuotas(document.getElementById(id).value);
+  return _markKeyField(id, v.ok ? null : t('keys.badRate', {error: v.error}));
+}
+
+function _renderKeyModelMenu(inputId) {
+  const input = document.getElementById(inputId);
+  const menu = document.getElementById(inputId + 'Menu');
+  if (!input || !menu) return;
+  const picked = new Set(_modelTokens(input.value));
+  const names = _modelChoices();
+  menu.innerHTML = names.length
+    ? names.map(n => `<label class="combo-option"><input type="checkbox" value="${esc(n)}" ${picked.has(n) ? 'checked' : ''} data-menu-for="${esc(inputId)}" onchange="pickKeyModel(this)"><span>${esc(n)}</span></label>`).join('')
+    : `<div class="combo-empty">${esc(t('keys.noModels'))}</div>`;
+}
+
+/** Open the picker, with the field's current names already ticked. */
+function openKeyModelMenu(inputId) {
+  const combo = document.getElementById(inputId + 'Combo');
+  if (!combo || combo.classList.contains('open')) return;
+  _renderKeyModelMenu(inputId);
+  combo.classList.add('open');
+  const btn = combo.querySelector('.combo-toggle');
+  if (btn) btn.setAttribute('aria-expanded', 'true');
+}
+
+function closeKeyModelMenu(inputId) {
+  const combo = document.getElementById(inputId + 'Combo');
+  if (!combo) return;
+  combo.classList.remove('open');
+  const btn = combo.querySelector('.combo-toggle');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+function toggleKeyModelMenu(inputId) {
+  const combo = document.getElementById(inputId + 'Combo');
+  if (combo && combo.classList.contains('open')) closeKeyModelMenu(inputId);
+  else openKeyModelMenu(inputId);
+}
+
+/** A tick in the picker writes the field: the text stays the source of truth.
+ *  The box carries its field's id, so the handler is not built per row. */
+function pickKeyModel(box) {
+  const inputId = box.dataset.menuFor;
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const tokens = _modelTokens(input.value).filter(m => m !== box.value);
+  if (box.checked) tokens.push(box.value);
+  input.value = tokens.join(', ');
+  validateKeyModels(inputId);
+}
+
+// A click anywhere else closes the picker, as a listbox should.
+document.addEventListener('click', (e) => {
+  document.querySelectorAll('.combo-field.open').forEach(combo => {
+    if (!combo.contains(e.target)) closeKeyModelMenu(combo.querySelector('input').id);
+  });
+});
 
 function generateKey() {
   // Two clicks on *Generate* used to send two POSTs (#1502 §1.2).
   return withBusyButton(_keyModalPrimary(), _generateKey);
 }
 
+/** "a, b c" → ["a","b","c"]; blank means every model. */
+function _parseModels(raw) {
+  return String(raw || '').split(/[,\s]+/).map(x => x.trim()).filter(Boolean);
+}
+
 async function _generateKey() {
+  if (!validateKeyModels('keyModels') || !validateKeyRate('keyRate')) return;
   const label = document.getElementById('keyLabel').value.trim();
   const manual = document.getElementById('keyManual').value.trim();
-  const body = {label};
+  const models = _parseModels(document.getElementById('keyModels').value);
+  const body = {label, allowed_models: models.length ? models : ['*'], rate_limit: document.getElementById('keyRate').value.trim()};
   if (manual) body.key = manual;
   const res = await api.post('/admin/api/keys', body);
   if (res.ok) {
@@ -404,6 +540,12 @@ function editKeyLabel(id) {
   const current = span ? span.textContent.trim() : '';
   const input = document.getElementById('keyLabelInput');
   input.value = current === '—' ? '' : current;
+  const key = ((S.keysData && S.keysData.keys) || []).find(k => String(k.id) === String(id)) || {};
+  const models = (key.allowed_models || ['*']).filter(m => m !== '*');
+  document.getElementById('keyModelsInput').value = models.join(', ');
+  document.getElementById('keyRateInput').value = key.rate_limit || '';
+  _clearKeyField('keyModelsInput');
+  _clearKeyField('keyRateInput');
   openModal('keyLabelModal');
   setTimeout(() => { input.focus(); input.select(); }, 0);
 }
@@ -424,8 +566,14 @@ function saveKeyLabel() {
 
 async function _saveKeyLabel() {
   if (!_editingKeyId) return;
+  if (!validateKeyModels('keyModelsInput') || !validateKeyRate('keyRateInput')) return;
   const label = document.getElementById('keyLabelInput').value.trim();
-  const res = await api.put(`/admin/api/keys/${encodeURIComponent(_editingKeyId)}`, {label});
+  const models = _parseModels(document.getElementById('keyModelsInput').value);
+  const res = await api.put(`/admin/api/keys/${encodeURIComponent(_editingKeyId)}`, {
+    label,
+    allowed_models: models.length ? models : ['*'],
+    rate_limit: document.getElementById('keyRateInput').value.trim(),
+  });
   if (res.ok) {
     closeModal('keyLabelModal');
     _editingKeyId = null;
@@ -469,6 +617,8 @@ Object.assign(window, {
   loadKeys, loadLogKeyLabels, renderKeys, openKeyModal,
   generateKey, copyCreatedKey, deleteKey, rotateKey, editKeyLabel,
   onKeyLabelInputKeydown, saveKeyLabel,
+  validateKeyModels, validateKeyRate, openKeyModelMenu, closeKeyModelMenu,
+  toggleKeyModelMenu, pickKeyModel,
   backfillKeysLastUsed, setKeyUsageWindow, sortKeys, setKeySortKey, toggleKeySortDir, clearKeySearch,
 });
 

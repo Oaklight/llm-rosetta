@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import re
 import time
 
 from collections.abc import Mapping
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.ratelimit import parse_quota
 from llm_rosetta.observability.usage import UsageReport
 
 from ...keystore import INTERNAL_LABEL, INTERNAL_USAGE_BUCKET, KeyStore
@@ -22,6 +24,58 @@ def _get_keystore(request: Any) -> KeyStore:
 
 
 # _log_key_event removed — replaced by OpsKey* in gateway/ops/keys.py
+
+#: What a model name may look like: the vendor spellings in use, no spaces.
+_MODEL_NAME = re.compile(r"^[A-Za-z0-9._:\-/@+]+$")
+
+
+def _key_models(raw: Any) -> tuple[list[str] | None, str | None]:
+    """A key's allowed models, deduplicated, or the reason they are refused.
+
+    Both input forms are read — the admin sends a list, a hand-written request
+    may send the comma string the field shows — so one rule covers both.
+    """
+    if raw is None:
+        return None, None
+    if isinstance(raw, str):
+        parts: list[Any] = re.split(r"[,\s]+", raw)
+    elif isinstance(raw, list):
+        parts = raw
+    else:
+        return None, "allowed_models must be a list of names"
+    models: list[str] = []
+    for part in parts:
+        name = str(part).strip()
+        if not name or name in models:
+            continue
+        if not _MODEL_NAME.match(name):
+            return None, f"Invalid model name '{name}'"
+        models.append(name)
+    return models or ["*"], None
+
+
+def _key_quota(raw: Any) -> tuple[str, str | None]:
+    """A key's own rate limit, normalized to the settings fields' form.
+
+    ``"60/m"`` or ``"30/m, 500/h"`` — the same strings the settings rate
+    limit fields take, validated here so a bad spec is never stored.
+    """
+    if raw is None:
+        return "", None
+    if isinstance(raw, list):
+        raw = ", ".join(str(part) for part in raw)
+    text = str(raw).strip()
+    if not text:
+        return "", None
+    parts = [part.strip() for part in text.split(",") if part.strip()]
+    for part in parts:
+        try:
+            parse_quota(part)
+        except ValueError:
+            return text, (
+                f"Invalid rate limit '{part}': use N/unit, e.g. 60/m or 30/m, 500/h"
+            )
+    return ", ".join(parts), None
 
 
 async def get_api_keys(request: Any) -> Response:
@@ -89,11 +143,18 @@ async def create_api_key(request: Any) -> Response:
     label = body.get("label", "")
     manual_key = body.get("key")
     allowed_shims = body.get("allowed_shims")
+    allowed_models, models_err = _key_models(body.get("allowed_models"))
+    rate_limit, quota_err = _key_quota(body.get("rate_limit"))
+    for field, error in (("allowed_models", models_err), ("rate_limit", quota_err)):
+        if error:
+            return JSONResponse({"error": error, "field": field}, status_code=400)
 
     try:
         key_id, raw_key = await keystore.create_key(
             label=label,
             allowed_shims=allowed_shims,
+            allowed_models=allowed_models,
+            rate_limit=rate_limit,
             manual_key=manual_key,
         )
     except Exception as exc:
@@ -121,8 +182,19 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
 
     label = body.get("label")
     allowed_shims = body.get("allowed_shims")
+    allowed_models, models_err = _key_models(body.get("allowed_models"))
+    rate_limit, quota_err = _key_quota(body.get("rate_limit"))
+    for field, error in (("allowed_models", models_err), ("rate_limit", quota_err)):
+        if error:
+            return JSONResponse({"error": error, "field": field}, status_code=400)
 
-    if not await keystore.update(key_id, label=label, allowed_shims=allowed_shims):
+    if not await keystore.update(
+        key_id,
+        label=label,
+        allowed_shims=allowed_shims,
+        allowed_models=allowed_models,
+        rate_limit=None if body.get("rate_limit") is None else rate_limit,
+    ):
         return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
     result: dict[str, Any] = {"ok": True, "id": key_id}
@@ -130,9 +202,17 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
         result["label"] = label
     if allowed_shims is not None:
         result["allowed_shims"] = allowed_shims
+    if allowed_models is not None:
+        result["allowed_models"] = allowed_models or ["*"]
+    if body.get("rate_limit") is not None:
+        result["rate_limit"] = rate_limit
     from llm_rosetta_gateway.ops.keys import OpsKeyUpdate
 
-    changed = [k for k in ("label", "allowed_shims") if body.get(k) is not None]
+    changed = [
+        k
+        for k in ("label", "allowed_shims", "allowed_models", "rate_limit")
+        if body.get(k) is not None
+    ]
     _ops_ctx = getattr(request.app, "ops_ctx", None)
     if _ops_ctx is not None:
         await OpsKeyUpdate(_ops_ctx, key_id=key_id, changed_fields=changed).execute()

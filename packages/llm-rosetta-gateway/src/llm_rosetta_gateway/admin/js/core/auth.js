@@ -4,6 +4,7 @@ import { t, applyI18n, typeNamesMode } from './i18n.js';
 import { showsNoPasswordBanner } from './posture.js';
 import { api, _adminHeaders, showToast, closeModal, fmtBytesLong, _startInactivityTracking, _stopInactivityTracking, paintThemeButton } from './utils.js';
 import { renderShimSources } from '../tabs/shims.js';
+import { parseQuota, splitQuotas, quotaToDisplay, quotaToPayload } from './quota.js';
 
 // --- Admin Token ---
 let _tokenRotateTimer = null;
@@ -67,13 +68,13 @@ function openSettings() {
   const rlAlgo = document.getElementById('rlAlgorithm');
   if (rlAlgo && rl.algorithm) rlAlgo.value = rl.algorithm;
   const rlG = document.getElementById('rlGlobal');
-  if (rlG) rlG.value = _quotaToDisplay(rl.global);
+  if (rlG) rlG.value = quotaToDisplay(rl.global);
   const rlI = document.getElementById('rlPerIp');
-  if (rlI) rlI.value = _quotaToDisplay(rl.per_ip);
+  if (rlI) rlI.value = quotaToDisplay(rl.per_ip);
   const rlK = document.getElementById('rlPerKey');
-  if (rlK) rlK.value = _quotaToDisplay(rl.per_key);
+  if (rlK) rlK.value = quotaToDisplay(rl.per_key);
   const rlM = document.getElementById('rlPerModel');
-  if (rlM) rlM.value = _quotaToDisplay(rl.per_model);
+  if (rlM) rlM.value = quotaToDisplay(rl.per_model);
   _validateRlQuotas();
   // Sync credential visibility
   const cv = document.getElementById('settingsCredentialVisible');
@@ -237,29 +238,6 @@ async function saveRetentionPart(part) {
 }
 
 // --- Rate Limiting ---
-const _RL_UNIT_MAP = {s:1,sec:1,second:1,m:60,min:60,minute:60,h:3600,hr:3600,hour:3600,d:86400,day:86400};
-function _parseQuota(q) {
-  if (!q || !q.trim()) return null;
-  const m = q.trim().match(/^(\d+)\s*(?:\/|per)\s*([a-z]+)(?:\s+burst\s+(\d+))?$/i);
-  if (!m) return {error: 'Invalid format. Use: N/unit (e.g. 100/m, 60/s, 10000/d)'};
-  let unit = m[2].toLowerCase();
-  if (unit.length > 1 && unit.endsWith('s')) unit = unit.slice(0, -1);
-  if (!(unit in _RL_UNIT_MAP)) return {error: 'Unknown unit: ' + m[2]};
-  return {limit: parseInt(m[1]), period: _RL_UNIT_MAP[unit]};
-}
-function _quotaToDisplay(v) {
-  if (!v) return '';
-  return Array.isArray(v) ? v.join(', ') : String(v);
-}
-function _splitQuotas(raw) {
-  if (!raw || !raw.trim()) return [];
-  return raw.split(',').map(s => s.trim()).filter(Boolean);
-}
-function _quotaToPayload(raw) {
-  const parts = _splitQuotas(raw);
-  if (parts.length === 0) return null;
-  return parts.length === 1 ? parts[0] : parts;
-}
 function _toRpm(p) { return p ? (p.limit / p.period) * 60 : null; }
 function _fmtRpm(v) { return v >= 1 ? Math.round(v) + ' ' + t('unit.reqPerMin')
                  : (v * 60).toFixed(1) + ' ' + t('unit.reqPerHour'); }
@@ -279,11 +257,11 @@ function _validateRlQuotas() {
   for (const f of fields) {
     const raw = document.getElementById(f.id)?.value?.trim();
     if (!raw) { parsed[f.id] = null; continue; }
-    const parts = _splitQuotas(raw);
+    const parts = splitQuotas(raw);
     let hasError = false;
     const allParsed = [];
     for (const part of parts) {
-      const p = _parseQuota(part);
+      const p = parseQuota(part);
       if (p && p.error) { errors.push(f.name + ' ("' + part + '"): ' + p.error); hasError = true; }
       else if (p) { allParsed.push(p); }
     }
@@ -311,7 +289,7 @@ async function saveRateLimitSettings() {
   const payload = { rate_limit: { enabled: document.getElementById('rlEnabled').checked, algorithm: document.getElementById('rlAlgorithm').value } };
   for (const [id, key] of [['rlGlobal','global'],['rlPerIp','per_ip'],['rlPerKey','per_key'],['rlPerModel','per_model']]) {
     const v = document.getElementById(id)?.value?.trim();
-    payload.rate_limit[key] = _quotaToPayload(v);
+    payload.rate_limit[key] = quotaToPayload(v);
   }
   try {
     const res = await api.put('/admin/api/config/server', payload);

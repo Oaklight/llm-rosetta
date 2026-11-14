@@ -88,7 +88,7 @@ function _langs() {
 }
 
 function _open() {
-  return S._accessOpen !== false;
+  return S._accessOpen === true;
 }
 
 function toggleAccessPanel() {
@@ -284,10 +284,11 @@ function copyAccessValue(value) {
 
 S._exampleLang = S._exampleLang || 'shell';
 S._examplePlatform = S._examplePlatform || 'unix';
+/** Collapsed until the reader opens it: the panel is for setting a tool up
+ *  once, and it is the tallest thing on a tab whose job is the key list. */
 try {
-  const stored = localStorage.getItem(OPEN_KEY);
-  S._accessOpen = stored === null ? true : stored === '1';
-} catch { S._accessOpen = true; }
+  S._accessOpen = localStorage.getItem(OPEN_KEY) === '1';
+} catch { S._accessOpen = false; }
 
 Object.assign(window, {
   loadKeyExamples, renderKeyExamples, setAccessDialect, toggleAccessPanel,

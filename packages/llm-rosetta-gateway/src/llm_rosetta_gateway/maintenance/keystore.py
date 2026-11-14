@@ -54,6 +54,8 @@ NAME = "api_keys"
 COLUMN_OF: dict[int, str] = {
     1: "last_used",
     2: "usage_bucket",
+    3: "allowed_models",
+    4: "rate_limit",
 }
 
 _CREATE_LEDGER = """CREATE TABLE IF NOT EXISTS schema_version (
