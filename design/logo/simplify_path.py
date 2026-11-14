@@ -946,6 +946,43 @@ def fmt(value: float, precision: int = 2) -> str:
 # --------------------------------------------------------------------------
 
 
+def seg_distance(p: Point, a: Point, b: Point) -> float:
+    """Distance from *p* to the segment *a*-*b*."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    length = dx * dx + dy * dy
+    t = 0.0
+    if length:
+        t = max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / length))
+    return math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy))
+
+
+def outline_deviation(
+    orig: list[list[Point]], out: list[list[Point]]
+) -> tuple[float, float]:
+    """Max and mean distance from the traced outline to the emitted one.
+
+    Measured at the flattened (original) vertices against the emitted polyline,
+    so a dense reference and a coarse budget compare honestly.  Both numbers are
+    in the same units as the rings; multiply by the framing scale for canvas
+    units.
+    """
+    worst = 0.0
+    total = 0.0
+    count = 0
+    for ring, emitted in zip(orig, out):
+        if len(emitted) < 2:
+            continue
+        n = len(emitted)
+        for p in ring:
+            best = min(
+                seg_distance(p, emitted[i], emitted[(i + 1) % n]) for i in range(n)
+            )
+            worst = max(worst, best)
+            total += best
+            count += 1
+    return worst, (total / count if count else 0.0)
+
+
 def emit_svg(
     rings: list[list[Point]],
     framing: Framing,
@@ -955,6 +992,7 @@ def emit_svg(
     as_: str = "polygon",
     precision: int = 1,
     inscriptions: str | None = None,
+    overlay: list[list[Point]] | None = None,
 ) -> str:
     """Render the rings as one SVG with a theme-aware fill.
 
@@ -962,6 +1000,9 @@ def emit_svg(
     ``<mask>`` that the mark is cut with, not a painted layer: the grooves are
     holes through the fill, so they show whatever the file sits on instead of a
     colour that only matches this page.
+
+    *overlay* is the outline the mark was traced from; it is drawn as a dashed
+    reference line in the same group, so both go through the one transform.
     """
     tx, ty, k = framing.transform
     vb = framing.viewbox.split()
@@ -976,11 +1017,21 @@ def emit_svg(
             '<rect x="-1000" y="-1000" width="3000" height="3000" fill="#fff"/>'
             f'<path fill="#000" d="{inscriptions}"/></mask></defs>'
         )
-    if dark_fill:
-        out.append(
-            f"<style>.mark{{fill:{fill}}}"
-            f"@media(prefers-color-scheme:dark){{.mark{{fill:{dark_fill}}}}}</style>"
-        )
+    if dark_fill or overlay:
+        css = ""
+        if dark_fill:
+            css += (
+                f".mark{{fill:{fill}}}"
+                f"@media(prefers-color-scheme:dark){{.mark{{fill:{dark_fill}}}}}"
+            )
+        if overlay:
+            # Constant dash whatever the file is scaled to: the reference is a
+            # measurement, not part of the mark.
+            css += (
+                ".orig{fill:none;stroke:#e02424;stroke-width:1.5;"
+                "stroke-dasharray:5 3;vector-effect:non-scaling-stroke}"
+            )
+        out.append(f"<style>{css}</style>")
     transform = ""
     if (tx, ty) != (0.0, 0.0) or k != 1.0:
         transform = (
@@ -1003,6 +1054,12 @@ def emit_svg(
                 f"L{fmt(p[0], precision)},{fmt(p[1], precision)}" for p in ring[1:]
             )
             out.append(f'<path class="mark" d="{d}Z"{fill_attr}{mask_attr}/>')
+    for ring in overlay or []:
+        d = f"M{fmt(ring[0][0], precision)},{fmt(ring[0][1], precision)}"
+        d += "".join(
+            f"L{fmt(p[0], precision)},{fmt(p[1], precision)}" for p in ring[1:]
+        )
+        out.append(f'<path class="orig" d="{d}Z"/>')
     out.extend(("</g>", "</svg>"))
     return "\n".join(out) + "\n"
 
@@ -1327,6 +1384,11 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--overlay",
+        action="store_true",
+        help="draw the outline the mark was traced from as a dashed reference",
+    )
+    p.add_argument(
         "--tolerance",
         type=float,
         default=0.05,
@@ -1464,6 +1526,14 @@ def main(argv: list[str] | None = None) -> int:
             rings.append(pts)
             tags_by_ring.append(tags)
         rings = deform(rings, args, lock_pivot(rings, tags_by_ring, locks))
+        # The reference outline goes through the same knobs, so the overlay
+        # answers "where does this leave the shape I traced", not "how does a
+        # second outline look under a different transform".
+        overlay = (
+            deform(dense, args, lock_pivot(rings, tags_by_ring, locks))
+            if args.overlay
+            else None
+        )
         framing = Framing(
             canvas=args.canvas, scale=args.scale, tight=args.tight, pad=args.pad
         )
@@ -1481,6 +1551,7 @@ def main(argv: list[str] | None = None) -> int:
             as_=args.as_,
             precision=args.precision,
             inscriptions=inscriptions,
+            overlay=overlay,
         )
         if args.stats:
             n_out = sum(len(r) for r in rings)
@@ -1489,11 +1560,18 @@ def main(argv: list[str] | None = None) -> int:
                 if args.method == "fidelity"
                 else f"{budget:>4} pts"
             )
-            print(
+            line = (
                 f"{label}: {total_in} flattened -> {n_out} vertices, "
-                f"{len(last_svg)} bytes, viewBox {framing.viewbox}",
-                file=sys.stderr,
+                f"{len(last_svg)} bytes, viewBox {framing.viewbox}"
             )
+            if overlay is not None:
+                worst, mean = outline_deviation(overlay, rings)
+                scale = framing.transform[2]
+                line += (
+                    f", off the traced outline max {worst * scale:.2f} "
+                    f"/ mean {mean * scale:.2f} canvas units"
+                )
+            print(line, file=sys.stderr)
         if out_path is not None and out_path != Path("-"):
             target = (
                 out_path.with_name(f"{out_path.stem}-{budget}{out_path.suffix}")
