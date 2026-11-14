@@ -3,6 +3,8 @@
 // The dialog marks the field and the save stops; those are the caller's job.
 // These are the rules, kept here so they can be tested without a browser.
 
+import { esc } from './html.js';
+
 /** A model name: the vendor spellings in use, and no whitespace. */
 export const MODEL_NAME_RE = /^[A-Za-z0-9._:\-/@+]+$/;
 
@@ -43,4 +45,31 @@ export function keyLimitTags(key, t) {
     });
   }
   return tags;
+}
+
+/**
+ * What the edit dialog sends for the models field.
+ *
+ * The field is text, so a stored `[]` and a stored `["*"]` open as the same
+ * blank line.  Sending `["*"]` for both would widen a key that may call no
+ * model the moment its label is edited, so an untouched field sends back
+ * exactly what was loaded; an edited one is read as written, with blank
+ * meaning every model, as the label says.
+ */
+export function modelsForSave(raw, original) {
+  const tokens = modelTokens(raw);
+  const before = (original || ['*']).filter((m) => m !== '*');
+  // Order is not part of the value — the server sorts — so a re-order counts
+  // as untouched and sends the loaded list back.
+  const untouched =
+    tokens.slice().sort().join(',') === before.slice().sort().join(',');
+  if (untouched) return Array.isArray(original) ? original : ['*'];
+  return tokens.length ? tokens : ['*'];
+}
+
+/** The row's tag markup: every text and title escaped on the way out. */
+export function keyLimitsMarkHtml(key, t) {
+  return keyLimitTags(key, t)
+    .map(({text, title}) => `<span class="tag is-plain" title="${esc(title)}">${esc(text)}</span>`)
+    .join(' ');
 }
