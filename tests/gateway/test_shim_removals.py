@@ -280,6 +280,7 @@ class TestAdminPayload:
                 "shims",
                 "free",
                 "tier",
+                "logos",
                 "note",
             }
             # Every published package resolves to a pinned primary plus a

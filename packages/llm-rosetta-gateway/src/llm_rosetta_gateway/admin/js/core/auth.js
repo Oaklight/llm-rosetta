@@ -783,7 +783,13 @@ async function doLogin() {
       // from the idle window, and the panel arms no timer for it.
       S.rememberedSession = !!(data && data.remember);
       _startInactivityTracking();
+      // A refusal from the paint before sign-in is about a state that no
+      // longer exists; it must not outlive the login card.
+      window.clearToast?.();
       window.initApp();
+      // The tab painted before this session existed; without a re-run its
+      // loader's 401 leaves the page empty until the operator reloads.
+      window.reactivateCurrentTab?.();
     } else {
       // A lockout carries the remaining seconds, which the generic line cannot
       // say; anything else is indistinguishable from a wrong password.

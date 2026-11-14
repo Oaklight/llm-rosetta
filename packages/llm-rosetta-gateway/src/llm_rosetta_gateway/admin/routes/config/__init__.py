@@ -65,6 +65,7 @@ from .shims import (
     _shim_removal_advisories,
     _shim_status_payload,
     _validate_shim_sources_body,
+    post_shim_package_upgrade,
     post_shims_check_updates,
     post_shims_reload,
     put_shim_sources,
@@ -107,6 +108,7 @@ __all__ = [
     "get_shim_manifest",
     "get_shim_manifests",
     "post_preview_shim_manifest",
+    "post_shim_package_upgrade",
     "post_shims_check_updates",
     "post_shims_reload",
     "post_shim_enabled",
@@ -199,6 +201,9 @@ def register_config_routes(app: Any) -> None:
     )
     app.route("/admin/api/config/shims/check-updates", methods=["POST"])(
         _guard("providers", post_shims_check_updates)
+    )
+    app.route("/admin/api/config/shims/packages/<key>/upgrade", methods=["POST"])(
+        _guard("providers", post_shim_package_upgrade)
     )
     # Vendor manifests: not shims, so a separate resource.  The path travels in
     # the query or the body rather than in the URL, because a filesystem path

@@ -327,6 +327,7 @@ class TestSourceCatalog:
             "shims",
             "free",
             "tier",
+            "logos",
             "note",
         }
 

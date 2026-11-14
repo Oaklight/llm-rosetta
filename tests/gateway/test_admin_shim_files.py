@@ -24,6 +24,7 @@ from llm_rosetta_gateway.admin.routes.config.shim_files import (
     put_loaded_shim,
 )
 from llm_rosetta_gateway.config import JsoncConfigIO
+from llm_rosetta.shims.provider_shim import ProviderShim
 from llm_rosetta_gateway.shims.sources import ShimLoadReport, ShimSourceStatus
 
 
@@ -234,6 +235,46 @@ async def test_inventory_marks_a_declared_shim_editable(tmp_path, local_source):
 
 
 @pytest.mark.asyncio
+async def test_a_shim_the_selection_declines_is_not_in_the_inventory(tmp_path):
+    """Excluded is not installed: the file exists, but nothing ran.
+
+    The Available card shows it unticked; the Installed view lists what runs.
+    A shim stopped by ``shims.disabled`` is the other case — it is installed
+    and switched off, and its switch lives in the inventory — so only the
+    selection takes a row away.
+    """
+    root = tmp_path / "free"
+    for name in ("kilo_free--chat_completions", "llm7--chat_completions"):
+        leaf = root / name.split("--")[0] / "provider.yaml"
+        leaf.parent.mkdir(parents=True)
+        leaf.write_text(_yaml(name), encoding="utf-8")
+
+    request = _request(tmp_path, {"providers": {}, "models": {}}, root)
+    # The report carries the selection the gateway applied when it loaded.
+    request.app.shim_source_report = ShimLoadReport(
+        sources=[
+            ShimSourceStatus(
+                kind="path",
+                location=str(root),
+                ok=True,
+                shim_count=1,
+                shim_names=("llm7--chat_completions",),
+                resolved_dir=str(root),
+                include=("llm7--chat_completions",),
+            )
+        ],
+        total_shims=1,
+        rebuilt_at=999.0,
+    )
+
+    rows = _body(await get_loaded_shims(request))["shims"]
+    names = {r["name"] for r in rows}
+
+    assert "llm7--chat_completions" in names
+    assert "kilo_free--chat_completions" not in names
+
+
+@pytest.mark.asyncio
 async def test_a_declined_shim_keeps_the_vendors_mark(tmp_path):
     """A shim the loader did not register still carries its mark.
 
@@ -259,6 +300,40 @@ async def test_a_declined_shim_keeps_the_vendors_mark(tmp_path):
     assert row["enabled"] is False
     assert row["logo"] == "https://cdn.example/kilocode.svg"
     assert row["group_label"] == "Kilo"
+
+
+@pytest.mark.asyncio
+async def test_a_shim_from_an_installed_package_is_not_filed_as_builtin(
+    tmp_path, monkeypatch
+):
+    """A plugin shim has no file to walk to, so the walk cannot place it.
+
+    Without the distribution the inventory knows nothing about it and files it
+    beside the built-ins — where the card draws no origin badge, and the source
+    line is empty, so an installed package looks like something we ship.
+    """
+    from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
+
+    name = "plugin_demo--chat_completions"
+    monkeypatch.setattr(
+        shim_files,
+        "_plugin_source",
+        lambda n: "llm_rosetta_shim_plugin_demo 1.2.3" if n == name else None,
+    )
+    register_shim(ProviderShim(name=name, format="chat_completions"))
+    try:
+        request = _request(tmp_path, {"providers": {}, "models": {}})
+
+        rows = _body(await get_loaded_shims(request))["shims"]
+        row = next(r for r in rows if r["name"] == name)
+        detail = _body(await get_loaded_shim(request, name))
+
+        assert row["origin"] == "plugin"
+        assert row["source"] == "llm_rosetta_shim_plugin_demo 1.2.3"
+        assert row["editable"] is False
+        assert "installed package" in (detail["read_only_reason"] or "")
+    finally:
+        unregister_shim(name)
 
 
 @pytest.fixture()

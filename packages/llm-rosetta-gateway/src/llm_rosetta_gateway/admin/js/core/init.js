@@ -125,6 +125,18 @@ function initApp(prefetchedConfig) {
   if (_dumpRoute) { window.openDumpPage?.(_dumpRoute); }
 }
 
+/** Re-run the current tab's loader after a sign-in.
+
+The first paint activates a tab before the session exists, so a deep link --
+or the remembered `#shims` -- ran that tab's loader against a 401 and left an
+empty view behind the login card.  `initApp` refreshes only the shell's own
+data; re-activating the tab is the one path every tab already implements.
+*/
+function reactivateCurrentTab() {
+  const el = document.querySelector('.tab[role="tab"].active');
+  if (el) activateTab(el, {push: false});
+}
+
 // ===================== Tabs =====================
 
 /** Paint the rail's mode / language buttons from the current state. */
@@ -826,4 +838,4 @@ setLang(S.currentLang);
 syncTopbarTitle();
 checkAuthAndInit();
 
-Object.assign(window, { initApp, stopTimers, toggleLogPause, startLogTimers });
+Object.assign(window, { initApp, reactivateCurrentTab, stopTimers, toggleLogPause, startLogTimers });

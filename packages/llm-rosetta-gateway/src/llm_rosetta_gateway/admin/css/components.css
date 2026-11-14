@@ -2863,7 +2863,10 @@ button.shim-update.unknown { color: var(--tag-warn); }
    chooses what the inventory lists, so it sits with the list's heading. */
 .shims-sources-toggle {
   display: inline-flex; align-items: center; gap: 8px;
-  margin-left: auto; white-space: nowrap;
+  /* The view has no heading of its own any more: the switch takes that place,
+     left of the trust line it belongs to, and the scope badge keeps the far
+     edge. */
+  margin-right: auto; white-space: nowrap;
   font-size: 12px; color: var(--text-dim); cursor: pointer;
 }
 .shims-sources-toggle .toggle { flex: 0 0 auto; }
@@ -2876,10 +2879,11 @@ button.shim-update.unknown { color: var(--tag-warn); }
   align-items: start;
   gap: 10px;
 }
-/* Package cards are a comparison grid, so a row shares one height.  The
-   vendor grid is a disclosure list: stretching its cards would make an opened
-   neighbour look opened too. */
-#shimCatalogGrid { align-items: stretch; grid-auto-rows: 1fr; }
+/* Both lists are disclosure grids, so a row is as tall as its own cards: an
+   expanded card must not stretch its neighbours, and equalised rows would
+   leave the opened card's own row taller than a closed one, with the gap
+   showing above it (measured: 250px of empty space under the first row). */
+#shimCatalogGrid { align-items: start; }
 
 /* ── Vendor card: one logo, one row per format ─────────────────────── */
 /* The card is a disclosure: its head is the whole click target, the rows
@@ -2959,16 +2963,41 @@ button.shim-update.unknown { color: var(--tag-warn); }
 
 .shim-card {
   display: flex; flex-direction: column; gap: 10px;
-  height: 100%;
+  /* Height follows the content: a card is a disclosure, so the one that is
+     open must not stretch its closed neighbours into empty boxes. */
+  align-self: start;
   padding: 16px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
 
-.shim-card-head { display: flex; align-items: center; gap: 10px; }
+/* Same disclosure as a vendor card: the head is the click target and the
+   body stays closed until the operator opens the package they want. */
+.shim-card-head {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 0; margin: 0;
+  background: none; border: 0; color: inherit; font: inherit;
+  text-align: left; cursor: pointer;
+}
+.shim-card-head:hover .shim-name { color: var(--accent); }
+.shim-card-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.shim-card.is-open .shim-card-head { padding-bottom: 2px; }
+.shim-card.is-open .shim-vendor-chevron { transform: rotate(180deg); }
 /* The provenance tag must not shrink away beside a long shim name. */
 .shim-card-head > .tag { flex: 0 0 auto; }
+.shim-card-head .shim-vendor-logo { flex: 0 0 auto; display: inline-flex; gap: 2px; width: auto; }
+/* A keyless pool is several vendors behind one key: one FREE plate says what
+   the card is about, where four vendor marks would only say whose. */
+.shim-pkg-mark { display: inline-flex; align-items: center; color: var(--green); }
+.shim-pkg-mark svg { display: block; }
+.shim-card-body { display: flex; flex-direction: column; gap: 10px; }
+.shim-card-body[hidden] { display: none; }
+/* Where the copy sits, and how far the repository has moved past it.  Only
+   a differing pair is dressed as an upgrade; an unreadable head says so. */
+.shim-card-hash { margin: 0; font-size: 11px; color: var(--text-muted); }
+.shim-card-hash .is-moved { color: var(--orange); }
+.shim-card-hash .is-unknown { color: var(--text-dim); }
 .shim-mark {
   flex: 0 0 30px; width: 30px; height: 30px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -2983,9 +3012,20 @@ button.shim-update.unknown { color: var(--tag-warn); }
 /* The provenance tag is a capability tag with an origin ink. */
 .tag.is-free { color: var(--green); }
 .tag.is-subscription { color: var(--accent, var(--orange)); }
+/* Origin and cost qualify a name rather than stand on their own, so they take
+   a cut two points below the tag scale in a box that hugs the word: at that
+   weight the padding of a full tag reads as an empty frame. */
+.tag.is-free,
+.tag.is-paid,
+.tag.is-subscription,
+.tag.is-remote,
+.tag.is-plugin { font-size: calc(var(--fs-micro) - 2px); padding: 0 4px; }
 .tag.is-builtin { color: var(--text-dim); }
 .tag.is-path { color: var(--accent); }
-.tag.is-remote { color: var(--orange); }
+/* A plugin shim and a fetched one are both external code, so they read as
+   one badge; only the origin key differs. */
+.tag.is-remote,
+.tag.is-plugin { color: var(--orange); }
 
 .shim-chips { display: flex; gap: 6px; flex-wrap: wrap; }
 /* A capability checkbox in the provider drawer carries the same icon as the
@@ -3010,6 +3050,11 @@ button.shim-update.unknown { color: var(--tag-warn); }
   display: inline-flex; align-items: center; justify-content: center;
 }
 .shim-logo { width: 16px; height: 16px; object-fit: contain; }
+/* A wordmark is wide: Argonne's is 300x105, and squeezing it into a 16px
+   square turns it into a dash.  Marks keep the 16px height and take the width
+   they need, up to a limit that still leaves the vendor name room. */
+.shim-vendor-head .shim-logo,
+.shim-card-head .shim-logo { width: auto; max-width: 34px; }
 .shim-logo-fallback {
   width: 16px; height: 16px; border-radius: 4px;
   display: inline-flex; align-items: center; justify-content: center;

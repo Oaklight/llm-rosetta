@@ -44,11 +44,27 @@ _READ_ONLY_REASON = {
         "A remote shim is a fetched artifact: the next refetch would overwrite "
         "an edit. Declare a local copy instead."
     ),
+    "plugin": (
+        "A plugin shim is registered by an installed package: edit it in that "
+        "package, or declare your own copy as a local shim source."
+    ),
 }
 
 #: Logger the shim loader reports a skipped directory on, captured while a
 #: saved file is reloaded so the panel can say *why* it did not load.
 _LOADER_LOGGER = "llm_rosetta.shims.providers"
+
+
+def _plugin_source(name: str) -> str | None:
+    """Return the distribution that registered plugin shim *name*, if any.
+
+    A plugin shim has no ``provider.yaml`` for the index to walk to, so this
+    is the only way the inventory can say where its code came from.
+    """
+    from llm_rosetta.shims import providers as _providers
+
+    getter = getattr(_providers, "plugin_source", None)
+    return getter(name) if callable(getter) else None
 
 
 def _builtin_root() -> Path:
@@ -235,7 +251,8 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
     rows: dict[str, dict[str, Any]] = {}
     for shim in list_shims():
         entry = index.get(shim.name) or {}
-        origin = entry.get("origin", "builtin")
+        plugin = "" if entry else (_plugin_source(shim.name) or "")
+        origin = entry.get("origin", "plugin" if plugin else "builtin")
         at_root = _at_source_root(entry)
         writable = origin == "path" and not at_root
         rows[shim.name] = {
@@ -247,7 +264,7 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
             "model_type": shim.model_type,
             "format": shim.format,
             "origin": origin,
-            "source": entry.get("source", ""),
+            "source": entry.get("source") or plugin,
             "path": entry.get("path"),
             "manifest_path": (
                 str(shim.manifest.path) if shim.manifest is not None else None
@@ -259,8 +276,29 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
             "free_source": bool(shim.free_source),
             "used_by": sorted(usage.get(shim.name, [])),
         }
+    # A shim the package's selection declined was never installed: its file
+    # exists, but the loader never parsed it.  It belongs in the Available
+    # card's unticked row, not in the inventory of what runs.  A shim stopped
+    # by `shims.disabled` is a different case — it is installed and switched
+    # off, and the switch lives here — so only the selection is consulted.
+    from ....shims.sources import _selection_predicate
+
+    keepers: dict[str, Any] = {}
+    for status in (
+        getattr(getattr(request.app, "shim_source_report", None), "sources", []) or []
+    ):
+        location = getattr(status, "location", "")
+        if location:
+            keepers[location] = _selection_predicate(
+                getattr(status, "include", ()) or (),
+                getattr(status, "exclude", ()) or (),
+            )
+
     for name, entry in index.items():
         if name in rows:
+            continue
+        keeper = keepers.get(entry.get("source", ""))
+        if keeper is not None and not keeper(name):
             continue
         origin = entry.get("origin", "unknown")
         at_root = _at_source_root(entry)
@@ -446,19 +484,43 @@ async def get_shim_catalog(request: Any) -> Response:
     Add Provider flow.  ``formats`` is the set of wire formats the package
     covers, taken from the canonical ``<vendor>--<format>`` shim names.
     """
-    from ....shims.catalog import SHIM_SOURCE_PACKAGES
+    from ....shims.catalog import SHIM_SOURCE_PACKAGES, repo_key
 
+    report = getattr(request.app, "shim_source_report", None)
+    pinned = {
+        repo_key(getattr(status, "location", "")): status
+        for status in getattr(report, "sources", []) or []
+        if getattr(status, "kind", "") == "remote"
+    }
+    # The update check is a cached answer, never a network call made here: the
+    # panel asks for it once per open and this endpoint only reads it back.
+    checked = getattr(request.app, "shim_update_check", None) or {}
+    heads = {
+        repo_key(entry.get("location")): entry
+        for entry in checked.get("sources", []) or []
+    }
     loaded = {shim.name for shim in list_shims()}
     packages = []
     for pkg in SHIM_SOURCE_PACKAGES:
         present = [name for name in pkg.shims if name in loaded]
         formats = sorted({name.split("--", 1)[1] for name in pkg.shims if "--" in name})
+        status = pinned.get(repo_key(pkg.repo))
+        verdict = heads.get(repo_key(pkg.repo)) or {}
         packages.append(
             {
                 **pkg.to_dict(),
                 "formats": formats,
                 "installed": bool(present),
                 "installed_shims": present,
+                # The pin the running gateway fetched, and the head the last
+                # check saw.  A package that is not installed has neither, and
+                # a check that could not answer leaves ``head`` empty rather
+                # than claiming the pin is current.
+                "pin": getattr(status, "resolved_ref", None) if status else None,
+                "source_ok": getattr(status, "ok", None) if status else None,
+                "head": verdict.get("head"),
+                "update_available": bool(verdict.get("update")),
+                "check_error": verdict.get("error"),
             }
         )
     return JSONResponse({"packages": packages})

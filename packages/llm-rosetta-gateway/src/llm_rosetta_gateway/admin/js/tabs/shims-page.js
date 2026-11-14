@@ -16,7 +16,10 @@ import { S, _CAP_ICONS } from '../core/state.js';
 import { t, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, esc, showToast, withBusyButton } from '../core/utils.js';
 import { jsArg, logoUrl } from '../core/html.js';
-import { hasPattern, keptShims, selectionMaps } from '../core/shim-selection.js';
+import {
+  hasPattern, keptShims, packageLogoUrl, selectionMaps, shortRef,
+} from '../core/shim-selection.js';
+import { toggleCard } from '../core/disclosure.js';
 
 let _view = 'installed';
 let _shims = [];
@@ -38,6 +41,8 @@ const VENDOR_NAMES = {
   // Manifest-backed vendors: the manifest names the group, and the leaves
   // (`alcf_metis`) are models of it, so their display_name is not the vendor.
   alcf: 'ALCF', argo: 'Argo', asksage: 'AskSage',
+  // A keyless pool is named for the product, not for the pool marker.
+  kilo_free: 'Kilo', opencode_zen_free: 'OpenCode Zen',
 };
 const vendorName = (vendor) =>
   _vendorMeta(vendor).group_label || VENDOR_NAMES[vendor] || cap(vendor);
@@ -93,10 +98,13 @@ async function loadShimsPage() {
       // `alcf_metis--…` leaves belong to; the name prefix would split them.
       _shimMeta[s.group || vendorOf(s.name)] = s;
     }
-    const [inv, cat] = await Promise.all([
-      api.get('/admin/api/config/shims'),
-      api.get('/admin/api/config/shims/catalog'),
-    ]);
+    const inv = await api.get('/admin/api/config/shims');
+    // The pin lives in the load report; the head comes from the check, which
+    // the server caches for five minutes.  Asking first means the catalogue
+    // below carries both halves as one snapshot instead of a card that shows
+    // a pin and no verdict.
+    try { await api.post('/admin/api/config/shims/check-updates', {}); } catch { /* newest is unknown */ }
+    const cat = await api.get('/admin/api/config/shims/catalog');
     _shims = inv.shims || [];
     // A shim the operator declined is not registered, so it never appears in
     // `registered_shims`; its card would then paint initials beside a loaded
@@ -114,6 +122,15 @@ async function loadShimsPage() {
       };
     }
     _packages = cat.packages || [];
+    // A loaded package whose archive predates its vendor's `logo:` still has
+    // no mark in the inventory.  The catalogue names the same files, so fill
+    // the gap from there and let a loaded shim's own declaration win.
+    for (const p of _packages) {
+      for (const [vendor, url] of Object.entries(p.logos || {})) {
+        const known = _shimMeta[vendor] || {};
+        if (!known.logo) _shimMeta[vendor] = { ...known, logo: url };
+      }
+    }
     _loaded = true;
   } catch (e) {
     showToast(String(e.message || e), 'error');
@@ -146,7 +163,11 @@ function _filters() {
 const _shimTier = (s) => s.tier || (s.free_source ? 'free' : 'paid');
 
 function _matches(s, f) {
-  if (f.origin && s.origin !== f.origin) return false;
+  // An installed package's shim is external too, so the one filter covers
+  // both spellings rather than making the operator guess which list to pick.
+  if (f.origin === 'remote') {
+    if (s.origin !== 'remote' && s.origin !== 'plugin') return false;
+  } else if (f.origin && s.origin !== f.origin) return false;
   if (f.type && (s.model_type || 'llm') !== f.type) return false;
   if (f.tier && _shimTier(s) !== f.tier) return false;
   if (!f.builtin && s.origin === 'builtin') return false;
@@ -157,7 +178,7 @@ function _matches(s, f) {
 
 function _originBadge(origin) {
   if (origin === 'builtin') return '';
-  const label = origin === 'path' ? t('shimPage.originLocal') : t('shimPage.originExternal');
+  const label = origin === 'path' ? t('shimPage.originLocal') : t('shimPage.originExt');
   return `<span class="tag is-square is-${esc(origin)}">${esc(label)}</span>`;
 }
 
@@ -167,13 +188,17 @@ function _markStyle(text) {
   return ` style="background:hsl(${h} 45% 90%);color:hsl(${h} 55% 32%)"`;
 }
 
-/** The vendor's logo, or a tinted initials tile when it has none. */
-function _vendorLogo(vendor) {
-  const logo = _vendorMeta(vendor).logo;
+/** A mark for *url*, or a tinted initials tile when there is none. */
+function _logoHtml(url, vendor) {
   const initials = esc(cap(vendor).slice(0, 2));
   const fallback = `<span class="shim-logo-fallback"${_markStyle(vendor)}>${initials}</span>`;
-  if (!logo) return fallback;
-  return `<img class="shim-logo" src="${esc(logoUrl(logo))}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="shim-logo-fallback" style="display:none"${_markStyle(vendor)}>${initials}</span>`;
+  if (!url) return fallback;
+  return `<img class="shim-logo" src="${esc(logoUrl(url))}" alt="" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><span class="shim-logo-fallback" style="display:none"${_markStyle(vendor)}>${initials}</span>`;
+}
+
+/** The vendor's logo, or a tinted initials tile when it has none. */
+function _vendorLogo(vendor) {
+  return _logoHtml(_vendorMeta(vendor).logo, vendor);
 }
 
 /** One row: the format this shim serves, with the two actions it allows. */
@@ -241,6 +266,7 @@ function _vendorCard(vendor, rows) {
               onclick="toggleShimVendor(${jsArg(vendor)})">
         <span class="shim-vendor-logo">${_vendorLogo(vendor)}</span>
         <span class="shim-vendor-name">${esc(vendorName(vendor))}</span>
+        ${rows.some((s) => s.free_source) ? `<span class="tag is-square is-free">${esc(t('shimPage.free'))}</span>` : ''}
         ${_originBadge(origin)}
         <span class="shim-vendor-meta">${esc(plural(rows.length, 'shimPage.formats', 'shimPage.formatOne'))}${usedBy.size ? ' · ' + esc(plural(usedBy.size, 'shimPage.usedBy', 'shimPage.usedByOne')) : ''}</span>
         <svg class="shim-vendor-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
@@ -257,16 +283,10 @@ function _vendorCard(vendor, rows) {
 
 /** Open or close one vendor card in place, so the scroll position holds. */
 export function toggleShimVendor(vendor) {
-  const card = [...document.querySelectorAll('#shimGrid .shim-vendor-card')]
-    .find((c) => c.dataset.vendor === vendor);
-  const open = !_openVendors.has(vendor);
-  if (open) _openVendors.add(vendor); else _openVendors.delete(vendor);
-  if (!card) return;
-  card.classList.toggle('is-open', open);
-  const head = card.querySelector('.shim-vendor-head');
-  const rows = card.querySelector('.shim-rows');
-  if (head) head.setAttribute('aria-expanded', String(open));
-  if (rows) rows.hidden = !open;
+  toggleCard({
+    root: '#shimGrid', card: '.shim-vendor-card', attr: 'vendor', key: vendor,
+    open: _openVendors, head: '.shim-vendor-head', body: '.shim-rows',
+  });
 }
 
 /** Whether a catalogue package passes the search and tier filters. */
@@ -285,8 +305,75 @@ function _selectionOf(key) {
            exclude: section.exclude && section.exclude[key] };
 }
 
+/** Packages stay closed until they are the one being worked on, as vendors do. */
+const _openPackages = new Set();
+
+export function toggleShimPackage(key) {
+  toggleCard({
+    root: '#shimCatalogGrid', card: '.shim-card', attr: 'package', key,
+    open: _openPackages, head: '.shim-card-head', body: '.shim-card-body',
+  });
+}
+
+/** The mark of one vendor inside a package, before or after it is fetched. */
+function _packageVendorLogo(pkg, vendor) {
+  return _logoHtml(packageLogoUrl(pkg, vendor, _vendorMeta(vendor).logo), vendor);
+}
+
 /**
- * One package card: what it ships, which of it is wanted, install or update.
+ * The tile a package shows on its closed card.
+ *
+ * A keyless pool is several vendors behind one key, and its own four marks in
+ * a row say "which vendors" when the card's job is to say "what kind of
+ * resource" — so it wears one FREE wordmark instead.  Any other package shows
+ * the marks its vendors declare, at most three.
+ */
+function _packageMark(pkg) {
+  const tier = pkg.tier || (pkg.free ? 'free' : 'paid');
+  if (tier === 'free') {
+    return `<span class="shim-pkg-mark is-free" aria-hidden="true">`
+      + `<svg width="34" height="18" viewBox="0 0 34 18" role="img">`
+      + `<rect x="0.5" y="0.5" width="33" height="17" rx="4" fill="none" stroke="currentColor"/>`
+      + `<text x="17" y="12.4" text-anchor="middle" font-size="8" font-weight="700"`
+      + ` letter-spacing="0.7" fill="currentColor">FREE</text></svg></span>`;
+  }
+  const vendors = [...new Set((pkg.shims || []).map(vendorOf))];
+  const marks = [...new Set(
+    vendors.map((v) => packageLogoUrl(pkg, v, _vendorMeta(v).logo)).filter(Boolean),
+  )].slice(0, 3);
+  if (!marks.length) return _logoHtml(null, pkg.key);
+  return marks
+    .map((url) => `<img class="shim-logo" src="${esc(logoUrl(url))}" alt="" loading="lazy">`)
+    .join('');
+}
+
+/**
+ * Where the running copy sits, and how far the repository has moved since.
+ *
+ * The pin is the commit the source was fetched at; the head is what the last
+ * check read.  Only a pair that differs is an upgrade, and a head that could
+ * not be read says so instead of pretending the pin is current.
+ */
+function _packagePinLine(p) {
+  if (!p.installed) return '';
+  const pin = shortRef(p.pin);
+  const head = shortRef(p.head);
+  if (!pin && !p.check_error) return '';
+  const parts = [];
+  if (pin) parts.push(`<span title="${esc(p.pin)}">${esc(t('shimPage.pinAt', {ref: pin}))}</span>`);
+  if (p.update_available && head) {
+    parts.push(`<span class="is-moved" title="${esc(p.head)}">${esc(t('shimPage.headAt', {ref: head}))}</span>`);
+  } else if (head) {
+    parts.push(`<span>${esc(t('shimPage.upToDate'))}</span>`);
+  } else if (p.check_error) {
+    parts.push(`<span class="is-unknown">${esc(p.check_error)}</span>`);
+  }
+  return `<p class="shim-card-hash">${parts.join(' · ')}</p>`;
+}
+
+/**
+ * One package card: its marks, tier and origin up front, its shims behind a
+ * disclosure — the same shape the Installed view gives a vendor.
  *
  * The checkboxes are the install, not a preference: the package's shims are
  * read from the catalogue, so the list exists before the repository is ever
@@ -295,10 +382,6 @@ function _selectionOf(key) {
  * a shim the package adds later switch itself on.
  */
 function _packageCard(p) {
-  const formats = (p.formats || []).map((f) => `<span class="tag is-plain">${esc(f)}</span>`).join('');
-  const status = p.installed
-    ? '<span class="tag is-square is-builtin">' + esc(t('shimPage.installedBadge')) + '</span>'
-    : '<span class="tag is-square is-remote">' + esc(t('shimPage.availableBadge')) + '</span>';
   const link = _sourceLink(p.source_repo, 'shim-repo');
   const tier = p.tier || (p.free ? 'free' : 'paid');
   const tierTag = `<span class="tag is-square is-${esc(tier)}">${esc(t('shimPage.' + tier))}</span>`;
@@ -314,26 +397,37 @@ function _packageCard(p) {
         ? 'shimPage.loadedMark' : 'shimPage.notLoadedMark');
       return `<label class="shim-preset-shim${on ? '' : ' off'}">`
         + `<input type="checkbox" data-shim="${esc(name)}" value="${esc(name)}"${on ? ' checked' : ''}>`
+        + `<span class="shim-vendor-logo">${_packageVendorLogo(p, vendorOf(name))}</span>`
         + `<span class="shim-preset-name">${esc(name)}</span>`
         + `<span class="shim-preset-state">${esc(state)}</span></label>`;
     }).join('');
+  const open = _openPackages.has(p.key);
+  const bodyId = esc(`shimBody-${p.key}`);
+  const upgrade = p.installed && p.update_available
+    ? `<button type="button" class="btn btn-sm btn-primary" onclick="upgradeShimPackage(this, ${jsArg(p.key)})">${esc(t('shimPage.upgrade'))}</button>`
+    : '';
+  const actions = p.installed
+    ? `${upgrade}
+       <button type="button" class="btn btn-sm${upgrade ? '' : ' btn-primary'}" onclick="updateShimPackage(this, ${jsArg(p.key)})">${esc(t('shimPage.saveSelection'))}</button>
+       <button type="button" class="btn btn-sm" onclick="startProviderFromShim(${jsArg(p.installed_shims[0] || '')})">${esc(t('shimPage.addProvider'))}</button>
+       <button type="button" class="btn btn-sm" onclick="removeShimPackage(this, ${jsArg(p.key)})">${esc(t('shimPage.remove'))}</button>`
+    : `<button type="button" class="btn btn-sm btn-primary" onclick="installShimPackage(this, ${jsArg(p.key)})">${esc(t('shimPage.install'))}</button>`;
   return `
-    <article class="shim-card" data-package="${esc(p.key)}">
-      <div class="shim-card-head">
+    <article class="shim-card${open ? ' is-open' : ''}" data-package="${esc(p.key)}">
+      <button type="button" class="shim-card-head" aria-expanded="${open}" aria-controls="${bodyId}"
+              onclick="toggleShimPackage(${jsArg(p.key)})">
+        <span class="shim-vendor-logo">${_packageMark(p)}</span>
         <span class="shim-name">${esc(p.label)}</span>
         ${tierTag}
-        ${status}
-      </div>
-      <div class="shim-chips">${formats || '<span class="tag is-plain">—</span>'}</div>
-      <div class="shim-usage">${esc(plural(p.shims.length, 'shimPage.shims', 'shimPage.shimOne'))}${link ? ' · ' + link : ''}</div>
-      <div class="shim-card-shims" role="group" aria-label="${esc(t('shimPage.chooseShims'))}">${rows}</div>
-      ${p.installed ? '' : `<p class="shim-trust" role="note">${esc(t('shimPage.trustWarning'))}</p>`}
-      <div class="shim-card-actions">
-        ${p.installed
-          ? `<button type="button" class="btn btn-sm btn-primary" onclick="updateShimPackage(this, ${jsArg(p.key)})">${esc(t('shimPage.update'))}</button>
-             <button type="button" class="btn btn-sm" onclick="startProviderFromShim(${jsArg(p.installed_shims[0] || '')})">${esc(t('shimPage.addProvider'))}</button>
-             <button type="button" class="btn btn-sm" onclick="removeShimPackage(this, ${jsArg(p.key)})">${esc(t('shimPage.remove'))}</button>`
-          : `<button type="button" class="btn btn-sm btn-primary" onclick="installShimPackage(this, ${jsArg(p.key)})">${esc(t('shimPage.install'))}</button>`}
+        <span class="shim-vendor-meta">${esc(plural((p.shims || []).length, 'shimPage.shims', 'shimPage.shimOne'))}</span>
+        <svg class="shim-vendor-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="shim-card-body" id="${bodyId}"${open ? '' : ' hidden'}>
+        <div class="shim-chips">${(p.formats || []).map((f) => `<span class="tag is-plain">${esc(f)}</span>`).join('') || '<span class="tag is-plain">—</span>'}${link ? ' ' + link : ''}</div>
+        ${_packagePinLine(p)}
+        <div class="shim-card-shims" role="group" aria-label="${esc(t('shimPage.chooseShims'))}">${rows}</div>
+        ${p.installed ? '' : `<p class="shim-trust" role="note">${esc(t('shimPage.trustWarning'))}</p>`}
+        <div class="shim-card-actions">${actions}</div>
       </div>
     </article>`;
 }
@@ -428,6 +522,29 @@ export async function updateShimPackage(btn, key) {
       showToast(failures
         ? t('shimPage.installFailed', {key, count: failures})
         : t('shimPage.updateDone', {key}), failures ? 'error' : undefined);
+    } catch (e) {
+      showToast(String(e.message || e), 'error');
+    }
+  });
+}
+
+/**
+ * Move one package's source to its repository head, if it has moved.
+ *
+ * The server recomputes the verdict, so this button is a request, not the
+ * decision: a call that arrives while the pin already equals the head comes
+ * back `changed: false` and nothing is written or refetched.
+ */
+export async function upgradeShimPackage(btn, key) {
+  await withBusyButton(btn, async () => {
+    try {
+      const r = await _mustWrite(() => api.post(
+        `/admin/api/config/shims/packages/${encodeURIComponent(key)}/upgrade`, {}));
+      S.configData = await api.get('/admin/api/config');
+      await loadShimsPage();
+      showToast(r && r.changed
+        ? t('shimPage.upgradeDone', {key})
+        : t('shimPage.upgradeCurrent', {key}), r && r.changed ? undefined : 'error');
     } catch (e) {
       showToast(String(e.message || e), 'error');
     }
@@ -550,6 +667,7 @@ export async function shimToggleEnabled(input, name) {
 
 Object.assign(window, {
   loadShimsPage, renderShimsPage, setShimsView, toggleShimVendor,
+  toggleShimPackage, upgradeShimPackage,
   installShimPackage, updateShimPackage, removeShimPackage, shimToggleEnabled,
   // Repainted on a language change: the per-shim rows carry translated marks.
   repaintShimCatalog: () => { if (_view === 'available') renderShimsPage(); },

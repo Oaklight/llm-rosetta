@@ -1693,6 +1693,26 @@ def load_providers() -> list[ProviderShim]:
     return shims
 
 
+#: Which installed distribution registered each plugin shim, keyed by shim
+#: name.  A plugin shim has no ``provider.yaml`` on disk, so nothing can walk to
+#: it; this map is how the inventory says where the code came from instead of
+#: filing it beside the built-ins.
+_PLUGIN_SOURCES: dict[str, str] = {}
+
+
+def plugin_source(name: str) -> str | None:
+    """Return the distribution that registered plugin shim *name*, if any.
+
+    Args:
+        name: A canonical shim name.
+
+    Returns:
+        ``"<distribution> <version>"`` for a shim a plugin registered, or
+        ``None`` for a shim that came from a directory.
+    """
+    return _PLUGIN_SOURCES.get(name)
+
+
 def _load_plugin_shims() -> list[ProviderShim]:
     """Discover and invoke ``llm_rosetta.shim_providers`` entry points.
 
@@ -1705,6 +1725,7 @@ def _load_plugin_shims() -> list[ProviderShim]:
     plugins from loading.
     """
     registered: list[ProviderShim] = []
+    _PLUGIN_SOURCES.clear()
 
     eps = entry_points()
     # Python 3.12+: eps.select(); Python 3.10–3.11: dict-style
@@ -1713,12 +1734,26 @@ def _load_plugin_shims() -> list[ProviderShim]:
     else:
         plugin_eps = eps.get("llm_rosetta.shim_providers", [])
 
+    from ..provider_shim import list_shims as _list_shims
+
     for ep in plugin_eps:
+        known = {shim.name for shim in _list_shims()}
         try:
             loader = ep.load()
             result = loader()
             if isinstance(result, list):
                 registered.extend(result)
+            # Whatever this entry point just registered has no file on disk;
+            # name the distribution so the inventory can say where it lives.
+            dist = getattr(ep, "dist", None)
+            label = (
+                f"{dist.name} {dist.version}"
+                if dist is not None and getattr(dist, "name", None)
+                else ep.name
+            )
+            for shim in _list_shims():
+                if shim.name not in known:
+                    _PLUGIN_SOURCES.setdefault(shim.name, label)
             logger.info("Loaded plugin shims from entry point: %s", ep.name)
         except Exception:
             logger.warning(
