@@ -1,0 +1,10 @@
+{
+  "model": "gpt-5-nano",
+  "messages": [
+    {"role": "system", "content": "You are a translator."},
+    {"role": "user", "content": "Translate the stone."}
+  ],
+  "tools": [
+    {"type": "function", "function": {"name": "lookup", "parameters": {}}}
+  ]
+}

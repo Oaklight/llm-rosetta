@@ -1,0 +1,10 @@
+{
+  "model": "gemini-2.5-flash",
+  "system_instruction": {"parts": [{"text": "You are a translator."}]},
+  "contents": [
+    {"role": "user", "parts": [{"text": "Translate the stone."}]}
+  ],
+  "tools": [
+    {"function_declarations": [{"name": "lookup", "parameters": {}}]}
+  ]
+}
