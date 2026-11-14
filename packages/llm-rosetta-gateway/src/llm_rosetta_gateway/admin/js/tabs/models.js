@@ -1414,7 +1414,7 @@ function renderModels() {
       </td>
       <td class="model-provider-cell" role="cell" aria-labelledby="sortProvider">${_renderProviderCell(name, info, disabledProviders)}</td>
       <td class="model-actions-cell" role="cell" aria-labelledby="sortEnabled">
-        <label class="toggle row-toggle" style="margin-right:6px" title="${allProvsDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}"><input type="checkbox" role="switch" ${effectiveEnabled ? 'checked' : ''} aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onchange="toggleModel(${jsArg(name)})"><span class="slider"></span></label>
+        <label class="toggle is-sm" style="margin-right:6px" title="${allProvsDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}"><input type="checkbox" role="switch" ${effectiveEnabled ? 'checked' : ''} aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onchange="toggleModel(${jsArg(name)})"><span class="slider"></span></label>
         ${_testGroup(name, modelType, {hasTools, hasVision, hasReasoning}, null, {extraClass: modelType !== 'llm' ? 'btn-test-embed' : '', style: 'display:inline-block'})}
         <button class="btn btn-sm more-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.more')} ${esc(name)}" onclick="toggleMoreMenu(this)" style="padding:3px 6px">⋯</button>
         <div class="more-menu" role="menu">

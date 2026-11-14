@@ -173,9 +173,11 @@ function _formatRow(s) {
               title="${esc(t(s.enabled === false ? 'shimPage.addBlocked' : 'shimPage.addProvider'))}"
               aria-label="${esc(t('shimPage.addProvider'))}"${s.enabled === false ? ' disabled' : ''}
               onclick="startProviderFromShim(${jsArg(s.name)})">+</button>
-      <input type="checkbox" role="switch" class="shim-switch"
-             title="${esc(t('shimPage.switchHint'))}" aria-label="${esc(t('shimPage.switchHint'))}"
-             ${s.enabled === false ? '' : 'checked'} onchange="shimToggleEnabled(this, ${jsArg(s.name)})">
+      <label class="toggle is-sm" title="${esc(t('shimPage.switchHint'))}">
+        <input type="checkbox" role="switch" aria-label="${esc(t('shimPage.switchHint'))}"
+               ${s.enabled === false ? '' : 'checked'} onchange="shimToggleEnabled(this, ${jsArg(s.name)})">
+        <span class="slider"></span>
+      </label>
     </div>`;
 }
 

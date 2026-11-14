@@ -81,7 +81,7 @@ test('the switch keeps the surface hook as a separate class', () => {
     title: 'on',
     extraClass: 'routing-switch',
   });
-  assert.match(html, /class="toggle row-toggle routing-switch"/,
+  assert.match(html, /class="toggle is-sm routing-switch"/,
     'the space is what makes the board\'s own selector match');
 });
 

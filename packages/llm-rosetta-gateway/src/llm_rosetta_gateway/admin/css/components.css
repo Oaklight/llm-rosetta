@@ -443,9 +443,6 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
 .bulk-bar .bulk-actions { margin-left:auto;display:flex;gap:6px; }
 .row-check { width:16px;height:16px;cursor:pointer;accent-color:var(--accent); }
 .pill-toggle { display:inline-flex;border:1px solid var(--border);border-radius:var(--radius-control);overflow:hidden;font-size:var(--fs-micro);font-weight:600;cursor:pointer;user-select:none;vertical-align:middle;min-width:52px;text-align:center; }
-.toggle.row-toggle { width:32px;height:18px;flex:0 0 auto; }
-.toggle.row-toggle .slider::before { height:12px;width:12px;left:3px;bottom:2px; }
-.toggle.row-toggle input:checked + .slider::before { transform:translateX(14px); }
 .pill-toggle span { padding:3px 8px;transition:all 0.15s; }
 .pill-toggle.is-on .pill-on { background:var(--green);color:#fff; }
 .pill-toggle.is-on .pill-off { background:var(--bg-card);color:var(--text-dim); }
@@ -670,14 +667,27 @@ button.prov-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
   background:#fff;border-radius:4px;padding:1px;box-sizing:content-box;
 }
 
-/* A rounded rectangle, not a pill: the panel's corners are square (2–6px)
-   and a 20px pill was the one shape on the page that disagreed. */
-.toggle { position:relative;display:inline-block;width:36px;height:20px; }
-.toggle input { opacity:0;width:0;height:0; }
-.toggle .slider { position:absolute;cursor:pointer;inset:0;background:var(--border);border-radius:4px;transition:.2s; }
-.toggle .slider::before { content:'';position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#fff;border-radius:2px;transition:.2s; }
-.toggle input:checked + .slider { background:var(--accent); }
-.toggle input:checked + .slider::before { transform:translateX(16px); }
+/* ── The switch ───────────────────────────────────────────────────────
+   One component, used wherever a boolean is set: a track, a knob, and the
+   checked state.  `.is-sm` is the dense-row size.  The knob keeps a 4px
+   inset all round so its square corners sit inside the track's. */
+.toggle { position: relative; display: inline-block; width: 36px; height: 20px; flex: 0 0 auto; }
+.toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle .slider {
+  position: absolute; inset: 0; background: var(--border);
+  border-radius: 4px; transition: background .2s; cursor: pointer;
+}
+.toggle .slider::before {
+  content: ''; position: absolute; height: 12px; width: 12px;
+  left: 4px; bottom: 4px; background: #fff; border-radius: 2px; transition: transform .2s;
+}
+.toggle input:checked + .slider { background: var(--accent); }
+.toggle input:checked + .slider::before { transform: translateX(16px); }
+.toggle input:focus-visible + .slider { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent); }
+.toggle.is-sm { width: 32px; height: 18px; }
+.toggle.is-sm .slider::before { height: 10px; width: 10px; }
+.toggle.is-sm input:checked + .slider::before { transform: translateX(14px); }
+
 .key-cell { display: flex; align-items: center; gap: 4px; }
 .key-cell code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .key-actions { display: flex; gap: 2px; flex-shrink: 0; }
@@ -2819,7 +2829,6 @@ button.shim-update.unknown { color: var(--tag-warn); }
 
 .shim-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
 .shim-note { font-size: 10.5px; color: var(--text-dim); }
-.shim-switch { width: 30px; height: 16px; accent-color: var(--accent); }
 .shim-empty { padding: 28px; text-align: center; color: var(--text-muted); grid-column: 1 / -1; }
 
 
