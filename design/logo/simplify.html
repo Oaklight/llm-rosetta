@@ -1,0 +1,1160 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LLM-Rosetta · 石形简化器</title>
+<style>
+:root{
+  color-scheme:light dark;
+  --bg:#f6f7f9; --panel:#fff; --fg:#0f172a; --dim:#64748b; --line:#e2e8f0;
+  --accent:#2f6fdd; --chip:#eef2f7; --grid:#0f172a;
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f16; --panel:#111823; --fg:#e2e8f0; --dim:#94a3b8; --line:#1e293b;
+  --accent:#6ea8fe; --chip:#182130; --grid:#e2e8f0;
+}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.5 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;
+  background:var(--bg);color:var(--fg);min-height:100vh}
+header{display:flex;align-items:center;gap:14px;padding:18px 24px;border-bottom:1px solid var(--line)}
+header h1{font-size:16px;margin:0;font-weight:650;letter-spacing:-.01em}
+header p{margin:0;color:var(--dim);font-size:12.5px}
+header .spacer{flex:1}
+main{display:grid;grid-template-columns:340px minmax(0,1fr);gap:20px;padding:20px 24px;align-items:start}
+@media (max-width:960px){main{grid-template-columns:1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+.panel + .panel{margin-top:14px}
+.panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:0 0 12px}
+label.row{display:block;margin-bottom:13px}
+label.row:last-child{margin-bottom:0}
+.k{display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px}
+.k b{font-variant-numeric:tabular-nums;font-weight:600}
+.k small{color:var(--dim);font-weight:400}
+input[type=range]{width:100%;accent-color:var(--accent)}
+input[type=text],textarea,select{width:100%;background:var(--bg);color:var(--fg);
+  border:1px solid var(--line);border-radius:8px;padding:7px 9px;font:inherit;font-size:12.5px}
+textarea{min-height:80px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.seg button{flex:1;min-width:78px}
+button{background:var(--chip);color:var(--fg);border:1px solid var(--line);border-radius:8px;
+  padding:7px 10px;font:inherit;font-size:12.5px;cursor:pointer}
+button:hover{border-color:var(--accent)}
+button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px;display:grid;place-items:center}
+.big-wrap{position:relative;width:340px;height:340px;overflow:hidden;border-radius:10px;touch-action:none}
+.big{width:100%;height:100%;transform-origin:0 0}
+.big svg{width:100%;height:100%}
+.big-wrap.zoomed{cursor:grab}
+.big-wrap.zoomed.dragging{cursor:grabbing}
+.view-bar{display:flex;gap:10px;align-items:center;margin-top:14px;font-size:11.5px;
+  color:var(--dim);font-variant-numeric:tabular-nums}
+.view-bar b{color:var(--fg)}
+.view-bar button{padding:3px 10px;font-size:11.5px}
+.view-bar .hint{margin:0}
+.sizes{display:flex;gap:16px;align-items:end;justify-content:center;margin-top:18px;flex-wrap:wrap}
+.sizes figure{margin:0;text-align:center}
+.sizes figcaption{font-size:11px;color:var(--dim);margin-top:6px;font-variant-numeric:tabular-nums}
+.sizes .box{display:grid;place-items:center;border:1px dashed var(--line);border-radius:10px;padding:6px}
+.stats{display:flex;gap:16px;flex-wrap:wrap;color:var(--dim);font-size:12px;margin-top:16px;
+  padding-top:14px;border-top:1px solid var(--line);width:100%}
+.stats b{color:var(--fg);font-variant-numeric:tabular-nums}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+th{color:var(--dim);font-weight:600}
+td.num{font-variant-numeric:tabular-nums}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;
+  background:var(--chip);padding:1px 5px;border-radius:5px}
+.hint{font-size:11.5px;color:var(--dim);margin:8px 0 0}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);
+  background:#111;color:#fff;padding:9px 16px;border-radius:10px;font-size:12.5px;
+  opacity:0;transition:.2s;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.pin{cursor:pointer}
+.pin:hover{stroke:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <svg width="22" height="24" viewBox="0 0 600 600" fill="currentColor" aria-hidden="true">
+    <path d="M517.5,415.4c.3-10.7-2.6-21.4-2.2-31.9c.1-2.4,2-4.5,2.1-6.9c.2-5.1-1.1-12.1-2.8-16.2c-2-4.9-1.4-11.1-1.1-16.9c.4-5.9-.3-11.6-.3-17.5c0-5.9-1.4-13.4-.3-18.4c.9-3.9-.3-8.7.2-12.7c.2-1.3,1.3-1.6,1.5-2.7c.6-2.8-1.7-2.8-1.7-4.7c0-1.6,1.7-3.2,1.9-5c1.5-3-2.3-8.2-1.4-10.6c4.9-14.2-8.2-27.4-12.9-37c-.1-.2-.2-.5-.2-.8c-3.8-15.2-8.4-27.1-13.8-41.1c-1.8-4.8-6-8.7-7.6-13.6c-1.6-4.9-5.1-9.4-7.9-13.4c-6.6-9.4-14.5-22.3-13.8-35.9c-6-6.5-6-18.5-9-28.5c-1.3-4.3-2-8.8-2.9-13.4c-.8-4.1-2.3-10.6-2.1-14.3c0-.6.8-1.1.7-1.7c-.1-.6-1.2-1-1.4-1.5c-1-2.7-1-6.6-2.2-10c-1.1-3.1-2.3-6.9-2.7-9.6c-.3-1.8-.1-3.2-1.1-4.2c-.9-.9-2.1-.9-2.3-1.9c-.5-1.8.8-2.5.8-3.8c0-2.6-2.7-6.6-3-9.7c-.1-.6.5-1.3.5-1.9c-.2-2.3-3.3-4.1-4.7-5.6c-1.8-1.8-4.3-7.6-4.9-10.1c-.6-2.2.3-6.1-1-7.2c-.7-.6-6-1-6.7-1.1c-11.2-.2-22.7-2.7-35.3-2.3c-8.5.2-17.3.5-25.6,1.4c-8.4.9-15.5,3.4-23.4,4.3c-4.5.5-7.4,1.9-11.1,2.8c-8,1.8-16.2,2.5-23,4.9c-2.8,1-8,2.4-9.6,4.4c-2,2.5-1.4,1.9-4.4,2c-1.1,0-2.4.9-3.7,1.1c-1.4.2-2.7-.5-4-.5c-1.9.1-5.9,2.2-7.9,3c-2.7,1-5.4,2.2-8.1,2.9c-14.2,3.8-26.2,10.3-38.8,16c-2.2,1-4.8,3.7-6.8,4.2c-6.6,1.8-9.7,6.2-15.4,8.7c-2.7,1.2-7.5,1.5-10,3.2c-3.7,2.6-7.4,5.9-11.7,8.4c-3,1.7-3.8.7-5,3.5c-.5,1.2-3.4.7-4.5,1.4c-5.5,3.7-9.7,9.5-15,14.1c-2.8,2.5-6,3.5-8.7,5.9c-2.9,2.5-5.8,3.9-8.9,5.7c-1.5.9-2.5,3.5-4.1,4.2c-4.1,1.9-7.7,4.2-11,7.2c-.3.2-.5.6-.6.8c-7.2,11.5-19.6,18.1-30.6,25.2c-4.6,1.7-6.6,9.6-7.1,15.3c-.2,2.1,1.1,3.6,1,5.7c-.1,1.8-1.4,2.6-1.3,4.4c.1,2.2.1,2.6-.5,4.4c-.9,2.7.8,6,.7,9.2c-.3,6.5-2.2,12.4-2.7,17.9c-.2,2.8,1.9,6.2,1,8.7c-3.3,9-1.6,21.4-.3,31.4c.7,5.2-.9,10.4-1,15.7c-.1,5.6.7,11.4.4,16.4c-.4,6.1-3.1,12.3-2.8,18.1c.3,6.1,2.2,11.8,3.5,17.2c2,7.7-.1,13.8-2.5,19.1c-2.5,5.5-.7,10.8-1.5,17.1c-.3,2.1-2.1,3.7-1.7,6.8c.3,2.5,1.2,5.1,1.3,7.5c.1,3.5-1.3,5.8-.3,9.5c1,3.8-.1,5.9-.8,9.3c-1.8,9.5-4.1,17.8-2.5,29.2c.6,4.1,1.7,7.4,2.1,11.4c.4,4.3-2.4,6.8-2.6,10.8c-.4,9.7.3,20.4-1.9,29c-1,3.8.7,5.6,1.2,8.7c.4,2.5-.4,6.2-1.3,9c-1,3.3.2,6,1.1,8.5c1.8,5.3.4,12.4-.1,18.2c-.5,6.4-.7,12.4-.5,19.1c.2,6.5-1.3,13-.4,19.7c.8,5.8,2,11.2,2,18.5c0,6.8,0,13.5-.3,19.9c-.3,7.4,3.7,9.9,11.2,9.5c3.3-.2,6.6-1.4,9.2-.2c2.4,1,4.6,2.7,7.7,2.9c1.3.1,2.6-.8,3.5-.8c2.6.2,5.4,2.4,8.7,2.1c4.7-.4,8.5.6,13,1.9c3.7,1.1,6.8,3,10.7,3.4c.7.1,1.2-.8,1.8-.8c2.9,0,5.5,1.6,8.7,1.1c3.1-.4,6.4-.4,9.3-.4c6.4.2,11.4-2.6,15.7-4.7c.3-.2.7-.3,1.1-.4c7.2-1.7,13.7-5.7,20.8-8c2.6-.8,6.4,0,9.3-.1c5-.3,11.2-1.2,16.4.8c5.9,2.2,10.9.6,16.6,1.4c2.8.4,4.9.7,7.8.8c9.8.4,19.8-4.8,29.1-5.5c.1,0,.1,0,.2-.1c5.3-1.9,13-1.6,17.9-1.3c8.2.6,18,2.6,25.4-1.1c3.2-1.6,7.4-3.3,11.1-3.7c4.5-.5,9.4,1.5,13.7.6c.8-.2.6-1.1,1.5-1.2c.6,0,1.2.5,1.9.5c12-.4,25.1-2.8,34.6-7c6.8-3,10.3-7.7,18.8-9.3c3.3-.6,6.6-3.3,9.2-4.9c5.1-3.2,15.8-4.4,18.4-9.8c5.6-11.5,22.2-12.4,28.9-22.5c.1-.1.2-.2.3-.3c4.8-4.1,9.7-8.1,13.8-12.8c2-2.3,5.1-3.6,7.1-6.2c2-2.6,4-5,6.3-7c4.6-4,8.2-9.4,12.6-14c6.8-7.1,12.3-15.3,18.6-22.2c1.6-1.7,7.5-4.8,8-7.1C521.1,437.1,517.2,426,517.5,415.4z"/>
+  </svg>
+  <div>
+    <h1>石形简化器</h1>
+    <p>在原型上做形变：顶点预算、结构锚点、旋转 / 拉伸 / 膨胀 / 网格化。</p>
+  </div>
+  <div class="spacer"></div>
+  <button id="resetAll" title="所有参数恢复默认，并清除手动锚点与缩放">重置</button>
+  <button id="themeBtn" title="切换主题">主题</button>
+</header>
+
+<main>
+  <section>
+    <div class="panel">
+      <h2>简化</h2>
+      <label class="row">
+        <span class="k"><span>顶点预算</span><b id="vPoints">48</b></span>
+        <input type="range" id="points" min="6" max="96" step="1" value="48">
+        <small class="hint">64 以上肉眼几乎无差别；真正的差别在形变。</small>
+      </label>
+      <label class="row">
+        <span class="k"><span>结构锚点 <small>不可删除</small></span><b id="vAnchor">12</b></span>
+        <input type="range" id="anchor" min="0" max="28" step="1" value="12">
+      </label>
+      <label class="row">
+        <span class="k"><span>锚点来源</span></span>
+        <select id="anchorMode">
+          <option value="area">按面积（大弧线）</option>
+          <option value="corner">按转角（尖角）</option>
+          <option value="depth">按凹陷深度（缺口）</option>
+          <option value="hybrid">混合（面积 + 深度）</option>
+        </select>
+      </label>
+      <label class="row">
+        <span class="k"><span>算法</span></span>
+        <select id="method">
+          <option value="visvalingam">Visvalingam（按面积）</option>
+          <option value="douglas">Douglas–Peucker（按偏离）</option>
+        </select>
+      </label>
+      <label class="row">
+        <span class="k"><span>曲线精度</span><b id="vTol">0.05</b></span>
+        <input type="range" id="tol" min="0.02" max="0.60" step="0.01" value="0.05">
+      </label>
+    </div>
+
+    <div class="panel">
+      <h2>形变</h2>
+      <label class="row">
+        <span class="k"><span>旋转</span><b id="vRot">0°</b></span>
+        <input type="range" id="rotate" min="-20" max="20" step="0.5" value="0">
+      </label>
+      <label class="row">
+        <span class="k"><span>横向拉伸</span><b id="vAspect">1.00</b></span>
+        <input type="range" id="aspect" min="0.75" max="1.25" step="0.01" value="1">
+      </label>
+      <label class="row">
+        <span class="k"><span>膨胀 / 收缩</span><b id="vInflate">0.00</b></span>
+        <input type="range" id="inflate" min="-0.08" max="0.08" step="0.005" value="0">
+      </label>
+      <label class="row">
+        <span class="k"><span>圆角平滑</span><b id="vSmooth">0</b></span>
+        <input type="range" id="smooth" min="0" max="4" step="1" value="0">
+      </label>
+      <label class="row">
+        <span class="k"><span>对称化</span><b id="vSym">0%</b></span>
+        <input type="range" id="sym" min="0" max="1" step="0.02" value="0">
+      </label>
+      <label class="row">
+        <span class="k"><span>网格化 <small>0 = 关</small></span><b id="vSnap">0</b></span>
+        <input type="range" id="snap" min="0" max="28" step="1" value="0">
+      </label>
+    </div>
+
+    <div class="panel">
+      <h2>取景与画布</h2>
+      <label class="row">
+        <span class="k"><span>取景</span></span>
+        <div class="seg">
+          <button id="frameSquare" class="on">方形画布</button>
+          <button id="frameTight">紧贴外框</button>
+        </div>
+      </label>
+      <label class="row">
+        <span class="k"><span>光学尺寸 scale</span><b id="vScale">0.88</b></span>
+        <input type="range" id="scale" min="0.40" max="1.00" step="0.005" value="0.88">
+      </label>
+      <label class="row">
+        <span class="k"><span>画布边长</span><b id="vCanvas">600</b></span>
+        <input type="range" id="canvas" min="200" max="1024" step="8" value="600">
+        <small class="hint">画布只改导出坐标系与网格刻度，屏幕上的视觉大小由 scale 决定。</small>
+      </label>
+      <label class="row">
+        <span class="k"><span>紧贴内边距</span><b id="vPad">0.04</b></span>
+        <input type="range" id="pad" min="0" max="0.16" step="0.01" value="0.04">
+      </label>
+      <label class="row">
+        <span class="k"><span>显示</span></span>
+        <div class="seg">
+          <button id="tGrid" class="on">网格</button>
+          <button id="tDots" class="on">顶点</button>
+        </div>
+      </label>
+      <label class="row">
+        <span class="k"><span>填充色（浅色 / 深色）</span></span>
+        <div class="seg">
+          <input type="text" id="fill" value="#1e293b" aria-label="浅色填充">
+          <input type="text" id="darkFill" value="#ededed" aria-label="深色填充">
+        </div>
+      </label>
+    </div>
+
+    <div class="panel">
+      <h2>预设</h2>
+      <div class="seg">
+        <button data-preset="app">应用图标</button>
+        <button data-preset="favicon">favicon</button>
+        <button data-preset="readme">README</button>
+        <button data-preset="docs">docs</button>
+      </div>
+      <p class="hint">点击实心顶点 = 添加锚点；点击橙色锚点 = 取消。空心点为候选点（当前预算下未进入轮廓），也可点选。</p>
+    </div>
+
+    <div class="panel">
+      <h2>导出</h2>
+      <div class="actions">
+        <button class="primary" id="dl">下载 SVG</button>
+        <button id="copySvg">复制 SVG</button>
+        <button id="copyCli">复制等价命令</button>
+      </div>
+      <div class="actions">
+        <button id="saveDraft">保存草稿</button>
+        <button id="loadDraft" disabled>载入草稿</button>
+        <button id="exportDraft">导出草稿</button>
+        <button id="importDraft">导入草稿</button>
+      </div>
+      <input type="file" id="draftFile" accept="application/json,.json" hidden>
+      <p class="hint" id="draftHint">草稿存在本机浏览器，换电脑请用导出 / 导入。</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="stage">
+      <div class="big-wrap" id="bigWrap">
+        <div class="big" id="big"></div>
+      </div>
+      <div class="view-bar" id="viewBar">
+        <span>视图 <b id="zoomPct">100%</b></span>
+        <button id="zoomReset" title="缩放与平移复位">重置视图</button>
+        <span class="hint">Ctrl+滚轮缩放，拖动平移，双击复位</span>
+      </div>
+      <div class="sizes" id="sizes"></div>
+      <div class="stats">
+        <span>源点 <b id="sIn">—</b></span>
+        <span>输出顶点 <b id="sOut">—</b></span>
+        <span>固定 <b id="sPin">—</b></span>
+        <span>SVG <b id="sBytes">—</b></span>
+        <span>viewBox <b id="sVb">—</b></span>
+        <span>网格 <b id="sCell">—</b></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>已发布副本对照</h2>
+      <table>
+        <thead><tr><th>位置</th><th>scale</th><th>取景</th><th>填充</th><th>备注</th></tr></thead>
+        <tbody>
+          <tr><td>README</td><td class="num">0.835</td><td>600 方框</td><td><code>#1e293b / #ededed</code></td><td>深浅两份文件字节相同</td></tr>
+          <tr><td>docs 站头</td><td class="num">0.934</td><td>600 方框</td><td><code>currentColor</code></td><td>跟随页面主题</td></tr>
+          <tr><td>docs favicon</td><td class="num">0.934</td><td>600 方框</td><td><code>#1a1a1a / #ededed</code></td><td>—</td></tr>
+          <tr><td>gateway favicon</td><td class="num">裁剪</td><td><code>30 15 490 500</code></td><td><code>#666</code></td><td>底部被切掉约 78 单位</td></tr>
+          <tr><td>gateway 顶栏</td><td class="num">裁剪</td><td><code>30 15 490 500</code></td><td><code>currentColor</code></td><td>同上</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>源路径</h2>
+      <textarea id="src" spellcheck="false"></textarea>
+      <div class="actions">
+        <button id="applySrc">应用</button>
+        <button id="resetSrc">恢复内置石形</button>
+        <button id="clearPins">清除手动锚点</button>
+        <label class="hint" style="display:flex;align-items:center;gap:6px;margin:0">
+          载入 SVG <input type="file" id="file" accept=".svg,image/svg+xml">
+        </label>
+      </div>
+    </div>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const STONE = "M517.486,415.436c0.337-10.662-2.645-21.362-2.186-31.946c0.104-2.383,2.01-4.503,2.108-6.856 c0.224-5.123-1.094-12.078-2.783-16.199c-2.005-4.876-1.412-11.114-1.056-16.876c0.364-5.948-0.337-11.613-0.302-17.481 c0.032-5.949-1.42-13.37-0.303-18.385c0.879-3.942-0.33-8.747,0.15-12.657c0.16-1.338,1.264-1.625,1.51-2.714 c0.619-2.77-1.697-2.805-1.734-4.672c-0.029-1.617,1.736-3.225,1.885-4.975c1.461-2.973-2.27-8.188-1.435-10.624 c4.884-14.208-8.189-27.443-12.882-36.995c-0.107-0.213-0.163-0.498-0.227-0.751c-3.78-15.151-8.43-27.13-13.788-41.065 c-1.83-4.754-6.049-8.707-7.609-13.639c-1.554-4.897-5.108-9.426-7.912-13.412c-6.642-9.449-14.541-22.274-13.789-35.865 c-5.982-6.516-6.025-18.484-8.968-28.481c-1.271-4.324-1.987-8.805-2.938-13.41c-0.848-4.12-2.336-10.568-2.107-14.316 c0.034-0.58,0.769-1.086,0.677-1.734c-0.082-0.605-1.245-0.973-1.432-1.507c-0.963-2.749-1.016-6.586-2.188-10.021 c-1.068-3.144-2.287-6.941-2.709-9.57c-0.292-1.816-0.06-3.24-1.06-4.219c-0.875-0.862-2.073-0.938-2.333-1.884 c-0.489-1.774,0.812-2.497,0.828-3.844c0.037-2.636-2.719-6.575-3.013-9.719c-0.06-0.637,0.508-1.332,0.453-1.885 c-0.227-2.279-3.252-4.138-4.673-5.577c-1.801-1.817-4.263-7.63-4.898-10.096c-0.563-2.185,0.269-6.075-0.979-7.233 c-0.678-0.628-5.99-1.043-6.705-1.055c-11.179-0.182-22.744-2.707-35.336-2.334c-8.48,0.248-17.349,0.549-25.621,1.43 c-8.398,0.896-15.511,3.436-23.434,4.295c-4.529,0.493-7.395,1.949-11.074,2.789c-7.996,1.821-16.231,2.542-22.982,4.896 c-2.835,0.99-7.999,2.398-9.568,4.369c-1.954,2.456-1.418,1.908-4.446,1.961c-1.076,0.018-2.439,0.861-3.689,1.054 c-1.441,0.222-2.678-0.496-3.993-0.451c-1.94,0.063-5.872,2.212-7.912,3.013c-2.668,1.049-5.445,2.238-8.062,2.939 c-14.249,3.825-26.219,10.313-38.804,15.974c-2.188,0.984-4.832,3.687-6.782,4.222c-6.635,1.818-9.655,6.199-15.445,8.739 c-2.678,1.174-7.474,1.465-10.022,3.241c-3.667,2.554-7.35,5.925-11.681,8.438c-2.967,1.725-3.828,0.66-4.971,3.467 c-0.484,1.188-3.384,0.665-4.521,1.432c-5.494,3.698-9.747,9.499-14.994,14.089c-2.839,2.483-5.974,3.545-8.666,5.878 c-2.852,2.471-5.758,3.918-8.891,5.727c-1.539,0.888-2.467,3.479-4.068,4.219c-4.075,1.885-7.688,4.221-11.001,7.157 c-0.253,0.227-0.481,0.563-0.603,0.754c-7.208,11.45-19.581,18.104-30.59,25.24c-4.56,1.655-6.601,9.579-7.083,15.296 c-0.181,2.133,1.065,3.624,0.978,5.727c-0.071,1.759-1.382,2.621-1.278,4.37c0.13,2.237,0.112,2.602-0.454,4.37 c-0.871,2.721,0.821,6.027,0.679,9.192c-0.294,6.475-2.229,12.436-2.714,17.933c-0.246,2.793,1.92,6.202,0.979,8.74 c-3.327,8.989-1.601,21.352-0.302,31.419c0.671,5.203-0.852,10.42-0.979,15.674c-0.138,5.633,0.667,11.447,0.377,16.425 c-0.356,6.083-3.051,12.252-2.789,18.084c0.274,6.118,2.162,11.822,3.542,17.177c1.98,7.69-0.084,13.81-2.488,19.142 c-2.469,5.481-0.662,10.812-1.507,17.103c-0.289,2.147-2.058,3.698-1.733,6.782c0.268,2.528,1.22,5.094,1.281,7.458 c0.09,3.479-1.292,5.838-0.3,9.491c1.024,3.785-0.123,5.893-0.754,9.271c-1.771,9.468-4.062,17.833-2.487,29.156 c0.57,4.099,1.707,7.421,2.109,11.379c0.438,4.324-2.393,6.833-2.562,10.774c-0.419,9.722,0.302,20.438-1.884,29.01 c-0.98,3.84,0.736,5.628,1.207,8.665c0.381,2.464-0.408,6.214-1.281,9.04c-1.013,3.276,0.181,5.997,1.055,8.518 c1.83,5.272,0.393,12.444-0.074,18.158c-0.523,6.398-0.662,12.438-0.453,19.14c0.205,6.532-1.265,13.024-0.375,19.664 c0.779,5.84,1.958,11.213,1.958,18.536c0,6.773-0.009,13.483-0.301,19.892c-0.339,7.448,3.687,9.896,11.151,9.494 c3.281-0.179,6.552-1.353,9.193-0.228c2.422,1.035,4.59,2.694,7.685,2.864c1.319,0.071,2.631-0.837,3.54-0.755 c2.593,0.238,5.408,2.394,8.74,2.111c4.717-0.398,8.548,0.599,13.036,1.883c3.714,1.062,6.799,2.975,10.699,3.391 c0.729,0.077,1.161-0.827,1.81-0.829c2.908-0.006,5.466,1.573,8.739,1.132c3.108-0.425,6.406-0.449,9.343-0.381 c6.407,0.155,11.405-2.597,15.673-4.744c0.297-0.151,0.713-0.297,1.054-0.378c7.206-1.699,13.731-5.656,20.797-7.988 c2.574-0.849,6.429,0,9.268-0.149c4.967-0.259,11.181-1.188,16.351,0.754c5.926,2.224,10.864,0.626,16.575,1.434 c2.836,0.396,4.938,0.72,7.761,0.828c9.764,0.365,19.824-4.838,29.086-5.5c0.069-0.008,0.142-0.048,0.226-0.076 c5.338-1.881,13.043-1.643,17.858-1.279c8.242,0.619,18.024,2.572,25.392-1.131c3.197-1.608,7.421-3.271,11.149-3.691 c4.511-0.509,9.386,1.467,13.717,0.604c0.785-0.158,0.581-1.142,1.503-1.207c0.628-0.047,1.18,0.476,1.887,0.453 c11.967-0.371,25.109-2.761,34.584-7.009c6.783-3.043,10.252-7.743,18.76-9.346c3.316-0.622,6.641-3.288,9.193-4.894 c5.144-3.244,15.776-4.445,18.384-9.799c5.611-11.496,22.205-12.391,28.86-22.454c0.062-0.089,0.233-0.243,0.301-0.298 c4.781-4.051,9.657-8.058,13.789-12.811c1.965-2.263,5.113-3.604,7.084-6.179c1.993-2.609,3.996-4.981,6.327-7.01 c4.581-3.98,8.182-9.443,12.583-14.014c6.802-7.063,12.256-15.313,18.61-22.229c1.583-1.721,7.535-4.843,7.985-7.08 C521.088,437.059,517.157,426.032,517.486,415.436z";
+
+/* ------------------------------ parsing ---------------------------- */
+const TOK = /[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d+\.\d*|\.\d+|\d+)(?:[eE][-+]?\d+)?/g;
+const isCmd = (t) => t.length === 1 && /[A-Za-z]/.test(t);
+
+function parsePath(d) {
+  const tok = d.match(TOK);
+  if (!tok) throw new Error("路径数据为空");
+  const subpaths = [];
+  let cur = [], subStart = [0, 0], pos = [0, 0], start = [0, 0], prevCtrl = null, cmd = null, i = 0;
+  const read = (n) => {
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      if (i >= tok.length || isCmd(tok[i])) throw new Error("路径数据提前结束");
+      out.push(parseFloat(tok[i++]));
+    }
+    return out;
+  };
+  const take = () => {
+    if (isCmd(tok[i])) cmd = tok[i++];
+    else if (cmd === null) throw new Error("路径以数字开头");
+    return [cmd.toUpperCase(), cmd === cmd.toLowerCase()];
+  };
+  while (i < tok.length) {
+    const [up, rel] = take();
+    if (up === "Z") { if (cur.length) subpaths.push([subStart, cur]); cur = []; pos = start; prevCtrl = null; cmd = null; continue; }
+    if (up === "A") throw new Error("不支持 arc(A/a)");
+    if (up === "M") {
+      const [x, y] = read(2);
+      pos = rel ? [pos[0] + x, pos[1] + y] : [x, y];
+      if (cur.length) subpaths.push([subStart, cur]);
+      cur = []; subStart = start = pos; prevCtrl = null; cmd = rel ? "l" : "L"; continue;
+    }
+    if (up === "L") { const [x, y] = read(2); pos = rel ? [pos[0] + x, pos[1] + y] : [x, y]; cur.push(["L", pos]); prevCtrl = null; }
+    else if (up === "H") { const [x] = read(1); pos = rel ? [pos[0] + x, pos[1]] : [x, pos[1]]; cur.push(["L", pos]); prevCtrl = null; }
+    else if (up === "V") { const [y] = read(1); pos = rel ? [pos[0], pos[1] + y] : [pos[0], y]; cur.push(["L", pos]); prevCtrl = null; }
+    else if (up === "C") {
+      const v = read(6);
+      const c1 = rel ? [pos[0] + v[0], pos[1] + v[1]] : [v[0], v[1]];
+      const c2 = rel ? [pos[0] + v[2], pos[1] + v[3]] : [v[2], v[3]];
+      const end = rel ? [pos[0] + v[4], pos[1] + v[5]] : [v[4], v[5]];
+      cur.push(["C", c1, c2, end]); prevCtrl = c2; pos = end;
+    } else if (up === "S") {
+      const v = read(4);
+      const c1 = prevCtrl ? [2 * pos[0] - prevCtrl[0], 2 * pos[1] - prevCtrl[1]] : pos;
+      const c2 = rel ? [pos[0] + v[0], pos[1] + v[1]] : [v[0], v[1]];
+      const end = rel ? [pos[0] + v[2], pos[1] + v[3]] : [v[2], v[3]];
+      cur.push(["C", c1, c2, end]); prevCtrl = c2; pos = end;
+    } else if (up === "Q") {
+      const v = read(4);
+      const q = rel ? [pos[0] + v[0], pos[1] + v[1]] : [v[0], v[1]];
+      const end = rel ? [pos[0] + v[2], pos[1] + v[3]] : [v[2], v[3]];
+      const [c1, c2] = quadToCubic(pos, q, end);
+      cur.push(["C", c1, c2, end]); prevCtrl = q; pos = end;
+    } else if (up === "T") {
+      const v = read(2);
+      const q = prevCtrl ? [2 * pos[0] - prevCtrl[0], 2 * pos[1] - prevCtrl[1]] : pos;
+      const end = rel ? [pos[0] + v[0], pos[1] + v[1]] : [v[0], v[1]];
+      const [c1, c2] = quadToCubic(pos, q, end);
+      cur.push(["C", c1, c2, end]); prevCtrl = q; pos = end;
+    }
+  }
+  if (cur.length) subpaths.push([subStart, cur]);
+  return subpaths;
+}
+const quadToCubic = (p0, q, p1) => [
+  [p0[0] + 2 / 3 * (q[0] - p0[0]), p0[1] + 2 / 3 * (q[1] - p0[1])],
+  [p1[0] + 2 / 3 * (q[0] - p1[0]), p1[1] + 2 / 3 * (q[1] - p1[1])]
+];
+
+/* ----------------------------- geometry ---------------------------- */
+const mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+function segDist(p, a, b) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+  if (!L) return Math.hypot(p[0] - a[0], p[1] - a[1]);
+  let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(p[0] - (a[0] + t * dx), p[1] - (a[1] + t * dy));
+}
+function flattenCubic(p0, c1, c2, p1, tol, out) {
+  if (segDist(c1, p0, p1) <= tol && segDist(c2, p0, p1) <= tol) { out.push(p1); return; }
+  const p01 = mid(p0, c1), p12 = mid(c1, c2), p23 = mid(c2, p1);
+  const p012 = mid(p01, p12), p123 = mid(p12, p23), m = mid(p012, p123);
+  flattenCubic(p0, p01, p012, m, tol, out);
+  flattenCubic(m, p123, p23, p1, tol, out);
+}
+function dedupe(pts, eps) {
+  const out = [];
+  for (const p of pts) if (!out.length || Math.hypot(p[0] - out[out.length-1][0], p[1] - out[out.length-1][1]) > eps) out.push(p);
+  if (out.length > 1 && Math.hypot(out[0][0]-out[out.length-1][0], out[0][1]-out[out.length-1][1]) <= eps) out.pop();
+  return out;
+}
+function flatten(subpaths, tol) {
+  return subpaths.map(([start, segs]) => {
+    const dense = [start];
+    let pos = start;
+    for (const s of segs) {
+      if (s[0] === "L") { pos = s[1]; dense.push(pos); }
+      else { flattenCubic(pos, s[1], s[2], s[3], tol, dense); pos = s[3]; }
+    }
+    return dedupe(dense, 1e-6);
+  });
+}
+const triArea = (a, b, c) => Math.abs((b[0]-a[0])*(c[1]-a[1]) - (c[0]-a[0])*(b[1]-a[1])) / 2;
+const isRing = (pts) => pts.length > 2 &&
+  Math.hypot(pts[0][0]-pts[pts.length-1][0], pts[0][1]-pts[pts.length-1][1]) <= 1e-6;
+function bbox(rings) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const r of rings) for (const p of r) {
+    if (p[0] < x0) x0 = p[0]; if (p[1] < y0) y0 = p[1];
+    if (p[0] > x1) x1 = p[0]; if (p[1] > y1) y1 = p[1];
+  }
+  return [x0, y0, x1, y1];
+}
+const fmt = (v, p = 2) => {
+  let s = v.toFixed(p);
+  if (s.includes(".")) s = s.replace(/0+$/, "").replace(/\.$/, "");
+  return s === "-0" ? "0" : s;
+};
+
+/* --------------------------- simplification ------------------------ */
+function keepVisvalingam(pts, target, closed, pinned) {
+  const n = pts.length;
+  if (target >= n || target < 3) return [...Array(n).keys()];
+  const prev = pts.map((_, i) => (i - 1 + n) % n);
+  const next = pts.map((_, i) => (i + 1) % n);
+  const alive = new Array(n).fill(true);
+  if (!closed) { prev[0] = 0; next[n-1] = n - 1; }
+  const removable = (i) => !pinned.has(i) && (closed || (i !== 0 && i !== n - 1));
+  const stamp = new Array(n).fill(0);
+  const heap = [];
+  const push = (i, s) => { if (alive[i] && removable(i)) heap.push([triArea(pts[prev[i]], pts[i], pts[next[i]]), i, s]); };
+  for (let i = 0; i < n; i++) push(i, 0);
+  const pop = () => {
+    let bi = 0;
+    for (let i = 1; i < heap.length; i++) if (heap[i][0] < heap[bi][0]) bi = i;
+    return heap.splice(bi, 1)[0];
+  };
+  let remaining = n;
+  while (remaining > target && heap.length) {
+    const [, i, s] = pop();
+    if (!alive[i] || stamp[i] !== s) continue;
+    alive[i] = false;
+    const p = prev[i], q = next[i];
+    next[p] = q; prev[q] = p; remaining--;
+    for (const j of [p, q]) if (alive[j]) { stamp[j]++; push(j, stamp[j]); }
+  }
+  const out = [];
+  for (let i = 0; i < n; i++) if (alive[i]) out.push(i);
+  return out;
+}
+
+function dpArc(pts, lo, hi, tol) {
+  const keep = new Set([lo, hi]);
+  const stack = [[lo, hi]];
+  while (stack.length) {
+    const [a, b] = stack.pop();
+    if (b <= a + 1) continue;
+    let best = -1, bi = a;
+    for (let i = a + 1; i < b; i++) {
+      const d = segDist(pts[i], pts[a], pts[b]);
+      if (d > best) { best = d; bi = i; }
+    }
+    if (best > tol) { keep.add(bi); stack.push([a, bi], [bi, b]); }
+  }
+  return keep;
+}
+
+function keepDouglas(pts, tol, closed, pinned) {
+  const n = pts.length;
+  const order = [...pinned].sort((a, b) => a - b);
+  const pins = order.length ? order : [0];
+  if (!closed) {
+    const keep = new Set([0, n - 1]);
+    const bounds = [0, ...pins.filter(i => i > 0 && i < n - 1), n - 1];
+    for (let k = 0; k < bounds.length - 1; k++)
+      for (const j of dpArc(pts, bounds[k], bounds[k+1], tol)) keep.add(j);
+    return [...keep].sort((a, b) => a - b);
+  }
+  const rot = pins[0];
+  const idx = [];
+  for (let k = 0; k <= n; k++) idx.push((rot + k) % n);
+  const rotPts = idx.map(i => pts[i % n]);
+  const posOf = new Map();
+  idx.forEach((v, k) => { if (!posOf.has(v)) posOf.set(v, k); });
+  const bounds = [0, ...pins.slice(1).map(p => posOf.get(p)).filter(v => v !== undefined), n];
+  bounds.sort((a, b) => a - b);
+  const keep = new Set();
+  for (let k = 0; k < bounds.length - 1; k++)
+    for (const j of dpArc(rotPts, bounds[k], bounds[k+1], tol)) keep.add(idx[j] % n);
+  return [...keep].sort((a, b) => a - b);
+}
+
+function convexHull(pts) {
+  const order = [...Array(pts.length).keys()].sort((i, j) =>
+    pts[i][0] - pts[j][0] || pts[i][1] - pts[j][1]);
+  const cross = (o, a, b) =>
+    (pts[a][0]-pts[o][0])*(pts[b][1]-pts[o][1]) - (pts[a][1]-pts[o][1])*(pts[b][0]-pts[o][0]);
+  const lower = [];
+  for (const i of order) {
+    while (lower.length >= 2 && cross(lower[lower.length-2], lower[lower.length-1], i) <= 0) lower.pop();
+    lower.push(i);
+  }
+  const upper = [];
+  for (const i of [...order].reverse()) {
+    while (upper.length >= 2 && cross(upper[upper.length-2], upper[upper.length-1], i) <= 0) upper.pop();
+    upper.push(i);
+  }
+  return lower.slice(0, -1).concat(upper.slice(0, -1));
+}
+
+function hullDepth(pts) {
+  const hull = convexHull(pts);
+  if (hull.length < 3) return pts.map(() => 0);
+  const edges = hull.map((h, k) => [pts[h], pts[hull[(k + 1) % hull.length]]]);
+  return pts.map(p => Math.min(...edges.map(([a, b]) => segDist(p, a, b))));
+}
+
+function anchorsBy(order, count, n, gapFrac = 0.03) {
+  const chosen = [], gap = Math.max(1, n * gapFrac);
+  for (const i of order) {
+    if (chosen.every(c => Math.min(Math.abs(i - c), n - Math.abs(i - c)) > gap)) chosen.push(i);
+    if (chosen.length === count) break;
+  }
+  return chosen;
+}
+
+function structuralAnchors(pts, count, closed, mode) {
+  if (count <= 0 || pts.length <= count) return new Set();
+  if (mode === "depth" || mode === "hybrid") {
+    const depth = hullDepth(pts);
+    const byDepth = [...Array(pts.length).keys()].sort((i, j) => depth[j] - depth[i]);
+    if (mode === "depth") return new Set(anchorsBy(byDepth, count, pts.length));
+    const half = Math.ceil(count / 2);
+    const area = [...keepVisvalingam(pts, half, closed, new Set())].sort((a, b) => a - b);
+    const chosen = anchorsBy(area, half, pts.length);
+    const gap = Math.max(1, pts.length * 0.03);
+    for (const i of byDepth) {
+      if (chosen.length === count) break;
+      if (chosen.every(c => Math.min(Math.abs(i - c), pts.length - Math.abs(i - c)) > gap)) chosen.push(i);
+    }
+    return new Set(chosen);
+  }
+  if (mode === "corner") {
+    const n = pts.length, ang = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const a = pts[(i-1+n)%n], b = pts[i], c = pts[(i+1)%n];
+      const v1 = [b[0]-a[0], b[1]-a[1]], v2 = [c[0]-b[0], c[1]-b[1]];
+      const l1 = Math.hypot(...v1) || 1, l2 = Math.hypot(...v2) || 1;
+      const cs = Math.max(-1, Math.min(1, (v1[0]*v2[0]+v1[1]*v2[1])/(l1*l2)));
+      ang[i] = Math.acos(cs) * 180 / Math.PI;
+    }
+    const order = [...Array(n).keys()].sort((i, j) => ang[j] - ang[i]);
+    const chosen = [], gap = Math.max(1, n * 0.03);
+    for (const i of order) {
+      if (chosen.every(c => Math.min(Math.abs(i-c), n - Math.abs(i-c)) > gap)) chosen.push(i);
+      if (chosen.length === count) break;
+    }
+    return new Set(chosen);
+  }
+  return new Set(keepVisvalingam(pts, count, closed, new Set()));
+}
+
+function reduceTo(pts, target, method, closed, pinned) {
+  const n = pts.length;
+  if (target >= n || target < 3) return [...Array(n).keys()];
+  if (pinned.size >= target) return [...pinned].sort((a, b) => a - b);
+  if (method === "visvalingam") return keepVisvalingam(pts, target, closed, pinned);
+  const [w, h] = bbox([pts]).slice(2).map((v, i) => v - bbox([pts])[i]);
+  let lo = 0, hi = Math.max(w, h) || 1, best = keepDouglas(pts, hi, closed, pinned);
+  for (let k = 0; k < 40; k++) {
+    const m = (lo + hi) / 2;
+    best = keepDouglas(pts, m, closed, pinned);
+    if (Math.abs(best.length - target) <= 1) break;
+    if (best.length > target) lo = m; else hi = m;
+  }
+  return best;
+}
+
+function chaikin(pts, passes, closed) {
+  if (passes <= 0 || pts.length < 3) return pts.slice();
+  let ring = pts.slice();
+  if (closed && ring[0][0] === ring[ring.length-1][0] && ring[0][1] === ring[ring.length-1][1]) ring.pop();
+  for (let k = 0; k < passes; k++) {
+    const out = [], n = ring.length, last = closed ? n : n - 1;
+    for (let i = 0; i < last; i++) {
+      const a = ring[i], b = ring[(i + 1) % n];
+      out.push([0.75*a[0] + 0.25*b[0], 0.75*a[1] + 0.25*b[1]]);
+      out.push([0.25*a[0] + 0.75*b[0], 0.25*a[1] + 0.75*b[1]]);
+    }
+    ring = out;
+  }
+  if (closed) ring.push(ring[0]);
+  return ring;
+}
+
+/* ----------------------------- deformation ------------------------- */
+function rotateRing(rings, deg) {
+  if (!deg) return rings;
+  const a = deg * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+  const [x0, y0, x1, y1] = bbox(rings);
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  return rings.map(r => r.map(([x, y]) => [
+    cx + (x - cx) * ca - (y - cy) * sa,
+    cy + (x - cx) * sa + (y - cy) * ca
+  ]));
+}
+function stretchRing(rings, aspect) {
+  if (aspect === 1) return rings;
+  const [x0, , x1] = bbox(rings);
+  const cx = (x0 + x1) / 2;
+  return rings.map(r => r.map(([x, y]) => [cx + (x - cx) * aspect, y]));
+}
+function inflateRing(rings, amount) {
+  if (!amount) return rings;
+  const [x0, y0, x1, y1] = bbox(rings);
+  const size = Math.max(x1 - x0, y1 - y0) || 1, d = amount * size;
+  const all = rings.flat();
+  const cx = all.reduce((s, p) => s + p[0], 0) / all.length;
+  const cy = all.reduce((s, p) => s + p[1], 0) / all.length;
+  return rings.map(ring => {
+    const closed = isRing(ring);
+    const base = closed ? ring.slice(0, -1) : ring.slice();
+    const m = base.length;
+    if (m < 3) return ring;
+    const out = [];
+    for (let i = 0; i < m; i++) {
+      const [x, y] = base[i];
+      const [px, py] = closed ? base[(i-1+m)%m] : base[Math.max(i-1, 0)];
+      const [nx, ny] = closed ? base[(i+1)%m] : base[Math.min(i+1, m-1)];
+      const ax = x - px, ay = y - py, bx = nx - x, by = ny - y;
+      const la = Math.hypot(ax, ay) || 1, lb = Math.hypot(bx, by) || 1;
+      let mx = -ay/la - by/lb, my = ax/la + bx/lb;
+      const L = Math.hypot(mx, my);
+      if (!L) { out.push([x, y]); continue; }
+      mx /= L; my /= L;
+      if (mx * (x - cx) + my * (y - cy) < 0) { mx = -mx; my = -my; }
+      out.push([x + d*mx, y + d*my]);
+    }
+    if (closed) out.push(out[0]);
+    return out;
+  });
+}
+function symmetrizeRing(rings, w) {
+  if (w <= 0) return rings;
+  const [x0, , x1] = bbox(rings);
+  const axis = (x0 + x1) / 2;
+  return rings.map(ring => {
+    const closed = isRing(ring);
+    const base = closed ? ring.slice(0, -1) : ring.slice();
+    const n = base.length, out = [];
+    for (let i = 0; i < n; i++) {
+      const [x, y] = base[i];
+      const [mx, my] = base[n - 1 - i];
+      out.push([(1-w)*x + w*(2*axis - mx), (1-w)*y + w*my]);
+    }
+    if (closed) out.push(out[0]);
+    return out;
+  });
+}
+function snapRing(rings, cells) {
+  if (cells < 2) return rings;
+  const [x0, y0, x1, y1] = bbox(rings);
+  const step = Math.max(x1 - x0, y1 - y0) / cells;
+  if (step <= 0) return rings;
+  return rings.map(ring => {
+    const closed = isRing(ring);
+    const snapped = ring.map(([x, y]) => [
+      x0 + Math.round((x - x0) / step) * step,
+      y0 + Math.round((y - y0) / step) * step
+    ]);
+    if (!closed) return snapped;
+    const body = dedupe(snapped.slice(0, -1), 1e-9);
+    body.push(body[0]);
+    return body;
+  });
+}
+
+/* -------------------------------- state ---------------------------- */
+const state = {
+  src: STONE, points: 48, anchor: 12, anchorMode: "area", method: "visvalingam",
+  tol: 0.05, rotate: 0, aspect: 1, inflate: 0, smooth: 0, sym: 0, snap: 0,
+  scale: 0.88, canvas: 600, pad: 0.04, tight: false,
+  fill: "#1e293b", darkFill: "#ededed", grid: true, dots: true,
+  pins: new Set(),      // clicked on: always kept
+  unpins: new Set()     // clicked off: auto anchor suppressed
+};
+let built = null;
+const $ = (id) => document.getElementById(id);
+
+/* Each ring keeps a parallel source-index array so a vertex can be pinned or
+ * unpinned by clicking it.  Candidate dots include vertices the current budget
+ * would drop, so an unpinned anchor can be clicked back on at any budget. */
+function snapTracked(rings, srcs, cells) {
+  const [x0, y0, x1, y1] = bbox(rings);
+  const step = Math.max(x1 - x0, y1 - y0) / cells;
+  if (!(step > 0)) return rings;
+  return rings.map((ring, ri) => {
+    const src = srcs[ri], out = [], outSrc = src ? [] : null;
+    for (let i = 0; i < ring.length; i++) {
+      const [x, y] = ring[i];
+      const q = [x0 + Math.round((x - x0) / step) * step,
+                 y0 + Math.round((y - y0) / step) * step];
+      const prev = out[out.length - 1];
+      if (prev && Math.hypot(prev[0] - q[0], prev[1] - q[1]) < 1e-9) continue;
+      out.push(q);
+      if (outSrc) outSrc.push(src[i]);
+    }
+    if (outSrc) srcs[ri] = outSrc;
+    return out;
+  });
+}
+
+function snapPlain(rings, cells) {
+  const [x0, y0, x1, y1] = bbox(rings);
+  const step = Math.max(x1 - x0, y1 - y0) / cells;
+  if (!(step > 0)) return rings;
+  return rings.map(ring => ring.map(([x, y]) => [
+    x0 + Math.round((x - x0) / step) * step,
+    y0 + Math.round((y - y0) / step) * step
+  ]));
+}
+
+function build() {
+  const dense = flatten(parsePath(state.src), state.tol);
+  const totalIn = dense.reduce((a, r) => a + r.length, 0);
+  const rings = [], srcs = [], dotRings = [], dotSrcs = [];
+  const autoByRing = [];
+
+  dense.forEach((ring, ri) => {
+    const isClosed = isRing(ring);
+    const budget = Math.max(3, Math.round(state.points * ring.length / Math.max(totalIn, 1)));
+    const auto = structuralAnchors(ring, state.anchor, isClosed, state.anchorMode);
+    const pins = new Set([...auto, ...state.pins].filter(i => i >= 0 && i < ring.length));
+    state.unpins.forEach(i => pins.delete(i));
+    autoByRing.push(auto);
+
+    const keepSet = new Set(reduceTo(ring, budget, state.method, isClosed, pins));
+    let pts = [...keepSet].map(i => ring[i]);
+    let src = [...keepSet];
+    if (isClosed && pts.length >= 3 &&
+        (pts[0][0] !== pts[pts.length-1][0] || pts[0][1] !== pts[pts.length-1][1])) {
+      pts.push(pts[0]); src.push(src[0]);
+    }
+    if (state.smooth > 0) { pts = chaikin(pts, state.smooth, isClosed); src = null; }
+
+    // Candidate dots: what a generous budget keeps, plus everything pinned.
+    const generous = new Set(reduceTo(ring, Math.max(budget, 64), state.method, isClosed, pins));
+    const candidates = new Set([...generous, ...keepSet, ...pins, ...auto]);
+    const dotsIdx = [...candidates].filter(i => i >= 0 && i < ring.length).sort((a, b) => a - b);
+    dotRings.push(dotsIdx.map(i => ring[i]));
+    dotSrcs.push(dotsIdx);
+
+    rings.push(pts); srcs.push(src);
+  });
+
+  let deformed = rotateRing(rings, state.rotate);
+  deformed = stretchRing(deformed, state.aspect);
+  deformed = inflateRing(deformed, state.inflate);
+  deformed = symmetrizeRing(deformed, state.sym);
+  let dots = rotateRing(dotRings, state.rotate);
+  dots = stretchRing(dots, state.aspect);
+  dots = inflateRing(dots, state.inflate);
+  dots = symmetrizeRing(dots, state.sym);
+  if (state.snap >= 2) {
+    deformed = snapTracked(deformed, srcs, state.snap);
+    dots = snapPlain(dots, state.snap);
+  }
+
+  const [bx0, by0, bx1, by1] = bbox(deformed);
+  const w = bx1 - bx0, h = by1 - by0;
+  let tx = 0, ty = 0, k = 1, viewBox;
+  if (state.tight) {
+    const side = (Math.max(w, h) || 1) * (1 + 2 * state.pad);
+    tx = -bx0 + (side - w) / 2; ty = -by0 + (side - h) / 2;
+    viewBox = `0 0 ${fmt(side)} ${fmt(side)}`;
+  } else {
+    const side = Math.max(w, h) || 1;
+    k = state.canvas * state.scale / side;
+    tx = (state.canvas - w * k) / 2 - bx0 * k;
+    ty = (state.canvas - h * k) / 2 - by0 * k;
+    viewBox = `0 0 ${fmt(state.canvas)} ${fmt(state.canvas)}`;
+  }
+
+  built = { deformed, srcs, dots, dotSrcs, autoByRing, viewBox, tx, ty, k, totalIn,
+            outN: deformed.reduce((a, r) => a + r.length, 0) };
+  return built;
+}
+
+const isPinned = (ri, src) =>
+  (state.pins.has(src) || built.autoByRing[ri].has(src)) && !state.unpins.has(src);
+
+/* -------------------------------- render --------------------------- */
+function svgFor(size, opts = {}) {
+  const b = built;
+  const vb = b.viewBox.split(" ");
+  const unit = parseFloat(vb[2]) / 10;
+  const head = `<style>.m{fill:${state.fill}}@media(prefers-color-scheme:dark){.m{fill:${state.darkFill}}}`
+             + `.dot{fill:var(--accent)}.ghost{fill:none;stroke:var(--grid);stroke-opacity:.45}`
+             + `.pin{fill:#e8890c;stroke:#fff}.pin-ghost{fill:none;stroke:#e8890c}</style>`;
+  let grid = "";
+  if (state.grid) {
+    const lines = [];
+    for (let i = 1; i < 10; i++) {
+      const at = fmt(i * unit, 2);
+      lines.push(`<line x1="${at}" y1="0" x2="${at}" y2="${vb[3]}"/>`);
+      lines.push(`<line x1="0" y1="${at}" x2="${vb[2]}" y2="${at}"/>`);
+    }
+    grid = `<g stroke="currentColor" stroke-opacity=".16" stroke-width="${fmt(unit * 0.02, 3)}" color="var(--grid)">`
+         + lines.join("")
+         + `<rect x="0" y="0" width="${vb[2]}" height="${vb[3]}" fill="none" stroke-opacity=".38"/></g>`;
+  }
+  const polys = b.deformed.map(r =>
+    `<polygon class="m" points="${r.map(p => `${fmt(p[0], 2)},${fmt(p[1], 2)}`).join(" ")}"/>`).join("");
+  let dots = "";
+  if (opts.dots && state.dots) {
+    const rad = (parseFloat(vb[2]) / Math.max(size, 1)) * (opts.dotPx || 3.2);
+    const inPoly = b.srcs;
+    const circles = [];
+    b.dots.forEach((ring, ri) => {
+      const src = b.dotSrcs[ri];
+      for (let i = 0; i < ring.length; i++) {
+        const idx = src[i];
+        const pinned = isPinned(ri, idx);
+        const on = inPoly[ri] ? inPoly[ri].includes(idx) : true;
+        const cls = pinned ? (on ? "pin" : "pin-ghost") : (on ? "dot" : "ghost");
+        circles.push(`<circle class="${cls}" data-ri="${ri}" data-src="${idx}" cx="${fmt(ring[i][0], 2)}" cy="${fmt(ring[i][1], 2)}" r="${fmt(rad, 2)}" stroke-width="${fmt(rad * 0.55, 2)}"/>`);
+      }
+    });
+    dots = `<g>${circles.join("")}</g>`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.viewBox}" width="${size}" height="${size}" color="var(--grid)">`
+       + head + grid
+       + `<g transform="translate(${fmt(b.tx, 3)},${fmt(b.ty, 3)}) scale(${fmt(b.k, 5)})">${polys}${dots}</g>`
+       + `</svg>`;
+}
+
+function render() {
+  build();
+  $("big").innerHTML = svgFor(340, { dots: true, dotPx: 4.2 });
+  $("sizes").innerHTML = [128, 64, 32, 16].map(s => `
+    <figure>
+      <div class="box" style="width:${s + 12}px;height:${s + 12}px">${svgFor(s)}</div>
+      <figcaption>${s} px</figcaption>
+    </figure>`).join("");
+  $("sIn").textContent = built.totalIn;
+  $("sOut").textContent = built.outN;
+  $("sPin").textContent = built.dots.reduce((acc, ring, ri) =>
+    acc + ring.filter((_, i) => isPinned(ri, built.dotSrcs[ri][i])).length, 0);
+  $("sBytes").textContent = `${new Blob([svgFor(600)]).size} B`;
+  $("sVb").textContent = built.viewBox;
+  const cell = parseFloat(built.viewBox.split(" ")[2]) / 10;
+  $("sCell").textContent = state.tight ? "—" : fmt(cell, 2) + " / 格";
+  $("big").onclick = (ev) => {
+    if (suppressClick) return;
+    const t = ev.target;
+    if (!t || t.tagName !== "circle") return;
+    const src = parseInt(t.getAttribute("data-src"), 10);
+    if (Number.isNaN(src)) return;
+    if (isPinned(parseInt(t.getAttribute("data-ri"), 10), src)) {
+      state.pins.delete(src);
+      state.unpins.add(src);
+    } else {
+      state.unpins.delete(src);
+      state.pins.add(src);
+    }
+    render();
+  };
+}
+
+function syncLabels() {
+  $("vPoints").textContent = state.points;
+  $("vAnchor").textContent = state.anchor;
+  $("vTol").textContent = state.tol.toFixed(2);
+  $("vRot").textContent = state.rotate.toFixed(1) + "°";
+  $("vAspect").textContent = state.aspect.toFixed(2);
+  $("vInflate").textContent = state.inflate.toFixed(3);
+  $("vSmooth").textContent = state.smooth;
+  $("vSym").textContent = Math.round(state.sym * 100) + "%";
+  $("vSnap").textContent = state.snap;
+  $("vScale").textContent = state.scale.toFixed(3);
+  $("vCanvas").textContent = state.canvas;
+  $("vPad").textContent = state.pad.toFixed(2);
+}
+
+function pullUI() {
+  $("points").value = state.points;
+  $("anchor").value = state.anchor;
+  $("anchorMode").value = state.anchorMode;
+  $("tol").value = state.tol;
+  $("rotate").value = state.rotate;
+  $("aspect").value = state.aspect;
+  $("inflate").value = state.inflate;
+  $("smooth").value = state.smooth;
+  $("sym").value = state.sym;
+  $("snap").value = state.snap;
+  $("scale").value = state.scale;
+  $("canvas").value = state.canvas;
+  $("pad").value = state.pad;
+  $("method").value = state.method;
+  $("fill").value = state.fill;
+  $("darkFill").value = state.darkFill;
+  $("frameSquare").classList.toggle("on", !state.tight);
+  $("frameTight").classList.toggle("on", state.tight);
+  $("tGrid").classList.toggle("on", state.grid);
+  $("tDots").classList.toggle("on", state.dots);
+  syncLabels();
+}
+
+function cliCommand() {
+  const parts = ["python design/logo/simplify_path.py", "design/logo/out/rosetta-icon-docs.svg", "-o out/mark.svg"];
+  parts.push(`--points ${state.points}`, `--anchor ${state.anchor}`);
+  if (state.anchorMode !== "area") parts.push(`--anchor-mode ${state.anchorMode}`);
+  if (state.tight) parts.push("--tight", `--pad ${state.pad.toFixed(2)}`);
+  else parts.push(`--scale ${state.scale.toFixed(3)}`, `--canvas ${state.canvas}`);
+  if (state.method !== "visvalingam") parts.push(`--method ${state.method}`);
+  if (state.smooth) parts.push(`--smooth ${state.smooth}`);
+  if (state.tol !== 0.05) parts.push(`--tolerance ${state.tol.toFixed(2)}`);
+  if (state.rotate) parts.push(`--rotate ${state.rotate}`);
+  if (state.aspect !== 1) parts.push(`--aspect ${state.aspect.toFixed(2)}`);
+  if (state.inflate) parts.push(`--inflate ${state.inflate.toFixed(3)}`);
+  if (state.sym) parts.push(`--symmetrize ${state.sym.toFixed(2)}`);
+  if (state.snap) parts.push(`--snap ${state.snap}`);
+  if (state.pins.size) parts.push(`--pin ${[...state.pins].sort((a,b)=>a-b).join(",")}`);
+  if (state.unpins.size) parts.push(`--unpin ${[...state.unpins].sort((a,b)=>a-b).join(",")}`);
+  if (state.fill !== "#1e293b") parts.push(`--fill '${state.fill}'`);
+  if (state.darkFill !== "#ededed") parts.push(`--dark-fill '${state.darkFill}'`);
+  return parts.join(" ");
+}
+
+/* -------------------------------- zoom ----------------------------- */
+const zoom = { z: 1, x: 0, y: 0 };
+let drag = null, suppressClick = false;
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+function applyZoom() {
+  // Keep the drawing covering the viewport: no panning it out of sight.
+  const W = $("bigWrap").clientWidth, H = $("bigWrap").clientHeight;
+  zoom.x = clamp(zoom.x, -(zoom.z - 1) * W, 0);
+  zoom.y = clamp(zoom.y, -(zoom.z - 1) * H, 0);
+  $("big").style.transform = `translate(${zoom.x}px,${zoom.y}px) scale(${zoom.z})`;
+  $("zoomPct").textContent = Math.round(zoom.z * 100) + "%";
+  $("viewBar").classList.toggle("active", zoom.z > 1);
+  $("bigWrap").classList.toggle("zoomed", zoom.z > 1);
+}
+
+function resetZoom() { zoom.z = 1; zoom.x = 0; zoom.y = 0; applyZoom(); }
+
+$("bigWrap").addEventListener("wheel", (e) => {
+  if (!e.ctrlKey && !e.metaKey) return;      // plain wheel keeps scrolling the page
+  e.preventDefault();
+  const r = $("bigWrap").getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  const factor = Math.exp(-e.deltaY * 0.0018);
+  const nz = clamp(zoom.z * factor, 1, 12);
+  if (nz === 1) { resetZoom(); return; }
+  zoom.x = mx - (mx - zoom.x) * (nz / zoom.z);
+  zoom.y = my - (my - zoom.y) * (nz / zoom.z);
+  zoom.z = nz;
+  applyZoom();
+}, { passive: false });
+
+$("bigWrap").addEventListener("pointerdown", (e) => {
+  if (zoom.z <= 1 || e.target.tagName === "circle") return;
+  drag = { x: e.clientX, y: e.clientY, ox: zoom.x, oy: zoom.y, moved: 0 };
+  $("bigWrap").setPointerCapture(e.pointerId);
+  $("bigWrap").classList.add("dragging");
+});
+$("bigWrap").addEventListener("pointermove", (e) => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  drag.moved = Math.max(drag.moved, Math.abs(dx) + Math.abs(dy));
+  zoom.x = drag.ox + dx; zoom.y = drag.oy + dy;
+  applyZoom();
+});
+$("bigWrap").addEventListener("pointerup", () => {
+  if (!drag) return;
+  const moved = drag.moved;
+  drag = null;
+  $("bigWrap").classList.remove("dragging");
+  if (moved > 4) { suppressClick = true; setTimeout(() => { suppressClick = false; }, 0); }
+});
+$("bigWrap").addEventListener("dblclick", resetZoom);
+$("zoomReset").addEventListener("click", (e) => { e.stopPropagation(); resetZoom(); });
+
+/* ------------------------------ defaults --------------------------- */
+const DEFAULTS = {
+  points: 48, anchor: 12, anchorMode: "area", method: "visvalingam", tol: 0.05,
+  rotate: 0, aspect: 1, inflate: 0, smooth: 0, sym: 0, snap: 0,
+  scale: 0.88, canvas: 600, pad: 0.04, tight: false,
+  fill: "#1e293b", darkFill: "#ededed", grid: true, dots: true
+};
+
+function resetAll() {
+  Object.assign(state, DEFAULTS);
+  state.pins.clear();
+  state.unpins.clear();
+  state.src = STONE;
+  $("src").value = STONE;
+  resetZoom();
+  pullUI();
+  render();
+  document.querySelectorAll("[data-preset]").forEach(b => b.classList.remove("on"));
+  refreshDraftUI();
+  toast("已恢复默认");
+}
+
+/* ------------------------------- drafts ---------------------------- */
+const DRAFT_KEY = "rosetta.stoneDraft.v1";
+
+function snapshot() {
+  return {
+    v: 1,
+    savedAt: new Date().toISOString(),
+    src: state.src,
+    params: {
+      points: state.points, anchor: state.anchor, anchorMode: state.anchorMode,
+      method: state.method, tol: state.tol, rotate: state.rotate, aspect: state.aspect,
+      inflate: state.inflate, smooth: state.smooth, sym: state.sym, snap: state.snap,
+      scale: state.scale, canvas: state.canvas, pad: state.pad, tight: state.tight,
+      fill: state.fill, darkFill: state.darkFill, grid: state.grid, dots: state.dots
+    },
+    pins: [...state.pins].sort((a, b) => a - b),
+    unpins: [...state.unpins].sort((a, b) => a - b),
+    zoom: { z: zoom.z, x: zoom.x, y: zoom.y }
+  };
+}
+
+function restore(draft) {
+  if (!draft || draft.v !== 1) throw new Error("草稿格式无法识别");
+  const params = draft.params || {};
+  for (const k of Object.keys(DEFAULTS)) {
+    if (params[k] !== undefined) state[k] = params[k];
+  }
+  if (typeof draft.src === "string" && draft.src.trim()) {
+    state.src = draft.src;
+    $("src").value = draft.src;
+  }
+  state.pins = new Set(Array.isArray(draft.pins) ? draft.pins : []);
+  state.unpins = new Set(Array.isArray(draft.unpins) ? draft.unpins : []);
+  if (draft.zoom) {
+    zoom.z = clamp(Number(draft.zoom.z) || 1, 1, 12);
+    zoom.x = Number(draft.zoom.x) || 0;
+    zoom.y = Number(draft.zoom.y) || 0;
+  }
+  pullUI();
+  render();
+  applyZoom();
+}
+
+function hasDraft() {
+  try { return !!localStorage.getItem(DRAFT_KEY); } catch (e) { return false; }
+}
+
+function draftStamp() {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return "尚无草稿";
+    const at = new Date(JSON.parse(raw).savedAt);
+    return "草稿：" + at.toLocaleString();
+  } catch (e) { return "草稿状态不可读"; }
+}
+
+function refreshDraftUI() {
+  $("loadDraft").disabled = !hasDraft();
+  $("draftHint").textContent = hasDraft()
+    ? draftStamp() + " · 换电脑请用导出 / 导入。"
+    : "草稿存在本机浏览器，换电脑请用导出 / 导入。";
+}
+
+/* -------------------------------- wire ----------------------------- */
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 1600);
+}
+function bind(id, key, after = syncLabels) {
+  const el = $(id);
+  el.addEventListener("input", () => { state[key] = parseFloat(el.value); after(); render(); });
+}
+bind("points", "points"); bind("anchor", "anchor"); bind("tol", "tol");
+bind("rotate", "rotate"); bind("aspect", "aspect"); bind("inflate", "inflate");
+bind("smooth", "smooth"); bind("sym", "sym"); bind("snap", "snap");
+bind("scale", "scale"); bind("canvas", "canvas"); bind("pad", "pad");
+
+$("anchorMode").addEventListener("change", e => { state.anchorMode = e.target.value; render(); });
+$("method").addEventListener("change", e => { state.method = e.target.value; render(); });
+$("fill").addEventListener("input", e => { state.fill = e.target.value; render(); });
+$("darkFill").addEventListener("input", e => { state.darkFill = e.target.value; render(); });
+$("frameSquare").addEventListener("click", () => { state.tight = false; pullUI(); render(); });
+$("frameTight").addEventListener("click", () => { state.tight = true; pullUI(); render(); });
+$("tGrid").addEventListener("click", () => { state.grid = !state.grid; pullUI(); render(); });
+$("tDots").addEventListener("click", () => { state.dots = !state.dots; pullUI(); render(); });
+
+document.querySelectorAll("[data-preset]").forEach(btn => btn.addEventListener("click", () => {
+  const p = btn.dataset.preset;
+  if (p === "app") Object.assign(state, { points: 48, anchor: 12, scale: 0.88, tight: false, smooth: 0, rotate: 0, aspect: 1, inflate: 0, sym: 0, snap: 0, fill: "#1e293b", darkFill: "#ededed" });
+  if (p === "favicon") Object.assign(state, { points: 28, anchor: 10, tight: true, pad: 0.04, smooth: 0, rotate: 0, aspect: 1, inflate: 0, sym: 0, snap: 0, fill: "#666666", darkFill: "#ededed" });
+  if (p === "readme") Object.assign(state, { points: 96, anchor: 16, scale: 0.835, tight: false, smooth: 0, fill: "#1e293b", darkFill: "#ededed" });
+  if (p === "docs") Object.assign(state, { points: 96, anchor: 16, scale: 0.934, tight: false, smooth: 0, fill: "#1a1a1a", darkFill: "#ededed" });
+  pullUI(); render();
+  document.querySelectorAll("[data-preset]").forEach(b => b.classList.toggle("on", b === btn));
+}));
+
+$("dl").addEventListener("click", () => {
+  const blob = new Blob([svgFor(state.tight ? 512 : state.canvas)], { type: "image/svg+xml" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `rosetta-mark-${state.points}.svg`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$("copySvg").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(svgFor(state.tight ? 512 : state.canvas));
+  toast("SVG 已复制");
+});
+$("copyCli").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(cliCommand());
+  toast("命令已复制");
+});
+
+$("src").value = state.src;
+$("applySrc").addEventListener("click", () => {
+  try { state.src = $("src").value.trim(); state.pins.clear(); render(); toast("已应用"); }
+  catch (e) { toast("解析失败：" + e.message); }
+});
+$("resetSrc").addEventListener("click", () => {
+  state.src = STONE; $("src").value = STONE; state.pins.clear(); state.unpins.clear(); render(); toast("已恢复内置石形");
+});
+$("clearPins").addEventListener("click", () => { state.pins.clear(); state.unpins.clear(); render(); toast("已清空手动锚点"); });
+$("file").addEventListener("change", async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  const root = new DOMParser().parseFromString(await f.text(), "image/svg+xml");
+  const ds = [...root.querySelectorAll("path")].map(p => p.getAttribute("d")).filter(Boolean);
+  if (!ds.length) { toast("文件里没有 path"); return; }
+  state.src = ds.sort((a, b) => b.length - a.length)[0];
+  state.pins.clear(); state.unpins.clear(); $("src").value = state.src; render(); toast("已载入 " + f.name);
+});
+
+$("resetAll").addEventListener("click", resetAll);
+
+$("saveDraft").addEventListener("click", () => {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(snapshot()));
+    refreshDraftUI();
+    toast("草稿已保存");
+  } catch (e) { toast("保存失败：" + e.message); }
+});
+$("loadDraft").addEventListener("click", () => {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) { toast("没有草稿"); return; }
+    restore(JSON.parse(raw));
+    toast("草稿已载入");
+  } catch (e) { toast("载入失败：" + e.message); }
+});
+$("exportDraft").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(snapshot(), null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `rosetta-draft-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+$("importDraft").addEventListener("click", () => $("draftFile").click());
+$("draftFile").addEventListener("change", async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    restore(JSON.parse(await f.text()));
+    toast("已导入草稿");
+  } catch (err) { toast("导入失败：" + err.message); }
+  e.target.value = "";
+});
+$("themeBtn").addEventListener("click", () => {
+  const cur = document.documentElement.getAttribute("data-theme");
+  document.documentElement.setAttribute("data-theme", cur === "dark" ? "light" : "dark");
+});
+
+pullUI();
+render();
+refreshDraftUI();
+</script>
+</body>
+</html>
