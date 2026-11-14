@@ -119,12 +119,15 @@ point; several locks are separated by `;`.
 treatment around a place on the outline instead of everywhere. A 锐 place drops
 to no rounding at its centre, so the corner stays exactly as traced, and it
 keeps the marked vertex plus every second vertex nearby: a 3% stretch of the
-outline roughly doubles its vertex count. A 圆 place adds two passes on top of
+outline roughly doubles its vertex count. Those extra vertices are protected
+through the reduction and are offered as vertices nowhere: inside a 锐 stretch
+the page draws only the violet marker, so it cannot fill with dots. A 圆 place
+adds two passes on top of
 `--smooth`. Both fade back to the global value by 4.5% of the outline, measured
 along it, so the two treatments blend rather than switch. The page marks them
 with the 左键模式 control (锚点 / 锐 / 圆) and draws them violet and teal.
 Measured at `--points 48 --smooth 2` on the stone: 14 vertices within 60 units
-of `u0.10` become 31 with `--sharp u0.10`, and 10 near `u0.60` become 34 with
+of `u0.10` become 31 with `--sharp u0.10`, and 13 near `u0.60` become 40 with
 `--round u0.60`, while the marked vertex itself stays at its traced position to
 0.0001 canvas units.
 

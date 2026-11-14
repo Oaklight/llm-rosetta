@@ -926,7 +926,8 @@ function regionBudgets(fracs, base, sharp, rounded, extra = 2) {
   return b.map(v => Math.max(0, Math.round(v)));
 }
 /* Extra vertices to keep around a 锐 place: the marked vertex itself, every
- * 2nd inside the core, every 4th in the fade band. */
+ * 2nd inside the core, every 4th in the fade band. The reduction keeps them;
+ * the dot layer draws them nowhere. */
 function regionPins(fracs, sharp, step = 2) {
   const out = new Set();
   for (const u of sharp) {
@@ -969,8 +970,18 @@ function build() {
                            .filter(i => i >= 0 && i < ring.length));
     unpinIdx.forEach(i => marked.delete(i));
     lockIdx.forEach((_, i) => { if (i >= 0 && i < ring.length) marked.add(i); });
-    const protect = new Set([...marked, ...regionPins(fracs, sharpUs)]
+    const detail = regionPins(fracs, sharpUs);
+    const protect = new Set([...marked, ...detail]
                             .filter(i => i >= 0 && i < ring.length));
+    // Nothing inside a 锐 stretch is offered as a vertex: its vertices are
+    // protected so the line stays as traced, not so they can be picked. Only
+    // the violet marker itself stays, and it is in *marked*.
+    const hidden = new Set();
+    for (const u of sharpUs) {
+      const d = arcDistance(fracs, u);
+      for (let i = 0; i < fracs.length; i++) if (d[i] < REGION_REACH) hidden.add(i);
+    }
+    for (const i of marked) hidden.delete(i);
     autoByRing.push(auto);
     fracsByRing.push(fracs);
     pinByRing.push(marked);
@@ -992,9 +1003,14 @@ function build() {
       [pts, src] = chaikinBudgeted(pts, src, budgets, isClosed, new Set(lockIdx.keys()));
 
     // Candidate dots: what a generous budget keeps, plus everything pinned.
-    const generous = new Set(reduceTo(ring, Math.max(budget, 64), state.method, isClosed, protect, state.fidelity));
+    // The generous pass protects only what is drawn, otherwise the 锐 place's
+    // detail pins fill its budget and crowd the clickable dots off the outline.
+    const displayProtect = new Set([...protect].filter(i => !hidden.has(i)));
+    const generous = new Set(reduceTo(ring, Math.max(budget, 64), state.method, isClosed, displayProtect, state.fidelity));
     const candidates = new Set([...generous, ...keepSet, ...marked, ...auto]);
-    const dotsIdx = [...candidates].filter(i => i >= 0 && i < ring.length).sort((a, b) => a - b);
+    const dotsIdx = [...candidates]
+      .filter(i => i >= 0 && i < ring.length && !hidden.has(i))
+      .sort((a, b) => a - b);
     dotRings.push(dotsIdx.map(i => ring[i]));
     dotSrcs.push(dotsIdx);
 

@@ -1107,7 +1107,8 @@ def region_pins(
 
     Every *step*-th vertex inside the core is pinned, and every second one of
     those in the fade band: a 3% stretch of the outline roughly doubles its
-    vertex count there without the whole budget following.
+    vertex count there without the whole budget following. They are kept by
+    the reduction; the page offers no vertex inside a 锐 stretch at all.
     """
     pinned: set[int] = set()
     for u in sharp:
