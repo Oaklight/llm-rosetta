@@ -117,8 +117,15 @@ async def _adopt_pre_registry_schema(context: StepContext) -> int:
     if await _has_ledger(conn):
         return 0
     columns = await _columns(conn)
+    cursor = await conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = {row[0] for row in await cursor.fetchall()}
     recorded = 0
     for version, column in sorted(COLUMN_OF.items()):
+        if version in DROPS and "api_keys_v5" in tables:
+            # The scratch table of a rebuild that never finished.  A missing
+            # column is not evidence the step is done here; it is the reason
+            # it still has to run.
+            continue
         present = column in columns
         if present != (version in DROPS):
             await conn.execute(
@@ -160,8 +167,8 @@ async def _apply_migration(
         return 0
     logger.info("Applying keys.db migration v%d: %s", version, description)
     columns = await _columns(conn)
-    if drops is not None:
-        await _restore_stranded_rebuild(conn)
+    if drops is not None and await _restore_stranded_rebuild(conn, columns):
+        columns = await _columns(conn)
     if drops is not None and drops not in columns:
         # A store this code created never had the column, so the version's
         # work is already done; only the ledger row is missing.
@@ -194,40 +201,54 @@ async def _apply_migration(
     return executed + 1
 
 
-async def _restore_stranded_rebuild(conn: Any) -> int:
-    """Put back keys an interrupted rebuild left in its scratch table.
+async def _restore_stranded_rebuild(conn: Any, columns: set[str]) -> bool:
+    """Finish a rebuild that died with the keys in its scratch table.
 
     The rebuild is one transaction now, so this state can only come from a
     file written by a build before that was true: the copy reached the scratch
     table, the live table was dropped, and the process died before the rename.
-    The next open then saw an empty table with no column and called v5 done.
-    Restoring is the difference between a manual ``INSERT … SELECT`` and a
-    gateway that serves nothing.
+    Two shapes follow from that, and both are finished here:
+
+    - the live table is empty but current, so the rows are copied back and the
+      scratch copy dropped;
+    - the live table is not current at all — a bootstrap recreated the base
+      table — and the scratch table *is* the finished table, so it is renamed
+      into place instead.
+
+    Returns whether anything was done, so the caller can re-read the columns.
     """
     from ..keystore import _REBUILD_COLUMNS
 
     cursor = await conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = {row[0] for row in await cursor.fetchall()}
     if "api_keys_v5" not in tables:
-        return 0
-    live = await conn.execute_fetchone("SELECT COUNT(*) FROM api_keys")
+        return False
     orphan = await conn.execute_fetchone("SELECT COUNT(*) FROM api_keys_v5")
-    live_rows = live[0] if live else 0
     orphan_rows = orphan[0] if orphan else 0
-    if live_rows or not orphan_rows:
-        return 0
-    await conn.execute(
-        f"INSERT INTO api_keys ({_REBUILD_COLUMNS}) "
-        f"SELECT {_REBUILD_COLUMNS} FROM api_keys_v5"
-    )
-    # The rows are back; the scratch copy is a second copy of every key hash
-    # and nothing reads it, so it goes in the same breath.
-    await conn.execute("DROP TABLE api_keys_v5")
+    if not orphan_rows:
+        return False
+    live = await conn.execute_fetchone("SELECT COUNT(*) FROM api_keys")
+    live_rows = live[0] if live else 0
+    if live_rows:
+        return False
+
+    current = {c.strip() for c in _REBUILD_COLUMNS.split(",")}
+    if current <= columns:
+        await conn.execute(
+            f"INSERT INTO api_keys ({_REBUILD_COLUMNS}) "
+            f"SELECT {_REBUILD_COLUMNS} FROM api_keys_v5"
+        )
+        # The rows are back; the scratch copy is a second copy of every key
+        # hash and nothing reads it, so it goes in the same breath.
+        await conn.execute("DROP TABLE api_keys_v5")
+    else:
+        await conn.execute("DROP TABLE api_keys")
+        await conn.execute("ALTER TABLE api_keys_v5 RENAME TO api_keys")
     await conn.commit()
     logger.warning(
         "Restored %d key(s) an interrupted rebuild left in api_keys_v5", orphan_rows
     )
-    return orphan_rows
+    return True
 
 
 async def _run_statements(conn: Any, statements: list[str], columns: set[str]) -> int:
