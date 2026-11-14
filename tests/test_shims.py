@@ -1146,13 +1146,20 @@ class TestFreeSourceShim:
         assert ConnectionConfig().keyless is False
         assert ConnectionConfig(keyless=True).keyless is True
 
-    def test_kilo_shim_fields(self):
+    def test_kilo_shim_is_the_paid_lane(self):
+        """The keyless free pool is a separate, externally published shim.
+
+        Keeping them apart is what lets this leaf demand a credential: a
+        provider on it without a key is refused rather than sent upstream
+        unauthenticated.
+        """
         shim = get_shim("kilo--chat_completions")
 
         assert shim is not None
         assert shim.base == "chat_completions"
-        assert shim.free_source is True
-        assert shim.connection.keyless is True
+        assert shim.free_source is False
+        assert shim.connection.keyless is False
+        assert shim.connection.api_key_env == "KILO_API_KEY"
         assert shim.connection.models_path == "/models"
         # The brand is the group title; the shim's own row label is unset, so
         # the picker shows it as the bare base format under "Kilo".
@@ -1160,6 +1167,10 @@ class TestFreeSourceShim:
         assert shim.group is None
         assert shim.display_name is None
         assert shim.logo is not None
+        # No model-list filter: a paid account sees the whole catalogue.
+        from llm_rosetta.shims.providers import get_model_list_transform
+
+        assert get_model_list_transform("kilo--chat_completions") is None
 
     def test_default_shim_is_not_free_source(self):
         shim = get_shim("openrouter--chat_completions")
@@ -1445,14 +1456,19 @@ class TestRequestConstraintDeclarations:
                 }
             )
 
-    def test_only_zhipu_declares_constraints_today(self):
-        """The first vendor-level declaration; every other shim is untouched."""
+    def test_only_the_glm_lanes_declare_constraints_today(self):
+        """Two lanes of one model family; every other shim is untouched.
+
+        Z.ai is Zhipu's international deployment of the same GLM API, so it
+        carries the same temperature range.  No other vendored lane has been
+        measured, and an unmeasured declaration is worse than none.
+        """
         from llm_rosetta.shims.providers import load_providers
 
         declared = {
             shim.name: shim.request for shim in load_providers() if shim.request
         }
-        assert set(declared) == {"zhipu"}, sorted(declared)
+        assert set(declared) == {"zhipu", "zai--chat_completions"}, sorted(declared)
 
 
 class TestZhipuRequestRanges:

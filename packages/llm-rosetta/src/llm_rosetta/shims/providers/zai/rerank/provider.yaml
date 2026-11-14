@@ -1,0 +1,11 @@
+name: zai--rerank
+model_type: rerank
+format: cohere
+group_label: Z.ai
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.svg
+
+# Measured 2026-11-13 against model ``rerank``: the Cohere request shape is
+# accepted and the answer is ``results[].index/relevance_score`` with no
+# ``document`` field.
+connection:
+  default_path: /rerank

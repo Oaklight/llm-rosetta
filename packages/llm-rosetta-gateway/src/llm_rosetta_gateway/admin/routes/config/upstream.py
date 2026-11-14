@@ -39,6 +39,21 @@ def _format_connection_error(exc: Exception, url: str) -> str:
     return f"Failed to connect to upstream: {err_str}"
 
 
+def _model_entries(body: dict[str, Any] | list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return the entry list of a model-list body, whatever its envelope.
+
+    Covers the OpenAI ``{data: [...]}`` and Google ``{models: [...]}``
+    envelopes, a bare array, and a nested ``{data: {models: [...]}}`` envelope
+    — SiliconFlow's typed playground catalogue is the last one.
+    """
+    if isinstance(body, list):
+        return body
+    entries = body.get("data") if "data" in body else body.get("models", [])
+    if isinstance(entries, dict):
+        entries = entries.get("models", [])
+    return entries if isinstance(entries, list) else []
+
+
 def _extract_model_ids(
     body: dict[str, Any] | list[dict[str, Any]],
     ptype: str,
@@ -47,12 +62,14 @@ def _extract_model_ids(
 ) -> tuple[list[str], dict[str, str]]:
     """Extract model IDs from an upstream ``/models`` response body.
 
-    Returns ``(model_ids, upstream_map)``.  Handles three response shapes:
+    Returns ``(model_ids, upstream_map)``.  Handles four response shapes:
 
     * OpenAI-style ``{data: [{id: ...}, ...]}``
     * Google-style ``{models: [{name: ...}, ...]}``
     * Bare JSON array ``[{id: ...}, ...]`` (e.g. ALCF) — requires a
       ``model_list_transform``; without one the array is silently ignored.
+    * Nested ``{data: {models: [{...}, ...]}}`` (SiliconFlow's typed
+      catalogue) — likewise requires a ``model_list_transform``.
 
     When a shim provides a ``model_list_transform`` hook, it is used to
     derive human-readable slugs and the mapping back to internal upstream
@@ -66,13 +83,7 @@ def _extract_model_ids(
     model_ids: list[str] = []
 
     if mlt is not None:
-        if isinstance(body, list):
-            raw_entries: list[dict[str, Any]] = body
-        else:
-            raw_entries = (
-                body.get("data", []) if "data" in body else body.get("models", [])
-            )
-        model_ids, upstream_map = mlt(raw_entries)
+        model_ids, upstream_map = mlt(_model_entries(body))
     elif isinstance(body, list):
         logger.debug(
             "Upstream returned bare array but no model_list_transform is registered "

@@ -1,0 +1,13 @@
+name: siliconflow--embedding
+model_type: embeddings
+format: openai
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/siliconcloud.svg
+
+# Measured 2026-11-13: BAAI/bge-m3 answers 200 in the OpenAI shape
+# (``data[].embedding`` is a float list).
+connection:
+  base_url: https://api.siliconflow.cn/v1
+  default_path: /embeddings
+  # Same typed catalogue as the chat leaf; the transform keeps the active
+  # ``subType: embedding`` slice (measured: 8 entries).
+  models_path: https://busy-bear.siliconflow.cn/api/v1/playground/comprehensive/all

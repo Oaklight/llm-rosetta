@@ -274,18 +274,18 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         legacy_names=("alcf--metis", "alcf--minerva", "alcf--sophia"),
         # The archive lives on the orphan ``dist`` branch, one directory
         # per tag (#1412); the CDN URL is a template, not the only host.
-        # ``sha256`` is the published digest of the v0.1.0 archive: bump it
+        # ``sha256`` is the published digest of the v0.2.0 archive: bump it
         # together with ``ref`` when a new archive is released.
         # ``path`` names ``providers`` rather than ``"."``: the archive
         # strips its single top-level directory, and a future release that
         # wraps the providers tree must not stop this config loading.
-        ref="v0.1.0",
+        ref="v0.2.0",
         mirror={
             "url_template": (
                 "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf"
                 "@dist/{ref}/alcf.tar.gz"
             ),
-            "sha256": "3e1bc7a63b07922befacfc73600304bfd6ea6a04788d1a897acf3414acb1a6e3",
+            "sha256": "85474163b1e054c05c38e83b6513a063d39935349650771316118a0ce9f53658",
             "path": "providers",
         },
     ),
@@ -309,55 +309,63 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         ),
         # The archive lives on the orphan ``dist`` branch, one directory
         # per tag (#1412); the CDN URL is a template, not the only host.
-        # ``sha256`` is the published digest of the v0.1.0 archive: bump it
+        # ``sha256`` is the published digest of the v0.2.0 archive: bump it
         # together with ``ref`` when a new archive is released.
         # ``path`` names ``providers`` rather than ``"."``: the archive
         # strips its single top-level directory, and a future release that
         # wraps the providers tree must not stop this config loading.
-        ref="v0.1.0",
+        ref="v0.2.0",
         mirror={
             "url_template": (
                 "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argo"
                 "@dist/{ref}/argo.tar.gz"
             ),
-            "sha256": "287df404145ced54f88ab7746750986a94354d4d4f5469cb83e3760a0c5f0158",
+            "sha256": "921c85f86082b0edf3821c7171ef5c36cc5693d4f72a1aadb237edffd892e4b2",
             "path": "providers",
         },
     ),
     ShimSourcePackage(
-        key="opencode_zen_free",
-        # The lane is upstream-gated to OpenCode's own client; see the
-        # package README.  It lives outside core so it can be withdrawn
-        # without a release.
-        label="OpenCode Zen free lane",
-        repo="https://github.com/Oaklight/llm-rosetta-shim-opencode-free",
-        package="llm_rosetta_shim_opencode_zen_free",
-        shims=("opencode_zen_free--chat_completions",),
-        # The only keyless package: the picker groups it under free resources.
+        key="free",
+        # Every keyless pool, in one package: four vendors with no contract
+        # behind them.  They live outside core so a pool that closes, or
+        # tightens its rate limit, can be withdrawn or retuned without a
+        # release.  This entry replaces the former ``opencode_zen_free`` one —
+        # that repository shipped a single lane, was renamed, and now ships it
+        # beside the others under an unchanged shim name.
+        label="Keyless free endpoints",
+        repo="https://github.com/Oaklight/llm-rosetta-shim-free",
+        package="llm_rosetta_shim_free",
+        shims=(
+            "kilo_free--chat_completions",
+            "llm7--chat_completions",
+            "opencode_zen_free--chat_completions",
+            "ovhcloud--chat_completions",
+        ),
+        # Keyless, so the picker groups them under free resources.
         free=True,
         note={
             "en": (
-                "The upstream gate fingerprints the client transport, so a "
-                "non-CLI client is refused even when the shim loads."
+                "Anonymous free tiers with no contract: Kilo serves only its "
+                "free slice, LLM7 only its turbo models, OVHcloud 2 requests "
+                "per minute per IP, and OpenCode's gate fingerprints the "
+                "client transport. Prompts may be logged by any of them."
             ),
             "zh": (
-                "上游门禁会识别客户端传输栈，非 CLI 客户端即使 shim 加载成功也会被拒。"
+                "无合同的匿名免费额度：Kilo 只服务免费子集，LLM7 只服务 turbo 模型，"
+                "OVHcloud 每 IP 每分钟 2 次请求，OpenCode 的门禁会识别客户端传输栈。"
+                "任何一家的提示词都可能被上游记录。"
             ),
         },
-        # The archive lives on the orphan ``dist`` branch, one directory
-        # per tag (#1412); the CDN URL is a template, not the only host.
-        # ``sha256`` is the published digest of the v0.1.0 archive: bump it
-        # together with ``ref`` when a new archive is released.
-        # ``path`` names ``providers`` rather than ``"."``: the archive
-        # strips its single top-level directory, and a future release that
-        # wraps the providers tree must not stop this config loading.
-        ref="v0.1.0",
+        # The archive lives on the orphan ``dist`` branch, one directory per
+        # tag; v0.1.0 there is the pre-rename OpenCode-only archive, kept so a
+        # released gateway still resolves its old preset.
+        ref="v0.2.0",
         mirror={
             "url_template": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-opencode-free"
-                "@dist/{ref}/opencode_zen_free.tar.gz"
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-free"
+                "@dist/{ref}/free.tar.gz"
             ),
-            "sha256": "0f2d9c5ff529985352d8c85114ab7378f09078f72ab8674140bfd9e2b42dde27",
+            "sha256": "ec77ee8d50c2ca596bc99da6250ace48681307f912c6091c5a2b24d17a29198d",
             "path": "providers",
         },
     ),
@@ -385,18 +393,18 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         ),
         # The archive lives on the orphan ``dist`` branch, one directory
         # per tag (#1412); the CDN URL is a template, not the only host.
-        # ``sha256`` is the published digest of the v0.1.0 archive: bump it
+        # ``sha256`` is the published digest of the v0.2.0 archive: bump it
         # together with ``ref`` when a new archive is released.
         # ``path`` names ``providers`` rather than ``"."``: the archive
         # strips its single top-level directory, and a future release that
         # wraps the providers tree must not stop this config loading.
-        ref="v0.1.0",
+        ref="v0.2.0",
         mirror={
             "url_template": (
                 "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-asksage"
                 "@dist/{ref}/asksage.tar.gz"
             ),
-            "sha256": "632ee2d768ded954ce39ef065613b6a884f8ec0b260cd26e7411a9585769ac6b",
+            "sha256": "ae850aeb1f5bde5fa0ff36102141ad75c37d131f7e4564319323fc9989c5e6a9",
             "path": "providers",
         },
     ),

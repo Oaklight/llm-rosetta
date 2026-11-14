@@ -1,0 +1,13 @@
+name: modelscope--chat_completions
+model_type: llm
+format: chat_completions
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/modelscope.svg
+
+# Measured 2026-11-13: GET /v1/models answers 200 with 38 entries in the
+# OpenAI shape and no type field, so the whole catalogue is offered.
+#
+# Access needs a real-name verified Alibaba Cloud account bound to the
+# ModelScope account, and the daily quota is dynamic (2,000 requests/day per
+# user, at most 500 per model).
+connection:
+  base_url: https://api-inference.modelscope.cn/v1

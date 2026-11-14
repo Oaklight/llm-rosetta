@@ -1,0 +1,10 @@
+name: zai--embedding
+model_type: embeddings
+format: openai
+group_label: Z.ai
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/zhipu.svg
+
+# Measured against embedding-3 on 2026-11-13: the OpenAI request shape is
+# accepted and data[].embedding is a float list.
+connection:
+  default_path: /embeddings

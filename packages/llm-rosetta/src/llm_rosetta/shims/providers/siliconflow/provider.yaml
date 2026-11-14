@@ -1,0 +1,5 @@
+# SiliconFlow — free and paid models on one credential.  The typed catalogue
+# lives on a second host, so ``models_path`` is an absolute URL on each leaf.
+connection:
+  base_url: https://api.siliconflow.cn/v1
+  api_key_env: SILICONFLOW_API_KEY

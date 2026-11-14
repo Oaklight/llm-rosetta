@@ -267,7 +267,7 @@ class TestAdminPayload:
         assert [entry["key"] for entry in payload] == [
             "alcf",
             "argo",
-            "opencode_zen_free",
+            "free",
             "asksage",
         ]
         for entry in payload:
@@ -284,7 +284,7 @@ class TestAdminPayload:
             # mirror (#1411 Phase 4); the picker writes the key, so the extra
             # keys ride along without a front-end change.
             assert set(entry["remote"]) == {"url", "path", "ref", "mirror"}
-            assert entry["remote"]["ref"] == "v0.1.0"
+            assert entry["remote"]["ref"].startswith("v")
             assert set(entry["remote"]["mirror"]) == {
                 "url_template",
                 "sha256",
@@ -300,10 +300,10 @@ class TestAdminPayload:
             entry["key"]: entry
             for entry in config_payload._shim_source_presets_payload()
         }
-        assert entries["opencode_zen_free"]["free"] is True
+        assert entries["free"]["free"] is True
         assert entries["alcf"]["free"] is False
         # The warning travels with the package, so the pane can show it.
-        note = entries["opencode_zen_free"]["note"]
+        note = entries["free"]["note"]
         assert set(note) == {"en", "zh"}
         assert entries["alcf"]["note"] is None
 
@@ -362,7 +362,7 @@ class TestPresets:
     def test_an_unknown_preset_names_the_known_ones(self):
         with pytest.raises(ValueError, match="unknown shim preset 'nope'"):
             resolve_source_config({"presets": ["nope"]}, None)
-        with pytest.raises(ValueError, match="alcf, argo, opencode_zen_free, asksage"):
+        with pytest.raises(ValueError, match="alcf, argo, free, asksage"):
             resolve_source_config({"presets": ["nope"]}, None)
 
     @pytest.mark.parametrize("presets", ["argo", [123], [""], [None]])

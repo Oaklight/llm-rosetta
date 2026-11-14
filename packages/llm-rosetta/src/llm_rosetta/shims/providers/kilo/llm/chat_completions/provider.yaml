@@ -1,10 +1,11 @@
-# Kilo — free model source.
+# Kilo — paid gateway (OpenAI Chat Completions endpoint).
 #
-# Kilo's public gateway serves a free model pool. Requests carry no credential
-# while no API key is configured (`keyless`); supplying a key switches back to
-# Bearer auth, so a user with a subscription uses the same shim. As a keyless
-# entry the admin UI shows it as "Kilo (Free)" and groups it under the Free
-# Resource section.
+# The keyless free pool is a different shim: ``kilo_free--chat_completions``,
+# published in llm-rosetta-shim-free.  Declaring
+# ``shims.presets: ["free"]`` loads it next to this one.  Splitting them keeps
+# the two contracts apart — this lane always sends a credential and offers the
+# whole catalogue, that one sends none and offers only the models the upstream
+# marks free.
 name: kilo--chat_completions
 model_type: llm
 format: chat_completions
@@ -13,8 +14,6 @@ format: chat_completions
 # label is left unset, so its row reads as the bare base format.
 group_label: Kilo
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/kilocode.svg
-free_source: true
 
 connection:
   base_url: https://api.kilo.ai/api/gateway
-  models_path: /models

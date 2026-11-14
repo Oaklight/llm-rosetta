@@ -1,0 +1,5 @@
+# ModelScope — Alibaba's model hub, served through an OpenAI-compatible
+# inference gateway.  Free API-Inference for registered users.
+connection:
+  base_url: https://api-inference.modelscope.cn/v1
+  api_key_env: MODELSCOPE_API_KEY

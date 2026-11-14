@@ -1,0 +1,15 @@
+name: siliconflow--chat_completions
+model_type: llm
+format: chat_completions
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/siliconcloud.svg
+
+# Measured 2026-11-13: chat answers 200 in the OpenAI shape.
+#
+# The plain /v1/models carries no type field, so the picker cannot tell a chat
+# model from an image one.  The playground endpoint on a second host tags
+# every entry with ``type``/``subType`` and a ``status`` of ``normal`` or
+# ``disable`` (measured: 201 entries, 91 active, 61 of them ``subType: chat``).
+# The shim owns that URL and its transform keeps the active chat slice.
+connection:
+  base_url: https://api.siliconflow.cn/v1
+  models_path: https://busy-bear.siliconflow.cn/api/v1/playground/comprehensive/all

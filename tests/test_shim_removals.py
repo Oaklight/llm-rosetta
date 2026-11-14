@@ -244,7 +244,7 @@ class TestSourceCatalog:
         assert [entry.key for entry in SHIM_SOURCE_PACKAGES] == [
             "alcf",
             "argo",
-            "opencode_zen_free",
+            "free",
             "asksage",
         ]
 
@@ -271,16 +271,22 @@ class TestSourceCatalog:
             else:
                 assert "ref" not in remote and "mirror" not in remote
 
-    def test_every_published_package_pins_v0_1_0(self):
-        """Phase 4 of #1411: the four packages that publish an archive."""
+    def test_every_published_package_pins_a_release_tag(self):
+        """Phase 4 of #1411: every package publishes an archive per tag.
+
+        The tags are not all the same — a package that ships a new archive
+        bumps its own — so the rule is that a tag is stated and an archive is
+        named, not that they agree on a number.
+        """
         assert {entry.key for entry in SHIM_SOURCE_PACKAGES} == {
             "alcf",
             "argo",
-            "opencode_zen_free",
+            "free",
             "asksage",
         }
         for entry in SHIM_SOURCE_PACKAGES:
-            assert entry.ref == "v0.1.0", entry.key
+            assert entry.ref is not None, entry.key
+            assert entry.ref.startswith("v"), entry.key
             assert entry.mirror is not None, entry.key
 
     def test_every_preset_round_trips_through_the_source_resolver(self):

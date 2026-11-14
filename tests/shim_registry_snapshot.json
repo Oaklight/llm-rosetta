@@ -12,6 +12,18 @@
     "free_source": false
   },
   {
+    "name": "cohere--chat_completions",
+    "model_type": "llm",
+    "format": "chat_completions",
+    "base_url": "https://api.cohere.com/compatibility/v1",
+    "api_key_env": "COHERE_API_KEY",
+    "default_path": null,
+    "group": null,
+    "group_label": null,
+    "display_name": null,
+    "free_source": false
+  },
+  {
     "name": "cohere--embedding",
     "model_type": "embeddings",
     "format": "cohere",
@@ -96,6 +108,18 @@
     "free_source": false
   },
   {
+    "name": "groq--chat_completions",
+    "model_type": "llm",
+    "format": "chat_completions",
+    "base_url": "https://api.groq.com/openai/v1",
+    "api_key_env": "GROQ_API_KEY",
+    "default_path": null,
+    "group": null,
+    "group_label": null,
+    "display_name": null,
+    "free_source": false
+  },
+  {
     "name": "jina--embedding",
     "model_type": "embeddings",
     "format": "jina",
@@ -124,12 +148,12 @@
     "model_type": "llm",
     "format": "chat_completions",
     "base_url": "https://api.kilo.ai/api/gateway",
-    "api_key_env": null,
+    "api_key_env": "KILO_API_KEY",
     "default_path": null,
     "group": null,
     "group_label": "Kilo",
     "display_name": null,
-    "free_source": true
+    "free_source": false
   },
   {
     "name": "minimax--chat_completions",
@@ -168,11 +192,35 @@
     "free_source": false
   },
   {
+    "name": "modelscope--chat_completions",
+    "model_type": "llm",
+    "format": "chat_completions",
+    "base_url": "https://api-inference.modelscope.cn/v1",
+    "api_key_env": "MODELSCOPE_API_KEY",
+    "default_path": null,
+    "group": null,
+    "group_label": null,
+    "display_name": null,
+    "free_source": false
+  },
+  {
     "name": "moonshot",
     "model_type": "llm",
     "format": "chat_completions",
     "base_url": "https://api.moonshot.cn/v1",
     "api_key_env": "MOONSHOT_API_KEY",
+    "default_path": null,
+    "group": null,
+    "group_label": null,
+    "display_name": null,
+    "free_source": false
+  },
+  {
+    "name": "nvidia--chat_completions",
+    "model_type": "llm",
+    "format": "chat_completions",
+    "base_url": "https://integrate.api.nvidia.com/v1",
+    "api_key_env": "NVIDIA_API_KEY",
     "default_path": null,
     "group": null,
     "group_label": null,
@@ -336,6 +384,42 @@
     "free_source": false
   },
   {
+    "name": "siliconflow--chat_completions",
+    "model_type": "llm",
+    "format": "chat_completions",
+    "base_url": "https://api.siliconflow.cn/v1",
+    "api_key_env": "SILICONFLOW_API_KEY",
+    "default_path": null,
+    "group": null,
+    "group_label": null,
+    "display_name": null,
+    "free_source": false
+  },
+  {
+    "name": "siliconflow--embedding",
+    "model_type": "embeddings",
+    "format": "openai",
+    "base_url": "https://api.siliconflow.cn/v1",
+    "api_key_env": "SILICONFLOW_API_KEY",
+    "default_path": "/embeddings",
+    "group": null,
+    "group_label": null,
+    "display_name": null,
+    "free_source": false
+  },
+  {
+    "name": "siliconflow--rerank",
+    "model_type": "rerank",
+    "format": "cohere",
+    "base_url": "https://api.siliconflow.cn/v1",
+    "api_key_env": "SILICONFLOW_API_KEY",
+    "default_path": "/rerank",
+    "group": null,
+    "group_label": null,
+    "display_name": null,
+    "free_source": false
+  },
+  {
     "name": "typesafe--systemone",
     "model_type": "decisions",
     "format": "systemone",
@@ -416,6 +500,54 @@
     "default_path": null,
     "group": null,
     "group_label": null,
+    "display_name": null,
+    "free_source": false
+  },
+  {
+    "name": "zai--chat_completions",
+    "model_type": "llm",
+    "format": "chat_completions",
+    "base_url": "https://api.z.ai/api/paas/v4",
+    "api_key_env": "ZAI_API_KEY",
+    "default_path": null,
+    "group": null,
+    "group_label": "Z.ai",
+    "display_name": null,
+    "free_source": false
+  },
+  {
+    "name": "zai--embedding",
+    "model_type": "embeddings",
+    "format": "openai",
+    "base_url": "https://api.z.ai/api/paas/v4",
+    "api_key_env": "ZAI_API_KEY",
+    "default_path": "/embeddings",
+    "group": null,
+    "group_label": "Z.ai",
+    "display_name": null,
+    "free_source": false
+  },
+  {
+    "name": "zai--messages",
+    "model_type": "llm",
+    "format": "messages",
+    "base_url": "https://api.z.ai/api/anthropic",
+    "api_key_env": "ZAI_API_KEY",
+    "default_path": null,
+    "group": null,
+    "group_label": "Z.ai",
+    "display_name": null,
+    "free_source": false
+  },
+  {
+    "name": "zai--rerank",
+    "model_type": "rerank",
+    "format": "cohere",
+    "base_url": "https://api.z.ai/api/paas/v4",
+    "api_key_env": "ZAI_API_KEY",
+    "default_path": "/rerank",
+    "group": null,
+    "group_label": "Z.ai",
     "display_name": null,
     "free_source": false
   },

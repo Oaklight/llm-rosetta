@@ -1,0 +1,4 @@
+# Groq — LPU inference on an OpenAI-compatible endpoint.
+connection:
+  base_url: https://api.groq.com/openai/v1
+  api_key_env: GROQ_API_KEY

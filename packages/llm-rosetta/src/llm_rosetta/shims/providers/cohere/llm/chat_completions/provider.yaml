@@ -1,0 +1,13 @@
+name: cohere--chat_completions
+model_type: llm
+format: chat_completions
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/cohere.svg
+
+# Cohere's OpenAI-compatible lane.  The native /v2/chat shape has no
+# converter; the compatibility endpoint is the one this leaf serves, and it
+# overrides the vendor manifest's native ``base_url``.  Measured 2026-11-13:
+# chat and tool calls answer 200 on both api.cohere.com and api.cohere.ai,
+# and /models lists the same catalogue as the native API.  The credential is
+# the vendor manifest's COHERE_API_KEY — one key signs every lane.
+connection:
+  base_url: https://api.cohere.com/compatibility/v1

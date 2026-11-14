@@ -76,24 +76,45 @@ class TestVendorNeutralBaseFormats:
         }
 
 
+@pytest.fixture()
+def keyless_shim():
+    """A keyless shim registered by this test module.
+
+    No built-in shim is keyless any more: the free pools moved to externally
+    published packages, so the mechanism is exercised on a shim of the test's
+    own rather than on a vendor's.
+    """
+    from llm_rosetta.shims import register_shim
+    from llm_rosetta.shims.provider_shim import ConnectionConfig, ProviderShim
+
+    register_shim(
+        ProviderShim(
+            name="keyless-test",
+            format="chat_completions",
+            connection=ConnectionConfig(
+                base_url="https://keyless.example.com/v1", keyless=True
+            ),
+        )
+    )
+    return "keyless-test"
+
+
 class TestKeylessProvider:
     """A free-source shim sends no auth header, and accepts a key for paid use."""
 
-    def test_free_shim_sends_no_auth(self):
+    def test_free_shim_sends_no_auth(self, keyless_shim):
         load_providers()
-        info = build_provider_info(
-            "openai_chat", {}, shim_name="kilo--chat_completions"
-        )
+        info = build_provider_info("openai_chat", {}, shim_name=keyless_shim)
 
         assert info.auth_headers() == {}
         assert info.ready is True
         assert info.keyless is True
-        assert info.base_url == "https://api.kilo.ai/api/gateway"
+        assert info.base_url == "https://keyless.example.com/v1"
 
-    def test_free_shim_with_key_sends_bearer(self):
+    def test_free_shim_with_key_sends_bearer(self, keyless_shim):
         load_providers()
         info = build_provider_info(
-            "openai_chat", {"api_key": "sk-x"}, shim_name="kilo--chat_completions"
+            "openai_chat", {"api_key": "sk-x"}, shim_name=keyless_shim
         )
 
         assert info.auth_headers() == {"Authorization": "Bearer sk-x"}
@@ -108,14 +129,14 @@ class TestKeylessProvider:
         with pytest.raises(ValueError, match="No API keys configured"):
             info.auth_headers()
 
-    def test_token_command_disables_keyless(self):
+    def test_token_command_disables_keyless(self, keyless_shim):
         """A keyless shim driven by token_command is not treated as keyless —
         the command (and its dynamic credential) must not be dropped."""
         load_providers()
         info = build_provider_info(
             "openai_chat",
             {"token_command": ["echo", "tok"]},
-            shim_name="kilo--chat_completions",
+            shim_name=keyless_shim,
         )
 
         assert info.keyless is False
@@ -171,26 +192,26 @@ class TestKeylessProvider:
                 shim_name="xai",
             )
 
-    def test_empty_base_url_falls_back_to_shim_default(self):
+    def test_empty_base_url_falls_back_to_shim_default(self, keyless_shim):
         """An empty base_url string must not shadow the shim's default."""
         load_providers()
         info = build_provider_info(
             "openai_chat",
             {"api_key": "sk-x", "base_url": ""},
-            shim_name="kilo--chat_completions",
+            shim_name=keyless_shim,
         )
 
-        assert info.base_url == "https://api.kilo.ai/api/gateway"
+        assert info.base_url == "https://keyless.example.com/v1"
 
-    def test_base_type_env_key_does_not_disable_keyless(self, monkeypatch):
+    def test_base_type_env_key_does_not_disable_keyless(
+        self, monkeypatch, keyless_shim
+    ):
         """An unrelated base-type env var must not turn a keyless shim into an
         authed provider — it is not this provider's credential."""
         load_providers()
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
 
-        info = build_provider_info(
-            "openai_chat", {}, shim_name="kilo--chat_completions"
-        )
+        info = build_provider_info("openai_chat", {}, shim_name=keyless_shim)
 
         assert info.keyless is True
         assert info.auth_headers() == {}
