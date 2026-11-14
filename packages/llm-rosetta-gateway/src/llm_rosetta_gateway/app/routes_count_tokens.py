@@ -44,7 +44,7 @@ from ..proxy import error_response_for_source
 from ..transport import UpstreamConnectionError, UpstreamTimeoutError
 
 from . import _state
-from .routes_llm import _resolve_or_error
+from .routes_llm import _resolve_or_error, model_allowed, sees_every_model
 
 logger = get_logger()
 
@@ -56,6 +56,13 @@ SOURCE_FORMAT = "messages"
 #: handler by ``source_format``, so a second route for ``messages`` cannot be
 #: expressed there without breaking that invariant.
 COUNT_TOKENS_PATH = "/v1/messages/count_tokens"
+
+
+def _unknown_model_note(key_ctx: Any, config: GatewayConfig) -> str:
+    """The catalogue a 404 may name, or nothing for a key that may not see it."""
+    if not sees_every_model(key_ctx):
+        return ""
+    return f". Configured models: {', '.join(sorted(config.models.keys()))}"
 
 
 def _error(request_id: str, status: int, message: str) -> Response:
@@ -101,18 +108,25 @@ async def handle_messages_count_tokens(request: Any, config: GatewayConfig) -> R
     if not model:
         return _error(request_id, 400, "Missing 'model' in request body")
 
+    key_ctx = api_key_context_var.get()
+    # Counted tokens are read through a provider's key upstream, so the
+    # allowlist applies here too — a model the key may not call is not counted.
+    if not model_allowed(key_ctx, model):
+        return _error(
+            request_id, 403, f"This API key is not allowed to use model '{model}'"
+        )
+
     try:
         selection = config.selection_context(model, SOURCE_FORMAT)
     except KeyError:
         # Same wording as the chat route's 404 (``_resolve_or_error``): the
         # model is resolved here rather than in ``config.resolve``.
-        configured = ", ".join(sorted(config.models.keys()))
+        note = _unknown_model_note(key_ctx, config)
         return _error(
             request_id,
             404,
-            f"Unknown model: '{model}'. Configured models: {configured}",
+            f"Unknown model: '{model}'{note}",
         )
-    key_ctx = api_key_context_var.get()
     selection.with_client(key_ctx.key_hash if key_ctx else None)
     # A model with rules needs the request in IR form before the chain runs;
     # one without them never pays for the extra read leg.

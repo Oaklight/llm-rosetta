@@ -21,6 +21,19 @@ from . import _state
 logger = get_logger()
 
 
+def _visible(names: list[str]) -> list[str]:
+    """The names the requesting key may see.
+
+    A key scoped to a model reads the models it can call, not the deployment's
+    catalogue; a key without a scope reads all of them.  The same rule the
+    chat route enforces decides what a listing answers.
+    """
+    from ..middleware.auth import api_key_context_var
+    from .routes_llm import visible_models
+
+    return visible_models(api_key_context_var.get(), names)
+
+
 async def handle_list_models(request: Any) -> Response:
     """List configured models in a format compatible with OpenAI and Anthropic SDKs.
 
@@ -51,7 +64,7 @@ async def handle_list_models(request: Any) -> Response:
 
     # LLM models (main pool)
     if type_filter is None or type_filter == "llm":
-        for name in sorted(_state._config.models.keys()):
+        for name in _visible(sorted(_state._config.models.keys())):
             model_route = _state._config.models[name]
             provider_name = model_route.providers[0].name
             api_standard = _state._config.provider_types.get(provider_name, "unknown")
@@ -76,7 +89,7 @@ async def handle_list_models(request: Any) -> Response:
 
     # Embedding models
     if type_filter is None or type_filter == "embeddings":
-        for name in sorted(_state._config.embeddings_models.keys()):
+        for name in _visible(sorted(_state._config.embeddings_models.keys())):
             provider_name = _state._config.embeddings_models[name]
             api_standard = _state._config.provider_types.get(provider_name, "unknown")
             data.append(
@@ -95,7 +108,7 @@ async def handle_list_models(request: Any) -> Response:
 
     # Rerank models
     if type_filter is None or type_filter == "rerank":
-        for name in sorted(_state._config.rerank_models.keys()):
+        for name in _visible(sorted(_state._config.rerank_models.keys())):
             provider_name = _state._config.rerank_models[name]
             api_standard = _state._config.provider_types.get(provider_name, "unknown")
             data.append(
@@ -147,7 +160,7 @@ async def handle_list_models_google(request: Any) -> Response:
     models_list: list[dict[str, Any]] = []
 
     if type_filter is None or type_filter == "llm":
-        for name in sorted(_state._config.models.keys()):
+        for name in _visible(sorted(_state._config.models.keys())):
             models_list.append(
                 {
                     "name": f"models/{name}",
@@ -160,7 +173,7 @@ async def handle_list_models_google(request: Any) -> Response:
             )
 
     if type_filter is None or type_filter == "embeddings":
-        for name in sorted(_state._config.embeddings_models.keys()):
+        for name in _visible(sorted(_state._config.embeddings_models.keys())):
             models_list.append(
                 {
                     "name": f"models/{name}",
@@ -170,7 +183,7 @@ async def handle_list_models_google(request: Any) -> Response:
             )
 
     if type_filter is None or type_filter == "rerank":
-        for name in sorted(_state._config.rerank_models.keys()):
+        for name in _visible(sorted(_state._config.rerank_models.keys())):
             models_list.append(
                 {
                     "name": f"models/{name}",

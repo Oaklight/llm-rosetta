@@ -78,11 +78,17 @@ def _unknown_model_response(
     Google's status is ``NOT_FOUND``.
     """
     api_format = detect_api_format_from_provider(source_provider)
-    configured = ", ".join(sorted(config.models.keys()))
+    # The catalogue is only named to a key that may see it: a restricted key
+    # gets the bare 404, the same set its listing shows.
+    kctx = api_key_context_var.get()
+    visible = visible_models(kctx, sorted(config.models.keys()))
+    note = (
+        f". Configured models: {', '.join(visible)}" if sees_every_model(kctx) else ""
+    )
     resp = format_error_response(
         api_format,
         404,
-        f"Unknown model: '{model}'. Configured models: {configured}",
+        f"Unknown model: '{model}'{note}",
         error_type="not_found_error"
         if api_format == "anthropic"
         else "invalid_request_error",
@@ -206,7 +212,10 @@ def model_allowed(kctx: Any, model: str) -> bool:
     """Whether the authenticated key may call *model*.
 
     ``None`` (no key context: open deployment or the internal token) and a
-    context whose allowlist holds ``*`` are unrestricted.
+    context whose allowlist holds ``*`` are unrestricted.  An empty allowlist
+    allows nothing: it is what a damaged record reads as, and widening a key
+    on unreadable data would be the wrong direction for an authorization
+    control.
 
     Args:
         kctx: The request's :class:`KeyContext`, or None.
@@ -215,12 +224,41 @@ def model_allowed(kctx: Any, model: str) -> bool:
     Returns:
         True when the request may proceed.
     """
+    if sees_every_model(kctx):
+        return True
+    allowed = getattr(kctx, "allowed_models", None) or ()
+    return model in allowed
+
+
+def sees_every_model(kctx: Any) -> bool:
+    """Whether *kctx* is unscoped, so every model and the catalogue are its own.
+
+    Args:
+        kctx: The request's :class:`KeyContext`, or None.
+
+    Returns:
+        True for no key context, and for a key whose allowlist holds ``*``.
+    """
     if kctx is None:
         return True
     allowed = getattr(kctx, "allowed_models", None)
-    if not allowed or "*" in allowed:
-        return True
-    return model in allowed
+    return allowed is None or "*" in allowed
+
+
+def visible_models(kctx: Any, names: Any) -> list[str]:
+    """The model names *kctx* may see, in the order given.
+
+    A key scoped to one model has no reason to read the deployment's whole
+    catalogue, so the listings answer with what the key can call.
+
+    Args:
+        kctx: The request's :class:`KeyContext`, or None.
+        names: The model names the deployment serves.
+
+    Returns:
+        The names that survive the key's allowlist.
+    """
+    return [name for name in names if model_allowed(kctx, name)]
 
 
 async def _handle_llm(
@@ -258,8 +296,10 @@ async def _handle_llm(
     # identity will need it again once the request has been converted.
     _kctx = api_key_context_var.get()
     # A key may name the models it can call; `*` is every model the gateway
-    # serves.  Checked before the model lookup so a restricted key cannot use
-    # this route to discover the configured set.
+    # serves.  Checked before the model lookup so the refusal does not depend
+    # on the model existing — an unconfigured name is refused as surely as a
+    # configured one it may not use.  The listings and the 404 note answer the
+    # same allowlist, so the check is not the only place it applies.
     if not model_allowed(_kctx, model):
         resp = error_response_for_source(
             source_provider,

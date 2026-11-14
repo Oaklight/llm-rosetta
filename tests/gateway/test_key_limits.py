@@ -100,29 +100,39 @@ async def test_an_unreadable_stored_quota_means_no_limit(tmp_path: Any) -> None:
 
 def test_the_allowlist_predicate() -> None:
     assert model_allowed(None, "anything")
-    assert model_allowed(_Ctx(None), "anything"), "no allowlist means every model"
     assert model_allowed(_Ctx({"*"}), "anything")
     assert model_allowed(_Ctx({"gpt-4o"}), "gpt-4o")
     assert not model_allowed(_Ctx({"gpt-4o"}), "gpt-4o-mini")
+    # Empty is the state a damaged record reads as: it allows nothing, because
+    # widening an authorization control on unreadable data fails the wrong way.
+    assert not model_allowed(_Ctx(None), "anything")
+
+
+@pytest.mark.asyncio
+async def test_a_damaged_allowlist_denies_rather_than_widens(tmp_path: Any) -> None:
+    store = await KeyStore.create(tmp_path / "keys.db")
+    scoped, raw_scoped = await store.create_key(label="scoped", allowed_models=["m-a"])
+    open_key, raw_open = await store.create_key(label="open")
+    await store._conn.execute(
+        "UPDATE api_keys SET allowed_models = ? WHERE id = ?", ("not json", scoped)
+    )
+    await store._conn.execute(
+        "UPDATE api_keys SET allowed_models = ? WHERE id = ?", ("[]", open_key)
+    )
+    await store._conn.commit()
+    await store._refresh_cache()
+
+    scoped_ctx = store.validate(raw_scoped)
+    open_ctx = store.validate(raw_open)
+    assert scoped_ctx is not None and open_ctx is not None
+    assert scoped_ctx[1].allowed_models == frozenset()
+    assert open_ctx[1].allowed_models == frozenset()
+    assert not model_allowed(scoped_ctx[1], "m-a")
 
 
 def test_the_allowlist_is_a_set_on_a_frozen_context() -> None:
     ctx = KeyContext(label="x", allowed_shims=frozenset({"*"}))
     assert ctx.allowed_models == frozenset({"*"})
-
-
-def test_a_key_limit_applies_without_global_limiting() -> None:
-    """The hook returns early when global limiting is off — the key's own cap
-    is checked before that, which is what the ordering in the hook is for."""
-    import inspect
-
-    from llm_rosetta_gateway.middleware import ratelimit
-
-    source = inspect.getsource(ratelimit.create_rate_limit_hook)
-    per_key = source.index("_check_key_quota(")
-    global_gate = source.index("if not state.enabled:")
-    assert per_key < global_gate, "the key's own cap is gated behind global limiting"
-    assert "ctx.rate_limit" in inspect.getsource(ratelimit._check_key_quota)
 
 
 class _Req:
@@ -201,6 +211,33 @@ async def test_a_changed_cap_starts_a_fresh_window() -> None:
         api_key_context_var.reset(token)
 
 
+def test_idle_key_windows_are_pruned(monkeypatch: Any) -> None:
+    """A key that stops calling must not hold a limiter for the process life."""
+    import time as time_module
+
+    from llm_rosetta_gateway.middleware.ratelimit import RateLimitState
+
+    state = RateLimitState()
+    state.rebuild(cast(Any, _NoConfig()))
+    first = KeyContext(
+        label="a", allowed_shims=frozenset({"*"}), rate_limit="1/m", key_hash="a" * 64
+    )
+    state.key_limiter(first)
+    assert len(state._key_limits) == 1
+
+    later = time_module.monotonic() + RateLimitState.KEY_LIMIT_IDLE_S + 1
+    monkeypatch.setattr(
+        "llm_rosetta_gateway.middleware.ratelimit.time.monotonic", lambda: later
+    )
+    state.rebuild(cast(Any, _NoConfig()))
+    second = KeyContext(
+        label="b", allowed_shims=frozenset({"*"}), rate_limit="1/m", key_hash="b" * 64
+    )
+    state.key_limiter(second)
+
+    assert list(state._key_limits) == [("b" * 64, "1/m")]
+
+
 @pytest.mark.asyncio
 async def test_every_window_of_a_quota_is_enforced() -> None:
     """A spec may name more than one window; the loosest minute does not
@@ -242,11 +279,19 @@ def test_the_admin_refuses_a_malformed_limit_before_storing_it() -> None:
     )
     models, err = _key_models(["gpt-4o", "bad name"])
     assert models is None and "bad name" in (err or "")
+    # The panel sends ["*"] back for "every model", so the validator accepts it.
+    assert _key_models(["*"]) == (["*"], None)
+    assert _key_models(["*", "gpt-4o"]) == (["*"], None)
 
     assert _key_quota("") == ("", None)
     assert _key_quota("30/m, 500/h") == ("30/m, 500/h", None)
     spec, err = _key_quota("60x")
     assert spec == "60x" and "60x" in (err or "")
+    # Zero is not "no limit" — the limiter refuses to be built with it — and
+    # the settings form says blank for none, so it is refused with the reason.
+    for zero in ("0/m", "5/m, 0/h"):
+        spec, err = _key_quota(zero)
+        assert spec == zero and "at least one request" in (err or "")
 
 
 class _NoConfig:

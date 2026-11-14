@@ -41,11 +41,18 @@ from ..middleware.headers import build_upstream_extra_headers, get_request_id
 from ..transport import UpstreamConnectionError, UpstreamTimeoutError
 
 from . import _state
-from .routes_llm import _resolve_or_error
+from .routes_llm import _resolve_or_error, model_allowed, sees_every_model
 
 logger = get_logger()
 
 SOURCE_FORMAT = "open_responses"
+
+
+def _unknown_model_note(key_ctx: Any, config: GatewayConfig) -> str:
+    """The catalogue a 404 may name, or nothing for a key that may not see it."""
+    if not sees_every_model(key_ctx):
+        return ""
+    return f". Configured models: {', '.join(sorted(config.models.keys()))}"
 
 
 def _error(request_id: str, status: int, message: str, error_type: str) -> Response:
@@ -133,19 +140,29 @@ async def handle_responses_compact(request: Any, config: GatewayConfig) -> Respo
             "invalid_request_error",
         )
 
+    key_ctx = api_key_context_var.get()
+    # The same allowlist the chat route enforces: this route relays a
+    # compaction upstream, so a model it may not call must not be compacted.
+    if not model_allowed(key_ctx, model):
+        return _error(
+            request_id,
+            403,
+            f"This API key is not allowed to use model '{model}'",
+            "permission_error",
+        )
+
     try:
         selection = config.selection_context(model, SOURCE_FORMAT)
     except KeyError:
         # Same wording as the chat route's 404 (``_resolve_or_error``): the
         # model is resolved here rather than in ``config.resolve``.
-        configured = ", ".join(sorted(config.models.keys()))
+        note = _unknown_model_note(key_ctx, config)
         return _error(
             request_id,
             404,
-            f"Unknown model: '{model}'. Configured models: {configured}",
+            f"Unknown model: '{model}'{note}",
             "model_not_found",
         )
-    key_ctx = api_key_context_var.get()
     selection.with_client(key_ctx.key_hash if key_ctx else None)
     # A model with rules needs the request in IR form before the chain runs;
     # one without them never pays for the extra read leg.
