@@ -15,6 +15,7 @@ stored without being parsed.
 
 from __future__ import annotations
 
+import time
 from typing import Any, cast
 
 import pytest
@@ -236,6 +237,41 @@ def test_idle_key_windows_are_pruned(monkeypatch: Any) -> None:
     state.key_limiter(second)
 
     assert list(state._key_limits) == [("b" * 64, "1/m")]
+
+
+def test_pruning_keeps_a_window_that_is_still_open(monkeypatch: Any) -> None:
+    """A ``2/d`` key idles for most of its window; pruning must not hand the
+    day's allowance back to it."""
+    from llm_rosetta_gateway.middleware.ratelimit import RateLimitState
+
+    state = RateLimitState()
+    state.rebuild(cast(Any, _NoConfig()))
+    start = time.monotonic()
+    daily = KeyContext(
+        label="daily",
+        allowed_shims=frozenset({"*"}),
+        rate_limit="2/d",
+        key_hash="d" * 64,
+    )
+    limiter = state.key_limiter(daily)
+    assert limiter.acquire("caller").allowed
+    assert limiter.acquire("caller").allowed
+    assert not limiter.acquire("caller").allowed
+
+    # Two hours pass and another key shows up: the prune runs, and the day
+    # window is still open.
+    monkeypatch.setattr(time, "monotonic", lambda: start + 7200)
+    state.key_limiter(
+        KeyContext(
+            label="other",
+            allowed_shims=frozenset({"*"}),
+            rate_limit="1/m",
+            key_hash="o" * 64,
+        )
+    )
+
+    assert ("d" * 64, "2/d") in state._key_limits, "an open day window is kept"
+    assert not state.key_limiter(daily).acquire("caller").allowed, "the cap holds"
 
 
 @pytest.mark.asyncio

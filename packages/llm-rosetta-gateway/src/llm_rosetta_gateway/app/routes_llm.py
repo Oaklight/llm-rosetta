@@ -80,11 +80,7 @@ def _unknown_model_response(
     api_format = detect_api_format_from_provider(source_provider)
     # The catalogue is only named to a key that may see it: a restricted key
     # gets the bare 404, the same set its listing shows.
-    kctx = api_key_context_var.get()
-    visible = visible_models(kctx, sorted(config.models.keys()))
-    note = (
-        f". Configured models: {', '.join(visible)}" if sees_every_model(kctx) else ""
-    )
+    note = unknown_model_note(api_key_context_var.get(), config)
     resp = format_error_response(
         api_format,
         404,
@@ -228,6 +224,21 @@ def model_allowed(kctx: Any, model: str) -> bool:
         return True
     allowed = getattr(kctx, "allowed_models", None) or ()
     return model in allowed
+
+
+def unknown_model_note(kctx: Any, config: GatewayConfig) -> str:
+    """The catalogue a 404 may name, or nothing for a key that may not see it.
+
+    Args:
+        kctx: The request's :class:`KeyContext`, or None.
+        config: The gateway config, whose models are the catalogue.
+
+    Returns:
+        ``". Configured models: …"`` for an unscoped key, ``""`` otherwise.
+    """
+    if not sees_every_model(kctx):
+        return ""
+    return f". Configured models: {', '.join(sorted(config.models.keys()))}"
 
 
 def sees_every_model(kctx: Any) -> bool:
