@@ -155,11 +155,33 @@ committed. `simplify_path.py --incisions FILE` cuts the mark with it: the data
 becomes a `<mask>` the polygon is filled through, so the grooves show whatever
 the file sits on instead of a colour that only matches one background, and they
 follow the mark because they live in the same user space as the outline. The
-page has the same thing behind 碑文: load the layer, tick 显示碑文, and it follows
-the deformation and the framing, clipped to the outline. It is memory-only —
-a reload asks for the file again, and it is not written into the draft, which
-would blow the `localStorage` quota. At icon sizes the carving reads as
-texture, not as letters.
+page has the same thing behind 碑文: paste a URL (the Commons file serves
+`access-control-allow-origin: *`, so the original loads straight from Wikimedia,
+and a jsDelivr mirror works if the file is published to GitHub instead) or pick
+a local file, tick 显示碑文, and the carving follows the deformation and the
+framing, clipped to the outline — on the canvas and on every size preview. The
+outline is taken as the *first* path of the source, because the longest one is
+a carved glyph; a layer written by `incisions.py` has a single path and is used
+as it is. The layer is memory-only: a reload asks for it again, and it is not
+written into the draft, which would blow the `localStorage` quota. At icon sizes
+the carving reads as texture, not as letters.
+
+Reduction is for the cases where 5.8 MB is too much. Measured on the 8.2 MB
+source, 22,149 marks:
+
+| flags | layer | marks |
+| --- | --- | --- |
+| *(none)* | 5.82 MB | 22,149 |
+| `--simplify 5` | 1.72 MB | 22,149, each outline cut to 5 vertices |
+| `--step 3` | 1.92 MB | 7,383 |
+| `--min-area 0.5` | 4.90 MB | 12,655 |
+| `--abstract` | 0.68 MB | 22,149, each mark a square of equal area |
+| `--abstract --step 3` | 0.23 MB | 7,383 |
+
+`--abstract` gives up the glyph shapes and keeps their mass and position, which
+is what survives at 16–64 px; `--simplify` keeps the shapes and cuts the
+vertices, which is what a large rendering needs. `--min-area` and `--step` trim
+marks and combine with either.
 
 ```bash
 cd design/logo
