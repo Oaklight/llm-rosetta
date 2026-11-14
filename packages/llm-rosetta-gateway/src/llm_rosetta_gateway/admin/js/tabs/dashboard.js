@@ -9,6 +9,7 @@ import { pageCount, clampPage, shouldResync } from '../core/pagination.js';
 import { dumpQuery, dumpStatusValue } from '../core/dump-query.js';
 import { jsArg } from '../core/html.js';
 import { api, _adminHeaders, showToast, esc, formatDuration, openModal, closeModal, fmtBytesShort, fmtBytesLong, fmtTokens, copyText } from '../core/utils.js';
+import { capClass } from '../core/status-ink.js';
 
 // ===================== Metrics =====================
 
@@ -818,9 +819,14 @@ function _dumpPageMetaRow(label, value, cls) {
   return cell;
 }
 
+// Two callers can open the page for the same hash (the route apply and the
+// dump list itself); only the newest answer may paint.
+let _dumpPageSeq = 0;
+
 async function openDumpPage(dumpId) {
   const page = document.getElementById('dumpPage');
   if (!page) return;
+  const seq = ++_dumpPageSeq;
   page.hidden = false;
   const title = document.getElementById('dumpPageTitle');
   const meta = document.getElementById('dumpPageMeta');
@@ -828,9 +834,14 @@ async function openDumpPage(dumpId) {
   title.textContent = dumpId;
   meta.replaceChildren();
   body.replaceChildren();
+  // A failed fetch must not leave the previous dump's actions live: they act
+  // on `_dumpPageEntry`, which would still be the dump opened before.
+  _dumpPageEntry = null;
+  _setDumpActions(false);
   document.title = t('dump.pageTitle', {id: dumpId});
   try {
     const e = await api.get(`/admin/api/error-dumps/${encodeURIComponent(dumpId)}`);
+    if (seq !== _dumpPageSeq) return;
     _dumpPageEntry = e;
     meta.replaceChildren(
       _dumpPageMetaRow(t('dump.metaModel'), e.model),
@@ -873,11 +884,52 @@ async function openDumpPage(dumpId) {
         mime: json ? 'application/json' : 'text/plain',
       }));
     }
+    _setDumpActions(true);
     const logBtn = document.getElementById('dumpPageLogBtn');
     if (logBtn) logBtn.disabled = !e.request_log_id;
   } catch (err) {
-    body.appendChild(_dumpPageSection(t('dump.notFound'), String(err && err.message || err), {cls: 'is-error'}));
+    if (seq !== _dumpPageSeq) return;
+    // An id that does not exist is an empty result, not a dump with an error
+    // in it: the body is the panel's empty state and the actions stay off
+    // (§13 of #1502).
+    body.appendChild(_dumpPageMissing(String(err && err.message || err)));
   }
+}
+
+/**
+ * Turn the dump page's actions on or off.
+ *
+ * @param {boolean} on Whether there is a dump for them to act on.
+ */
+function _setDumpActions(on) {
+  for (const id of ['dumpPageCopyBtn', 'dumpPageDownloadBtn', 'dumpPageLogBtn']) {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = !on;
+  }
+}
+
+/**
+ * The body of a dump page whose id resolved to nothing.
+ *
+ * @param {string} detail The server's message, shown as the hint line.
+ * @returns {HTMLElement}
+ */
+function _dumpPageMissing(detail) {
+  const box = document.createElement('div');
+  box.className = 'empty';
+  const text = document.createElement('p');
+  text.className = 'empty-text';
+  text.textContent = t('dump.notFound');
+  const hint = document.createElement('p');
+  hint.className = 'hint';
+  hint.textContent = detail;
+  const back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'btn btn-sm';
+  back.textContent = t('btn.back');
+  back.addEventListener('click', exitDumpPage);
+  box.append(text, hint, back);
+  return box;
 }
 
 /** Hide the dump page.  Navigation is the caller's business: the tab strip
@@ -1155,14 +1207,13 @@ function renderPersistence(p, totalReq) {
   const dumpCap = p.dump_max || 0;
   const successPct = successCap > 0 ? Math.round((successN / successCap) * 100) : 0;
   const dumpPct = dumpCap > 0 ? Math.round((dumpN / dumpCap) * 100) : 0;
-  const pctClass = (pct) => pct >= 95 ? 'crit' : (pct >= 75 ? 'warn' : '');
   const fmtN = (n) => Number.isFinite(n) ? n.toLocaleString() : '–';
 
   el.innerHTML = `
     <span class="seg seg-req" title="${t('footer.tip.req')}"><span class="k">${t('footer.req')}</span><span class="v">${fmtN(totalReq)}</span></span>
-    <span class="seg seg-ok" title="${t('footer.tip.ok')}"><span class="k">${t('footer.ok')}</span><span class="v ${pctClass(successPct)}">${successN}/${successCap} (${successPct}%)</span></span>
+    <span class="seg seg-ok" title="${t('footer.tip.ok')}"><span class="k">${t('footer.ok')}</span><span class="v ${capClass(successN, successCap)}">${successN}/${successCap} (${successPct}%)</span></span>
     <span class="seg seg-err" title="${t('footer.tip.err')}"><span class="k">${t('footer.err')}</span><span class="v">${fmtN(errorN)}</span></span>
-    <span class="seg seg-dumps" title="${t('footer.tip.dumps')}"><span class="k">${t('footer.dumps')}</span><span class="v ${pctClass(dumpPct)}">${dumpN}/${dumpCap} (${dumpPct}%)</span></span>
+    <span class="seg seg-dumps" title="${t('footer.tip.dumps')}"><span class="k">${t('footer.dumps')}</span><span class="v ${capClass(dumpN, dumpCap)}">${dumpN}/${dumpCap} (${dumpPct}%)</span></span>
     <span class="seg seg-db" title="${t('footer.tip.db')}"><span class="k">${t('footer.db')}</span><span class="v">${fmtBytesShort(p.db_bytes)}</span></span>
     <span class="seg seg-wal" title="${t('footer.tip.wal')}"><span class="k">WAL</span><span class="v">${fmtBytesShort(p.wal_bytes)}</span></span>
   `;
