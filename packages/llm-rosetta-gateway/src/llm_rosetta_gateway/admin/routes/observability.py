@@ -472,9 +472,8 @@ def _dump_status_bounds(request: Any) -> tuple[int | None, int | None]:
 def _dump_filters(request: Any) -> dict[str, Any]:
     """Read the error-dump filters shared by the list and id reads.
 
-    The tar.gz export route parses ``start``/``end`` itself: it is a
-    date-range download that also walks the body blobs, so it is not one of
-    the reads below.
+    The tar.gz export route applies the same filters to its own walk of the
+    body blobs, so a filtered list and its export hold the same rows.
 
     Raises:
         ValueError: If a bound is not parseable; callers answer 400.
@@ -770,10 +769,12 @@ async def export_error_dumps(request: Any) -> Response:
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
-    start = _qp(request, "start")
-    end = _qp(request, "end")
+    try:
+        filters = _dump_filters(request)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
-    data = await persistence.export_error_dumps(start=start, end=end)
+    data = await persistence.export_error_dumps(**filters)
 
     return Response(
         body=data,
