@@ -430,19 +430,35 @@ def _cmd_db_export_errors(args: argparse.Namespace) -> None:
     start = f"{args.start}T00:00:00Z" if args.start else None
     end = f"{args.end}T23:59:59Z" if args.end else None
 
-    async def _do_export() -> bytes:
+    output = args.output or "error-dumps.tar.gz"
+    partial = f"{output}.part"
+
+    async def _do_export() -> int:
         pm = await PersistenceManager.create(data_dir)
+        written = 0
         try:
-            return await pm.export_error_dumps(start=start, end=end)
+            # Written as it is read, so the archive of a large store never
+            # sits in memory — the same reason the admin route streams it.
+            # The archive lands in *output* only once its last chunk is
+            # written, so a failed export leaves no half archive behind.
+            with open(partial, "wb") as f:
+                async for chunk in pm.iter_export_error_dumps(start=start, end=end):
+                    f.write(chunk)
+                    written += len(chunk)
         finally:
             await pm.close()
+        return written
 
-    data = asyncio.run(_do_export())
-
-    output = args.output or "error-dumps.tar.gz"
-    with open(output, "wb") as f:
-        f.write(data)
-    print(f"Exported {len(data)} bytes to {output}")
+    try:
+        written = asyncio.run(_do_export())
+    except BaseException:
+        try:
+            os.remove(partial)
+        except OSError:
+            pass
+        raise
+    os.replace(partial, output)
+    print(f"Exported {written} bytes to {output}")
 
 
 def _cmd_shims_preset(args: argparse.Namespace) -> None:

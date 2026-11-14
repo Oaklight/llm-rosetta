@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpclient import AsyncClient, Response as HttpResponse
-from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway._vendor.httpserver import (
+    JSONResponse,
+    Response,
+    StreamingResponse,
+)
 
 from ...config import GatewayConfig
 from ._shared import _qp, parse_json_body
@@ -763,8 +768,8 @@ async def cleanup_error_dumps_by_age(request: Any) -> Response:
     )
 
 
-async def export_error_dumps(request: Any) -> Response:
-    """Export error dumps in a date range as tar.gz."""
+async def export_error_dumps(request: Any) -> Response | StreamingResponse:
+    """Export error dumps in a date range as a streamed tar.gz."""
     persistence = getattr(request.app, "persistence", None)
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
@@ -774,10 +779,36 @@ async def export_error_dumps(request: Any) -> Response:
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
 
-    data = await persistence.export_error_dumps(**filters)
+    # The rows are read while the archive is being sent, so a store failure
+    # most of the way through truncates the download.  Priming the generator
+    # runs the first read — the metadata page — inside the handler, where
+    # the server still answers a JSON 500.
+    stream = persistence.iter_export_error_dumps(**filters)
+    try:
+        first = await anext(stream)
+    except StopAsyncIteration:  # pragma: no cover - an archive has a trailer
+        first = b""
 
-    return Response(
-        body=data,
+    async def _chunks() -> AsyncIterator[bytes]:
+        # The transport's only cleanup is ``aclose()`` on the generator it
+        # was handed — this wrapper.  Closing the wrapper raises
+        # ``GeneratorExit`` at its own ``yield`` and leaves ``stream``
+        # suspended, so the archive's ``finally`` never runs and the frame
+        # keeps the last body and the open gzip encoder until shutdown.
+        # Closing the inner iterator is what makes the store's promise true.
+        try:
+            if first:
+                yield first
+            # A failure after the first chunk can only truncate what was
+            # already sent; the browser reports the download as failed
+            # (an incomplete chunked body rejects ``r.blob()``).
+            async for chunk in stream:
+                yield chunk
+        finally:
+            await stream.aclose()
+
+    return StreamingResponse(
+        _chunks(),
         status_code=200,
         content_type="application/gzip",
         headers={"Content-Disposition": "attachment; filename=error-dumps.tar.gz"},
