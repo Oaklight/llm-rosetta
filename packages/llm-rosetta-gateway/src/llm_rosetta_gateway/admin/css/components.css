@@ -693,10 +693,15 @@ tr:hover td { background: var(--bg-hover); }
 }
 .toggle .slider::before {
   content: ''; position: absolute; height: 12px; width: 12px;
-  left: 4px; bottom: 4px; background: #fff; border-radius: 2px; transition: transform .2s;
+  left: 4px; bottom: 4px; background: var(--text-dim); border-radius: 2px; transition: transform .2s;
 }
 .toggle input:checked + .slider { background: var(--accent); }
-.toggle input:checked + .slider::before { transform: translateX(16px); }
+/* The knob is the track's contrast colour, not a fixed white: in dark mode
+   the accent is near-white, so a white knob on the checked track measured
+   1.15:1 and the switch read as one pale blob (#1502 §13). */
+.toggle input:checked + .slider::before {
+  background: var(--accent-on); transform: translateX(16px);
+}
 .toggle input:focus-visible + .slider { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent); }
 .toggle.is-sm { width: 32px; height: 18px; }
 .toggle.is-sm .slider::before { height: 10px; width: 10px; }
