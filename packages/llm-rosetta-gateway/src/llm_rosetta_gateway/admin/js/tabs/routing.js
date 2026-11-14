@@ -10,6 +10,7 @@ import { t } from '../core/i18n.js';
 import { api, esc, showToast } from '../core/utils.js';
 import { ROUTING_PRESETS, matchPreset, presetBlock } from '../core/routing-presets.js';
 import { laneGripHtml, laneSwitchHtml } from '../components/provider-row.js';
+import { providerLogoHtml } from '../components/provider-picker.js';
 import { loadConfig } from './providers.js';
 
 let _data = null;
@@ -413,7 +414,9 @@ function _renderBoard() {
         data: 'data-lane="' + esc(provider.name) + '"',
         extraClass: 'routing-switch',
       }) +
-      '<span class="routing-lane-id"><b>' + esc(provider.name) + '</b>' +
+      '<span class="routing-lane-id"><span class="routing-lane-name">' +
+      providerLogoHtml(provider.name, 'pm-logo') +
+      '<b>' + esc(provider.name) + '</b></span>' +
       '<small title="' + esc(_laneSub(provider)) + '">' + esc(_laneSub(provider)) + '</small></span></span>' +
       '<span class="routing-stepper">' +
       // A weight only means something between lanes: a model with one
