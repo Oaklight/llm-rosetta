@@ -34,6 +34,12 @@ function _getModelType(info) {
 }
 
 /** Look up the badge CSS class for a model type from registry metadata. */
+/** The provider's logo, for a lane row; empty when the provider has none. */
+function _pmLogo(name) {
+  const logo = _providerLogo(name);
+  return logo ? `<img class="pm-logo" src="${esc(logo)}" alt="">` : '';
+}
+
 function _typeBadgeClass(typeName) {
   const types = (S.configData && S.configData.model_types) || [];
   const desc = types.find(t => t.name === typeName);
@@ -610,7 +616,7 @@ function _renderProviderCell(name, info, disabledProviders) {
     const p = details[0] || {name: ''};
     // No "(Disabled)" word: the dimmed cell and the switch already say it, and
     // the word is what squeezes a long provider name into the switch.
-    return `<span class="provider-link" title="${esc(p.name)}" onclick="goToProviderFromModel(${jsArg(p.name)})">${esc(_providerLabel(p.name))}</span>`;
+    return `<span class="provider-link provider-link-logo" title="${esc(p.name)}" onclick="goToProviderFromModel(${jsArg(p.name)})">${_pmLogo(p.name)}<span>${esc(_providerLabel(p.name))}</span></span>`;
   }
   const live = details.filter(p => !_providerEntryOff(p, disabledProviders)).length;
   return `<button class="btn btn-sm provider-multi-btn" aria-haspopup="true" aria-expanded="false" onclick="toggleProviderMenu(this,${jsArg(name)})">
@@ -744,7 +750,7 @@ function _providerMenuRows(name, info, disabledProviders) {
         onchange: `toggleModelProvider(${jsArg(name)},${jsArg(p.name)},${jsArg(upstream)})`,
       })}
       <div class="pm-id">
-        <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel(${jsArg(p.name)})">${esc(_providerLabel(p.name))}</span>
+        <span class="pm-idline">${_pmLogo(p.name)}<span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel(${jsArg(p.name)})">${esc(_providerLabel(p.name))}</span></span>
         <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
       </div>
       ${modelType === 'llm'
@@ -873,7 +879,7 @@ function _detailProviderRows(name, info, disabledProviders) {
   const off = _providerEntryOff(p, disabledProviders);
   return `<div class="provider-menu-row pd-single${off ? ' pm-off' : ''}">
       <span class="pm-id">
-        <span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel(${jsArg(p.name)})">${esc(_providerLabel(p.name))}</span>
+        <span class="pm-idline">${_pmLogo(p.name)}<span class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel(${jsArg(p.name)})">${esc(_providerLabel(p.name))}</span></span>
         <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
       </span>
       ${_testGroup(name, modelType, opts, p.name)}
