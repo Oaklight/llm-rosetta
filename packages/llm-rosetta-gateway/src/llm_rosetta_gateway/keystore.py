@@ -32,6 +32,13 @@ _DB_FILENAME = "keys.db"
 #: description, statements)`` — the same table shape the request log keeps, so
 #: there is one way to read a store's history in this codebase.  The statements
 #: are applied by the steps in
+#: The columns the v5 rebuild carries across: everything the store keeps, which
+#: is every column but the one being dropped.
+_REBUILD_COLUMNS = (
+    "id, key_hash, label, created, rotated, last_used, usage_bucket, "
+    "allowed_models, rate_limit"
+)
+
 #: :mod:`~llm_rosetta_gateway.maintenance.keystore`, which also records them in
 #: this store's ``schema_version`` ledger.
 VERSIONS: list[tuple[int, str, list[str]]] = [
@@ -75,10 +82,8 @@ VERSIONS: list[tuple[int, str, list[str]]] = [
                 allowed_models TEXT NOT NULL DEFAULT '["*"]',
                 rate_limit  TEXT NOT NULL DEFAULT ''
             )""",
-            "INSERT INTO api_keys_v5 (id, key_hash, label, created, rotated, "
-            "last_used, usage_bucket, allowed_models, rate_limit) "
-            "SELECT id, key_hash, label, created, rotated, last_used, "
-            "usage_bucket, allowed_models, rate_limit FROM api_keys",
+            f"INSERT INTO api_keys_v5 ({_REBUILD_COLUMNS}) "
+            f"SELECT {_REBUILD_COLUMNS} FROM api_keys",
             "DROP TABLE api_keys",
             "ALTER TABLE api_keys_v5 RENAME TO api_keys",
         ],

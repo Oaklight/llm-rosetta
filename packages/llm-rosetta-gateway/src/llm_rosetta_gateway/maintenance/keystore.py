@@ -160,6 +160,8 @@ async def _apply_migration(
         return 0
     logger.info("Applying keys.db migration v%d: %s", version, description)
     columns = await _columns(conn)
+    if drops is not None:
+        await _restore_stranded_rebuild(conn)
     if drops is not None and drops not in columns:
         # A store this code created never had the column, so the version's
         # work is already done; only the ledger row is missing.
@@ -190,6 +192,39 @@ async def _apply_migration(
         raise
     logger.info("Keys.db migration v%d applied", version)
     return executed + 1
+
+
+async def _restore_stranded_rebuild(conn: Any) -> int:
+    """Put back keys an interrupted rebuild left in its scratch table.
+
+    The rebuild is one transaction now, so this state can only come from a
+    file written by a build before that was true: the copy reached the scratch
+    table, the live table was dropped, and the process died before the rename.
+    The next open then saw an empty table with no column and called v5 done.
+    Restoring is the difference between a manual ``INSERT … SELECT`` and a
+    gateway that serves nothing.
+    """
+    from ..keystore import _REBUILD_COLUMNS
+
+    cursor = await conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = {row[0] for row in await cursor.fetchall()}
+    if "api_keys_v5" not in tables:
+        return 0
+    live = await conn.execute_fetchone("SELECT COUNT(*) FROM api_keys")
+    orphan = await conn.execute_fetchone("SELECT COUNT(*) FROM api_keys_v5")
+    live_rows = live[0] if live else 0
+    orphan_rows = orphan[0] if orphan else 0
+    if live_rows or not orphan_rows:
+        return 0
+    await conn.execute(
+        f"INSERT INTO api_keys ({_REBUILD_COLUMNS}) "
+        f"SELECT {_REBUILD_COLUMNS} FROM api_keys_v5"
+    )
+    await conn.commit()
+    logger.warning(
+        "Restored %d key(s) an interrupted rebuild left in api_keys_v5", orphan_rows
+    )
+    return orphan_rows
 
 
 async def _run_statements(conn: Any, statements: list[str], columns: set[str]) -> int:
