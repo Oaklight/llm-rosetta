@@ -590,3 +590,143 @@ def test_preflight_resolves_env_placeholders_without_touching_the_document(
     assert _config_preflight_error(data) is None
     # The saved file keeps the placeholder.
     assert data["providers"]["p"]["timeout"] == "${UPSTREAM_TIMEOUT}"
+
+
+class TestExchangeAuthFields:
+    """The setup inputs an exchange declares live in the entry.
+
+    They are stored beside the key so one Save writes both — the panel used to
+    put them in a separate record, which made "save, then enter, then save
+    again" a required order.
+    """
+
+    def test_the_declared_fields_are_stored_on_the_entry(self):
+        entry = _save(
+            {
+                "type": "asksage--open_responses",
+                "base_url": "https://api.asksage.anl.gov/server/openai/v1",
+                "api_key": "k",
+                "auth_fields": {"email": "user@example.gov"},
+            }
+        )
+
+        assert entry["auth_fields"] == {"email": "user@example.gov"}
+
+    def test_a_key_that_is_not_an_identifier_is_refused(self):
+        """Dropping it stored the rest and reloaded without the bad key, so the
+        operator saw a save succeed and the value they typed gone."""
+        with pytest.raises(ValueError, match="not usable"):
+            _save(
+                {
+                    "type": "asksage--open_responses",
+                    "base_url": "https://api.example/v1",
+                    "api_key": "k",
+                    "auth_fields": {"../etc": "x", "email": "ok@example.gov"},
+                }
+            )
+
+    def test_a_non_string_value_is_refused(self):
+        with pytest.raises(ValueError, match="must be a string"):
+            _save(
+                {
+                    "type": "asksage--open_responses",
+                    "base_url": "https://api.example/v1",
+                    "api_key": "k",
+                    "auth_fields": {"email": {"nested": 1}},
+                }
+            )
+
+    def test_an_over_long_value_is_refused_not_truncated(self):
+        """A clipped credential fails at the vendor with no trace of why."""
+        with pytest.raises(ValueError, match="at most 200"):
+            _save(
+                {
+                    "type": "asksage--open_responses",
+                    "base_url": "https://api.example/v1",
+                    "api_key": "k",
+                    "auth_fields": {"email": "x" * 201},
+                }
+            )
+
+    def test_more_keys_than_the_schema_allows_is_refused(self):
+        with pytest.raises(ValueError, match="at most 8"):
+            _save(
+                {
+                    "type": "asksage--open_responses",
+                    "base_url": "https://api.example/v1",
+                    "api_key": "k",
+                    "auth_fields": {f"f{n}": "v" for n in range(9)},
+                }
+            )
+
+    def test_an_empty_object_clears_them(self):
+        stored = {
+            "type": "asksage--open_responses",
+            "base_url": "https://api.example/v1",
+            "api_key": "k",
+            "auth_fields": {"email": "old@example.gov"},
+        }
+
+        entry = _save(
+            {
+                "type": "asksage--open_responses",
+                "base_url": "https://api.example/v1",
+                "api_key": "k",
+                "auth_fields": {},
+            },
+            existing={"p": stored},
+            name="p",
+        )
+
+        assert "auth_fields" not in entry
+
+    def test_an_ordinary_save_keeps_them(self):
+        """The editor sends them on every save, but a client that omits them
+        must not wipe what is stored."""
+        stored = {
+            "type": "asksage--open_responses",
+            "base_url": "https://api.example/v1",
+            "api_key": "k",
+            "auth_fields": {"email": "old@example.gov"},
+        }
+
+        entry = _save(
+            {
+                "type": "asksage--open_responses",
+                "base_url": "https://api.example/v1",
+                "api_key": "k",
+            },
+            existing={"p": stored},
+            name="p",
+        )
+
+        assert entry["auth_fields"] == {"email": "old@example.gov"}
+
+
+@pytest.mark.asyncio
+async def test_a_setup_input_the_entry_cannot_hold_is_a_400(tmp_path):
+    """The refusal reaches the operator, and the file is not touched.
+
+    ``_build_provider_entry`` refuses instead of repairing, so the save route
+    has to turn that refusal into a 400 — an uncaught ``ValueError`` is a 500
+    and says nothing about the field.
+    """
+    from llm_rosetta_gateway.admin.routes.config.providers import put_provider
+
+    raw = {"providers": {}, "models": {}}
+    request = _save_request(
+        tmp_path,
+        raw,
+        {
+            "type": "openai",
+            "base_url": "https://api.example/v1",
+            "api_key": "sk-x",
+            "auth_fields": {"email": "x" * 201},
+        },
+    )
+
+    response = await put_provider(request)
+
+    assert response.status_code == 400
+    assert b"auth_fields" in response.body
+    assert _saved_file(request)["providers"] == {}

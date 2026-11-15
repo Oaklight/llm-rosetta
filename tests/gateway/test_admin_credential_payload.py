@@ -193,6 +193,79 @@ class TestTheConfigPayload:
         assert entry["credential_source"] == "auth_exchange"
 
 
+class TestTheDeclaredSetupFields:
+    """The credential form's inputs travel from the shim, not from the panel.
+
+    A shim states them in ``provider.yaml``; the payload reports them in the
+    shape the form renders, so changing the form for every vendor is a change
+    to the YAML rather than a gateway release.
+    """
+
+    def test_a_shim_declaration_reaches_the_payload(self, monkeypatch, tmp_path):
+        from llm_rosetta.shims.providers import load_providers_from_dir
+
+        vendor = tmp_path / "acme"
+        (vendor / "llm").mkdir(parents=True)
+        (vendor / "provider.yaml").write_text(
+            "fields:\n  - key: email\n    label: Account email\n    required: true\n"
+        )
+        (vendor / "llm" / "provider.yaml").write_text(
+            "name: acme--chat_completions\nmodel_type: llm\nformat: chat_completions\n"
+        )
+        shim = load_providers_from_dir(tmp_path)[0]
+
+        from llm_rosetta_gateway.admin.routes.config import payload
+
+        monkeypatch.setattr(payload, "list_shims", lambda: [shim])
+        body = TestTheConfigPayload()._payload(
+            monkeypatch, SimpleNamespace(providers={})
+        )
+
+        assert body["registered_shims"][0]["fields"] == [
+            {"key": "email", "label": "Account email", "required": True}
+        ]
+
+    def test_the_code_declaration_is_a_fallback_beside_the_yaml(self):
+        """One list, two sources: the data wins per key, the code adds the rest."""
+        from types import SimpleNamespace as Shim
+
+        from llm_rosetta_gateway.admin.routes._shared import declared_fields
+
+        exchange = SimpleNamespace(
+            fields=lambda: (
+                {"key": "email", "label": "From the exchange"},
+                {"key": "tenant", "label": "Tenant"},
+            )
+        )
+        shim = Shim(
+            fields=({"key": "email", "label": "Account email"},),
+            auth=exchange,
+        )
+
+        assert declared_fields(shim) == [
+            {"key": "email", "label": "Account email"},
+            {"key": "tenant", "label": "Tenant"},
+        ]
+
+    def test_an_entry_the_panel_cannot_render_is_dropped(self):
+        from types import SimpleNamespace as Shim
+
+        from llm_rosetta_gateway.admin.routes._shared import declared_fields
+
+        shim = Shim(
+            fields=(
+                {"key": "../etc", "label": "Escape"},
+                {"key": "ok", "label": "Fine", "help": 7},
+                "not a mapping",
+            ),
+            auth=None,
+        )
+
+        # A non-identifier key and a non-mapping entry cannot be rendered; a
+        # non-string hint is dropped while the row it belongs to stays.
+        assert declared_fields(shim) == [{"key": "ok", "label": "Fine"}]
+
+
 class TestTheLegacyMarker:
     """The old panel stored the literal word ``token_command`` in the key slot.
 

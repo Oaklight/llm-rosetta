@@ -127,9 +127,14 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
         if missing_err is not None:
             return missing_err
 
-        provider_entry = _build_provider_entry(
-            body, api_key, base_url, existing_providers, resolve_name
-        )
+        try:
+            provider_entry = _build_provider_entry(
+                body, api_key, base_url, existing_providers, resolve_name
+            )
+        except ValueError as exc:
+            # A declared setup input the entry cannot hold: refused before it
+            # reaches the config file, with the field named.
+            return JSONResponse({"error": str(exc)}, status_code=400)
 
         # Handle rename: remove old entry and update model references
         rename_from = body.get("rename_from")
