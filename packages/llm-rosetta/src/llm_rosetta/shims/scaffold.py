@@ -25,6 +25,7 @@ a package's ``providers`` directory (``src/<package>/providers`` in the
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import signal
 import subprocess
@@ -32,6 +33,7 @@ import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Collection
 from typing import Any
 from urllib.parse import urlsplit
 from urllib.request import urlopen
@@ -1441,8 +1443,8 @@ def _lane_or_format_problem(root: Path, tail: list[str]) -> str:
     first = positions[0]
     if len(positions) > 1:
         return "more than one <type>/ directory above the leaf"
-    if first > 1:
-        return "more than one directory above the <type>/ directory"
+    if first > 2:
+        return "more than one lane directory above the <type>/ directory"
     if len(tail) - first > 2:
         return "more than one directory below the <type>/ directory"
     if len(tail) - first == 2:
@@ -1452,13 +1454,87 @@ def _lane_or_format_problem(root: Path, tail: list[str]) -> str:
             for child in sorted(type_dir.iterdir())
             if child.is_dir() and not child.name.startswith(("_", "."))
         ]
-        if len(formats) == 1:
+        if len(formats) == 1 and not (type_dir / "provider.yaml").is_file():
             return (
                 f"the only lane of {tail[first]}; it belongs directly under "
                 f"{type_dir.relative_to(root).as_posix()}/, and the format "
                 f"directory appears when a second lane arrives"
             )
     return ""
+
+
+def _mixed_level_problem(root: Path, tail: list[str]) -> str:
+    """Why a leaf that sits in a type directory shares it with lanes.
+
+    A type directory holding a leaf *and* format directories is the one shape
+    the loader reads halfway: ``_load_type_folder`` takes the leaf and never
+    scans below it, so the format lanes load nowhere and nothing says so.  The
+    advice has to differ from the only-lane case, where the lone lane moves up —
+    here the flat leaf is the one that moves down.
+    """
+    positions = [i for i, part in enumerate(tail) if part in _TYPE_DIR_NAMES]
+    if len(positions) != 1 or len(tail) - positions[0] != 1:
+        return ""
+    type_dir = root.joinpath(*tail)
+    formats = sorted(
+        child.name
+        for child in type_dir.iterdir()
+        if child.is_dir()
+        and not child.name.startswith(("_", "."))
+        and (child / "provider.yaml").is_file()
+    )
+    if not formats:
+        return ""
+    return (
+        f"{type_dir.relative_to(root).as_posix()}/ holds a leaf and format "
+        f"directories at once ({', '.join(formats)}); the loader reads only "
+        f"provider.yaml there and never scans them. Move this leaf down into "
+        f"{type_dir.relative_to(root).as_posix()}/<its format>/"
+    )
+
+
+def _token_command_problems(root: Path) -> list[Finding]:
+    """Report a relative ``token_command`` entry whose file is not there.
+
+    A credential-exchange command runs with the leaf directory as its working
+    directory, so ``../token.py`` is resolved against it.  A leaf that moved —
+    which is what ``shims migrate`` does — leaves such a path pointing at one
+    more level of parent than the file it names, and nothing fails until the
+    first exchange.  Only entries that look like a path are checked: an
+    interpreter name or a flag is not a file to look for.
+    """
+    findings: list[Finding] = []
+    for provider_yaml in sorted(root.rglob("provider.yaml")):
+        if any(
+            part.startswith(("_", "."))
+            for part in provider_yaml.relative_to(root).parts
+        ):
+            continue
+        document = _yaml_document(provider_yaml)
+        if not isinstance(document, dict):
+            continue
+        connection = document.get("connection")
+        if not isinstance(connection, dict):
+            continue
+        command = connection.get("token_command")
+        entries = command if isinstance(command, list) else [command]
+        for entry in entries:
+            if not isinstance(entry, str) or entry.startswith("-"):
+                continue
+            if "/" not in entry and not entry.endswith(".py"):
+                continue
+            target = Path(entry)
+            if target.is_absolute():
+                continue
+            if not (provider_yaml.parent / target).exists():
+                findings.append(
+                    Finding(
+                        provider_yaml,
+                        f"connection.token_command runs relative to this "
+                        f"directory, and {entry} is not here",
+                    )
+                )
+    return findings
 
 
 def _module_problems(root: Path) -> list[Finding]:
@@ -1479,14 +1555,23 @@ def _module_problems(root: Path) -> list[Finding]:
         vendor_auth = vendor_dir / "auth.py"
         if vendor_auth.is_file():
             for leaf_auth in sorted(vendor_dir.rglob("auth.py")):
-                if leaf_auth != vendor_auth:
-                    findings.append(
-                        Finding(
-                            leaf_auth,
-                            f"the vendor already ships its exchange in {vendor_auth}; "
-                            "a second one is refused at load",
-                        )
+                if leaf_auth == vendor_auth:
+                    continue
+                # ``_``/``.`` directories are where a package parks what the
+                # loader must not read, so a module there is not a second
+                # exchange — no scan ever reaches it.
+                if any(
+                    part.startswith(("_", "."))
+                    for part in leaf_auth.relative_to(vendor_dir).parts
+                ):
+                    continue
+                findings.append(
+                    Finding(
+                        leaf_auth,
+                        f"the vendor already ships its exchange in {vendor_auth}; "
+                        "a second one is refused at load",
                     )
+                )
     return findings
 
 
@@ -1527,8 +1612,9 @@ def check_tree(root: Path) -> list[Finding]:
     The contract is the one ``_shim_template/README_en.md`` states: a vendor
     directory carries a manifest rather than a leaf, every leaf sits under a
     model-type directory, and the format level appears only when a type holds
-    more than one lane.  Private helper modules are not reported — the loader
-    never imports them, and a shim that needs one is allowed to keep it.
+    more than one lane.  Private helper modules are not reported: the loader
+    opens none of them directly, and a module one of the five allowed files
+    imports — ``transforms.py`` may — is the package's own business.
 
     Args:
         root: The directory a gateway scans.
@@ -1568,11 +1654,14 @@ def check_tree(root: Path) -> list[Finding]:
                 )
             )
             continue
-        problem = _lane_or_format_problem(root, tail)
+        problem = _mixed_level_problem(root, tail) or _lane_or_format_problem(
+            root, tail
+        )
         if problem:
             findings.append(Finding(provider_yaml, problem))
     findings.extend(_module_problems(root))
     findings.extend(_manifest_problems(root))
+    findings.extend(_token_command_problems(root))
     return sorted(findings, key=lambda f: str(f.path))
 
 
@@ -1586,3 +1675,373 @@ def run_check(root: Path) -> int:
         print(f"problem {finding.render(root)}")
     print(f"\n{len(findings)} finding(s); see shims/_shim_template/README_en.md")
     return 1
+
+
+# ---------------------------------------------------------------------------
+# shims migrate — move a tree onto the contract, mechanically
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Move:
+    """One directory the migration relocates.
+
+    Attributes:
+        source: The directory holding the leaf today.
+        destination: Where the contract puts it.
+        vendor_leaf: True when *source* is the vendor root itself, in which
+            case the migration leaves a manifest marker behind.
+        keep: Names inside *source* that belong to another leaf and must not
+            travel.  A leaf that sits in a directory another leaf also lives in
+            -- the flat lane of a type that already holds a sibling lane -- is
+            moved entry by entry, not as a directory, or the sibling would be
+            dragged one level down with it.
+    """
+
+    source: Path
+    destination: Path
+    vendor_leaf: bool = False
+    keep: tuple[str, ...] = ()
+
+
+def _leaf_entry(root: Path, provider_yaml: Path) -> tuple[dict[str, Any] | None, str]:
+    """Describe one leaf for the migration, or say why it is left alone.
+
+    Returns:
+        ``(entry, note)`` — exactly one of them is set.
+    """
+    document = _yaml_document(provider_yaml)
+    if document is None or not _is_leaf_document(document):
+        return None, ""
+    model_type = document.get("model_type") or "llm"
+    format_ = document.get("format") or document.get("base")
+    if not isinstance(model_type, str) or model_type not in _TYPE_DIR_NAMES:
+        return None, f"{provider_yaml}: unknown model_type {model_type!r}; left alone"
+    tail = list(provider_yaml.relative_to(root).parts[:-1])
+    below = tail[1:]
+    type_at = next((i for i, part in enumerate(below) if part in _TYPE_DIR_NAMES), None)
+    if type_at is None:
+        lanes = tuple(below[:-1])
+        name_dir = below[-1] if below else ""
+        if name_dir and name_dir != format_:
+            lanes = (*lanes, name_dir)
+    else:
+        lanes = tuple(below[:type_at])
+    if len(lanes) > 1:
+        return None, f"{provider_yaml}: more than one lane directory; left alone"
+    return (
+        {
+            "key": (tail[0], lanes, model_type),
+            "path": provider_yaml,
+            "directory": provider_yaml.parent,
+            "format": format_,
+            "vendor_leaf": len(tail) == 1,
+        },
+        "",
+    )
+
+
+def _group_moves(
+    root: Path,
+    key: tuple[str, tuple[str, ...], str],
+    leaves: list[dict[str, Any]],
+    notes: list[str],
+    leaf_dirs: Collection[Path],
+) -> list[Move]:
+    """Turn one ``(vendor, lanes, type)`` group into its moves.
+
+    A group of one lane belongs directly under the type directory; a group of
+    several needs a format level, because a type directory holds one leaf.
+    The leaves of a directory another leaf also occupies are moved by name, so
+    a sibling lane stays where it is.
+
+    Args:
+        root: The directory a gateway scans.
+        key: The ``(vendor, lanes, model_type)`` this group shares.
+        leaves: The leaves of this group.
+        notes: Collected operator notes; appended to.
+        leaf_dirs: Every leaf directory in the tree, across all groups, so a
+            sibling of a different model type is kept too.
+    """
+    vendor, lanes, model_type = key
+    base = root.joinpath(vendor, *lanes, model_type)
+    moves: list[Move] = []
+    for leaf in leaves:
+        if len(leaves) == 1:
+            destination = base
+        elif not leaf["format"]:
+            notes.append(
+                f"{leaf['path']}: declares no 'format:' but shares its type "
+                f"with another lane; left alone"
+            )
+            continue
+        else:
+            destination = base / leaf["format"]
+        if destination == leaf["directory"]:
+            continue
+        shared = tuple(
+            sorted(
+                other.name
+                for other in leaf_dirs
+                if other != leaf["directory"] and other.parent == leaf["directory"]
+            )
+        )
+        moves.append(
+            Move(
+                leaf["directory"],
+                destination,
+                vendor_leaf=leaf["vendor_leaf"],
+                keep=shared,
+            )
+        )
+    return moves
+
+
+def plan_migration(root: Path) -> tuple[list[Move], list[str]]:
+    """Plan the moves that put *root* on the contract.
+
+    Only the mechanical part is planned: a leaf that sits at the wrong depth,
+    and a vendor directory used as a leaf.  A leaf whose type cannot be read,
+    or that sits deeper than a lane and a format, is reported and left alone —
+    a guess there would move code the author has to reconcile by hand.
+
+    Args:
+        root: The directory a gateway scans.
+
+    Returns:
+        ``(moves, notes)``; apply the moves with :func:`apply_migration`.
+    """
+    notes: list[str] = []
+    groups: dict[tuple[str, tuple[str, ...], str], list[dict[str, Any]]] = {}
+    leaf_dirs: set[Path] = set()
+    for provider_yaml in sorted(root.rglob("provider.yaml")):
+        parts = provider_yaml.relative_to(root).parts
+        if any(part.startswith(("_", ".")) for part in parts):
+            continue
+        entry, note = _leaf_entry(root, provider_yaml)
+        if note:
+            notes.append(note)
+        if entry is None:
+            continue
+        leaf_dirs.add(entry["directory"])
+        groups.setdefault(entry.pop("key"), []).append(entry)
+
+    moves: list[Move] = []
+    for key, leaves in sorted(groups.items()):
+        moves.extend(_group_moves(root, key, leaves, notes, leaf_dirs))
+    return moves, notes
+
+
+def _move_entries(root: Path, move: Move) -> list[str]:
+    """Move one leaf directory's contents, and report what was done."""
+    actions: list[str] = []
+    # Snapshot before the destination exists: when it sits inside the source
+    # (``alcf/metis`` -> ``alcf/metis/llm``) the destination would otherwise
+    # appear in its own move list.
+    entries = sorted(move.source.iterdir())
+    move.destination.mkdir(parents=True, exist_ok=True)
+    for entry in entries:
+        # An entry that is the destination, or holds it, stays: moving it would
+        # carry the tree being written into itself.
+        if entry == move.destination or move.destination.is_relative_to(entry):
+            continue
+        if entry.name in move.keep:
+            actions.append(f"kept    {entry} (another leaf)")
+            continue
+        os.rename(entry, move.destination / entry.name)
+    if move.vendor_leaf:
+        marker = move.source / "provider.yaml"
+        marker.write_text(
+            "# Vendor manifest: the defaults every "
+            f"{move.source.name} shim shares.\n"
+            "# A leaf inherits every field here and may override any of them.\n"
+            "# This lane declares its own connection values, so the block is\n"
+            "# empty on purpose.\n"
+            "connection: {}\n",
+            encoding="utf-8",
+        )
+        actions.append(f"wrote   {marker} (manifest marker)")
+    else:
+        try:
+            move.source.rmdir()
+        except OSError:
+            pass
+    actions.append(
+        f"moved   {move.source.relative_to(root)} -> "
+        f"{move.destination.relative_to(root)}"
+    )
+    return actions
+
+
+_MANIFEST_KEY_ORDER = ("version", "core", "shims")
+
+
+def _manifest_value(value: Any) -> str | None:
+    """Render *value* as a one-line YAML scalar, or ``None`` when it is not one."""
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if value is None:
+        return "null"
+    if isinstance(value, str):
+        return _yaml_scalar(value)
+    return None
+
+
+def _render_manifest_header(document: dict[str, Any]) -> list[str] | None:
+    """The top-level keys, in a stable order, or ``None`` on a non-scalar.
+
+    ``version`` and ``core`` lead; anything else the operator wrote keeps its
+    order behind them, and a missing ``version`` is written rather than lost.
+    """
+    ordered = [key for key in ("version", "core") if key in document]
+    ordered += [key for key in document if key not in _MANIFEST_KEY_ORDER]
+    lines: list[str] = []
+    for key in ordered:
+        rendered = _manifest_value(document[key])
+        if rendered is None:
+            return None
+        lines.append(f"{key}: {rendered}")
+    if "version" not in document:
+        lines.insert(0, "version: 1")
+    return lines
+
+
+def _render_manifest_entry(entry: Any) -> list[str] | None:
+    """One ``shims:`` item, or ``None`` when a value is not a scalar."""
+    if not isinstance(entry, dict):
+        return None
+    ordered = [key for key in ("name", "path") if key in entry]
+    ordered += [key for key in entry if key not in ("name", "path")]
+    lines: list[str] = []
+    for index, key in enumerate(ordered):
+        rendered = _manifest_value(entry[key])
+        if rendered is None:
+            return None
+        lines.append(("  - " if index == 0 else "    ") + f"{key}: {rendered}")
+    return lines
+
+
+def _render_manifest(document: dict[str, Any], entries: list[Any]) -> list[str] | None:
+    """Rebuild ``shims.yaml`` from its parsed document, or refuse.
+
+    Returns:
+        The file's lines, or ``None`` when a value is not a scalar this writer
+        can render — a list or a nested mapping is the operator's to keep, and
+        rewriting it lossily would be worse than leaving the file alone.
+    """
+    header = _render_manifest_header(document)
+    if header is None:
+        return None
+    lines = [*header, "shims:"]
+    for entry in entries:
+        rendered = _render_manifest_entry(entry)
+        if rendered is None:
+            return None
+        lines.extend(rendered)
+    return lines
+
+
+def _rewrite_manifest(root: Path, moves: list[Move]) -> list[str]:
+    """Point every ``shims.yaml`` entry at where its leaf moved to.
+
+    Only ``path`` is rewritten.  Every other key stays as it was — ``core``,
+    and any the writer does not know — and the file is rebuilt from its parsed
+    document, so comments do not survive.  A document holding a value that is
+    not a scalar (a list, a nested mapping) is left untouched with a note
+    instead: a lossy rewrite of the operator's file is worse than a path they
+    fix by hand.
+    """
+    manifest = root / "shims.yaml"
+    if not moves or not manifest.is_file():
+        return []
+    from llm_rosetta._vendor.yaml import load as yaml_load
+
+    document = yaml_load(manifest.read_text(encoding="utf-8")) or {}
+    if not isinstance(document, dict):
+        return [f"left {manifest.relative_to(root)} alone: it is not a mapping"]
+    entries = document.get("shims")
+    if entries is None:
+        entries = []
+    if not isinstance(entries, list):
+        return [f"left {manifest.relative_to(root)} alone: 'shims' is not a list"]
+    relocated = [(Path(str(m.source)), Path(str(m.destination))) for m in moves]
+    for entry in entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            continue
+        old = root / entry["path"]
+        for source, destination in relocated:
+            if old == source or source in old.parents:
+                suffix = old.relative_to(source)
+                entry["path"] = (destination / suffix).relative_to(root).as_posix()
+                break
+    lines = _render_manifest(document, entries)
+    if lines is None:
+        return [
+            f"left {manifest.relative_to(root)} alone: it holds a value this "
+            "rewrite cannot render; update its paths by hand"
+        ]
+    manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return [f"rewrote {manifest.relative_to(root)}"]
+
+
+def apply_migration(root: Path, moves: list[Move]) -> list[str]:
+    """Perform the planned moves and rewrite ``shims.yaml`` paths.
+
+    The moves are directory-level: every file beside the leaf — transforms,
+    a leaf exchange, a quota module — travels with it.  Two things move with it
+    and are deliberately not rewritten, because a tool that guesses there can
+    break a module the author has to reconcile by hand:
+
+    - **Import depth.**  ``from ..model_utils`` in a leaf one level higher
+      needs one more dot after the move, and a skipped ``transforms.py`` fails
+      quietly: the source still reports ``ok``, with the leaf's transforms
+      missing.
+    - **Relative paths in ``provider.yaml``.**  A ``connection.token_command``
+      such as ``[python3, ../token.py]`` resolves against the leaf directory,
+      so a file that stays behind stops resolving — and nothing fails until the
+      first credential exchange.  ``shims check`` reports a relative entry whose
+      target does not exist.
+
+    The command prints the same warning after ``--write``; run the package's
+    tests before trusting the result.
+
+    Returns:
+        One line per action, for the operator.
+    """
+    actions: list[str] = []
+    for move in moves:
+        actions.extend(_move_entries(root, move))
+    actions.extend(_rewrite_manifest(root, moves))
+    return actions
+
+
+def run_migrate(root: Path, *, write: bool = False) -> int:
+    """Plan (and optionally apply) the migration of *root*.
+
+    Returns:
+        ``0`` when there is nothing to do or the migration was applied;
+        ``1`` when a dry run found work, so a script can tell the two apart.
+    """
+    moves, notes = plan_migration(root)
+    for note in notes:
+        print(f"note    {note}")
+    if not moves:
+        print(f"ok      {root}: nothing to migrate")
+        return 0
+    for move in moves:
+        print(
+            f"move    {move.source.relative_to(root)} -> "
+            f"{move.destination.relative_to(root)}"
+        )
+    if not write:
+        print(f"\n{len(moves)} move(s); rerun with --write to apply")
+        return 1
+    for action in apply_migration(root, moves):
+        print(action)
+    print(
+        "\nnext: imports that moved one level deeper need a hand — check "
+        "`from ..` against the new depth, then run the package's tests."
+    )
+    return 0
