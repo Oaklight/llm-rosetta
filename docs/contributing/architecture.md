@@ -40,7 +40,7 @@ converters/llm/<name>/
 
 ## Shim 层
 
-`ProviderShim` 是一个轻量级身份卡，声明 provider 使用的基础转换器以及连接默认值和字段级变换。Shim 位于 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`，chat 在模型类型下再保留一层格式目录。
+`ProviderShim` 是一个轻量级身份卡，声明 provider 使用的基础转换器以及连接默认值和字段级变换。Shim 位于 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<type>/provider.yaml`；只有该类型下存在第二条 lane 时才在类型下再加 `<format>/` 层（`<vendor>/llm/chat_completions/` 与 `<vendor>/llm/messages/` 并排），只有存在多个具名实例的厂商才在类型之上加 lane 目录（`alcf/metis/llm/`）。这份约定、`shims new` 渲染的模板，以及 `shims check` 与 `shims migrate` 执行的检查，都在 `llm_rosetta/shims/_shim_template/`。
 
 转换器保持格式通用；shim 声明 provider 特定的差异（如 response ID 前缀、默认请求头、字段重命名）。
 
@@ -54,7 +54,7 @@ converters/llm/<name>/
 4. 在 `packages/llm-rosetta/src/llm_rosetta/formats/catalog.py` 中添加一条 `FormatSpec`，在
    `formats/detect.py` 中注册其请求体探测器，并在 `converters/registry.py`
    中绑定转换器类
-5. 在 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/llm/<format>/` 下添加 shim
+5. 在 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/llm/` 下添加 shim（只有存在第二条 lane 时才加 `<format>/`，单条时直接放 `provider.yaml`）
 6. 在 `tests/converters/` 下添加测试
 7. 提交 PR
 

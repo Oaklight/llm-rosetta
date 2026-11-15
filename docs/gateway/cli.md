@@ -72,8 +72,8 @@ llm-rosetta-gateway shims new acme --no-input \
   --base-url https://api.acme.example/v1 --check
 ```
 
-在终端上不带参数运行时它是一份问卷 —— 先问扫描根，再问厂商、模型类型、线上格式、布局、base URL、
-凭据变量、可选的展示名 / logo / 分组标题、是否生成 transforms 桩 —— 回车即采用中括号里的值。
+在终端上不带参数运行时它是一份问卷 —— 先问扫描根，再问厂商、模型类型、线上格式、lane、base URL、
+凭据变量、可选的展示名 / logo / 分组标题、以及要写出哪些可选模块 —— 回车即采用中括号里的值。
 扫描根排在第一位，因为它之后的每一项都跟随包已有的做法（见下文）。**默认是交互模式**；已经用
 flag 给出的值不会再问。`--no-input`（stdin 不是终端时自动生效）从不提问，所以同一条命令可以
 直接放进脚本。
@@ -83,7 +83,7 @@ flag 给出的值不会再问。`--no-input`（stdin 不是终端时自动生效
 | `--root DIR` | 网关扫描的目录；默认 `providers` |
 | `--model-type` | `llm`（默认）、`embeddings`、`rerank`、`decisions` |
 | `--format` | 线上格式；问卷与 `--format` 的帮助都会列出该模型类型注册的全部格式，未注册的格式在写任何文件之前就被拒绝 |
-| `--layout` | `typed`（`<vendor>/llm/<format>`）或 `flat`（`<vendor>/<format>`）；默认跟随扫描根已有的形状，否则 `typed` |
+| `--lane` | 厂商的具名实例，写在厂商与类型目录之间（`<vendor>/<lane>/<type>/`）；ALCF 的集群 |
 | `--base-url` | 上游 base URL；省略时写入占位值 |
 | `--probe` | 检查 `--base-url` 是否可达，并打印它返回了什么 |
 | `--models-path` | 模型列表 URL 或路径（非默认时） |
@@ -93,18 +93,19 @@ flag 给出的值不会再问。`--no-input`（stdin 不是终端时自动生效
 | `--auto-logo` | 按厂商名到 jsDelivr 上的 lobehub 图标集里查找标志图；查不到就失败 |
 | `--localize-logo` | 把 `--logo` 存进包的 `assets/`，并引用它的 jsDelivr URL |
 | `--transform` | 同时生成一个 `transforms.py` 桩 |
-| `--vendor-manifest` | 写出 `<vendor>/provider.yaml`，承载各 lane 共享的身份与凭据；默认会写，除非扫描根是多厂商 bundle |
-| `--no-vendor-manifest` | 把每个字段都写在叶子上 |
+| `--auth`、`--quota` | 同时生成厂商级的 `auth.py` 或 `quota.py` 桩 |
+| `--package DISTRIBUTION` | 同时写出外部包外壳（`pyproject.toml`、入口点、CI、README），目录树落在 `src/<package>/providers` |
 | `--no-registry-manifest` | 不改动包的 `shims.yaml` |
 | `--check` | 装载新叶子并报告解析结果 |
 
 厂商已有 `provider.yaml` 时，凭据和厂商身份留在那里，叶子只写自己独有的字段。扫描根提供
 `shims.yaml` 时，新叶子会被追加进去 —— 那份清单对网关是权威的，没列出的叶子永远不会装载。
 
-**扫描根决定形状。** 厂商都是单叶子目录的根（`llm-rosetta-shim-free`：`kilo/provider.yaml`
-自带 `name`）写成 flat 叶子且不写厂商清单，因为那种包把每个提供方都当作自己的顶层厂商；厂商
-是「清单 + `llm/` 或 `<type>/` 目录」的根（`google`：两种 chat 方言加 `embeddings/`）写成
-typed 布局。两种混在一起的根没有可照抄的约定，于是保留 `typed` 默认，由问卷去问而不是猜。
+**扫描根只被读取，不被照抄。** 一切都按约定形状写出 ——
+`<vendor>[/<lane>]/<type>[/<format>]/provider.yaml` —— 扫描根只决定是否需要 `<format>` 层：
+该类型下已有第二条 lane 的厂商需要，第一条 lane 则直接落在类型目录里。厂商仍把格式目录直接放在
+其下的根（`kilo_free/chat_completions/`）属于约定之前的形状，因此新叶子仍按规范写出，只对该厂商
+给出提示，并附上报告其余问题的 `shims check` 命令。
 
 以下三种目标在写任何文件之前就被拒绝：
 
@@ -113,7 +114,8 @@ typed 布局。两种混在一起的根没有可照抄的约定，于是保留 `
 - 另一个文件已经声明的 shim 名，并指出那个文件；
 - loader 会跳过或误读的厂商名 —— `_`/`.` 开头，或 `llm`、`embeddings`、`rerank`、`decisions`。
 
-厂商已有*另一种*布局的 lane 时只提示、不阻断：两种形状都能加载，只是这个厂商同时带了两种。
+厂商仍把格式目录直接放在其下时只提示、不阻断：loader 同样能读那些目录，`shims migrate`
+负责把它们移过去。
 
 粘贴进来的 base URL 在写入前会先检查。结尾的 `/models`（厂商控制台常见）会被去掉，然后不带
 凭据请求 `<base>/models`：`200`、`401`、`403` 都证明主机在该路径上有应答，其余结果会连同
@@ -134,6 +136,34 @@ base URL 自身的状态一起报告，于是后缀写错现在就暴露，而�
 `opencode_zen_free` 仍能找到 `opencode`；每次尝试是一个 `HEAD`，CDN 不可达时立即结束查找，
 而不是每个候选各等一次超时。已经在 jsDelivr 上的 URL 原样保留，因为没有什么可复制的 ——
 两种情况下标志图都由 CDN 提供。`--auto-logo` 不做问卷、直接查表，查不到就失败。
+
+### `shims check [--root DIR]`
+
+报告 loader 会读错的 shim 目录树，只要发现问题就以非零退出：
+
+```bash
+llm-rosetta-gateway shims check --root src/llm_rosetta_shim_acme/providers
+# ok      .../providers: no deviation from the shim contract
+# problem acme/chat_completions: <type>/ is missing above this leaf
+```
+
+它不装载、不写文件、也不需要配置，因此可以在还没配好网关的包仓库里直接运行。会报告的情形：
+叶子不在规范路径上、把厂商目录当叶子用、类型目录同时混有叶子层和格式层、类型目录之上超过一个
+lane 目录、厂商级 `transforms.py`、厂商与叶子两级都声明了 `auth.py`、文件不在允许清单内、缺少
+`provider.yaml`。约定本身见 `llm_rosetta/shims/_shim_template/README_zh.md`。
+
+### `shims migrate [--root DIR] [--write]`
+
+把一棵树移到约定形状上。不加 `--write` 时只打印移动计划，什么都不动：
+
+```bash
+llm-rosetta-gateway shims migrate --root src/llm_rosetta_shim_acme/providers
+llm-rosetta-gateway shims migrate --root src/llm_rosetta_shim_acme/providers --write
+```
+
+它移动目录，并改写每个被移动叶子的 `shims.yaml` 登记，包括第二条 lane 的情况 —— 已有叶子要下沉
+到 `<type>/<它自己的格式>/`。它**不**重写相对导入：原先向上导入 `model_utils` 的 `transforms.py`
+需要多一个点，靠包自己的测试兜住。加 `--write` 之后请跑一遍包的测试。
 
 ### `credential <provider>`
 

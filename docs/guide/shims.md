@@ -30,44 +30,65 @@ ProviderShim ("deepseek--chat_completions")
 
 ### 声明式提供方目录
 
-内置 shim 以目录结构定义在 `shims/providers/` 下：
+内置 shim 以目录结构定义在 `shims/providers/` 下。所有厂商共用同一种形状，下面的三条规则
+就是 loader 接受的形状。
+
+```text
+<vendor>/
+├── provider.yaml            # 厂商清单，永远不是叶子
+├── auth.py                  # 可选：厂商的凭据交换
+├── quota.py                 # 可选：该厂商各类共用的探针
+└── [<lane>/]                # 可选：同一厂商的多个具名实例
+    └── <type>/              # llm | embeddings | rerank | decisions
+        └── [<format>/]      # 仅当该类型下有多条 lane
+            └── provider.yaml
+```
+
+1. **只有存在多个具名实例的厂商才有 lane 层** —— ALCF 的集群（`alcf/metis/`、
+   `alcf/minerva/`）。loader 会递归进入既不是类型目录、也不是叶子的目录，最多三层，
+   仍然跳过以 `_` 或 `.` 开头的名字。
+2. **`<type>/` 永远存在**，按端点的拼写命名：`llm/`、`embeddings/`、`rerank/`、
+   `decisions/`。loader 会把目录名与 shim 的 `model_type:` 对照，放错类型的 shim 会被
+   拒绝。类别名与目录拼写一致（`embeddings`）；`embedding:` 作为弃用别名，在
+   `model_type:` 与按类型段名中仍然接受。
+3. **`<format>/` 仅当该类型下有多条 lane 时才出现。** chat 厂商通常会提供多种方言，
+   因此保留格式层；某类型只有一条 lane 的厂商把 `provider.yaml` 直接放在类型目录里 ——
+   `anthropic/llm/provider.yaml`。加第二条 lane 时，第一条会下沉到它自己的格式目录，
+   这正是 `shims migrate` 做的事。
+
+内置树按这个形状排列：
 
 ```text
 packages/llm-rosetta/src/llm_rosetta/shims/providers/
-├── __init__.py                  # 自动发现：扫描子目录
+├── __init__.py
+├── anthropic/
+│   └── llm/provider.yaml        # 单条 lane：类型目录直接放叶子
 ├── openai/
 │   ├── provider.yaml            # 厂商清单：共用的凭据
-│   ├── quota.py                 # 厂商级探针，该厂商每种类型共用
+│   ├── quota.py                 # 厂商级探针，该厂商各类共用
 │   ├── llm/
-│   │   ├── chat_completions/
-│   │   │   ├── provider.yaml    # 提供方身份（YAML）
-│   │   │   └── transforms.py    # 字段级转换规则
-│   │   └── open_responses/
-│   │       └── provider.yaml
-│   ├── embeddings/
-│   │   └── provider.yaml        # format: openai
-│   └── decisions/
-│       └── provider.yaml        # format: openai_decisions
-├── cohere/
-│   ├── provider.yaml            # 厂商清单：base_url + 凭据
-│   ├── embeddings/
-│   │   └── provider.yaml        # format: cohere
-│   └── rerank/
-│       └── provider.yaml
+│   │   ├── chat_completions/    # provider.yaml + transforms.py
+│   │   └── open_responses/      # provider.yaml
+│   ├── embeddings/provider.yaml
+│   └── decisions/provider.yaml
 ├── openai_chatgpt/
 │   ├── provider.yaml            # 厂商清单：只有注释
 │   ├── auth.py                  # 厂商级凭据交换
-│   └── llm/
-│       └── open_responses/
-│           └── provider.yaml
+│   └── llm/open_responses/provider.yaml
 └── ...
 ```
 
-厂商下的第一层是它的**模型类型**，按端点的拼写命名：`llm/`、`embeddings/`、`rerank/`、
-`decisions/`。chat 厂商在其下保留格式层，因为一家厂商可能提供多种 chat 方言；非 chat 厂商
-通常只提供一种，因此类型目录直接放 YAML。loader 会把目录名与 shim 的 `model_type:` 对照，
-放错类型的 shim 会被拒绝。类别名与目录拼写一致（`embeddings`）；`embedding:`
-作为弃用别名，在 `model_type:` 与按类型段名中仍然接受。
+**文件规则。** gateway 只读五个名字，别的一概不读：shim 目录内的 `provider.yaml`、
+`auth.py`、`quota.py`、`transforms.py`，以及包根部的 `shims.yaml`。树里其余文件都只属于
+该包，永远不会被导入 —— 包为自己的导入保留 `__init__.py` 没有问题，它不会被读取。
+`auth.py` 与 `quota.py` 以扁平模块执行，因此必须自包含；`transforms.py` 可以使用相对导入。
+
+**先检查，再迁移。** `llm-rosetta-gateway shims check --root <providers 目录>` 报告
+loader 会读错的树 —— 叶子不在规范路径上、把厂商目录当叶子用、类型目录同时混有叶子层和
+格式层、文件不在允许清单内 —— 并以非零退出。`shims migrate --root <目录>` 打印让它归位的
+移动，加 `--write` 才执行；它只移动目录并改写 `shims.yaml` 路径，不重写相对导入，那部分由
+包自己的测试兜住。`shims new` 用同一份模板生成骨架。完整约定、骨架的输出与占位符清单见
+`llm_rosetta/shims/_shim_template/README_zh.md`。
 
 每个叶子目录包含：
 
@@ -116,15 +137,16 @@ shim 不需要任何改动。叶子也可以为某条 lane 覆盖凭据字段；
 **脚手架。** `llm-rosetta-gateway shims new` 写出新 shim 所需的文件 —— 叶子、厂商还没有清单
 时的厂商清单、包提供 `shims.yaml` 时的那条登记 —— 然后用真实的 loader 装载一遍，所以网关
 用不了的形状在这里失败，而不是等到启动。在终端上不带 flag 时它逐项询问；**交互是默认
-模式**，`--no-input` 加 flag 则是脚本里的同一件事。`--layout flat` 产生
-`<vendor>/<format>` 形状，`--transform` 追加 `transforms.py` 桩。在仓库检出里，
+模式**，`--no-input` 加 flag 则是脚本里的同一件事。一切都按约定形状写出：`--lane`
+把具名实例写在厂商与类型目录之间，`--auth`、`--quota` 写出厂商级桩，`--package`
+补上外部包外壳，`--transform` 追加 `transforms.py` 桩。在仓库检出里，
 `scripts/dev/new_shim.py` 就是同一条命令，只是默认根指向内置树。给出 logo URL 时它会问是否
 存进包的 `assets/`，写进配置的是该文件的 jsDelivr URL，因此发布出去的标志图不指向厂商主机。
 线上格式从 converter registry 为该模型类型列出的格式中挑选；粘贴进来的 base URL 会先规范化，
-再检查是否可达 —— 不可达只是警告，不是拒绝。已有的树会被先读一遍：单厂商 bundle（`free`）得到
-flat 叶子且不写厂商清单，「清单 + `llm/` 或 `<type>/` 目录」（`google`）得到 typed 布局；而对于
-永远不会被加载的 lane —— 位于本身就是一个 shim 的目录之下、名字已被别的文件声明、或厂商名会被
-loader 跳过 —— 在写任何文件之前就拒绝。标志图会从 jsDelivr 上的 lobehub 图标集里按厂商名查找并
+再检查是否可达 —— 不可达只是警告，不是拒绝。已有的树会被先读一遍，因此某类型的第一条 lane 落在 `<type>/` 里，已有 lane
+的厂商得到 `<type>/<format>/`；仍把格式目录放在厂商目录下的只给出提示并附上 `shims check`
+命令，而不是照抄。永远不会被加载的 lane —— 位于本身就是一个 shim 的目录之下、名字已被别的
+文件声明、或厂商名会被 loader 跳过 —— 在写任何文件之前就拒绝。标志图会从 jsDelivr 上的 lobehub 图标集里按厂商名查找并
 作为默认值；已经在 jsDelivr 上的 URL 原样保留，不再复制进 `assets/`。按一次 Ctrl+C 重新询问
 当前问题，再按一次取消，Ctrl+D 立即取消。详见 [`shims new`](../gateway/cli.md#shims-new-vendor)。
 
@@ -510,10 +532,14 @@ forge、在本网络解析不了的 DNS 名。`mirror` 为同一份归档再给�
 哪一侧加载的（`loaded via mirror`）；`leg` 与展开后的 `archive_url` 也在管理 API 返回的源
 状态里。
 
-每个已发布包的 `presets` 条目本身就带镜像：钉住的 tag、jsDelivr 上 `{ref}` 模板化的 `dist`
-归档，以及适配该归档布局的 `path: "providers"`（写目录名而不是 `"."`，这样将来某次发布
-再套一层目录也照样能加载）。镜像仍然是模板而不是依赖 —— 用内网镜像替换 CDN 只需
-把 remote 显式写出，同一 URL 的显式 remote 会合并到对应预设上（显式键优先）。
+每个已发布包的 `presets` 条目本身就带镜像：jsDelivr 上 `{ref}` 模板化的 `dist` 归档，以及
+适配该归档布局的 `path: "providers"`（写目录名而不是 `"."`，这样归档再套一层目录也照样能
+加载）。预设不钉 `ref`，因此跟随仓库的分支：每次拉取把分支解析成一个 commit，把该 commit
+记进缓存戳，并用同一个 commit 填充 `{ref}`。发布任务在每次推送时构建一个
+`dist/<commit>/` 目录，于是预设指向的归档与它记录的 commit 永远是同一棵树 —— 这正是
+`ref` 加 `sha256` 固定对曾给出的保证，而两个仓库都不必等对方打 release。镜像仍然是模板而
+不是依赖 —— 用内网镜像替换 CDN 只需把 remote 显式写出，同一 URL 的显式 remote 会合并到
+对应预设上（显式键优先）。
 
 !!! warning
     声明的源可能携带在加载时被执行的 `transforms.py` —— 与安装插件包是同一信任级别。
@@ -643,10 +669,11 @@ remote 配置：
 ```
 
 预设先于显式 remote 应用，同一 URL 的显式 remote 会合并到对应预设上（显式键优先），
-因此固定 `ref` 时无需重复 `path`。三个仓库都是公开的，预设不带 `token_env`；只有私有 shim 仓库
-才需要添加。预设中不固定 `ref`，因为这些仓库都还
-没有打 tag：不带 `ref` 的远程源会先把 `HEAD` 解析为某个 commit 并记录进缓存 stamp。等它们
-打上 tag 后再固定该 tag —— 参见 [ref 解析](../gateway/configuration.md#external-shim-sources)。
+因此固定 `ref` 时无需重复 `path`。这些仓库都是公开的，预设不带 `token_env`；只有私有 shim
+仓库才需要添加。预设故意不固定 `ref`：它跟随该包发布所用的分支，这样 catalog 与包就不会为
+了一个 release 互相等待。指向 tag 的固定写法仍然有效 —— 用同一个包 URL 加 `ref` 的显式
+remote 会合并到预设上 —— 对不允许移动的部署来说，这才是正确的选择。参见
+[ref 解析](../gateway/configuration.md#external-shim-sources)。
 
 **网关 → Shims → 可安装** 把每个 catalog 包显示为一张卡片，免费资源在前；安装一张卡片
 会把 `presets` 与选择一起写入配置。若配置仍使用这些 shim 却没有声明源，
@@ -1004,7 +1031,7 @@ register_shim(my_shim)
 
 要向内置注册表添加新提供方：
 
-1. 在 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/` 下创建目录：chat 用 `<vendor>/llm/<format>/`，embedding、rerank 或 decision 用 `<vendor>/<model-type>/`
+1. 把叶子放在 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<type>/provider.yaml`，其中 `<type>` 是格式所属的模型类型（`llm`、`embeddings`、`rerank`、`decisions`）。只有该类型下存在第二条 lane 时才在其下再加 `<format>/` 层，因此同一厂商的 `chat_completions` 与 `messages` 并排放在 `llm/` 里；有多个具名实例的厂商在类型之上再加 lane 目录（`<vendor>/<lane>/<type>/`）。`llm-rosetta-gateway shims new` 写出的就是这个形状，`shims check` 报告偏离它的树。
 2. 若该厂商的叶子共用连接信息（通常就是凭据），添加不带 `name` 的 `<vendor>/provider.yaml`：它是厂商清单，每个叶子都继承它。
 
     ```yaml
