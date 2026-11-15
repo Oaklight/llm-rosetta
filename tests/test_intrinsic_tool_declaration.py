@@ -498,7 +498,7 @@ class TestShimEmitConsistency:
 
         The record is in
         ``packages/llm-rosetta/src/llm_rosetta/shims/providers/``
-        ``openai_chatgpt/llm/open_responses/provider.yaml``: the plan route
+        ``openai_chatgpt/llm/provider.yaml``: the plan route
         rejects `code_interpreter`, `file_search`, image generation, computer
         use, hosted MCP and `tool_search` (the shim records the outcome but no
         date, so it is the shim — not this docstring — that is the source).
