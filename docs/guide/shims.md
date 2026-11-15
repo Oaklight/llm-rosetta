@@ -650,6 +650,13 @@ with the commit it resolved the branch to — so the archive the preset names an
 the commit it records describe one tree, which is what a `ref` plus `sha256`
 pair used to guarantee, without a release in the loop.
 
+One limitation worth knowing: the address is a commit, and a gateway that has
+never resolved the branch — a cold cache during a forge outage — has no commit
+to fill in. Its first fetch still fails; the mirror helps from the second fetch
+on, when the cache stamp carries the commit it resolved. That is deliberate: a
+leg that answers rather than guessing a tree is the right outcome, and a guess
+there would load the wrong shims quietly.
+
 The address has to be exactly what the packages publish. A mirror answers `404`
 as a final verdict, and the leg is only asked when the forge cannot be connected
 to, so a template that names a directory nobody writes fails precisely where the
