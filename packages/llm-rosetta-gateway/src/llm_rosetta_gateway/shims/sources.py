@@ -61,7 +61,12 @@ from llm_rosetta.shims.provider_shim import (
 )
 from llm_rosetta.shims.providers import load_providers, load_providers_from_dir
 
-from .manifest import MANIFEST_FILENAME, ShimManifestError, read_shim_manifest
+from .manifest import (
+    MANIFEST_FILENAME,
+    ShimManifestError,
+    core_version_problem,
+    read_shim_manifest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -978,6 +983,18 @@ def _scan_dir(
             ok=False,
             error=f"{MANIFEST_FILENAME}: {exc}",
         )
+
+    if manifest is not None and manifest.core:
+        # A package that tracks its branch can bring a shape this core cannot
+        # read; the floor it declares is checked before anything is loaded, so
+        # the failure names the version rather than surfacing as a bad leaf.
+        problem = core_version_problem(manifest.core)
+        if problem:
+            return ShimSourceStatus(
+                **base,
+                ok=False,
+                error=f"{MANIFEST_FILENAME}: {problem}",
+            )
 
     keep = _selection_predicate(include, exclude)
     only_paths: set[str] | None = None

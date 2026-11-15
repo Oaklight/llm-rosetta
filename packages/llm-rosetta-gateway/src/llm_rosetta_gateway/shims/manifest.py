@@ -31,6 +31,7 @@ Example::
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -71,10 +72,15 @@ class ShimManifest:
         version: The declared manifest version (always
             :data:`MANIFEST_VERSION` once parsed).
         entries: The declared shims, in declaration order.
+        core: The oldest core this package needs, as ``">=X.Y[.Z]"``.  The
+            gateway checks it before loading, because a package that tracks
+            its branch can otherwise bring a shape the running core cannot
+            read.  ``None`` means the package states no requirement.
     """
 
     version: int
     entries: tuple[ShimManifestEntry, ...]
+    core: str | None = None
 
     @property
     def names(self) -> tuple[str, ...]:
@@ -116,6 +122,9 @@ def read_shim_manifest(root: Path) -> ShimManifest | None:
             f"version {MANIFEST_VERSION}"
         )
 
+    core = document.get("core")
+    core = None if core is None else _normalize_core(core)
+
     raw = document.get("shims")
     if raw is None:
         raw = []
@@ -143,7 +152,62 @@ def read_shim_manifest(root: Path) -> ShimManifest | None:
             raise ShimManifestError(f"{where}.path {leaf!r} holds no provider.yaml")
         entries.append(ShimManifestEntry(name=name, path=leaf))
 
-    return ShimManifest(version=MANIFEST_VERSION, entries=tuple(entries))
+    return ShimManifest(version=MANIFEST_VERSION, entries=tuple(entries), core=core)
+
+
+#: The only requirement form a manifest may state.
+_AT_LEAST = re.compile(r"^>=\s*(\d+(?:\.\d+){0,2})$")
+
+
+def _normalize_core(value: Any) -> str:
+    """Validate a manifest's ``core:`` floor and return it stripped."""
+    if not isinstance(value, str) or _AT_LEAST.match(value.strip()) is None:
+        raise ShimManifestError(
+            "'core' must read '>=X.Y[.Z]' — the oldest core this package needs"
+        )
+    return value.strip()
+
+
+def _version_tuple(value: str) -> tuple[int, int, int]:
+    """The first three numeric components of a version, padded with zeros."""
+    parts: list[int] = []
+    for chunk in value.split(".")[:3]:
+        match = re.match(r"^\d+", chunk)
+        if match is None:
+            break
+        parts.append(int(match.group(0)))
+    major, minor, patch = (parts + [0, 0, 0])[:3]
+    return major, minor, patch
+
+
+def core_version_problem(requirement: str, current: str | None = None) -> str | None:
+    """Why *requirement* is not satisfied by the running core, or ``None``.
+
+    Only ``>=X.Y[.Z]`` is understood.  The manifest exists to state a floor,
+    and a full specifier grammar would be a second dependency to keep in step
+    with the release workflow — the loader refuses anything else rather than
+    guessing at it.
+
+    Args:
+        requirement: The manifest's ``core:`` value.
+        current: The version to check against; the running core by default.
+
+    Returns:
+        The sentence to report, or ``None`` when the requirement holds.
+    """
+    if current is None:
+        from llm_rosetta import __version__ as current_version
+
+        current = current_version
+    match = _AT_LEAST.match(requirement.strip())
+    if match is None:
+        return f"'core: {requirement}' is not a floor this loader understands"
+    if _version_tuple(current) < _version_tuple(match.group(1)):
+        return (
+            f"needs llm-rosetta {requirement} but this gateway runs {current}; "
+            f"upgrade the gateway, or pin an older ref for this package"
+        )
+    return None
 
 
 def _normalize_path(value: Any, *, where: str) -> str:
