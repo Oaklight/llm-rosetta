@@ -107,6 +107,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/dev/check_shim_catalog.py
 
+      - name: Compare the packages' branch-publish workflow with the master copy
+        # Five copies of one job, and drift in them is silent: a copy that stops
+        # publishing the `.sha256` sibling leaves a mirror with a missing file.
+        # A package with no copy yet is a warning until the rollout finishes;
+        # the nightly `shim-drift` job passes --require-all once it has.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/dev/check_shim_workflow.py
+
   docs-build:
     # The docs live on two orphan branches, and Read the Docs builds them by
     # running *their* .readthedocs.yaml: a pre_build that clones this

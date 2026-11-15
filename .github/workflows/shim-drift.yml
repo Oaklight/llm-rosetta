@@ -1,0 +1,44 @@
+name: Shim drift
+
+# Two things live in the five published shim packages and nowhere else:
+# the workflow that publishes their `dist` archive, and the archives it
+# produces.  Neither is visible to this repository's CI, which only runs on a
+# push to master — so a package can drift, or stop publishing, and nobody
+# learns until someone wants a mirror.
+#
+# This job asks both questions on a schedule.  It is separate from `ci.yml` on
+# purpose: a nightly run of the full test suite would spend an hour for two
+# HTTP checks.
+
+on:
+  schedule:
+    # Off the hour: every scheduled workflow in the ecosystem fires at :00.
+    - cron: "23 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Every package names the repositories the catalogue lists
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/dev/check_shim_catalog.py
+
+      - name: Every package carries the branch-publish workflow
+        # `--require-all` is the post-rollout state.  Until all five packages
+        # carry the file, drop it here rather than teaching the script to tell
+        # a rollout apart from drift it will never be able to explain.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/dev/check_shim_workflow.py
