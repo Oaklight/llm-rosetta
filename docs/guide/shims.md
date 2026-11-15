@@ -713,7 +713,8 @@ to one tier. Ticking shims on a card and pressing **Install** adds the key to
 installed shows *loaded* / *not loaded* per shim and offers **Save
 selection**, **Add provider** and **Remove**. Cards are closed by default and
 carry the vendors' marks on their head, so the package is recognisable before
-its rows are opened.
+its rows are opened; a keyless pool shows one **FREE** plate instead of its
+four vendors' marks.
 
 **Upgrading is separate from saving.** An installed card states the commit its
 source was fetched at (`installed <sha>`) and the commit the last check read
