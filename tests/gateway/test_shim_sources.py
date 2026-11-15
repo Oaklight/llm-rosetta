@@ -800,35 +800,30 @@ class TestMirrorConfig:
         assert merged["ref"] == "v0.1.0"
 
     @pytest.mark.parametrize(
-        "key, archive",
-        [
-            ("asksage", "asksage.tar.gz"),
-            ("alcf", "alcf.tar.gz"),
-            ("argo", "argo.tar.gz"),
-            ("free", "free.tar.gz"),
-        ],
+        "key",
+        ["asksage", "alcf", "argo", "free", "opendesign"],
     )
-    def test_a_preset_carries_its_tag_and_mirror(
-        self, key: str, archive: str, tmp_path: Path
+    def test_a_preset_tracks_its_branch_and_pins_nothing(
+        self, key: str, tmp_path: Path
     ):
-        """Every published package expands to a pinned primary plus a mirror.
+        """Every published package expands to a branch-tracked remote, alone.
 
-        The tag is what makes the mirror usable: its bytes are the archive
-        built for that tag, so an unpinned primary could drift away from it.
+        No tag and no digest: the loader resolves the branch to a commit and
+        records it in the cache stamp, so the preset stays reproducible
+        without a release having to happen first.
+
+        No mirror either: the packages' ``dist`` branches hold tag-addressed
+        archives, and a branch-tracking preset addresses the mirror by commit,
+        so the leg would answer 404 — which is final, on exactly the path a
+        mirror exists for.  It returns with a publish job that writes
+        ``dist/<commit>/``.
         """
         sources = parse_shims_section({"presets": [key]}, str(tmp_path / "c.jsonc"))
         remote = sources.remotes[0]
-        # Each package pins its own tag: ``free`` shipped a second archive, so
-        # it is on v0.2.0 while the rest are still on their first.
-        assert remote["ref"].startswith("v")
+        assert "ref" not in remote
+        assert "sha256" not in remote
         assert remote["path"].endswith("/providers")
-        mirror = remote["mirror"]
-        assert mirror["url_template"].endswith(f"@dist/{{ref}}/{archive}")
-        assert "{ref}" in mirror["url_template"]
-        assert len(mirror["sha256"]) == 64
-        # The published archive is laid out from the providers directory, not
-        # from the repository root, so the mirror names its own scan path.
-        assert mirror["path"] == "providers"
+        assert "mirror" not in remote
 
     def test_describe_names_the_leg(self):
         report = ShimLoadReport(
@@ -863,3 +858,30 @@ class TestMirrorConfig:
     def test_describe_is_empty_without_a_section(self):
         assert describe_shim_sources(None) == []
         assert describe_shim_sources(ShimLoadReport()) == []
+
+
+class TestMirrorSlot:
+    """Which ref a mirror's ``{ref}`` is filled with.
+
+    A branch-tracked preset has no declared ref, so the mirror must be
+    addressed by the commit the primary resolved to — otherwise the pinned
+    commit and the mirror's bytes name different trees, which is exactly what
+    the retired ``sha256`` pair used to catch.
+    """
+
+    def test_a_declared_ref_wins(self):
+        from llm_rosetta_gateway.shims.sources import _mirror_slot
+
+        assert _mirror_slot("v0.3.1", "abc123") == "v0.3.1"
+
+    def test_a_branch_tracked_preset_uses_the_resolved_commit(self):
+        from llm_rosetta_gateway.shims.sources import _mirror_slot
+
+        assert _mirror_slot(None, "c1925c14f35170aa4f839c7fb8b97de58c2d4bee") == (
+            "c1925c14f35170aa4f839c7fb8b97de58c2d4bee"
+        )
+
+    def test_no_ref_and_no_commit_leaves_the_placeholder_empty(self):
+        from llm_rosetta_gateway.shims.sources import _mirror_slot
+
+        assert _mirror_slot(None, None) is None
