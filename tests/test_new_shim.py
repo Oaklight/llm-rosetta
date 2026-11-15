@@ -1289,6 +1289,40 @@ class TestCheckTree:
         (tmp_path / "acme" / "token.py").write_text("", encoding="utf-8")
         assert check_tree(tmp_path) == []
 
+    def test_a_broken_fields_block_is_reported_before_it_is_installed(
+        self, tmp_path: Path
+    ):
+        """The loader refuses the whole root, so the check must say which file.
+
+        The panel renders those entries verbatim; a typo in one would otherwise
+        surface as a gateway that will not load the tree at all.
+        """
+        from llm_rosetta.shims.scaffold import check_tree
+
+        (tmp_path / "acme").mkdir()
+        (tmp_path / "acme" / "provider.yaml").write_text(
+            "fields:\n  - key: email\n", encoding="utf-8"
+        )
+        self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
+
+        findings = check_tree(tmp_path)
+
+        assert [f.path.name for f in findings] == ["provider.yaml"]
+        assert "declares no label" in findings[0].message
+        # The finding carries the path, so the sentence does not repeat it.
+        assert str(tmp_path) not in findings[0].message
+
+    def test_a_well_formed_fields_block_is_not_a_finding(self, tmp_path: Path):
+        from llm_rosetta.shims.scaffold import check_tree
+
+        (tmp_path / "acme").mkdir()
+        (tmp_path / "acme" / "provider.yaml").write_text(
+            "fields:\n  - key: email\n    label: Account email\n", encoding="utf-8"
+        )
+        self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
+
+        assert check_tree(tmp_path) == []
+
     def test_a_retired_exchange_in_a_private_directory_is_not_a_second_one(
         self, tmp_path: Path
     ):
