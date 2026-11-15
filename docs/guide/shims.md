@@ -549,7 +549,7 @@ forge、在本网络解析不了的 DNS 名。`mirror` 为同一份归档再给�
 
 LLM-Rosetta 内置 49 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`
 下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。ALCF、AskSage、Argo、
-Open Design 与免密钥免费端点的 shim 作为独立包发布 ——
+Open Design 与免费端点的 shim 作为独立包发布 ——
 参见[独立 Shim 包](#standalone-shim-packages)。
 
 | 名称 | 格式 | 默认 Base URL | API Key 环境变量 | 转换规则 |
@@ -617,7 +617,7 @@ Open Design 与免密钥免费端点的 shim 作为独立包发布 ——
 | Argo | `argo--chat_completions`、`argo--messages`、`argo--open_responses` | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
 | AskSage | `asksage--chat_completions`、`asksage--messages`、`asksage--open_responses`、`asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
 | Open Design | `opendesign--chat_completions`、`opendesign--open_responses`、`opendesign--messages` | [llm-rosetta-shim-opendesign](https://github.com/Oaklight/llm-rosetta-shim-opendesign) |
-| 免密钥免费端点 | `kilo_free--chat_completions`、`llm7--chat_completions`、`opencode_zen_free--chat_completions`、`ovhcloud--chat_completions` | [llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free) |
+| 免费端点 | `kilo_free--chat_completions`、`llm7--chat_completions`、`opencode_zen_free--chat_completions`、`ovhcloud--chat_completions` | [llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free) |
 
 ALCF 与 AskSage 是在 0.14.0 开发周期中引入的，从未出现在任何稳定版的内置集合中；Argo 则自
 v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心。OpenCode 免费通道在 0.14 之后
