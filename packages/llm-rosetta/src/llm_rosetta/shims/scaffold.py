@@ -25,6 +25,7 @@ a package's ``providers`` directory (``src/<package>/providers`` in the
 from __future__ import annotations
 
 import argparse
+import re
 import signal
 import subprocess
 import sys
@@ -66,48 +67,60 @@ DEFAULT_FORMATS = {
     "decisions": "systemone",
 }
 
-LEAF_TEMPLATE = """\
-{comment}name: {name}
-model_type: {model_type}
-format: {format}
-{identity}
-connection:
-{connection}
-"""
+#: The template this module renders.  A shim's shape is documentation first:
+#: the files below are what the guide shows and what the scaffold writes, so
+#: neither can describe a tree the other does not mean.
+TEMPLATE_DIR = Path(__file__).with_name("_shim_template")
+TREE_DIR = TEMPLATE_DIR / "tree"
+PACKAGE_DIR = TEMPLATE_DIR / "package"
 
-TRANSFORMS_TEMPLATE = '''\
-"""Field-level transforms for {name}.
+_PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 
-The loader imports this module when it sits beside ``provider.yaml`` and reads
-the tuples it exports; there is nothing to declare in the YAML.  A transform
-takes and returns a plain body dict, and returning the argument unchanged keeps
-the field.
-"""
-
-from __future__ import annotations
-
-from typing import Any
+#: The leaf modules a template may ship beside ``provider.yaml``.
+LEAF_MODULES = ("transforms.py", "auth.py", "quota.py")
 
 
-def _keep(body: dict[str, Any]) -> dict[str, Any]:
-    """Return the body unchanged."""
+def _render(text: str, values: dict[str, str]) -> str:
+    """Fill a template's placeholders.
 
-    return body
+    A line that names a placeholder with no value is dropped, so an optional
+    field can stay on one line in the template.  A placeholder the caller does
+    not know at all is an error rather than an empty substitution: a typo in a
+    template must fail loudly, and a test renders every template for that.
+
+    Args:
+        text: The template's contents.
+        values: The value of every placeholder the template may name.
+
+    Returns:
+        The rendered text.
+
+    Raises:
+        KeyError: The template names a placeholder *values* does not carry.
+    """
+    rendered: list[str] = []
+    for line in text.splitlines(keepends=True):
+        names = _PLACEHOLDER.findall(line)
+        unknown = [name for name in names if name not in values]
+        if unknown:
+            raise KeyError(f"template names unknown placeholder(s) {unknown}")
+        if any(not values[name] for name in names):
+            continue
+        rendered.append(_PLACEHOLDER.sub(lambda m: values[m.group(1)], line))
+    return "".join(rendered)
 
 
-#: A tuple, not a function: the loader reads the exports and the pipeline
-#: iterates them, so a callable export would fail at request time, not here.
-response_body_transforms = (_keep,)
-'''
+def _template(relative: str) -> str:
+    """Return the text of one file under the template directory."""
+    return (TEMPLATE_DIR / relative).read_text(encoding="utf-8")
 
 
-def _leaf_comment(name: str, format_: str) -> str:
-    """A first line that says why this file exists, in the house style."""
-    return (
-        f"# {name}: the {format_} lane.  Delete this comment once the shim has\n"
-        f"# something worth explaining — a measured quirk, a field the upstream\n"
-        f"# renames, a range it accepts.\n"
-    )
+def _write_from_template(
+    template: str, destination: Path, values: dict[str, str]
+) -> None:
+    """Render *template* into *destination*, creating the directory."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(_render(_template(template), values), encoding="utf-8")
 
 
 def _yaml_scalar(value: str) -> str:
@@ -121,15 +134,63 @@ def _yaml_scalar(value: str) -> str:
     return value
 
 
-def _leaf_path(root: Path, vendor: str, model_type: str, format_: str, layout: str):
-    """Return the leaf directory for the requested layout."""
-    if layout == "flat":
-        return root / vendor / format_
-    if model_type == "llm":
-        return root / vendor / "llm" / format_
-    # A non-chat type names its own directory, and the leaf inside names the
-    # dialect: ``<vendor>/embeddings/provider.yaml`` with ``format: openai``.
-    return root / vendor / model_type
+def _type_dir(root: Path, vendor: str, model_type: str, lane: str | None) -> Path:
+    """Return the type directory a leaf belongs under.
+
+    The type directory is always present; whether the leaf sits directly in it
+    or one format level deeper is decided by :func:`_format_level`.
+    """
+    base = root / vendor / lane if lane else root / vendor
+    return base / model_type
+
+
+def _format_level(type_dir: Path) -> tuple[bool, bool]:
+    """Whether *type_dir* already uses a format level, and whether a move is due.
+
+    A type directory holding a leaf directly has exactly one lane.  The second
+    lane moves that leaf into ``<its format>/`` so both live at one level; a
+    directory that already holds format directories needs no move.
+
+    Returns:
+        ``(uses_formats, move_due)``.
+    """
+    if not type_dir.is_dir():
+        return False, False
+    if (type_dir / "provider.yaml").is_file():
+        return True, True
+    for child in sorted(type_dir.iterdir()):
+        if child.is_dir() and (child / "provider.yaml").is_file():
+            return True, False
+    return False, False
+
+
+def _declared_format(directory: Path) -> str | None:
+    """The ``format:`` a leaf declares, for the move a second lane forces."""
+    document = _yaml_document(directory / "provider.yaml") or {}
+    value = document.get("format") or document.get("base")
+    return value if isinstance(value, str) and value else None
+
+
+def _move_to_format_level(type_dir: Path) -> tuple[str | None, str]:
+    """Move the lone leaf of *type_dir* into ``<type>/<format>/``.
+
+    Returns the format it moved under (``None`` when the leaf does not say) and
+    a note for the operator.  Every recognised leaf module moves with it,
+    because they belong to that leaf.
+    """
+    fmt = _declared_format(type_dir)
+    if not fmt:
+        return None, (
+            f"{type_dir}/provider.yaml declares no 'format:', so a second lane "
+            f"cannot be placed beside it; move it into a format directory first"
+        )
+    destination = type_dir / fmt
+    destination.mkdir(parents=True, exist_ok=True)
+    for name in ("provider.yaml", *LEAF_MODULES):
+        source = type_dir / name
+        if source.is_file():
+            source.rename(destination / name)
+    return fmt, f"moved the existing lane into {destination}"
 
 
 #: Directory names the loader reads as model types rather than vendors.
@@ -290,22 +351,19 @@ def _existing_names(root: Path) -> dict[str, Path]:
     return names
 
 
-def inspect_target(
-    root: Path, vendor: str, name: str, *, layout: str
-) -> tuple[str | None, list[str]]:
+def inspect_target(root: Path, vendor: str, name: str) -> tuple[str | None, list[str]]:
     """Check the target against what *root* already holds.
 
     Three things the loader cannot honour are refused: writing below a vendor
     whose ``provider.yaml`` is a shim (nothing below such a directory is read),
     a name another file already declares (the registry keeps one), and a name
-    that cannot be a directory.  A vendor that already holds lanes in the other
-    layout is legal and merely noted.
+    that cannot be a directory.  A vendor still holding lanes in the old
+    shapes is legal and merely noted, with the command that reports the rest.
 
     Args:
         root: The directory a gateway scans.
         vendor: Vendor directory name.
         name: The shim name the new leaf will declare.
-        layout: The layout the leaf will be written in.
 
     Returns:
         ``(error, notes)`` — an error refuses the write; a note is printed and
@@ -319,32 +377,28 @@ def inspect_target(
             f"{provider_yaml} is a shim, not a vendor manifest: the loader reads "
             f"{vendor}/ as that one shim and never looks below it. Add a new "
             f"top-level vendor, or turn {vendor}/ into a group — move its "
-            f"provider.yaml into {vendor}/<format>/ and write a manifest at "
+            f"provider.yaml into {vendor}/<type>/ and write a manifest at "
             f"{vendor}/provider.yaml",
             notes,
         )
     taken = _existing_names(root)
     if name in taken:
         return f"{name!r} is already declared by {taken[name]}", notes
-    current = _vendor_layout(vendor_dir) if vendor_dir.is_dir() else None
-    if current is not None and current != layout:
-        notes.append(
-            f"{vendor} already holds leaves in the {current} layout; this one is "
-            f"{layout} — both load, but the vendor now carries two shapes"
-        )
+    if vendor_dir.is_dir():
+        legacy = [
+            child.name
+            for child in sorted(vendor_dir.iterdir())
+            if child.is_dir()
+            and child.name not in _TYPE_DIR_NAMES
+            and (child / "provider.yaml").is_file()
+        ]
+        if legacy:
+            notes.append(
+                f"{vendor} still holds format directories directly under it "
+                f"({', '.join(legacy)}); `llm-rosetta-gateway shims check --root "
+                f"{root}` reports the canonical path"
+            )
     return None, notes
-
-
-def _existing_vendor_fields(manifest: Path) -> set[str]:
-    """The identity fields a vendor manifest already declares."""
-    if not manifest.is_file():
-        return set()
-    from llm_rosetta._vendor.yaml import load as yaml_load
-
-    document = yaml_load(manifest.read_text(encoding="utf-8")) or {}
-    if not isinstance(document, dict):
-        return set()
-    return {key for key in ("logo", "group", "group_label") if key in document}
 
 
 def _append_registry_entry(root: Path, name: str, leaf: Path) -> str | None:
@@ -379,27 +433,6 @@ def _append_registry_entry(root: Path, name: str, leaf: Path) -> str | None:
     text += f"  - name: {name}\n    path: {relative}\n"
     manifest.write_text(text, encoding="utf-8")
     return f"updated {manifest}"
-
-
-def _identity_lines(
-    vendor: str,
-    *,
-    logo: str | None,
-    group: str | None,
-    group_label: str | None,
-    inherited: set[str],
-    default_group: str | None,
-) -> list[str]:
-    """The vendor-level lines a file declares, skipping what it inherits."""
-    lines = []
-    for key, value in (
-        ("logo", logo),
-        ("group", group or default_group),
-        ("group_label", group_label),
-    ):
-        if value and key not in inherited:
-            lines.append(f"{key}: {_yaml_scalar(value)}")
-    return lines
 
 
 def _git(*args: str, cwd: Path) -> str | None:
@@ -594,7 +627,7 @@ def scaffold(
     *,
     format_: str,
     model_type: str = "llm",
-    layout: str = "typed",
+    lane: str | None = None,
     base_url: str | None = None,
     models_path: str | None = None,
     api_key_env: str | None = None,
@@ -602,22 +635,26 @@ def scaffold(
     logo: str | None = None,
     group: str | None = None,
     group_label: str | None = None,
-    vendor_manifest: bool = True,
     registry_manifest: bool = True,
     transform: bool = False,
+    auth: bool = False,
+    quota: bool = False,
+    package: str | None = None,
     check: bool = False,
     name: str | None = None,
 ) -> int:
-    """Write the files for one shim.
+    """Write the files for one shim from the template.
 
     Args:
         root: The directory a gateway scans — a built-in ``providers`` tree, or
-            a package's ``providers`` directory.
+            a package's ``providers`` directory.  With *package* it is the
+            repository root instead, and the tree is written under
+            ``src/<package>/providers``.
         vendor: Vendor directory name, e.g. ``acme``.
         format_: Wire format, e.g. ``chat_completions``.
         model_type: One of :data:`MODEL_TYPES`.
-        layout: ``"typed"`` (``<vendor>/llm/<format>``) or ``"flat"``
-            (``<vendor>/<format>``).
+        lane: A named instance of the vendor (ALCF's clusters), written between
+            the vendor and its type directories.
         base_url: Upstream base URL.  A placeholder is written when omitted, so
             the file always loads and the missing value is obvious.
         models_path: Model-list URL or path, when it is not the default.
@@ -627,11 +664,12 @@ def scaffold(
         logo: Vendor mark URL, written to the vendor manifest.
         group: Vendor group key.  Defaults to the vendor name in the manifest.
         group_label: Vendor group title.
-        vendor_manifest: Write ``<vendor>/provider.yaml`` when the vendor has
-            none, and keep shared values there.
         registry_manifest: Add the leaf to ``<root>/shims.yaml`` when that file
             exists.
         transform: Write a ``transforms.py`` stub beside the leaf.
+        auth: Write a vendor-level ``auth.py`` stub for a credential exchange.
+        quota: Write a vendor-level ``quota.py`` stub.
+        package: Distribution name; write the external package shell too.
         check: Load the new leaf through the real loader and report.
         name: Shim name.  Defaults to ``<vendor>--<format>``.
 
@@ -644,92 +682,59 @@ def scaffold(
     if error:
         print(f"error: {error}", file=sys.stderr)
         return 2
+    if lane is not None:
+        lane = lane.strip()
+        error = vendor_name_error(lane)
+        if error:
+            print(f"error: lane {error}", file=sys.stderr)
+            return 2
     name = name or f"{vendor}--{format_}"
     api_key_env = api_key_env or vendor.upper().replace("-", "_") + "_API_KEY"
     if not root.is_dir():
         print(f"error: {root} is not a directory", file=sys.stderr)
         return 2
-    error, notes = inspect_target(root, vendor, name, layout=layout)
+
+    scan_root = root
+    if package:
+        package_module = package.replace("-", "_")
+        scan_root = root / "src" / package_module / "providers"
+        scan_root.mkdir(parents=True, exist_ok=True)
+        _write_package_shell(root, package, package_module, vendor)
+
+    error, notes = inspect_target(scan_root, vendor, name)
     if error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     for note in notes:
         print(f"note: {note}")
 
-    leaf = _leaf_path(root, vendor, model_type, format_, layout)
-    provider_yaml = leaf / "provider.yaml"
-    if provider_yaml.exists():
-        print(f"error: {provider_yaml} already exists", file=sys.stderr)
+    leaf = _resolve_leaf_dir(scan_root, vendor, model_type, lane, format_)
+    if leaf is None:
         return 1
 
-    manifest = root / vendor / "provider.yaml"
-    if vendor_manifest and not manifest.is_file():
-        manifest.parent.mkdir(parents=True, exist_ok=True)
-        manifest_lines = [
-            f"# Vendor manifest: the defaults every {vendor} shim shares.",
-            "# A leaf inherits every field here and may override any of them.",
-        ]
-        manifest_lines.extend(
-            _identity_lines(
-                vendor,
-                logo=logo,
-                group=group,
-                group_label=group_label,
-                inherited=set(),
-                default_group=vendor,
-            )
-        )
-        manifest_lines.append("connection:")
-        manifest_lines.append(f"  api_key_env: {_yaml_scalar(api_key_env)}")
-        manifest.write_text("\n".join(manifest_lines) + "\n", encoding="utf-8")
-    # Read back what the vendor already declares, including a manifest just
-    # written: the leaf states only what it does not inherit.
-    inherited = set() if not vendor_manifest else _existing_vendor_fields(manifest)
-
-    identity_lines = _identity_lines(
-        vendor,
-        logo=logo,
-        group=group,
-        group_label=group_label,
-        inherited=inherited,
-        default_group=None,
-    )
-    if display_name:
-        identity_lines.append(f"display_name: {_yaml_scalar(display_name)}")
-
-    connection_lines: list[str] = []
-    connection_lines.append(
-        f"  base_url: {_yaml_scalar(base_url)}"
-        if base_url
-        else "  base_url: https://example.invalid/v1"
-    )
-    if not vendor_manifest:
-        connection_lines.append(f"  api_key_env: {_yaml_scalar(api_key_env)}")
-    if models_path:
-        connection_lines.append(f"  models_path: {_yaml_scalar(models_path)}")
-
-    leaf.mkdir(parents=True, exist_ok=True)
-    provider_yaml.write_text(
-        LEAF_TEMPLATE.format(
-            comment=_leaf_comment(name, format_),
+    written: list[Path] = []
+    written.extend(
+        _write_leaf_files(
+            scan_root,
+            leaf,
+            vendor=vendor,
             name=name,
             model_type=model_type,
-            format=format_,
-            identity=("\n".join(identity_lines) + "\n") if identity_lines else "",
-            connection="\n".join(connection_lines),
-        ),
-        encoding="utf-8",
+            format_=format_,
+            base_url=base_url,
+            models_path=models_path,
+            display_name=display_name,
+            api_key_env=api_key_env,
+            logo=logo,
+            group=group,
+            group_label=group_label,
+            transform=transform,
+            auth=auth,
+            quota=quota,
+        )
     )
-    written = [provider_yaml]
-    if vendor_manifest:
-        written.append(manifest)
 
-    if transform:
-        transforms = leaf / "transforms.py"
-        transforms.write_text(TRANSFORMS_TEMPLATE.format(name=name), encoding="utf-8")
-        written.append(transforms)
-
-    note = _append_registry_entry(root, name, leaf) if registry_manifest else None
+    note = _append_registry_entry(scan_root, name, leaf) if registry_manifest else None
 
     for path in written:
         print(f"wrote   {path}")
@@ -737,12 +742,151 @@ def scaffold(
         print(note)
 
     if check:
-        return _check(root, leaf, name)
+        return _check(scan_root, leaf, name)
     print(
         "\nnext: fill in the measured facts, add a test under tests/, and update "
         "docs_en + docs_zh."
     )
     return 0
+
+
+def _resolve_leaf_dir(
+    scan_root: Path,
+    vendor: str,
+    model_type: str,
+    lane: str | None,
+    format_: str,
+) -> Path | None:
+    """Return the directory the new leaf goes in, or ``None`` when it cannot.
+
+    The format level appears when a type directory already holds a lane: the
+    first lane lives at ``<type>/provider.yaml`` and the second moves it into
+    ``<type>/<its format>/`` so both sit at the same level.
+    """
+    type_dir = _type_dir(scan_root, vendor, model_type, lane or None)
+    uses_formats, move_due = _format_level(type_dir)
+    if move_due:
+        moved, note = _move_to_format_level(type_dir)
+        print(f"note: {note}")
+        if moved is None:
+            return None
+        uses_formats = True
+    leaf = type_dir / format_ if uses_formats else type_dir
+    if (leaf / "provider.yaml").exists():
+        print(f"error: {leaf / 'provider.yaml'} already exists", file=sys.stderr)
+        return None
+    return leaf
+
+
+def _write_leaf_files(
+    scan_root: Path,
+    leaf: Path,
+    *,
+    vendor: str,
+    name: str,
+    model_type: str,
+    format_: str,
+    base_url: str | None,
+    models_path: str | None,
+    display_name: str | None,
+    api_key_env: str,
+    logo: str | None,
+    group: str | None,
+    group_label: str | None,
+    transform: bool,
+    auth: bool,
+    quota: bool,
+) -> list[Path]:
+    """Write the leaf, the vendor manifest and any optional module.
+
+    Returns:
+        Every file written, in the order it was written.
+    """
+    written: list[Path] = []
+    manifest = scan_root / vendor / "provider.yaml"
+    if not manifest.is_file():
+        _write_from_template(
+            "tree/vendor/provider.yaml.tmpl",
+            manifest,
+            {
+                "vendor": vendor,
+                "logo": _yaml_scalar(logo) if logo else "",
+                "group": _yaml_scalar(group or vendor),
+                "group_label": _yaml_scalar(group_label) if group_label else "",
+                "api_key_env": _yaml_scalar(api_key_env),
+            },
+        )
+        written.append(manifest)
+
+    _write_from_template(
+        "tree/vendor/type/format/provider.yaml.tmpl",
+        leaf / "provider.yaml",
+        {
+            "vendor": vendor,
+            "name": _yaml_scalar(name),
+            "model_type": model_type,
+            "format": _yaml_scalar(format_),
+            "base_url": _yaml_scalar(base_url or "https://example.invalid/v1"),
+            "display_name": _yaml_scalar(display_name) if display_name else "",
+            "models_path": _yaml_scalar(models_path) if models_path else "",
+        },
+    )
+    written.append(leaf / "provider.yaml")
+
+    if transform:
+        _write_from_template(
+            "tree/vendor/type/format/transforms.py.tmpl",
+            leaf / "transforms.py",
+            {"name": name, "vendor": vendor, "format": format_},
+        )
+        written.append(leaf / "transforms.py")
+
+    for module, wanted in (("auth.py", auth), ("quota.py", quota)):
+        if not wanted:
+            continue
+        destination = scan_root / vendor / module
+        _write_from_template(
+            f"tree/vendor/{module}.tmpl",
+            destination,
+            {"name": name, "vendor": vendor, "format": format_},
+        )
+        written.append(destination)
+    return written
+
+
+def _write_package_shell(
+    repo: Path, distribution: str, package_module: str, vendor: str
+) -> list[Path]:
+    """Write the files that make *repo* an installable shim package.
+
+    A file that already exists is left alone: the shell carries the release
+    workflow and the version, which a repository owns once it exists.
+
+    Returns:
+        The files that were written.
+    """
+    from llm_rosetta import __version__ as core_version
+
+    values = {
+        "distribution": distribution,
+        "package": package_module,
+        "vendor": vendor,
+        "core_floor": core_version,
+    }
+    written: list[Path] = []
+    for template in sorted(PACKAGE_DIR.rglob("*.tmpl")):
+        relative = template.relative_to(PACKAGE_DIR).as_posix()
+        destination = repo / relative.removesuffix(".tmpl")
+        if destination.exists():
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(
+            _render(template.read_text(encoding="utf-8"), values), encoding="utf-8"
+        )
+        written.append(destination)
+    for path in written:
+        print(f"wrote   {path}")
+    return written
 
 
 def _check(root: Path, leaf: Path, name: str) -> int:
@@ -988,12 +1132,7 @@ def _fill_interactively(args: argparse.Namespace) -> None:
     )
     default_format = args.format or DEFAULT_FORMATS.get(args.model_type, formats[0])
     args.format = _ask_choice("Wire format", formats, default_format)
-    print("Directory layout:")
-    print("  typed  <vendor>/llm/<format>/ for chat, <vendor>/<type>/ otherwise")
-    print("  flat   <vendor>/<format>/ — the format directory sits under the vendor")
-    args.layout = _ask_choice(
-        "Layout", ("typed", "flat"), args.layout or shape.layout or "typed"
-    )
+    args.lane = _ask("Lane directory (optional; ALCF's clusters)", args.lane or "")
     args.base_url = _ask("Upstream base URL", args.base_url or "")
     if args.base_url:
         args.base_url, note = normalize_base_url(args.base_url)
@@ -1058,11 +1197,10 @@ def add_arguments(parser: argparse.ArgumentParser, *, default_root: str) -> None
         help="Directory a gateway scans (a providers tree)",
     )
     parser.add_argument(
-        "--layout",
-        choices=("typed", "flat"),
+        "--lane",
         default=None,
-        help="typed: <vendor>/llm/<format>; flat: <vendor>/<format>.  Default: "
-        "follow the scan root's existing shape, else typed",
+        help="A named instance of the vendor (ALCF's clusters), written "
+        "between the vendor and its type directories",
     )
     parser.add_argument("--base-url", help="Upstream base URL")
     parser.add_argument(
@@ -1093,21 +1231,20 @@ def add_arguments(parser: argparse.ArgumentParser, *, default_root: str) -> None
     parser.add_argument("--group", help="Group key; default the vendor name")
     parser.add_argument("--group-label", help="Group title")
     parser.add_argument(
-        "--vendor-manifest",
-        dest="vendor_manifest",
-        action="store_const",
-        const=True,
-        default=None,
-        help="Write <vendor>/provider.yaml, when it has none, for the identity "
-        "and credential every lane shares.  Default: yes, unless the scan root "
-        "is a bundle of single-lane vendors",
+        "--auth",
+        action="store_true",
+        help="Write a vendor-level auth.py stub for a credential exchange",
     )
     parser.add_argument(
-        "--no-vendor-manifest",
-        dest="vendor_manifest",
-        action="store_const",
-        const=False,
-        help="Write every field on the leaf instead of a vendor manifest",
+        "--quota",
+        action="store_true",
+        help="Write a vendor-level quota.py stub",
+    )
+    parser.add_argument(
+        "--package",
+        metavar="DISTRIBUTION",
+        help="Write the external package shell into --root as well, e.g. "
+        "llm-rosetta-shim-acme; the tree then goes to src/<package>/providers",
     )
     parser.add_argument(
         "--no-registry-manifest",
@@ -1188,17 +1325,12 @@ def _run(args: argparse.Namespace) -> int:
         return 2
     root = Path(args.root).expanduser().resolve()
     shape = detect_package(root)
-    layout = args.layout or shape.layout or "typed"
-    if args.layout is None and shape.layout:
-        print(f"note: {root} holds {shape.describe()}; using the {layout} layout")
-    vendor_manifest = args.vendor_manifest
-    if vendor_manifest is None:
-        vendor_manifest = not shape.leaf_only
-        if shape.leaf_only:
-            print(
-                "note: this package models each provider as its own vendor; "
-                "the credential and the identity go on the leaf"
-            )
+    if shape.leaf_only:
+        print(
+            "note: this package models each provider as its own vendor leaf; "
+            "the scaffold now writes <vendor>/<type>/ — run `shims check` for "
+            "the canonical path of what is already there"
+        )
     base_url = args.base_url or None
     if base_url and args.probe:
         base_url, note = normalize_base_url(base_url)
@@ -1227,7 +1359,7 @@ def _run(args: argparse.Namespace) -> int:
         args.vendor,
         format_=args.format,
         model_type=args.model_type,
-        layout=layout,
+        lane=args.lane or None,
         base_url=base_url,
         models_path=args.models_path or None,
         api_key_env=args.api_key_env,
@@ -1235,9 +1367,11 @@ def _run(args: argparse.Namespace) -> int:
         logo=logo,
         group=args.group,
         group_label=args.group_label or None,
-        vendor_manifest=vendor_manifest,
         registry_manifest=not args.no_registry_manifest,
         transform=args.transform,
+        auth=args.auth,
+        quota=args.quota,
+        package=args.package,
         check=args.check,
         name=args.name,
     )

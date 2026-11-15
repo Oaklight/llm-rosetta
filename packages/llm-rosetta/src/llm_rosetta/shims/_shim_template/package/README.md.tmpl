@@ -1,0 +1,38 @@
+# {{distribution}}
+
+{{vendor}} provider shims for [llm-rosetta](https://github.com/Oaklight/llm-rosetta).
+
+The provider tree is generated and checked by the core CLI; do not hand-write
+its shape:
+
+```bash
+llm-rosetta-gateway shims check --root src/{{package}}/providers
+```
+
+The contract it follows is documented in `llm_rosetta/shims/_shim_template/`.
+
+## Install
+
+```bash
+pip install {{distribution}}
+```
+
+Installing registers the shims through the `llm_rosetta.shim_providers` entry
+point. A gateway can also load the tree without installing the package, by
+pointing `shims.paths` at `src/{{package}}/providers`.
+
+## Layout
+
+```
+src/{{package}}/providers/{{vendor}}/
+├── provider.yaml            vendor manifest: the shared credential and identity
+└── <type>/[<format>/]
+    └── provider.yaml        one leaf per lane
+```
+
+## Development
+
+```bash
+pip install -e ".[dev]"
+pytest
+```

@@ -1,0 +1,20 @@
+"""Allowance probe for {{vendor}}.
+
+The loader executes this file as a standalone module while it builds the shim
+registry: no relative imports, and nothing may touch the network at import
+time.
+
+Export ``PROBES`` — a tuple of objects implementing
+:class:`llm_rosetta.shims.quota_probe.QuotaProbe`.  The gateway resolves the
+one named by the shim's ``quota.probe`` against this tuple, and owns the HTTP
+call, the cache and the admin surface; this module owns only what the vendor
+answers.
+
+Place this file at the vendor root when every lane answers the same way, and
+beside a leaf when only that lane does.  A leaf-level module complements the
+vendor-level one rather than replacing it.
+"""
+
+from __future__ import annotations
+
+PROBES: tuple = ()

@@ -77,7 +77,7 @@ def test_the_typed_layout_creates_a_vendor_manifest_and_a_leaf(new_shim, root):
         ]
     )
 
-    leaf = root / "acme" / "llm" / "chat_completions" / "provider.yaml"
+    leaf = root / "acme" / "llm" / "provider.yaml"
     assert code == 0
     assert leaf.is_file()
     text = leaf.read_text(encoding="utf-8")
@@ -119,11 +119,17 @@ def test_the_scaffold_loads_with_what_it_inherits(new_shim, root):
     assert shim.logo == "https://example.com/acme.svg"
 
 
-def test_the_flat_layout_puts_the_format_under_the_vendor(new_shim, root):
-    new_shim.main(["acme", "--root", str(root), "--layout", "flat"])
+def test_a_second_lane_moves_the_first_into_a_format_directory(new_shim, root):
+    new_shim.main(["acme", "--root", str(root)])
 
-    assert (root / "acme" / "chat_completions" / "provider.yaml").is_file()
-    assert [s.name for s in load_providers_from_dir(root)] == ["acme--chat_completions"]
+    code = new_shim.main(["acme", "--root", str(root), "--format", "open_responses"])
+
+    assert code == 0
+    assert (root / "acme" / "llm" / "chat_completions" / "provider.yaml").is_file()
+    assert (root / "acme" / "llm" / "open_responses" / "provider.yaml").is_file()
+    assert not (root / "acme" / "llm" / "provider.yaml").exists()
+    names = sorted(s.name for s in load_providers_from_dir(root))
+    assert names == ["acme--chat_completions", "acme--open_responses"]
 
 
 def test_a_non_chat_type_names_its_own_directory(new_shim, root):
@@ -268,7 +274,7 @@ class TestInteractiveMode:
                 "acme",  # vendor
                 "llm",  # model type
                 "chat_completions",  # format
-                "typed",  # layout
+                "",  # lane
                 "https://api.acme.example/v1",  # base URL
                 "ACME_API_KEY",  # credential env var
                 "",  # models path
@@ -286,7 +292,7 @@ class TestInteractiveMode:
         assert code == 0
         assert "Creating a shim" in out
         assert "check   acme--chat_completions loads" in out
-        leaf = root / "acme" / "llm" / "chat_completions" / "provider.yaml"
+        leaf = root / "acme" / "llm" / "provider.yaml"
         assert leaf.is_file()
         assert "display_name: acme" in leaf.read_text(encoding="utf-8")
 
@@ -299,7 +305,7 @@ class TestInteractiveMode:
                 str(root),  # scan root
                 "llm",  # model type
                 "chat_completions",  # format
-                "typed",  # layout
+                "",  # lane
                 "https://api.acme.example/v1",
                 "ACME_API_KEY",
                 "",
@@ -337,7 +343,7 @@ class TestInteractiveMode:
                 "acme",
                 "llm",
                 "chat_completions",
-                "typed",
+                "",  # lane
                 "https://api.acme.example/v1",
                 "ACME_API_KEY",
                 "",
@@ -466,7 +472,7 @@ class TestGatewayCommand:
             cli.main()
 
         assert exit_info.value.code == 0
-        assert (root / "acme" / "llm" / "chat_completions" / "provider.yaml").is_file()
+        assert (root / "acme" / "llm" / "provider.yaml").is_file()
 
     def test_a_failed_load_check_reaches_the_shell(self, monkeypatch, root, tmp_path):
         from llm_rosetta.shims import providers as providers_module
@@ -503,7 +509,7 @@ class TestFormatChoice:
                 "llm",
                 "rpc",  # not a format
                 "chat_completions",
-                "typed",
+                "",  # lane
                 "",
                 "",
                 "",
@@ -639,7 +645,7 @@ class TestBaseUrlProbe:
         assert code == 0
         assert "dropped the pasted /models suffix" in out
         assert "ok:" in out
-        leaf = root / "acme" / "llm" / "chat_completions" / "provider.yaml"
+        leaf = root / "acme" / "llm" / "provider.yaml"
         assert "base_url: https://api.acme.example/v1" in leaf.read_text(
             encoding="utf-8"
         )
@@ -682,7 +688,7 @@ class TestCtrlC:
                 "acme",
                 "llm",
                 "chat_completions",
-                "typed",
+                "",  # lane
                 "",
                 "",
                 "",
@@ -699,7 +705,7 @@ class TestCtrlC:
         out = capsys.readouterr().out
         assert code == 0
         assert "Ctrl+C again to quit" in out
-        assert (root / "acme" / "llm" / "chat_completions" / "provider.yaml").is_file()
+        assert (root / "acme" / "llm" / "provider.yaml").is_file()
 
     def test_a_second_ctrl_c_cancels_without_writing(self, monkeypatch, root, capsys):
         from llm_rosetta.shims import scaffold
@@ -736,18 +742,18 @@ def _leaf_file(
 class TestExistingTree:
     """A root that already holds shims decides the shape a new one takes."""
 
-    def test_a_bundle_of_single_lane_vendors_gets_flat_leaves(self, root, capsys):
+    def test_a_bundle_of_single_lane_vendors_gets_a_typed_leaf(self, root, capsys):
         _leaf_file(root, "kilo", name="kilo--chat_completions")
 
         code = _script().main(["acme", "--no-input", "--root", str(root)])
 
         out = capsys.readouterr().out
         assert code == 0
-        assert "single-lane vendor" in out
-        leaf = root / "acme" / "chat_completions" / "provider.yaml"
-        assert leaf.is_file()
-        assert not (root / "acme" / "provider.yaml").exists()
-        assert "api_key_env: ACME_API_KEY" in leaf.read_text(encoding="utf-8")
+        assert "as its own vendor leaf" in out
+        assert (root / "acme" / "llm" / "provider.yaml").is_file()
+        # The credential still lives one level up, in the vendor manifest.
+        manifest = (root / "acme" / "provider.yaml").read_text(encoding="utf-8")
+        assert "api_key_env: ACME_API_KEY" in manifest
 
     def test_a_manifest_group_gets_the_typed_layout(self, root):
         (root / "google").mkdir()
@@ -759,7 +765,7 @@ class TestExistingTree:
         code = _script().main(["acme", "--no-input", "--root", str(root)])
 
         assert code == 0
-        assert (root / "acme" / "llm" / "chat_completions" / "provider.yaml").is_file()
+        assert (root / "acme" / "llm" / "provider.yaml").is_file()
 
     def test_a_lane_below_a_single_lane_vendor_is_refused(self, root, capsys):
         _leaf_file(root, "kilo", name="kilo--chat_completions")
@@ -775,35 +781,24 @@ class TestExistingTree:
     def test_a_name_another_leaf_declares_is_refused(self, root, capsys):
         _leaf_file(root, "acme/llm/chat_completions", name="acme--chat_completions")
 
-        code = _script().main(
-            ["acme", "--no-input", "--root", str(root), "--layout", "flat"]
-        )
+        code = _script().main(["acme", "--no-input", "--root", str(root)])
 
         err = capsys.readouterr().err
         assert code == 1
         assert "'acme--chat_completions' is already declared by" in err
-        assert not (root / "acme" / "chat_completions").exists()
 
-    def test_a_second_shape_inside_one_vendor_is_noted(self, root, capsys):
-        _leaf_file(root, "acme/llm/chat_completions", name="acme--chat_completions")
+    def test_the_second_lane_moves_the_existing_one(self, root, capsys):
+        _leaf_file(root, "acme/llm", name="acme--chat_completions")
 
         code = _script().main(
-            [
-                "acme",
-                "--no-input",
-                "--root",
-                str(root),
-                "--format",
-                "messages",
-                "--layout",
-                "flat",
-            ]
+            ["acme", "--no-input", "--root", str(root), "--format", "messages"]
         )
 
         out = capsys.readouterr().out
         assert code == 0
-        assert "two shapes" in out
-        assert (root / "acme" / "messages" / "provider.yaml").is_file()
+        assert "moved the existing lane into" in out
+        assert (root / "acme" / "llm" / "chat_completions" / "provider.yaml").is_file()
+        assert (root / "acme" / "llm" / "messages" / "provider.yaml").is_file()
 
     def test_a_model_type_name_is_refused_as_a_vendor(self, root, capsys):
         code = _script().main(["llm", "--no-input", "--root", str(root)])
@@ -856,9 +851,8 @@ class TestExistingTree:
         assert code == 0
         assert "found 1 single-lane vendor" in out
         assert prompts[0].startswith("Scan root")
-        layout_prompt = next(p for p in prompts if p.startswith("Layout"))
-        assert layout_prompt.endswith("[flat]: ")
-        assert (root / "acme" / "chat_completions" / "provider.yaml").is_file()
+        assert any(p.startswith("Lane directory") for p in prompts)
+        assert (root / "acme" / "llm" / "provider.yaml").is_file()
 
 
 class TestCtrlD:
@@ -901,7 +895,7 @@ class TestCtrlD:
 
         self._input(
             monkeypatch,
-            answers=[str(root), "acme", "llm", "chat_completions", "typed"],
+            answers=[str(root), "acme", "llm", "chat_completions", ""],
         )
 
         code = scaffold.main([])
@@ -1021,7 +1015,7 @@ class TestLobehubLogo:
                 "acme",  # vendor
                 "llm",  # model type
                 "chat_completions",  # format
-                "typed",  # layout
+                "",  # lane
                 "",  # base URL
                 "",  # credential env var
                 "",  # models path
@@ -1053,7 +1047,7 @@ class TestLobehubLogo:
                 "acme",
                 "llm",
                 "chat_completions",
-                "typed",
+                "",  # lane
                 "",
                 "",
                 "",
@@ -1082,7 +1076,7 @@ class TestLobehubLogo:
                 "acme",
                 "llm",
                 "chat_completions",
-                "typed",
+                "",  # lane
                 "",
                 "",
                 "",
@@ -1127,3 +1121,103 @@ class TestLobehubLogo:
         assert code == 2
         assert "no lobehub icon found for 'acme'" in capsys.readouterr().err
         assert not (root / "acme").exists()
+
+
+class TestTemplate:
+    """The template directory, and what the scaffold derives from it."""
+
+    _VALUES = {
+        "vendor": "acme",
+        "group": "acme",
+        "group_label": "Acme",
+        "logo": "https://example.invalid/acme.svg",
+        "api_key_env": "ACME_API_KEY",
+        "name": "acme--chat_completions",
+        "model_type": "llm",
+        "format": "chat_completions",
+        "base_url": "https://api.acme.example/v1",
+        "display_name": "Acme",
+        "models_path": "https://api.acme.example/v1/models",
+        "distribution": "llm-rosetta-shim-acme",
+        "package": "llm_rosetta_shim_acme",
+        "core_floor": "0.14.0",
+    }
+
+    def test_every_template_renders(self):
+        """A placeholder the scaffold does not fill must fail here, not at use."""
+        from llm_rosetta.shims import scaffold
+
+        for template in sorted(scaffold.TEMPLATE_DIR.rglob("*.tmpl")):
+            rendered = scaffold._render(
+                template.read_text(encoding="utf-8"), self._VALUES
+            )
+            assert "{{" not in rendered, template
+
+    def test_the_tree_carries_exactly_the_modules_the_loader_reads(self):
+        """The template set and the loader's allow-list are the same list."""
+        from llm_rosetta.shims import scaffold
+
+        names = {path.name for path in scaffold.TREE_DIR.rglob("*.tmpl")}
+        assert names == {
+            "provider.yaml.tmpl",
+            "transforms.py.tmpl",
+            "auth.py.tmpl",
+            "quota.py.tmpl",
+        }
+
+    def test_a_line_with_an_empty_placeholder_is_dropped(self):
+        """Optional fields stay on one line in the template."""
+        from llm_rosetta.shims import scaffold
+
+        text = "a: {{one}}\nb: {{two}}\nc: x\n"
+
+        assert scaffold._render(text, {"one": "1", "two": ""}) == "a: 1\nc: x\n"
+
+    def test_the_second_lane_moves_the_leaf_modules_with_it(self, new_shim, root):
+        new_shim.main(["acme", "--root", str(root), "--transform"])
+        new_shim.main(["acme", "--root", str(root), "--format", "messages"])
+
+        assert (root / "acme" / "llm" / "chat_completions" / "transforms.py").is_file()
+        assert not (root / "acme" / "llm" / "transforms.py").exists()
+
+    def test_the_package_shell_is_written_beside_the_tree(self, new_shim, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+
+        code = new_shim.main(
+            [
+                "acme",
+                "--root",
+                str(repo),
+                "--package",
+                "llm-rosetta-shim-acme",
+            ]
+        )
+
+        assert code == 0
+        assert (repo / "pyproject.toml").is_file()
+        leaf = (
+            repo
+            / "src"
+            / "llm_rosetta_shim_acme"
+            / "providers"
+            / "acme"
+            / "llm"
+            / "provider.yaml"
+        )
+        assert leaf.is_file()
+        text = (repo / "pyproject.toml").read_text(encoding="utf-8")
+        assert "llm-rosetta-shim-acme" in text
+        assert "llm_rosetta_shim_acme" in text
+        assert "{{" not in text
+
+    def test_an_existing_package_file_is_left_alone(self, new_shim, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        (repo / "pyproject.toml").write_text("# mine\n", encoding="utf-8")
+
+        new_shim.main(
+            ["acme", "--root", str(repo), "--package", "llm-rosetta-shim-acme"]
+        )
+
+        assert (repo / "pyproject.toml").read_text(encoding="utf-8") == "# mine\n"
