@@ -1,0 +1,118 @@
+# One copy per published shim package: this exact file lives in each of the
+# five repositories as `.github/workflows/publish-branch.yml`.  The master copy
+# is `llm-rosetta/scripts/dev/shim-publish-branch.yml`, and
+# `scripts/dev/check_shim_workflow.py` fails when a copy differs from it.
+# Edit the master copy, then copy it out.
+#
+# Why the packages publish: a gateway preset that tracks a branch resolves
+# `main` to a commit and addresses the CDN mirror by that commit
+# (`@dist/<sha>/<name>.tar.gz`).  This job builds the archive at every push
+# that can change it and commits it under the commit's own directory, so the
+# pinned commit and the bytes always describe one tree.
+
+name: Publish branch archive
+
+# A gateway preset that tracks the branch names its mirror by commit:
+# `@dist/<sha>/<name>.tar.gz`.  The loader resolves `main` to a commit when it
+# fetches, records that commit in the cache stamp, and fills the mirror's
+# `{ref}` with the same value — so the pin and the bytes describe one tree.
+# This job builds the archive at every push to `main` and commits it under the
+# commit's own directory, which is what makes the URL safe to cache anywhere.
+#
+# The `.sha256` beside it is published too.  The loader never reads it — a
+# branch-tracking preset declares no digest, because every commit has its own —
+# so it exists for a human or a mirror-sync script that wants to check the
+# bytes it copied.
+#
+# One directory per commit, immutable: a rebuild of an older commit would be a
+# different tree under a name that says otherwise.  Nothing is pruned here.  An
+# archive is a few hundred KB, and deleting the commit a released gateway's
+# cache stamp names would turn its mirror into a 404.
+#
+# The layout check runs first: an archive that extracts to a different shape
+# is worse than no mirror, because it loads nothing and the failure surfaces
+# far from the build.
+
+on:
+  push:
+    branches: [main]
+    # Only a push that can change the archive publishes one: a README commit
+    # leaves no directory behind on purpose, and a gateway that pinned it
+    # falls back to the GitHub primary, which carries the same tree.  The tag
+    # workflow is listed because its build invocation is the other half of
+    # this job's input.
+    paths:
+      - "src/**/providers/**"
+      - "scripts/build_shim_archive.py"
+      - ".github/workflows/publish-branch.yml"
+      - ".github/workflows/release.yml"
+  # The gate filters what runs; it cannot backfill.  This is how a commit that
+  # landed while the workflow was missing — or under a path the gate was wrong
+  # about — gets its directory.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dist-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build and verify the archive
+        id: build
+        run: |
+          set -euo pipefail
+          python scripts/build_shim_archive.py --write | tee build.log
+          shim=$(sed -n 's/^archive: \(.*\)\.tar\.gz$/\1/p' build.log)
+          built=$(find dist -name "${shim}.tar.gz" -type f | head -1)
+          test -n "$built"
+          # The builder is byte-reproducible, so the digest it wrote is the
+          # claim the commit address rests on; check the bytes against it
+          # rather than trusting the two to have been produced together.
+          ( cd "$(dirname "$built")" && sha256sum -c "$(basename "$built").sha256" )
+          {
+            echo "shim=$shim"
+            echo "built=$(pwd)/${built}"
+            echo "sha=${GITHUB_SHA}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish to the dist branch
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="${{ steps.build.outputs.sha }}"
+          shim="${{ steps.build.outputs.shim }}"
+          archive="${{ steps.build.outputs.built }}"
+
+          work=$(mktemp -d)
+          cd "$work"
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+          if git fetch -q origin dist; then
+            git checkout -q -B dist FETCH_HEAD
+          else
+            git checkout -q --orphan dist
+          fi
+
+          mkdir -p "${sha}"
+          cp "$archive" "${archive}.sha256" "${sha}/"
+          git add --all
+          if git diff --cached --quiet; then
+            echo "dist already carries ${sha}; nothing to publish"
+            exit 0
+          fi
+          git commit -q -m "dist: ${sha}"
+          git push origin dist
