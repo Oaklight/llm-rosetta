@@ -36,9 +36,12 @@ jobs:
         run: python scripts/dev/check_shim_catalog.py
 
       - name: Every package carries the branch-publish workflow
-        # `--require-all` is the post-rollout state.  Until all five packages
-        # carry the file, drop it here rather than teaching the script to tell
-        # a rollout apart from drift it will never be able to explain.
+        # `--require-all` is the post-rollout state, and the rollout is done:
+        # all five packages carry the file.  A package without one from here on
+        # is a new catalogue entry whose repository was never given a copy, and
+        # the nightly run is the place that says so — the push-time job stays
+        # tolerant so a repository published a moment after its entry does not
+        # redden an unrelated pull request.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/dev/check_shim_workflow.py
+        run: python scripts/dev/check_shim_workflow.py --require-all
