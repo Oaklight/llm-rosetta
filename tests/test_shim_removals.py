@@ -258,13 +258,16 @@ class TestSourceCatalog:
             assert remote["url"] == entry.repo
             assert remote["path"] == f"src/{entry.package}/providers"
             assert "token_env" not in remote
-            # The shipped presets track the default branch: no ref, no digest.
+            # The shipped presets track the default branch: no ref, no digest,
+            # and a mirror addressed by the commit the loader resolved.
             assert "ref" not in remote
-            # And no mirror either: a branch-tracking preset addresses the
-            # mirror by commit, while the packages' `dist` branches still hold
-            # tag-addressed archives, so the leg would 404 — which is final on
-            # the one path a mirror exists for.
-            assert "mirror" not in remote
+            mirror = remote["mirror"]
+            assert mirror["url_template"].startswith(
+                "https://cdn.jsdelivr.net/gh/Oaklight/"
+            )
+            assert "@dist/{ref}/" in mirror["url_template"]
+            assert "sha256" not in mirror
+            assert mirror["path"] == "providers"
 
     def test_every_published_package_tracks_its_branch(self):
         """A shim change must not wait for a gateway release.
@@ -282,10 +285,11 @@ class TestSourceCatalog:
         }
         for entry in SHIM_SOURCE_PACKAGES:
             assert entry.ref is None, entry.key
-            # A mirror returns with the publish job that writes
-            # ``dist/<commit>/``; until then a branch-tracking preset would
-            # address an archive nothing publishes.
-            assert entry.mirror is None, entry.key
+            # The mirror is addressed by the commit, and the package's publish
+            # job writes that directory, so the leg and the cache stamp agree.
+            assert entry.mirror is not None, entry.key
+            assert "@dist/{ref}/" in entry.mirror["url_template"], entry.key
+            assert "sha256" not in entry.mirror, entry.key
 
     def test_every_preset_round_trips_through_the_source_resolver(self):
         from llm_rosetta_gateway.shim_sources import resolve_source_config

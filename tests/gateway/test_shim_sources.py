@@ -803,27 +803,25 @@ class TestMirrorConfig:
         "key",
         ["asksage", "alcf", "argo", "free", "opendesign"],
     )
-    def test_a_preset_tracks_its_branch_and_pins_nothing(
+    def test_a_preset_tracks_its_branch_and_names_a_mirror_by_commit(
         self, key: str, tmp_path: Path
     ):
-        """Every published package expands to a branch-tracked remote, alone.
+        """No tag and no digest, but a mirror addressed by the resolved commit.
 
-        No tag and no digest: the loader resolves the branch to a commit and
-        records it in the cache stamp, so the preset stays reproducible
-        without a release having to happen first.
-
-        No mirror either: the packages' ``dist`` branches hold tag-addressed
-        archives, and a branch-tracking preset addresses the mirror by commit,
-        so the leg would answer 404 — which is final, on exactly the path a
-        mirror exists for.  It returns with a publish job that writes
-        ``dist/<commit>/``.
+        The loader resolves the branch to a commit, records it in the cache
+        stamp, and fills the mirror's ``{ref}`` with the same commit — and each
+        package's publish job writes exactly that directory, so the leg names a
+        file that exists instead of a tag nobody moved.
         """
         sources = parse_shims_section({"presets": [key]}, str(tmp_path / "c.jsonc"))
         remote = sources.remotes[0]
         assert "ref" not in remote
         assert "sha256" not in remote
         assert remote["path"].endswith("/providers")
-        assert "mirror" not in remote
+        mirror = remote["mirror"]
+        assert mirror["url_template"].endswith(f"@dist/{{ref}}/{key}.tar.gz")
+        assert "sha256" not in mirror
+        assert mirror["path"] == "providers"
 
     def test_describe_names_the_leg(self):
         report = ShimLoadReport(
