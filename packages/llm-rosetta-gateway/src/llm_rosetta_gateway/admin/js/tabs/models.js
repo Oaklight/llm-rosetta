@@ -12,7 +12,9 @@ import { providerRowsHtml, syncPickerBtn, openPickerMenu } from '../components/p
 import { laneGripHtml, laneSwitchHtml, laneWeightInputHtml } from '../components/provider-row.js';
 import { findLane, laneBody, laneKey, laneLabel } from '../core/lanes.js';
 import { jsArg, logoUrl } from '../core/html.js';
-import { openDialog, closeDialog } from '../core/dialog.js';
+import {
+  openDialog, closeDialog, isDialogPristine,
+} from '../core/dialog.js';
 import { typeOptionHtml, typeMark } from '../core/type-switch.js';
 
 // ── helpers (module-private) ──
@@ -821,6 +823,9 @@ function _markActiveModelRow() {
 /** Swap the panel between the summary and the edit form. */
 function _setDrawerPane(which) {
   _drawerPane = which;
+  // A pane switch hides one pane and shows another; both are static DOM, so
+  // the form keeps what was typed into it.  Marking the panel clean here would
+  // let a click outside throw those values away without a warning.
   document.getElementById('drawerDetail').hidden = which !== 'detail';
   document.getElementById('modelModal').hidden = which !== 'form';
   document.getElementById('drawerTitle').textContent = which === 'detail'
@@ -1046,6 +1051,9 @@ function _syncModelDrawer() {
   );
   el.innerHTML = _modelDetailHtml(_drawerModel, info, disabledProviders);
   _wireProviderDrag(el);
+  // No reset here: assigning ``innerHTML`` fires no ``input``/``change``, so
+  // the repaint never dirtied the panel — and clearing the flag would discard
+  // the record that the *form* pane still holds edits the operator typed.
 }
 
 document.addEventListener('keydown', (e) => {
@@ -1055,7 +1063,9 @@ document.addEventListener('keydown', (e) => {
 });
 
 // A click outside the panel closes it — except on another row, which switches
-// the panel to that model instead of closing it.
+// the panel to that model instead of closing it.  The rule about typed input is
+// `dialog.js`'s: a click may throw away a panel nobody has typed into, and must
+// not throw away one that has been edited.
 document.addEventListener('click', (e) => {
   const el = document.getElementById('modelDrawer');
   if (!el || !el.classList.contains('open')) return;
@@ -1064,6 +1074,7 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('.modal-overlay.open')) return;
   // A control that opens the panel is, by definition, outside it.
   if (e.target.closest('.drawer-trigger')) return;
+  if (!isDialogPristine(el)) return;
   closeModelDrawer();
 });
 
