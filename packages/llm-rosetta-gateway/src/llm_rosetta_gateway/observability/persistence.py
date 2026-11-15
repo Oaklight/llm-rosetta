@@ -26,7 +26,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequenc
 from contextlib import asynccontextmanager
 from functools import partial
 from pathlib import Path
-from typing import IO, Any, cast
+from urllib.parse import quote
+from typing import Any, cast
 
 from .._vendor import aiosqlite
 
@@ -99,20 +100,23 @@ _DUMP_COLUMN_NAMES = tuple(name.strip() for name in _DUMP_COLUMNS.split(","))
 #: Rows per export read: the largest entry page an export holds at once.
 _DUMP_EXPORT_PAGE = 500
 
-#: An export's metadata spools in memory up to this size, then goes to disk.
-_DUMP_EXPORT_SPOOL_BYTES = 1024 * 1024
 
+def _dump_metadata_member(entry: Mapping[str, Any]) -> tuple[str, bytes]:
+    """Return one dump's metadata member name and payload.
 
-def _dump_metadata_json(entry: Mapping[str, Any]) -> bytes:
-    """Render one metadata entry as a member of an indented JSON array.
+    A single array would have to be serialized whole before tar could name
+    its size, and the store can hold tens of thousands of dumps; one entry's
+    size is known as soon as the entry is.  So each dump is its own member.
 
-    ``json.dumps`` serializes a whole list at once, but the archive is
-    written one entry at a time and must not hold the list.  This reproduces
-    the layout of ``json.dumps(entries, indent=2, ensure_ascii=False)``, so
-    the streamed ``metadata.json`` is the file the in-memory export wrote.
+    A member name is a path, and the id is text from the store: the gateway
+    writes ``uuid4().hex``, but :meth:`PersistenceManager.insert_error_dump`
+    is public and takes any string, and an id of ``../../outside`` would be
+    extracted above the archive's root.  Percent-encoding closes that and is
+    injective, so two ids cannot collapse into one member name.
     """
-    text = json.dumps(entry, indent=2, ensure_ascii=False)
-    return ("  " + text.replace("\n", "\n  ")).encode()
+    name = quote(str(entry["id"]), safe="")
+    payload = json.dumps(entry, indent=2, ensure_ascii=False).encode()
+    return f"metadata/{name}.json", payload
 
 
 class _ChunkSink:
@@ -2267,14 +2271,15 @@ class PersistenceManager:
         exactly the rows that list shows — a 206-row status filter exports
         206 dumps, not the whole store.
 
-        The rows are read in ``(timestamp, id)`` keyset pages and serialized
-        as they are read, and the archive is drained after each member is
-        written.  An export therefore holds one page of entries, one body and
-        one member's compressed output at a time, not the entry list plus the
-        finished archive.  A drain is not a chunk per member: the gzip
-        encoder buffers, so a drain can return nothing and several members
-        can share one chunk.  ``metadata.json`` is still one member, so its
-        compressed size is resident until it is drained.
+        The rows are read in ``(timestamp, id)`` keyset pages, every dump is
+        written as its own ``metadata/<id>.json`` member, and the archive is
+        drained after each member.  Nothing in the archive depends on a pass
+        over the whole store, so an export holds one page of rows, one entry,
+        one body and one member's compressed output at a time — not the entry
+        list, and not the whole ``metadata.json`` either.
+
+        A drain is not a chunk per member: the gzip encoder buffers, so a
+        drain can return nothing and several members can share one chunk.
 
         Args:
             model/model_search/error_phase/provider/status_min/status_max:
@@ -2285,13 +2290,13 @@ class PersistenceManager:
             page_size: Rows read per metadata page.
 
         Yields:
-            ``tar.gz`` bytes: ``metadata.json``, then one
-            ``bodies/<hash>.bin`` per body.  Joined, the chunks are the
-            archive the in-memory export returns.
+            ``tar.gz`` bytes: one ``metadata/<id>.json`` per dump, in
+            newest-first order, then one ``bodies/<hash>.bin`` per distinct
+            body.  Joined, the chunks are the archive the in-memory export
+            returns.
         """
         import io
         import tarfile
-        import tempfile
 
         filters: dict[str, Any] = {
             "model": model,
@@ -2310,22 +2315,20 @@ class PersistenceManager:
         archive = tarfile.open(fileobj=cast(Any, sink), mode="w:gz")
         try:
             hashes: set[str] = set()
-            # The member's size is known only once its JSON is complete, so
-            # the metadata is spooled (in memory up to a bound, then on
-            # disk) and added from there instead of from a string.
-            with tempfile.SpooledTemporaryFile(
-                max_size=_DUMP_EXPORT_SPOOL_BYTES
-            ) as spool:
-                size = await self._write_dump_metadata(
-                    spool, filters, page_size, hashes
-                )
-                spool.seek(0)
-                info = tarfile.TarInfo(name="metadata.json")
-                info.size = size
-                archive.addfile(info, spool)
-            chunk = sink.drain()
-            if chunk:
-                yield chunk
+            async for entry in self._iter_dump_entries(filters, page_size):
+                name, payload = _dump_metadata_member(entry)
+                info = tarfile.TarInfo(name=name)
+                info.size = len(payload)
+                archive.addfile(info, io.BytesIO(payload))
+                for key in ("body_hash", "converted_body_hash"):
+                    value = entry.get(key)
+                    if value:
+                        hashes.add(value)
+                # Usually empty: the gzip encoder holds its output until it
+                # has enough, so a member is freed before it is sent.
+                chunk = sink.drain()
+                if chunk:
+                    yield chunk
 
             for body_hash in sorted(hashes):
                 row = await self._conn.execute_fetchone(
@@ -2337,8 +2340,6 @@ class PersistenceManager:
                 info = tarfile.TarInfo(name=f"bodies/{body_hash}.bin")
                 info.size = len(data)
                 archive.addfile(info, io.BytesIO(data))
-                # Usually empty: the gzip encoder holds its output until it
-                # has enough, so a member is freed before it is sent.
                 chunk = sink.drain()
                 if chunk:
                     yield chunk
@@ -2354,25 +2355,19 @@ class PersistenceManager:
         if chunk:
             yield chunk
 
-    async def _write_dump_metadata(
+    async def _iter_dump_entries(
         self,
-        spool: IO[bytes],
         filters: dict[str, Any],
         page_size: int,
-        hashes: set[str],
-    ) -> int:
-        """Write the filtered dumps' ``metadata.json`` into *spool*.
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Yield the filtered dumps newest first, one keyset page at a time.
 
-        Entries are serialized page by page, so the entry list is never
-        resident.  *hashes* collects the body hashes the entries name in
-        the same pass.
-
-        Returns:
-            The bytes written, which is the tar member's size.
+        The cursor is the row's own ``(timestamp, id)``, so a page boundary
+        stays the same position while the table is being written.  Rows that
+        share a timestamp are carried by the id half; without it the walk
+        would stop at the end of the first page.
         """
         before: tuple[str, str] | None = None
-        first = True
-        size = 0
         while True:
             where_sql, params = self._dump_filter_sql(**filters, before=before)
             rows = await self._conn.execute_fetchall(
@@ -2381,29 +2376,18 @@ class PersistenceManager:
                 [*params, page_size],
             )
             if not rows:
-                break
+                return
             for row in rows:
-                entry: dict[str, Any] = {
-                    k: v for k, v in zip(_DUMP_COLUMN_NAMES, row) if v is not None
-                }
-                size += spool.write(b"[\n" if first else b",\n")
-                first = False
-                size += spool.write(_dump_metadata_json(entry))
-                for key in ("body_hash", "converted_body_hash"):
-                    value = entry.get(key)
-                    if value:
-                        hashes.add(value)
+                yield {k: v for k, v in zip(_DUMP_COLUMN_NAMES, row) if v is not None}
             if len(rows) < page_size:
-                break
+                return
             # The row is past the cursor when its timestamp is older, or
             # equal and its id sorts lower — the order ``_DUMP_ORDER`` names.
             position = (rows[-1][2], rows[-1][0])
             if position == before:
                 # A cursor that does not move would read this page forever.
-                break
+                return
             before = position
-        size += spool.write(b"[]" if first else b"\n]")
-        return size
 
     async def export_error_dumps(
         self,
@@ -2435,7 +2419,8 @@ class PersistenceManager:
             q: Free text over the id and the request-log id.
 
         Returns:
-            In-memory tar.gz archive with metadata.json and bodies/<hash>.bin.
+            In-memory tar.gz archive: one ``metadata/<id>.json`` per dump and
+            one ``bodies/<hash>.bin`` per distinct body.
         """
         # A bytearray, not a list joined at the end: the chunks and the
         # joined copy would both be live across the join, and the archive is

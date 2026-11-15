@@ -10,7 +10,6 @@ the predicate fails here rather than leaking rows in production.
 from __future__ import annotations
 
 import io
-import json
 import tarfile
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -262,9 +261,8 @@ async def test_ops_log_and_dumps_have_their_own_ranges(pm):
     with tarfile.open(
         fileobj=io.BytesIO(await pm.export_error_dumps()), mode="r:gz"
     ) as archive:
-        metadata = archive.extractfile("metadata.json")
-        assert metadata is not None
-        assert json.loads(metadata.read()) == []
+        # One member per dump, so a cleared store exports no member at all.
+        assert archive.getnames() == []
 
 
 async def test_ranges_survive_a_reopen(tmp_path):
