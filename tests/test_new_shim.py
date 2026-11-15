@@ -1221,3 +1221,127 @@ class TestTemplate:
         )
 
         assert (repo / "pyproject.toml").read_text(encoding="utf-8") == "# mine\n"
+
+
+class TestCheckTree:
+    """`shims check` reports what the loader would not read, and nothing else."""
+
+    @staticmethod
+    def _manifest(vendor_dir: Path) -> None:
+        vendor_dir.mkdir(parents=True, exist_ok=True)
+        (vendor_dir / "provider.yaml").write_text(
+            "connection:\n  api_key_env: ACME_API_KEY\n", encoding="utf-8"
+        )
+
+    @staticmethod
+    def _leaf(directory: Path, name: str) -> Path:
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / "provider.yaml"
+        path.write_text(
+            f"name: {name}\nmodel_type: llm\nformat: chat_completions\n"
+            "connection:\n  base_url: https://api.acme.example/v1\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def test_a_canonical_tree_has_no_findings(self, tmp_path: Path):
+        from llm_rosetta.shims.scaffold import check_tree
+
+        self._manifest(tmp_path / "acme")
+        self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
+
+        assert check_tree(tmp_path) == []
+
+    def test_a_vendor_directory_used_as_a_leaf_is_reported(self, tmp_path: Path):
+        from llm_rosetta.shims.scaffold import check_tree
+
+        self._leaf(tmp_path / "acme", "acme--chat_completions")
+
+        findings = check_tree(tmp_path)
+        assert len(findings) == 1
+        assert "a vendor directory is a leaf" in findings[0].message
+
+    def test_a_leaf_without_a_type_directory_is_reported(self, tmp_path: Path):
+        from llm_rosetta.shims.scaffold import check_tree
+
+        self._manifest(tmp_path / "acme")
+        self._leaf(tmp_path / "acme" / "chat_completions", "acme--chat_completions")
+
+        findings = check_tree(tmp_path)
+        assert len(findings) == 1
+        assert "no <type>/ directory" in findings[0].message
+
+    def test_the_only_lane_at_a_format_level_is_reported(self, tmp_path: Path):
+        from llm_rosetta.shims.scaffold import check_tree
+
+        self._manifest(tmp_path / "acme")
+        self._leaf(
+            tmp_path / "acme" / "llm" / "chat_completions", "acme--chat_completions"
+        )
+
+        findings = check_tree(tmp_path)
+        assert len(findings) == 1
+        assert "the only lane of llm" in findings[0].message
+
+    def test_two_lanes_at_a_format_level_conform(self, tmp_path: Path):
+        from llm_rosetta.shims.scaffold import check_tree
+
+        self._manifest(tmp_path / "acme")
+        self._leaf(
+            tmp_path / "acme" / "llm" / "chat_completions", "acme--chat_completions"
+        )
+        second = tmp_path / "acme" / "llm" / "messages"
+        second.mkdir()
+        (second / "provider.yaml").write_text(
+            "name: acme--messages\nmodel_type: llm\nformat: messages\n"
+            "connection:\n  base_url: https://api.acme.example/v1\n",
+            encoding="utf-8",
+        )
+
+        assert check_tree(tmp_path) == []
+
+    def test_a_vendor_level_transforms_file_is_reported(self, tmp_path: Path):
+        from llm_rosetta.shims.scaffold import check_tree
+
+        self._manifest(tmp_path / "acme")
+        self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
+        (tmp_path / "acme" / "transforms.py").write_text("", encoding="utf-8")
+
+        findings = check_tree(tmp_path)
+        assert len(findings) == 1
+        assert "vendor-level one is never read" in findings[0].message
+
+    def test_a_second_exchange_below_the_vendor_is_reported(self, tmp_path: Path):
+        from llm_rosetta.shims.scaffold import check_tree
+
+        self._manifest(tmp_path / "acme")
+        self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
+        (tmp_path / "acme" / "auth.py").write_text("", encoding="utf-8")
+        (tmp_path / "acme" / "llm" / "auth.py").write_text("", encoding="utf-8")
+
+        findings = check_tree(tmp_path)
+        assert len(findings) == 1
+        assert "already ships its exchange" in findings[0].message
+
+    def test_a_manifest_entry_with_no_leaf_is_reported(self, tmp_path: Path):
+        from llm_rosetta.shims.scaffold import check_tree
+
+        self._manifest(tmp_path / "acme")
+        self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
+        (tmp_path / "shims.yaml").write_text(
+            "version: 1\nshims:\n  - name: ghost--chat_completions\n    path: ghost\n",
+            encoding="utf-8",
+        )
+
+        findings = check_tree(tmp_path)
+        assert len(findings) == 1
+        assert "holds no provider.yaml" in findings[0].message
+
+    def test_a_private_helper_module_is_not_reported(self, tmp_path: Path):
+        from llm_rosetta.shims.scaffold import check_tree
+
+        self._manifest(tmp_path / "acme")
+        self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
+        (tmp_path / "acme" / "model_utils.py").write_text("", encoding="utf-8")
+
+        assert check_tree(tmp_path) == []

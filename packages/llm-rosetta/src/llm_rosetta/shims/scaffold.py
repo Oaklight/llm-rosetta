@@ -196,6 +196,9 @@ def _move_to_format_level(type_dir: Path) -> tuple[str | None, str]:
 #: Directory names the loader reads as model types rather than vendors.
 _TYPE_DIR_NAMES = frozenset(MODEL_TYPES)
 
+#: Keys that make a ``provider.yaml`` a shim rather than a vendor manifest.
+_IDENTITY_KEYS = ("name", "format", "base")
+
 
 @dataclass(frozen=True)
 class PackageShape:
@@ -1394,3 +1397,192 @@ def _namespace(**overrides: Any) -> argparse.Namespace:
     for key, value in overrides.items():
         setattr(args, key, value)
     return args
+
+
+# ---------------------------------------------------------------------------
+# shims check — report a tree that does not follow the contract
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Finding:
+    """One deviation from the shim tree contract.
+
+    Attributes:
+        path: The file the deviation is about.
+        message: What is wrong, in the terms of the contract.
+    """
+
+    path: Path
+    message: str
+
+    def render(self, root: Path) -> str:
+        """Return the line the CLI prints."""
+        try:
+            shown = self.path.relative_to(root).as_posix()
+        except ValueError:
+            shown = str(self.path)
+        return f"{shown}: {self.message}"
+
+
+def _is_leaf_document(document: dict[str, Any]) -> bool:
+    """Whether a ``provider.yaml`` declares a shim rather than a manifest."""
+    return any(document.get(key) for key in _IDENTITY_KEYS)
+
+
+def _lane_or_format_problem(root: Path, tail: list[str]) -> str:
+    """Why a leaf's directory is not canonical, as one sentence."""
+    positions = [i for i, part in enumerate(tail) if part in _TYPE_DIR_NAMES]
+    if not positions:
+        return (
+            "no <type>/ directory above the leaf; the leaf belongs at "
+            "<vendor>/<type>/[<format>/]"
+        )
+    first = positions[0]
+    if len(positions) > 1:
+        return "more than one <type>/ directory above the leaf"
+    if first > 1:
+        return "more than one directory above the <type>/ directory"
+    if len(tail) - first > 2:
+        return "more than one directory below the <type>/ directory"
+    if len(tail) - first == 2:
+        type_dir = root.joinpath(*tail[: first + 1])
+        formats = [
+            child
+            for child in sorted(type_dir.iterdir())
+            if child.is_dir() and not child.name.startswith(("_", "."))
+        ]
+        if len(formats) == 1:
+            return (
+                f"the only lane of {tail[first]}; it belongs directly under "
+                f"{type_dir.relative_to(root).as_posix()}/, and the format "
+                f"directory appears when a second lane arrives"
+            )
+    return ""
+
+
+def _module_problems(root: Path) -> list[Finding]:
+    """Report the places a module sits where the loader will not read it."""
+    findings: list[Finding] = []
+    for vendor_dir in sorted(root.iterdir()):
+        if not vendor_dir.is_dir() or vendor_dir.name.startswith(("_", ".")):
+            continue
+        transforms = vendor_dir / "transforms.py"
+        if transforms.is_file():
+            findings.append(
+                Finding(
+                    transforms,
+                    "the loader imports transforms.py beside a leaf only; "
+                    "a vendor-level one is never read",
+                )
+            )
+        vendor_auth = vendor_dir / "auth.py"
+        if vendor_auth.is_file():
+            for leaf_auth in sorted(vendor_dir.rglob("auth.py")):
+                if leaf_auth != vendor_auth:
+                    findings.append(
+                        Finding(
+                            leaf_auth,
+                            f"the vendor already ships its exchange in {vendor_auth}; "
+                            "a second one is refused at load",
+                        )
+                    )
+    return findings
+
+
+def _manifest_problems(root: Path) -> list[Finding]:
+    """Report a ``shims.yaml`` entry whose directory holds no leaf."""
+    manifest = root / "shims.yaml"
+    if not manifest.is_file():
+        return []
+    from llm_rosetta._vendor.yaml import load as yaml_load
+
+    try:
+        document = yaml_load(manifest.read_text(encoding="utf-8")) or {}
+    except Exception as exc:  # noqa: BLE001 - the loader reports the same thing
+        return [Finding(manifest, f"cannot be read: {exc}")]
+    entries = document.get("shims") if isinstance(document, dict) else None
+    if not isinstance(entries, list):
+        return [Finding(manifest, "declares no 'shims' list")]
+    findings: list[Finding] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            findings.append(Finding(manifest, "an entry is not a mapping"))
+            continue
+        relative = entry.get("path")
+        name = entry.get("name") or "?"
+        if not isinstance(relative, str) or not relative:
+            findings.append(Finding(manifest, f"{name}: declares no 'path'"))
+            continue
+        if not (root / relative / "provider.yaml").is_file():
+            findings.append(
+                Finding(manifest, f"{name}: {relative}/ holds no provider.yaml")
+            )
+    return findings
+
+
+def check_tree(root: Path) -> list[Finding]:
+    """Report every place *root* deviates from the shim tree contract.
+
+    The contract is the one ``_shim_template/README_en.md`` states: a vendor
+    directory carries a manifest rather than a leaf, every leaf sits under a
+    model-type directory, and the format level appears only when a type holds
+    more than one lane.  Private helper modules are not reported — the loader
+    never imports them, and a shim that needs one is allowed to keep it.
+
+    Args:
+        root: The directory a gateway scans.
+
+    Returns:
+        The findings, sorted by path.  An empty list means the tree conforms.
+    """
+    if not root.is_dir():
+        return [Finding(root, "is not a directory")]
+    findings: list[Finding] = []
+    for provider_yaml in sorted(root.rglob("provider.yaml")):
+        parts = provider_yaml.relative_to(root).parts
+        if any(part.startswith(("_", ".")) for part in parts):
+            continue
+        document = _yaml_document(provider_yaml)
+        if document is None:
+            findings.append(Finding(provider_yaml, "is not a YAML mapping"))
+            continue
+        leaf = _is_leaf_document(document)
+        tail = list(parts[:-1])
+        if len(tail) == 1:
+            if leaf:
+                findings.append(
+                    Finding(
+                        provider_yaml,
+                        "a vendor directory is a leaf; the vendor carries a "
+                        "manifest and the leaf goes under <type>/",
+                    )
+                )
+            continue
+        if not leaf:
+            findings.append(
+                Finding(
+                    provider_yaml,
+                    "a manifest below the vendor root; only a vendor directory "
+                    "may carry one",
+                )
+            )
+            continue
+        problem = _lane_or_format_problem(root, tail)
+        if problem:
+            findings.append(Finding(provider_yaml, problem))
+    findings.extend(_module_problems(root))
+    findings.extend(_manifest_problems(root))
+    return sorted(findings, key=lambda f: str(f.path))
+
+
+def run_check(root: Path) -> int:
+    """Print the findings for *root* and return a process exit code."""
+    findings = check_tree(root)
+    if not findings:
+        print(f"ok      {root}: no deviation from the shim contract")
+        return 0
+    for finding in findings:
+        print(f"problem {finding.render(root)}")
+    print(f"\n{len(findings)} finding(s); see shims/_shim_template/README_en.md")
+    return 1

@@ -506,6 +506,24 @@ def _cmd_shims_preset(args: argparse.Namespace) -> None:
             print(f"Shim preset '{args.preset}' is not enabled")
 
 
+def _dispatch_shims(args: argparse.Namespace, sub: Any) -> None:
+    """Run the ``shims`` action the operator named.
+
+    Args:
+        args: The parsed arguments, whose ``shim_action`` names the action.
+        sub: The subparsers, whose help is printed when no action was named.
+    """
+    if args.shim_action in {"enable-preset", "disable-preset"}:
+        args.action = "enable" if args.shim_action == "enable-preset" else "disable"
+        _cmd_shims_preset(args)
+    elif args.shim_action == "new":
+        _cmd_shims_new(args)
+    elif args.shim_action == "check":
+        _cmd_shims_check(args)
+    else:
+        sub.choices["shims"].print_help()
+
+
 def _cmd_shims_new(args: argparse.Namespace) -> None:
     """Scaffold a new shim — the one command that writes files, not config.
 
@@ -516,6 +534,19 @@ def _cmd_shims_new(args: argparse.Namespace) -> None:
     from llm_rosetta.shims.scaffold import run
 
     raise SystemExit(run(args))
+
+
+def _cmd_shims_check(args: argparse.Namespace) -> None:
+    """Report a shim tree that does not follow the contract.
+
+    Read-only: it loads nothing, writes nothing and needs no config, so it can
+    run against a package repository whose gateway is not set up yet.
+    """
+    from pathlib import Path
+
+    from llm_rosetta.shims.scaffold import run_check
+
+    raise SystemExit(run_check(Path(args.root).expanduser().resolve()))
 
 
 def _write_record_file(path: str, text: str) -> None:
@@ -654,13 +685,7 @@ def _dispatch_subcommand(args: argparse.Namespace, sub: Any) -> bool:
             sub.choices["add"].print_help()
         return True
     if args.command == "shims":
-        if args.shim_action in {"enable-preset", "disable-preset"}:
-            args.action = "enable" if args.shim_action == "enable-preset" else "disable"
-            _cmd_shims_preset(args)
-        elif args.shim_action == "new":
-            _cmd_shims_new(args)
-        else:
-            sub.choices["shims"].print_help()
+        _dispatch_shims(args, sub)
         return True
     if args.command == "credential":
         _cmd_credential(args)
@@ -915,6 +940,16 @@ def main() -> None:  # noqa: C901
         "new", help="Create the files for a new provider shim"
     )
     _add_scaffold_args(new_parser, default_root="providers")
+
+    # ``shims check`` — report a tree that does not follow the contract.
+    check_parser = shim_sub.add_parser(
+        "check", help="Report a shim tree that does not follow the contract"
+    )
+    check_parser.add_argument(
+        "--root",
+        default="providers",
+        help="Directory a gateway scans (a providers tree)",
+    )
 
     # ``credential`` subcommand
     cred_parser = sub.add_parser(
