@@ -18,7 +18,7 @@ working private module; `__init__.py` is the name that stays unread, and a
 
 | File | Where | Required | Read as |
 |:--|:--|:--|:--|
-| `provider.yaml` | vendor root | no | vendor manifest: `connection:`, `logo`, `group`, `group_label` |
+| `provider.yaml` | vendor root | no | vendor manifest: `connection:`, `logo`, `group`, `group_label`, `fields:` |
 | `provider.yaml` | leaf | yes | the shim's own declaration |
 | `auth.py` | vendor root | no | `EXCHANGE`, the credential exchange for every lane |
 | `auth.py` | leaf | no | that leaf's exchange; refused when the vendor has one |
@@ -59,9 +59,10 @@ existing package keeps loading; they are tolerated, not the contract, and
 
 1. **The vendor directory is never a leaf.** `provider.yaml` there is a
    manifest, and every leaf sits below it.  A manifest carries `connection:`,
-   `logo`, `group`, `group_label` and nothing that identifies a shim — adding
-   `name`, `model_type` or `format` turns the vendor into a leaf, and every
-   shim below it then loads as zero with one "missing 'name' or 'format'" line.
+   `logo`, `group`, `group_label`, `fields:` and nothing that identifies a
+   shim — adding `name`, `model_type` or `format` turns the vendor into a
+   leaf, and every shim below it then loads as zero with one "missing 'name'
+   or 'format'" line.
 2. **A type directory is always present**, even when it holds a single lane.
 3. **The format directory appears only when a second lane of that type
    exists.** The first lane is written as `<vendor>/<type>/provider.yaml`; the
@@ -72,6 +73,31 @@ A lane is a named instance of the same vendor — ALCF's `metis`, `minerva` and
 `sophia` are three clusters of one account, sharing one manifest and one
 credential. A lane has no `provider.yaml` of its own; the vendor manifest is
 inherited.
+
+## Declare the credential inputs
+
+A shim whose credential needs more than the key declares the extra inputs in
+`fields:` — on the vendor manifest when every lane shares them, on a leaf to
+add one or reword one for that lane.  The admin provider form renders one input
+per entry, and one Save writes the key and these values into the provider entry
+(under `auth_fields`), which is what the shim's `auth.py` reads back:
+
+```yaml
+fields:
+  - key: email            # the record key, a plain identifier
+    label: Account email  # required
+    placeholder: you@example.gov
+    help: The address the AskSage account key was issued to.
+    required: true
+```
+
+The block is data: changing the form for a vendor is a change to the YAML, not
+to the gateway or the panel.  Entries are validated at load — a missing `key`
+or `label`, a duplicate key, or a non-boolean `required` is refused with the
+file named — and `shims check` reports the same finding before the tree is
+installed.  Nothing declared here is a secret: the values live on the provider
+entry and are echoed to the authenticated panel, so a credential belongs in
+`api_key` or in the exchange's own record.
 
 ## Create a shim
 

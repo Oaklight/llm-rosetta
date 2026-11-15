@@ -1455,6 +1455,154 @@ class TestVendorManifest:
         assert [s.name for s in shims] == ["other--chat_completions"]
 
 
+class TestDeclaredFields:
+    """A shim states its credential inputs in YAML, not in the gateway.
+
+    The panel renders one input per entry beside the key, so a vendor that
+    needs more than the key gets a usable form without a gateway or panel
+    change.  The declaration is data, so the loader validates it strictly: a
+    typo is a load-time error rather than an input that silently never appears.
+    """
+
+    @staticmethod
+    def _vendor(tmp_path: Path, manifest: str, leaf_extra: str = "") -> Path:
+        vendor = tmp_path / "acme"
+        leaf = vendor / "llm"
+        leaf.mkdir(parents=True)
+        (leaf / "provider.yaml").write_text(
+            "name: acme--chat_completions\n"
+            "model_type: llm\n"
+            "format: chat_completions\n" + textwrap.dedent(leaf_extra)
+        )
+        (vendor / "provider.yaml").write_text(textwrap.dedent(manifest))
+        return vendor
+
+    def test_a_vendor_declares_the_input_every_lane_inherits(self, tmp_path):
+        """AskSage's shape: one account email, four dialects."""
+        self._vendor(
+            tmp_path,
+            "fields:\n"
+            "  - key: email\n"
+            "    label: Account email\n"
+            "    placeholder: you@example.gov\n"
+            "    help: The address the key belongs to.\n"
+            "    required: true\n",
+        )
+
+        shim = load_providers_from_dir(tmp_path)[0]
+
+        assert shim.fields == (
+            {
+                "key": "email",
+                "label": "Account email",
+                "placeholder": "you@example.gov",
+                "help": "The address the key belongs to.",
+                "required": True,
+            },
+        )
+
+    def test_a_leaf_adds_a_field_and_overrides_the_vendors_wording(self, tmp_path):
+        self._vendor(
+            tmp_path,
+            "fields:\n  - key: email\n    label: Account\n",
+            "fields:\n"
+            "  - key: account\n"
+            "    label: Account id\n"
+            "  - key: email\n"
+            "    label: Email address\n",
+        )
+
+        shim = load_providers_from_dir(tmp_path)[0]
+
+        # The vendor's order first, the leaf's extra row after it, one row per
+        # key.
+        assert [(f["key"], f["label"]) for f in shim.fields] == [
+            ("email", "Email address"),
+            ("account", "Account id"),
+        ]
+
+    def test_a_shim_without_a_declaration_carries_none(self, tmp_path):
+        self._vendor(tmp_path, "connection:\n  api_key_env: ACME_KEY\n")
+
+        assert load_providers_from_dir(tmp_path)[0].fields == ()
+
+    @pytest.mark.parametrize(
+        ("block", "message"),
+        [
+            ("fields: acme\n", "fields must be a list of mappings"),
+            ("fields:\n  - acme\n", "every fields entry must be a mapping"),
+            ("fields:\n  - label: Account\n", "declares no key"),
+            ("fields:\n  - key: email\n", "declares no label"),
+            (
+                "fields:\n  - key: email\n    label: A\n  - key: email\n    label: B\n",
+                "declared twice",
+            ),
+            (
+                "fields:\n  - key: email\n    label: A\n    help: [1]\n",
+                "non-string help",
+            ),
+            (
+                "fields:\n  - key: email\n    label: A\n    required: 1\n",
+                "non-boolean required",
+            ),
+            (
+                # ``secret`` was advertised once and would do nothing: the
+                # value goes into the entry, so it is never a treasure.  A
+                # declaration that names it must not load and then render
+                # nothing.
+                "fields:\n  - key: email\n    label: A\n    secret: true\n",
+                "which this schema does not define",
+            ),
+            (
+                "fields:\n  - key: bad key\n    label: A\n",
+                "is not a plain identifier",
+            ),
+            (
+                "fields:\n  - key: email\n    label: A\n    help: " + "x" * 201 + "\n",
+                "help longer than 200",
+            ),
+        ],
+    )
+    def test_a_broken_declaration_is_a_load_error(self, tmp_path, block, message):
+        self._vendor(tmp_path, block)
+
+        with pytest.raises(ValueError, match=message):
+            load_providers_from_dir(tmp_path)
+
+    def test_more_inputs_than_the_panel_renders_is_a_load_error(self, tmp_path):
+        """A block the loader accepts and the panel truncates is a silent loss."""
+        block = "fields:\n" + "".join(
+            f"  - key: f{n}\n    label: Field {n}\n" for n in range(9)
+        )
+        self._vendor(tmp_path, block)
+
+        with pytest.raises(ValueError, match="at most 8"):
+            load_providers_from_dir(tmp_path)
+
+    def test_a_leaf_that_reworks_one_attribute_keeps_the_vendors_rest(self, tmp_path):
+        """Merging entries wholesale drops a help text the vendor wrote once."""
+        self._vendor(
+            tmp_path,
+            "fields:\n"
+            "  - key: email\n"
+            "    label: Account\n"
+            "    help: The address the key belongs to.\n"
+            "    required: true\n",
+            "fields:\n  - key: email\n    label: Email address\n",
+        )
+
+        shim = load_providers_from_dir(tmp_path)[0]
+
+        assert shim.fields == (
+            {
+                "key": "email",
+                "label": "Email address",
+                "help": "The address the key belongs to.",
+                "required": True,
+            },
+        )
+
+
 class TestBuiltinVendorManifests:
     """The shipped tree keeps one credential declaration per vendor."""
 

@@ -290,6 +290,16 @@ class VendorManifest:
             vendor whose shim names carry a deployment (``alcf_metis``)
             declares it once here.
         group_label: The vendor's group title, inherited the same way.
+        fields: The provider-form inputs this shim declares, as data.  Each is
+            a mapping with ``key`` and ``label`` and optionally
+            ``placeholder``, ``help`` and ``required``; the gateway renders
+            them beside the key and stores what the operator types in the
+            entry's ``auth_fields``.  Declaring them here keeps a UI change a
+            shim edit, never a gateway edit — and an exchange in ``auth.py``
+            may declare the same inputs in code, which is merged with these by
+            key.  A leaf that names a key it inherits from its vendor merges
+            over that entry attribute by attribute, so rewording a label keeps
+            the vendor's ``help``.
     """
 
     vendor: str
@@ -299,6 +309,7 @@ class VendorManifest:
     logo: str | None = None
     group: str | None = None
     group_label: str | None = None
+    fields: tuple[dict[str, Any], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -610,6 +621,16 @@ class ProviderShim:
     shared connection defaults; the merged values themselves live in
     :attr:`connection`.
     """
+    fields: tuple[dict[str, Any], ...] = ()
+    """Provider-form inputs this shim declares in its ``provider.yaml``.
+
+    Data, not code: the gateway renders one field per entry beside the key and
+    stores the values in the entry's ``auth_fields``, so a UI change is a shim
+    edit rather than a gateway edit.  A vendor manifest declares the inputs its
+    lanes share and a leaf merges over any of them by key, attribute by
+    attribute; an exchange in ``auth.py`` may declare more in code, merged by
+    key at render time.
+    """
     tools: ToolsConfig = ToolsConfig()
     pre_ir_transforms: tuple[Transform, ...] = ()
     post_ir_transforms: tuple[Transform, ...] = ()
@@ -728,6 +749,7 @@ class ProviderShim:
             "soft_error_patterns": (),
             "params": {},
             "request": RequestConstraints(),
+            "fields": (),
         }
         _VALID_FIELDS = {"name", "format", "base"} | _FIELD_DEFAULTS.keys()
         for k, v in _FIELD_DEFAULTS.items():

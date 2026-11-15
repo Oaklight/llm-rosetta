@@ -1575,6 +1575,42 @@ def _module_problems(root: Path) -> list[Finding]:
     return findings
 
 
+def _field_problems(root: Path) -> list[Finding]:
+    """Report a ``fields:`` block the loader would refuse.
+
+    The panel renders those entries verbatim, so the loader validates them
+    strictly and one bad entry stops the whole root from loading.  Running the
+    loader's own validator here turns that into a finding that names the file,
+    before the tree is installed rather than on the gateway's first read.
+    """
+    from llm_rosetta.shims.providers import _declared_fields
+
+    findings: list[Finding] = []
+    for provider_yaml in sorted(root.rglob("provider.yaml")):
+        if any(
+            part.startswith(("_", "."))
+            for part in provider_yaml.relative_to(root).parts
+        ):
+            continue
+        document = _yaml_document(provider_yaml)
+        if not isinstance(document, dict) or "fields" not in document:
+            continue
+        try:
+            _declared_fields(document.get("fields"), provider_yaml)
+        except ValueError as exc:
+            # The validator names the file itself; the finding already carries
+            # the path, so only the sentence after it is kept.
+            prefix = f"{provider_yaml}: "
+            message = str(exc)
+            findings.append(
+                Finding(
+                    provider_yaml,
+                    message[len(prefix) :] if message.startswith(prefix) else message,
+                )
+            )
+    return findings
+
+
 def _manifest_problems(root: Path) -> list[Finding]:
     """Report a ``shims.yaml`` entry whose directory holds no leaf."""
     manifest = root / "shims.yaml"
@@ -1662,6 +1698,7 @@ def check_tree(root: Path) -> list[Finding]:
     findings.extend(_module_problems(root))
     findings.extend(_manifest_problems(root))
     findings.extend(_token_command_problems(root))
+    findings.extend(_field_problems(root))
     return sorted(findings, key=lambda f: str(f.path))
 
 

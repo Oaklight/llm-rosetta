@@ -39,9 +39,27 @@ loader executes every shim's ``auth.py`` while building the registry.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
+
+#: The shape a declared input's ``key`` must have.  The value is stored on a
+#: provider entry and rendered as an element id, so it has to be a plain
+#: identifier — and it has to be *this* rule everywhere: the loader validates
+#: against it, and the panel drops what fails it.  Two spellings of "valid
+#: key" is how a shim loads and then renders no form.
+FIELD_KEY_PATTERN = r"^[A-Za-z0-9_.-]{1,64}$"
+FIELD_KEY_RE = re.compile(FIELD_KEY_PATTERN)
+
+#: How many inputs one credential may declare.  More than this is a record,
+#: and a record belongs in the exchange's own store, not a form.
+FIELD_LIMIT = 8
+
+#: The longest value or descriptive string a field may carry.  Descriptions
+#: are clipped to it; a *value* longer than it is refused rather than
+#: truncated, because a silently shortened credential fails at the vendor.
+FIELD_TEXT_LIMIT = 200
 
 
 class AuthExchangeError(Exception):
@@ -173,6 +191,43 @@ class AuthExchange(Protocol):
         """
         ...
 
+    def fields(self) -> tuple[Mapping[str, Any], ...]:
+        """The inputs this exchange's :meth:`install` accepts, for a UI form.
+
+        An exchange whose setup is more than one pasted blob — AskSage needs
+        the account email beside the key — describes those inputs here so the
+        panel can render a form instead of a JSON textarea.  Each entry is a
+        mapping with:
+
+        * ``key`` (required): the record key the value is sent under.
+        * ``label`` (required): what the operator sees.
+        * ``placeholder``: an example, not a secret.
+        * ``help``: one sentence under the input.
+        * ``required``: ``True`` when the field must be filled; the panel
+          refuses a save that leaves it empty.
+
+        None of these is a secret, and no other key is accepted: the panel
+        writes the values into the provider entry and the exchange reads them
+        back, so a credential belongs in ``api_key`` or the exchange's own
+        record.  An entry that fails :data:`FIELD_KEY_RE` or a block with more
+        than :data:`FIELD_LIMIT` entries is refused at load.
+
+        Values are strings and are shown verbatim, so an exchange fills them
+        itself rather than echoing anything the operator typed.  These are the
+        same rules the loader applies to a ``fields:`` block, so a code
+        declaration and a YAML one fail the same way instead of one rendering
+        and the other vanishing.
+
+        Prefer the shim's ``fields:`` block: it declares the same list as
+        data, so the form changes without touching this module.  This member
+        stays for a shim that already ships a code declaration, and its
+        entries are merged under the YAML ones, key by key.
+
+        Optional: an exchange that takes a single opaque record returns an
+        empty tuple, and the panel keeps the textarea path.
+        """
+        ...
+
     def revoke(self, ctx: AuthContext) -> bool:
         """Sign out: remove the record, revoking upstream when the vendor allows.
 
@@ -265,6 +320,10 @@ class BaseAuthExchange:
     def describe(self, ctx: AuthContext) -> Mapping[str, Any] | None:
         """Return ``None``; override to show who is signed in."""
         return None
+
+    def fields(self) -> tuple[Mapping[str, Any], ...]:
+        """Return ``()``; override when :meth:`install` takes named inputs."""
+        return ()
 
     def install(
         self, ctx: AuthContext, record: Mapping[str, Any]

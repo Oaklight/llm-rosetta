@@ -16,7 +16,7 @@ helper 模块在被其中某个文件 import 之前是惰性的。`transforms.py
 
 | 文件 | 位置 | 必需 | 读取为 |
 |:--|:--|:--|:--|
-| `provider.yaml` | vendor 根 | 否 | vendor manifest：`connection:`、`logo`、`group`、`group_label` |
+| `provider.yaml` | vendor 根 | 否 | vendor manifest：`connection:`、`logo`、`group`、`group_label`、`fields:` |
 | `provider.yaml` | 叶子 | 是 | shim 自己的声明 |
 | `auth.py` | vendor 根 | 否 | `EXCHANGE`，该 vendor 所有 lane 的凭据交换 |
 | `auth.py` | 叶子 | 否 | 该叶子的交换；vendor 已有时报错 |
@@ -54,7 +54,7 @@ helper 模块在被其中某个文件 import 之前是惰性的。`transforms.py
 
 1. **vendor 目录永远不是叶子。** 那里的 `provider.yaml` 是 manifest，所有
    叶子都在它下面。manifest 只写 `connection:`、`logo`、`group`、
-   `group_label`，不写任何标识某个 shim 的字段——加上 `name`、`model_type`
+   `group_label`、`fields:`，不写任何标识某个 shim 的字段——加上 `name`、`model_type`
    或 `format` 就把 vendor 变成了叶子，它下面的 shim 会以零个加载，只留一行
    "missing 'name' or 'format'"。
 2. **`<type>` 目录永远存在**，即使里面只有一个 lane。
@@ -65,6 +65,28 @@ helper 模块在被其中某个文件 import 之前是惰性的。`transforms.py
 lane 是同一 vendor 的命名实例——ALCF 的 `metis`、`minerva`、`sophia` 是同一
 账号的三个集群，共享一个 manifest 和一份凭据。lane 自己没有
 `provider.yaml`，它继承 vendor manifest。
+
+## 声明凭据输入
+
+如果凭据除 key 之外还需要别的输入，就在 `fields:` 里声明：所有 lane 共享的
+写在 vendor manifest 上，某个 lane 要新增或改写就写在该叶子上。管理面板的服务
+方表单会按条目逐个渲染输入框，一次保存就把 key 和这些值一起写进服务方条目
+（`auth_fields` 之下），shim 的 `auth.py` 再从那里读回：
+
+```yaml
+fields:
+  - key: email            # 记录键，纯标识符
+    label: 账号邮箱        # 必填
+    placeholder: you@example.gov
+    help: 该 AskSage 账号 key 对应的邮箱地址。
+    required: true
+```
+
+这个块是数据：为某个 vendor 改表单就是改 YAML，不需要动 gateway 或面板。
+条目在加载时校验——缺 `key` 或 `label`、key 重复、`required` 不是布尔值——
+都会带着文件名被拒绝；`shims check` 会在安装这棵树之前报出同样的发现。
+这里声明的都不是机密：值存在服务方条目里、会回传给已认证的面板，因此真正的
+凭据应放在 `api_key` 或 exchange 自己的记录里。
 
 ## 创建一个 shim
 
