@@ -520,6 +520,8 @@ def _dispatch_shims(args: argparse.Namespace, sub: Any) -> None:
         _cmd_shims_new(args)
     elif args.shim_action == "check":
         _cmd_shims_check(args)
+    elif args.shim_action == "migrate":
+        _cmd_shims_migrate(args)
     else:
         sub.choices["shims"].print_help()
 
@@ -547,6 +549,22 @@ def _cmd_shims_check(args: argparse.Namespace) -> None:
     from llm_rosetta.shims.scaffold import run_check
 
     raise SystemExit(run_check(Path(args.root).expanduser().resolve()))
+
+
+def _cmd_shims_migrate(args: argparse.Namespace) -> None:
+    """Move a shim tree onto the contract, dry-run unless ``--write``.
+
+    The moves are directory-level and do not touch imports, so a repository
+    with relative imports one level up needs a hand afterwards; the command
+    says so when it applies.
+    """
+    from pathlib import Path
+
+    from llm_rosetta.shims.scaffold import run_migrate
+
+    raise SystemExit(
+        run_migrate(Path(args.root).expanduser().resolve(), write=args.write)
+    )
 
 
 def _write_record_file(path: str, text: str) -> None:
@@ -949,6 +967,21 @@ def main() -> None:  # noqa: C901
         "--root",
         default="providers",
         help="Directory a gateway scans (a providers tree)",
+    )
+
+    # ``shims migrate`` — move a tree onto the contract.
+    migrate_parser = shim_sub.add_parser(
+        "migrate", help="Move a shim tree onto the contract"
+    )
+    migrate_parser.add_argument(
+        "--root",
+        default="providers",
+        help="Directory a gateway scans (a providers tree)",
+    )
+    migrate_parser.add_argument(
+        "--write",
+        action="store_true",
+        help="Apply the moves; without it the command only plans them",
     )
 
     # ``credential`` subcommand
