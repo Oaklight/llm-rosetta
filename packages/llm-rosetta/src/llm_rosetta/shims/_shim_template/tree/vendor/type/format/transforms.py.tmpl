@@ -1,0 +1,26 @@
+"""Field-level transforms for {{name}}.
+
+The loader imports this module when it sits beside ``provider.yaml`` and picks
+up the tuples it exports; there is nothing to declare in the YAML.  A transform
+takes and returns a plain body dict, and returning the argument unchanged keeps
+the field.
+
+Relative imports work here (``from .helpers import x``): the loader registers a
+package chain for this module.  ``auth.py`` and ``quota.py`` do not have that,
+so they must stay self-contained.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+def _keep(body: dict[str, Any]) -> dict[str, Any]:
+    """Return the body unchanged."""
+
+    return body
+
+
+#: A tuple, not a function: the loader reads the exports and the pipeline
+#: iterates them, so a callable export would fail at request time, not here.
+response_body_transforms = (_keep,)

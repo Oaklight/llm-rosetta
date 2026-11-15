@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import textwrap
 from pathlib import Path
@@ -1781,3 +1782,114 @@ class TestTypeParams:
         shim = get_shim("cohere--embedding")
         assert shim is not None
         assert shim.params == {"task_type": "retrieval_document"}
+
+
+class TestLaneDirectories:
+    """A vendor may hold several named instances, each with type directories.
+
+    ALCF is the real case: one account, one credential, three clusters.  The
+    lane sits between the vendor and its type directories, and inherits the
+    vendor manifest because the credential and the identity belong to the
+    vendor rather than to one cluster.
+    """
+
+    def _manifest(self, root: Path, vendor: str = "acme") -> Path:
+        """Write a vendor manifest at the root of *vendor*."""
+        vendor_dir = root / vendor
+        vendor_dir.mkdir()
+        (vendor_dir / "provider.yaml").write_text(
+            textwrap.dedent(
+                """\
+                logo: https://example.invalid/acme.svg
+                group: acme
+                group_label: Acme
+                connection:
+                  api_key_env: ACME_API_KEY
+                """
+            )
+        )
+        return vendor_dir
+
+    def _leaf(self, directory: Path, name: str, *, fmt: str = "chat_completions"):
+        """Write a leaf declaring *name* in *directory*."""
+        directory.mkdir(parents=True)
+        (directory / "provider.yaml").write_text(
+            textwrap.dedent(
+                f"""\
+                name: {name}
+                model_type: llm
+                format: {fmt}
+                connection:
+                  base_url: https://{name.split("--")[0]}.example/v1
+                """
+            )
+        )
+
+    def test_a_lane_leaf_loads_and_inherits_the_vendor_manifest(self, tmp_path: Path):
+        vendor = self._manifest(tmp_path)
+        self._leaf(vendor / "metis" / "llm", "acme_metis--chat_completions")
+
+        shims = load_providers_from_dir(tmp_path)
+
+        assert [s.name for s in shims] == ["acme_metis--chat_completions"]
+        shim = shims[0]
+        assert shim.connection.base_url == "https://acme_metis.example/v1"
+        assert shim.connection.api_key_env == "ACME_API_KEY"
+        assert shim.group == "acme"
+        assert shim.logo == "https://example.invalid/acme.svg"
+
+    def test_a_lane_holds_several_clusters(self, tmp_path: Path):
+        vendor = self._manifest(tmp_path)
+        for cluster in ("metis", "minerva"):
+            self._leaf(vendor / cluster / "llm", f"acme_{cluster}--chat_completions")
+
+        shims = load_providers_from_dir(tmp_path)
+
+        assert sorted(s.name for s in shims) == [
+            "acme_metis--chat_completions",
+            "acme_minerva--chat_completions",
+        ]
+        assert {s.group for s in shims} == {"acme"}
+
+    def test_a_directory_with_nothing_to_load_is_still_skipped(self, tmp_path: Path):
+        vendor = self._manifest(tmp_path)
+        (vendor / "docs").mkdir()
+        (vendor / "docs" / "notes.txt").write_text("not a shim")
+        self._leaf(vendor / "llm", "acme--chat_completions")
+
+        shims = load_providers_from_dir(tmp_path)
+
+        assert [s.name for s in shims] == ["acme--chat_completions"]
+
+    def test_a_lane_deeper_than_the_cap_is_not_loaded(self, tmp_path: Path, caplog):
+        """The count drops silently otherwise — a valid tree that loads nothing."""
+        vendor = self._manifest(tmp_path)
+        deep = vendor / "a" / "b" / "c" / "d" / "llm"
+        self._leaf(deep, "acme_deep--chat_completions")
+
+        with caplog.at_level(logging.WARNING, logger="llm_rosetta.shims.providers"):
+            assert load_providers_from_dir(tmp_path) == []
+
+        assert any("at most 3 lane levels" in r.message for r in caplog.records)
+
+    def test_a_lane_at_the_cap_still_loads(self, tmp_path: Path, caplog):
+        """The warning is for what is past the cap, not for what reaches it."""
+        vendor = self._manifest(tmp_path)
+        self._leaf(vendor / "a" / "b" / "c" / "llm", "acme_deep--chat_completions")
+
+        with caplog.at_level(logging.WARNING, logger="llm_rosetta.shims.providers"):
+            shims = load_providers_from_dir(tmp_path)
+
+        assert [s.name for s in shims] == ["acme_deep--chat_completions"]
+        assert not any("lane levels" in r.message for r in caplog.records)
+
+    def test_only_paths_selects_one_lane(self, tmp_path: Path):
+        vendor = self._manifest(tmp_path)
+        for cluster in ("metis", "minerva"):
+            self._leaf(vendor / cluster / "llm", f"acme_{cluster}--chat_completions")
+
+        shims = load_providers_from_dir(
+            tmp_path, only_paths={"acme/metis/llm/provider.yaml"}
+        )
+
+        assert [s.name for s in shims] == ["acme_metis--chat_completions"]

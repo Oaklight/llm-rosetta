@@ -72,7 +72,7 @@ Issues = "https://github.com/Oaklight/llm-rosetta/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"llm_rosetta" = ["py.typed", "shims/providers/provider.schema.json", "shims/providers/*/provider.yaml", "shims/providers/*/auth.py", "shims/providers/*/*/provider.yaml", "shims/providers/*/*/*/provider.yaml"]
+"llm_rosetta" = ["py.typed", "shims/providers/provider.schema.json", "shims/providers/*/provider.yaml", "shims/providers/*/auth.py", "shims/providers/*/quota.py", "shims/providers/*/*/provider.yaml", "shims/providers/*/*/quota.py", "shims/providers/*/*/*/provider.yaml", "shims/_shim_template/*.md", "shims/_shim_template/**/*.tmpl"]
 
 [tool.setuptools.dynamic]
 version = { attr = "llm_rosetta.__version__" }

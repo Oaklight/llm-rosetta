@@ -1,0 +1,43 @@
+"""Credential exchange for {{vendor}}.
+
+The loader executes this file as a standalone module while it builds the shim
+registry, which has two consequences:
+
+* it cannot use relative imports — keep every helper in this file;
+* it is executed even for a provider that never signs in, so nothing may touch
+  the network at import time.
+
+Export the exchange as ``EXCHANGE``.  The gateway never calls an exchange
+directly: it asks the shim for a credential, and the exchange decides whether a
+stored record, a refresh, or an interactive sign-in is what produces one.
+
+A vendor declares exactly one exchange, beside this file's ``provider.yaml``;
+every leaf below inherits it.
+"""
+
+from __future__ import annotations
+
+from llm_rosetta.shims.auth_exchange import BaseAuthExchange
+
+
+class Exchange(BaseAuthExchange):
+    """The exchange this shim ships.
+
+    Implement :meth:`credential` — it is the only method every exchange must
+    have.  ``begin_login`` / ``complete_login`` / ``install`` / ``describe`` /
+    ``revoke`` are optional; the ``can_*`` helpers report which ones this class
+    implements.
+    """
+
+    kind = "exchange"
+
+    def needs_interactive_setup(self, ctx) -> bool:
+        """Return whether a human must sign in before a credential can exist."""
+        return True
+
+    async def credential(self, ctx) -> str:
+        """Return the credential to send upstream."""
+        raise NotImplementedError
+
+
+EXCHANGE = Exchange()

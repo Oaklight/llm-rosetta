@@ -115,6 +115,13 @@ _TYPE_DIRS: dict[str, str] = {
     "decisions": "decisions",
 }
 
+#: How many lane levels a vendor may nest below its own directory.  A lane is
+#: a named instance of one vendor — ALCF's ``metis``, ``minerva`` and
+#: ``sophia`` are three clusters of one account — and it holds type
+#: directories of its own.  The cap exists only so a mis-shaped tree cannot
+#: recurse without end.
+_MAX_LANE_DEPTH = 3
+
 #: ``connection:`` keys a vendor manifest may declare, read off the config
 #: object so the two lists cannot drift.
 _CONNECTION_KEYS: tuple[str, ...] = tuple(
@@ -1495,6 +1502,59 @@ def _load_type_folder(
     return loaded
 
 
+def _lane_holds_shims(
+    directory: Path,
+    root: Path,
+    only_paths: Collection[str] | None,
+    depth: int = 0,
+) -> bool:
+    """Whether a lane directory has a shim somewhere below it.
+
+    A lane is a named instance of one vendor, and it holds type directories
+    of its own rather than a leaf directly.  The loader enters one only when
+    something loadable sits below it: a model-type directory, or a leaf
+    ``provider.yaml``.  Without that test a stray ``docs/`` or ``assets/``
+    directory would be walked for nothing.
+
+    Args:
+        directory: The candidate lane directory.
+        root: The scan root the ``only_paths`` selection is relative to.
+        only_paths: The selected relative paths, or ``None`` for everything.
+        depth: How far below the first lane this call already is.
+
+    Returns:
+        Whether the directory should be scanned as a lane.
+    """
+    if depth >= _MAX_LANE_DEPTH:
+        # A shim one level past the cap is the one shape that loads as nothing
+        # while looking fine: the tree is reachable, the leaves are valid, and
+        # only the count is lower.  Say so rather than returning quietly.
+        if any(
+            child.is_dir()
+            and not child.name.startswith(("_", "."))
+            and (child.name in _TYPE_DIRS or (child / "provider.yaml").exists())
+            for child in directory.iterdir()
+        ):
+            logger.warning(
+                "Shim lane below %s is not read: the loader enters at most %d "
+                "lane levels, and a shim sits one level deeper. Flatten the "
+                "tree, or file it under the vendor with a single lane level.",
+                directory,
+                _MAX_LANE_DEPTH,
+            )
+        return False
+    for sub in sorted(directory.iterdir()):
+        if not sub.is_dir() or sub.name.startswith(("_", ".")):
+            continue
+        if not _path_selected(sub, root, only_paths):
+            continue
+        if sub.name in _TYPE_DIRS or (sub / "provider.yaml").exists():
+            return True
+        if _lane_holds_shims(sub, root, only_paths, depth + 1):
+            return True
+    return False
+
+
 def _load_group_folder(
     group_dir: Path,
     group: str | None,
@@ -1506,13 +1566,17 @@ def _load_group_folder(
     manifest: VendorManifest | None = None,
     only_paths: Collection[str] | None = None,
     keep_names: Callable[[str], bool] | None = None,
+    lane_depth: int = 0,
 ) -> list[ProviderShim]:
     """Load every leaf provider inside a *group_dir*.
 
-    A child is a leaf (``<group>/<leaf>/provider.yaml``) or a model-type
-    directory (``<group>/llm/...``, ``<group>/embeddings/...``); a child that
-    is neither is not a provider directory and is skipped.  *manifest* is the
-    vendor manifest read from *group_dir* itself, if it has one.
+    A child is a leaf (``<group>/<leaf>/provider.yaml``), a model-type
+    directory (``<group>/llm/...``, ``<group>/embeddings/...``), or a lane — a
+    named instance of the same vendor that holds type directories of its own.
+    A child that is none of those is not a provider directory and is skipped.
+    *manifest* is the vendor manifest read from *group_dir* itself, if it has
+    one; a lane inherits it, because the credential and the identity belong to
+    the vendor rather than to one instance.
     """
     child_group = f"{group}.{group_dir.name}" if group else group_dir.name
     loaded: list[ProviderShim] = []
@@ -1551,6 +1615,25 @@ def _load_group_folder(
             )
             if shim is not None:
                 loaded.append(shim)
+            continue
+        # A lane: a named instance of this vendor, holding type directories of
+        # its own.  Entered only when something loadable sits below, and only
+        # within the depth cap.
+        if lane_depth < _MAX_LANE_DEPTH and _lane_holds_shims(sub, root, only_paths):
+            loaded.extend(
+                _load_group_folder(
+                    sub,
+                    child_group,
+                    builtin=builtin,
+                    root=root,
+                    on_error=on_error,
+                    quota_probes=quota_probes,
+                    manifest=manifest,
+                    only_paths=only_paths,
+                    keep_names=keep_names,
+                    lane_depth=lane_depth + 1,
+                )
+            )
     return loaded
 
 
@@ -1572,15 +1655,23 @@ def load_providers_from_dir(
     (``_llm_rosetta_plugin_shims.*``) to avoid collisions with built-in
     modules in ``sys.modules``.
 
-    Supports three layouts:
+    The contract is the model-typed shape stated in
+    ``shims/_shim_template/README_en.md``: ``<vendor>[/<lane>]/<type>`` with a
+    ``<format>`` level only when that type holds more than one lane.  Two older
+    shapes still load — they are tolerated, not the contract, and
+    ``shims check`` reports both:
 
-    * **Flat** — a direct child with ``provider.yaml`` (e.g. ``openai/``).
-    * **Grouped** — a child WITHOUT ``provider.yaml`` whose own children
-      each contain one (e.g. ``vendor/messages/``, ``vendor/chat_completions/``).
-    * **Model-typed** — a child WITHOUT ``provider.yaml`` whose name is a
-      model-type directory (``llm``, ``embeddings``, ``rerank``, ``decisions``):
-      the directory itself holds the leaf, or it groups format directories.
-      Every shim below it must declare the matching ``model_type``.
+    * **Flat (legacy)** — a direct child with ``provider.yaml`` (e.g.
+      ``openai/``).
+    * **Grouped (legacy)** — a child WITHOUT ``provider.yaml`` whose own
+      children each contain one (e.g. ``vendor/messages/``,
+      ``vendor/chat_completions/``).
+
+    * **Model-typed (the contract)** — a child WITHOUT ``provider.yaml`` whose
+      name is a model-type directory (``llm``, ``embeddings``, ``rerank``,
+      ``decisions``): the directory itself holds the leaf, or it groups format
+      directories, and a lane directory may sit above it.  Every shim below it
+      must declare the matching ``model_type``.
 
     Either of the last two may also carry a **vendor manifest**: a
     ``provider.yaml`` at the vendor root that declares no ``name``/``format``,

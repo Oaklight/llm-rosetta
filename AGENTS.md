@@ -120,6 +120,7 @@ declare the differences.
 | `Transform` primitives | `shims/transforms.py` | `strip_fields`, `rename_field`, `set_defaults` |
 | Built-in shims | `shims/providers/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type |
 | Vendor manifest | `shims/providers/<vendor>/provider.yaml` | Optional per-vendor defaults every leaf inherits: `connection:` (the credential) plus the vendor's own `logo` / `group` / `group_label`; `auth.py` sits beside it |
+| Tree contract | `shims/_shim_template/` | The path rules (`<vendor>[/<lane>]/<type>[/<format>]/provider.yaml`), the file allow-list, and the skeleton `shims new` renders; `shims check` reports a tree that departs from it, `shims migrate --write` moves one onto it |
 | External shim sources | `llm_rosetta_gateway/shims/` | Directory/archive loaders, standalone catalog (with its free / paid / subscription tier), scheduled removals |
 
 ### Gateway
