@@ -426,3 +426,56 @@ class TestStrictUnmatched:
 
         assert report.failures() == []
         assert report.sources[0].unmatched == ("ghost--*",)
+
+
+class TestCoreFloor:
+    """A package that tracks its branch states the oldest core it needs."""
+
+    def test_a_floor_the_running_core_meets_loads(self, tmp_path: Path):
+        _leaf(tmp_path, "a")
+        _manifest(
+            tmp_path,
+            "version: 1\ncore: '>=0.1'\nshims:\n"
+            "  - name: a--chat_completions\n    path: a\n",
+        )
+
+        status = _scan_dir(tmp_path, kind="path", location="src")
+
+        assert status.ok
+        assert status.shim_names == ("a--chat_completions",)
+
+    def test_a_floor_above_the_running_core_is_refused(self, tmp_path: Path):
+        _leaf(tmp_path, "a")
+        _manifest(
+            tmp_path,
+            "version: 1\ncore: '>=99.0.0'\nshims:\n"
+            "  - name: a--chat_completions\n    path: a\n",
+        )
+
+        status = _scan_dir(tmp_path, kind="path", location="src")
+
+        assert not status.ok
+        error = status.error or ""
+        assert "needs llm-rosetta >=" in error
+        assert "upgrade the gateway" in error
+
+    @pytest.mark.parametrize("body", ["core: '>='\n", "core: '^0.15'\n", "core: 15\n"])
+    def test_an_unusable_floor_is_refused(self, tmp_path: Path, body: str):
+        _leaf(tmp_path, "a")
+        _manifest(tmp_path, f"version: 1\n{body}shims: []\n")
+
+        with pytest.raises(ShimManifestError):
+            read_shim_manifest(tmp_path)
+
+    def test_the_floor_is_recorded_on_the_manifest(self, tmp_path: Path):
+        _leaf(tmp_path, "a")
+        _manifest(
+            tmp_path,
+            "version: 1\ncore: '>=0.15.0'\nshims:\n"
+            "  - name: a--chat_completions\n    path: a\n",
+        )
+
+        manifest = read_shim_manifest(tmp_path)
+
+        assert manifest is not None
+        assert manifest.core == ">=0.15.0"
