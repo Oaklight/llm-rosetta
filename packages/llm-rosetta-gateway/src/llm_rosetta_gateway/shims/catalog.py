@@ -64,15 +64,12 @@ class ShimSourcePackage:
             draws them before the package is fetched, when there is no
             ``provider.yaml`` on disk to read a mark from; a vendor absent here
             falls back to the initials tile the Installed view uses.
-        mirror: The ``shims.remotes[].mirror`` entry, when a package publishes
-            a CDN copy.  ``url_template`` is addressed the way the package
-            publishes: with ``{ref}`` the loader substitutes the remote's
-            declared ``ref`` when there is one and the commit it resolved
-            otherwise, so a commit-addressed template and a branch-tracking
-            preset stay consistent.  No shipped preset carries one: their
-            ``dist`` branches hold tag-addressed archives, and a mirror that
-            answers 404 is final on the one path a mirror exists for.  A
-            package that publishes ``dist/<commit>/`` can set it again.
+        mirror: The ``shims.remotes[].mirror`` entry.  ``url_template`` is
+            commit-addressed (``@dist/{ref}``): with no declared ``ref`` the
+            loader substitutes the commit it resolved the branch to, and each
+            package's publish job writes exactly that directory — so the
+            pinned commit and the mirror's bytes describe one tree, and no
+            digest has to be kept here by hand.
     """
 
     key: str
@@ -327,11 +324,18 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
                 "@main/assets/alcf.svg"
             ),
         },
-        # No ``mirror`` until the package publishes ``dist/<commit>/``: the
-        # presets track a branch, so ``{ref}`` is a commit, and a ``dist``
-        # branch that still holds tags answers that URL with a 404 — which is
-        # final for a mirror leg, on the one path a mirror exists for (the
-        # forge unreachable).  The template returns with the publish job.
+        # The archive is commit-addressed (``@dist/<commit>``), and the
+        # loader fills ``{ref}`` with the commit it resolved the branch to,
+        # so the pinned commit and the mirror's bytes name one tree without
+        # a hand-maintained ``sha256``.  ``path`` names ``providers`` rather
+        # than ``"."``: the archive strips its single top-level directory.
+        mirror={
+            "url_template": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf"
+                "@dist/{ref}/alcf.tar.gz"
+            ),
+            "path": "providers",
+        },
     ),
     ShimSourcePackage(
         key="argo",
@@ -359,11 +363,18 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
                 "@c1925c14f35170aa4f839c7fb8b97de58c2d4bee/assets/argo.svg"
             ),
         },
-        # No ``mirror`` until the package publishes ``dist/<commit>/``: the
-        # presets track a branch, so ``{ref}`` is a commit, and a ``dist``
-        # branch that still holds tags answers that URL with a 404 — which is
-        # final for a mirror leg, on the one path a mirror exists for (the
-        # forge unreachable).  The template returns with the publish job.
+        # The archive is commit-addressed (``@dist/<commit>``), and the
+        # loader fills ``{ref}`` with the commit it resolved the branch to,
+        # so the pinned commit and the mirror's bytes name one tree without
+        # a hand-maintained ``sha256``.  ``path`` names ``providers`` rather
+        # than ``"."``: the archive strips its single top-level directory.
+        mirror={
+            "url_template": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argo"
+                "@dist/{ref}/argo.tar.gz"
+            ),
+            "path": "providers",
+        },
     ),
     ShimSourcePackage(
         key="free",
@@ -413,11 +424,18 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         # commit.  A directory named by a tag stays reachable too: a gateway
         # that pinned v0.1.0 before the layout moved still resolves its own
         # preset, and that path was the pre-rename OpenCode-only archive.
-        # No ``mirror`` until the package publishes ``dist/<commit>/``: the
-        # presets track a branch, so ``{ref}`` is a commit, and a ``dist``
-        # branch that still holds tags answers that URL with a 404 — which is
-        # final for a mirror leg, on the one path a mirror exists for (the
-        # forge unreachable).  The template returns with the publish job.
+        # The archive is commit-addressed (``@dist/<commit>``), and the
+        # loader fills ``{ref}`` with the commit it resolved the branch to,
+        # so the pinned commit and the mirror's bytes name one tree without
+        # a hand-maintained ``sha256``.  ``path`` names ``providers`` rather
+        # than ``"."``: the archive strips its single top-level directory.
+        mirror={
+            "url_template": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-free"
+                "@dist/{ref}/free.tar.gz"
+            ),
+            "path": "providers",
+        },
     ),
     ShimSourcePackage(
         key="asksage",
@@ -450,11 +468,18 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
                 "@main/assets/asksage.png"
             ),
         },
-        # No ``mirror`` until the package publishes ``dist/<commit>/``: the
-        # presets track a branch, so ``{ref}`` is a commit, and a ``dist``
-        # branch that still holds tags answers that URL with a 404 — which is
-        # final for a mirror leg, on the one path a mirror exists for (the
-        # forge unreachable).  The template returns with the publish job.
+        # The archive is commit-addressed (``@dist/<commit>``), and the
+        # loader fills ``{ref}`` with the commit it resolved the branch to,
+        # so the pinned commit and the mirror's bytes name one tree without
+        # a hand-maintained ``sha256``.  ``path`` names ``providers`` rather
+        # than ``"."``: the archive strips its single top-level directory.
+        mirror={
+            "url_template": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-asksage"
+                "@dist/{ref}/asksage.tar.gz"
+            ),
+            "path": "providers",
+        },
     ),
     ShimSourcePackage(
         key="opendesign",
@@ -475,10 +500,17 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
             ),
         },
         # Branch-addressed for the same reason as the rest: no digest to bump.
-        # No ``mirror`` until the package publishes ``dist/<commit>/``: the
-        # presets track a branch, so ``{ref}`` is a commit, and a ``dist``
-        # branch that still holds tags answers that URL with a 404 — which is
-        # final for a mirror leg, on the one path a mirror exists for (the
-        # forge unreachable).  The template returns with the publish job.
+        # The archive is commit-addressed (``@dist/<commit>``), and the
+        # loader fills ``{ref}`` with the commit it resolved the branch to,
+        # so the pinned commit and the mirror's bytes name one tree without
+        # a hand-maintained ``sha256``.  ``path`` names ``providers`` rather
+        # than ``"."``: the archive strips its single top-level directory.
+        mirror={
+            "url_template": (
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-opendesign"
+                "@dist/{ref}/opendesign.tar.gz"
+            ),
+            "path": "providers",
+        },
     ),
 )

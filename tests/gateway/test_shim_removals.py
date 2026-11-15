@@ -283,11 +283,12 @@ class TestAdminPayload:
                 "logos",
                 "note",
             }
-            # Every published package tracks its branch and names no mirror:
-            # the packages publish tag-addressed archives, and a preset that
-            # tracks a branch would address one by commit.  The picker writes
-            # the key, so the payload is url + path until that changes.
-            assert set(entry["remote"]) == {"url", "path"}
+            # Every published package tracks its branch and names a mirror
+            # addressed by the commit; the picker writes the key, so the extra
+            # keys ride along without a front-end change.
+            assert set(entry["remote"]) == {"url", "path", "mirror"}
+            assert "@dist/{ref}/" in entry["remote"]["mirror"]["url_template"]
+            assert set(entry["remote"]["mirror"]) == {"url_template", "path"}
             assert entry["shims"]
 
     def test_the_free_package_carries_the_flag_the_picker_groups_on(self):
