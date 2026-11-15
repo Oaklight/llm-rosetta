@@ -641,16 +641,22 @@ A preset pins no `ref`, so it tracks the repository's branch: each fetch
 resolves the branch to a commit and records that commit in the cache stamp.
 That is what a shim change no longer has to wait for a release to travel.
 
-A preset carries **no mirror today**, and that is deliberate. The packages'
-`dist` branches hold tag-addressed archives (`dist/v0.3.1/alcf.tar.gz`), while
-a branch-tracking preset addresses the mirror by the commit it resolved
-(`{ref}` = `6d5efda…`) — a URL nothing publishes yet. A mirror that answers
-`404` is a final verdict, and the leg is only asked when the forge cannot be
-connected to, so the fallback would die exactly where it is needed. The
-`mirror` template returns to the presets with the publish job that writes one
-immutable `dist/<commit>/` directory per push; at that point the archive a
-preset names and the commit it records describe one tree, which is the fixed
-pair a `ref` plus `sha256` used to give, without a release in the loop.
+A preset carries a **commit-addressed mirror**: the `dist` archive on jsDelivr
+with `{ref}` in the template, and `path: "providers"` for that archive's layout
+(a name, not `"."`, so an archive that wraps the tree in one more directory
+still loads). Each package's publish job builds one immutable
+`dist/<commit>/<name>.tar.gz` directory per push, and the loader fills `{ref}`
+with the commit it resolved the branch to — so the archive the preset names and
+the commit it records describe one tree, which is what a `ref` plus `sha256`
+pair used to guarantee, without a release in the loop.
+
+The address has to be exactly what the packages publish. A mirror answers `404`
+as a final verdict, and the leg is only asked when the forge cannot be connected
+to, so a template that names a directory nobody writes fails precisely where the
+mirror is the only remaining option. `scripts/dev/check_shim_workflow.py` in the
+core repository guards the other half: the five packages' copies of the publish
+job must stay identical to the master copy, or one of them silently stops
+writing the directory this template names.
 
 The `mirror` field itself is unchanged and an explicit remote may still carry
 one. Replacing the CDN with an internal mirror is a matter of writing the
