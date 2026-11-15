@@ -294,7 +294,9 @@ test('the countdown ticks only while it is on screen, and stops with the drawer'
   assert.match(code, /if \(showCountdown\) \{\s*_expiryTimer = setInterval\(paint, 1000\);/);
   assert.doesNotMatch(code, /_expiryTimer = setInterval\(\(\) => \{ if \(showCountdown\)/);
   assert.match(code, /else \{\s*_clearExpiryTimer\(\);/);
-  assert.match(code, /if \(_provPane === 'basic'\) _clearExpiryTimer\(\);/);
+  // The expiry row lives on Auth alone, so leaving it — to either of the
+  // other panes — is what stops the clock.
+  assert.match(code, /if \(_provPane !== 'auth'\) _clearExpiryTimer\(\);/);
   const exportList = code.match(/Object\.assign\(window,\s*\{([\s\S]*?)\}\);/);
   assert.ok(exportList, 'providers.js must export its inline handlers');
   assert.match(exportList[1], /\bclearProviderExpiryTimer\b/);
@@ -365,4 +367,155 @@ test('the Basic pane states one source instead of offering a picker', () => {
   // an action it does not perform.
   assert.match(code, /chip\.setAttribute\('aria-current', 'true'\)/);
   assert.doesNotMatch(code, /chip\.setAttribute\('aria-pressed'/);
+});
+
+
+test('the paste box asks for what the exchange shows, not always a URL', () => {
+  // Globus renders the authorization code on its own page; a loopback
+  // redirect yields a URL.  The panel keeps one input for both, so the label
+  // and placeholder must come from the start-login answer.
+  assert.match(code, /result\.paste_label/);
+  assert.match(code, /result\.paste_placeholder/);
+  // The reset puts the generic wording back, or the next provider inherits
+  // this one's.
+  const reset = code.slice(
+    code.indexOf('function resetProviderBrowserLogin('),
+    code.indexOf('async function beginProviderBrowserLogin('),
+  );
+  assert.match(reset, /prov\.browserPastePlaceholder/);
+  assert.match(reset, /prov\.browserLoginHint/);
+  // The input is no longer a `type="url"`: a code is not a URL, and the
+  // browser's URL validation would refuse it.
+  assert.match(html, /id="provBrowserCallback" type="text"/);
+});
+
+test('the declared setup fields are rendered beside the key', () => {
+  // An exchange that needs named inputs gets a field in the provider form, so
+  // one Save writes the key and the account details together.  The card's own
+  // form made a two-save order mandatory, which nobody could infer.
+  assert.match(code, /function _authFieldDefs\(/);
+  // The definition comes from the shim, never from a per-provider edit.
+  assert.match(code, /shim && shim\.fields/);
+  assert.match(code, /data-auth-field/);
+  assert.match(code, /_authFieldSeed/);
+  // Values are text, never markup: the declaration is shim-owned.
+  const render = code.slice(
+    code.indexOf('function _renderAuthFields('),
+    code.indexOf('function setProviderPane('),
+  );
+  assert.ok(render.length > 200, 'the renderer was found');
+  assert.match(render, /label\.textContent/);
+  assert.match(render, /help\.textContent/);
+  assert.doesNotMatch(render, /innerHTML/);
+  assert.match(html, /id="provAuthFields"/);
+  // The removed card form must not come back.
+  assert.doesNotMatch(html, /provExchangeFields/);
+});
+
+test('the save sends the declared fields with the entry', () => {
+  const save = code.slice(code.indexOf('async function _saveProvider('));
+  assert.match(save, /body\.auth_fields = _authFieldValues\(\)/);
+  // Sent even when the selected shim declares none: the backend reads an
+  // absent key as "keep what is stored", so guarding the send on the shim
+  // would carry the previous shim's values into one that has no such input.
+  assert.doesNotMatch(save, /if \(_authFieldDefs\(\)\.length\)/);
+});
+
+test('a new provider saves and stays on the credential pane', () => {
+  // A record is addressed by a provider that exists, so it cannot be produced
+  // in the add form — but the entry can be created there, and the operator
+  // should not have to leave the drawer and find their way back.
+  const panel = code.slice(
+    code.indexOf('function _renderExchangePanel('),
+    code.indexOf('function _credentialDraftDirty('),
+  );
+  const addBranch = panel.slice(
+    panel.indexOf('if (!_editingProviderName) {'),
+    panel.indexOf('if (!data) {'),
+  );
+  assert.match(addBranch, /_credentialText\('prov\.state\.unsaved'/);
+  assert.match(addBranch, /fn: 'saveProviderAndManageCredential\(\)'/);
+  // The detour sentence belongs to the other case — a saved provider whose
+  // credential source was just changed — not to creation.
+  assert.doesNotMatch(addBranch, /label\.credentialSaveFirst/);
+
+  const save = code.slice(code.indexOf('async function _saveProvider('));
+  assert.match(save, /if \(res\.ok && stayOnCredential\)/);
+  assert.match(save, /editProvider\(name\);\s*setProviderPane\('auth'\);/);
+  // The flag is read and cleared on entry: a refused or ordinary save must
+  // not leave the next one holding the drawer open.
+  assert.match(code, /const stayOnCredential = _saveAndManage;\s*_saveAndManage = false;/);
+  // And it is the linking function that raises it.  Without this the button
+  // is a plain Save, which is the behaviour it was added to replace.
+  const link = code.slice(
+    code.indexOf('function saveProviderAndManageCredential('),
+    code.indexOf('async function _saveProvider('),
+  );
+  assert.match(link, /_saveAndManage = true;/);
+  // A save leaves the drawer clean: it is already open, so reopening it does
+  // not reset the edit flag, and a provider just saved would still refuse to
+  // close when the operator clicks outside it.
+  assert.match(
+    save,
+    /markDialogPristine\(document\.getElementById\('providerModal'\)\);/,
+  );
+});
+
+test('the install guard reads the two values the exchange would use', () => {
+  // The exchange mints against the saved entry.  Asking the whole form
+  // whether it is pristine made the record box unusable: pasting into it is
+  // an edit, so the box dirtied the form it then refused to proceed without
+  // saving.  The guard must answer for the key and the declared fields only.
+  const guard = code.slice(
+    code.indexOf('function _credentialDrift('),
+    code.indexOf('function saveProvider('),
+  );
+  // An empty key box means "keep the stored key" — the panel leaves it blank
+  // whenever credential visibility is off — so only a typed value counts.
+  assert.match(guard, /const typedKey = _getKeyFieldValue\(\);/);
+  assert.match(guard, /if \(typedKey && typedKey !== storedKey\) return true;/);
+  assert.match(guard, /_authFieldValues\(\)/);
+  assert.match(guard, /_authFieldSeed/);
+  assert.doesNotMatch(guard, /providerFormPristine|isDialogPristine/);
+
+  const install = code.slice(
+    code.indexOf('async function installProviderCredential('),
+    code.indexOf('async function signOutProviderCredential('),
+  );
+  assert.match(install, /if \(_credentialDrift\(\)\) \{/);
+  assert.doesNotMatch(install, /providerFormPristine\(\)/);
+});
+
+test('a required declared field refuses the save', () => {
+  const guard = code.slice(
+    code.indexOf('function _missingAuthField('),
+    code.indexOf('function saveProvider('),
+  );
+  // Only the shim's own sign-in reads these values, so only that source makes
+  // one required.
+  assert.match(guard, /credentialSourceId\(_uiSource\(\)\) !== 'auth_exchange'/);
+  assert.match(guard, /if \(!def\.required\) continue;/);
+
+  const save = code.slice(code.indexOf('async function _saveProvider('));
+  assert.match(save, /const missingInput = _missingAuthField\(\);/);
+  // The mark and the focus go to the input, not to the submit button.
+  assert.match(save, /missingInput\.setAttribute\('aria-invalid', 'true'\)/);
+  assert.match(save, /missingInput\.focus\(\)/);
+});
+
+test('the new credential keys exist in both dictionaries', () => {
+  const enBody = i18n.slice(i18n.indexOf('  en: {'), i18n.indexOf('  zh: {'));
+  const zhStart = i18n.indexOf('  zh: {');
+  const zhBody = i18n.slice(zhStart, i18n.indexOf('\n};', zhStart));
+  for (const key of [
+    'prov.browserPastePlaceholder', 'prov.saveProviderFirst',
+    'label.credentialFieldsHint', 'label.credentialHintInstall',
+    'btn.saveAndManage', 'prov.credentialAfterSave',
+    'error.authFieldRequired',
+  ]) {
+    assert.equal(enBody.split(`'${key}'`).length - 1, 1, `${key} in the en dictionary`);
+    assert.equal(zhBody.split(`'${key}'`).length - 1, 1, `${key} in the zh dictionary`);
+  }
+  // The sentence that read as a warning about a setting nobody chose is gone.
+  assert.equal(enBody.split("'prov.keyInputHint'").length - 1, 0);
 });

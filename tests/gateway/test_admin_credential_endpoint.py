@@ -100,6 +100,40 @@ class _BrowserExchange(_Exchange):
         return {"connected": True, "subject": "user-1"}
 
 
+class _CodeExchange(_BrowserExchange):
+    """An exchange whose page shows a code, not a callback URL."""
+
+    def begin_login(self, ctx: AuthContext) -> dict[str, Any]:
+        return {
+            "authorization_url": "https://auth.example/authorize?state=opaque",
+            "expires_at": 123.0,
+            "paste_label": "Sign in, then paste the code the page shows.",
+            "paste_placeholder": "the code on the page",
+            "access_token": "must-not-escape",
+        }
+
+
+class _FieldExchange(_BrowserExchange):
+    """An exchange whose install step takes named inputs."""
+
+    def fields(self) -> tuple[dict[str, Any], ...]:
+        return (
+            {
+                "key": "email",
+                "label": "Account email",
+                "placeholder": "you@example.gov",
+                "help": "The address the account key belongs to.",
+                "required": True,
+            },
+            {
+                "key": "api_key",
+                "label": "Account key",
+                "placeholder": "sk-...",
+                "required": "true",
+            },
+        )
+
+
 class _LegacyExchange:
     """An exchange written before ``install()`` existed."""
 
@@ -178,6 +212,48 @@ class TestBrowserLogin:
         assert "access_token" not in payload
         assert "refresh_token" not in payload
         assert "id_token" not in payload
+
+    def test_the_exchange_says_what_the_operator_pastes_back(self):
+        """Globus shows a code; a loopback redirect yields a URL.
+
+        The panel reuses one input box for both, so the label and placeholder
+        come from the exchange instead of always asking for a callback URL.
+        """
+        payload = json.loads(
+            _call(
+                begin_provider_login, _Request(_config(exchange=_CodeExchange()))
+            ).body
+        )
+
+        assert payload["paste_label"].startswith("Sign in, then paste the code")
+        assert payload["paste_placeholder"] == "the code on the page"
+
+    def test_an_exchange_without_hints_sends_none(self):
+        payload = json.loads(
+            _call(
+                begin_provider_login, _Request(_config(exchange=_BrowserExchange()))
+            ).body
+        )
+
+        assert "paste_label" not in payload
+        assert "paste_placeholder" not in payload
+        assert payload["callback_url"] == "http://127.0.0.1:1455/auth/callback"
+
+    def test_a_non_string_hint_is_dropped(self):
+        class _BadHints(_BrowserExchange):
+            def begin_login(self, ctx: AuthContext) -> dict[str, Any]:
+                return {
+                    "authorization_url": "https://auth.example/authorize",
+                    "paste_label": {"nested": "object"},
+                    "paste_placeholder": ["x"],
+                }
+
+        payload = json.loads(
+            _call(begin_provider_login, _Request(_config(exchange=_BadHints()))).body
+        )
+
+        assert "paste_label" not in payload
+        assert "paste_placeholder" not in payload
 
     def test_callback_accepts_only_the_url_and_reseeds(self):
         exchange = _BrowserExchange()
@@ -294,6 +370,70 @@ class TestGet:
 
         assert payload["can_install"] is False
         assert payload["can_revoke"] is False
+
+    def test_the_inputs_the_exchange_declares_reach_the_panel(self):
+        """A sign-in that needs an email gets a form, not a JSON textarea."""
+        payload = json.loads(
+            _call(
+                get_provider_credential, _Request(_config(exchange=_FieldExchange()))
+            ).body
+        )
+
+        assert [f["key"] for f in payload["fields"]] == ["email", "api_key"]
+        assert payload["fields"][0]["required"] is True
+        assert payload["fields"][0]["help"]
+        # ``"true"`` from a declaration and ``True`` from Python mean the same.
+        assert payload["fields"][1]["required"] is True
+        assert payload["fields"][1]["placeholder"] == "sk-..."
+
+    def test_an_exchange_that_declares_nothing_has_no_fields(self):
+        payload = json.loads(
+            _call(get_provider_credential, _Request(_config(exchange=_Exchange()))).body
+        )
+
+        assert payload["fields"] == []
+
+    @pytest.mark.parametrize(
+        "declared",
+        [
+            [{"key": "email"}],  # no label
+            [{"label": "Email"}],  # no key
+            [{"key": "not a key!", "label": "Email"}],
+            [{"key": "../etc", "label": "Email"}],
+            ["email"],  # not a mapping
+        ],
+    )
+    def test_a_field_it_cannot_render_is_dropped(self, declared):
+        class _Bad(_FieldExchange):
+            def fields(self):
+                return tuple(declared)
+
+        payload = json.loads(
+            _call(get_provider_credential, _Request(_config(exchange=_Bad()))).body
+        )
+
+        assert payload["fields"] == []
+
+    def test_the_field_list_is_bounded(self):
+        class _Many(_FieldExchange):
+            def fields(self):
+                return tuple({"key": f"f{i}", "label": f"Field {i}"} for i in range(20))
+
+        payload = json.loads(
+            _call(get_provider_credential, _Request(_config(exchange=_Many()))).body
+        )
+
+        assert len(payload["fields"]) == 8
+
+    def test_a_silent_declaration_is_not_a_500(self):
+        class _Broken(_FieldExchange):
+            def fields(self):
+                raise RuntimeError("boom")
+
+        response = _call(get_provider_credential, _Request(_config(exchange=_Broken())))
+
+        assert response.status_code == 200
+        assert json.loads(response.body)["fields"] == []
 
     def test_a_record_with_a_refused_grant_is_not_reported_connected(self):
         """The refresh token of a refused grant stays in the store, so the

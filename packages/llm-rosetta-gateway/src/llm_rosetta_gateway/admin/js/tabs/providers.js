@@ -26,7 +26,7 @@ import { shimHintText } from '../core/shim-hint.js';
 import { jsArg, logoUrl } from '../core/html.js';
 import { filteredEmptyHtml } from '../core/empty.js';
 import { providerFormError } from '../core/form-validate.js';
-import { isDialogPristine } from '../core/dialog.js';
+import { isDialogPristine, markDialogPristine } from '../core/dialog.js';
 import { typeOptionHtml } from '../core/type-switch.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -149,6 +149,7 @@ let _credSource = null;      // card id: static | config | shim | exchange
 let _credSourceOriginal = null;  // card id in effect when the drawer opened
 let _credArgv = [];          // editable argv rows
 let _credFormDirty = false;  // the operator touched a credential field
+let _authFieldSeed = {};     // the setup fields the entry was opened with
 let _provPane = 'basic';
 
 function _selectedShim() {
@@ -220,23 +221,119 @@ function _clearProviderDrawerState(cfg) {
   _credSourceOriginal = credentialUiSource(credentialSource(_selectedShim(), cfg));
   _credSource = _credSourceOriginal;
   _credArgv = Array.isArray(cfg && cfg.token_command) ? [...cfg.token_command] : [];
+  _authFieldSeed = (cfg && cfg.auth_fields && typeof cfg.auth_fields === 'object')
+    ? { ...cfg.auth_fields } : {};
   _setCredentialError('');
   _setCommandError('');
   _resetCredentialBox();
 }
 
+/** The setup fields the selected shim declares, if any. */
+function _authFieldDefs() {
+  const shim = _selectedShim();
+  return Array.isArray(shim && shim.fields) ? shim.fields : [];
+}
+
+/** What the declared-field inputs currently hold, keyed like the entry. */
+function _authFieldValues() {
+  const values = {};
+  const host = document.getElementById('provAuthFields');
+  if (!host) return values;
+  for (const input of host.querySelectorAll('input[data-auth-field]')) {
+    const value = (input.value || '').trim();
+    if (value) values[input.getAttribute('data-auth-field')] = value;
+  }
+  return values;
+}
+
+/**
+ * Render the exchange's setup fields beside the key.
+ *
+ * They are stored in the provider entry (``auth_fields``), not in a separate
+ * record, so the operator fills the key and these together and presses Save
+ * once.  A separate "sign-in details" box made "save, then enter, then save
+ * again" a required order nobody could infer from the screen.
+ */
+function _renderAuthFields(seed) {
+  const host = document.getElementById('provAuthFields');
+  if (!host) return;
+  const defs = _authFieldDefs();
+  if (!defs.length) {
+    host.hidden = true;
+    host.textContent = '';
+    return;
+  }
+  // A pane repaint keeps what is on screen; a drawer that just opened has no
+  // inputs yet and seeds from the entry.  Without the distinction a re-render
+  // would wipe a half-typed value, and a new provider would inherit the last
+  // one's.
+  const painted = host.querySelector('input[data-auth-field]') !== null;
+  const current = seed !== undefined
+    ? (seed || {})
+    : (painted ? _authFieldValues() : _authFieldSeed);
+  host.textContent = '';
+  for (const field of defs) {
+    const wrap = document.createElement('div');
+    wrap.className = 'form-group';
+    const label = document.createElement('label');
+    label.textContent = field.label + (field.required ? ' *' : '');
+    const input = document.createElement('input');
+    // An id puts the field in the form snapshot, so closing the drawer with a
+    // typed value warns instead of dropping it.
+    input.id = `provAuthField_${field.key}`;
+    input.type = 'text';
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    input.setAttribute('autocapitalize', 'off');
+    input.setAttribute('data-auth-field', field.key);
+    if (field.placeholder) input.placeholder = field.placeholder;
+    if (current[field.key]) input.value = current[field.key];
+    // A refusal marks the input it named; typing the answer clears the mark,
+    // the same rule the name and base-URL fields follow.
+    input.addEventListener('input', () => {
+      input.removeAttribute('aria-invalid');
+      wrap.classList.remove('is-invalid');
+    });
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+    if (field.help) {
+      const help = document.createElement('div');
+      help.className = 'prov-field-hint';
+      help.textContent = field.help;
+      wrap.appendChild(help);
+    }
+    host.appendChild(wrap);
+  }
+  host.hidden = false;
+}
+
 /** Switch panes without touching the type picker or its `_applyType` closure. */
+const _PROVIDER_PANES = ['basic', 'caps', 'auth'];
+
+/**
+ * Show one pane of the provider drawer.
+ *
+ * Three panes, one subject each: what the provider is and how to reach it
+ * (basic), what it serves and how each endpoint is addressed (caps), and where
+ * its credential comes from (auth).  Nothing is rebuilt, so a tab switch, a
+ * language switch or a failed save never loses a typed key or a multi-key row.
+ *
+ * @param {'basic'|'caps'|'auth'} pane
+ */
 function setProviderPane(pane) {
-  _provPane = pane === 'auth' ? 'auth' : 'basic';
-  const basic = document.getElementById('provPaneBasic');
-  const auth = document.getElementById('provPaneAuth');
-  if (!basic || !auth) return;
-  basic.hidden = _provPane !== 'basic';
-  auth.hidden = _provPane !== 'auth';
+  _provPane = _PROVIDER_PANES.includes(pane) ? pane : 'basic';
+  const panes = {
+    basic: document.getElementById('provPaneBasic'),
+    caps: document.getElementById('provPaneCaps'),
+    auth: document.getElementById('provPaneAuth'),
+  };
+  if (!panes.basic || !panes.caps || !panes.auth) return;
+  for (const [name, el] of Object.entries(panes)) el.hidden = _provPane !== name;
   // The expiry row is on the Auth pane only; while it is off screen its
   // countdown has nothing to repaint, so the clock stops.
-  if (_provPane === 'basic') _clearExpiryTimer();
+  if (_provPane !== 'auth') _clearExpiryTimer();
   for (const [id, on] of [['provTabBasic', _provPane === 'basic'],
+    ['provTabCaps', _provPane === 'caps'],
     ['provTabAuth', _provPane === 'auth']]) {
     const tab = document.getElementById(id);
     if (!tab) continue;
@@ -249,6 +346,7 @@ function setProviderPane(pane) {
     _syncCredentialUI();
     _renderPreview();
   }
+  if (_provPane === 'caps') _renderCapsSummary();
   _renderAuthSummary();
 }
 
@@ -438,11 +536,13 @@ function _renderKeyPanel(ui, shim, cfg) {
   if (panel) panel.hidden = !(ui === 'static' || needsKey);
   const hint = document.getElementById('provKeyHint');
   if (!hint) return;
+  // Only the static source has something to say about the box.  A minting
+  // source already states what it does on its card, and a second sentence
+  // here read as a warning about a setting the operator had not chosen.
   hint.textContent = ui === 'static'
     ? _credentialText('prov.keyStaticHint',
       'Stored in the entry, or written as ${VENDOR_API_KEY}.')
-    : _credentialText('prov.keyInputHint',
-      'The command receives this key through its env var. It is not a second credential.');
+    : '';
 }
 
 /** The value the save will use for each editable field, already validated. */
@@ -655,6 +755,10 @@ function addProviderArg() {
 
 function _renderCredentialPanels() {
   const ui = _uiSource();
+  // The setup fields the shim's exchange declares belong to the key box, not
+  // to a card: they are painted here because every path that changes the
+  // selected shim or re-reads the entry ends up in this function.
+  _renderAuthFields();
   _renderExchangePanel(_credentialData, ui);
   _renderStatusCard(_credentialData, ui);
 }
@@ -776,9 +880,20 @@ function _renderExchangePanel(data, ui) {
   if (refreshHint) { refreshHint.hidden = true; refreshHint.textContent = ''; }
 
   if (!_editingProviderName) {
+    // A credential record is addressed by a provider that exists: the
+    // endpoint resolves the name against the loaded config.  So the record
+    // cannot be produced here — but the entry can be created here, and the
+    // operator should not have to leave the drawer and find their way back.
     _appendRow(rows, _credentialText('prov.stateLabel', 'State'),
-      _credentialText('label.credentialSaveFirst',
-        'Save this provider, then come back to manage its credential.'), true);
+      _credentialText('prov.state.unsaved', 'Not saved'), true);
+    if (refreshHint) {
+      refreshHint.hidden = false;
+      refreshHint.textContent = _credentialText('prov.credentialAfterSave',
+        'Saving creates the provider entry; sign in or install a record here right after.');
+    }
+    _appendAction(acts, {kind: 'primary',
+      label: _credentialText('btn.saveAndManage', 'Save and continue'),
+      fn: 'saveProviderAndManageCredential()'});
     return;
   }
   if (!data) {
@@ -855,6 +970,22 @@ function _renderExchangePanel(data, ui) {
       label: _credentialText('btn.signOut', 'Sign out'),
       fn: 'signOutProviderCredential()'});
   }
+  // The card's closing sentence has to describe *this* exchange: a shim that
+  // declares setup fields mints from those and the key, one with a browser
+  // flow signs in, and one with neither takes a record produced elsewhere.
+  const hint = document.getElementById('provCredentialHint');
+  if (hint) {
+    if (_authFieldDefs().length) {
+      hint.textContent = _credentialText('label.credentialFieldsHint',
+        'The shim mints the credential from the account key and the details above.');
+    } else if (browserLogin) {
+      hint.textContent = _credentialText('label.credentialHint',
+        'This provider signs in rather than stores a key. Use the browser sign-in above.');
+    } else {
+      hint.textContent = _credentialText('label.credentialHintInstall',
+        'Install a record produced where a browser is.');
+    }
+  }
 }
 
 /** Whether a refresh or test would run something other than the saved state. */
@@ -900,8 +1031,8 @@ function _renderStatusCard(data, ui) {
   };
 
   if (!_editingProviderName) {
-    line(_credentialText('label.credentialSaveFirst',
-      'Save this provider, then come back to manage its credential.'), true);
+    line(_credentialText('prov.credentialAfterSave',
+      'Saving creates the provider entry; sign in or install a record here right after.'), true);
     return;
   }
   if (!data) {
@@ -1047,8 +1178,10 @@ function _renderAuthSummary() {
     return;
   }
   if (state === 'unsaved') {
-    detail.textContent = _credentialText('label.credentialSaveFirst',
-      'Save this provider, then come back to manage its credential.');
+    // A new provider: the same sentence the exchange panel shows, so the two
+    // surfaces cannot describe the same state two ways.
+    detail.textContent = _credentialText('prov.credentialAfterSave',
+      'Saving creates the provider entry; sign in or install a record here right after.');
     return;
   }
   if (state === 'loading') {
@@ -1180,7 +1313,16 @@ function resetProviderBrowserLogin() {
   if (link) { link.hidden = true; link.removeAttribute('href'); link.textContent = ''; }
   const code = document.getElementById('provBrowserLoginUrl');
   if (code) code.textContent = '';
-  if (input) input.value = '';
+  if (input) {
+    input.value = '';
+    input.placeholder = _credentialText('prov.browserPastePlaceholder',
+      'http://127.0.0.1:1455/auth/callback?code=...&state=...');
+  }
+  const hint = document.getElementById('provBrowserLoginHint');
+  if (hint) {
+    hint.textContent = _credentialText('prov.browserLoginHint',
+      'Open the sign-in URL in a browser. After authorization, paste the complete callback URL here.');
+  }
   _setCredentialError('');
 }
 
@@ -1214,6 +1356,11 @@ async function beginProviderBrowserLogin() {
     }
     if (code) code.textContent = result.authorization_url;
     if (box) box.hidden = false;
+    // What the operator copies back is the exchange's to say: a loopback
+    // redirect yields a callback URL, Globus yields a code on its own page.
+    const hint = document.getElementById('provBrowserLoginHint');
+    if (hint && result.paste_label) hint.textContent = result.paste_label;
+    if (input && result.paste_placeholder) input.placeholder = result.paste_placeholder;
     input?.focus();
   } catch (err) {
     if (opened) opened.close();
@@ -1274,6 +1421,18 @@ async function installProviderCredential() {
   // Belt and braces: the box is reset when the editor moves on, and the name
   // that installs must still be the one on screen.
   if (_credentialFor !== _editingProviderName) return;
+  // The exchange mints against the *saved* entry.  Installing while the
+  // drawer holds a different key or different setup fields would store the
+  // record and then mint with the values still on disk — which reads as "the
+  // key was refused".  Everything else the drawer can hold (above all the
+  // record pasted into this very box) never reaches the entry, so asking the
+  // whole form whether it is pristine made the box unusable: typing into it
+  // dirtied the form it then refused to proceed without saving.
+  if (_credentialDrift()) {
+    _setCredentialError(_credentialText('prov.saveProviderFirst',
+      'The provider has unsaved changes — Save it first, then install the record.'));
+    return;
+  }
   const record = parseRecord(ta.value);
   if (!record) {
     _setCredentialError(_credentialText('label.credentialBadJson', 'That is not valid JSON.'));
@@ -1669,6 +1828,40 @@ function toggleProvCapSection() {
       if (sec) sec.classList.toggle('visible', chk?.checked || false);
     }
   }
+  _renderCapsSummary();
+}
+
+/** The capabilities currently ticked, in the registry's order. */
+function _tickedCapabilities() {
+  return (S.configData?.model_types || []).filter(
+    (desc) => document.getElementById(`provCap${_capitalize(desc.name)}`)?.checked,
+  );
+}
+
+/**
+ * Mirror the ticked capabilities on the Basic pane and on the tab itself.
+ *
+ * The Basic pane is a summary, like its credential card: it says what the
+ * provider serves and offers one way to change it.  The count on the tab
+ * answers the same question without opening the pane, which is the one thing a
+ * hidden form cannot do.
+ */
+function _renderCapsSummary() {
+  const ticked = _tickedCapabilities().map((desc) => desc.name);
+  const chips = document.getElementById('provCapsChips');
+  if (chips) {
+    // The card's own tags, colours included: the summary should look like the
+    // thing it summarises, and a capability has one visual language in this
+    // console.  A grey icon here read as "disabled" on a provider that serves.
+    chips.innerHTML = ticked.length
+      ? _capBadgesHtml(ticked, { cfg: _editingCfg() })
+      : `<span class="prov-field-hint">${esc(_credentialText('prov.capsNone', 'None selected'))}</span>`;
+  }
+  const count = document.getElementById('provCapsCount');
+  if (count) {
+    count.textContent = String(ticked.length);
+    count.hidden = ticked.length === 0;
+  }
 }
 
 // ── Data-driven UI builders ─────────────────────────────────────────
@@ -1689,8 +1882,11 @@ function _buildProvCapCheckboxes() {
     // badge a saved provider shows are recognisably the same thing.
     const icon = desc.icon_svg || _CAP_ICONS[desc.name] || '';
     label.classList.add('prov-cap-check');
+    // The icon keeps the capability's own hue (`cap-badge-*`), the same one its
+    // badges wear, so the tick row and the card name each type the same way.
+    const inkClass = desc.badge_class ? ` ${desc.badge_class}` : '';
     label.innerHTML = `<input type="checkbox" id="provCap${_capitalize(desc.name)}" onchange="toggleProvCapSection()">`
-      + (icon ? `<span class="prov-cap-ico" aria-hidden="true">${icon}</span>` : '')
+      + (icon ? `<span class="prov-cap-ico${inkClass}" aria-hidden="true">${icon}</span>` : '')
       + ` <span>${esc(labelText)}</span>`;
     container.appendChild(label);
   }
@@ -2593,6 +2789,12 @@ function _rejectProviderField(problem) {
   showToast(t(problem.key), 'error');
   const el = document.querySelector(_PROVIDER_FIELD_TARGETS[problem.field] || '');
   if (!el) return;
+  // The field can be on another pane now; a mark the operator cannot see
+  // reads as a refusal with no reason.
+  const pane = el.closest('.prov-pane')?.id;
+  if (pane === 'provPaneCaps') setProviderPane('caps');
+  else if (pane === 'provPaneAuth') setProviderPane('auth');
+  else if (pane === 'provPaneBasic') setProviderPane('basic');
   // The capability boxes are four inputs behind one label; mark every box of
   // the group so the message points at the group, and focus the first.
   const targets = problem.field === 'capability'
@@ -2635,12 +2837,69 @@ function providerFormPristine() {
   return isDialogPristine(overlay);
 }
 
+/** Whether a save would change what the exchange mints the record against.
+ *
+ *  Only two things on the drawer reach the entry the exchange reads: the key
+ *  and the declared setup fields.  This answers for those two alone, so a
+ *  panel-wide "is it pristine" — which any keystroke anywhere clears — does
+ *  not block an action that never reads the rest of the form.
+ */
+function _credentialDrift() {
+  if (!_editingProviderName) return true;
+  const cfg = _editingCfg() || {};
+  const storedKey = typeof cfg.api_key === 'string' ? cfg.api_key : '';
+  // An empty box is "keep the stored key", not a change: the panel leaves it
+  // blank on purpose whenever credential visibility is off, and the save path
+  // omits an empty key for the backend to keep.  Comparing '' against a stored
+  // key would report every masked provider as edited.
+  const typedKey = _getKeyFieldValue();
+  if (typedKey && typedKey !== storedKey) return true;
+  const typed = _authFieldValues();
+  const seed = _authFieldSeed || {};
+  const keys = new Set([...Object.keys(typed), ...Object.keys(seed)]);
+  for (const key of keys) {
+    if ((typed[key] || '') !== (seed[key] || '')) return true;
+  }
+  return false;
+}
+
+/** The first declared input marked required that the operator left empty.
+ *
+ *  Only the shim's own sign-in consumes these values, so only that source
+ *  makes one required: an entry on a static key or a command stores them and
+ *  reads none, and blocking its save would be a rule without a reason.
+ */
+function _missingAuthField() {
+  const host = document.getElementById('provAuthFields');
+  if (!host) return null;
+  if (credentialSourceId(_uiSource()) !== 'auth_exchange') return null;
+  for (const def of _authFieldDefs()) {
+    if (!def.required) continue;
+    const input = host.querySelector(`input[data-auth-field="${def.key}"]`);
+    if (input && !(input.value || '').trim()) return input;
+  }
+  return null;
+}
+
 function saveProvider() {
   // One Save click, one PUT: the button is held until the answer arrives.
   return withBusyButton(document.querySelector('#providerModal .panel-foot .btn-primary'), _saveProvider);
 }
 
+/** Set by the Auth pane's "Save and continue": the same save, but the drawer
+ *  stays open on the pane whose subject only exists once the entry does. */
+let _saveAndManage = false;
+
+function saveProviderAndManageCredential() {
+  _saveAndManage = true;
+  return saveProvider();
+}
+
 async function _saveProvider() {
+  // Read and clear: a failed or ordinary save must not leave the next one
+  // holding the drawer open.
+  const stayOnCredential = _saveAndManage;
+  _saveAndManage = false;
   const name = document.getElementById('provName').value.trim();
   const provType = document.getElementById('provType').value;
   const baseUrl = document.getElementById('provBaseUrl').value.trim();
@@ -2662,6 +2921,14 @@ async function _saveProvider() {
     editing: _editingProviderName,
   });
   if (problem) { _rejectProviderField(problem); return; }
+  const missingInput = _missingAuthField();
+  if (missingInput) {
+    missingInput.setAttribute('aria-invalid', 'true');
+    missingInput.closest('.form-group')?.classList.add('is-invalid');
+    missingInput.focus();
+    showToast(t('error.authFieldRequired', 'Fill every field marked * before saving.'), 'error');
+    return;
+  }
   const urlTemplate = document.getElementById('provUrlTemplate').value.trim();
   const streamUrlTemplate = document.getElementById('provStreamUrlTemplate').value.trim();
   const body = {base_url: baseUrl, proxy};
@@ -2723,6 +2990,12 @@ async function _saveProvider() {
   body.max_tool_description_length = maxToolDescVal !== '' ? parseInt(maxToolDescVal, 10) : '';
   body.models_path = document.getElementById('provModelsPath').value.trim();
   body.logo = getLogoPickerValue();
+  // The setup fields the shim's exchange declared.  They live in this entry
+  // beside the key, so one Save writes both and the exchange can mint
+  // immediately.  Sent even when the shim declares none: the backend reads an
+  // absent key as "keep what is stored", so omitting it would carry the last
+  // shim's values into a shim that has no such input.
+  body.auth_fields = _authFieldValues();
   // Credential fields the Auth pane owns.  A static key is stored in the
   // entry; a command or a sign-in stores none of the key box contents, so the
   // pane's choice of source decides which fields exist at all.
@@ -2783,6 +3056,20 @@ async function _saveProvider() {
     body.rename_from = _editingProviderName;
   }
   const res = await api.put(`/admin/api/config/providers/${encodeURIComponent(name)}`, body);
+  if (res.ok && stayOnCredential) {
+    showToast(t('toast.providerSaved', {name}));
+    // The entry is on disk and loaded now, so the drawer becomes an editor of
+    // a provider that exists — which is what makes the credential reachable
+    // without closing and re-opening it.
+    await loadConfig();
+    editProvider(name);
+    setProviderPane('auth');
+    // ``editProvider`` reopens a dialog that is already open, and reopening
+    // does not reset it: without this the drawer would still read as edited
+    // and refuse the outside-click dismissal it has just earned.
+    markDialogPristine(document.getElementById('providerModal'));
+    return;
+  }
   if (res.ok) { showToast(t('toast.providerSaved',{name})); closeModal('providerModal'); loadConfig(); }
   else { showToast(res.error || t('toast.error'), 'error'); }
 }
@@ -2973,7 +3260,8 @@ Object.assign(window, {
   toggleProvCapSection, toggleModalKeyVisibility, copyModalKey,
   _syncKeyField, _promoteToMultiKey, _addKeyEntry, _removeKeyEntry,
   switchProviderFilter, setProviderView, renderProviders,
-  saveProvider, deleteProvider, providerFormPristine, onDeleteConfirmInput, onDeleteConfirmClick,
+  saveProvider, saveProviderAndManageCredential, deleteProvider, providerFormPristine,
+  onDeleteConfirmInput, onDeleteConfirmClick,
   confirmDeleteProvider, toggleProvider, editProvider, copyProviderEntry,
   saveServerSettings, runNetDiag, loadConfig,
   goToModelsForProvider, goToProviderFromModel, testProviderConnectivity,

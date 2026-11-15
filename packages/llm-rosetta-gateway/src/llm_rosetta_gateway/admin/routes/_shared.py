@@ -19,6 +19,106 @@ logger = logging.getLogger("llm-rosetta-gateway")
 _ENV_VAR_RE = re.compile(r"^\$\{.+\}$")
 _ENV_PLACEHOLDER_RE = re.compile(r"\$\{([^}]+)\}")
 
+#: The longest string a shim may put in a field label, hint or placeholder.
+#: These are rendered verbatim in the admin origin, so the bound is what keeps
+#: a malformed shim from filling the panel.
+_FIELD_TEXT_LIMIT = 200
+#: How many declared fields the panel will render.  A credential set with more
+#: than a handful of rows is a record, and the paste box exists for that.
+_FIELD_LIMIT = 8
+_FIELD_KEY_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
+
+
+def exchange_field_text(value: Any) -> str | None:
+    """Return *value* when it is a non-empty string, clipped to the bound."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text[:_FIELD_TEXT_LIMIT] if text else None
+
+
+def declared_fields(shim: Any) -> list[dict[str, Any]]:
+    """The form inputs a shim declares, in the panel's own shape.
+
+    Two sources, one list: ``fields:`` in the shim's ``provider.yaml`` (already
+    validated and merged with its vendor manifest at load) and, for
+    compatibility, what an ``auth.py`` exchange declares in code.  The data
+    wins per key, so a YAML entry can reword a field an exchange also
+    describes; the order follows the shim first.
+    """
+    fields: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in getattr(shim, "fields", ()) or ():
+        cleaned = _normalize_field(entry)
+        if cleaned is None or cleaned["key"] in seen:
+            continue
+        seen.add(cleaned["key"])
+        fields.append(cleaned)
+    for entry in exchange_fields(getattr(shim, "auth", None)):
+        if entry["key"] in seen:
+            continue
+        seen.add(entry["key"])
+        fields.append(entry)
+    return fields[:_FIELD_LIMIT]
+
+
+def _normalize_field(entry: Any) -> dict[str, Any] | None:
+    """Shape one declared input for the panel, or ``None`` when it cannot be.
+
+    Both sources go through this: the shim's YAML (validated at load) and an
+    exchange's ``fields()`` (arbitrary Python).  Every value is coerced to a
+    clipped string, the key must be a plain identifier, and anything else is
+    dropped rather than guessed at.  Nothing here is a secret: these are the
+    setup inputs stored on the provider entry, so the credential itself stays
+    in ``api_key`` or the exchange's own record.
+    """
+    if not isinstance(entry, dict):
+        return None
+    key = entry.get("key")
+    label = exchange_field_text(entry.get("label"))
+    if not isinstance(key, str) or not _FIELD_KEY_RE.match(key) or label is None:
+        return None
+    field: dict[str, Any] = {"key": key, "label": label}
+    for name in ("placeholder", "help"):
+        text = exchange_field_text(entry.get(name))
+        if text is not None:
+            field[name] = text
+    required = entry.get("required")
+    # ``True`` from Python, ``"true"`` from a YAML-ish declaration: both mean
+    # the same thing, and anything else means no.
+    if required is True or (isinstance(required, str) and required.strip() == "true"):
+        field["required"] = True
+    return field
+
+
+def exchange_fields(exchange: Any) -> list[dict[str, Any]]:
+    """The inputs an exchange declares in code, in the panel's own shape.
+
+    The exchange is trusted code, but the panel renders what it returns inside
+    the admin origin, so every entry is normalized and a broken one is dropped.
+    """
+    reader = getattr(exchange, "fields", None)
+    if reader is None:
+        return []
+    try:
+        declared = reader()
+    except Exception:  # noqa: BLE001 - a broken declaration is not a 500
+        return []
+    if not isinstance(declared, (list, tuple)):
+        return []
+    fields: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in declared:
+        field = _normalize_field(entry)
+        if field is None or field["key"] in seen:
+            continue
+        seen.add(field["key"])
+        fields.append(field)
+        if len(fields) >= _FIELD_LIMIT:
+            break
+    return fields
+
+
 # The old panel wrote this word into the key slot to say "a command mints the
 # credential".  It is a display marker, never a key, and storing it beside a
 # real command makes the provider unloadable.
@@ -437,6 +537,65 @@ def _sync_auth_middleware(app: Any, config: GatewayConfig) -> None:
         )
 
 
+def _apply_auth_fields(
+    entry: dict[str, Any], body: dict[str, Any], existing: dict[str, Any] | None
+) -> None:
+    """Store the setup inputs an exchange declared, as the entry's own fields.
+
+    The panel sends what the operator typed into the fields the shim declared;
+    the values are validated here rather than trusted, because the entry is
+    read by the exchange and written to the config file.  Validation *refuses*
+    rather than repairs: a value the entry cannot hold is an error the operator
+    can see and fix, whereas a silently dropped or truncated one is a field
+    that saves, reloads empty, and fails at the vendor with no trace of why.
+
+    An absent key means "keep what is stored", the same rule the command
+    fields follow: the editor always sends them, and a client that does not
+    must not wipe an account by saving something else.  An empty mapping means
+    "the operator cleared them", which is how switching to a shim with no
+    declared inputs drops the previous shim's values.
+
+    Raises:
+        ValueError: The payload is not a mapping, names a key this entry
+            cannot hold, or carries a value that is not a string or is longer
+            than :data:`_FIELD_TEXT_LIMIT`.
+    """
+    if "auth_fields" not in body:
+        if existing and isinstance(existing.get("auth_fields"), dict):
+            entry["auth_fields"] = dict(existing["auth_fields"])
+        return
+    value = body["auth_fields"]
+    if value is None:
+        entry.pop("auth_fields", None)
+        return
+    if not isinstance(value, dict):
+        raise ValueError("auth_fields must be a mapping of field key to value")
+    if len(value) > _FIELD_LIMIT:
+        raise ValueError(
+            f"auth_fields carries {len(value)} entries; at most {_FIELD_LIMIT} "
+            "are accepted"
+        )
+    cleaned: dict[str, str] = {}
+    for key, raw in value.items():
+        if not isinstance(key, str) or not _FIELD_KEY_RE.match(key):
+            raise ValueError(f"auth_fields names the key {key!r}, which is not usable")
+        if not isinstance(raw, str):
+            raise ValueError(f"auth_fields[{key!r}] must be a string")
+        text = raw.strip()
+        if not text:
+            continue
+        if len(text) > _FIELD_TEXT_LIMIT:
+            raise ValueError(
+                f"auth_fields[{key!r}] is {len(text)} characters; at most "
+                f"{_FIELD_TEXT_LIMIT} are accepted"
+            )
+        cleaned[key] = text
+    if cleaned:
+        entry["auth_fields"] = cleaned
+    else:
+        entry.pop("auth_fields", None)
+
+
 def _apply_optional_int(entry: dict[str, Any], body: dict[str, Any], key: str) -> None:
     """Set or clear an optional integer field on a provider entry."""
     if key in body:
@@ -643,6 +802,9 @@ def _build_provider_entry(
     # Optional provider-level fields: set when truthy, clear when
     # explicitly sent as empty (so the admin UI can remove them).
     _apply_optional_provider_fields(entry, body)
+    # The exchange's declared setup inputs live beside those fields but are a
+    # dict, so they get their own validated writer.
+    _apply_auth_fields(entry, body, existing_providers.get(resolve_name))
 
     return entry
 

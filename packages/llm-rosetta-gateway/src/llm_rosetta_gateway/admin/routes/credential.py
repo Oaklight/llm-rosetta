@@ -25,7 +25,7 @@ from llm_rosetta_gateway.transport.token_refresh import (
     public_token_status,
 )
 
-from ._shared import parse_json_body
+from ._shared import exchange_field_text, exchange_fields, parse_json_body
 from .config.payload import _get_gateway_config
 
 
@@ -257,6 +257,9 @@ async def get_provider_credential(request: Any, name: str) -> Response:
             "can_revoke": exchange_can_revoke(exchange),
             "can_begin_login": exchange_can_begin_login(exchange),
             "can_complete_login": exchange_can_complete_login(exchange),
+            # The inputs install() takes.  Non-empty means the panel renders a
+            # form; empty keeps the record-textarea path.
+            "fields": exchange_fields(exchange),
         }
     )
 
@@ -292,6 +295,14 @@ async def begin_provider_login(request: Any, name: str) -> Response:
     for key in ("callback_url", "expires_at"):
         if key in result:
             payload[key] = result[key]
+    # What the operator pastes back is not the same for every exchange: a
+    # loopback redirect hands over a callback URL, Globus hands over a code on
+    # its own page.  The exchange says which, in its own words, and the panel
+    # labels the box with it instead of always asking for a URL.
+    for key in ("paste_label", "paste_placeholder"):
+        text = exchange_field_text(result.get(key))
+        if text is not None:
+            payload[key] = text
     return JSONResponse(payload)
 
 

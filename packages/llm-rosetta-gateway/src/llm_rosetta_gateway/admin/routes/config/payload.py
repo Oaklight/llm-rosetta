@@ -27,6 +27,7 @@ from .._shared import (
     _mask_api_key,
     _mask_proxy_url,
     _sanitize_server_section,
+    declared_fields,
 )
 
 from .shims import _shim_removal_advisories, _shim_status_payload
@@ -535,6 +536,14 @@ async def get_config(request: Any) -> Response:
                         s.connection.token_refresh_interval
                     ),
                     "default_token_command_env": s.connection.token_command_env,
+                    # The setup inputs this shim declares.  The list comes from
+                    # ``fields:`` in the shim's own ``provider.yaml``, so a new
+                    # vendor needs no gateway or panel change to get a credential
+                    # form; the provider form renders them beside the key, and
+                    # one Save writes the key and its account details together.
+                    # The exchange reads them back from the entry under
+                    # ``auth_fields``.
+                    "fields": declared_fields(s),
                     "manage_usage_url": s.connection.manage_usage_url,
                     "default_base_url": s.connection.base_url,
                     "default_api_key_env": s.connection.api_key_env,

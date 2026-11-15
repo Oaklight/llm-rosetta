@@ -342,8 +342,8 @@ tr:hover td { background: var(--bg-hover); }
 .cap-checks label { display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;color:var(--text);user-select:none; }
 .cap-checks input[type="checkbox"] { accent-color:var(--accent);width:16px;height:16px; }
 
-/* ── Provider drawer: Basic / Auth panes ──
-   The drawer is one static form split into two panes.  The panes are toggled
+/* ── Provider drawer: Basic / Capabilities / Auth panes ──
+   The drawer is one static form split into three panes.  The panes are toggled
    with `hidden`, never rebuilt, so a multi-key row or a pasted credential
    record survives a tab switch, a language switch and a failed request. */
 .prov-tabs { display:flex; gap:2px; margin:0 -24px 16px; padding:0 24px; border-bottom:1px solid var(--border); }
@@ -357,6 +357,14 @@ tr:hover td { background: var(--bg-hover); }
 .prov-tab:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .prov-tab-badge { width:7px; height:7px; border-radius:50%; background:var(--red); display:inline-block; }
 .prov-tab-badge[hidden] { display:none; }
+/* How many capabilities are ticked.  The pane is hidden most of the time, so
+   the count is the only way to read that answer without opening it. */
+.prov-tab-count {
+  min-width:16px; height:16px; padding:0 4px; border-radius:8px;
+  background:var(--accent); color:var(--accent-on);
+  font-size:11px; line-height:16px; font-weight:600; text-align:center;
+}
+.prov-tab-count[hidden] { display:none; }
 .prov-pane[hidden] { display:none; }
 .prov-type-summary {
   font-family:var(--mono); font-size:12px; color:var(--text-dim);
