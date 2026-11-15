@@ -394,7 +394,7 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         # release.  This entry replaces the former ``opencode_zen_free`` one —
         # that repository shipped a single lane, was renamed, and now ships it
         # beside the others under an unchanged shim name.
-        label="Keyless free endpoints",
+        label="Free Endpoints",
         repo="https://github.com/Oaklight/llm-rosetta-shim-free",
         package="llm_rosetta_shim_free",
         shims=(
