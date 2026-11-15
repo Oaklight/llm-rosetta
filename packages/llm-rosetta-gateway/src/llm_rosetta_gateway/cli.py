@@ -432,6 +432,10 @@ def _cmd_db_export_errors(args: argparse.Namespace) -> None:
 
     output = args.output or "error-dumps.tar.gz"
     partial = f"{output}.part"
+    output_dir = os.path.dirname(os.path.abspath(output))
+    if not os.path.isdir(output_dir):
+        print(f"Output directory not found: {output_dir}", file=sys.stderr)
+        sys.exit(1)
 
     async def _do_export() -> int:
         pm = await PersistenceManager.create(data_dir)
