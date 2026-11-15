@@ -1,8 +1,8 @@
 ---
-title: Keyless free endpoints
+title: Free Endpoints
 ---
 
-# Keyless free endpoints
+# Free Endpoints
 
 Four providers publish a free pool that needs no account. None of them carries
 a contract: the roster, the rate limit and the endpoint itself can change or
