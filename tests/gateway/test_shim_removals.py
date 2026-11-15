@@ -283,16 +283,11 @@ class TestAdminPayload:
                 "logos",
                 "note",
             }
-            # Every published package resolves to a pinned primary plus a
-            # mirror (#1411 Phase 4); the picker writes the key, so the extra
-            # keys ride along without a front-end change.
-            assert set(entry["remote"]) == {"url", "path", "ref", "mirror"}
-            assert entry["remote"]["ref"].startswith("v")
-            assert set(entry["remote"]["mirror"]) == {
-                "url_template",
-                "sha256",
-                "path",
-            }
+            # Every published package tracks its branch and names no mirror:
+            # the packages publish tag-addressed archives, and a preset that
+            # tracks a branch would address one by commit.  The picker writes
+            # the key, so the payload is url + path until that changes.
+            assert set(entry["remote"]) == {"url", "path"}
             assert entry["shims"]
 
     def test_the_free_package_carries_the_flag_the_picker_groups_on(self):

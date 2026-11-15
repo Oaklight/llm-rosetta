@@ -258,26 +258,20 @@ class TestSourceCatalog:
             assert remote["url"] == entry.repo
             assert remote["path"] == f"src/{entry.package}/providers"
             assert "token_env" not in remote
-            # A package that publishes tagged archives pins the tag and names
-            # its archive as a mirror; one that does not carries neither.
-            if entry.ref:
-                assert remote["ref"] == entry.ref
-                mirror = remote["mirror"]
-                assert mirror["url_template"].startswith(
-                    "https://cdn.jsdelivr.net/gh/Oaklight/"
-                )
-                assert "{ref}" in mirror["url_template"]
-                assert len(mirror["sha256"]) == 64
-                assert mirror["path"] == "providers"
-            else:
-                assert "ref" not in remote and "mirror" not in remote
+            # The shipped presets track the default branch: no ref, no digest.
+            assert "ref" not in remote
+            # And no mirror either: a branch-tracking preset addresses the
+            # mirror by commit, while the packages' `dist` branches still hold
+            # tag-addressed archives, so the leg would 404 — which is final on
+            # the one path a mirror exists for.
+            assert "mirror" not in remote
 
-    def test_every_published_package_pins_a_release_tag(self):
-        """Phase 4 of #1411: every package publishes an archive per tag.
+    def test_every_published_package_tracks_its_branch(self):
+        """A shim change must not wait for a gateway release.
 
-        The tags are not all the same — a package that ships a new archive
-        bumps its own — so the rule is that a tag is stated and an archive is
-        named, not that they agree on a number.
+        A hand-maintained tag plus digest made every structure change a
+        two-repository hand-off; the preset now names the branch, and the
+        loader pins the commit it resolved to in its cache stamp.
         """
         assert {entry.key for entry in SHIM_SOURCE_PACKAGES} == {
             "alcf",
@@ -287,9 +281,11 @@ class TestSourceCatalog:
             "opendesign",
         }
         for entry in SHIM_SOURCE_PACKAGES:
-            assert entry.ref is not None, entry.key
-            assert entry.ref.startswith("v"), entry.key
-            assert entry.mirror is not None, entry.key
+            assert entry.ref is None, entry.key
+            # A mirror returns with the publish job that writes
+            # ``dist/<commit>/``; until then a branch-tracking preset would
+            # address an archive nothing publishes.
+            assert entry.mirror is None, entry.key
 
     def test_every_preset_round_trips_through_the_source_resolver(self):
         from llm_rosetta_gateway.shim_sources import resolve_source_config

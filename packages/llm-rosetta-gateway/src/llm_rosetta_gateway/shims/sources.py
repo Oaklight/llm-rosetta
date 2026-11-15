@@ -1131,13 +1131,16 @@ def _fetch_remote(
 
     effective_ref = resolved_ref if spec.github else ref
     primary_url = _archive_url(spec.url, effective_ref, spec.github)
-    # The mirror is addressed by the ref the operator declared, not by the
-    # commit the forge resolved it to: a mirror publishes one directory per
-    # release (``...@dist/v0.1.0/...``, #1412), and its URL must not depend on
-    # api.github.com answering — an anonymous rate limit would otherwise turn
-    # a working fallback into a 404.  Its bytes are pinned by ``sha256``, so
-    # the release spelling is what the pin is about.
-    legs = _leg_plan(spec, primary_url, ref=effective_ref, mirror_ref=ref)
+    # The mirror is addressed by the ref the operator declared when there is
+    # one: a tag-addressed mirror publishes one directory per release
+    # (``...@dist/v0.1.0/...``, #1412), and its URL must not depend on
+    # api.github.com answering.  With no declared ref the preset tracks the
+    # branch, so the mirror is addressed by the commit the forge resolved:
+    # that is what makes the pinned commit and the mirror's bytes name the
+    # same tree, which the old ``sha256`` pair used to guarantee.  An
+    # unreachable API then costs the fallback, never the primary.
+    mirror_ref = _mirror_slot(ref, resolved_ref)
+    legs = _leg_plan(spec, primary_url, ref=effective_ref, mirror_ref=mirror_ref)
 
     with _file_lock(spec.source_dir.parent / f"{spec.source_dir.name}.lock"):
         return _fetch_installable(
@@ -1239,6 +1242,27 @@ def _install_archive(
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
     return digest
+
+
+def _mirror_slot(declared: str | None, resolved: str | None) -> str | None:
+    """Which ref the mirror leg's ``{ref}`` is filled with.
+
+    A declared ref wins: a tag-addressed mirror publishes one directory per
+    release, and that spelling must not depend on api.github.com answering.
+    With no declared ref the source tracks its branch, and the mirror is
+    addressed by the commit the forge resolved — the pinned commit and the
+    mirror's bytes then name the same tree, which the old ``sha256`` pair used
+    to guarantee.  ``None`` leaves the placeholder as ``HEAD``, which the
+    caller's URL builder turns into a leg that 404s rather than a wrong tree.
+
+    Args:
+        declared: The remote's ``ref``, when the operator pinned one.
+        resolved: The commit a GitHub primary resolved to, when it could.
+
+    Returns:
+        The value for the mirror's ``{ref}``.
+    """
+    return declared or resolved
 
 
 def _leg_plan(
