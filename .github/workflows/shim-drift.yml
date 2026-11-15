@@ -9,6 +9,11 @@ name: Shim drift
 # This job asks both questions on a schedule.  It is separate from `ci.yml` on
 # purpose: a nightly run of the full test suite would spend an hour for two
 # HTTP checks.
+#
+# A red check in the Actions tab is not "somebody noticed", so a failure opens
+# an issue — one issue, updated in place, commented on only when the problem
+# set changes, and closed only when a timer run is green.  The reasoning lives
+# in `scripts/dev/report_shim_drift.py`.
 
 on:
   schedule:
@@ -18,6 +23,10 @@ on:
 
 permissions:
   contents: read
+  # The report step opens, updates and closes one issue.  It is the only
+  # workflow in this repository that writes to the tracker, so the permission
+  # is visible here rather than inherited from a default.
+  issues: write
 
 jobs:
   drift:
@@ -31,17 +40,32 @@ jobs:
           python-version: "3.11"
 
       - name: Every package names the repositories the catalogue lists
+        # `continue-on-error` so the second check still runs and the report sees
+        # both verdicts in one issue.
+        id: catalog
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/dev/check_shim_catalog.py
+        run: python scripts/dev/check_shim_catalog.py 2>&1 | tee catalog.log
 
       - name: Every package carries the branch-publish workflow
-        # `--require-all` is the post-rollout state, and the rollout is done:
-        # all five packages carry the file.  A package without one from here on
-        # is a new catalogue entry whose repository was never given a copy, and
-        # the nightly run is the place that says so — the push-time job stays
-        # tolerant so a repository published a moment after its entry does not
-        # redden an unrelated pull request.
+        id: workflow
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/dev/check_shim_workflow.py --require-all
+        run: python scripts/dev/check_shim_workflow.py --require-all 2>&1 | tee workflow.log
+
+      - name: Report the verdict to the tracker
+        # Runs whatever the checks said, so a green timer run is what closes the
+        # issue.  A failed report fails the job: a reporter that speaks to
+        # nobody is the failure mode this step exists to remove.
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          python scripts/dev/report_shim_drift.py \
+            --problems catalog.log workflow.log \
+            --repo "${{ github.repository }}" \
+            --event "${{ github.event_name }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
