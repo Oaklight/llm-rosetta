@@ -8,6 +8,7 @@ import {
   _startInactivityTracking, _stopInactivityTracking,
 } from './utils.js';
 import { checkAuthAndInit, showLoginOverlay, openSettings } from './auth.js';
+import { isDialogPristine } from './dialog.js';
 import { loadConfig, renderProviders, applyProviderHealth } from '../tabs/providers.js';
 import { renderModels } from '../tabs/models.js';
 import '../components/fetch-models.js';
@@ -504,13 +505,15 @@ document.getElementById('filterOpsSource').addEventListener('change', () => { S.
 // click must not throw away input the operator typed, and the one dialog that
 // shows a secret in full closes only on its own button (#1519):
 // `data-scrim-close="never"` refuses every scrim click, `"pristine"` allows
-// one only while the form still holds what it opened with.
+// one only while the form still holds what it opened with.  What counts as an
+// edit is `dialog.js`'s rule, so the provider and model panels answer it the
+// same way.
 document.querySelectorAll('.modal-overlay').forEach(m => {
   m.addEventListener('click', e => {
     if (e.target !== m) return;
     const rule = m.dataset.scrimClose || '';
     if (rule === 'never') return;
-    if (rule === 'pristine' && !(window.providerFormPristine ? window.providerFormPristine() : true)) return;
+    if (rule === 'pristine' && !isDialogPristine(m)) return;
     closeModal(m.id);
   });
 });

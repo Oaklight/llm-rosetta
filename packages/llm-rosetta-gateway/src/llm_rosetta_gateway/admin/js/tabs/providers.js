@@ -26,6 +26,7 @@ import { shimHintText } from '../core/shim-hint.js';
 import { jsArg, logoUrl } from '../core/html.js';
 import { filteredEmptyHtml } from '../core/empty.js';
 import { providerFormError } from '../core/form-validate.js';
+import { isDialogPristine } from '../core/dialog.js';
 import { typeOptionHtml } from '../core/type-switch.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -1646,10 +1647,8 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
   _wireProviderFieldValidation();
   setProviderPane('basic');
   openModal('providerModal');
-  // Taken after every field has its value: the scrim may close the form only
-  // while it still holds what it opened with (#1519).
-  _providerFormSnapshot = _providerFormState();
-  // When editing, fetch the real (unmasked) key
+  // When editing, fetch the real (unmasked) key.  The value the script writes
+  // is not an edit, so the drawer stays dismissable with a click outside it.
   if (name && S._credentialVisible) {
     api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/key`).then(res => {
       if (res.api_key) {
@@ -2621,25 +2620,19 @@ function _wireProviderFieldValidation() {
   }
 }
 
-/** The editable state of the form, as one string, for the scrim rule. */
-function _providerFormState() {
-  const parts = [];
-  for (const el of document.querySelectorAll('#providerModal input, #providerModal select, #providerModal textarea')) {
-    if (!el.id) continue;
-    parts.push(el.type === 'checkbox' || el.type === 'radio' ? `${el.id}:${el.checked}` : `${el.id}:${el.value}`);
-  }
-  return parts.join('|');
-}
-
-let _providerFormSnapshot = '';
-
-/** Whether the open provider form is untouched since it opened. */
+/** Whether the open provider form still holds what it opened with.
+ *
+ *  `dialog.js` owns the rule (an operator edit, not a prefill, makes a panel
+ *  dirty), so a drawer opened from a shim — with a suggested name and a
+ *  pre-ticked capability — is still dismissed by a click on the page behind
+ *  it, and one the operator has typed into is not.
+ */
 function providerFormPristine() {
   const overlay = document.getElementById('providerModal');
   // A closed form has nothing to lose: the scrim rule only guards an *open*
-  // dialog, and this predicate is asked only for the click on that dialog.
+  // dialog, and this predicate is also asked by the install path.
   if (!overlay || !overlay.classList.contains('open')) return true;
-  return _providerFormState() === _providerFormSnapshot;
+  return isDialogPristine(overlay);
 }
 
 function saveProvider() {
