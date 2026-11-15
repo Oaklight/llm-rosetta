@@ -24,7 +24,7 @@ Zero required dependencies at its core; provider SDKs are optional extras.
 Provider A ──→ IR ──→ Provider B
 ```
 
-Five chat converters, one per API standard:
+One chat converter per API standard:
 
 | Converter | API Standard | Module |
 |-----------|-------------|--------|
@@ -35,7 +35,7 @@ Five chat converters, one per API standard:
 | `google_interactions` | Google Interactions API | `converters/llm/google_interactions/` |
 
 `OpenResponsesConverter` implements the vendor-neutral Open Responses spec (the
-base of the two Responses classes); `OpenAIResponsesConverter` derives from it as
+base of both Responses classes); `OpenAIResponsesConverter` derives from it as
 the OpenAI profile (adds the `resp_` id prefix, `store: true`, and OpenAI-only
 echo fields). The `OpenAIResponses*` ops classes are aliases of the
 `OpenResponses*` ones.
@@ -100,7 +100,7 @@ They are reached through `EmbeddingConversionPipeline` /
 `RerankConversionPipeline` (or `get_embedding_converter(format)`), not through
 `auto_detect.detect_provider()`: the gateway's model-type descriptors own
 source detection for embedding, rerank and decision routes
-(`gateway/source_formats.py`), and an embedding body cannot be attributed to
+(`source_formats.py`), and an embedding body cannot be attributed to
 a vendor from its model name.  The decision detector also reads the route
 (`/v1/decisions` vs `/v1/systemone`), so a provider's default path follows
 the format it declares.
@@ -118,7 +118,7 @@ declare the differences.
 | `AuthExchange` | `shims/auth_exchange.py` | Credential-exchange contract a shim ships in `auth.py` |
 | `QuotaProbe` | `shims/quota_probe.py` | Allowance-probe contract a shim ships in `quota.py` |
 | `Transform` primitives | `shims/transforms.py` | `strip_fields`, `rename_field`, `set_defaults` |
-| Built-in shims | `shims/providers/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type (49 built in) |
+| Built-in shims | `shims/providers/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type |
 | Vendor manifest | `shims/providers/<vendor>/provider.yaml` | Optional per-vendor defaults every leaf inherits: `connection:` (the credential) plus the vendor's own `logo` / `group` / `group_label`; `auth.py` sits beside it |
 | External shim sources | `llm_rosetta_gateway/shims/` | Directory/archive loaders, standalone catalog (with its free / paid / subscription tier), scheduled removals |
 
@@ -129,23 +129,32 @@ supported format and forwards them to any configured upstream provider.
 
 | Module | Purpose |
 |--------|---------|
-| `gateway/app/` | Route handlers (chat/models/health/typed plus the relayed `compact` and `count_tokens` routes), app factory, tasks |
-| `gateway/proxy/` | Core proxy engine: errors, metadata, fidelity, preflight, engine, streaming |
-| `gateway/config/` | Config package: JSONC loading, locking, parsing, resolution |
-| `gateway/providers.py` | Provider info, auth headers, key rotation |
-| `gateway/admin/` | Admin UI, metrics, request logging, persistence |
-| `gateway/observability/` | Telemetry: metrics, request log, SQLite persistence, ops log, error dumps, capture, maintenance, retention, sanitizing, profiler state |
-| `gateway/ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
-| `gateway/routing/` | Candidate selection: the route container plus the pluggable strategies (weighted round-robin, affinity) |
-| `gateway/middleware/` | Auth, rate limiting, error format, hop limit, headers, etc. |
+| `app/` | Route handlers (`routes_llm.py`, `routes_models.py`, `routes_health.py`, `routes_typed.py`, plus the relayed `routes_compact.py` and `routes_count_tokens.py`), app factory, tasks |
+| `proxy/` | Core proxy engine: errors, metadata, fidelity, preflight, engine, streaming |
+| `config/` | Config package: JSONC loading, locking, parsing, resolution |
+| `pipelines/` | Typed request handlers (embeddings, rerank, decision) behind `handle_typed_request` |
+| `model_types.py` | The model-type registry: descriptors, routes, formats, config keys |
+| `source_formats.py` | Source detection for typed routes (embedding, rerank, decision) |
+| `providers.py` | Provider info, auth headers, key rotation |
+| `shims/`, `shim_sources.py` | External shim sources, catalog, scheduled removals; the `shims` config section |
+| `routing/` | Candidate selection: the route container plus the pluggable strategies (weighted round-robin, affinity) |
+| `jobs/` | Background jobs: the envelope (`model.py`), store, queue, worker, handlers |
+| `quota/` | Provider quota probing and quota-aware credential rotation |
+| `maintenance/` | Maintenance steps: backfills, config, dumps, keystore, migrations, startup |
+| `middleware/` | Auth, rate limiting, error format, hop limit, headers |
+| `transport/` | Upstream HTTP transport |
+| `ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
+| `admin/` | Admin panel and its routes, over the observability layer |
+| `observability/` | Telemetry: metrics, request log, SQLite persistence, ops log, error dumps, capture, retention, sanitizing, profiler state; `observability/usage/cli.py` is the `llm-rosetta-usage` console script |
+| `_vendor/` | Vendored modules (DO NOT EDIT) |
 
 ### IR type system
 
 Typed dataclasses for the intermediate representation live in `types/ir/`.
-Four paradigms have their own IR types: chat (`request.py`, `response.py`),
+Each paradigm has its own IR types: chat (`request.py`, `response.py`),
 embedding (`embedding.py`), rerank (`rerank.py`), and decision (`decision.py`).
-Provider-specific types (for documentation, not runtime) in
-`types/anthropic/`, `types/google/`.
+Provider shapes for reference (documentation, not runtime) live in
+`types/messages/`, `types/openai/`, and `types/google/`.
 
 The logic that operates on IR values lives in `ir/`:
 
@@ -162,122 +171,68 @@ converter *base* contracts and the shim contract. `llm_rosetta.transforms` and
 
 ## Repository layout
 
-Two distributions live side by side in one repository (epic #1127):
+The repository holds the core distribution and the gateway distribution
+(epic #1127).
 
-```
-packages/
-├── llm-rosetta/             # core distribution (import root `llm_rosetta`)
-│   ├── pyproject.toml
-│   └── src/llm_rosetta/
-│       ├── __init__.py              # Public API: convert(), get_converter_for_provider()
-│       ├── auto_detect.py           # Provider auto-detection (delegates to formats.detect)
-│       ├── tool_ops.py              # Cross-provider tool call utilities
-│       ├── formats/                 # Format catalog: one FormatSpec per (model_type, format)
-│       │   ├── spec.py              # The record type
-│       │   ├── catalog.py           # The records + BY_PAIR
-│       │   └── detect.py            # Priority-ordered body detectors
-│       ├── converters/              # one directory per (model_type, format)
-│       │   ├── base/                # Abstract base + ConversionContext
-│       │   ├── llm/                 # chat: one package per wire format
-│       │   │   ├── chat_completions/
-│       │   │   ├── open_responses/
-│       │   │   ├── messages/
-│       │   │   ├── google_generate/
-│       │   │   └── google_interactions/
-│       │   ├── embeddings/
-│       │   ├── rerank/
-│       │   ├── decisions/           # Decision paradigm (TypeSafe System One)
-│       │   └── embedding/           # deprecated alias of embeddings/ (0.16.0)
-│       ├── shims/                   # Provider/model identity cards + transforms
-│       │   ├── provider_shim.py
-│       │   ├── auth_exchange.py     # shim-shipped credential exchange (auth.py)
-│       │   ├── quota_probe.py       # shim-shipped allowance probe (quota.py)
-│       │   ├── transforms.py
-│       │   └── providers/           # One provider.yaml per vendor/model-type/[format]
-│       ├── ir/                      # IR logic: primitives/, tools/, passes/
-│       ├── types/                   # Typed IR and provider-specific types
-│       │   └── ir/                  # IR dataclasses (messages, parts, tools, stream)
-│       ├── transforms/              # Facade over ir.primitives (compat)
-│       ├── capabilities/            # Facade over ir.passes (compat)
-│       ├── observability/usage/     # The meaning of a usage report (no store)
-│       ├── gateway/                 # Deprecated shim: aliases llm_rosetta_gateway,
-│       │                            #   removed in 0.16.0 (#919)
-│       └── _vendor/                 # validate, yaml, profiler (DO NOT EDIT)
-└── llm-rosetta-gateway/     # gateway distribution (import root `llm_rosetta_gateway`)
-    ├── pyproject.toml
-    └── src/llm_rosetta_gateway/
-        ├── app/                 # package: factory, routes_llm/models/health/
-        │                        #   typed, tasks, _state
-        ├── proxy/               # package: errors, metadata, fidelity, preflight,
-        │                        #   engine, streaming, stream_merge
-        ├── config/              # config package: io, loader, schema, core,
-        │                        #   parse, typed, settings, resolve
-        ├── providers.py
-        ├── shims/               # External shim sources, catalog, scheduled removals
-        ├── shim_sources.py      # Config `shims` section → shim registry
-        ├── model_types.py, keystore.py, logging.py, updates.py
-        ├── routing/, maintenance/  # Selection strategies; config/key/backfill steps
-        ├── cli.py, banner.py, __main__.py
-        ├── middleware/          # Auth, rate limiting, error format, headers, etc.
-        ├── pipelines/           # typed.py shell + embeddings/rerank/decision specs
-        ├── transport/           # Upstream HTTP transport
-        ├── ops/                 # Unified operations audit layer
-        │   ├── base.py          # OpsContext, OpsBase ABC
-        │   ├── proxy.py         # OpsProxyRequest (hot path)
-        │   ├── data.py          # Data mutation ops
-        │   ├── security.py      # Auth/session ops
-        │   └── keys.py          # API key management ops
-        ├── observability/       # Telemetry: metrics, request log, persistence,
-        │                        #   ops log, error dumps, capture, maintenance,
-        │                        #   retention, sanitize, profiling
-        │   └── usage/cli.py     # The llm-rosetta-usage console script
-        ├── admin/               # Admin panel over the observability layer
-        │   └── routes/          # one module per resource; routes/config/ is
-        │                        #   split into payload/providers/models/
-        │                        #   model_providers/settings/shims/upstream/bulk
-        └── _vendor/             # httpserver, httpclient, sse, ratelimit,
-                                 #   aiosqlite, jsonx (DO NOT EDIT)
+| Distribution | Import root | Owns |
+|--------------|-------------|------|
+| `packages/llm-rosetta/` | `llm_rosetta` | Format catalog, converters, IR, shims — how a request is converted |
+| `packages/llm-rosetta-gateway/` | `llm_rosetta_gateway` | Routes, config, proxy engine, admin — how a request is served |
 
-tests/
-├── converters/              # Per-converter test suites
-├── gateway/                 # Gateway unit tests
-├── integration/             # E2E tests (require API keys)
-├── test_types/              # IR type system tests
-├── test_core_import_boundary.py   # core must not import the gateway
-├── test_package_split.py    # the deprecated llm_rosetta.gateway alias
-├── test_shims.py
-├── test_transforms.py
-├── test_auto_detect.py
-└── test_tool_ops.py
+Read the tree with `ls` when a path is needed. This section records
+module-level ownership and the conventions that the filesystem cannot show.
+Do not record counts here — a count goes stale as soon as a file is added.
+Count from the tree when a number is needed.
 
-scripts/
-├── bench_pipeline.py             # Conversion pipeline benchmarks
-├── rosetta-test-*.sh             # Agent integration test runners
-├── run_gateway_integration.sh    # Gateway integration test runner
-├── dev/                          # Developer tools (not user-facing)
-│   ├── extract_google_types.py
-│   ├── extract_tool_choice_types.py
-│   ├── new_shim.py              # Scaffold a shim (leaf + vendor manifest + shims.yaml entry)
-│   ├── check_shim_catalog.py    # Compare SHIM_SOURCE_PACKAGES with the published shim repos
-│   ├── scan_sdk_types.py
-│   ├── merge-pr.sh
-│   ├── public_api_diff.py        # public-API break check (knows both layouts)
-│   └── probe/                    # Upstream API probing
-│       └── probe_argo.py         # Unified ARGO model probe
-└── integration/                  # Integration test scripts
-    ├── test_roundtrip_inflation.py
-    └── test_roundtrip_live.py
+Core modules (`packages/llm-rosetta/src/llm_rosetta/`):
 
-tools/conformance/           # Developer-only probe harness (never shipped in a wheel)
-├── runner.py, model.py, redact.py   # Bounded concurrency, report schema, redaction
-├── suites/drift.py            # SDK type drift against a committed baseline
-├── suites/wire.py             # Canonical request round-tripped through every chat format
-└── baselines/                 # Committed snapshots; a diff means behaviour changed
+| Module | Holds |
+|--------|-------|
+| `__init__.py` | Public API: `convert()`, `get_converter_for_provider()` |
+| `auto_detect.py` | Provider auto-detection (delegates to `formats/detect.py`) |
+| `tool_ops.py` | Cross-provider tool-call utilities |
+| `model_vocabulary.py` | The model-type and format vocabulary |
+| `provider_names.py` | Canonical provider/format names and legacy alias resolution |
+| `conversion_warnings.py` | The warning sink for lossy conversions |
+| `formats/` | `spec.py` (record type), `catalog.py` (records and `BY_PAIR`), `detect.py` (body detectors) |
+| `converters/` | One package per `(model_type, format)`; `base/` is the abstract contract; `registry.py` binds formats to classes |
+| `ir/` | IR logic: `primitives/`, `tools/`, `passes/` |
+| `types/` | Typed IR dataclasses in `types/ir/`; provider shapes for reference in `types/messages/`, `types/openai/`, `types/google/` |
+| `shims/` | `provider_shim.py`, `auth_exchange.py`, `quota_probe.py`, `transforms.py`, and `providers/` (one manifest per vendor/model-type/format) |
+| `pipeline/` | Chat and typed conversion pipelines |
+| `fidelity/` | Fidelity baseline and checker |
+| `profiling/` | The profiler |
+| `routing/` | Routing contract types |
+| `observability/usage/` | The meaning of a usage report (no store) |
+| `transforms/`, `capabilities/` | Compatibility facades over `ir/` |
+| `gateway/` | Deprecated forward shim to `llm_rosetta_gateway`; removed in 0.16.0 (#919) |
+| `_vendor/` | Vendored modules (DO NOT EDIT) |
 
-docs_en/, docs_zh/           # Documentation (git worktrees, orphan branches)
-docker/                      # Dockerfile for gateway image
-examples/                    # Usage examples
-```
+Other top-level paths:
+
+| Path | Holds |
+|------|-------|
+| `tests/` | Unit tests; `tests/integration/` needs live API keys and is excluded from `make test` |
+| `tools/conformance/` | Developer-only probe harness, never shipped in a wheel |
+| `scripts/` | Benchmarks, agent integration runners, and developer tools (`dev/new_shim.py` scaffolds a shim; `dev/check_shim_catalog.py` compares the shim sources with the published repos) |
+| `docker/`, `examples/` | Gateway image; usage examples |
+| `docs_en/`, `docs_zh/` | Documentation worktrees on orphan branches |
+
+Conventions the filesystem does not show:
+
+- `llm_rosetta/gateway/` forwards to `llm_rosetta_gateway`; it is removed in
+  0.16.0. Do not add code to it.
+- These converter packages are deprecated aliases; the canonical package is
+  on the right: `converters/embedding/` → `converters/embeddings/`,
+  `converters/openai_chat/` → `converters/llm/chat_completions/`,
+  `converters/openai_responses/` → `converters/llm/open_responses/`,
+  `converters/anthropic/` → `converters/llm/messages/`,
+  `converters/google_genai/` → `converters/llm/google_generate/`.
+- Core must not import the gateway distribution
+  (`tests/test_core_import_boundary.py`).
+- `packages/*/src/*/_vendor/**` is vendored through `zerodep`; never edit it
+  in place.
+- `docs_en/`, `docs_zh/` are separate branches; edit inside the worktree only.
 
 ## Setup and commands
 
@@ -515,8 +470,7 @@ gate — missing any item means the converter is not fully integrated.
    `llm_rosetta_gateway/app/routes_llm.py`.
    Update `llm_rosetta_gateway/proxy/` for error responses, stream detection,
    stream flag injection, preflight body, and usage extraction.
-7. **CLAUDE.md** — update the converter table and repository layout
-   in this file.
+7. **CLAUDE.md** — update the converter table in this file.
 8. **Documentation** — update `docs_en/` and `docs_zh/` (both in the
    same task): changelog, converters guide, API reference.  Push both
    worktrees.
@@ -531,11 +485,11 @@ gate — missing any item means the converter is not fully integrated.
 - Converter output mismatch → check IR types in `types/ir/`, then the
   converter's `*_ops.py` modules
 - Shim/transform issue → check `shims/providers/` and `shims/transforms.py`
-- Gateway config issue → check `gateway/config/` resolution order
+- Gateway config issue → check `config/` resolution order
   (`loader` → `core` → `parse`/`typed`/`settings`, then `resolve`)
   (shim → type → name fallback)
-- Ops audit issue → check `gateway/ops/base.py` execute flow, verify
-  OpsContext wiring in `gateway/admin/__init__.py` (`setup_admin`)
+- Ops audit issue → check `ops/base.py` execute flow, verify
+  OpsContext wiring in `admin/__init__.py` (`setup_admin`)
 - `_vendor/` issues → never fix in-place; update upstream, re-vendor
 - Integration test failure → likely missing API keys or network; these are
   excluded from `make test` by default
@@ -555,12 +509,12 @@ must be completed.  The model type registry makes most of this
 declarative — steps 1–3 are the core work, the rest is wiring.
 
 1. **Handler** — describe the type with a `TypedHandler` in
-   `gateway/pipelines/<name>.py` and serve it through
+   `pipelines/<name>.py` and serve it through
    `pipelines/typed.py::handle_typed_request`; a type supplies its
    pipeline, its resolver, its detector and any request/response
    hooks, and nothing else.  `handle_<name>(request, config)` stays the
-   public entry point (a three-line wrapper).
-2. **Register descriptor** — in `gateway/model_types.py`, add a
+   public entry point.
+2. **Register descriptor** — in `model_types.py`, add a
    `_<name>_pipeline()` lazy import wrapper and a
    `_register_<name>()` function that calls `register_model_type()`
    with a `ModelTypeDescriptor`.  Required fields: `name`, `routes`,
@@ -612,7 +566,7 @@ When adding a new operation to the gateway ops layer, **every** item
 below must be completed.
 
 1. **Subclass `OpsBase`** in the appropriate module under
-   `gateway/ops/` (`data.py`, `security.py`, `keys.py`, or a new
+   `ops/` (`data.py`, `security.py`, `keys.py`, or a new
    file).
 2. **Set class variables**: `event_type`, `severity`, `source`.
 3. **Implement abstract methods**: `_run()`, `_message(result)`,
@@ -624,7 +578,7 @@ below must be completed.
    `ALL_EVENT_TYPES`.
 5. **Wire into route handler** — construct the Ops subclass with
    `OpsContext` and `await op.execute()`.
-6. **Export** — add the class to `gateway/ops/__init__.py` `__all__`.
+6. **Export** — add the class to `ops/__init__.py` `__all__`.
 7. **Unit tests** in `tests/gateway/ops/`.
 8. **Update CLAUDE.md** ops module description if a new file was
    added.
