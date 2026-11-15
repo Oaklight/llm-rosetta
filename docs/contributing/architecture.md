@@ -40,7 +40,7 @@ If you find yourself duplicating logic across converters, consider extracting it
 
 ## Shim Layer
 
-A `ProviderShim` is a lightweight identity card that declares which base converter a provider uses, plus connection defaults and field-level transforms. Shims live under `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`, with a format level below the model type for chat.
+A `ProviderShim` is a lightweight identity card that declares which base converter a provider uses, plus connection defaults and field-level transforms. Shims live under `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<type>/provider.yaml`, with a `<format>/` level below the type only when that type holds a second lane (`<vendor>/llm/chat_completions/` beside `<vendor>/llm/messages/`) and a lane directory above it only for a vendor with several named instances (`alcf/metis/llm/`). The contract, the template `shims new` renders, and the checks `shims check` and `shims migrate` apply are in `llm_rosetta/shims/_shim_template/`.
 
 Converters stay format-generic; shims declare provider-specific differences (e.g. response ID prefix, default headers, field renames).
 
@@ -54,7 +54,7 @@ To add support for a new API standard:
 4. Add one `FormatSpec` to `packages/llm-rosetta/src/llm_rosetta/formats/catalog.py` and register
    its body detector in `formats/detect.py`, then bind the converter class in
    `converters/registry.py`
-5. Add a shim under `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/llm/<format>/`
+5. Add a shim under `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/llm/` (`<format>/` only beside a second lane, or `provider.yaml` directly for a single one)
 6. Add tests under `tests/converters/`
 7. Submit a PR
 

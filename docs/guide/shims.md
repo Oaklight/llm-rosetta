@@ -30,47 +30,77 @@ ProviderShim ("deepseek--chat_completions")
 
 ### Declarative Provider Directory
 
-Built-in shims are defined as a directory structure under `shims/providers/`:
+Built-in shims are defined as a directory structure under `shims/providers/`.
+One shape covers every vendor; the three rules below are what the loader
+accepts.
+
+```text
+<vendor>/
+├── provider.yaml            # vendor manifest, never a leaf
+├── auth.py                  # optional: the vendor's credential exchange
+├── quota.py                 # optional: probes shared by every type
+└── [<lane>/]                # optional: named instances of one vendor
+    └── <type>/              # llm | embeddings | rerank | decisions
+        └── [<format>/]      # only when the type holds more than one lane
+            └── provider.yaml
+```
+
+1. **A lane level exists only for a vendor with several named instances** —
+   ALCF's clusters (`alcf/metis/`, `alcf/minerva/`). The loader recurses into a
+   directory that is neither a type directory nor a leaf, up to three levels,
+   and still skips names that begin with `_` or `.`.
+2. **`<type>/` is always present**, named the way the endpoint is spelled:
+   `llm/`, `embeddings/`, `rerank/`, `decisions/`. The loader compares the
+   directory with the shim's `model_type:` and refuses a shim filed under the
+   wrong type. The category uses the directory's spelling (`embeddings`);
+   `embedding:` is accepted as a deprecated alias in `model_type:` and in the
+   per-type section name.
+3. **`<format>/` appears only when that type holds more than one lane.** A chat
+   vendor normally serves several dialects, so it keeps the format level; a
+   vendor with one lane of a type puts `provider.yaml` directly in the type
+   directory — `anthropic/llm/provider.yaml`. Add the second lane and the first
+   moves down into its own format directory, which is what `shims migrate` does.
+
+The built-in tree, in that shape:
 
 ```text
 packages/llm-rosetta/src/llm_rosetta/shims/providers/
-├── __init__.py                  # Auto-discovery: scans subdirectories
+├── __init__.py
+├── anthropic/
+│   └── llm/provider.yaml        # one lane: the type directory holds the leaf
 ├── openai/
-│   ├── provider.yaml            # Vendor manifest: the shared credential
-│   ├── quota.py                 # vendor-level probe, shared by every type
+│   ├── provider.yaml            # vendor manifest: the shared credential
+│   ├── quota.py                 # vendor-level probe, every type shares it
 │   ├── llm/
-│   │   ├── chat_completions/
-│   │   │   ├── provider.yaml    # Provider identity (YAML)
-│   │   │   └── transforms.py    # Field-level transforms
-│   │   └── open_responses/
-│   │       └── provider.yaml
-│   ├── embeddings/
-│   │   └── provider.yaml        # format: openai
-│   └── decisions/
-│       └── provider.yaml        # format: openai_decisions
-├── cohere/
-│   ├── provider.yaml            # Vendor manifest: base_url + credential
-│   ├── embeddings/
-│   │   └── provider.yaml        # format: cohere
-│   └── rerank/
-│       └── provider.yaml
+│   │   ├── chat_completions/    # provider.yaml + transforms.py
+│   │   └── open_responses/      # provider.yaml
+│   ├── embeddings/provider.yaml
+│   └── decisions/provider.yaml
 ├── openai_chatgpt/
-│   ├── provider.yaml            # Vendor manifest: comments only
-│   ├── auth.py                  # Vendor-level credential exchange
-│   └── llm/
-│       └── open_responses/
-│           └── provider.yaml
+│   ├── provider.yaml            # vendor manifest: comments only
+│   ├── auth.py                  # vendor-level credential exchange
+│   └── llm/open_responses/provider.yaml
 └── ...
 ```
 
-The first level under a vendor is its **model type**, named the way the
-endpoint is spelled: `llm/`, `embeddings/`, `rerank/`, `decisions/`. A chat
-vendor keeps a format level below it because one vendor serves several chat
-dialects; a non-chat vendor normally serves one, so the type directory holds
-the YAML directly. The loader checks the directory against the shim's
-`model_type:` and refuses a shim filed under the wrong type.  The category uses
-the directory's spelling (`embeddings`); `embedding:` is accepted as a
-deprecated alias in `model_type:` and in the per-type section name.
+**The file rule.** The gateway reads five names and nothing else:
+`provider.yaml`, `auth.py`, `quota.py`, `transforms.py` inside a shim
+directory, and `shims.yaml` at a package root. Everything else in the tree is
+private to the package and is never imported — an `__init__.py` a package keeps
+for its own imports is fine and stays unread. `auth.py` and `quota.py` execute
+as flat modules, so they must be self-contained; `transforms.py` may use
+relative imports.
+
+**Check a tree, then move it.** `llm-rosetta-gateway shims check --root
+<providers dir>` reports a tree the loader would misread — a leaf that is not
+at a canonical path, a vendor directory used as a leaf, a type directory that
+mixes the leaf and format levels, a file outside the allow-list — and exits
+non-zero. `shims migrate --root <dir>` prints the moves that would put the tree
+right and applies them with `--write`; it moves directories and rewrites
+`shims.yaml` paths, but not relative imports, which the package's own tests
+will catch. `shims new` scaffolds from the same template. The full contract,
+with the scaffold's output and its placeholder list, is in
+`llm_rosetta/shims/_shim_template/README_en.md`.
 
 Each leaf directory contains:
 
@@ -131,20 +161,22 @@ shim — the leaf, the vendor manifest when the vendor has none, the package's
 `shims.yaml` entry when it ships one — and then loads the result through the real
 loader, so a shape no gateway could use fails there instead of at startup. With
 no flags on a terminal it asks for each field; **interactive is the default**,
-and `--no-input` plus flags does the same in a script. `--layout flat` produces
-the `<vendor>/<format>` shape and `--transform` adds a `transforms.py` stub.
+and `--no-input` plus flags does the same in a script. Everything is written in
+the contract shape: `--lane` puts a named instance between the vendor and its
+type directory, `--auth` and `--quota` write the vendor-level stubs, `--package`
+adds the external package shell, and `--transform` adds a `transforms.py` stub.
 Inside a checkout, `scripts/dev/new_shim.py` is the same command with the
 built-in tree as its default root. A logo URL is offered for saving into the
 package's `assets/`, and what gets written is the jsDelivr URL of that file, so a
 shipped mark never points at the vendor's host. The wire format is picked from
 what the converter registry lists for the model type, and a pasted base URL is
 normalised and then asked whether it answers — a negative answer is a warning,
-not a refusal. An existing tree is read first: a package of single-lane vendors
-(`free`) gets a flat leaf and no vendor manifest, a manifest over `llm/` or
-`<type>/` directories (`google`) gets the typed layout, and a lane that would
-never load — below a directory that is itself a shim, under a name another file
-already declares, or under a vendor name the loader skips — is refused before
-anything is written. The mark is offered from the lobehub icon set on jsDelivr
+not a refusal. An existing tree is read first, so the type's first lane lands in `<type>/`
+and a vendor that already holds one gets `<type>/<format>/`; a vendor still
+keeping format directories under itself is noted with the `shims check` command
+rather than copied. A lane that would never load — below a directory that is
+itself a shim, under a name another file already declares, or under a vendor
+name the loader skips — is refused before anything is written. The mark is offered from the lobehub icon set on jsDelivr
 when the vendor name matches one, and a URL already on jsDelivr is left alone
 instead of being copied into `assets/`. Ctrl+C re-asks the current question once,
 a second press cancels, and Ctrl+D cancels at once. See
@@ -605,14 +637,19 @@ connect, not one per fetch, and a restart costs one. The startup log says which
 leg each source loaded from (`loaded via mirror`); the `leg` and the expanded
 `archive_url` are also part of the source status the admin API returns.
 
-Every published package's `presets` entry already carries a mirror: the tag it
-pins, the `dist` archive on jsDelivr with `{ref}` in the template, and
-and `path: "providers"` for that archive's layout (a name, not `"."`, so a
-release that wraps the tree in one more directory still loads). The mirror
-stays a template, not a
-dependency — replacing the CDN with an internal mirror is a matter of writing
-the remote out, and an explicit remote with the same URL is merged onto its
-preset (explicit keys win).
+Every published package's `presets` entry already carries a mirror: the `dist`
+archive on jsDelivr with `{ref}` in the template, and `path: "providers"` for
+that archive's layout (a name, not `"."`, so an archive that wraps the tree in
+one more directory still loads). A preset pins no `ref`, so it tracks the
+repository's branch: each fetch resolves the branch to a commit, records that
+commit in the cache stamp, and fills `{ref}` with the same commit. The publish
+job builds one `dist/<commit>/` directory per push, so the archive a preset
+names and the commit it records are always one tree — the fixed pair a `ref`
+plus `sha256` used to give, without either repository waiting for the other to
+tag a release. The mirror stays a template, not a dependency — replacing the
+CDN with an internal mirror is a matter of writing the remote out, and an
+explicit remote with the same URL is merged onto its preset (explicit keys
+win).
 
 !!! warning
     A declared source may ship a `transforms.py` that is executed on load — the
@@ -764,11 +801,14 @@ variable, so one line replaces the expanded remote:
 
 Presets are applied before explicit remotes, and an explicit remote with the
 same URL is merged onto its preset (explicit keys win), so a `ref` can be pinned
-without restating the `path`. The three repositories are public, so a preset
-carries no `token_env`; add one for a private shim repository. No `ref` is pinned
-because none of them is tagged yet: a remote without a `ref` resolves `HEAD` to
-a commit once and records it in the cache stamp. Once they are tagged, pin the
-tag — see [Ref resolution](../gateway/configuration.md#external-shim-sources).
+without restating the `path`. The repositories are public, so a preset carries
+no `token_env`; add one for a private shim repository. A preset pins no `ref` on
+purpose: it follows the branch its package publishes from, which is what keeps
+the catalogue and the package from waiting on each other for a release. A pin
+that names a tag still works — an explicit remote with the package's URL and a
+`ref` is merged onto the preset — and it is the right choice for a deployment
+that must not move. See
+[Ref resolution](../gateway/configuration.md#external-shim-sources).
 
 **Gateway → Shims → Available** offers every catalog package as a card, free
 resources first, and installing one writes `presets` plus the selection to the
@@ -1146,7 +1186,7 @@ After registration the shim name works everywhere — `get_converter_for_provide
 
 To add a new provider to the built-in registry:
 
-1. Create a directory under `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/`: `<vendor>/llm/<format>/` for chat, `<vendor>/<model-type>/` for embedding, rerank or decision.
+1. Create the leaf at `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<type>/provider.yaml`, where `<type>` is the format's model type (`llm`, `embeddings`, `rerank`, `decisions`). A `<format>/` level appears below it only when the type holds a second lane, so a vendor serving `chat_completions` and `messages` keeps both under `llm/`; a vendor with several named instances puts a lane directory above the type (`<vendor>/<lane>/<type>/`). `llm-rosetta-gateway shims new` writes this shape, and `shims check` reports a tree that departs from it.
 2. If the vendor's leaves share connection facts — the credential, usually — add `<vendor>/provider.yaml` with no `name`: it is the vendor manifest, and every leaf inherits it.
 
     ```yaml

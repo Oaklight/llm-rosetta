@@ -74,8 +74,8 @@ llm-rosetta-gateway shims new acme --no-input \
 ```
 
 Run with no flags on a terminal it is a questionnaire — the scan root first, then
-vendor, model type, wire format, layout, base URL, credential variable, optional
-row label / logo / group title, and whether to add a transforms stub — and
+vendor, model type, wire format, lane, base URL, credential variable, optional
+row label / logo / group title, and which optional modules to write — and
 pressing Enter takes the value in brackets.  The root is asked first because
 everything after it follows what the package already does (see below).
 **Interactive is the default**; a value a flag already gave is not asked for
@@ -87,7 +87,7 @@ terminal) never prompts, so the same command works in a script.
 | `--root DIR` | The directory a gateway scans; default `providers` |
 | `--model-type` | `llm` (default), `embeddings`, `rerank`, `decisions` |
 | `--format` | Wire format; the prompt and `--format`'s help list every format the model type registers, and an unregistered one is refused before anything is written |
-| `--layout` | `typed` (`<vendor>/llm/<format>`) or `flat` (`<vendor>/<format>`); the default follows the scan root's existing shape, else `typed` |
+| `--lane` | A named instance of the vendor, written between the vendor and its type directory (`<vendor>/<lane>/<type>/`); ALCF's clusters |
 | `--base-url` | Upstream base URL; a placeholder is written when omitted |
 | `--probe` | Check that `--base-url` answers, and print what it answered |
 | `--models-path` | Model-list URL or path, when it is not the default |
@@ -97,8 +97,8 @@ terminal) never prompts, so the same command works in a script.
 | `--auto-logo` | Take the mark from the lobehub icon set on jsDelivr, found by vendor name; fails when there is no icon under that name |
 | `--localize-logo` | Save `--logo` into the package's `assets/` and reference its jsDelivr URL |
 | `--transform` | Also write a `transforms.py` stub |
-| `--vendor-manifest` | Write `<vendor>/provider.yaml` for the identity and credential every lane shares; the default is yes unless the scan root is a bundle of single-lane vendors |
-| `--no-vendor-manifest` | State every field on the leaf instead |
+| `--auth`, `--quota` | Also write a vendor-level `auth.py` or `quota.py` stub |
+| `--package DISTRIBUTION` | Write the external package shell too (`pyproject.toml`, entry point, CI, README), with the tree under `src/<package>/providers` |
 | `--no-registry-manifest` | Do not touch the package's `shims.yaml` |
 | `--check` | Load the new leaf and report what it resolves to |
 
@@ -107,13 +107,14 @@ identity stay there and the leaf carries only its own fields.  When the scan roo
 ships a `shims.yaml`, the new leaf is appended to it — that file is authoritative
 for a gateway, so a leaf it does not list never loads.
 
-**The scan root decides the shape.**  A root whose vendors are single leaf
-directories (`llm-rosetta-shim-free`: `kilo/provider.yaml` declaring a name) gets
-a flat leaf and no vendor manifest, because that package models each provider as
-its own top-level vendor.  A root whose vendors are manifests over `llm/` or
-`<type>/` directories (`google`: two chat dialects plus `embeddings/`) gets the
-typed layout.  A root that mixes the two has no convention to copy, so `typed`
-stays the default and the prompt asks instead of guessing.
+**The scan root is read, not copied.**  Everything is written in the contract
+shape — `<vendor>[/<lane>]/<type>[/<format>]/provider.yaml` — and the root only
+decides whether `<format>` is needed: a vendor that already holds a second lane
+of the type gets one, and a vendor's first lane goes straight into the type
+directory.  A root whose vendors hold format directories directly under them
+(`kilo_free/chat_completions/`) is the pre-contract shape, so the new leaf is
+written canonically and the vendor is noted with the `shims check` command that
+reports the rest.
 
 Three targets are refused before anything is written:
 
@@ -124,8 +125,8 @@ Three targets are refused before anything is written:
 - a vendor name the loader skips or misreads — an `_`/`.` prefix, or one of
   `llm`, `embeddings`, `rerank`, `decisions`.
 
-A vendor that already holds lanes in the *other* layout is only noted: both
-shapes load under one vendor, the package just carries two.
+A vendor still holding format directories directly under it is only noted, never
+blocked: the loader reads those too, and `shims migrate` moves them.
 
 A pasted base URL is checked before it is written.  A trailing `/models` (what
 vendor consoles copy) is dropped, then `<base>/models` is requested without a
@@ -157,6 +158,41 @@ timeout per name.  A URL that is already on jsDelivr is kept as typed, because
 there is nothing to copy: the mark is served from the CDN either way.
 `--auto-logo` does the lookup without the questionnaire and fails when there is
 no icon.
+
+### `shims check [--root DIR]`
+
+Report a shim tree that the loader would misread, and exit non-zero when anything
+is found:
+
+```bash
+llm-rosetta-gateway shims check --root src/llm_rosetta_shim_acme/providers
+# ok      .../providers: no deviation from the shim contract
+# problem acme/chat_completions: <type>/ is missing above this leaf
+```
+
+It loads nothing, writes nothing and needs no config, so it runs against a package
+repository whose gateway is not set up yet.  Reportable: a leaf that is not at a
+canonical path, a vendor directory used as a leaf, a type directory that mixes the
+leaf and format levels, more than one lane directory above a type directory, a
+vendor-level `transforms.py`, `auth.py` declared at both the vendor and the leaf,
+a file outside the allow-list, and a missing `provider.yaml`.  The contract itself
+is in `llm_rosetta/shims/_shim_template/README_en.md`.
+
+### `shims migrate [--root DIR] [--write]`
+
+Move a tree onto the contract.  Without `--write` it prints the moves and touches
+nothing:
+
+```bash
+llm-rosetta-gateway shims migrate --root src/llm_rosetta_shim_acme/providers
+llm-rosetta-gateway shims migrate --root src/llm_rosetta_shim_acme/providers --write
+```
+
+It renames directories and rewrites the `shims.yaml` entry for each moved leaf,
+including the second-lane case where the existing leaf has to move down into
+`<type>/<its format>/`.  It does **not** rewrite relative imports: a `transforms.py`
+that imported `model_utils` one level up needs one more dot, and the package's own
+tests are what catch it.  Run the package's tests after `--write`.
 
 ### `credential <provider>`
 
