@@ -320,6 +320,57 @@ class TestScanSelection:
             for message in captured
         )
 
+    def test_an_include_the_exclude_emptied_is_reported(self, tmp_path: Path, captured):
+        """Every pattern matched, yet the source loads nothing — say so."""
+        _leaf(tmp_path, "b")
+
+        status = _scan_dir(
+            tmp_path,
+            kind="path",
+            location="src",
+            include=("b--*",),
+            exclude=("b--*",),
+        )
+
+        assert status.emptied_includes == ("b--*",)
+        assert any(
+            "include 'b--*' selected only shims the exclude drops" in message
+            for message in captured
+        )
+
+    def test_only_the_include_patterns_the_exclude_emptied_are_named(
+        self, tmp_path: Path, captured
+    ):
+        _leaf(tmp_path, "b")
+
+        status = _scan_dir(
+            tmp_path,
+            kind="path",
+            location="src",
+            include=("ghost", "b--*"),
+            exclude=("b--*",),
+        )
+
+        assert status.unmatched == ("ghost",)
+        assert status.emptied_includes == ("b--*",)
+
+    def test_a_source_that_still_loads_something_is_not_emptied(
+        self, tmp_path: Path, captured
+    ):
+        _leaf(tmp_path, "a")
+        _leaf(tmp_path, "b")
+
+        status = _scan_dir(
+            tmp_path,
+            kind="path",
+            location="src",
+            include=("a--*", "b--*"),
+            exclude=("b--*",),
+        )
+
+        assert status.shim_names == ("a--chat_completions",)
+        assert status.emptied_includes == ()
+
     def test_a_manifest_source_reports_what_it_declined(self, tmp_path: Path, captured):
         """A manifest entry the selection dropped is remembered, not rescanned."""
         _three_shims(tmp_path)
@@ -373,6 +424,7 @@ class TestScanSelection:
         assert payload["exclude"] == ["b*"]
         assert payload["unmatched"] == []
         assert payload["unmatched_excludes"] == []
+        assert payload["emptied_includes"] == []
         assert payload["manifest_shims"] == []
         assert payload["declined"] == [
             "b--chat_completions",
@@ -531,6 +583,13 @@ class TestStrictUnmatched:
 
         assert report.failures() == []
         assert report.sources[0].unmatched_excludes == ("drop",)
+
+    def test_an_include_the_exclude_emptied_stops_a_strict_load(self, monkeypatch):
+        """It matched only shims the exclude drops, so nothing runs."""
+        self._patch(monkeypatch, emptied_includes=("b--*",))
+
+        with pytest.raises(ShimSourceError, match="only shims the exclude drops"):
+            rebuild_shims(["x"], strict=True)
 
 
 class TestCoreFloor:
