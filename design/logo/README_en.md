@@ -67,11 +67,11 @@ file carries.
 | Package READMEs | `out/rosetta-icon-github.svg` | `#1e293b` / `#ededed` |
 | Docs header | `docs_{en,zh}/docs/images/rosetta_stone.svg` | `currentColor` |
 | Docs favicon | `docs_{en,zh}/docs/images/favicon.svg` | `#1a1a1a` / `#ededed` |
-| Gateway favicon | `admin/routes/auth.py` `_FAVICON_SVG` | `#666666` / `#ededed`, tight at viewBox `635.22` |
-| Gateway sidebar/header | `admin/admin.html` inline `<svg>` | `currentColor`, `600` box |
+| Gateway favicon | `admin/routes/auth.py` `_FAVICON_SVG`; `admin.html` data URI | `#666666` / `#ededed`, tight at viewBox `634.78` |
+| Gateway sidebar/header | `admin/admin.html` inline `<svg>` | `currentColor`, `634.78` box |
 
-The README, favicon and docs copies are generated from it, with the fill as
-the only difference, and the docs files land in the docs worktrees:
+The README, favicon, gateway and docs copies are generated from it, with the
+fill as the only difference, and the docs files land in the docs worktrees:
 
 ```bash
 python design/logo/simplify_path.py \
@@ -88,10 +88,10 @@ rendered the same file twice. The light half is now a light-only file and the
 dark half keeps its own media query. The package READMEs reference the dark
 file directly, and they still adapt on their own.
 
-The gateway is the exception. Its favicon is framed tight (`635.22`) but from
-the older 48-point trace, and the two inline marks in `admin.html` still sit in
-the 600 box, so none of the three carries the draft's 128 points. Replacing
-them is a gateway code change and is left for its own PR.
+The gateway follows the same draft. Its favicon is the draft at
+`--fill '#666666'`, the page carries a data URI of that favicon, and the two
+inline marks in `admin.html` use the same 128-point geometry at
+`fill="currentColor"`.
 
 `out/favicon-gateway.svg` is a tracked copy of exactly what the gateway serves
 today, so the mark it ships stays visible in the repository instead of living

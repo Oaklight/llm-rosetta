@@ -41,10 +41,10 @@ python simplify_path.py --draft references/rosetta-draft.json --fill '#666666' -
 | 各包 README | `out/rosetta-icon-github.svg` | `#1e293b` / `#ededed` |
 | docs 站头 | `docs_{en,zh}/docs/images/rosetta_stone.svg` | `currentColor` |
 | docs favicon | `docs_{en,zh}/docs/images/favicon.svg` | `#1a1a1a` / `#ededed` |
-| 网关 favicon | `admin/routes/auth.py` 的 `_FAVICON_SVG` | `#666666` / `#ededed`，紧贴方形 `635.22` |
-| 网关侧栏/顶栏 | `admin/admin.html` 内联 `<svg>` | `currentColor`，600 方框 |
+| 网关 favicon | `admin/routes/auth.py` 的 `_FAVICON_SVG`；`admin.html` 的 data URI | `#666666` / `#ededed`，紧贴方形 `634.78` |
+| 网关侧栏/顶栏 | `admin/admin.html` 内联 `<svg>` | `currentColor`，`634.78` 方框 |
 
-README、favicon 和 docs 这三处都由它生成，差别只在填充色，docs 的两份落在 docs 工作树里：
+README、favicon、网关和 docs 这几处都由它生成，差别只在填充色，docs 的两份落在 docs 工作树里：
 
 ```bash
 python design/logo/simplify_path.py \
@@ -58,7 +58,7 @@ python design/logo/simplify_path.py \
 
 README 的深浅两份过去是逐字节相同的，`prefers-color-scheme` 切换会渲染同一个文件两次。现在浅色那份是纯浅色文件，深色那份保留自己的 media query。各包的 README 直接引用深色文件，它们仍能自行适应。
 
-网关是例外。它的 favicon 已经是紧贴方形（`635.22`），但用的是旧的 48 点描摹；`admin.html` 里那两处内联标记仍是 600 方框。三处都没有草稿的 128 个点。换过来属于网关代码改动，留给单独的 PR。
+网关也跟随同一份草稿：favicon 是草稿加 `--fill '#666666'` 的产物，页面里带一份该 favicon 的 data URI，`admin.html` 的两处内联标记用同一份 128 点几何、填充为 `currentColor`。
 
 `out/favicon-gateway.svg` 是网关当前实际提供内容的存档副本，这样它实际发布的标记在仓库里可见，而不只是藏在 `auth.py` 的一段字节串里。
 
