@@ -1314,6 +1314,17 @@ class TestVendorManifest:
 
             load_providers_from_dir(tmp_path)
 
+    def test_a_leaf_quota_that_is_not_a_mapping_is_refused(self, tmp_path):
+        """A typo must not read as "inherit the vendor's declaration"."""
+        with pytest.raises(ValueError, match="quota must be a mapping"):
+            self._vendor(
+                tmp_path,
+                "quota:\n  probe: acme\n",
+                {"a": self._leaf("a") + "quota: [1, 2]\n"},
+            )
+
+            load_providers_from_dir(tmp_path)
+
     def test_a_vendor_without_a_manifest_still_loads(self, tmp_path):
         """The manifest is optional: an existing third-party shim keeps working."""
         self._vendor(

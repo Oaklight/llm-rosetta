@@ -175,7 +175,9 @@ def _pinfo(exchange: Any = None, *, key: str = _RUNTIME) -> Any:
         key_ring=ring,
         auth_exchange=exchange,
         auth_context=AuthContext(provider="od") if exchange is not None else None,
-        auth_headers_for=lambda k: {"Authorization": f"Bearer {k}"},
+        # A vendor that stamps the credential into its own header too, so a
+        # branch that stops skipping it is visible in the request.
+        auth_headers_for=lambda k: {"Authorization": f"Bearer {k}", "x-api-key": k},
         active_key=lambda: key,
     )
 
@@ -200,6 +202,8 @@ class TestThePrimaryCredential:
         assert reading.status == "ok"
         assert reading.advisory is False
         assert client.calls[0][1]["Authorization"] == f"Bearer {_RUNTIME}"
+        # The lane's own header is the model credential's to carry.
+        assert client.calls[0][1]["x-api-key"] == _RUNTIME
 
 
 class TestTheSecondaryCredential:
@@ -211,8 +215,13 @@ class TestTheSecondaryCredential:
 
         assert reading.status == "ok"
         assert reading.advisory is True
-        # The control plane refuses the model credential, so it is never sent.
-        assert client.calls[0][1]["Authorization"] == f"Bearer {_CONTROL}"
+        # The whole header set, not one key: the probe's own headers are the
+        # only ones on the request, so neither the model credential nor the
+        # lane's header can travel to the control plane.
+        headers = client.calls[0][1]
+        assert headers["Authorization"] == f"Bearer {_CONTROL}"
+        assert "x-api-key" not in headers
+        assert _RUNTIME not in str(headers)
 
     def test_an_exchange_without_the_role_reports_unsupported(self, monkeypatch):
         client = _Client({})
@@ -413,3 +422,67 @@ class TestTheCredentialRoleRule:
 
         assert asyncio.run(credential_for(_Exchange(), ctx, "control")) == _CONTROL
         assert asyncio.run(credential_for(_Exchange(), ctx)) == _RUNTIME
+
+
+class TestAnAdvisoryReadingDoesNotClearADemotion:
+    """A fresh control reading is not evidence that a demotion has passed.
+
+    The demotion was written against the serving credential after an in-band
+    refusal; clearing it from a read made with another key would hand the lane
+    back on evidence about a different credential — through the round trip,
+    not only through the predicate.
+    """
+
+    @staticmethod
+    def _config():
+        from llm_rosetta_gateway.config import GatewayConfig
+
+        return GatewayConfig(
+            {
+                "providers": {
+                    "od": {
+                        "type": "chat_completions",
+                        "api_key": _RUNTIME,
+                        "base_url": "https://model.example.test/v1",
+                    }
+                },
+                "models": {"m": {"provider": "od"}},
+            }
+        )
+
+    def _read(self, monkeypatch, config, *, advisory: bool):
+        pinfo = config.providers["od"]
+        pinfo.quota_probe = _PROBE
+        pinfo.quota_probe_impl = _ControlProbe()
+        pinfo.quota_usage_url = _URL
+        fingerprint = credential_fingerprint(_RUNTIME)
+
+        async def fake_probe_one(*args: Any, **kwargs: Any) -> QuotaReading:
+            return QuotaReading(
+                probe=_PROBE,
+                credential=fingerprint,
+                windows=[QuotaWindow(name="5 hours", used_percent=10.0)],
+                advisory=advisory,
+            )
+
+        monkeypatch.setattr(service, "_probe_one", fake_probe_one)
+        asyncio.run(service.read_provider_quota(config, "od", force=True))
+
+    def test_the_demotion_survives_an_advisory_read(self, monkeypatch):
+        config = self._config()
+        until = datetime.now(timezone.utc) + timedelta(hours=2)
+        QUOTA_STATE.demote(_PROBE, credential_fingerprint(_RUNTIME), until, "429")
+
+        self._read(monkeypatch, config, advisory=True)
+
+        assert QUOTA_STATE.is_usable(_PROBE, _RUNTIME) is False
+
+    def test_a_reading_with_the_key_itself_still_clears_it(self, monkeypatch):
+        """The control: the same round trip with the serving credential."""
+        config = self._config()
+        until = datetime.now(timezone.utc) + timedelta(hours=2)
+        QUOTA_STATE.demote(_PROBE, credential_fingerprint(_RUNTIME), until, "429")
+
+        self._read(monkeypatch, config, advisory=False)
+
+        assert QUOTA_STATE.is_usable(_PROBE, _RUNTIME) is True
