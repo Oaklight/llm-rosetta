@@ -205,6 +205,59 @@ losses are the ones you meant, then re-baseline.
 
 CI runs this suite on every PR that touches the core, and uploads the report.
 
+### `live`
+
+The only suite that leaves the machine. For each of the five chat formats it
+builds the request the converter emits, sends it to the vendor the format is
+named for, and asserts two things: the vendor accepts the body (HTTP 200, JSON
+in the dialect), and its answer still reads back through our reader into IR
+with text in it.
+
+A vendor that **rejects** the body (a 400 naming a field) fails the case — that
+is the request this library ships. A refused credential (401/403), a rate limit
+(429), a 5xx or a transport error is an **error**: the probe could not run,
+which is a fact about the run rather than about the dialect. A lane whose
+credential, model or base URL is not configured is **skipped**, so a machine
+holding two keys out of five gets a partial sweep, not a broken run.
+
+| lane | credential | model | base |
+| --- | --- | --- | --- |
+| `chat_completions/openai` | `OPENAI_API_KEY` | `OPENAI_MODEL` | `OPENAI_BASE_URL` |
+| `open_responses/openai` | `OPENAI_RESPONSES_API_KEY` | `OPENAI_RESPONSES_MODEL` | `OPENAI_RESPONSES_BASE_URL` |
+| `messages/anthropic` | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` | `ANTHROPIC_BASE_URL` |
+| `google_generate/google` | `GOOGLE_API_KEY` | `GOOGLE_MODEL` | `GOOGLE_BASE_URL` |
+| `google_interactions/google` | `GOOGLE_API_KEY` | `GOOGLE_MODEL` | `GOOGLE_BASE_URL` |
+
+The Google lanes default their base URL to
+`https://generativelanguage.googleapis.com`; the others have none, because
+their base carries an API version and a vendor prefix and a wrong default would
+probe the wrong surface.
+
+Two things the first measured run settled, and both are load-bearing in the
+suite:
+
+- The request asks for 256 output tokens. A reasoning model spends a smaller
+  budget on the thought and answers with an empty text part, which reads as a
+  rejection when it is only a truncation.
+- `google_generate` is built with `output_format="rest"`, the shape the gateway
+  sends. The converter's default `sdk` shape nests sampling under `config`,
+  which the Generative Language endpoint rejects with HTTP 400
+  `Unknown name "config"`.
+
+```bash
+set -a; . ./.env; set +a
+python -m tools.conformance run --suite live \
+  --secret-env OPENAI_API_KEY --secret-env OPENAI_RESPONSES_API_KEY \
+  --secret-env ANTHROPIC_API_KEY --secret-env GOOGLE_API_KEY \
+  --out /tmp/live-report.json
+```
+
+CI runs it from `.github/workflows/conformance-live.yml` — weekly and on
+dispatch, never on a pull request, because it needs secrets a fork must not see
+and a vendor outage is no reason to hold a PR. The job maps repository secrets
+onto the names above and repository variables onto base URLs and models; a
+secret the repository does not define leaves its lane skipped.
+
 ## Pinned SDKs
 
 CI installs the SDKs with `-c tools/conformance/sdk-pins.txt`, so the baselines

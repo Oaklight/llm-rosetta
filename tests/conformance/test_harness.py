@@ -202,18 +202,44 @@ def test_a_version_change_does_not_hide_new_drift():
         ).run()
 
 
-def test_ci_runs_every_suite():
+def _workflow_texts() -> dict[str, str]:
+    """Every workflow, by file name."""
+    root = Path(__file__).resolve().parents[2] / ".github/workflows"
+    return {path.name: path.read_text() for path in sorted(root.glob("*.yml"))}
+
+
+def test_every_suite_has_a_workflow_that_runs_it():
     """A suite no job runs is asleep, and every test here stays green.
 
     The drift step is the one that keeps this suite from silently skipping
-    (issue #1389); the same rule holds for the rest.
+    (issue #1389); the same rule holds for the rest.  A suite is run by *some*
+    workflow — the credentialled one has its own, so this guard reads all of
+    them, not only PR CI.
     """
-    workflow = (
-        Path(__file__).resolve().parents[2] / ".github/workflows/ci.yml"
-    ).read_text()
+    texts = _workflow_texts()
 
-    missing = [name for name in SUITES if f"--suite {name}" not in workflow]
-    assert not missing, f"CI runs no step for: {', '.join(missing)}"
+    missing = [
+        name
+        for name in SUITES
+        if not any(f"--suite {name}" in text for text in texts.values())
+    ]
+    assert not missing, f"no workflow runs: {', '.join(missing)}"
+
+
+def test_the_live_suite_is_scheduled_and_not_in_pr_ci():
+    """A credentialled probe must not run on a pull request.
+
+    The live suite leaves the machine and needs secrets, so exactly one
+    scheduled workflow may name it, and PR CI may not — a fork's pull request
+    would otherwise hold on a vendor outage, or reach for a credential it does
+    not have.
+    """
+    texts = _workflow_texts()
+    runners = [name for name, text in texts.items() if "--suite live" in text]
+
+    assert "--suite live" not in texts["ci.yml"]
+    assert len(runners) == 1, f"the live suite is named by {runners}"
+    assert "schedule:" in texts[runners[0]]
 
 
 def test_cli_writes_the_report(monkeypatch, tmp_path):

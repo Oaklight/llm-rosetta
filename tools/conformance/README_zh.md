@@ -147,3 +147,34 @@ python -c "from tools.conformance.suites.wire import write_baseline; write_basel
 新增一例是两步改动：基线中没有条目时，它报告的每个丢失都是「新」的，因此首次运行必然失败——这正是目的，因为用例必须经过审查，而不是默认可信。先运行一次，确认这些丢失就是你想要的，再重建基线。
 
 CI 在每个触及核心的 PR 上运行该套件，并上传报告。
+
+### `live`
+
+唯一会离开本机的套件。它对五个聊天格式各构造转换器发出的请求，发送给该格式对应的厂商，断言两件事：厂商接受该 body（HTTP 200、方言 JSON），以及答案仍能经我们的读取器还原成 IR 且带文本。
+
+厂商**拒绝** body（400 并点名某字段）时该例失败——那正是本库发出的请求。凭据被拒（401/403）、限流（429）、5xx 或传输错误是 **error**：探针无法运行，这是运行环境的事实，不是方言的事实。凭据、模型或 base URL 未配置的 lane 记为 **skip**，所以只有五个密钥中两个的机器得到的是部分扫描，而不是失败运行。
+
+| lane | 凭据 | 模型 | base |
+| --- | --- | --- | --- |
+| `chat_completions/openai` | `OPENAI_API_KEY` | `OPENAI_MODEL` | `OPENAI_BASE_URL` |
+| `open_responses/openai` | `OPENAI_RESPONSES_API_KEY` | `OPENAI_RESPONSES_MODEL` | `OPENAI_RESPONSES_BASE_URL` |
+| `messages/anthropic` | `ANTHROPIC_API_KEY` | `ANTHROPIC_MODEL` | `ANTHROPIC_BASE_URL` |
+| `google_generate/google` | `GOOGLE_API_KEY` | `GOOGLE_MODEL` | `GOOGLE_BASE_URL` |
+| `google_interactions/google` | `GOOGLE_API_KEY` | `GOOGLE_MODEL` | `GOOGLE_BASE_URL` |
+
+Google 两条 lane 的 base URL 默认是 `https://generativelanguage.googleapis.com`；其余没有默认值，因为它们的 base 带 API 版本和厂商前缀，错误的默认值会探测错误的 surface。
+
+首次实测确定了两件事，二者都是套件的前提：
+
+- 请求要求 256 个输出 token。推理模型会把更小的预算花在思考上，返回空的文本部分——那是截断，不是拒绝。
+- `google_generate` 用 `output_format="rest"` 构建，也就是网关发送的形状。转换器默认的 `sdk` 形状把采样参数嵌在 `config` 里，Generative Language 端点会以 HTTP 400 `Unknown name "config"` 拒绝。
+
+```bash
+set -a; . ./.env; set +a
+python -m tools.conformance run --suite live \
+  --secret-env OPENAI_API_KEY --secret-env OPENAI_RESPONSES_API_KEY \
+  --secret-env ANTHROPIC_API_KEY --secret-env GOOGLE_API_KEY \
+  --out /tmp/live-report.json
+```
+
+CI 从 `.github/workflows/conformance-live.yml` 运行它——每周一次，也可手动触发，从不在 PR 上运行：它需要 fork 不应看到的密钥，且厂商故障不是扣住 PR 的理由。作业把仓库 secrets 映射到上表的变量名、把仓库 variables 映射到 base URL 与模型；仓库未定义的 secret 会让对应 lane 跳过。
