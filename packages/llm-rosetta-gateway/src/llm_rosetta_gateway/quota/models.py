@@ -69,6 +69,11 @@ class QuotaReading:
         read_at: When the reading was taken.
         demote_at: Used share that counts as spent for routing.  ``100``
             keeps the vendor's own rule (percent or status).
+        advisory: The reading was made with a credential the model requests
+            do not send (a vendor's control-plane key).  It is shown, and it
+            may weight the lane's share, but it is never evidence for a
+            demotion, an exclusion or a recovery time: those need what the
+            serving credential reports.
     """
 
     probe: str
@@ -79,6 +84,7 @@ class QuotaReading:
     error: str | None = None
     read_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     demote_at: float = 100.0
+    advisory: bool = False
 
     @property
     def exhausted_until(self) -> datetime | None:
@@ -115,5 +121,6 @@ class QuotaReading:
             "error": self.error,
             "read_at": _iso(self.read_at),
             "demote_at": self.demote_at,
+            "advisory": self.advisory,
             "windows": [w.to_dict() for w in self.windows],
         }

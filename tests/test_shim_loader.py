@@ -1268,6 +1268,52 @@ class TestVendorManifest:
         assert shims["acme_a"].connection.headers == {"X-Shared": "1"}
         assert shims["acme_b"].connection.headers == {"X-Shared": "1", "X-Lane": "2"}
 
+    def test_the_manifest_declares_the_allowance_once(self, tmp_path):
+        """An allowance is an account fact: one control plane, every lane."""
+        self._vendor(
+            tmp_path,
+            "quota:\n  probe: acme\n  url: https://control.acme.example\n",
+            {"a": self._leaf("a"), "b": self._leaf("b")},
+        )
+
+        shims = load_providers_from_dir(tmp_path)
+
+        assert [s.quota and s.quota.probe for s in shims] == ["acme", "acme"]
+        assert [s.quota and s.quota.url for s in shims] == [
+            "https://control.acme.example",
+            "https://control.acme.example",
+        ]
+
+    def test_a_leaf_overrides_one_field_of_the_allowance(self, tmp_path):
+        """The merge is per field, like the connection block."""
+        self._vendor(
+            tmp_path,
+            "quota:\n  probe: acme\n  url: https://control.acme.example\n"
+            "  interval: 0\n",
+            {
+                "a": self._leaf("a"),
+                "b": self._leaf("b") + "quota:\n  interval: 600\n",
+            },
+        )
+
+        shims = load_providers_from_dir(tmp_path)
+
+        assert [s.quota and s.quota.interval for s in shims] == [0, 600]
+        assert all(
+            s.quota is not None and s.quota.url == "https://control.acme.example"
+            for s in shims
+        )
+
+    def test_an_allowance_that_is_not_a_mapping_is_refused(self, tmp_path):
+        with pytest.raises(ValueError, match="quota must be a mapping"):
+            self._vendor(
+                tmp_path,
+                "quota: every five hours\n",
+                {"a": self._leaf("a")},
+            )
+
+            load_providers_from_dir(tmp_path)
+
     def test_a_vendor_without_a_manifest_still_loads(self, tmp_path):
         """The manifest is optional: an existing third-party shim keeps working."""
         self._vendor(

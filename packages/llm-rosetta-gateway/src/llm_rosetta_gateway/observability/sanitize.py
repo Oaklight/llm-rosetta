@@ -24,6 +24,9 @@ _CREDENTIAL_PATTERNS = re.compile(
             r"Bearer\s+[A-Za-z0-9_\-./+]+",
             r"sk-ant-[A-Za-z0-9_-]{20,}",
             r"sk-[A-Za-z0-9_-]{20,}",
+            # A control-plane key: its own prefix, not a model key, and the
+            # vendor that issues it also issues the runtime key above.
+            r"vela_ctrl_[A-Za-z0-9_-]{8,}",
             r"AIza[A-Za-z0-9_-]{30,}",
             # A JWT: three base64url segments, the first always decoding to
             # ``{"`` — hence the ``eyJ`` prefix.  OAuth access and ID tokens

@@ -7,22 +7,30 @@ module keeps the gateway's existing import path for the resolution helpers.
 """
 
 from llm_rosetta.shims.quota_probe import (
+    PROBE_ROLE_API_KEY,
     ProbeMatch,
+    ProbeRefused,
     ProbeTarget,
     QuotaProbe,
     QuotaProbeError,
     parse_iso,
+    probe_credential_role,
+    probe_fetch,
     probe_ids,
     resolve_probe,
     vendor_message,
 )
 
 __all__ = [
+    "PROBE_ROLE_API_KEY",
     "ProbeMatch",
+    "ProbeRefused",
     "ProbeTarget",
     "QuotaProbe",
     "QuotaProbeError",
     "parse_iso",
+    "probe_credential_role",
+    "probe_fetch",
     "probe_ids",
     "resolve_probe",
     "vendor_message",
