@@ -35,6 +35,13 @@ def _points(svg: str) -> str:
     return match.group(1)
 
 
+def _translate(svg: str) -> str:
+    """The ``translate(x,y)`` a mark places its outline with, or fail."""
+    match = re.search(r'transform="translate\(([^)]+)\)', svg)
+    assert match, "the mark lost its placement transform"
+    return match.group(1)
+
+
 def _outline_bottom() -> float:
     """The lowest y the design's polygon reaches, in its own coordinates."""
     return max(float(pair.split(",")[1]) for pair in _points(_design_svg()).split())
@@ -64,6 +71,12 @@ def test_both_inline_marks_are_the_shipped_mark() -> None:
         assert _points(mark.group(0)) == design, (
             f"the {where} mark is not the shipped outline"
         )
+        # The outline is in the design's own coordinates: the placement is
+        # what puts it inside the window, and it is not visible to the point
+        # comparison.
+        assert _translate(mark.group(0)) == _translate(_design_svg()), (
+            f"the {where} mark is placed somewhere else inside its window"
+        )
 
 
 def test_the_page_icon_is_the_served_favicon() -> None:
@@ -72,6 +85,9 @@ def test_the_page_icon_is_the_served_favicon() -> None:
     icon = urllib.parse.unquote(match.group(1))
     assert 'viewBox="0 0 634.78 634.78"' in icon
     assert _points(icon) == _points(_design_svg())
+    assert _translate(icon) == _translate(_design_svg()), (
+        "the page icon is placed somewhere else inside its window"
+    )
     assert "#666666" in icon and "#ededed" in icon, "the page icon lost its two inks"
 
 
