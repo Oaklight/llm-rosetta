@@ -245,6 +245,97 @@ class TestScanSelection:
         assert status.shim_names == ("a--chat_completions",)
         assert any("ghost--*" in message for message in captured)
 
+    def test_an_exclude_that_matches_nothing_is_reported(
+        self, tmp_path: Path, captured
+    ):
+        """The operator's mistake is the directory slug; an exclude matches names."""
+        _leaf(tmp_path, "drop")
+        _leaf(tmp_path, "keep")
+
+        status = _scan_dir(tmp_path, kind="path", location="src", exclude=("drop",))
+
+        assert status.shim_names == (
+            "drop--chat_completions",
+            "keep--chat_completions",
+        )
+        assert status.declined == ()
+        assert status.unmatched_excludes == ("drop",)
+        assert any("exclude 'drop' matched no shim" in message for message in captured)
+
+    def test_an_exclude_that_matches_is_not_reported(self, tmp_path: Path, captured):
+        _leaf(tmp_path, "drop")
+        _leaf(tmp_path, "keep")
+
+        status = _scan_dir(
+            tmp_path,
+            kind="path",
+            location="src",
+            exclude=("drop--chat_completions",),
+        )
+
+        assert status.shim_names == ("keep--chat_completions",)
+        assert status.declined == ("drop--chat_completions",)
+        assert status.unmatched_excludes == ()
+        assert not any(
+            "exclude" in message and "matched no shim" in message
+            for message in captured
+        )
+
+    def test_an_exclude_warns_once_per_unmatched_pattern(
+        self, tmp_path: Path, captured
+    ):
+        _leaf(tmp_path, "keep")
+
+        status = _scan_dir(
+            tmp_path, kind="path", location="src", exclude=("ghost", "phantom")
+        )
+
+        assert status.unmatched_excludes == ("ghost", "phantom")
+        warnings = [
+            message
+            for message in captured
+            if "exclude" in message and "matched no shim" in message
+        ]
+        assert len(warnings) == 2
+
+    def test_an_include_that_matched_a_declined_shim_is_not_unmatched(
+        self, tmp_path: Path, captured
+    ):
+        """The pattern did hit a shim; the exclude is what removed it."""
+        _leaf(tmp_path, "b")
+
+        status = _scan_dir(
+            tmp_path,
+            kind="path",
+            location="src",
+            include=("b--*",),
+            exclude=("b--*",),
+        )
+
+        assert status.shim_names == ()
+        assert status.declined == ("b--chat_completions",)
+        assert status.unmatched == ()
+        assert not any(
+            "include" in message and "matched no shim" in message
+            for message in captured
+        )
+
+    def test_a_manifest_source_reports_what_it_declined(self, tmp_path: Path, captured):
+        """A manifest entry the selection dropped is remembered, not rescanned."""
+        _three_shims(tmp_path)
+        _manifest(tmp_path, MANIFEST)
+
+        status = _scan_dir(
+            tmp_path,
+            kind="path",
+            location="src",
+            include=("a--chat_completions",),
+        )
+
+        assert status.shim_names == ("a--chat_completions",)
+        assert status.declined == ("b--chat_completions", "c--chat_completions")
+        assert status.unmatched_excludes == ()
+
     def test_a_broken_manifest_fails_the_source(self, tmp_path: Path):
         _three_shims(tmp_path)
         _manifest(
@@ -281,7 +372,12 @@ class TestScanSelection:
         assert payload["include"] == ["a*"]
         assert payload["exclude"] == ["b*"]
         assert payload["unmatched"] == []
+        assert payload["unmatched_excludes"] == []
         assert payload["manifest_shims"] == []
+        assert payload["declined"] == [
+            "b--chat_completions",
+            "c--chat_completions",
+        ]
 
 
 class TestCoreLoaderSelection:
@@ -405,27 +501,36 @@ class TestStrictUnmatched:
     """An include that matched nothing stops a strict load, and only that."""
 
     @staticmethod
-    def _patch(monkeypatch):
+    def _patch(monkeypatch, **fields):
         monkeypatch.setattr(
             shim_sources,
             "_load_local_dir",
             lambda directory: ShimSourceStatus(
-                kind="path", location=str(directory), unmatched=("ghost--*",)
+                kind="path", location=str(directory), **fields
             ),
         )
 
     def test_strict_raises(self, monkeypatch):
-        self._patch(monkeypatch)
+        self._patch(monkeypatch, unmatched=("ghost--*",))
         with pytest.raises(ShimSourceError, match="matched nothing"):
             rebuild_shims(["x"], strict=True)
 
     def test_non_strict_returns_the_report(self, monkeypatch):
-        self._patch(monkeypatch)
+        self._patch(monkeypatch, unmatched=("ghost--*",))
 
         report = rebuild_shims(["x"])
 
         assert report.failures() == []
         assert report.sources[0].unmatched == ("ghost--*",)
+
+    def test_an_unmatched_exclude_does_not_stop_a_strict_load(self, monkeypatch):
+        """Nothing downstream depends on an exclude having hit."""
+        self._patch(monkeypatch, unmatched_excludes=("drop",))
+
+        report = rebuild_shims(["x"], strict=True)
+
+        assert report.failures() == []
+        assert report.sources[0].unmatched_excludes == ("drop",)
 
 
 class TestCoreFloor:
