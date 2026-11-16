@@ -748,8 +748,15 @@ class TestWhenEveryKeyIsOut:
         """
         pinfo = _pinfo("a", keys=keys, probe=_PROBE)
         # ``is_usable`` fingerprints the key itself; passing one in would
-        # fingerprint twice and report every key usable.
-        pinfo.key_ring.set_usable(lambda key: QUOTA_STATE.is_usable(_PROBE, key))
+        # fingerprint twice and report every key usable.  The ladder half is
+        # the one ``bind_provider_quota`` also installs.
+        pinfo.key_ring.set_usable(
+            lambda key: (
+                QUOTA_STATE.is_usable(_PROBE, key)
+                and QUOTA_STATE.rate_limits.disabled("a", credential_fingerprint(key))
+                is None
+            )
+        )
         return pinfo
 
     @staticmethod
@@ -778,19 +785,57 @@ class TestWhenEveryKeyIsOut:
         assert answer.reason == "spent"
         assert answer.until == earliest
 
-    def test_a_429_disable_still_wins_and_says_rate_limited(self):
+    def test_one_key_held_by_both_is_out_until_the_later_end(self):
         from llm_rosetta_gateway.quota.rate_limit import RateLimitPolicy
 
         pinfo = self._bound_pinfo()
-        self._demote("k1", 3600)
+        demotion_end = self._demote("k1", 3600)
         QUOTA_STATE.rate_limits.note(
             "a", credential_fingerprint("k1"), RateLimitPolicy(after=1, cooldown_s=60)
         )
 
         answer = lane_eligibility(pinfo, "a", lane="m")
 
+        # The ladder's 60 s pass long before the allowance returns; naming the
+        # ladder's end would tell an operator it is back in a minute when it
+        # is not back for an hour.
+        assert answer.reason == "spent"
+        assert answer.until == demotion_end
+
+    def test_a_ladder_longer_than_the_demotion_keeps_rate_limited(self):
+        from llm_rosetta_gateway.quota.rate_limit import RateLimitPolicy
+
+        pinfo = self._bound_pinfo()
+        self._demote("k1", 60)
+        QUOTA_STATE.rate_limits.note(
+            "a", credential_fingerprint("k1"), RateLimitPolicy(after=1, cooldown_s=900)
+        )
+        ladder_end = QUOTA_STATE.rate_limits.disabled("a", credential_fingerprint("k1"))
+
+        answer = lane_eligibility(pinfo, "a", lane="m")
+
         assert answer.reason == "rate_limited"
-        assert answer.until is not None
+        assert answer.until == ladder_end
+
+    def test_the_earliest_key_wins_across_kinds(self):
+        """A demoted key returning first is the provider's recovery, full stop.
+
+        Comparing the *kinds* rather than the keys reported the ladder's
+        longest end (900 s) while the provider was back in 60 — 840 s of
+        outage the operator does not have.
+        """
+        from llm_rosetta_gateway.quota.rate_limit import RateLimitPolicy
+
+        pinfo = self._bound_pinfo(keys="k1,k2")
+        first = self._demote("k1", 60)
+        QUOTA_STATE.rate_limits.note(
+            "a", credential_fingerprint("k2"), RateLimitPolicy(after=1, cooldown_s=900)
+        )
+
+        answer = lane_eligibility(pinfo, "a", lane="m")
+
+        assert answer.until == first
+        assert answer.reason == "spent"
 
     def test_a_ring_out_for_no_known_reason_is_no_credential(self):
         """The answer keeps its old meaning: nothing usable, and nothing to name."""

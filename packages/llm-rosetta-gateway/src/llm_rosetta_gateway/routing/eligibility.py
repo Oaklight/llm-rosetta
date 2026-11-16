@@ -260,12 +260,16 @@ def _eligibility(
         # told an operator their key was missing when the vendor had merely
         # said "not until then" — and it shadowed the allowance answer below,
         # because this branch returns first.
-        until = QUOTA_STATE.rate_limits.latest_disable(key)
-        if until is not None:
-            return answer(RATE_LIMITED, until=until)
-        demoted_until = _demotion_end(pinfo)
-        if demoted_until is not None:
-            return answer(SPENT, until=demoted_until)
+        #
+        # The time reported is when *this provider* can serve again, which is
+        # the first credential to come back — not the longest of anything.  The
+        # two kinds are therefore resolved per key first (one key held by both
+        # is out until the later one), and the keys are then compared by their
+        # earliest.
+        recovery = _ring_recovery(pinfo, key)
+        if recovery is not None:
+            until, reason = recovery
+            return answer(reason, until=until)
         return answer(NO_CREDENTIAL)
 
     if provider_spent(pinfo):
@@ -274,32 +278,53 @@ def _eligibility(
     return answer(None, eligible=True)
 
 
-def _demotion_end(pinfo: Any) -> datetime | None:
-    """When the first demoted credential of *pinfo* may serve again.
+def _ring_recovery(pinfo: Any, name: str) -> tuple[datetime, str] | None:
+    """When the first credential of *pinfo* comes back, and what holds it.
 
-    A demotion is the vendor's own answer to "when", and the ring is unusable
-    only while *every* key is out — so the earliest end is when the provider
-    can serve again at all.
+    The ring is unusable only while **every** key is out, so the provider is
+    back as soon as one key is — that key's own binding end, whichever kind
+    it is.  A key held by both a ladder disable and a demotion leaves when the
+    later of its two ends passes; the provider leaves when the earliest key
+    does.
 
     Args:
         pinfo: The provider whose key ring is out.
+        name: The provider's config key, for the ladder's records.
 
     Returns:
-        The earliest live demotion's end, or ``None`` when no key is demoted
-        (the ring is unusable for some other reason).
+        ``(until, reason)`` — the moment the provider can serve again and the
+        reason constant for what is holding it then — or ``None`` when no key
+        can be dated, which is a ring that is out for some other reason.
     """
     from ..quota.models import credential_fingerprint
 
-    probe_id = getattr(pinfo, "quota_probe", None)
     ring = getattr(pinfo, "key_ring", None)
-    if not probe_id or ring is None:
+    if ring is None:
         return None
-    ends: list[datetime] = []
+    probe = getattr(pinfo, "quota_probe", None)
+    # A disable covering the whole provider is one key's end for every key.
+    provider_end = QUOTA_STATE.rate_limits.disabled(name)
+    best: tuple[datetime, str] | None = None
     for raw in ring.keys():
-        demotion = QUOTA_STATE.demotion(probe_id, credential_fingerprint(raw))
-        if demotion is not None:
-            ends.append(demotion.until)
-    return min(ends) if ends else None
+        fingerprint = credential_fingerprint(raw)
+        ends: list[tuple[datetime, str]] = []
+        if provider_end is not None:
+            ends.append((provider_end, RATE_LIMITED))
+        lane_end = QUOTA_STATE.rate_limits.disabled(name, fingerprint)
+        if lane_end is not None:
+            ends.append((lane_end, RATE_LIMITED))
+        if probe:
+            demotion = QUOTA_STATE.demotion(probe, fingerprint)
+            if demotion is not None:
+                ends.append((demotion.until, SPENT))
+        if not ends:
+            # This key is out for a reason that carries no end, so the
+            # provider's recovery cannot be dated from this ring either.
+            continue
+        key_end, key_reason = max(ends, key=lambda entry: entry[0])
+        if best is None or key_end < best[0]:
+            best = (key_end, key_reason)
+    return best
 
 
 def _block_end(pinfo: Any, name: str) -> datetime | None:
