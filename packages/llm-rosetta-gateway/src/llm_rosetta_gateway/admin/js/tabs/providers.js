@@ -1907,7 +1907,7 @@ function _buildProvEndpointSections() {
     section.id = `provEndpoint_${desc.name}`;
     const endpointLabel = t('label.' + desc.name + 'Endpoint') || (desc.name.charAt(0).toUpperCase() + desc.name.slice(1) + ' Endpoint');
     const pathLabel = t('label.' + desc.name + 'Path') || (desc.name.charAt(0).toUpperCase() + desc.name.slice(1) + ' Path');
-    const dotColor = desc.color || 'var(--border)';
+    const dotColor = desc.color || 'var(--hairline)';
     // One dropdown, as on the LLM endpoint: a vendor serves one dialect per
     // model type, so the shim and the bare format are the same choice at
     // different levels.  The path is a peer field: with a 58% basis on the

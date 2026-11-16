@@ -190,7 +190,7 @@ function renderFetchedModels() {
       style = ' style="opacity:0.6"';
     } else if (canAddProvider) {
       attrs = ' data-can-add="true"';
-      tag = ` <span class="add-provider-tag" style="font-size:11px;color:var(--blue)">${esc(t('fetch.addProvider'))}</span>`;
+      tag = ` <span class="add-provider-tag" style="font-size:11px;color:var(--info)">${esc(t('fetch.addProvider'))}</span>`;
     }
 
     return `<label${style}>

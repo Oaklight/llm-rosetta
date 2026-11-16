@@ -172,48 +172,73 @@ class TestThemeFiles:
                 f"{theme.name} is missing {sorted(vocabulary - available)}"
             )
 
-    def test_the_legacy_aliases_are_marked_for_removal(self):
-        # P1 left the previous names aliased so no component changes
-        # behaviour; the block must carry its removal condition verbatim, or a
-        # looser wording ("removed later") would satisfy a looser test while
-        # the promise quietly rots.  P5 was where the comment used to say the
-        # block would go; it did not (the aliases are still consumed), so the
-        # condition names the cleanup issue and its precondition instead.
+    def test_no_theme_declares_a_legacy_alias(self):
+        # P1 aliased the previous names so no component changed behaviour, and
+        # the block carried its own expiry.  #1489 is that expiry: every
+        # consumer moved to the shared vocabulary first, then the block went.
+        # A theme that still declared one would be the fourth theme's problem.
         legacy = {
-            "--bg-card": "--surface",
-            "--bg-hover": "--surface-2",
-            "--border": "--hairline",
-            "--green": "--pos",
-            "--green-subtle": "--pos-subtle",
-            "--green-bg": "--pos-bg",
-            "--red": "--neg",
-            "--red-subtle": "--neg-subtle",
-            "--orange": "--warn",
-            "--blue": "--info",
-            "--badge-radius": "--radius-pill",
+            "--bg-card",
+            "--bg-hover",
+            "--border",
+            "--green",
+            "--green-subtle",
+            "--green-bg",
+            "--red",
+            "--red-subtle",
+            "--orange",
+            "--blue",
+            "--badge-radius",
         }
         for theme in registry.THEMES:
-            # The raw file: _theme_text() strips the comment that carries the
-            # expiry, and the expiry is the thing under test.
             text = (ADMIN_DIR / theme.file).read_text(encoding="utf-8")
-            # The condition is wrapped across comment lines, so it is matched
-            # in its two halves; both must be inside the alias block.
-            marker, precondition = "planned for removal (#1489)", "must migrate first"
-            assert text.count(marker) == 1, theme.name
-            assert text.count(precondition) == 1, theme.name
-            head = text[: text.index("/* P1 compatibility aliases")]
-            assert marker not in head and precondition not in head, theme.name
-            aliases = text[text.index("/* P1 compatibility aliases") :]
-            assert marker in aliases.split("[data-scheme=", 1)[0], theme.name
-            assert precondition in aliases.split("[data-scheme=", 1)[0], theme.name
-            declared = set(_TOKEN.findall(aliases))
-            for old, new in legacy.items():
-                assert f"{old}: var({new});" in aliases, (theme.name, old)
-            # Every old name the components still use has an alias; this is
-            # the set P5 deletes, so it must be the whole set, not a sample.
-            assert declared == set(legacy), (
-                f"{theme.name}: alias block declares {sorted(declared)}"
+            declared = set(_TOKEN.findall(_COMMENT.sub("", text)))
+            assert not (declared & legacy), (
+                f"{theme.name} still declares {sorted(declared & legacy)}"
             )
+            assert "P1 compatibility aliases" not in text, theme.name
+
+    def test_no_consumer_reads_a_legacy_alias(self):
+        # The other half of the same promise, and the half that made the block
+        # undeletable: a name declared nowhere and read somewhere renders as
+        # nothing.  Stylesheets, the page's inline styles, the JS templates and
+        # the model-type descriptors are all searched, because all four used
+        # the old names.
+        legacy = (
+            "bg-card",
+            "bg-hover",
+            "border",
+            "green",
+            "green-subtle",
+            "green-bg",
+            "red",
+            "red-subtle",
+            "orange",
+            "blue",
+            "badge-radius",
+        )
+        # Three spellings reach a token, and the alias block answered all of
+        # them: the variable itself, the fallback form `var(--green, #22c55e)`,
+        # and the name as a string argument to `getPropertyValue`.  A search
+        # for only the first left the dashboard's canvas colours reading an
+        # empty string.
+        patterns = [f"var(--{name})" for name in legacy]
+        patterns += [f"var(--{name}," for name in legacy]
+        patterns += [f"('--{name}')" for name in legacy]
+        patterns += [f'("--{name}")' for name in legacy]
+        sources = [
+            *(ADMIN_DIR / "css").rglob("*.css"),
+            *(ADMIN_DIR / "js").rglob("*.js"),
+            ADMIN_DIR / "admin.html",
+            ADMIN_DIR.parent / "model_types.py",
+        ]
+        offenders = []
+        for path in sources:
+            text = path.read_text(encoding="utf-8")
+            for pattern in patterns:
+                if pattern in text:
+                    offenders.append(f"{path.name}: {pattern}")
+        assert offenders == []
 
     def test_the_default_themes_structural_block_is_not_empty(self):
         # A structural block that parsed as empty would make the completeness

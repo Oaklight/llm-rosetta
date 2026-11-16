@@ -30,8 +30,8 @@
      surface inside a hard 1px frame — black in light mode, the hairline grey
      in dark (a black frame on #0b0b0b is invisible). */
   --stats-gap: 1px;
-  --stats-frame-bg: var(--border);
-  --stats-frame-border: 1px solid var(--border);
+  --stats-frame-bg: var(--hairline);
+  --stats-frame-border: 1px solid var(--hairline);
   --stats-frame-radius: var(--radius);
   --card-bg: var(--surface);
   --card-border: 1px solid #161616;
@@ -163,25 +163,4 @@
   --tag-tools: #22d3ee;
   --tag-lime: #a3e635;
   --tag-decision: #976df7;
-}
-
-/* P1 compatibility aliases — planned for removal (#1489); every consumer
-   must migrate first.  The values live under the shared vocabulary
-   (surface, hairline, pos/neg/warn/info and their -bg/-subtle/-border
-   variants); these names keep every component resolving the same values
-   until the last one reads the new names.  Removing them is not a
-   comment edit — `--bg-card`, `--bg-hover`, `--border`, `--badge-radius`
-   and the colour aliases are still read by base.css and components.css. */
-[data-scheme="typesafe"] {
-  --bg-card: var(--surface);
-  --bg-hover: var(--surface-2);
-  --border: var(--hairline);
-  --green: var(--pos);
-  --green-subtle: var(--pos-subtle);
-  --green-bg: var(--pos-bg);
-  --red: var(--neg);
-  --red-subtle: var(--neg-subtle);
-  --orange: var(--warn);
-  --blue: var(--info);
-  --badge-radius: var(--radius-pill);
 }

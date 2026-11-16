@@ -137,7 +137,7 @@ class TestLLMDescriptor:
     def test_llm_color(self) -> None:
         desc = get_model_type("llm")
         assert desc is not None
-        assert desc.color == "var(--green)"
+        assert desc.color == "var(--pos)"
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +188,7 @@ class TestEmbeddingDescriptor:
     def test_embedding_color(self) -> None:
         desc = get_model_type("embedding")
         assert desc is not None
-        assert desc.color == "var(--blue)"
+        assert desc.color == "var(--info)"
 
 
 # ---------------------------------------------------------------------------
@@ -239,7 +239,7 @@ class TestRerankDescriptor:
     def test_rerank_color(self) -> None:
         desc = get_model_type("rerank")
         assert desc is not None
-        assert desc.color == "var(--orange)"
+        assert desc.color == "var(--warn)"
 
 
 class TestDecisionDescriptor:
@@ -652,7 +652,7 @@ class TestAdminModelTypeMetadata:
         llm_entry = next(m for m in metadata if m["name"] == "llm")
         assert llm_entry["is_llm"] is True
         assert llm_entry["icon_svg"].startswith("<svg")
-        assert llm_entry["color"] == "var(--green)"
+        assert llm_entry["color"] == "var(--pos)"
 
     def test_metadata_non_llm_is_llm_false(self) -> None:
         from llm_rosetta_gateway.admin.routes.config import _get_model_type_metadata

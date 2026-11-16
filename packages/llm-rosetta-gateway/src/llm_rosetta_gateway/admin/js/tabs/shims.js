@@ -171,8 +171,8 @@ function _renderAdvisories() {
     host.innerHTML = '';
     return;
   }
-  const title = `<div style="color:var(--orange,#e67e22);margin-bottom:4px">${esc(t('shim.removal.title'))}</div>`;
-  host.innerHTML = title + removals.map(a => `<div style="display:flex;gap:8px;align-items:center;padding:3px 0;border-top:1px solid var(--border)">
+  const title = `<div style="color:var(--warn,#e67e22);margin-bottom:4px">${esc(t('shim.removal.title'))}</div>`;
+  host.innerHTML = title + removals.map(a => `<div style="display:flex;gap:8px;align-items:center;padding:3px 0;border-top:1px solid var(--hairline)">
       <span style="flex:1">${esc(t('shim.removal.line', { provider: a.provider, shim: a.shim, version: a.removed_in }))}</span>
       <button class="btn btn-sm" data-url="${esc(a.remote.url)}" onclick="addShimPresetFromRow(this)">${esc(t('shim.removal.fix'))}</button>
     </div>`).join('');

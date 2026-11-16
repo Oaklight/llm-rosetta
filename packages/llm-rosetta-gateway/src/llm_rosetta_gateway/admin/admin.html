@@ -431,7 +431,7 @@
   <div class="modal-overlay" id="clearDumpsModal">
     <div class="modal" style="width:400px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="clearDumpsModalTitle">
       <h3 data-i18n="confirm.clearDumps" id="clearDumpsModalTitle">Clear All Error Dumps</h3>
-      <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px" data-i18n-html="confirm.clearDumpsHint">This will permanently delete all error dump records. Type <strong style="color:var(--red)">CLEAR</strong> to confirm.</p>
+      <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px" data-i18n-html="confirm.clearDumpsHint">This will permanently delete all error dump records. Type <strong style="color:var(--neg)">CLEAR</strong> to confirm.</p>
       <input type="text" id="clearDumpsInput" oninput="onClearDumpsInput()" placeholder="Type CLEAR" data-i18n-placeholder="confirm.typeClear" style="width:100%;font-family:var(--mono)">
       <div class="panel-foot">
         <button class="btn" onclick="closeModal('clearDumpsModal')" data-i18n="btn.cancel">Cancel</button>
@@ -677,9 +677,9 @@
             <button class="btn btn-sm" onclick="backfillDumpLogIds()" title="Link unmatched error dumps to their request log entries by timestamp and provider" data-i18n-title="btn.matchLogsTitle" data-i18n="btn.matchLogs">Match Logs</button>
             <div style="display:inline-block;position:relative">
               <button class="btn btn-sm" onclick="toggleDumpMoreMenu(this)">⋯</button>
-              <div id="dumpMoreMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:140px;background:var(--bg-card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;overflow:hidden">
-                <div style="padding:8px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openExportDumpsModal()" data-i18n="btn.export">Export...</div>
-                <div style="padding:8px 14px;font-size:13px;cursor:pointer;color:var(--red)" onmouseenter="this.style.background='var(--bg-hover)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openClearDumpsConfirm()" data-i18n="btn.clearAll">Clear All</div>
+              <div id="dumpMoreMenu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);min-width:140px;background:var(--surface);border:1px solid var(--hairline);border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,0.3);z-index:10;overflow:hidden">
+                <div style="padding:8px 14px;font-size:13px;cursor:pointer" onmouseenter="this.style.background='var(--surface-2)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openExportDumpsModal()" data-i18n="btn.export">Export...</div>
+                <div style="padding:8px 14px;font-size:13px;cursor:pointer;color:var(--neg)" onmouseenter="this.style.background='var(--surface-2)'" onmouseleave="this.style.background=''" onclick="document.getElementById('dumpMoreMenu').style.display='none';openClearDumpsConfirm()" data-i18n="btn.clearAll">Clear All</div>
               </div>
             </div>
           </div>
@@ -864,7 +864,7 @@
             <button class="btn btn-sm" onclick="reloadShimSources(true)" data-i18n="btn.refetchShims">Refetch</button>
             <button class="btn btn-sm" onclick="checkShimUpdates(true)" data-i18n="btn.checkShimUpdates">Check now</button>
             <span id="shimSourcesDirty" class="shim-dirty" hidden data-i18n="shim.dirty"></span>
-            <span id="shimSourcesError" style="font-size:11px;color:var(--red)"></span>
+            <span id="shimSourcesError" style="font-size:11px;color:var(--neg)"></span>
           </div>
           <div id="shimRemovalAdvisories" class="shim-status"></div>
         </div>
@@ -1350,7 +1350,7 @@
           </div>
         </div>
         <div class="form-group" style="flex:1">
-          <label data-i18n="label.providerName">Provider Name <span style="color:var(--red)">*</span></label>
+          <label data-i18n="label.providerName">Provider Name <span style="color:var(--neg)">*</span></label>
           <input id="provName" placeholder="e.g. my-openai, openrouter-claude" data-i18n-placeholder="placeholder.providerName">
         </div>
       </div>
@@ -1523,7 +1523,7 @@
            command receives through token_command_env. -->
       <div class="prov-group" id="provKeyPanel">
         <div class="form-group" id="provApiKeyGroup">
-        <label data-i18n="label.apiKey">API Key <span id="provRequiredMark" style="color:var(--red)">*</span> <span id="provOptionalTag" style="color:var(--text-dim);font-weight:normal" data-i18n="label.optional">(optional)</span></label>
+        <label data-i18n="label.apiKey">API Key <span id="provRequiredMark" style="color:var(--neg)">*</span> <span id="provOptionalTag" style="color:var(--text-dim);font-weight:normal" data-i18n="label.optional">(optional)</span></label>
         <div style="display:flex;gap:4px;align-items:center" id="provApiKeyRow">
           <input id="provApiKey" placeholder="${OPENAI_API_KEY}" type="password" style="flex:1" oninput="_syncKeyField()" onpaste="setTimeout(()=>_syncKeyField(),0)">
         </div>
@@ -1722,7 +1722,7 @@
         <input id="modelTimeout" type="number" min="1" step="1" placeholder="">
         <div style="font-size:0.8em;color:var(--text-dim);margin-top:2px" data-i18n="label.modelTimeoutHint">Overrides provider and global timeout for this model. Leave blank to inherit.</div>
       </div>
-      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+      <hr style="border:none;border-top:1px solid var(--hairline);margin:16px 0">
       <div class="form-group">
         <label data-i18n="label.systemOptions">System Message</label>
         <div class="checkbox-group">
@@ -1730,14 +1730,14 @@
 Rules:..."</code><br><br>Some upstream providers don't support content arrays in system messages.</span></span>
         </div>
       </div>
-      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+      <hr style="border:none;border-top:1px solid var(--hairline);margin:16px 0">
       <div class="form-group">
         <label data-i18n="label.failover">Failover</label>
         <div class="checkbox-group">
           <label><input type="checkbox" id="failoverOnError"> <span data-i18n="label.failoverOnError">Try another provider on a refusal</span></label><span class="hint-icon">i<span class="menu hint-popup" style="width:360px;text-align:left" data-i18n-html="hint.failoverOnError">When this model has several providers, a refusal moves the request to the next one once: an upstream <code>402</code>/<code>429</code>, or <code>408</code>, <code>500</code>, <code>502</code>-<code>504</code>, <code>520</code>-<code>524</code> or <code>529</code>. These never demote a credential. Turning this off trades availability for a warmer prompt cache — the second provider is another cache and possibly another model build.</span></span>
         </div>
       </div>
-      <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+      <hr style="border:none;border-top:1px solid var(--hairline);margin:16px 0">
       <div class="form-group" id="modelReasoningGroup" style="display:none">
         <label><span data-i18n="label.reasoningConfig">Reasoning</span>
           <span class="tag is-pill" id="reasoningSourceBadge" style="margin-left:6px"></span>
@@ -1859,7 +1859,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     <div id="fetchModelsLoading" style="display:none;text-align:center;padding:20px;color:var(--text-dim)">
       Loading models...
     </div>
-    <div id="fetchModelsError" style="display:none;color:var(--red);padding:8px 0;font-size:13px"></div>
+    <div id="fetchModelsError" style="display:none;color:var(--neg);padding:8px 0;font-size:13px"></div>
     <div class="panel-foot">
       <button class="btn" onclick="closeModal('fetchModelsModal')" data-i18n="btn.cancel">Cancel</button>
       <button class="btn btn-primary" id="fetchAddBtn" onclick="bulkAddFetchedModels()" disabled data-i18n="btn.applyChanges">Apply Changes</button>
@@ -1924,7 +1924,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
   <div class="modal" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="deleteConfirmModalTitle">
     <h3 data-i18n="confirm.deleteProviderTitle" id="deleteConfirmModalTitle">Delete Provider</h3>
     <p id="deleteConfirmMsg" style="margin:8px 0 12px;color:var(--text-dim);font-size:13px"></p>
-    <div id="deleteAffectedModels" style="display:none;margin-bottom:12px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-size:12px;max-height:120px;overflow-y:auto"></div>
+    <div id="deleteAffectedModels" style="display:none;margin-bottom:12px;padding:8px 12px;background:var(--bg);border:1px solid var(--hairline);border-radius:var(--radius);font-size:12px;max-height:120px;overflow-y:auto"></div>
     <div class="form-group">
       <input id="deleteConfirmInput" autocomplete="off" spellcheck="false"
         oninput="onDeleteConfirmInput()" style="font-family:monospace">
@@ -1983,7 +1983,7 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     <div class="shim-modal-meta" id="shimModalMeta"></div>
     <textarea id="shimModalYaml" class="shim-yaml" spellcheck="false" rows="18"></textarea>
     <div class="field-hint" id="shimModalNote"></div>
-    <div class="field-hint" id="shimModalProblem" style="color:var(--red)" hidden></div>
+    <div class="field-hint" id="shimModalProblem" style="color:var(--neg)" hidden></div>
     <div class="shim-inherit" id="shimModalInherit" hidden>
       <div class="shim-inherit-head">
         <span class="shim-inherit-title" data-i18n="shim.manifest.fields">Fields and who inherits them</span>
