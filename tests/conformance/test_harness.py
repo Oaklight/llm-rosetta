@@ -251,9 +251,13 @@ def _triggers(text: str) -> dict[str, list[str]]:
         if indent == 0:
             break
         stripped = line.strip()
-        if indent == 2 and stripped.endswith(":"):
-            current = stripped[:-1]
-            events[current] = []
+        if indent == 2:
+            # ``key:`` and the flow spelling ``key: {}`` both register the
+            # event; a reader that only accepted the first would let
+            # ``pull_request: {}`` through the exact-set assertion.
+            key, _, value = stripped.partition(":")
+            current = key.strip()
+            events[current] = [value.strip()] if value.strip() else []
         elif current is not None:
             events[current].append(stripped)
     return events
@@ -275,6 +279,13 @@ def test_the_trigger_reader_sees_each_event():
         "schedule": ['- cron: "1 2 * * 3" # weekly'],
         "workflow_dispatch": [],
     }
+
+
+def test_the_trigger_reader_sees_a_flow_style_event():
+    """`pull_request: {}` is a trigger GitHub honours and a text scan misses."""
+    text = "on:\n  pull_request: {}\n  workflow_dispatch:\n"
+
+    assert _triggers(text) == {"pull_request": ["{}"], "workflow_dispatch": []}
 
 
 def test_the_live_suite_is_scheduled_and_not_in_pr_ci():

@@ -319,6 +319,26 @@ class TestOutcome:
         with pytest.raises(RuntimeError):
             _LaneProbe(_BY_NAME["messages/anthropic"], post=transport).run()
 
+    def test_a_400_that_names_the_model_is_an_error(self, monkeypatch):
+        """A stale `*_MODEL` reaches the marker list, not the body-key match."""
+        _configure(monkeypatch, "messages/anthropic", base="https://a.example")
+        transport = _Transport(
+            status=400, text='{"error": "Invalid model: gpt-9 is not available"}'
+        )
+
+        with pytest.raises(RuntimeError, match="HTTP 400"):
+            _LaneProbe(_BY_NAME["messages/anthropic"], post=transport).run()
+
+    def test_a_5xx_that_echoes_a_field_is_an_error(self, monkeypatch):
+        """The 400 test is what may fail a case; an outage never is."""
+        _configure(monkeypatch, "chat_completions/openai", base="https://o.example/v1")
+        transport = _Transport(
+            status=500, text='{"error": "max_completion_tokens must be positive"}'
+        )
+
+        with pytest.raises(RuntimeError, match="HTTP 500"):
+            _LaneProbe(_BY_NAME["chat_completions/openai"], post=transport).run()
+
     def test_a_404_for_a_moved_model_is_an_error(self, monkeypatch):
         _configure(monkeypatch, "chat_completions/openai", base="https://o.example/v1")
         transport = _Transport(
