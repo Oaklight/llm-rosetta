@@ -350,6 +350,47 @@ together is a load error. A provider's own `token_command` still wins, and an
 `api_key` beside an exchange that does not declare `consumes_key` is rejected —
 the two are alternative sources for one credential.
 
+#### Declaring the credential's inputs
+
+An exchange that needs more than the key — AskSage needs the account email the
+key was issued to — declares those inputs as data, in the same vendor manifest:
+
+```yaml
+# <vendor>/provider.yaml
+fields:
+  - key: email
+    label: Account email
+    placeholder: you@example.gov
+    help: The address the AskSage account key was issued to.
+```
+
+Each entry becomes one input beside the key in the provider drawer's Auth pane,
+and one **Save** writes the key and the values into the provider entry under
+`auth_fields`, which is where the exchange reads them. A leaf may add a key or
+reword an entry; the merge is attribute by attribute, so a leaf that changes
+only `label` keeps the vendor's `help` and `required`.
+
+| Key | Required | Meaning |
+|-----|----------|---------|
+| `key` | yes | The entry key the value is stored under. Letters, digits, `_`, `.`, `-`, at most 64 characters — it is also the input's element id. |
+| `label` | yes | What the operator sees. |
+| `placeholder` | no | An example, never a secret. |
+| `help` | no | One sentence under the input. |
+| `required` | no | `true` refuses a save that leaves the input empty — while the shim's own sign-in is the credential source, because a static key or a command reads none of these values. |
+
+The declaration is validated at load, before an operator ever sees it: a block
+that is not a list of mappings, an entry without a usable `key` or `label`, a key
+declared twice, a key or description longer than 200 characters, more than eight
+entries, or a key the schema does not define (`secret`, `type`, …) is a load error
+naming the file. None of these values is a secret: they are stored verbatim in the
+provider entry and printed back in the panel, so the credential itself still
+belongs in `api_key`, `token_command`, or the exchange's own record.
+
+A shim that ships an exchange may also declare the same inputs in code, from
+`AuthExchange.fields()`; the YAML wins per key, and an entry declared only in
+code is appended after the YAML ones. The shipped reference is the AskSage
+shim: four lanes, one `email` in its vendor manifest, no form code in `auth.py`.
+
 **How the admin panel groups shims.** The provider-type picker has two levels: a
 top level (the *group*) and one row per shim under it. Both strings can be
 declared, because they are not always derivable from the name:
