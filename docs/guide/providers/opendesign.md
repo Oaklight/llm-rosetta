@@ -58,10 +58,18 @@ default, and the model-list URL; a provider entry may override any of them.
 
 ## Quota
 
-This shim does not read the Coding Plan allowance. Open Design reports that
-allowance on a separate control plane that does not accept the runtime API key,
-and the control key is issued by a device-authorization flow rather than shown
-in the web console. The gateway reports the provider's quota as unsupported. Tracking issue: [#1499](https://github.com/Oaklight/llm-rosetta/issues/1499).
+The Coding Plan allowance is read on the **control plane**
+(`https://amr-api.open-design.ai`), which accepts only the control key
+(`vela_ctrl_…`) — never the runtime key. Both keys come from the same device
+sign-in, and the shim's `quota.py` declares `credential_role: control`, so the
+gateway asks the sign-in record for the second credential and files the reading
+as **advisory**: the panel shows the 5-hour and 7-day windows and the plan
+tier, and the reading can weight the lane's share, but it never demotes,
+excludes or dates a model credential.
+
+Without a control key the provider's quota reads as unsupported and no billing
+request is made: there is no fallback to the runtime key, which the control
+plane refuses with `401`.
 
 ## Status
 
