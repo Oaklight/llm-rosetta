@@ -35,11 +35,15 @@ jobs:
           python-version: "3.11"
 
       - name: Install the library
-        # The live suite reads the converters, the format catalog and the
-        # report harness; it needs no provider SDK and no gateway.
+        # `tools/conformance/redact.py` imports
+        # `llm_rosetta_gateway.observability.sanitize`, so the gateway is on the
+        # path beside the core even though this suite makes no HTTP call through
+        # it.  The provider SDKs are not needed: the suites that import them
+        # import lazily, and the live suite never asks for one; the run warns
+        # that the installed SDKs differ from the pins, which is expected here.
         run: |
           python -m pip install --upgrade pip
-          pip install -e packages/llm-rosetta
+          pip install -e packages/llm-rosetta -e packages/llm-rosetta-gateway
 
       - name: Run the live suite
         # A repository variable overrides a base URL or a model without editing
@@ -56,6 +60,7 @@ jobs:
           ANTHROPIC_BASE_URL: ${{ vars.ANTHROPIC_BASE_URL || 'https://api.anthropic.com' }}
           ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5' }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_BASE_URL: ${{ vars.GOOGLE_BASE_URL || 'https://generativelanguage.googleapis.com' }}
           GOOGLE_MODEL: ${{ vars.GOOGLE_MODEL || 'gemini-3.7-flash' }}
         run: >-
           python -m tools.conformance run --suite live

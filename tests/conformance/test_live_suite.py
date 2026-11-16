@@ -295,12 +295,38 @@ class TestOutcome:
 
         assert "half-secret-value" not in json.dumps(data)
 
-    def test_a_rejected_body_is_a_failure(self, monkeypatch):
+    def test_a_400_that_names_a_body_field_is_a_failure(self, monkeypatch):
         _configure(monkeypatch, "messages/anthropic", base="https://a.example")
-        transport = _Transport(status=400, text='{"error": "Unknown name config"}')
+        transport = _Transport(
+            status=400, text='{"error": {"message": "Invalid value for max_tokens"}}'
+        )
 
         with pytest.raises(ProbeFailure, match="HTTP 400"):
             _LaneProbe(_BY_NAME["messages/anthropic"], post=transport).run()
+
+    def test_a_400_that_names_the_credential_is_an_error(self, monkeypatch):
+        """Google answers a revoked key with 400, not 401."""
+        _configure(monkeypatch, "messages/anthropic", base="https://a.example")
+        transport = _Transport(status=400, text='{"error": "API key not valid"}')
+
+        with pytest.raises(RuntimeError, match="HTTP 400"):
+            _LaneProbe(_BY_NAME["messages/anthropic"], post=transport).run()
+
+    def test_a_400_that_names_no_body_field_is_an_error(self, monkeypatch):
+        _configure(monkeypatch, "messages/anthropic", base="https://a.example")
+        transport = _Transport(status=400, text='{"error": "Request blocked"}')
+
+        with pytest.raises(RuntimeError):
+            _LaneProbe(_BY_NAME["messages/anthropic"], post=transport).run()
+
+    def test_a_404_for_a_moved_model_is_an_error(self, monkeypatch):
+        _configure(monkeypatch, "chat_completions/openai", base="https://o.example/v1")
+        transport = _Transport(
+            status=404, text='{"error": {"message": "The model `nope` does not exist"}}'
+        )
+
+        with pytest.raises(RuntimeError, match="HTTP 404"):
+            _LaneProbe(_BY_NAME["chat_completions/openai"], post=transport).run()
 
     @pytest.mark.parametrize("status", [401, 403, 429, 500, 503])
     def test_a_run_the_vendor_could_not_serve_is_an_error(self, monkeypatch, status):

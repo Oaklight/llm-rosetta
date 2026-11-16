@@ -226,20 +226,74 @@ def test_every_suite_has_a_workflow_that_runs_it():
     assert not missing, f"no workflow runs: {', '.join(missing)}"
 
 
+def _triggers(text: str) -> dict[str, list[str]]:
+    """The event keys of a workflow's top-level ``on:`` block, with their lines.
+
+    A tiny reader rather than a YAML dependency: PyYAML is not installed by
+    every test environment (the docs test skips without it), and the guard
+    needs the trigger keys only.  Each event maps to the indented lines below
+    it, so ``schedule:`` with no cron is distinguishable from one with.
+
+    Args:
+        text: A workflow file's text.
+
+    Returns:
+        ``{event: [its deeper-indented lines]}``.
+    """
+    lines = text.splitlines()
+    start = next(index for index, line in enumerate(lines) if line.rstrip() == "on:")
+    events: dict[str, list[str]] = {}
+    current: str | None = None
+    for line in lines[start + 1 :]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        indent = len(line) - len(line.lstrip())
+        if indent == 0:
+            break
+        stripped = line.strip()
+        if indent == 2 and stripped.endswith(":"):
+            current = stripped[:-1]
+            events[current] = []
+        elif current is not None:
+            events[current].append(stripped)
+    return events
+
+
+def test_the_trigger_reader_sees_each_event():
+    text = (
+        "on:\n"
+        "  schedule:\n"
+        '    - cron: "1 2 * * 3" # weekly\n'
+        "  workflow_dispatch:\n"
+        "\n"
+        "jobs:\n"
+        "  x:\n"
+        "    steps: []\n"
+    )
+
+    assert _triggers(text) == {
+        "schedule": ['- cron: "1 2 * * 3" # weekly'],
+        "workflow_dispatch": [],
+    }
+
+
 def test_the_live_suite_is_scheduled_and_not_in_pr_ci():
     """A credentialled probe must not run on a pull request.
 
     The live suite leaves the machine and needs secrets, so exactly one
-    scheduled workflow may name it, and PR CI may not — a fork's pull request
-    would otherwise hold on a vendor outage, or reach for a credential it does
-    not have.
+    scheduled workflow may name it, its triggers must be exactly the weekly
+    schedule and manual dispatch — a ``pull_request`` or ``push`` trigger would
+    start a credentialled sweep no one asked for, and an empty ``schedule:``
+    would never run at all — and PR CI may not name it either.
     """
     texts = _workflow_texts()
     runners = [name for name, text in texts.items() if "--suite live" in text]
 
     assert "--suite live" not in texts["ci.yml"]
     assert len(runners) == 1, f"the live suite is named by {runners}"
-    assert "schedule:" in texts[runners[0]]
+    triggers = _triggers(texts[runners[0]])
+    assert set(triggers) == {"schedule", "workflow_dispatch"}, triggers
+    assert any("23 4 * * 1" in line for line in triggers["schedule"]), triggers
 
 
 def test_cli_writes_the_report(monkeypatch, tmp_path):
