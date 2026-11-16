@@ -143,14 +143,14 @@ function _renderModelList() {
     // The count is where an operator asks "how many, and are they well?" —
     // the answer belongs on it, one lane per line, rather than on the slices
     // they would have to hunt through one at a time.
-    // A lane a ladder holds out says when it comes back: "rate limited" alone
-    // makes the reader open the model to find out how long.
+    // A lane a ladder holds out says when it comes back: "rate limited" or
+    // "spent" alone makes the reader open the model to find out how long.
     const laneTitle = lanesInfo
       .map((lane) =>
         lane.name + ' · ' +
         Math.round((Math.max(0, Number(lane.share) || 0) / total) * 100) + '% · ' +
         _stateLabel({ state: lane.state }) +
-        (lane.until && lane.state === 'rate_limited'
+        (lane.until && (lane.state === 'rate_limited' || lane.state === 'spent')
           ? ' · ' + new Date(lane.until).toLocaleTimeString()
           : '')
       )
