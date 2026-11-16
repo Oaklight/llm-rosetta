@@ -837,6 +837,35 @@ class TestWhenEveryKeyIsOut:
         assert answer.until == first
         assert answer.reason == "spent"
 
+    def test_a_reading_that_says_spent_is_spent_with_its_reset(self):
+        """Evidence can outlive the demotion that described it.
+
+        A reading marks the key spent on its own: it may have been polled
+        before any demotion was written, or the demotion may have been
+        cleared while the window is still empty.  ``provider_spent`` is
+        ``True`` and ``provider_exhausted_until`` names the reset, so
+        ``no_credential`` is the same wrong word the demotion case was.
+        """
+        from llm_rosetta_gateway.quota.models import QuotaReading
+        from llm_rosetta.shims.quota_probe import QuotaWindow
+
+        pinfo = self._bound_pinfo()
+        reset = datetime.now(timezone.utc) + timedelta(seconds=1800)
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=_PROBE,
+                credential=credential_fingerprint("k1"),
+                windows=[
+                    QuotaWindow(name="7 days", used_percent=100.0, resets_at=reset)
+                ],
+            )
+        )
+
+        answer = lane_eligibility(pinfo, "a", lane="m")
+
+        assert answer.reason == "spent"
+        assert answer.until == reset
+
     def test_a_ring_out_for_no_known_reason_is_no_credential(self):
         """The answer keeps its old meaning: nothing usable, and nothing to name."""
 
