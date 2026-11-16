@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
 import threading
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager
@@ -300,3 +301,30 @@ async def test_route_is_registered() -> None:
         if route.pattern.fullmatch("/v1/messages/count_tokens")
     )
     assert "POST" in count_route.methods
+
+
+@pytest.mark.asyncio
+async def test_a_dead_host_is_counted_against_its_lane() -> None:
+    """A refusal nobody records keeps the lane reading available.
+
+    The route answers 502 itself — no failover on this path — but a host that
+    does not answer costs every request the whole timeout, so the count has to
+    reach the same ladder the chat proxy feeds.
+    """
+    from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+    QUOTA_STATE.clear()
+    # A port nothing listens on: the transport fails at connect, fast.
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    closed_port = probe.getsockname()[1]
+    probe.close()
+
+    async with _serve(_config(f"http://127.0.0.1:{closed_port}")) as app:
+        status, _, _ = await app.post("/v1/messages/count_tokens", _COUNT_BODY)
+
+    assert status == 502
+    # The lane key is the one ``attempted_lane`` builds: the candidate names
+    # an upstream alias, so the *requested* model keys the lane, as in chat.
+    assert QUOTA_STATE.rate_limits.upstream_sunk("Up", "claude-alias")
+    QUOTA_STATE.clear()

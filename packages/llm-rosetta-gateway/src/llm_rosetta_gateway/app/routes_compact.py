@@ -38,6 +38,9 @@ from ..lifecycle import (
 from ..logging import get_logger
 from ..middleware.auth import api_key_context_var
 from ..middleware.headers import build_upstream_extra_headers, get_request_id
+from ..proxy.errors import note_transport_refusal
+from ..proxy.failover import attempted_lane
+from ..quota.service import note_upstream_success
 from ..transport import UpstreamConnectionError, UpstreamTimeoutError
 
 from . import _state
@@ -50,6 +53,36 @@ from .routes_llm import (
 logger = get_logger()
 
 SOURCE_FORMAT = "open_responses"
+
+
+def _transport_failure(
+    request_id: str,
+    provider_info: Any,
+    exc: UpstreamConnectionError,
+    config: GatewayConfig,
+    lane: str,
+) -> tuple[int, str, Response]:
+    """Count a missed connection on its lane, and build the answer to send.
+
+    A host that does not answer is a capacity refusal like any other: it is
+    recorded on the lane it was tried on, so the routing panel stops calling
+    that lane available, and the panel's own ladder decides when it returns.
+    This route relays the failure rather than retrying it.
+
+    Returns:
+        ``(status, detail, response)``, so the caller has one exit for the
+        request ledger.
+    """
+    note_transport_refusal(
+        provider_info,
+        rate_limit=getattr(config, "routing_rate_limit", None),
+        lane=lane,
+    )
+    if isinstance(exc, UpstreamTimeoutError):
+        detail = f"Upstream timeout: {exc}"
+        return 504, detail, _error(request_id, 504, detail, "upstream_error")
+    detail = f"Upstream connection failed: {exc}"
+    return 502, detail, _error(request_id, 502, detail, "upstream_error")
 
 
 def _error(request_id: str, status: int, message: str, error_type: str) -> Response:
@@ -212,6 +245,9 @@ async def handle_responses_compact(request: Any, config: GatewayConfig) -> Respo
         return rejection
 
     upstream_model = route.upstream_model or model
+    # The lane this attempt is counted under, the same key the chat proxy
+    # uses: a transport failure is evidence about one lane.
+    lane = attempted_lane(selection, route, model)
     upstream_body = dict(body)
     upstream_body["model"] = upstream_model
 
@@ -247,15 +283,14 @@ async def handle_responses_compact(request: Any, config: GatewayConfig) -> Respo
                 status_code,
                 (error_detail or "")[:200],
             )
+        if not resp.is_error:
+            note_upstream_success(provider_info, lane=lane)
         return _relay(resp, request_id)
-    except UpstreamTimeoutError as exc:
-        status_code = 504
-        error_detail = f"Upstream timeout: {exc}"
-        return _error(request_id, 504, error_detail, "upstream_error")
     except UpstreamConnectionError as exc:
-        status_code = 502
-        error_detail = f"Upstream connection failed: {exc}"
-        return _error(request_id, 502, error_detail, "upstream_error")
+        status_code, error_detail, response = _transport_failure(
+            request_id, provider_info, exc, config, lane
+        )
+        return response
     finally:
         await finish_typed(
             request,
