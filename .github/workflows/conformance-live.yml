@@ -1,0 +1,75 @@
+name: Conformance (live)
+
+# The weekly, credentialled sweep of the five chat lanes (epic #1128).
+#
+# It is separate from PR CI on purpose: it talks to live vendors, it needs
+# secrets a pull request from a fork must not see, and a vendor outage is not a
+# reason to hold a pull request.  The offline suites keep gating PRs in
+# `ci.yml`; this job is the other half — what each vendor accepts and echoes
+# today.
+#
+# A lane whose secret is unset is skipped rather than failed, so a repository
+# holding one provider's credential gets a partial sweep.  The report's
+# `environment.configured` names the lanes that ran.
+
+on:
+  schedule:
+    - cron: "23 4 * * 1" # Mondays 04:23 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: conformance-live
+  cancel-in-progress: false
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install the library
+        # The live suite reads the converters, the format catalog and the
+        # report harness; it needs no provider SDK and no gateway.
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e packages/llm-rosetta
+
+      - name: Run the live suite
+        # A repository variable overrides a base URL or a model without editing
+        # this file; a secret the repository does not define leaves its lane
+        # unconfigured, which the suite reports as skipped.
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5-nano' }}
+          OPENAI_RESPONSES_API_KEY: ${{ secrets.OPENAI_RESPONSES_API_KEY || secrets.OPENAI_API_KEY }}
+          OPENAI_RESPONSES_BASE_URL: ${{ vars.OPENAI_RESPONSES_BASE_URL || 'https://api.openai.com/v1' }}
+          OPENAI_RESPONSES_MODEL: ${{ vars.OPENAI_RESPONSES_MODEL || 'gpt-5-nano' }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: ${{ vars.ANTHROPIC_BASE_URL || 'https://api.anthropic.com' }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL || 'claude-haiku-4-5' }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GOOGLE_MODEL: ${{ vars.GOOGLE_MODEL || 'gemini-3.7-flash' }}
+        run: >-
+          python -m tools.conformance run --suite live
+          --timeout 90 --retries 1
+          --secret-env OPENAI_API_KEY
+          --secret-env OPENAI_RESPONSES_API_KEY
+          --secret-env ANTHROPIC_API_KEY
+          --secret-env GOOGLE_API_KEY
+          --out live-report.json
+
+      - name: Upload the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-live
+          path: live-report.json
+          if-no-files-found: warn

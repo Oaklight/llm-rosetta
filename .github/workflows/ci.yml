@@ -280,8 +280,8 @@ jobs:
     # deterministic, so they can gate every PR: their committed baselines turn a
     # conversion behaviour change into a named diff (`generation.top_k: lost`)
     # or a new upstream field rather than a flaky red build.  Upstream probing —
-    # what a vendor accepts and echoes — needs credentials and stays out of PR
-    # CI until the scheduled group lands (epic #1128).
+    # what a vendor accepts and echoes — needs credentials, and runs in the
+    # weekly `conformance-live` workflow (epic #1128), not here.
     needs: changes
     if: needs.changes.outputs.core == 'true'
     runs-on: ubuntu-latest
