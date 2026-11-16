@@ -277,7 +277,7 @@ function renderKeys() {
     // Two keys behind one label cannot be told apart in the log, so this row
     // reads zero while its traffic shows up under Unattributed.
     const sharedMark = (entry && entry.shared_label)
-      ? `<span title="${esc(t('keys.sharedLabelHint'))}" style="color:var(--orange);margin-left:4px;cursor:help">⚠</span>`
+      ? `<span title="${esc(t('keys.sharedLabelHint'))}" style="color:var(--warn);margin-left:4px;cursor:help">⚠</span>`
       : '';
     return `<tr role="row">
       <td class="col-check" role="cell"><input type="checkbox" class="row-check key-check" data-key="${esc(k.id)}" onchange="updateKeyBulk()"${(S._selectedKeyIds || new Set()).has(String(k.id)) ? ' checked' : ''}></td>

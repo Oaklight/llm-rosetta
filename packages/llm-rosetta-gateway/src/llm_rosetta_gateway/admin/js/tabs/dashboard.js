@@ -117,9 +117,9 @@ function drawRequestHistogram(canvasId, data, hoverIdx = -1) {
   _drawAxes(ctx, w, h, cs, maxVal, padL, padR, padT, padB, {labels: false});
 
   const accent = cs.getPropertyValue('--accent').trim() || '#2f7d5c';
-  const red = cs.getPropertyValue('--red').trim() || '#ef4444';
+  const red = cs.getPropertyValue('--neg').trim() || '#ef4444';
   const dim = cs.getPropertyValue('--text-dim').trim();
-  const border = cs.getPropertyValue('--border').trim();
+  const border = cs.getPropertyValue('--hairline').trim();
   const n = buckets.length;
   if (!n) return;
   const lastB = buckets[n - 1];
@@ -332,7 +332,7 @@ async function loadProfilingResults() {
         <td>${esc(r.source || '-')} → ${esc(r.target || '-')}</td>
         <td>${mode}</td>
         <td>${dur}</td>
-        <td>${r.tracing ? '<span style="color:var(--orange,#f59e0b);font-weight:600">trace</span>' : 'cProfile'}</td>
+        <td>${r.tracing ? '<span style="color:var(--warn,#f59e0b);font-weight:600">trace</span>' : 'cProfile'}</td>
         <td style="white-space:nowrap"><button class="btn btn-sm" onclick="viewFlamegraph(${i})" title="${esc(t('btn.view'))}"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 14c-2.5 0-5-1.5-5-5 0-2 1-3.5 2.5-5.5C7 1.5 8 1 8 1s1 .5 2.5 2.5C12 5.5 13 7 13 9c0 3.5-2.5 5-5 5z"/><path d="M8 14c-1.5 0-2.5-1-2.5-3 0-1 .5-2 1.5-3 .5-.5 1-1 1-1s.5.5 1 1c1 1 1.5 2 1.5 3 0 2-1 3-2.5 3z"/></svg></button> <button class="btn btn-sm" onclick="downloadFlamegraph(${i}, ${jsArg(r.model||'profile')})" title="${esc(t('btn.downloadFile'))}"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" style="vertical-align:middle"><path d="M8 2v8m0 0l-3-3m3 3l3-3M3 12h10"/></svg></button></td>
       </tr>`;
     }).join('');
@@ -1298,7 +1298,7 @@ function _chartSetup(canvasId) {
 function _drawAxes(ctx, w, h, cs, maxVal, padL, padR, padT, padB, opts = {}) {
   const chartW = w - padL - padR;
   const chartH = h - padT - padB;
-  const gridColor = cs.getPropertyValue('--border').trim();
+  const gridColor = cs.getPropertyValue('--hairline').trim();
   const dimColor = cs.getPropertyValue('--text-dim').trim();
 
   ctx.strokeStyle = gridColor;
@@ -1404,7 +1404,7 @@ function drawLatencyChart(canvasId, series) {
     return;
   }
 
-  const blueColor = cs.getPropertyValue('--blue').trim();
+  const blueColor = cs.getPropertyValue('--info').trim();
   const tMin = series[0].t;
   const tMax = series[series.length - 1].t;
   const tRange = tMax - tMin || 1;
@@ -1482,7 +1482,7 @@ function renderTokenUsageTable(data) {
     return;
   }
 
-  summaryEl.innerHTML = `<div style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);font-size:12px">
+  summaryEl.innerHTML = `<div style="display:flex;gap:16px;flex-wrap:wrap;padding:10px 12px;background:var(--bg);border:1px solid var(--hairline);border-radius:var(--radius);font-size:12px">
     <span><strong>${t('tokenUsage.summary')}</strong></span>
     <span>${t('tokenUsage.col.requests')}: <strong>${(totals.request_count||0).toLocaleString()}</strong></span>
     <span>↑ <strong>${fmtTokens(totals.input_tokens||0)}</strong></span>

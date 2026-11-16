@@ -105,7 +105,7 @@ test('a panel keeps the panel corner, a 1px edge and no shadow', () => {
   assert.ok(modal, 'expected a .modal rule');
   assert.equal(valueOf(modal.body, 'border-radius'), 'var(--card-radius)');
   assert.equal(valueOf(modal.body, 'box-shadow'), undefined, '.modal must not carry a shadow');
-  assert.match(valueOf(modal.body, 'border') || '', /^1px solid var\(--border\)$/);
+  assert.match(valueOf(modal.body, 'border') || '', /^1px solid var\(--hairline\)$/);
 
   const drawerRules = rules(COMPONENTS).filter((r) => /#providerModal > \.modal/.test(r.selector));
   const body = drawerRules.find((r) => valueOf(r.body, 'width') === 'var(--drawer-w)');
@@ -148,7 +148,7 @@ test('the model side panel takes the same frame and the same role', () => {
   assert.equal(valueOf(drawer.body, 'width'), 'var(--drawer-w)');
   assert.equal(valueOf(drawer.body, 'border-radius'), 'var(--card-radius) 0 0 var(--card-radius)');
   assert.equal(valueOf(drawer.body, 'box-shadow'), undefined, 'the side panel must not carry a shadow');
-  assert.equal(valueOf(drawer.body, 'border-left'), '1px solid var(--border)');
+  assert.equal(valueOf(drawer.body, 'border-left'), '1px solid var(--hairline)');
   const scrim = rules(COMPONENTS).find((r) => r.selector === '.drawer-scrim');
   assert.ok(scrim, 'expected the side panel to have a scrim');
   assert.equal(valueOf(scrim.body, 'background'), 'var(--overlay)');

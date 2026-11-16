@@ -260,12 +260,12 @@ async function runTest(model, type, extraParam, provider) {
             if (statusCode >= 400) {
               const errMsg = body?.error?.message || JSON.stringify(body?.error || body);
               output.textContent = t('test.errorStatus', {status: statusCode, msg: errMsg});
-              meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--red)">${statusCode}</span></div>`;
+              meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--neg)">${statusCode}</span></div>`;
               resolve();
               return;
             }
 
-            meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--green)">200 OK</span></div>`;
+            meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--pos)">200 OK</span></div>`;
 
             // Delegate to registered renderer if available, otherwise LLM
             if (regSpec && regSpec.renderResult) {
@@ -322,7 +322,7 @@ async function runTest(model, type, extraParam, provider) {
       const errText = await res.text();
       output.className = 'test-output';
       output.textContent = t('test.errorStatus', {status: res.status, msg: errText});
-      meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${((performance.now()-t0)/1000).toFixed(2)}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--red)">${res.status}</span></div>`;
+      meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${((performance.now()-t0)/1000).toFixed(2)}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--neg)">${res.status}</span></div>`;
       resDetails.style.display = '';
       resBody.textContent = errText;
       return;
@@ -356,7 +356,7 @@ async function runTest(model, type, extraParam, provider) {
     output.className = 'test-output';
     if (!fullText) output.textContent = t('test.emptyResponse');
     const elapsed = ((performance.now() - t0)/1000).toFixed(2);
-    meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--green)">OK (stream)</span></div>`;
+    meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--pos)">OK (stream)</span></div>`;
     resDetails.style.display = '';
     resBody.textContent = rawChunks.map(c => c === '[DONE]' ? c : JSON.stringify(JSON.parse(c), null, 2)).join('\n---\n');
   } catch(e) {

@@ -80,7 +80,7 @@ class ModelTypeDescriptor:
             LLM (the route names it) and for decision (its own track).
         icon_svg: Inline SVG string for the capability icon.  Consumed
             by the admin UI for badges and filters.
-        color: CSS color string (e.g. ``"var(--green)"``) for badges
+        color: CSS color string (e.g. ``"var(--pos)"``) for badges
             and status dots in the admin UI.
         is_llm: ``True`` only for the ``"llm"`` type, indicating that
             LLM-specific UI elements (shim type, URL templates, tool
@@ -250,7 +250,7 @@ def _register_builtins() -> None:
                 ' stroke-linejoin="round"><path d="M2 4c0-1.1.9-2 2-2h8a2'
                 ' 2 0 012 2v5a2 2 0 01-2 2H5l-3 3V4z"/></svg>'
             ),
-            color="var(--green)",
+            color="var(--pos)",
             is_llm=True,
         )
     )
@@ -283,7 +283,7 @@ def _register_builtins() -> None:
                 '<circle cx="9" cy="7" r="1"/>'
                 '<circle cx="13" cy="13" r="1"/></svg>'
             ),
-            color="var(--blue)",
+            color="var(--info)",
         )
     )
 
@@ -314,7 +314,7 @@ def _register_builtins() -> None:
                 '<path d="M3 9.5L1.5 11 3 12.5"'
                 ' stroke-linejoin="round"/></svg>'
             ),
-            color="var(--orange)",
+            color="var(--warn)",
         )
     )
 

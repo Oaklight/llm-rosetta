@@ -126,7 +126,7 @@ body.auth-pending > .db-footer { display: none !important; }
   position: sticky; top: 0; height: 100vh;
   display: flex; flex-direction: column; gap: 12px;
   padding: 0 12px 12px;
-  border-right: 1px solid var(--border); background: var(--bg-card);
+  border-right: 1px solid var(--hairline); background: var(--surface);
 }
 /* The brand is the way home. */
 /* The brand is a header strip the same height as the page's topbar, so the
@@ -183,8 +183,8 @@ body.auth-pending > .db-footer { display: none !important; }
   content: '';
   position: absolute; left: 17px; top: -6px; bottom: 50%;
   width: 8px;
-  border-left: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
+  border-left: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
   border-bottom-left-radius: 4px;
   pointer-events: none;
 }
@@ -195,7 +195,7 @@ body.auth-pending > .db-footer { display: none !important; }
 }
 .sb-foot {
   margin-top: auto; display: flex; flex-direction: column; gap: 8px;
-  padding-top: 10px; border-top: 1px solid var(--border);
+  padding-top: 10px; border-top: 1px solid var(--hairline);
 }
 .sb-clock { display: flex; flex-direction: column; gap: 2px; padding: 0 10px; font-size: 11px; color: var(--text-dim); }
 /* The label, the time and the zone are each a click target: the first two
@@ -221,7 +221,7 @@ body.auth-pending > .db-footer { display: none !important; }
   font-size: 12px; border: 0; background: transparent;
 }
 .sb-actions .icon-btn:hover { background: transparent; color: var(--text); }
-.sb-actions .icon-btn.is-danger:hover { color: var(--red); }
+.sb-actions .icon-btn.is-danger:hover { color: var(--neg); }
 /* Settings lives in the foot, not the tab list, so the gear is what says the
    panel is open.  The marker is the rail's accent bar turned horizontal: in
    the minimal scheme `--accent` is the text colour, so a colour change alone
@@ -293,7 +293,7 @@ body.auth-pending > .db-footer { display: none !important; }
   .app-shell { grid-template-columns: 1fr; }
   .sidebar {
     position: static; height: auto;
-    border-right: none; border-bottom: 1px solid var(--border);
+    border-right: none; border-bottom: 1px solid var(--hairline);
   }
   /* The strip wraps instead of scrolling: eight items in 390 px used to cut
      the last one to "Observabil…" with nothing saying it scrolled (#1523). */
@@ -318,7 +318,7 @@ a { color: var(--accent); text-decoration: none; }
 /* Header */
 .header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 24px; border-bottom: 1px solid var(--border);
+  padding: 16px 24px; border-bottom: 1px solid var(--hairline);
   flex-wrap: wrap; gap: 8px;
 }
 .header h1 { font-size: 18px; font-weight: 600; white-space: nowrap; }
@@ -349,7 +349,7 @@ a { color: var(--accent); text-decoration: none; }
   position: sticky; top: 8px; align-self: stretch;
   display: flex; flex-direction: column; gap: 4px;
   padding: 0 18px 0 0;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--hairline);
 }
 .settings-nav-btn {
   position: relative;
@@ -358,7 +358,7 @@ a { color: var(--accent); text-decoration: none; }
   padding: 9px 10px 9px 12px; border-radius: var(--radius-control);
   transition: color .12s ease, background .12s ease;
 }
-.settings-nav-btn:hover { background: var(--bg-hover); color: var(--text); }
+.settings-nav-btn:hover { background: var(--surface-2); color: var(--text); }
 .settings-nav-btn.is-active { color: var(--accent); font-weight: 600; }
 .settings-nav-btn.is-active::before {
   content: ''; position: absolute; left: 0; top: 8px; bottom: 8px; width: 2px;
@@ -377,7 +377,7 @@ a { color: var(--accent); text-decoration: none; }
 }
 /* Nothing on this tab is a card any more: a group is a heading, its fields
    and its own buttons, separated by a rule rather than boxed. */
-.settings-group { padding: 18px 0; border-top: 1px solid var(--border); }
+.settings-group { padding: 18px 0; border-top: 1px solid var(--hairline); }
 .settings-group:first-of-type { padding-top: 0; border-top: 0; }
 .settings-group:last-of-type { padding-bottom: 0; }
 .settings-group-head { margin-bottom: 10px; }
@@ -405,13 +405,13 @@ a { color: var(--accent); text-decoration: none; }
 /* Anything still built as a section inside this tab keeps the flat look. */
 #tab-settings .settings-section {
   background: transparent; border: 0; border-radius: 0;
-  padding: 18px 0; margin: 0; border-top: 1px solid var(--border);
+  padding: 18px 0; margin: 0; border-top: 1px solid var(--hairline);
 }
 #tab-settings .settings-section:first-of-type { padding-top: 0; border-top: 0; }
 .scope-badge {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 2px 9px; border-radius: 999px; font-size: 11px;
-  border: 1px solid var(--border); color: var(--text-dim); background: var(--bg);
+  border: 1px solid var(--hairline); color: var(--text-dim); background: var(--bg);
   white-space: nowrap;
 }
 /* The pip is the shared status dot, not a second copy of it: `.dot.is-sm`
@@ -420,17 +420,17 @@ a { color: var(--accent); text-decoration: none; }
 .scope-badge .dot { opacity: .6; }
 .scope-badge.server {
   color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--hairline));
 }
 .scope-badge.server-save {
   color: var(--tag-warn);
-  border-color: color-mix(in srgb, var(--yellow, #b7791f) 40%, var(--border));
+  border-color: color-mix(in srgb, var(--yellow, #b7791f) 40%, var(--hairline));
 }
 @media (max-width: 900px) {
   .settings-shell { grid-template-columns: 1fr; gap: 14px; }
   .settings-nav {
     position: static; flex-direction: row; flex-wrap: wrap; overflow: visible;
-    padding: 0 0 8px; border-right: 0; border-bottom: 1px solid var(--border);
+    padding: 0 0 8px; border-right: 0; border-bottom: 1px solid var(--hairline);
   }
   .settings-nav-btn { white-space: nowrap; min-height: 24px; }
   .settings-nav-btn.is-active::before { left: 8px; right: 8px; top: auto; bottom: 0; width: auto; height: 2px; }
@@ -444,14 +444,14 @@ a { color: var(--accent); text-decoration: none; }
 }
 .settings-popup.open { display: flex; }
 .settings-popup-panel {
-  background: var(--bg-card); border: 1px solid var(--border);
+  background: var(--surface); border: 1px solid var(--hairline);
   border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,0.15);
   width: 820px; max-width: 95vw; padding: 28px;
   max-height: 85vh; overflow-y: auto;
 }
 .settings-popup-panel::-webkit-scrollbar { width: 6px; }
 .settings-popup-panel::-webkit-scrollbar-track { background: transparent; }
-.settings-popup-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.settings-popup-panel::-webkit-scrollbar-thumb { background: var(--hairline); border-radius: 3px; }
 .settings-popup-panel h3 {
   margin-bottom: 20px; font-size: var(--fs-base); font-weight: 600; letter-spacing: -0.01em;
   display: flex; align-items: center; gap: 8px;
@@ -461,7 +461,7 @@ a { color: var(--accent); text-decoration: none; }
   background: var(--accent); border-radius: 2px;
 }
 .settings-section {
-  background: var(--bg); border: 1px solid var(--border);
+  background: var(--bg); border: 1px solid var(--hairline);
   border-radius: 8px; padding: 16px 18px; margin-bottom: 10px;
   
   transition: border-color 0.2s ease;
@@ -568,21 +568,21 @@ a { color: var(--accent); text-decoration: none; }
    its text and would drag the copy button around. */
 .settings-token-chip {
   font-family: var(--mono); font-size: 12px; color: var(--text);
-  background: var(--bg-card); border: 1px solid var(--border);
+  background: var(--surface); border: 1px solid var(--hairline);
   border-radius: 6px; padding: 5px 10px;
   /* One width whether or not a token is loaded: an empty chip must not pull
      the copy button across the row. */
   width: 100%; box-sizing: border-box;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.settings-error { font-size: 11.5px; color: var(--red); margin-top: 6px; }
+.settings-error { font-size: 11.5px; color: var(--neg); margin-top: 6px; }
 .settings-error:empty { display: none; }
 .countdown { color: var(--accent); font-size: 12px; white-space: nowrap; font-weight: 500; }
 .countdown .cd-time { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.settings-divider { border-top: 1px solid var(--border); margin: 6px 0; }
+.settings-divider { border-top: 1px solid var(--hairline); margin: 6px 0; }
 .section-footer {
   display: flex; justify-content: flex-end; margin-top: 8px; padding-top: 8px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--hairline);
 }
 .quota-input-wrap {
   flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0;
@@ -591,8 +591,8 @@ a { color: var(--accent); text-decoration: none; }
 .quota-hint { font-size: 10px; color: var(--text-dim); font-style: italic; opacity: 0.8; }
 .rl-warning {
   display: none; padding: 8px 12px; margin: 6px 0 2px;
-  font-size: 11px; color: var(--orange); line-height: 1.5;
-  background: color-mix(in srgb, var(--orange) 6%, transparent); border: 1px solid color-mix(in srgb, var(--orange) 15%, transparent);
+  font-size: 11px; color: var(--warn); line-height: 1.5;
+  background: color-mix(in srgb, var(--warn) 6%, transparent); border: 1px solid color-mix(in srgb, var(--warn) 15%, transparent);
   border-radius: 6px;
 }
 .rl-warning.visible { display: block; }
@@ -605,15 +605,15 @@ a { color: var(--accent); text-decoration: none; }
 .about-link {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 6px 14px; font-size: 13px; color: var(--text);
-  text-decoration: none; border: 1px solid var(--border);
+  text-decoration: none; border: 1px solid var(--hairline);
   border-radius: 6px; transition: background 0.15s, border-color 0.15s;
 }
-.about-link:hover { background: var(--bg-hover); border-color: var(--accent); color: var(--accent); }
+.about-link:hover { background: var(--surface-2); border-color: var(--accent); color: var(--accent); }
 .header-select { cursor: pointer; }
 
 /* Tabs */
 .tabs {
-  display: flex; gap: 0; border-bottom: 1px solid var(--border);
+  display: flex; gap: 0; border-bottom: 1px solid var(--hairline);
   padding: 0 24px; align-items: center;
   overflow-x: auto; -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
@@ -643,7 +643,7 @@ a { color: var(--accent); text-decoration: none; }
   border: 1px solid var(--tag-warn);
   border-left-width: 3px;
   border-radius: var(--radius);
-  background: color-mix(in srgb, var(--tag-warn) 8%, var(--bg-card));
+  background: color-mix(in srgb, var(--tag-warn) 8%, var(--surface));
   color: var(--text);
   font-size: 12.5px;
   line-height: 1.5;
@@ -690,9 +690,9 @@ body::before {
 }
 .stat-card .label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
 .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
-.stat-card .value.green { color: var(--green); }
-.stat-card .value.red { color: var(--red); }
-.stat-card .value.blue { color: var(--blue); }
+.stat-card .value.green { color: var(--pos); }
+.stat-card .value.red { color: var(--neg); }
+.stat-card .value.blue { color: var(--info); }
 .stat-card .sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 
 /* ── Heading scale (issue #1472 P3) ──────────────────────────────────────

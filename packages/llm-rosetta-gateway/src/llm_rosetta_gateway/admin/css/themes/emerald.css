@@ -27,8 +27,8 @@ Values only: components own where these land (epic #1154, issue #1471). */
   --stats-frame-bg: transparent;
   --stats-frame-border: 0;
   --stats-frame-radius: 0;
-  --card-bg: var(--bg-card);
-  --card-border: 1px solid var(--border);
+  --card-bg: var(--surface);
+  --card-border: 1px solid var(--hairline);
   --card-radius: var(--radius);
   --card-texture:
     repeating-linear-gradient(90deg,var(--grid) 0 1px,transparent 1px 28px),
@@ -159,25 +159,4 @@ Values only: components own where these land (epic #1154, issue #1471). */
   --tag-decision: #9b72f7;
   --dot: rgba(255,255,255,.025);
   --grid: rgba(255,255,255,.025);
-}
-
-/* P1 compatibility aliases — planned for removal (#1489); every consumer
-   must migrate first.  The values live under the shared vocabulary
-   (surface, hairline, pos/neg/warn/info and their -bg/-subtle/-border
-   variants); these names keep every component resolving the same values
-   until the last one reads the new names.  Removing them is not a
-   comment edit — `--bg-card`, `--bg-hover`, `--border`, `--badge-radius`
-   and the colour aliases are still read by base.css and components.css. */
-[data-scheme="emerald"] {
-  --bg-card: var(--surface);
-  --bg-hover: var(--surface-2);
-  --border: var(--hairline);
-  --green: var(--pos);
-  --green-subtle: var(--pos-subtle);
-  --green-bg: var(--pos-bg);
-  --red: var(--neg);
-  --red-subtle: var(--neg-subtle);
-  --orange: var(--warn);
-  --blue: var(--info);
-  --badge-radius: var(--radius-pill);
 }
