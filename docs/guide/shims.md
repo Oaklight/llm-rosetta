@@ -495,7 +495,7 @@ remote；同一 URL 的显式 remote 会合并到预设上（显式键优先）�
 
 条目是 shim 名字或 `*` 通配（如 `asksage--*`）。空的 `include` 表示「不限制」而不是「什么都不装」；`exclude` 优先于 `include`。显式 `remotes[]` 条目也可以内联 `include` / `exclude`。选择发生在叶子 `provider.yaml` 解析之后、`transforms.py` 导入之前，所以被排除的 shim 既不导入模块也不注册。
 
-匹配不到任何 shim 的 `include` 会在启动时告警，并列出该源实际装载了什么；只有 `shims.strict` 为 `true` 时才升级为失败。`exclude` 指名一个已经不存在的 shim 是无操作。真正用到被排除 shim 的 provider 会以原有的 unknown-shim 错误失败，失败落在需要它的地方。
+匹配不到任何 shim 的 `include` 会在启动时告警，并列出该源实际装载了什么；只有 `shims.strict` 为 `true` 时才升级为失败。匹配不到该源提供的任何 shim 的 `exclude` 也会告警，但永远不会让加载失败：模式匹配的是 shim 名字，所以从目录树上读到的目录名（`drop`）什么都排除不掉，告警会把这一点说出来。真正用到被排除 shim 的 provider 会以原有的 unknown-shim 错误失败，失败落在需要它的地方。
 
 选择是按名字的，所以需要知道名字。包可以在其 `path` 所指目录的根部用 `shims.yaml` 声明：
 

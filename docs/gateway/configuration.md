@@ -94,7 +94,7 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
 （`my-provider/provider.yaml`），或只分组一层（`vendor/messages/provider.yaml`、
 `vendor/chat_completions/provider.yaml`）。
 
-**选择。** `include` / `exclude` 是可选项，按预设键书写；`remotes[]` 条目也可以内联这两个键。选择发生在叶子 `provider.yaml` 解析之后、`transforms.py` 导入之前，所以被排除的 shim 既不导入模块也不注册。匹配不到任何 shim 的 `include` 在启动时告警，只有 `strict` 下才失败；`exclude` 指名一个已不存在的 shim 是无操作。包可以在其 `path` 所指目录的根部用 `shims.yaml` 声明自己提供什么，清单存在即权威——未列出的目录根本不会被读取。它是数据而不是代码：只用相对路径，不含 URL，因此无法改变拉取目标。
+**选择。** `include` / `exclude` 是可选项，按预设键书写；`remotes[]` 条目也可以内联这两个键。选择发生在叶子 `provider.yaml` 解析之后、`transforms.py` 导入之前，所以被排除的 shim 既不导入模块也不注册。匹配不到任何 shim 的 `include` 在启动时告警，只有 `strict` 下才失败。匹配不到该源提供的任何 shim 的 `exclude` 同样告警，但永不使加载失败：模式匹配的是 shim 名字，所以从目录树上读到的目录名（`drop`）什么都排除不掉，告警就是让操作者知道这一点的途径。包可以在其 `path` 所指目录的根部用 `shims.yaml` 声明自己提供什么，清单存在即权威——未列出的目录根本不会被读取。它是数据而不是代码：只用相对路径，不含 URL，因此无法改变拉取目标。
 
 **远程拉取不依赖 git。** GitHub 仓库 URL 会被改写到 codeload 的 tarball 端点；其它站点
 给出显式归档 URL 即可（可含 `{ref}` 占位符），所以 GitLab 和自建 forge 都不需要按站点
