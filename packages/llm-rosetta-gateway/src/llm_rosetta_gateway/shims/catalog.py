@@ -483,7 +483,7 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
     ),
     ShimSourcePackage(
         key="opendesign",
-        label="Open Design Cloud",
+        label="OpenDesign",
         repo="https://github.com/Oaklight/llm-rosetta-shim-opendesign",
         package="llm_rosetta_shim_opendesign",
         shims=(
