@@ -9,12 +9,14 @@ baseline:
 - the vendor accepts the body we emit (HTTP 200, JSON in the dialect), and
 - its answer still reads back through our reader into IR with text in it.
 
-A vendor that rejects the body (a 400 naming a field) is a **failure**: that
-is the request this library ships.  A credential the vendor refuses, a rate
-limit, a 5xx or a transport error is an **error**: the probe could not run,
-which is a fact about the run, not about the dialect.  A lane whose
-credential, model or base URL is not configured is **skipped**, so a run that
-holds two keys out of five is a partial sweep rather than a broken one.
+A vendor that rejects the body — a ``400`` naming a field the body carries —
+is a **failure**: that is the request this library ships.  A credential the
+vendor refuses (``401``/``403``), a ``400`` that names the credential or the
+model, a ``404`` for a model that moved, a rate limit, a 5xx or a transport
+error is an **error**: the probe could not run, which is a fact about the run
+rather than about the dialect.  A lane whose credential, model or base URL is
+not configured is **skipped**, so a run that holds two keys out of five is a
+partial sweep rather than a broken one.
 
 Two things the first measured run settled, and both are load-bearing:
 
@@ -211,6 +213,52 @@ def _id_prefix(identifier: Any) -> str | None:
     return head if sep else None
 
 
+#: Words that make a ``400``/``404`` about the run rather than about the body
+#: we sent: a revoked or mistyped key, a permission, a model that moved.  The
+#: weekly job meets these more often than a wrong field, and reporting them as
+#: "the vendor rejected our request" would name the wrong culprit.
+_RUN_FAULT_MARKERS: tuple[str, ...] = (
+    "api key",
+    "api_key",
+    "api-key",
+    "credential",
+    "unauthorized",
+    "unauthenticated",
+    "authentication",
+    "permission",
+    "does not exist",
+    "not found",
+    "not_found",
+    "unknown model",
+    "model_not_found",
+    "invalid model",
+)
+
+
+def _is_request_fault(status: int, text: str, body: dict[str, Any]) -> bool:
+    """Whether a non-200 answer blames the body this probe sent.
+
+    Only a ``400`` can: the fail bucket means "the request this library ships
+    is wrong", which the vendor says by naming a field the body carries.  A
+    ``400`` that names the credential or the model, a ``404``, a rate limit and
+    a 5xx are the run's own state, and the error bucket reports those.
+
+    Args:
+        status: The HTTP status the vendor answered with.
+        text: The response body.
+        body: The request body this probe sent.
+
+    Returns:
+        ``True`` when the answer is about a field of *body*.
+    """
+    if status != 400:
+        return False
+    lowered = text.lower()
+    if any(marker in lowered for marker in _RUN_FAULT_MARKERS):
+        return False
+    return any(str(key).lower() in lowered for key in body)
+
+
 def _request_body(lane: Lane, model: str) -> dict[str, Any]:
     """The body the lane's converter emits for the minimal request.
 
@@ -286,15 +334,14 @@ class _LaneProbe:
             raise RuntimeError(
                 f"{self.name}: the credential was refused (HTTP {status})"
             )
-        if status == 429 or status >= 500:
-            raise RuntimeError(
-                f"{self.name}: the vendor could not serve the probe "
-                f"(HTTP {status}): {text[:300]}"
-            )
         if status != 200:
-            raise ProbeFailure(
-                f"{self.name}: the vendor rejected the request "
-                f"(HTTP {status}): {text[:300]}"
+            if _is_request_fault(status, text, body):
+                raise ProbeFailure(
+                    f"{self.name}: the vendor rejected the request "
+                    f"(HTTP {status}): {text[:300]}"
+                )
+            raise RuntimeError(
+                f"{self.name}: the probe could not run (HTTP {status}): {text[:300]}"
             )
         try:
             payload = json.loads(text)

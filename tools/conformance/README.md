@@ -213,12 +213,13 @@ named for, and asserts two things: the vendor accepts the body (HTTP 200, JSON
 in the dialect), and its answer still reads back through our reader into IR
 with text in it.
 
-A vendor that **rejects** the body (a 400 naming a field) fails the case — that
-is the request this library ships. A refused credential (401/403), a rate limit
-(429), a 5xx or a transport error is an **error**: the probe could not run,
-which is a fact about the run rather than about the dialect. A lane whose
-credential, model or base URL is not configured is **skipped**, so a machine
-holding two keys out of five gets a partial sweep, not a broken run.
+A vendor that **rejects** the body — a 400 naming a field the body carries —
+fails the case: that is the request this library ships. A refused credential
+(401/403), a 400 that names the credential or the model, a 404 for a model that
+moved, a rate limit (429), a 5xx or a transport error is an **error**: the probe
+could not run, which is a fact about the run rather than about the dialect. A
+lane whose credential, model or base URL is not configured is **skipped**, so a
+machine holding two keys out of five gets a partial sweep, not a broken run.
 
 | lane | credential | model | base |
 | --- | --- | --- | --- |
