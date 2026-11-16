@@ -99,9 +99,12 @@ level (`vendor/messages/provider.yaml`, `vendor/chat_completions/provider.yaml`)
 `remotes[]` entry may carry the same two keys inline. They are applied after a
 leaf's `provider.yaml` is parsed and before its `transforms.py` is imported, so
 a declined shim costs neither its module nor its registration. An `include` that
-matches nothing warns at startup and fails only under `strict`; an `exclude`
-naming a shim that is gone is a no-op. A package can declare what it ships in a
-`shims.yaml` at the root of the directory its `path` names, and a manifest that
+matches nothing warns at startup and fails only under `strict`. An `exclude`
+that matches nothing the source ships warns too, and never fails a load: the
+patterns match shim names, so a directory name read off the tree
+(`drop`) declines nothing, and the warning is how the operator hears it. A
+package can declare what it ships in a `shims.yaml` at the root of the
+directory its `path` names, and a manifest that
 is present is authoritative — unlisted directories are never read. It is data,
 not code: relative paths only, no URLs, so it cannot redirect the fetch.
 

@@ -577,8 +577,10 @@ after a leaf's `provider.yaml` is parsed and before its `transforms.py` is
 imported, so a declined shim costs neither its module nor its registration.
 
 An `include` that matches nothing warns at startup, naming what the source did
-load, and fails only under `shims.strict: true`. An `exclude` naming a shim that
-is gone is a no-op. A provider that needs a declined shim fails with the usual
+load, and fails only under `shims.strict: true`. An `exclude` that matches
+nothing the source ships warns too, and never fails a load: the patterns match
+shim names, so a directory name read off the tree (`drop`) declines nothing, and
+the warning says so. A provider that needs a declined shim fails with the usual
 unknown-shim error, so the failure lands on whatever needed it.
 
 Selection is name-based, so it needs the names. A package can declare them with
