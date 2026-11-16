@@ -219,10 +219,10 @@ States follow the eligibility predicate, so the panel and the proxy agree by con
 | State | Meaning |
 |-------|---------|
 | **Serving** | A candidate; nothing is holding it back |
-| **Sunk** | Still a candidate, but a recent 429 orders it last |
+| **Sunk** | Still a candidate, but a recent 429 — or a request that never got an answer — orders it last |
 | **Blocked** | A provider-wide block (a keyless 429, a rotating credential whose account is out); the row counts down to its end and the board refetches when it expires |
-| **Rate limited** | Continuous 429s disabled the lane until the cooldown ends — or a run of capacity refusals (`503`, `529`, `520`-`524`) disabled that upstream lane, leaving its siblings in rotation |
-| **Spent** | Every credential's freshest reading says its window is spent |
+| **Rate limited** | Continuous 429s disabled the lane until the cooldown ends — or a run of capacity refusals (`503`, `529`, `520`-`524`, or a transport failure that got no answer at all) disabled that upstream lane, leaving its siblings in rotation |
+| **Spent** | The credentials are out on evidence: every one is demoted, or its freshest reading says its window is spent. The row counts down to the earliest moment one of them can serve again |
 | **No credential** | The key ring has nothing usable left |
 | **Starting** | A credential has not been seeded yet |
 | **Off** | The provider is switched off in the Providers section, so the route does not carry the lane; the row stays after the candidates, read-only apart from its switch |
