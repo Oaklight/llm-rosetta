@@ -179,8 +179,9 @@ def _eligibility(
        rotating credential whose account is out) — it has a known end;
     2. a rate-limit disable from continuous 429s — it also has a known end;
     3. a credential that has not been seeded yet — it is still starting;
-    4. a key ring with no usable credential left — a demotion or a disable
-       covers every key;
+    4. a key ring with no usable credential left — a 429 disable or a quota
+       demotion covers every key, and the answer names which (a disable is
+       ``rate_limited``; a demotion is ``spent``, with the vendor's own end);
     5. readings that say every credential's allowance is spent.
 
     The provider-wide checks read the credential ladder: a ``429`` takes every
@@ -252,13 +253,53 @@ def _eligibility(
         and len(ring)
         and not ring.any_usable()
     ):
+        # Every key is out, and the two ways it happens are different facts
+        # that end at different times: a 429 ladder disable has its own
+        # cooldown, while a quota demotion is the allowance the vendor
+        # measured running out.  Reporting the second one as "no credential"
+        # told an operator their key was missing when the vendor had merely
+        # said "not until then" — and it shadowed the allowance answer below,
+        # because this branch returns first.
         until = QUOTA_STATE.rate_limits.latest_disable(key)
-        return answer(RATE_LIMITED if until else NO_CREDENTIAL, until=until)
+        if until is not None:
+            return answer(RATE_LIMITED, until=until)
+        demoted_until = _demotion_end(pinfo)
+        if demoted_until is not None:
+            return answer(SPENT, until=demoted_until)
+        return answer(NO_CREDENTIAL)
 
     if provider_spent(pinfo):
         return answer(SPENT, until=provider_exhausted_until(pinfo))
 
     return answer(None, eligible=True)
+
+
+def _demotion_end(pinfo: Any) -> datetime | None:
+    """When the first demoted credential of *pinfo* may serve again.
+
+    A demotion is the vendor's own answer to "when", and the ring is unusable
+    only while *every* key is out — so the earliest end is when the provider
+    can serve again at all.
+
+    Args:
+        pinfo: The provider whose key ring is out.
+
+    Returns:
+        The earliest live demotion's end, or ``None`` when no key is demoted
+        (the ring is unusable for some other reason).
+    """
+    from ..quota.models import credential_fingerprint
+
+    probe_id = getattr(pinfo, "quota_probe", None)
+    ring = getattr(pinfo, "key_ring", None)
+    if not probe_id or ring is None:
+        return None
+    ends: list[datetime] = []
+    for raw in ring.keys():
+        demotion = QUOTA_STATE.demotion(probe_id, credential_fingerprint(raw))
+        if demotion is not None:
+            ends.append(demotion.until)
+    return min(ends) if ends else None
 
 
 def _block_end(pinfo: Any, name: str) -> datetime | None:

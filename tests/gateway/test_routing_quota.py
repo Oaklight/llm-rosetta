@@ -7,6 +7,11 @@ providers split the traffic evenly even when one was at 96%.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
+
+import pytest
+
 from typing import Any
 
 from llm_rosetta_gateway.quota.models import (
@@ -23,9 +28,14 @@ from llm_rosetta_gateway.routing import (
     SelectionContext,
     create_strategy,
 )
+from llm_rosetta_gateway.routing.eligibility import lane_eligibility
 from llm_rosetta_gateway.routing.select import quota_weight, select_ready_entry
 from llm_rosetta_gateway.routing.strategy import ModelRoute, ProviderEntry
 from llm_rosetta_gateway.transport.provider_info import ProviderInfo
+
+
+#: One probe id for this module's demotions.
+_PROBE = "p-quota-test"
 
 
 def _eligible(
@@ -709,3 +719,102 @@ class TestTheRealignment:
 
         assert "b" not in served, served
         assert served.get("c", 0) > 0, served
+
+
+class TestWhenEveryKeyIsOut:
+    """A ring with nothing usable has two causes, and two different words.
+
+    A ``429`` ladder disable and a quota demotion both take the whole ring out
+    of rotation, but they end at different times and mean different things.
+    Reporting the demotion as ``no_credential`` — what the panel printed —
+    told an operator their key had gone missing when the vendor had merely
+    said "not until then".
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clean_quota_state(self):
+        """The quota state is process-wide: no test may inherit another's."""
+        QUOTA_STATE.clear()
+        yield
+        QUOTA_STATE.clear()
+
+    @staticmethod
+    def _bound_pinfo(keys: str = "k1") -> Any:
+        """A provider whose key ring asks the quota state, as the config binds it.
+
+        The binding itself is tested elsewhere; here only the eligibility rule
+        matters, so the predicate is the same one
+        :func:`~llm_rosetta_gateway.quota.service.bind_provider_quota` installs.
+        """
+        pinfo = _pinfo("a", keys=keys, probe=_PROBE)
+        # ``is_usable`` fingerprints the key itself; passing one in would
+        # fingerprint twice and report every key usable.
+        pinfo.key_ring.set_usable(lambda key: QUOTA_STATE.is_usable(_PROBE, key))
+        return pinfo
+
+    @staticmethod
+    def _demote(key: str, seconds: int) -> datetime:
+        until = datetime.now(timezone.utc) + timedelta(seconds=seconds)
+        QUOTA_STATE.demote(_PROBE, credential_fingerprint(key), until, "429")
+        return until
+
+    def test_a_demoted_credential_is_spent_and_carries_its_end(self):
+        pinfo = self._bound_pinfo()
+        until = self._demote("k1", 3600)
+
+        answer = lane_eligibility(pinfo, "a", lane="m")
+
+        assert answer.eligible is False
+        assert answer.reason == "spent"
+        assert answer.until == until
+
+    def test_the_earliest_key_to_recover_is_the_end(self):
+        pinfo = self._bound_pinfo(keys="k1,k2")
+        self._demote("k1", 7200)
+        earliest = self._demote("k2", 600)
+
+        answer = lane_eligibility(pinfo, "a", lane="m")
+
+        assert answer.reason == "spent"
+        assert answer.until == earliest
+
+    def test_a_429_disable_still_wins_and_says_rate_limited(self):
+        from llm_rosetta_gateway.quota.rate_limit import RateLimitPolicy
+
+        pinfo = self._bound_pinfo()
+        self._demote("k1", 3600)
+        QUOTA_STATE.rate_limits.note(
+            "a", credential_fingerprint("k1"), RateLimitPolicy(after=1, cooldown_s=60)
+        )
+
+        answer = lane_eligibility(pinfo, "a", lane="m")
+
+        assert answer.reason == "rate_limited"
+        assert answer.until is not None
+
+    def test_a_ring_out_for_no_known_reason_is_no_credential(self):
+        """The answer keeps its old meaning: nothing usable, and nothing to name."""
+
+        class Ring:
+            def __len__(self) -> int:
+                return 1
+
+            def any_usable(self) -> bool:
+                return False
+
+            def keys(self) -> tuple[str, ...]:
+                return ("k1",)
+
+        pinfo = SimpleNamespace(
+            name="a",
+            config_name="a",
+            keyless=False,
+            credentials_pending=False,
+            quota_provider_blocked=lambda: False,
+            key_ring=Ring(),
+        )
+
+        answer = lane_eligibility(pinfo, "a", lane="m")
+
+        assert answer.reason == "no_credential"
+        assert answer.until is None
