@@ -180,11 +180,19 @@ class ShimSourceStatus:
         include: The ``include`` selection the source's declaration carried,
             as written (exact names and ``*`` globs).
         exclude: The ``exclude`` selection, as written.
-        unmatched: ``include`` patterns that selected nothing from this
-            source.  A name the package stopped shipping lands here, which is
-            how a stale config is visible instead of silently empty.
+        unmatched: ``include`` patterns that selected nothing from what this
+            source ships.  A name the package stopped shipping lands here,
+            which is how a stale config is visible instead of silently empty.
+        unmatched_excludes: ``exclude`` patterns that matched nothing the
+            source ships.  An exclude is measured against the shipped set, not
+            the loaded one, so a pattern that hit a shim already gone is told
+            apart from one that hit a shim the selection dropped.
         manifest_shims: The shim names the source's ``shims.yaml`` declares.
             Empty when it ships no manifest, which is the legacy scan layout.
+        declined: The shim names the source ships that the selection dropped.
+            A loaded name is never here; ``shim_names`` plus this is the set a
+            pattern can match, which is what makes an ``exclude`` that hit
+            nothing visible at all.
     """
 
     kind: Literal["path", "remote"]
@@ -208,7 +216,9 @@ class ShimSourceStatus:
     include: tuple[str, ...] = ()
     exclude: tuple[str, ...] = ()
     unmatched: tuple[str, ...] = ()
+    unmatched_excludes: tuple[str, ...] = ()
     manifest_shims: tuple[str, ...] = ()
+    declined: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe view for the admin API."""
@@ -234,7 +244,9 @@ class ShimSourceStatus:
             "include": list(self.include),
             "exclude": list(self.exclude),
             "unmatched": list(self.unmatched),
+            "unmatched_excludes": list(self.unmatched_excludes),
             "manifest_shims": list(self.manifest_shims),
+            "declined": list(self.declined),
         }
 
 
@@ -386,7 +398,10 @@ def rebuild_shims(
 
     # An ``include`` that selected nothing is a config fact rather than a
     # source failure — the rest of the source loaded — so it is reported on the
-    # status and only stops a strict load.
+    # status and only stops a strict load.  An unmatched ``exclude`` stays a
+    # warning under ``strict`` too: nothing downstream depends on an exclude
+    # having hit, while an include that hit nothing means the operator thinks a
+    # shim is running that is not.
     unmatched = [
         (status.location, pattern)
         for status in statuses
@@ -997,16 +1012,29 @@ def _scan_dir(
             )
 
     keep = _selection_predicate(include, exclude)
+    # What the source ships beyond what it loads is known only here: ``keep`` is
+    # asked about every leaf the scan parses before the leaf is dropped, so a
+    # refused name is a shipped shim the selection declined.  Without that
+    # record an ``exclude`` that matches nothing cannot be told from one that
+    # matches a shim the selection already dropped — both leave no trace.
+    declined: list[str] = []
+
+    def selected(shim_name: str) -> bool:
+        keep_it = keep(shim_name)
+        if not keep_it:
+            declined.append(shim_name)
+        return keep_it
+
     only_paths: set[str] | None = None
     if manifest is not None:
-        only_paths = {entry.path for entry in manifest.entries if keep(entry.name)}
+        only_paths = {entry.path for entry in manifest.entries if selected(entry.name)}
 
     try:
         shims = load_providers_from_dir(
             directory,
             on_error="warn",
             only_paths=only_paths,
-            keep_names=keep,
+            keep_names=selected,
         )
     except Exception as exc:
         return ShimSourceStatus(
@@ -1016,13 +1044,25 @@ def _scan_dir(
         )
 
     names = tuple(s.name for s in shims)
-    unmatched = _unmatched_includes(include, names)
+    declined_names = tuple(n for n in dict.fromkeys(declined) if n not in names)
+    # A pattern is matched against everything the source ships, loaded or
+    # declined: that set is the only thing an ``exclude`` can hit.
+    shipped = names + declined_names
+    unmatched = _unmatched_patterns(include, shipped)
+    unmatched_excludes = _unmatched_patterns(exclude, shipped)
     for pattern in unmatched:
         logger.warning(
             "Shim source %s: include %r matched no shim; it loads: %s",
             location,
             pattern,
             ", ".join(names) or "nothing",
+        )
+    for pattern in unmatched_excludes:
+        logger.warning(
+            "Shim source %s: exclude %r matched no shim; it ships: %s",
+            location,
+            pattern,
+            ", ".join(shipped) or "nothing",
         )
     if manifest is not None:
         declared = set(manifest.names)
@@ -1041,7 +1081,9 @@ def _scan_dir(
         shim_count=len(names),
         shim_names=names,
         unmatched=unmatched,
+        unmatched_excludes=unmatched_excludes,
         manifest_shims=manifest.names if manifest is not None else (),
+        declined=declined_names,
     )
 
 
@@ -1064,14 +1106,21 @@ def _selection_predicate(
     return keep
 
 
-def _unmatched_includes(
-    include: Collection[str], loaded: Collection[str]
+def _unmatched_patterns(
+    patterns: Collection[str], shipped: Collection[str]
 ) -> tuple[str, ...]:
-    """The ``include`` patterns that selected none of *loaded*."""
+    """The selection *patterns* that matched none of *shipped*.
+
+    Both directions are read against everything the source ships — the shims it
+    loaded and the ones the selection declined — because that is the set a
+    pattern can match.  A name dropped by the selection is by construction
+    absent from the loaded set, so matching against the loaded set alone would
+    call every ``exclude`` that did its job unmatched.
+    """
     return tuple(
         pattern
-        for pattern in include
-        if not any(fnmatch(loaded_name, pattern) for loaded_name in loaded)
+        for pattern in patterns
+        if not any(fnmatch(shipped_name, pattern) for shipped_name in shipped)
     )
 
 
