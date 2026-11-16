@@ -287,6 +287,11 @@ def _ring_recovery(pinfo: Any, name: str) -> tuple[datetime, str] | None:
     later of its two ends passes; the provider leaves when the earliest key
     does.
 
+    A key can be out on its allowance alone: a reading that says the window
+    is spent, with a reset ahead, keeps the ring unusable without any
+    demotion having been written.  That reset is an end like the other two,
+    so "spent" carries a time here too.
+
     Args:
         pinfo: The provider whose key ring is out.
         name: The provider's config key, for the ladder's records.
@@ -317,6 +322,14 @@ def _ring_recovery(pinfo: Any, name: str) -> tuple[datetime, str] | None:
             demotion = QUOTA_STATE.demotion(probe, fingerprint)
             if demotion is not None:
                 ends.append((demotion.until, SPENT))
+            # A reading can say the allowance is spent without the gateway
+            # having demoted anything: the probe was polled, or the key was
+            # marked before this process started.  Its reset is the same kind
+            # of end, so a ring held by readings alone is ``spent`` with a
+            # time, not "no credential".
+            reading = QUOTA_STATE.get_reading(probe, fingerprint)
+            if reading is not None and reading.exhausted_until is not None:
+                ends.append((reading.exhausted_until, SPENT))
         if not ends:
             # This key is out for a reason that carries no end, so the
             # provider's recovery cannot be dated from this ring either.
