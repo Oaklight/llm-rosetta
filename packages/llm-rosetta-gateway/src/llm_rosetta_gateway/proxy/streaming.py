@@ -40,10 +40,11 @@ from .errors import (
     RefusalDecision,
     RefusalScope,
     _connection_error_response,
-    _first_token_timeout_response,
     _detect_stream_chunk_error,
+    _first_token_timeout_response,
     _upstream_error_passthrough,
     DumpContext,
+    connection_refusal_decision,
     decide_on_refusal,
     note_upstream_success,
 )
@@ -447,6 +448,125 @@ async def _stream_event_generator(
             capture_state.record(capture_record)
 
 
+async def _connection_failure_stream(
+    config: Any | None,
+    selection: SelectionContext,
+    route: ResolvedRoute,
+    body: dict[str, Any],
+    *,
+    provider_info: ProviderInfo,
+    exc: UpstreamConnectionError,
+    target_body: dict[str, Any],
+    reported_model: str | None,
+    transport: UpstreamTransport,
+    metadata_store: ProviderMetadataStore | None,
+    extra_headers: dict[str, str] | None,
+    entry_id: str | None,
+    request_log: Any | None,
+    metrics: Any | None,
+    persistence: Any | None,
+    capture_state: CaptureState | None,
+    preflight_token_count: bool,
+    profile: dict[str, Any],
+    budget: FailoverBudget,
+) -> tuple[Response | StreamingResponse, dict[str, Any]]:
+    """Answer a stream whose upstream host could not be reached.
+
+    The streaming form of :func:`proxy.engine._connection_failure`: another
+    lane first, the 502 otherwise.  Nothing has been written to the client at
+    this point, so the second answer is still honest.
+    """
+    failed_over = await _connection_failover_stream(
+        config,
+        selection,
+        route,
+        body,
+        provider_info=provider_info,
+        exc=exc,
+        reported_model=reported_model,
+        transport=transport,
+        metadata_store=metadata_store,
+        extra_headers=extra_headers,
+        entry_id=entry_id,
+        request_log=request_log,
+        metrics=metrics,
+        persistence=persistence,
+        capture_state=capture_state,
+        preflight_token_count=preflight_token_count,
+        profile=profile,
+        budget=budget,
+    )
+    if failed_over is not None:
+        return failed_over
+    return (
+        await _connection_error_response(
+            exc,
+            body=body,
+            target_body=target_body,
+            route=route,
+            provider_info=provider_info,
+            persistence=persistence,
+            entry_id=entry_id,
+            extra_headers=extra_headers,
+            capture_state=capture_state,
+            error_phase="stream_header",
+        ),
+        profile,
+    )
+
+
+async def _connection_failover_stream(
+    config: Any | None,
+    selection: SelectionContext,
+    route: ResolvedRoute,
+    body: dict[str, Any],
+    *,
+    provider_info: ProviderInfo,
+    exc: UpstreamConnectionError,
+    reported_model: str | None,
+    transport: UpstreamTransport,
+    metadata_store: ProviderMetadataStore | None,
+    extra_headers: dict[str, str] | None,
+    entry_id: str | None,
+    request_log: Any | None,
+    metrics: Any | None,
+    persistence: Any | None,
+    capture_state: CaptureState | None,
+    preflight_token_count: bool,
+    profile: dict[str, Any],
+    budget: FailoverBudget,
+) -> tuple[Response | StreamingResponse, dict[str, Any]] | None:
+    """Try a stream the upstream host never answered on another lane.
+
+    See :func:`proxy.engine._connection_failover`: one decision, kept out of a
+    handler that already carries too many.
+    """
+    return await _failover_stream(
+        config,
+        selection,
+        route,
+        body,
+        reported_model=reported_model,
+        decision=connection_refusal_decision(
+            provider_info,
+            exc,
+            rate_limit=getattr(config, "routing_rate_limit", None),
+            lane=attempted_lane(selection, route, selection.model),
+        ),
+        transport=transport,
+        metadata_store=metadata_store,
+        extra_headers=extra_headers,
+        entry_id=entry_id,
+        request_log=request_log,
+        metrics=metrics,
+        persistence=persistence,
+        capture_state=capture_state,
+        preflight_token_count=preflight_token_count,
+        profile=profile,
+        budget=budget,
+    )
+
+
 async def _failover_stream(
     config: Any | None,
     selection: SelectionContext,
@@ -617,20 +737,26 @@ async def handle_streaming(  # noqa: C901
             profile["stream_connect_ms"] = round(
                 (time.perf_counter() - t_connect) * 1000, 2
             )
-            return (
-                await _connection_error_response(
-                    exc,
-                    body=body,
-                    target_body=target_body,
-                    route=route,
-                    provider_info=provider_info,
-                    persistence=persistence,
-                    entry_id=entry_id,
-                    extra_headers=extra_headers,
-                    capture_state=capture_state,
-                    error_phase="stream_header",
-                ),
-                profile,
+            return await _connection_failure_stream(
+                config,
+                selection,
+                route,
+                body,
+                provider_info=provider_info,
+                exc=exc,
+                target_body=target_body,
+                reported_model=reported_model,
+                transport=transport,
+                metadata_store=store,
+                extra_headers=extra_headers,
+                entry_id=entry_id,
+                request_log=request_log,
+                metrics=metrics,
+                persistence=persistence,
+                capture_state=capture_state,
+                preflight_token_count=preflight_token_count,
+                profile=profile,
+                budget=budget,
             )
 
         profile["stream_connect_ms"] = round(

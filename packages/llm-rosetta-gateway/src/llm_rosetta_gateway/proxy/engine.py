@@ -39,6 +39,7 @@ from .image_fetch import fetch_image
 from .errors import (
     RefusalAction,
     _connection_error_response,
+    connection_refusal_decision,
     _detect_stream_chunk_error,
     _soft_error_response,
     _upstream_error_passthrough,
@@ -266,6 +267,114 @@ async def prepare_request(
         target_body=target_body,
         provider_info=provider_info,
         model=model,
+    )
+
+
+async def _connection_failure(
+    config: Any | None,
+    selection: SelectionContext,
+    route: ResolvedRoute,
+    body: dict[str, Any],
+    *,
+    provider_info: ProviderInfo,
+    exc: UpstreamConnectionError,
+    target_body: dict[str, Any],
+    transport: UpstreamTransport,
+    metadata_store: ProviderMetadataStore | None,
+    extra_headers: dict[str, str] | None,
+    persistence: Any | None,
+    capture_state: CaptureState | None,
+    entry_id: str | None,
+    profile: dict[str, Any],
+    budget: FailoverBudget,
+) -> tuple[Response, dict[str, Any]]:
+    """Answer a request whose upstream host could not be reached.
+
+    Another lane is tried first when the model opted in and has one left; the
+    502 is what the client gets otherwise.  Split from the handler because it
+    is one decision in a row of them, and the handler is the row.
+    """
+    failed_over = await _connection_failover(
+        config,
+        selection,
+        route,
+        body,
+        provider_info=provider_info,
+        exc=exc,
+        transport=transport,
+        metadata_store=metadata_store,
+        extra_headers=extra_headers,
+        persistence=persistence,
+        capture_state=capture_state,
+        entry_id=entry_id,
+        profile=profile,
+        budget=budget,
+    )
+    if failed_over is not None:
+        return failed_over
+    return (
+        await _connection_error_response(
+            exc,
+            body=body,
+            target_body=target_body,
+            route=route,
+            provider_info=provider_info,
+            persistence=persistence,
+            entry_id=entry_id,
+            extra_headers=extra_headers,
+            capture_state=capture_state,
+        ),
+        profile,
+    )
+
+
+async def _connection_failover(
+    config: Any | None,
+    selection: SelectionContext,
+    route: ResolvedRoute,
+    body: dict[str, Any],
+    *,
+    provider_info: ProviderInfo,
+    exc: UpstreamConnectionError,
+    transport: UpstreamTransport,
+    metadata_store: ProviderMetadataStore | None,
+    extra_headers: dict[str, str] | None,
+    persistence: Any | None,
+    capture_state: CaptureState | None,
+    entry_id: str | None,
+    profile: dict[str, Any],
+    budget: FailoverBudget,
+) -> tuple[Response, dict[str, Any]] | None:
+    """Try a request the upstream host never answered on another lane.
+
+    A transport failure carries no upstream status, so it earns the same
+    treatment as any other capacity refusal: it is counted against the lane and
+    offered to failover.  Split out of the handler because it is one decision,
+    and the handler is where a dozen of them meet.
+
+    Returns:
+        The attempt's response and merged profile, or ``None`` when the model
+        has not opted in or nothing else can serve.
+    """
+    return await _failover_response(
+        config,
+        selection,
+        route,
+        body,
+        decision=connection_refusal_decision(
+            provider_info,
+            exc,
+            rate_limit=getattr(config, "routing_rate_limit", None),
+            lane=attempted_lane(selection, route, selection.model),
+        ),
+        transport=transport,
+        metadata_store=metadata_store,
+        extra_headers=extra_headers,
+        persistence=persistence,
+        capture_state=capture_state,
+        entry_id=entry_id,
+        profile=profile,
+        budget=budget,
     )
 
 
@@ -620,19 +729,22 @@ async def handle_non_streaming(  # noqa: C901
             )
         except UpstreamConnectionError as exc:
             profile["upstream_ms"] = round((time.perf_counter() - t_upstream) * 1000, 2)
-            return (
-                await _connection_error_response(
-                    exc,
-                    body=body,
-                    target_body=target_body,
-                    route=route,
-                    provider_info=provider_info,
-                    persistence=persistence,
-                    entry_id=entry_id,
-                    extra_headers=extra_headers,
-                    capture_state=capture_state,
-                ),
-                profile,
+            return await _connection_failure(
+                config,
+                selection,
+                route,
+                body,
+                provider_info=provider_info,
+                exc=exc,
+                target_body=target_body,
+                transport=transport,
+                metadata_store=store,
+                extra_headers=extra_headers,
+                persistence=persistence,
+                capture_state=capture_state,
+                entry_id=entry_id,
+                profile=profile,
+                budget=budget,
             )
         profile["upstream_ms"] = round((time.perf_counter() - t_upstream) * 1000, 2)
 

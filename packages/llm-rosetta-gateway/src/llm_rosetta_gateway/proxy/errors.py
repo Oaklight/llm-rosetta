@@ -393,6 +393,46 @@ def _count_lane_refusal(
         logger.warning("Could not record the lane refusal", exc_info=True)
 
 
+def connection_refusal_decision(
+    provider_info: ProviderInfo,
+    exc: UpstreamConnectionError,
+    *,
+    rate_limit: Any | None,
+    lane: str,
+) -> RefusalDecision:
+    """Count a transport failure against its lane and offer it to failover.
+
+    A host that does not answer is not "ready but unlucky": every request
+    against it pays the whole timeout.  The failure never becomes an upstream
+    status — nothing was received — so it used to bypass the refusal path
+    entirely: no count, no state change, and a client-visible 502 while the
+    routing panel still called the provider available.
+
+    Counting it on the lane's capacity ladder is what makes the panel say so:
+    the first failure sinks the lane and ``policy.after`` of them disable it
+    for the cooldown.  The scope is ``LANE`` because a connection is made
+    against the provider's base URL from one candidate; a sibling that uses
+    another host may still answer.
+
+    Args:
+        provider_info: The provider the request could not reach.
+        exc: The transport failure.
+        rate_limit: The rule in force, or ``None`` for the default.
+        lane: The lane's key, as :func:`proxy.failover.attempted_lane` builds
+            it.
+
+    Returns:
+        A ``LANE``-scoped ``FAILOVER`` decision.  The caller still answers
+        502 when the model has not opted in or has nothing left to try.
+    """
+    _count_lane_refusal(provider_info, 502, rate_limit, lane)
+    return RefusalDecision(
+        RefusalAction.FAILOVER,
+        signal=UpstreamRefusal(502, f"upstream transport: {exc}"),
+        scope=RefusalScope.LANE,
+    )
+
+
 def note_upstream_success(provider_info: ProviderInfo, *, lane: str) -> None:
     """Clear the ladder entries a served request is evidence about.
 

@@ -402,7 +402,7 @@ def _stream_refused() -> Any:
     return _ErrorStream(429, _RATE_LIMITED.decode())
 
 
-def _run_stream(config: GatewayConfig, transport: _StreamTransport):
+def _run_stream(config: GatewayConfig, transport: _Transport):
     selection = config.selection_context("m", "chat_completions")
     route, pinfo = config.resolve(selection)
     body = {**_REQUEST, "stream": True}
@@ -1278,3 +1278,90 @@ class TestTheFailurePath:
             lifecycle._lifecycle_var.reset(token)
 
         assert transport.calls[-1] == "https://b.test"
+
+
+class _ConnectionTransport(_Transport):
+    """A transport whose first attempt cannot reach the host, then answers.
+
+    A transport failure never becomes an upstream status — nothing was
+    received — so it used to skip the refusal path entirely: no count, no
+    state change, and a 502 while the routing panel still said "available".
+    """
+
+    def __init__(self, *responses: Any, fail_first: bool = True) -> None:
+        super().__init__(*responses)
+        self.fail_first = fail_first
+
+    def _connect(self, provider_info: Any) -> None:
+        if not self.fail_first:
+            return
+        self.fail_first = False
+        from llm_rosetta_gateway.transport import UpstreamConnectionError
+
+        raise UpstreamConnectionError(
+            f"Request to {provider_info.base_url} timed out after 300.0s"
+        )
+
+    async def send(self, provider_info: Any, url: str, body: Any, **kw: Any) -> Any:
+        provider_info.auth_headers()
+        self.calls.append(provider_info.base_url)
+        self.models.append(body.get("model"))
+        self._connect(provider_info)
+        return self._responses.pop(0)
+
+    async def send_streaming(
+        self, provider_info: Any, url: str, body: Any, **kw: Any
+    ) -> Any:
+        provider_info.auth_headers()
+        self.calls.append(provider_info.base_url)
+        self.models.append(body.get("model"))
+        self._connect(provider_info)
+        return self._responses.pop(0)
+
+
+class TestATransportFailure:
+    """A host that does not answer is a lane refusal, not a dead end."""
+
+    def test_a_host_that_cannot_be_reached_is_tried_elsewhere(self):
+        config = _config()
+        transport = _ConnectionTransport(_ok())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 200
+        assert transport.calls == ["https://a.test", "https://b.test"]
+        assert profile["failover"]["from"] == "a"
+        assert profile["failover"]["to"] == "b"
+        # The record says what happened, not "upstream 502".
+        assert "transport" in profile["failover"]["reason"]
+
+    def test_the_lane_is_counted_so_the_panel_stops_calling_it_available(self):
+        from llm_rosetta_gateway.routing.eligibility import lane_eligibility
+
+        config = _config()
+        transport = _ConnectionTransport(_ok())
+
+        _run(config, transport)
+
+        answer = lane_eligibility(config.providers["a"], "a", lane="m")
+        assert answer.sunk is True
+
+    def test_an_opted_out_model_gets_the_502(self):
+        config = _config(opt_in=False)
+        transport = _ConnectionTransport(_ok())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 502
+        assert transport.calls == ["https://a.test"]
+        assert "failover" not in profile
+
+    def test_a_stream_that_never_dials_is_served_by_another(self):
+        config = _config()
+        transport = _ConnectionTransport(_EmptyStream())
+
+        response, profile = _run_stream(config, transport)
+
+        assert response.status_code == 200
+        assert transport.calls == ["https://a.test", "https://b.test"]
+        assert profile["failover"]["to"] == "b"
