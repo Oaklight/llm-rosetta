@@ -12,6 +12,18 @@ loader executes every shim's ``quota.py`` while building the registry.
 A shim's ``quota.py`` exports ``PROBES`` (a tuple of probe objects).  The shim
 loader attaches them to the :class:`~llm_rosetta.shims.provider_shim.ProviderShim`,
 and the gateway resolves the one named by ``quota.probe`` against them.
+
+Two capabilities are optional, and a probe that omits them is read exactly as
+before:
+
+* ``credential_role`` -- which credential the read needs.  The default,
+  ``"api_key"``, is the key the model requests use; a vendor that reports the
+  allowance on a control plane behind a *second* credential declares the role
+  its ``auth.py`` serves (see :func:`probe_credential_role`).
+* ``fetch`` -- a multi-step read, for a vendor whose allowance takes more than
+  one request (an account, then a billing read).  The gateway hands it a
+  ``read`` callable and the probe drives the calls; without it the gateway
+  makes the one GET and passes the body to :meth:`QuotaProbe.parse`.
 """
 
 from __future__ import annotations
@@ -207,6 +219,20 @@ class QuotaProbe(Protocol):
         """Classify an inference error as a spent allowance, if it is one."""
         ...
 
+    # -- optional ----------------------------------------------------------
+    #
+    # ``credential_role: str = PROBE_ROLE_API_KEY`` -- the credential the read
+    # needs, as the shim's ``auth.py`` names it.  A role other than the model
+    # credential makes the reading display-only: the gateway shows it and
+    # never demotes a model credential on it.
+    #
+    # ``async def fetch(self, read, credential, url) -> (plan, windows)`` --
+    # a multi-step read.  ``read(url, headers)`` is an async callable the
+    # gateway provides; it returns ``(status_code, body)`` and never raises
+    # for a non-2xx answer.  The probe raises :class:`QuotaProbeError` for an
+    # answer it cannot decode, and :class:`ProbeRefused` for a status whose
+    # description belongs to :meth:`describe_error`.
+
 
 @dataclass(frozen=True, slots=True)
 class ProbeMatch:
@@ -301,14 +327,52 @@ def resolve_probe(
     return None
 
 
+#: The role a probe reads when it declares none: the credential the model
+#: requests send.
+PROBE_ROLE_API_KEY = "api_key"
+
+
+class ProbeRefused(Exception):
+    """A step of a multi-step read was refused by the vendor.
+
+    Carries the status and the vendor's body so the gateway can describe it
+    with :meth:`QuotaProbe.describe_error`, which is where a vendor's wording
+    belongs.
+    """
+
+    def __init__(self, status_code: int, body: Any) -> None:
+        super().__init__(f"HTTP {status_code}")
+        self.status_code = status_code
+        self.body = body
+
+
+def probe_credential_role(probe: QuotaProbe) -> str:
+    """Return the credential role *probe* reads.
+
+    A probe that declares no role reads the credential the model requests use.
+    """
+    role = getattr(probe, "credential_role", PROBE_ROLE_API_KEY)
+    return role if isinstance(role, str) and role else PROBE_ROLE_API_KEY
+
+
+def probe_fetch(probe: QuotaProbe) -> Any | None:
+    """Return *probe*'s multi-step reader, or ``None`` for the single GET."""
+    fetch = getattr(probe, "fetch", None)
+    return fetch if callable(fetch) else None
+
+
 __all__ = [
+    "PROBE_ROLE_API_KEY",
     "InBandSignal",
     "ProbeMatch",
+    "ProbeRefused",
     "ProbeTarget",
     "QuotaProbe",
     "QuotaProbeError",
     "QuotaWindow",
     "parse_iso",
+    "probe_credential_role",
+    "probe_fetch",
     "probe_ids",
     "resolve_probe",
     "vendor_message",

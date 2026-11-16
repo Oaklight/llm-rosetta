@@ -28,7 +28,15 @@ from .models import (
     QuotaReading,
     credential_fingerprint,
 )
-from .probes import QuotaProbe, QuotaProbeError, resolve_probe
+from .probes import (
+    PROBE_ROLE_API_KEY,
+    ProbeRefused,
+    QuotaProbe,
+    QuotaProbeError,
+    probe_credential_role,
+    probe_fetch,
+    resolve_probe,
+)
 from .rate_limit import RateLimitPolicy
 from .state import QUOTA_STATE
 
@@ -114,11 +122,140 @@ def resolve_provider_probe(
     return probe, pinfo.quota_usage_url, None
 
 
-def _probe_headers(pinfo: Any, probe: QuotaProbe, key: str) -> dict[str, str]:
-    """Build the probe request headers for one credential."""
-    headers = {"Accept": "application/json", **pinfo.auth_headers_for(key)}
-    headers.update(probe.headers(key))
+def _probe_headers(
+    pinfo: Any,
+    probe: QuotaProbe,
+    credential: str,
+    *,
+    advisory: bool = False,
+) -> dict[str, str]:
+    """Build the probe request headers for one credential.
+
+    An advisory read uses the probe's own headers only.  The provider's base
+    auth signs with the model credential, and a control plane that refuses
+    that credential is exactly the 401 the second credential exists to avoid,
+    so it is not sent.
+    """
+    headers = {"Accept": "application/json"}
+    if not advisory:
+        headers.update(pinfo.auth_headers_for(credential))
+    headers.update(probe.headers(credential))
     return headers
+
+
+async def _probe_secret(
+    pinfo: Any,
+    probe: QuotaProbe,
+    key: str,
+) -> tuple[str, bool, str | None]:
+    """The credential *probe* sends, and whether its reading is advisory.
+
+    A probe that declares the model's own role is read with the key the
+    caller holds.  Any other role is a credential the shim's ``auth.py``
+    serves, and a reading made with it is advisory: it describes the account
+    and never decides the lane.
+
+    Returns:
+        ``(credential, advisory, unsupported)``.  ``credential`` is empty when
+        the provider cannot serve the role, and ``unsupported`` says why.  No
+        request is made in that case: the issue's rule is that a missing
+        control credential reports the quota unsupported rather than probing
+        with the wrong one.
+    """
+    from llm_rosetta.shims.auth_exchange import (
+        AuthExchangeError,
+        InteractiveSetupRequired,
+        credential_for,
+    )
+
+    role = probe_credential_role(probe)
+    if role == PROBE_ROLE_API_KEY:
+        return key, False, None
+    exchange = getattr(pinfo, "auth_exchange", None)
+    ctx = getattr(pinfo, "auth_context", None)
+    if exchange is None or ctx is None:
+        return (
+            "",
+            True,
+            (
+                f"the {role!r} credential is unavailable: this provider does not "
+                "sign in through a shim exchange"
+            ),
+        )
+    try:
+        secret = await credential_for(exchange, ctx, role)
+    except InteractiveSetupRequired as exc:
+        return "", True, f"no {role} credential: {exc}"
+    except AuthExchangeError as exc:
+        return (
+            "",
+            True,
+            f"no {role} credential: {scrub_credential_patterns(str(exc))}",
+        )
+    if not secret:
+        return "", True, f"no {role} credential is stored"
+    return secret, True, None
+
+
+async def _probe_multi(
+    client: Any,
+    pinfo: Any,
+    probe: QuotaProbe,
+    url: str,
+    secret: str,
+    credential: str,
+    *,
+    demote_at: float,
+    advisory: bool,
+) -> QuotaReading:
+    """Run a probe's own multi-step read and normalize the answer.
+
+    The probe drives the calls through ``read(url, headers)``, which returns
+    ``(status_code, body)`` and never raises for a non-2xx answer: describing
+    a refusal is the probe's job, and it has the vendor's wording.
+    """
+    headers = _probe_headers(pinfo, probe, secret, advisory=advisory)
+
+    async def read(target: str, extra: dict[str, str] | None = None) -> tuple[int, Any]:
+        resp = await client.get(target, headers={**headers, **(extra or {})})
+        assert isinstance(resp, HttpResponse)
+        try:
+            body: Any = resp.json()
+        except Exception:
+            body = resp.text
+        return resp.status_code, body
+
+    fetch = probe_fetch(probe)
+    assert fetch is not None
+    try:
+        plan, windows = await fetch(read, secret, url)
+    except ProbeRefused as exc:
+        return QuotaReading(
+            probe=probe.id,
+            credential=credential,
+            status=STATUS_ERROR,
+            error=probe.describe_error(exc.status_code, exc.body),
+            demote_at=demote_at,
+            advisory=advisory,
+        )
+    except QuotaProbeError as exc:
+        return QuotaReading(
+            probe=probe.id,
+            credential=credential,
+            status=exc.status,
+            error=str(exc),
+            demote_at=demote_at,
+            advisory=advisory,
+        )
+    return QuotaReading(
+        probe=probe.id,
+        credential=credential,
+        windows=windows,
+        plan=plan,
+        status=STATUS_OK,
+        demote_at=demote_at,
+        advisory=advisory,
+    )
 
 
 async def _probe_one(
@@ -131,10 +268,33 @@ async def _probe_one(
 ) -> QuotaReading:
     """Read one credential and normalize the answer."""
     credential = credential_fingerprint(key)
+    secret, advisory, unsupported = await _probe_secret(pinfo, probe, key)
+    if not secret:
+        return QuotaReading(
+            probe=probe.id,
+            credential=credential,
+            status=STATUS_UNSUPPORTED,
+            error=unsupported,
+            demote_at=demote_at,
+            advisory=advisory,
+        )
     proxy = getattr(pinfo, "proxy_url", None)
+    fetch = probe_fetch(probe)
     try:
         async with AsyncClient(timeout=_PROBE_TIMEOUT_SECONDS, proxy=proxy) as client:
-            resp = await client.get(url, headers=_probe_headers(pinfo, probe, key))
+            if fetch is not None:
+                return await _probe_multi(
+                    client,
+                    pinfo,
+                    probe,
+                    url,
+                    secret,
+                    credential,
+                    demote_at=demote_at,
+                    advisory=advisory,
+                )
+            headers = _probe_headers(pinfo, probe, secret, advisory=advisory)
+            resp = await client.get(url, headers=headers)
             assert isinstance(resp, HttpResponse)
             body: Any
             try:
@@ -148,6 +308,7 @@ async def _probe_one(
                     status=STATUS_ERROR,
                     error=probe.describe_error(resp.status_code, body),
                     demote_at=demote_at,
+                    advisory=advisory,
                 )
             try:
                 plan, windows = probe.parse(body)
@@ -158,6 +319,7 @@ async def _probe_one(
                     status=exc.status,
                     error=str(exc),
                     demote_at=demote_at,
+                    advisory=advisory,
                 )
             return QuotaReading(
                 probe=probe.id,
@@ -166,6 +328,7 @@ async def _probe_one(
                 plan=plan,
                 status=STATUS_OK,
                 demote_at=demote_at,
+                advisory=advisory,
             )
     except Exception as exc:  # noqa: BLE001 - report, never raise into admin
         logger.warning(
@@ -236,9 +399,14 @@ async def read_provider_quota(
         reading = await _probe_one(pinfo, probe, url, key, demote_at=demote_at)
         QUOTA_STATE.put_reading(reading)
         refreshed = True
-        if reading.status == STATUS_OK and reading.exhausted_until is None:
+        if (
+            reading.status == STATUS_OK
+            and reading.exhausted_until is None
+            and not reading.advisory
+        ):
             # A fresh reading that says the credential can serve clears an
-            # in-band demotion taken before the window reset.
+            # in-band demotion taken before the window reset.  An advisory
+            # reading does not: it was made with another credential.
             QUOTA_STATE.clear_demotion(probe.id, credential)
 
     payload: dict[str, Any] = {
@@ -679,7 +847,11 @@ def provider_spent(pinfo: Any) -> bool:
     max_age = reading_max_age(pinfo)
     for key in keys:
         reading = QUOTA_STATE.get_reading(probe, credential_fingerprint(key))
-        if reading is None or QUOTA_STATE.reading_age(reading) > max_age:
+        if reading is None or reading.advisory:
+            # Silence is not agreement, and neither is a reading taken with a
+            # different credential: neither says whether this key can serve.
+            return False
+        if QUOTA_STATE.reading_age(reading) > max_age:
             return False
         if not reading.windows:
             return False
@@ -703,7 +875,7 @@ def provider_exhausted_until(pinfo: Any) -> datetime | None:
     resets: list[datetime] = []
     for key in ring.keys():
         reading = QUOTA_STATE.get_reading(probe, credential_fingerprint(key))
-        if reading is None:
+        if reading is None or reading.advisory:
             return None
         moment = reading.exhausted_until
         if moment is None:

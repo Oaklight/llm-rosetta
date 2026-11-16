@@ -174,13 +174,15 @@ class QuotaState:
         A credential is unusable when it is demoted, or when its latest
         reading has an exhausted window with a reset time still in the
         future.  A reading that failed is not a demotion: an unreachable probe
-        says nothing about the key's health.
+        says nothing about the key's health.  An advisory reading — one made
+        with the vendor's control-plane credential — is not evidence about
+        this key at all, so it is skipped.
         """
         credential = credential_fingerprint(key)
         if self.demotion(probe, credential) is not None:
             return False
         reading = self.get_reading(probe, credential)
-        if reading is None:
+        if reading is None or reading.advisory:
             return True
         until = reading.exhausted_until
         return until is None or until <= _now()

@@ -71,6 +71,14 @@ class TestScrubCredentialPatterns:
         assert "sk-ant-api03" not in result
         assert "[REDACTED]" in result
 
+    def test_scrubs_a_control_plane_key(self):
+        """A vendor's second credential is not shaped like its model key."""
+        token = "vela_ctrl_" + "a" * 30
+        result = scrub_credential_patterns(f"refused: {token}")
+
+        assert token not in result
+        assert "[REDACTED]" in result
+
     def test_scrubs_a_jwt(self):
         """OAuth access and ID tokens are JWTs, not ``sk-`` keys."""
         # Assembled from its segments so no scanner mistakes the fixture for a

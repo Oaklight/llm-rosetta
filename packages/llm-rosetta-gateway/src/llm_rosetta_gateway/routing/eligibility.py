@@ -326,9 +326,14 @@ def _ring_recovery(pinfo: Any, name: str) -> tuple[datetime, str] | None:
             # having demoted anything: the probe was polled, or the key was
             # marked before this process started.  Its reset is the same kind
             # of end, so a ring held by readings alone is ``spent`` with a
-            # time, not "no credential".
+            # time, not "no credential".  An advisory reading is excluded:
+            # it was made with another credential, so it cannot date this one.
             reading = QUOTA_STATE.get_reading(probe, fingerprint)
-            if reading is not None and reading.exhausted_until is not None:
+            if (
+                reading is not None
+                and not reading.advisory
+                and reading.exhausted_until is not None
+            ):
                 ends.append((reading.exhausted_until, SPENT))
         if not ends:
             # This key is out for a reason that carries no end, so the

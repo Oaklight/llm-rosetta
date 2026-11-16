@@ -61,6 +61,11 @@ FIELD_LIMIT = 8
 #: truncated, because a silently shortened credential fails at the vendor.
 FIELD_TEXT_LIMIT = 200
 
+#: The role every caller means by "the credential": what a model request
+#: sends.  Other roles are vendor-defined and served only by an exchange that
+#: implements ``credential_for``.
+DEFAULT_CREDENTIAL_ROLE = "api_key"
+
 
 class AuthExchangeError(Exception):
     """The exchange could not produce a credential right now.
@@ -117,6 +122,14 @@ class AuthExchange(Protocol):
             beside the exchange and is handed to it; when ``False`` the two
             are alternative sources for one slot and a config that sets both
             is rejected.
+
+    A vendor may issue more than one credential, each accepted by a different
+    plane.  The model credential is the one every caller already means; a
+    second one is served by an **optional** ``credential_for(ctx, role)``,
+    which is deliberately not a protocol member: a protocol member would make
+    ``isinstance`` fail for every shim that predates it.  Call
+    :func:`credential_for` rather than the member, so the fallback is one
+    rule.
     """
 
     kind: str
@@ -376,3 +389,49 @@ class BaseAuthExchange:
     async def credential(self, ctx: AuthContext) -> str:  # pragma: no cover
         """Mint a credential.  Every exchange must implement this."""
         raise NotImplementedError
+
+    async def credential_for(self, ctx: AuthContext, role: str) -> str:
+        """Return the credential this exchange serves for *role*.
+
+        Override when the vendor issues more than one credential.  The
+        default serves :data:`DEFAULT_CREDENTIAL_ROLE` from
+        :meth:`credential` and refuses every other role, which is the honest
+        answer for an exchange that has one credential.
+
+        Raises:
+            AuthExchangeError: This exchange serves no such role.
+        """
+        if role == DEFAULT_CREDENTIAL_ROLE:
+            return await self.credential(ctx)
+        raise AuthExchangeError(f"this shim serves no {role!r} credential")
+
+
+async def credential_for(
+    exchange: AuthExchange,
+    ctx: AuthContext,
+    role: str = DEFAULT_CREDENTIAL_ROLE,
+) -> str:
+    """Return the credential *exchange* serves for *role*.
+
+    The one rule for a caller that does not know which exchange it has: an
+    exchange that implements ``credential_for`` answers, one that predates the
+    member serves the default role from :meth:`AuthExchange.credential`, and
+    any other role is refused with the shim named as the reason.
+
+    Args:
+        exchange: The shim's exchange.
+        ctx: The provider it serves.
+        role: Which credential, as the caller names it.  ``"api_key"`` is the
+            model credential.
+
+    Raises:
+        InteractiveSetupRequired: The credential does not exist yet and a
+            human has to sign in.
+        AuthExchangeError: The exchange failed, or serves no such role.
+    """
+    member = getattr(exchange, "credential_for", None)
+    if callable(member):
+        return await member(ctx, role)
+    if role == DEFAULT_CREDENTIAL_ROLE:
+        return await exchange.credential(ctx)
+    raise AuthExchangeError(f"this shim serves no {role!r} credential")

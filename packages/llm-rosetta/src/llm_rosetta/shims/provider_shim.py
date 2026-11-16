@@ -300,6 +300,10 @@ class VendorManifest:
             key.  A leaf that names a key it inherits from its vendor merges
             over that entry attribute by attribute, so rewording a label keeps
             the vendor's ``help``.
+        quota: Raw ``quota:`` mapping, inherited by every leaf that names none
+            and merged per field on a leaf that does.  An allowance is an
+            account fact — one control plane, one workspace — so a vendor with
+            several lanes declares it once here.
     """
 
     vendor: str
@@ -310,6 +314,7 @@ class VendorManifest:
     group: str | None = None
     group_label: str | None = None
     fields: tuple[dict[str, Any], ...] = ()
+    quota: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

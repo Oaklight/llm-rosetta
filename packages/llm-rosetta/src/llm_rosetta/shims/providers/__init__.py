@@ -146,6 +146,7 @@ _MANIFEST_KEYS: tuple[str, ...] = (
     "group",
     "group_label",
     "fields",
+    "quota",
 )
 
 # Convention-based model list transforms registered by shim transforms modules.
@@ -1176,6 +1177,9 @@ def _vendor_manifest(vendor_dir: Path) -> VendorManifest | None:
             f"found {', '.join(sorted(unknown))}. Shim identity — 'name', "
             f"'format', 'base' — belongs in a leaf's provider.yaml"
         )
+    quota = cfg.get("quota")
+    if quota is not None and not isinstance(quota, dict):
+        raise ValueError(f"{path}: quota must be a mapping")
     vendor_fields: dict[str, str | None] = {}
     for key in ("logo", "group", "group_label"):
         value = cfg.get(key)
@@ -1200,8 +1204,25 @@ def _vendor_manifest(vendor_dir: Path) -> VendorManifest | None:
         connection=dict(connection or {}),
         auth=_load_auth_exchange(vendor_dir / "auth.py"),
         fields=_declared_fields(cfg.get("fields"), path),
+        quota=dict(quota or {}),
         **vendor_fields,
     )
+
+
+def _leaf_quota(
+    cfg: dict[str, Any], manifest: VendorManifest | None
+) -> dict[str, Any] | None:
+    """The quota declaration a leaf actually carries.
+
+    A vendor reads one allowance for every lane — the control plane and the
+    workspace are the account's, not the format's — so the manifest's block
+    applies unless the leaf names a field itself, and per field when it does.
+    """
+    declared = cfg.get("quota")
+    vendor = dict(manifest.quota) if manifest is not None else {}
+    if isinstance(declared, dict):
+        return {**vendor, **declared}
+    return vendor or None
 
 
 def _leaf_connection(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -1419,7 +1440,7 @@ def _load_single_provider(
     # Parse the quota declaration: which probe reads this lane, and how often
     # the gateway should read it.  Parsers live in the gateway; the shim only
     # names one.
-    quota_raw = cfg.get("quota")
+    quota_raw = _leaf_quota(cfg, manifest)
     quota_decl: QuotaDeclaration | None = None
     if isinstance(quota_raw, dict):
         quota_decl = QuotaDeclaration(
