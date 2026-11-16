@@ -759,6 +759,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 ## v0.6.10 — 2026-06-18
 
 ### Added
+- **提供方的第二把凭据，以及一条不得替车道做决定的读数**（issue [#1499](https://github.com/Oaklight/llm-rosetta/issues/1499)）：提供方可能在控制面上报告额度，而控制面只接受控制 Key、拒绝模型请求所用的 Key；此前的探针契约既无法表达这第二把凭据，也无法表达控制面所需的三次请求。`quota.py` 现在可以声明 `credential_role` —— 网关通过新增的可选方法 `credential_for(ctx, role)` 向 shim 的 `auth.py` 索取该凭据 —— 以及多步 `fetch(read, credential, url)` 自行驱动调用。用非模型凭据取得的读数记为**仅供参考（advisory）**：面板展示它、允许它参与车道份额加权，但它永远不作为降级、排除或恢复时间的证据。缺少该凭据时额度报告为不支持，且不发出请求。厂商清单也可以一次性声明 `quota:` 供所有车道继承，按字段合并，与 `connection:` 相同。`sk-amr-…` 原本已被脱敏，形如 `vela_ctrl-…` 的控制 Key 现在同样会被脱敏。
 
 - **Process-level conversion cache** ([#276](https://github.com/Oaklight/llm-rosetta/issues/276), [#279](https://github.com/Oaklight/llm-rosetta/pull/279), [#281](https://github.com/Oaklight/llm-rosetta/pull/281), [#283](https://github.com/Oaklight/llm-rosetta/pull/283)): Per-entry LRU cache with access-refreshed TTL (default 30 min) for tool conversion, schema sanitization, and IR validation. Eliminates repeated work for unchanged tool definitions and messages across conversation turns
     - **Hub-and-spoke architecture**: conversion caches (spokes) are converter-specific; IR validation cache (hub) is converter-agnostic and shared across all converters

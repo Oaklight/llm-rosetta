@@ -57,9 +57,14 @@ Open Design 在三种 API 上都提供每个模型，因此按客户端使用的
 
 ## 额度
 
-此 shim 不读取 Coding Plan 额度。Open Design 在单独的控制面上报告该额度，而控制面不接受
-运行时 API Key；控制 Key 由设备授权流程签发，网页控制台并不显示。网关会将该提供方的额度
-报告为不支持。跟踪议题：[#1499](https://github.com/Oaklight/llm-rosetta/issues/1499)。
+Coding Plan 额度在**控制面**（`https://amr-api.open-design.ai`）读取，它只接受控制 Key
+（`vela_ctrl_…`），从不接受运行时 Key。两把 Key 来自同一次设备登录；shim 的 `quota.py`
+声明 `credential_role: control`，因此网关会向登录记录索取第二把凭据，并把读数记为**仅供参考
+（advisory）**：面板显示 5 小时与 7 天两个窗口以及套餐等级，读数也可以参与通道份额的加权，
+但它永远不会把某个模型凭据降级、排除或给出恢复时间。
+
+没有控制 Key 时，该提供方的额度显示为不支持，且不会发出任何账单请求：不会退回运行时 Key，
+因为控制面会以 `401` 拒绝它。
 
 ## 状态
 
