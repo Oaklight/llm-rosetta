@@ -131,10 +131,12 @@ def _probe_headers(
 ) -> dict[str, str]:
     """Build the probe request headers for one credential.
 
-    An advisory read uses the probe's own headers only.  The provider's base
-    auth signs with the model credential, and a control plane that refuses
-    that credential is exactly the 401 the second credential exists to avoid,
-    so it is not sent.
+    An advisory read uses the probe's own headers only.  ``auth_headers_for``
+    stamps whatever credential it is handed into the provider's own header —
+    ``x-api-key`` for some vendors — and the control key is not a model
+    credential: sending it that way describes the second key to the wrong
+    plane, and the control plane documents one scheme.  The model credential
+    is not sent either, because that plane answers it with 401.
     """
     headers = {"Accept": "application/json"}
     if not advisory:

@@ -866,6 +866,69 @@ class TestWhenEveryKeyIsOut:
         assert answer.reason == "spent"
         assert answer.until == reset
 
+    @staticmethod
+    def _unusable_ring_provider() -> Any:
+        """A provider whose ring is out in-band, as a demotion leaves it."""
+
+        class Ring:
+            def __len__(self) -> int:
+                return 1
+
+            def any_usable(self) -> bool:
+                return False
+
+            def keys(self) -> tuple[str, ...]:
+                return ("k1",)
+
+        return SimpleNamespace(
+            name="a",
+            config_name="a",
+            keyless=False,
+            credentials_pending=False,
+            quota_provider_blocked=lambda: False,
+            key_ring=Ring(),
+            quota_probe=_PROBE,
+        )
+
+    @staticmethod
+    def _put_reading(*, advisory: bool, reset: datetime) -> None:
+        QUOTA_STATE.put_reading(
+            QuotaReading(
+                probe=_PROBE,
+                credential=credential_fingerprint("k1"),
+                windows=[
+                    QuotaWindow(name="5 hours", used_percent=100.0, resets_at=reset)
+                ],
+                advisory=advisory,
+            )
+        )
+
+    def test_a_ring_out_in_band_is_not_dated_by_an_advisory_reading(self):
+        """A control-plane reading cannot date this ring's recovery.
+
+        The ring is out for a reason of its own (a demotion or a ladder
+        disable leaves it this way) and the reading was made with a credential
+        the requests do not send.  Taking its reset as the answer would
+        exclude the lane on a time read from another plane.
+        """
+        reset = datetime.now(timezone.utc) + timedelta(minutes=30)
+        self._put_reading(advisory=True, reset=reset)
+
+        answer = lane_eligibility(self._unusable_ring_provider(), "a", lane="m")
+
+        assert answer.reason == "no_credential"
+        assert answer.until is None
+
+    def test_the_same_reading_with_the_keys_own_credential_dates_it(self):
+        """The control: the skip is about the credential, not about readings."""
+        reset = datetime.now(timezone.utc) + timedelta(minutes=30)
+        self._put_reading(advisory=False, reset=reset)
+
+        answer = lane_eligibility(self._unusable_ring_provider(), "a", lane="m")
+
+        assert answer.reason == "spent"
+        assert answer.until == reset
+
     def test_a_ring_out_for_no_known_reason_is_no_credential(self):
         """The answer keeps its old meaning: nothing usable, and nothing to name."""
 

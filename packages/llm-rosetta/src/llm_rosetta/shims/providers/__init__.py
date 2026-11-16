@@ -1210,19 +1210,26 @@ def _vendor_manifest(vendor_dir: Path) -> VendorManifest | None:
 
 
 def _leaf_quota(
-    cfg: dict[str, Any], manifest: VendorManifest | None
+    cfg: dict[str, Any], manifest: VendorManifest | None, path: Path
 ) -> dict[str, Any] | None:
     """The quota declaration a leaf actually carries.
 
     A vendor reads one allowance for every lane — the control plane and the
     workspace are the account's, not the format's — so the manifest's block
     applies unless the leaf names a field itself, and per field when it does.
+
+    Raises:
+        ValueError: The leaf's ``quota:`` is present but not a mapping.  A
+            typo must not be read as "inherits the vendor's", which would put
+            another declaration's probe on this lane in place of reporting it.
     """
     declared = cfg.get("quota")
     vendor = dict(manifest.quota) if manifest is not None else {}
-    if isinstance(declared, dict):
-        return {**vendor, **declared}
-    return vendor or None
+    if declared is None:
+        return vendor or None
+    if not isinstance(declared, dict):
+        raise ValueError(f"{path}: quota must be a mapping")
+    return {**vendor, **declared}
 
 
 def _leaf_connection(cfg: dict[str, Any]) -> dict[str, Any]:
@@ -1440,7 +1447,7 @@ def _load_single_provider(
     # Parse the quota declaration: which probe reads this lane, and how often
     # the gateway should read it.  Parsers live in the gateway; the shim only
     # names one.
-    quota_raw = _leaf_quota(cfg, manifest)
+    quota_raw = _leaf_quota(cfg, manifest, yaml_path)
     quota_decl: QuotaDeclaration | None = None
     if isinstance(quota_raw, dict):
         quota_decl = QuotaDeclaration(
