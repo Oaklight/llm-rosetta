@@ -10,6 +10,13 @@ the lane.  The rules, weakest first:
 - every repeated disable doubles the cooldown, up to ``cooldown_max_s``, and a
   success clears the count, the ladder and the sink alike.
 
+A sunk lane is only attempted when no sibling answers, so with a healthy
+sibling it collects no further refusals and the disable never fires — the
+sink is the whole effect there.  The cooldown rung is for the lane that keeps
+being tried: a provider with one lane, or one whose siblings are also out.
+Sinking is therefore also what a transport failure gets, and on a route with a
+sibling that is all it gets.
+
 State is keyed by ``(provider config key, credential fingerprint)``.  A 429
 names the credential that earned it when the lane has keys, and the provider
 itself when it does not, so the same rule covers a probed lane, a keyless one

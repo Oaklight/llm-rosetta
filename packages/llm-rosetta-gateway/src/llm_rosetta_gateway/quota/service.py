@@ -782,10 +782,13 @@ def note_lane_refusal(
     """Count one capacity refusal against the upstream lane that answered.
 
     The per-request failover already serves this request from a sibling lane
-    (``#1448``).  This is the cross-request half: ``policy.after`` refusals of
-    *this lane* inside ``policy.window_s`` disable it for ``policy.cooldown_s``,
-    doubling on repeats, so later requests start on a sibling instead of
-    paying the failed attempt again.
+    (``#1448``).  This is the cross-request half: the first refusal sinks the
+    lane behind its siblings, and ``policy.after`` of them inside
+    ``policy.window_s`` disable it for ``policy.cooldown_s``, doubling on
+    repeats, so later requests start on a sibling instead of paying the failed
+    attempt again.  A lane that is sunk and skipped while a sibling answers
+    collects no second refusal, so there the sink is the whole effect and the
+    disable belongs to a lane that keeps being tried.
 
     The key is ``(provider, lane)`` — the lane, not the credential — where a
     lane is the upstream model the attempt asked for, or the model the client

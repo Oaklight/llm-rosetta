@@ -25,7 +25,10 @@ from llm_rosetta_gateway.quota.models import (
 from llm_rosetta_gateway.quota.state import QUOTA_STATE
 from llm_rosetta_gateway.pipelines.embeddings import handle_embeddings
 from llm_rosetta_gateway.routing import ProviderEntry
-from llm_rosetta_gateway.transport._base import UpstreamResponse
+from llm_rosetta_gateway.transport._base import (
+    UpstreamConnectionError,
+    UpstreamResponse,
+)
 
 
 def _raw(*, model: dict | None = None) -> dict:
@@ -278,3 +281,47 @@ class TestFailoverAfterARefusal:
 
         assert response.status_code == 429
         assert request.app.transport.send.call_count == 1
+
+
+class TestATransportFailureIsCounted:
+    """A host that does not answer is evidence about the lane, as in chat.
+
+    A typed route answers the failure itself -- there is no failover budget on
+    this path -- but leaving it unrecorded kept the routing panel calling the
+    lane available while every request against it paid the whole timeout.
+    """
+
+    @staticmethod
+    def _dead() -> UpstreamConnectionError:
+        return UpstreamConnectionError("connection refused")
+
+    @pytest.mark.asyncio
+    async def test_a_dead_host_sinks_its_lane_and_no_other(self):
+        config = GatewayConfig(_openai_raw(failover=False))
+        request = _request()
+        request.app.transport.send = AsyncMock(side_effect=self._dead())
+
+        response = await handle_embeddings(request, config)
+
+        assert response.status_code == 502
+        assert QUOTA_STATE.rate_limits.upstream_sunk("jina-a", "emb")
+        assert not QUOTA_STATE.rate_limits.upstream_sunk("jina-b", "emb")
+
+    @pytest.mark.asyncio
+    async def test_a_served_request_clears_the_record(self):
+        config = GatewayConfig(
+            _raw(model={"providers": ["jina-a"], "type": "embeddings"})
+        )
+        request = _request()
+        request.app.transport.send = AsyncMock(side_effect=self._dead())
+        await handle_embeddings(request, config)
+        assert QUOTA_STATE.rate_limits.upstream_sunk("jina-a", "emb")
+
+        # The same lane answering is what disproves the record; a sibling's
+        # success is not, which is why the clear is keyed by lane.
+        served = _request()
+        served.app.transport.send = AsyncMock(return_value=_embedding_ok())
+        response = await handle_embeddings(served, config)
+
+        assert response.status_code == 200
+        assert not QUOTA_STATE.rate_limits.upstream_sunk("jina-a", "emb")

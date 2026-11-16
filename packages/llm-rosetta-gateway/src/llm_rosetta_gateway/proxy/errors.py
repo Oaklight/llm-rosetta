@@ -393,6 +393,34 @@ def _count_lane_refusal(
         logger.warning("Could not record the lane refusal", exc_info=True)
 
 
+def note_transport_refusal(
+    provider_info: ProviderInfo,
+    *,
+    rate_limit: Any | None,
+    lane: str,
+) -> None:
+    """Count a transport failure against its lane, without offering failover.
+
+    The counting half of :func:`connection_refusal_decision`, for the routes
+    that answer the failure themselves: the typed pipelines (embeddings,
+    rerank, decisions) and the relayed ``compact`` / ``count_tokens`` routes.
+    They have no failover budget of their own, but a host that does not answer
+    costs every request the whole timeout, and unrecorded it left the routing
+    panel calling that lane available.
+
+    The status counted is ``502`` whatever the caller answers: a transport
+    failure receives no upstream status, and a timeout is the same "nothing
+    came back" from this ladder's point of view.
+
+    Args:
+        provider_info: The provider the request could not reach.
+        rate_limit: The rule in force, or ``None`` for the default.
+        lane: The lane's key, as :func:`proxy.failover.attempted_lane` builds
+            it.
+    """
+    _count_lane_refusal(provider_info, 502, rate_limit, lane)
+
+
 def connection_refusal_decision(
     provider_info: ProviderInfo,
     exc: UpstreamConnectionError,
@@ -421,11 +449,20 @@ def connection_refusal_decision(
         lane: The lane's key, as :func:`proxy.failover.attempted_lane` builds
             it.
 
+    A timeout is the ambiguous case.  :class:`UpstreamTimeoutError` is a
+    connection failure only in the gateway's own terms: the request was
+    written, so the upstream may have received it and may still be
+    generating.  Retrying it on a sibling can bill the work twice and make
+    the client wait twice the timeout, which is why failover stays a
+    per-model choice (``failover_on_error``): the operator decides whether a
+    served request is worth that.  On the streaming path the header had not
+    arrived and no bytes were sent, so the same retry costs nothing there.
+
     Returns:
         A ``LANE``-scoped ``FAILOVER`` decision.  The caller still answers
         502 when the model has not opted in or has nothing left to try.
     """
-    _count_lane_refusal(provider_info, 502, rate_limit, lane)
+    note_transport_refusal(provider_info, rate_limit=rate_limit, lane=lane)
     return RefusalDecision(
         RefusalAction.FAILOVER,
         signal=UpstreamRefusal(502, f"upstream transport: {exc}"),

@@ -14,9 +14,15 @@ import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from llm_rosetta_gateway.app.routes_compact import handle_responses_compact
 from llm_rosetta_gateway.config import GatewayConfig
-from llm_rosetta_gateway.transport._base import UpstreamResponse
+from llm_rosetta_gateway.quota.state import QUOTA_STATE
+from llm_rosetta_gateway.transport._base import (
+    UpstreamConnectionError,
+    UpstreamResponse,
+)
 
 COMPACTION_BODY: dict[str, Any] = {
     "model": "gpt-5-nano",
@@ -411,3 +417,54 @@ class TestThroughTheLifecycle:
 
         breaker = config.circuit_breaker_registry.get_or_create("p")
         assert breaker.state == CircuitState.OPEN
+
+
+class TestATransportFailureIsCounted:
+    """A host that does not answer is evidence about the lane.
+
+    The route relays the failure itself, so it has no failover to offer; what
+    it must not do is answer 502 and leave the routing panel calling the
+    provider available while every request pays the whole timeout.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clean_quota_state(self):
+        QUOTA_STATE.clear()
+        yield
+        QUOTA_STATE.clear()
+
+    @staticmethod
+    def _dead() -> MagicMock:
+        transport = MagicMock()
+        transport.send = AsyncMock(side_effect=UpstreamConnectionError("refused"))
+        return transport
+
+    def test_the_lane_is_sunk(self):
+        transport = self._dead()
+
+        response = asyncio.run(
+            handle_responses_compact(_request(COMPACTION_BODY, transport), _config())
+        )
+
+        assert response.status_code == 502
+        assert QUOTA_STATE.rate_limits.upstream_sunk("p", "gpt-5-nano")
+
+    def test_a_served_request_clears_the_record(self):
+        asyncio.run(
+            handle_responses_compact(_request(COMPACTION_BODY, self._dead()), _config())
+        )
+        assert QUOTA_STATE.rate_limits.upstream_sunk("p", "gpt-5-nano")
+
+        served = _transport(
+            UpstreamResponse(
+                status_code=200,
+                body=COMPACTED,
+                raw_content=json.dumps(COMPACTED).encode(),
+            )
+        )
+        response = asyncio.run(
+            handle_responses_compact(_request(COMPACTION_BODY, served), _config())
+        )
+
+        assert response.status_code == 200
+        assert not QUOTA_STATE.rate_limits.upstream_sunk("p", "gpt-5-nano")

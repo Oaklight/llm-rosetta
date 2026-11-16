@@ -23,7 +23,15 @@ from llm_rosetta_gateway.proxy import (
     handle_non_streaming,
     handle_streaming,
 )
-from llm_rosetta_gateway.transport._base import UpstreamResponse
+from llm_rosetta_gateway.proxy.errors import (
+    RefusalAction,
+    RefusalScope,
+    connection_refusal_decision,
+)
+from llm_rosetta_gateway.transport._base import (
+    UpstreamConnectionError,
+    UpstreamResponse,
+)
 
 _OK_BODY: dict[str, Any] = {
     "id": "resp-1",
@@ -1321,6 +1329,23 @@ class _ConnectionTransport(_Transport):
 
 class TestATransportFailure:
     """A host that does not answer is a lane refusal, not a dead end."""
+
+    def test_the_decision_names_the_lane_and_not_the_credential(self):
+        """A connection is made from one candidate; its siblings use other hosts.
+
+        The scope is what decides how far a mutation reaches, so it is pinned
+        on its own: ``CREDENTIAL`` would let one dead host take a healthy
+        sibling's own host out of rotation.
+        """
+        decision = connection_refusal_decision(
+            _config().providers["a"],
+            UpstreamConnectionError("connection refused"),
+            rate_limit=None,
+            lane="m",
+        )
+
+        assert decision.action is RefusalAction.FAILOVER
+        assert decision.scope is RefusalScope.LANE
 
     def test_a_host_that_cannot_be_reached_is_tried_elsewhere(self):
         config = _config()
