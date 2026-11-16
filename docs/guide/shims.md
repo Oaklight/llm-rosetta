@@ -580,8 +580,13 @@ An `include` that matches nothing warns at startup, naming what the source did
 load, and fails only under `shims.strict: true`. An `exclude` that matches
 nothing the source ships warns too, and never fails a load: the patterns match
 shim names, so a directory name read off the tree (`drop`) declines nothing, and
-the warning says so. A provider that needs a declined shim fails with the usual
-unknown-shim error, so the failure lands on whatever needed it.
+the warning says so. An `include` whose every hit the `exclude` then drops warns
+as well, and fails under `shims.strict: true`, because every pattern matched and
+the source still ends up empty. These warnings are startup log lines; the same
+facts ride the reload report — `unmatched`, `unmatched_excludes`,
+`emptied_includes` and `declined` — beside each source. A provider that needs a
+declined shim fails with the usual unknown-shim error, so the failure lands on
+whatever needed it.
 
 Selection is name-based, so it needs the names. A package can declare them with
 a `shims.yaml` at the root of the directory its `path` names:
