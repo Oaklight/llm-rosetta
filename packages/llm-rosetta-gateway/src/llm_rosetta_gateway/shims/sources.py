@@ -187,12 +187,18 @@ class ShimSourceStatus:
             source ships.  An exclude is measured against the shipped set, not
             the loaded one, so a pattern that hit a shim already gone is told
             apart from one that hit a shim the selection dropped.
+        emptied_includes: ``include`` patterns whose every hit the ``exclude``
+            dropped, when that left the source with nothing loaded.  Every
+            pattern "matched", so neither of the fields above reports it, and
+            yet the outcome is the one the include warning exists for: the
+            operator believes a shim is running and nothing loads.
         manifest_shims: The shim names the source's ``shims.yaml`` declares.
             Empty when it ships no manifest, which is the legacy scan layout.
-        declined: The shim names the source ships that the selection dropped.
-            A loaded name is never here; ``shim_names`` plus this is the set a
-            pattern can match, which is what makes an ``exclude`` that hit
-            nothing visible at all.
+        declined: The names the selection dropped — a shim the source ships, or
+            a leaf it refused before validation could have failed it.  A loaded
+            name is never here; ``shim_names`` plus this is the set a pattern
+            can match, which is what makes an ``exclude`` that hit nothing
+            visible at all.
     """
 
     kind: Literal["path", "remote"]
@@ -217,6 +223,7 @@ class ShimSourceStatus:
     exclude: tuple[str, ...] = ()
     unmatched: tuple[str, ...] = ()
     unmatched_excludes: tuple[str, ...] = ()
+    emptied_includes: tuple[str, ...] = ()
     manifest_shims: tuple[str, ...] = ()
     declined: tuple[str, ...] = ()
 
@@ -245,6 +252,7 @@ class ShimSourceStatus:
             "exclude": list(self.exclude),
             "unmatched": list(self.unmatched),
             "unmatched_excludes": list(self.unmatched_excludes),
+            "emptied_includes": list(self.emptied_includes),
             "manifest_shims": list(self.manifest_shims),
             "declined": list(self.declined),
         }
@@ -398,19 +406,31 @@ def rebuild_shims(
 
     # An ``include`` that selected nothing is a config fact rather than a
     # source failure — the rest of the source loaded — so it is reported on the
-    # status and only stops a strict load.  An unmatched ``exclude`` stays a
-    # warning under ``strict`` too: nothing downstream depends on an exclude
-    # having hit, while an include that hit nothing means the operator thinks a
-    # shim is running that is not.
+    # status and only stops a strict load.  An include whose every hit the
+    # exclude dropped lands here too: it selected *something*, but the source
+    # still ends up empty and the operator believes a shim is running.  An
+    # unmatched ``exclude`` stays a warning under ``strict``: nothing downstream
+    # depends on an exclude having hit.
     unmatched = [
         (status.location, pattern)
         for status in statuses
         for pattern in status.unmatched
     ]
-    if strict and unmatched:
+    emptied = [
+        (status.location, pattern)
+        for status in statuses
+        for pattern in status.emptied_includes
+    ]
+    if strict and (unmatched or emptied):
         detail = "; ".join(
-            f"{location}: include {pattern!r} matched no shim"
-            for location, pattern in unmatched
+            [
+                f"{location}: include {pattern!r} matched no shim"
+                for location, pattern in unmatched
+            ]
+            + [
+                f"{location}: include {pattern!r} selected only shims the exclude drops"
+                for location, pattern in emptied
+            ]
         )
         raise ShimSourceError(f"shim selection matched nothing: {detail}")
 
@@ -1045,25 +1065,9 @@ def _scan_dir(
 
     names = tuple(s.name for s in shims)
     declined_names = tuple(n for n in dict.fromkeys(declined) if n not in names)
-    # A pattern is matched against everything the source ships, loaded or
-    # declined: that set is the only thing an ``exclude`` can hit.
-    shipped = names + declined_names
-    unmatched = _unmatched_patterns(include, shipped)
-    unmatched_excludes = _unmatched_patterns(exclude, shipped)
-    for pattern in unmatched:
-        logger.warning(
-            "Shim source %s: include %r matched no shim; it loads: %s",
-            location,
-            pattern,
-            ", ".join(names) or "nothing",
-        )
-    for pattern in unmatched_excludes:
-        logger.warning(
-            "Shim source %s: exclude %r matched no shim; it ships: %s",
-            location,
-            pattern,
-            ", ".join(shipped) or "nothing",
-        )
+    unmatched, unmatched_excludes, emptied_includes = _selection_report(
+        location, names, declined_names, include=include, exclude=exclude
+    )
     if manifest is not None:
         declared = set(manifest.names)
         for shim_name in names:
@@ -1082,6 +1086,7 @@ def _scan_dir(
         shim_names=names,
         unmatched=unmatched,
         unmatched_excludes=unmatched_excludes,
+        emptied_includes=emptied_includes,
         manifest_shims=manifest.names if manifest is not None else (),
         declined=declined_names,
     )
@@ -1122,6 +1127,57 @@ def _unmatched_patterns(
         for pattern in patterns
         if not any(fnmatch(shipped_name, pattern) for shipped_name in shipped)
     )
+
+
+def _selection_report(
+    location: str,
+    names: tuple[str, ...],
+    declined: tuple[str, ...],
+    *,
+    include: Collection[str],
+    exclude: Collection[str],
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """Measure both selection directions and log what matched nothing.
+
+    A pattern is matched against everything the source ships — the shims it
+    loaded and the ones the selection declined — because that is the set a
+    pattern can hit.  An ``include`` whose every hit the ``exclude`` then drops
+    matches every pattern and still leaves the source empty, so it is reported
+    on its own: the operator believes a shim is running and nothing loads.
+
+    Returns:
+        ``(unmatched, unmatched_excludes, emptied_includes)``.
+    """
+    shipped = names + declined
+    unmatched = _unmatched_patterns(include, shipped)
+    unmatched_excludes = _unmatched_patterns(exclude, shipped)
+    emptied_includes = (
+        tuple(pattern for pattern in include if pattern not in unmatched)
+        if include and not names
+        else ()
+    )
+    for pattern in unmatched:
+        logger.warning(
+            "Shim source %s: include %r matched no shim; it loads: %s",
+            location,
+            pattern,
+            ", ".join(names) or "nothing",
+        )
+    for pattern in unmatched_excludes:
+        logger.warning(
+            "Shim source %s: exclude %r matched no shim; it ships: %s",
+            location,
+            pattern,
+            ", ".join(shipped) or "nothing",
+        )
+    for pattern in emptied_includes:
+        logger.warning(
+            "Shim source %s: include %r selected only shims the exclude "
+            "drops; it loads: nothing",
+            location,
+            pattern,
+        )
+    return unmatched, unmatched_excludes, emptied_includes
 
 
 # ---------------------------------------------------------------------------
