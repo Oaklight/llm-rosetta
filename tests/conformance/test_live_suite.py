@@ -329,6 +329,22 @@ class TestOutcome:
         with pytest.raises(RuntimeError, match="HTTP 400"):
             _LaneProbe(_BY_NAME["messages/anthropic"], post=transport).run()
 
+    def test_a_400_that_names_the_model_by_value_is_an_error(self, monkeypatch):
+        """The model is the run's variable, not a field the converter chose.
+
+        ``Invalid value for 'model'`` names a top-level key of the body, so a
+        plain field scan reads it as a rejected request; it is the ``*_MODEL``
+        variable that is wrong.
+        """
+        _configure(monkeypatch, "chat_completions/openai", base="https://o.example/v1")
+        transport = _Transport(
+            status=400,
+            text='{"error": {"message": "Invalid value for \'model\': gpt-9"}}',
+        )
+
+        with pytest.raises(RuntimeError, match="HTTP 400"):
+            _LaneProbe(_BY_NAME["chat_completions/openai"], post=transport).run()
+
     def test_a_5xx_that_echoes_a_field_is_an_error(self, monkeypatch):
         """The 400 test is what may fail a case; an outage never is."""
         _configure(monkeypatch, "chat_completions/openai", base="https://o.example/v1")
