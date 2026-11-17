@@ -251,12 +251,21 @@ def _triggers(text: str) -> dict[str, list[str]]:
         if indent == 0:
             break
         stripped = line.strip()
+        if stripped.startswith("-"):
+            # A sequence item at the event's own indent belongs to the event
+            # above it: YAML lets ``schedule:`` put its cron at the key's
+            # column, and reading that line as an event would hide the cron
+            # the guard is about.
+            if current is not None:
+                events[current].append(stripped)
+            continue
         if indent == 2:
             # ``key:`` and the flow spelling ``key: {}`` both register the
             # event; a reader that only accepted the first would let
-            # ``pull_request: {}`` through the exact-set assertion.
+            # ``pull_request: {}`` through the exact-set assertion.  A quoted
+            # key is the same event, so the quotes come off.
             key, _, value = stripped.partition(":")
-            current = key.strip()
+            current = key.strip().strip("\"'")
             events[current] = [value.strip()] if value.strip() else []
         elif current is not None:
             events[current].append(stripped)
@@ -286,6 +295,26 @@ def test_the_trigger_reader_sees_a_flow_style_event():
     text = "on:\n  pull_request: {}\n  workflow_dispatch:\n"
 
     assert _triggers(text) == {"pull_request": ["{}"], "workflow_dispatch": []}
+
+
+def test_the_trigger_reader_takes_a_dedented_sequence_item():
+    """``schedule:`` may put its cron at the key's own column."""
+    text = 'on:\n  schedule:\n  - cron: "23 4 * * 1"\n  workflow_dispatch:\n'
+
+    assert _triggers(text) == {
+        "schedule": ['- cron: "23 4 * * 1"'],
+        "workflow_dispatch": [],
+    }
+
+
+def test_the_trigger_reader_reads_a_quoted_event_key():
+    """A quoted key is the same event, and the guard has to see it as one."""
+    text = 'on:\n  "schedule":\n    - cron: "23 4 * * 1"\n  workflow_dispatch:\n'
+
+    assert _triggers(text) == {
+        "schedule": ['- cron: "23 4 * * 1"'],
+        "workflow_dispatch": [],
+    }
 
 
 def test_the_live_suite_is_scheduled_and_not_in_pr_ci():
