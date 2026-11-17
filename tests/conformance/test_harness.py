@@ -304,6 +304,9 @@ def test_the_live_suite_is_scheduled_and_not_in_pr_ci():
     assert len(runners) == 1, f"the live suite is named by {runners}"
     triggers = _triggers(texts[runners[0]])
     assert set(triggers) == {"schedule", "workflow_dispatch"}, triggers
+    # Exactly one cron: a second entry beside the weekly one would turn the
+    # sweep into a daily credentialled run and nothing else would notice.
+    assert len(triggers["schedule"]) == 1, triggers
     assert any("23 4 * * 1" in line for line in triggers["schedule"]), triggers
 
 

@@ -243,20 +243,28 @@ def _is_request_fault(status: int, text: str, body: dict[str, Any]) -> bool:
     ``400`` that names the credential or the model, a ``404``, a rate limit and
     a 5xx are the run's own state, and the error bucket reports those.
 
+    ``model`` is not a field of the body this *library* chooses: the harness
+    fills it from the lane's ``*_MODEL`` variable, so "Invalid value for
+    'model'" is the run's configuration and not a dialect fault.  It is left
+    out of the scan, which sends a message naming it to the error bucket the
+    same way a marker does.
+
     Args:
         status: The HTTP status the vendor answered with.
         text: The response body.
         body: The request body this probe sent.
 
     Returns:
-        ``True`` when the answer is about a field of *body*.
+        ``True`` when the answer is about a field of *body* that the
+        converter, not the run, chose.
     """
     if status != 400:
         return False
     lowered = text.lower()
     if any(marker in lowered for marker in _RUN_FAULT_MARKERS):
         return False
-    return any(str(key).lower() in lowered for key in body)
+    fields = (str(key).lower() for key in body)
+    return any(field in lowered for field in fields if field != "model")
 
 
 def _request_body(lane: Lane, model: str) -> dict[str, Any]:
