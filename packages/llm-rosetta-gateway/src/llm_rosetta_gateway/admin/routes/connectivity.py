@@ -207,10 +207,28 @@ def _endpoint_url(
     """
     info = (getattr(config, f"{ep_name}_provider_infos", None) or {}).get(name)
     if info is not None:
-        return info.upstream_url("")
+        return info.upstream_url(
+            _sample_model(getattr(config, f"{ep_name}_models", {}), name)
+        )
     if not face_host:
         return None
     return f"{face_host}{face_path}"
+
+
+def _sample_model(models: dict[str, str], name: str) -> str:
+    """One model this provider serves, for a path template that needs one.
+
+    Google's embedding endpoint carries the model in the URL
+    (``/v1beta/models/{model}:embedContent``), so probing with an empty model
+    asks for ``…/models/:embedContent`` — a URL no request ever uses, drawn as
+    a broken endpoint by a gateway that knows the model (#1595 review).  An
+    endpoint with no model mapped keeps the empty value, and its template needs
+    none.
+    """
+    for model, provider in models.items():
+        if provider == name:
+            return model
+    return ""
 
 
 async def _check_post_endpoint(

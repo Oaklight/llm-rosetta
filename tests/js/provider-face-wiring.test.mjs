@@ -128,3 +128,17 @@ test('the reader the drawer uses is the shared one', () => {
   assert.match(read, /return readFace\(cfg,\s*desc\.name,\s*field,\s*flatKey\)/);
   assert.match(read, /base_url:\s*`\$\{desc\.name\}_base_url`/);
 });
+
+test('choosing another shim re-resolves the candidates', () => {
+  // The set was written once when the row opened.  Picking a different shim
+  // from the dropdown left the marker comparing against the previous one —
+  // quiet on a real mismatch, or lit on a correct configuration (#1595
+  // review).
+  const choice = bodyOf('_applyEndpointChoice');
+
+  assert.match(choice, /_refreshFaceCandidates\(desc\);/);
+  const refresh = bodyOf('_refreshFaceCandidates');
+  assert.match(refresh, /faceCandidateHosts\(shims,\s*\{/);
+  assert.match(refresh, /dataset\.shimHosts\s*=\s*JSON\.stringify/);
+  assert.match(refresh, /_markFaceHostMismatch\(desc,\s*el\)/);
+});
