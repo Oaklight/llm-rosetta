@@ -260,15 +260,30 @@ function _vendorCard(vendor, rows) {
   const source = (rows.find((s) => s.source) || {}).source || '';
   const open = _openVendors.has(vendor);
   const rowsId = esc(`shimRows-${vendor}`);
+  // The head is two fixed rows rather than one flex line: the title row keeps
+  // the mark, the name and the badges, the second row carries the counts.  A
+  // single line made the layout depend on how long the vendor's name is — the
+  // name wrapped, the counts wrapped under it, and the card grew taller than
+  // its neighbours while the badge slid to wherever the name ended.
+  const badges = [
+    rows.some((s) => s.free_source)
+      ? `<span class="tag is-square is-free">${esc(t('shimPage.free'))}</span>`
+      : '',
+    _originBadge(origin),
+  ].filter(Boolean).join('');
+  const name = vendorName(vendor);
+  const metaText = `${plural(rows.length, 'shimPage.formats', 'shimPage.formatOne')}`
+    + (usedBy.size ? ' · ' + plural(usedBy.size, 'shimPage.usedBy', 'shimPage.usedByOne') : '');
   return `
     <article class="shim-vendor-card${open ? ' is-open' : ''}" data-vendor="${esc(vendor)}">
       <button type="button" class="shim-vendor-head" aria-expanded="${open}" aria-controls="${rowsId}"
               onclick="toggleShimVendor(${jsArg(vendor)})">
         <span class="shim-vendor-logo">${_vendorLogo(vendor)}</span>
-        <span class="shim-vendor-name">${esc(vendorName(vendor))}</span>
-        ${rows.some((s) => s.free_source) ? `<span class="tag is-square is-free">${esc(t('shimPage.free'))}</span>` : ''}
-        ${_originBadge(origin)}
-        <span class="shim-vendor-meta">${esc(plural(rows.length, 'shimPage.formats', 'shimPage.formatOne'))}${usedBy.size ? ' · ' + esc(plural(usedBy.size, 'shimPage.usedBy', 'shimPage.usedByOne')) : ''}</span>
+        <span class="shim-vendor-title">
+          <span class="shim-vendor-name" title="${esc(name)}">${esc(name)}</span>
+          ${badges}
+        </span>
+        <span class="shim-vendor-meta" title="${esc(metaText)}">${esc(metaText)}</span>
         <svg class="shim-vendor-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="shim-rows" id="${rowsId}"${open ? '' : ' hidden'}>
@@ -417,9 +432,11 @@ function _packageCard(p) {
       <button type="button" class="shim-card-head" aria-expanded="${open}" aria-controls="${bodyId}"
               onclick="toggleShimPackage(${jsArg(p.key)})">
         <span class="shim-vendor-logo">${_packageMark(p)}</span>
-        <span class="shim-name">${esc(p.label)}</span>
-        ${tierTag}
-        <span class="shim-vendor-meta">${esc(plural((p.shims || []).length, 'shimPage.shims', 'shimPage.shimOne'))}</span>
+        <span class="shim-vendor-title">
+          <span class="shim-vendor-name" title="${esc(p.label)}">${esc(p.label)}</span>
+          ${tierTag}
+        </span>
+        <span class="shim-vendor-meta" title="${esc(plural((p.shims || []).length, 'shimPage.shims', 'shimPage.shimOne'))}">${esc(plural((p.shims || []).length, 'shimPage.shims', 'shimPage.shimOne'))}</span>
         <svg class="shim-vendor-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="shim-card-body" id="${bodyId}"${open ? '' : ' hidden'}>
