@@ -141,11 +141,22 @@ fail, and forces what it requires:
 | `previous_response_id` | stripped — the route keeps no server state, so send the history in `input` |
 | `temperature`, `top_p`, `max_output_tokens`, `top_logprobs` | stripped |
 | `background`, `conversation`, `max_tool_calls`, `metadata`, `moderation`, `multi_agent`, `prompt`, `prompt_cache_retention`, `safety_identifier`, `truncation`, `user` | stripped |
+| `input` items with role `system` or `developer` | moved out of `input` — leading items become `instructions`, late ones become user turns wrapped in `<system>…</system>` |
 
 A stripped field is visible in the request log's applied-transform list
 (`drop_refused_fields(...)`); the request itself still succeeds. `instructions`
 carries system guidance, `input` carries the full history, and function tools
 are sent with the namespacing the route expects.
+
+**A system item must not appear in `input`.** The route refuses the whole
+request with `400 {"detail":"System messages are not allowed"}` when it sees one
+anywhere in the array, the *first* item included — this is not only the
+mid-conversation case. A Responses client that sends its prompt as an `input`
+item instead of `instructions` hits it on its first request, and a request
+converted from Chat Completions keeps a mid-conversation system message as an
+item unless it is rewritten. The shim therefore runs the IR hoist transform
+(`hoist_late_system_messages()`), which is a cache-prefix nicety on other lanes
+and a requirement on this one.
 
 **Streaming is required.** The route answers SSE only, so the gateway forces
 `stream: true` upstream even when the client asked for one response. A
@@ -209,5 +220,6 @@ request id, rather than rewriting them.
 | “needs an interactive sign-in” at startup | no record at `<data_dir>/shim-auth/<provider>` | run the sign-in and install the record |
 | The record is refused when pasted | the ID token has expired, or it belongs to another client | sign in again and paste promptly |
 | `subscription_sharing_user_not_eligible` | the account is not on the route | use an eligible account; this is not a transient error |
+| `400 {"detail":"System messages are not allowed"}` | the request carried a `system`/`developer` `input` item, which the shim now hoists out | upgrade to a build with the hoist transform on this lane; nothing to change at the client |
 | `usage_limit_exceeded` after a few requests | the plan's window or the app's weekly cap | pause; link to your usage page |
 | Requests still 401 after a sign-in | the record was installed for a different provider name | two providers are two accounts; install per provider |
