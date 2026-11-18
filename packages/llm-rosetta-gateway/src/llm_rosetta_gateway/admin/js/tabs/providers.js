@@ -28,7 +28,13 @@ import { filteredEmptyHtml } from '../core/empty.js';
 import { providerFormError } from '../core/form-validate.js';
 import { isDialogPristine, markDialogPristine } from '../core/dialog.js';
 import { typeOptionHtml } from '../core/type-switch.js';
-import { readFace, faceSaveBlock, faceHostMismatch, faceRow } from '../core/face-host.js';
+import {
+  readFace,
+  faceSaveBlock,
+  faceHostMismatch,
+  faceRow,
+  faceCandidateHosts,
+} from '../core/face-host.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -2054,6 +2060,11 @@ function _applyEndpointChoice(desc, value) {
     }
     pathEl.dataset.defaultPath = nextDefault;
   }
+  // The candidate hosts were resolved from the stored choice when the row
+  // opened; this one may be a different shim or a different format, so the set
+  // the marker compares against is recomputed here rather than left stale
+  // (#1595 review).
+  _refreshFaceCandidates(desc);
   if (!shim) return;
   const urlInput = document.getElementById('provBaseUrl');
   if (urlInput && !urlInput.value.trim()) urlInput.value = shim.default_base_url || '';
@@ -2061,6 +2072,27 @@ function _applyEndpointChoice(desc, value) {
   if (keyInput && !keyInput.value.trim() && shim.default_api_key_env) {
     keyInput.value = '${' + shim.default_api_key_env + '}';
   }
+}
+
+/** Re-resolve the endpoint row's candidate hosts from the picker's value.
+ *
+ *  `dataset.shimHosts` is written when the drawer opens.  Choosing another
+ *  shim or another format after that changes which hosts the endpoint would
+ *  forward to, and a marker comparing against the old set either stays quiet
+ *  on a real mismatch or lights up on a correct configuration.
+ */
+function _refreshFaceCandidates(desc) {
+  const el = document.getElementById(`provFaceBase_${desc.name}`);
+  if (!el) return;
+  const shims = S.configData?.registered_shims || [];
+  const value = document.getElementById(`provShim_${desc.name}`)?.value || '';
+  const chosen = shims.find(s => s.name === value);
+  el.dataset.shimHosts = JSON.stringify(faceCandidateHosts(shims, {
+    modelType: desc.name,
+    format: chosen ? chosen.format : value,
+    shim: chosen ? chosen.name : '',
+  }));
+  _markFaceHostMismatch(desc, el);
 }
 
 /** The endpoint path a format defaults to, or the type's own default.

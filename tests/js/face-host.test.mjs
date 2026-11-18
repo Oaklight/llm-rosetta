@@ -162,6 +162,26 @@ test('an unknown shim declares no host', () => {
   assert.equal(faceHostMismatch('https://api.openai.com/v1', []), false);
 });
 
+test('the model type is half the key', () => {
+  // `cohere` names a format on two endpoints.  A rerank shim answers a rerank
+  // face and not an embeddings one: dropping the model-type comparison folds
+  // the two sets together and an OpenRouter embeddings face on `cohere` stops
+  // being marked (#1595 review).
+  const shims = [
+    ...SHIMS,
+    { name: 'openrouter--rerank', model_type: 'rerank', format: 'cohere', default_base_url: 'https://openrouter.ai/api/v1' },
+  ];
+
+  assert.deepEqual(
+    faceCandidateHosts(shims, { modelType: 'embeddings', format: 'cohere' }),
+    ['https://api.cohere.com'],
+  );
+  assert.deepEqual(
+    faceCandidateHosts(shims, { modelType: 'rerank', format: 'cohere' }),
+    ['https://openrouter.ai/api/v1'],
+  );
+});
+
 // ── the row the drawer shows, and the block it saves ───────────────
 
 const EMB = { name: 'embeddings', config_shim_key: 'embeddings_shim', config_format_key: 'embeddings_format' };

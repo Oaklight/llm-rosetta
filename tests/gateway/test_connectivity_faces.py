@@ -57,11 +57,11 @@ def probe(monkeypatch):
     return client
 
 
-def _request(tmp_path, entry: dict) -> SimpleNamespace:
+def _request(tmp_path, entry: dict, models: dict | None = None) -> SimpleNamespace:
     from llm_rosetta_gateway.config import load_gateway_config
 
     path = tmp_path / "config.jsonc"
-    path.write_text(json.dumps({"providers": {"mix": entry}, "models": {}}))
+    path.write_text(json.dumps({"providers": {"mix": entry}, "models": models or {}}))
     config = load_gateway_config(str(path))
     app = SimpleNamespace(gateway_config=config, config_path=str(path))
     return SimpleNamespace(app=app, path_params={"name": "mix"})
@@ -140,3 +140,32 @@ class TestTheProbeSeesTheFace:
         posted = [url for verb, url in probe.calls if verb == "POST"]
         assert runtime.upstream_url("") in posted, (runtime.upstream_url(""), posted)
         assert runtime.upstream_url("").endswith("/v1/embeddings")
+
+    @pytest.mark.asyncio
+    async def test_a_path_that_carries_the_model_is_probed_with_one(
+        self, tmp_path, probe
+    ):
+        """Google puts the model in the path; an empty one asks a URL nobody uses.
+
+        Probing with ``""`` produced ``…/models/:embedContent`` for a gateway
+        that knows the model, and the row read ``ok: false`` on a URL no
+        request would ever reach (#1595 review).
+        """
+        request = _request(
+            tmp_path,
+            {
+                "type": "openai--chat_completions",
+                "base_url": "https://chat.example/v1",
+                "api_key": "k",
+                "embeddings": {"format": "google_generate"},
+            },
+            models={"text-embedding-004": {"provider": "mix", "type": "embeddings"}},
+        )
+
+        await connectivity.test_provider_connectivity(request, "mix")
+
+        posted = [url for verb, url in probe.calls if verb == "POST"]
+        embedded = [url for url in posted if "embedContent" in url]
+        assert embedded, posted
+        assert "models/:embedContent" not in embedded[0], embedded
+        assert "text-embedding-004" in embedded[0], embedded
