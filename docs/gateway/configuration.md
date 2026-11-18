@@ -226,7 +226,7 @@ stale。不掩盖的只有两类 —— `sha256` 不符，以及 body 不是可�
 1. **shim**：块内的 `shim`（或扁平的 `<type>_shim`）；否则使用提供方级的 `shim` 或 `type`，但仅当该 shim 的 `model_type` 与端点一致；
 2. **格式**：显式的格式优先于 shim 的格式；
 3. **路径**：显式的路径优先于 shim 的 `connection.default_path`（仅当最终格式就是该 shim 的格式时才使用），其次是该格式自身的默认路径（Cohere 使用 `/v2/...`；Google 的 embedding 路径携带模型）；
-4. **主机**：端点自己的 `base_url`；否则条目的 `base_url`；否则 shim 的 `connection.base_url`。若端点继承条目的主机、而它自己的 shim 声明了另一个主机，启动时会写一条日志，同时点出两个主机和修法 —— 这种组合几乎总是块出现之前写下的条目，请求会发往错误的厂商；
+4. **主机**：端点自己的 `base_url`；否则条目的 `base_url`；否则 shim 的 `connection.base_url`。若端点继承条目的主机、而没有为它服务的 shim 声明该主机，启动时会写一条日志，点出相关主机和修法 —— 这种组合几乎总是块出现之前写下的条目，请求会发往错误的厂商。多家厂商共用的方言不等于某一家厂商的主机：SiliconFlow 上的 `embeddings: {format: "openai"}` 是被接受的，因为 `siliconflow--embedding` 为它服务并声明了 SiliconFlow 的主机；
 5. **凭据**：条目的（`base_url` / `api_key` 默认值来自 shim）。一个条目就是一份凭据；两家厂商两把 key 就是两个条目。
 
 `<type>_shim` 若不属于该能力，启动时会报错并指明该 shim 的类别。gateway 把每个提供方的身份记录为 `(model_type, format)` 对；LLM 模型若被路由到身份为 `embeddings`、`rerank` 或 `decisions` 的提供方，会被拒绝。
