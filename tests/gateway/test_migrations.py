@@ -50,7 +50,7 @@ class TestMigrationV0ToV1:
     """Migration 001: merge legacy rerank/embedding into unified providers."""
 
     def test_rerank_provider_merged_onto_existing(self):
-        raw = {
+        raw: dict[str, Any] = {
             "providers": {
                 "jina": {"api_key": "j-test", "base_url": "https://api.jina.ai"}
             },
@@ -65,7 +65,7 @@ class TestMigrationV0ToV1:
             },
         }
         migrate(raw)
-        prov = raw["providers"]["jina"]
+        prov: dict[str, Any] = raw["providers"]["jina"]
         # v4→v5 folds the flat endpoint keys into the endpoint's own block.
         assert prov["rerank"]["format"] == "jina"
         assert prov["rerank"]["path"] == "/v1/rerank"
@@ -90,7 +90,7 @@ class TestMigrationV0ToV1:
         assert raw["providers"]["jina"]["api_key"] == "j-test"
 
     def test_embedding_provider_merged(self):
-        raw = {
+        raw: dict[str, Any] = {
             "providers": {
                 "openai": {"api_key": "sk-test", "base_url": "https://api.openai.com"}
             },
@@ -105,7 +105,7 @@ class TestMigrationV0ToV1:
             },
         }
         migrate(raw)
-        prov = raw["providers"]["openai"]
+        prov: dict[str, Any] = raw["providers"]["openai"]
         assert prov["embeddings"]["format"] == "openai"
         assert prov["embeddings"]["path"] == "/v1/embeddings"
         assert prov["api_key"] == "sk-test"
@@ -251,7 +251,7 @@ class TestMigrationV1ToV2:
     """Migration 002: rename the ``embedding`` model type to ``embeddings``."""
 
     def test_provider_endpoint_keys_renamed(self):
-        raw = {
+        raw: dict[str, Any] = {
             "config_version": 1,
             "providers": {
                 "openai": {
@@ -265,7 +265,7 @@ class TestMigrationV1ToV2:
             "models": {},
         }
         migrate(raw)
-        prov = raw["providers"]["openai"]
+        prov: dict[str, Any] = raw["providers"]["openai"]
         assert prov["embeddings"]["format"] == "openai"
         assert prov["embeddings"]["path"] == "/v1/embeddings"
         assert prov["embeddings"]["shim"] == "openai--embedding"
@@ -359,7 +359,7 @@ class TestMigrationV2ToV3:
     """Migration 003: rename the ``decision`` model type to ``decisions``."""
 
     def test_provider_endpoint_keys_renamed(self):
-        raw = {
+        raw: dict[str, Any] = {
             "config_version": 2,
             "providers": {
                 "ts": {
@@ -373,7 +373,7 @@ class TestMigrationV2ToV3:
             "models": {},
         }
         migrate(raw)
-        prov = raw["providers"]["ts"]
+        prov: dict[str, Any] = raw["providers"]["ts"]
         assert prov["decisions"]["format"] == "systemone"
         assert prov["decisions"]["path"] == "/v1/systemone"
         assert prov["decisions"]["shim"] == "typesafe--systemone"

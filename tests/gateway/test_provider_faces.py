@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import Any
 
 import pytest
 
@@ -258,7 +259,7 @@ class TestTheMigration:
 
         migrate(raw)
 
-        entry = raw["providers"]["p"]
+        entry: dict[str, Any] = raw["providers"]["p"]
         assert entry["embeddings"]["shim"] == "kept--embedding"
         assert "embeddings_shim" not in entry
 
@@ -359,7 +360,7 @@ class TestTheAdminPayload:
     def test_a_flat_entry_is_folded_into_a_block_for_the_panel(self):
         from llm_rosetta_gateway.admin.routes.config.payload import _mask_provider_entry
 
-        masked = _mask_provider_entry(
+        masked: dict[str, Any] = _mask_provider_entry(
             "mix",
             {
                 "type": "google_generate",
@@ -400,7 +401,9 @@ def test_every_typed_endpoint_reads_its_block(type_name):
 
     descriptors = {desc.name: desc for desc in _typed_descriptors()}
     desc = descriptors[type_name]
-    cfg = {type_name: {"shim": "x--y", "path": "/p"}}
+    cfg: dict = {type_name: {"shim": "x--y", "path": "/p"}}
 
+    assert desc.config_shim_key is not None
+    assert desc.config_path_key is not None
     assert face_value(cfg, desc.config_shim_key, type_name) == "x--y"
     assert face_value(cfg, desc.config_path_key, type_name) == "/p"
