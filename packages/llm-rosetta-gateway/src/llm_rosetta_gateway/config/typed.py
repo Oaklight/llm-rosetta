@@ -496,7 +496,7 @@ def typed_provider_info(
     effective = _apply_shim_defaults(cfg, shim) if shim is not None else cfg
     if credential_owner is None and refuse_unowned_minted:
         _refuse_unowned_minted_credential(name, effective, shim, keys.type_name)
-    base_url = _face_base_url(name, cfg, keys.type_name, effective, shim)
+    base_url = _face_base_url(name, cfg, keys.type_name, effective, shim, wire_format)
     info = ProviderInfo(
         name=f"{keys.type_name}:{name}",
         api_key=effective.get("api_key", ""),
@@ -518,55 +518,108 @@ def _face_base_url(
     type_name: str,
     effective: dict[str, Any],
     shim: Any,
+    wire_format: str,
 ) -> str:
     """The host one typed endpoint forwards to.
 
     The face's own ``base_url`` wins; without one the endpoint inherits the
-    entry's, which is what it always did.  Inheritance is checked rather than
-    assumed: an endpoint shim that declares a different host is almost always
-    an entry written before the face existed, and sending it the LLM host is a
-    silent misroute rather than a configuration error — so the mismatch is
-    logged here and shown on the endpoint's row in the panel.
+    entry's, which is what it always did — a shim's default host never
+    substitutes for the operator's URL.  Inheritance is checked rather than
+    assumed: an endpoint whose own declaration belongs to another place is
+    almost always an entry written before the face existed, and sending it the
+    chat lane's host is a silent misroute rather than a configuration error —
+    so the mismatch is logged here and shown on the endpoint's row in the panel.
 
     Args:
         name: The provider's config key, for the warning.
         cfg: The raw provider entry.
         type_name: The model type whose face this is.
-        effective: The entry after shim defaults, i.e. what the connection
-            is built from.
+        effective: The entry after shim defaults, i.e. what the connection is
+            built from.
         shim: The endpoint's shim, or ``None``.
+        wire_format: The format the endpoint resolves to; used to find the
+            vendor shim when the face names a format and no shim.
 
     Returns:
         The base URL with any trailing slash removed.
     """
     declared = face_section(cfg, type_name).get("base_url") or ""
-    base_url = declared or effective.get("base_url", "")
-    if declared or shim is None:
-        return str(base_url).rstrip("/")
-    endpoint_host = getattr(getattr(shim, "connection", None), "base_url", None) or ""
-    if endpoint_host and _host(endpoint_host) != _host(base_url):
+    base_url = str(declared or effective.get("base_url", ""))
+    if declared:
+        return base_url.rstrip("/")
+    candidates = _endpoint_hosts(shim, type_name, wire_format)
+    if candidates and _origin(base_url) not in {_origin(host) for host in candidates}:
         logger.warning(
-            "Provider %r: the %s endpoint inherits base_url %r, but its shim "
-            "%r forwards to %r; give the endpoint its own `%s: {base_url: ...}` "
-            "if the two are different vendors",
+            "Provider %r: the %s endpoint inherits base_url %r, but %s; "
+            "give the endpoint its own `%s: {base_url: ...}` if the two are "
+            "different vendors",
             name,
             type_name,
             base_url,
-            getattr(shim, "name", "?"),
-            endpoint_host,
+            _endpoint_subject(shim, wire_format, candidates),
             type_name,
         )
-    return str(base_url).rstrip("/")
+    return base_url.rstrip("/")
 
 
-def _host(url: str) -> str:
-    """The host of *url*, for comparing two endpoints; the text otherwise."""
+def _endpoint_subject(shim: Any, wire_format: str, candidates: list[str]) -> str:
+    """How the warning names what the endpoint forwards with."""
+    if shim is not None:
+        return f"its shim {getattr(shim, 'name', '?')!r} forwards to {candidates[0]!r}"
+    listed = ", ".join(f"{host!r}" for host in sorted(candidates))
+    return (
+        f"no shim serving format {wire_format!r} forwards there (one of {listed} would)"
+    )
+
+
+def _endpoint_hosts(shim: Any, type_name: str, wire_format: str) -> list[str]:
+    """The hosts this endpoint's declaration would forward to.
+
+    A face that names a shim takes that shim's host.  A face that names only a
+    *format* has no shim of its own to ask, and several vendors ship a shim in
+    their dialect — ``embeddings: {format: "openai"}`` is served by
+    ``openai--embedding``, by ``siliconflow--embedding`` and by three more — so
+    *every* registered shim of the ``(model_type, format)`` pair answers.  The
+    inherited host is accepted when it is any of them and reported only when it
+    is none: answering with the first registered shim made SiliconFlow, Zhipu,
+    Z.ai and Volcengine warn while routing correctly (#1595 review).
+    """
+    connection = getattr(shim, "connection", None) if shim is not None else None
+    host = getattr(connection, "base_url", None) or ""
+    if host:
+        return [str(host)]
+    from llm_rosetta.shims import list_shims
+
+    hosts: list[str] = []
+    for candidate in list_shims():
+        if (
+            getattr(candidate, "model_type", None) == type_name
+            and getattr(candidate, "format", None) == wire_format
+        ):
+            candidate_host = getattr(candidate.connection, "base_url", None) or ""
+            if candidate_host and str(candidate_host) not in hosts:
+                hosts.append(str(candidate_host))
+    return hosts
+
+
+def _origin(url: str) -> str:
+    """The origin of *url*: scheme, host and port.
+
+    Hostname alone called ``http://api.cohere.com`` and
+    ``https://api.cohere.com`` the same place, and two local services on
+    different ports the same place too — each a silent misroute, which is the
+    failure this check exists to name (#1595 review).
+    """
     from urllib.parse import urlsplit
 
     try:
-        return (urlsplit(url).hostname or "").lower() or url
+        parts = urlsplit(str(url))
     except ValueError:
-        return url
+        return str(url)
+    if not parts.scheme or not parts.hostname:
+        return str(url)
+    port = parts.port or {"http": 80, "https": 443}.get(parts.scheme)
+    return f"{parts.scheme}://{parts.hostname.lower()}:{port}"
 
 
 def resolve_endpoint_shim(cfg: dict[str, Any], *, type_name: str, shim_key: str) -> Any:

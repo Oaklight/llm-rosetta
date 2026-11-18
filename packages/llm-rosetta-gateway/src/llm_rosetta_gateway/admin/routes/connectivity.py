@@ -8,6 +8,7 @@ from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta_gateway.providers import default_models_path
 from llm_rosetta_gateway.transport.provider_info import _VERSION_SUFFIXES
 
+from ...config.typed import face_value
 from ._shared import _resolve_models_path
 
 
@@ -76,51 +77,19 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
         # 1. Probe base URL — deliberately unauthenticated. This only answers
         # "can we reach the host at all", so an auth rejection would be noise;
         # any HTTP response, including 401/404, proves reachability.
-        try:
-            resp = await client.get(base_url)
-            results["reachable"] = True
-            results["base_status"] = resp.status_code
-        except Exception as exc:
-            results["reachable"] = False
-            results["base_status"] = None
-            results["base_error"] = str(exc)
+        await _probe_base(client, base_url, results)
 
         # 2. Check models endpoint (type-aware URL, same as fetch_upstream_models)
-        ptype = (
-            config.provider_types.get(name, "unknown")
-            if hasattr(config, "provider_types")
-            else "unknown"
+        await _probe_models(
+            client,
+            config,
+            name,
+            provider_cfg,
+            base_url,
+            auth_ready,
+            auth_headers,
+            results,
         )
-        explicit_path = _resolve_models_path(provider_cfg, config, name)
-        if explicit_path:
-            if explicit_path.startswith(("https://", "http://")):
-                models_url = explicit_path
-            else:
-                models_url = f"{base_url}{explicit_path}"
-        else:
-            models_url = f"{base_url}{default_models_path(ptype)}"
-        if auth_ready:
-            try:
-                resp = await client.get(models_url, headers=auth_headers)
-                results["endpoints"]["models"] = {
-                    "url": models_url,
-                    "status": resp.status_code,
-                    "ok": resp.status_code < 400,
-                }
-            except Exception as exc:
-                results["endpoints"]["models"] = {
-                    "url": models_url,
-                    "status": None,
-                    "ok": False,
-                    "error": str(exc),
-                }
-        else:
-            results["endpoints"]["models"] = {
-                "url": models_url,
-                "status": None,
-                "ok": False,
-                "skipped": "provider not ready",
-            }
 
         # 3–5. Check optional POST endpoints (embedding, rerank, decision)
         for ep_name, fmt_key, path_key, default_path in (
@@ -128,20 +97,34 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
             ("rerank", "rerank_format", "rerank_path", "/v1/rerank"),
             ("decisions", "decisions_format", "decisions_path", "/v1/systemone"),
         ):
-            if not provider_cfg.get(fmt_key):
+            # The endpoint's own block first, the flat key after it: the v5 fold
+            # moves these, and a reader that only knew the flat key reported a
+            # migrated provider as having no typed endpoints at all (#1595
+            # review).  A shim declares the endpoint just as a format does.
+            if not (
+                face_value(provider_cfg, fmt_key, ep_name)
+                or face_value(provider_cfg, f"{ep_name}_shim", ep_name)
+            ):
+                continue
+            # The face's own host and path as written — what the operator has
+            # to fix — and the URL the runtime builds from them, which is what
+            # the probe asks for.
+            face_host = (
+                str(
+                    face_value(provider_cfg, f"{ep_name}_base_url", ep_name) or ""
+                ).rstrip("/")
+                or base_url
+            )
+            face_path = face_value(provider_cfg, path_key, ep_name) or default_path
+            _check_double_prefix(face_host, face_path, ep_name, results)
+            url = _endpoint_url(config, name, ep_name, face_host, face_path)
+            if url is None:
                 continue
             if auth_ready:
-                await _check_post_endpoint(
-                    client,
-                    base_url,
-                    auth_headers,
-                    provider_cfg.get(path_key, default_path),
-                    ep_name,
-                    results,
-                )
+                await _check_post_endpoint(client, url, auth_headers, ep_name, results)
             else:
                 results["endpoints"][ep_name] = {
-                    "url": f"{base_url}{provider_cfg.get(path_key, default_path)}",
+                    "url": url,
                     "status": None,
                     "ok": False,
                     "skipped": "provider not ready",
@@ -150,17 +133,94 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
     return JSONResponse(results)
 
 
+async def _probe_base(client: Any, base_url: str, results: dict[str, Any]) -> None:
+    """Record whether the entry's own host answers at all."""
+    try:
+        resp = await client.get(base_url)
+        results["reachable"] = True
+        results["base_status"] = resp.status_code
+    except Exception as exc:
+        results["reachable"] = False
+        results["base_status"] = None
+        results["base_error"] = str(exc)
+
+
+async def _probe_models(
+    client: Any,
+    config: Any,
+    name: str,
+    provider_cfg: dict,
+    base_url: str,
+    auth_ready: bool,
+    auth_headers: dict[str, str],
+    results: dict[str, Any],
+) -> None:
+    """Record whether the entry's models listing answers."""
+    ptype = (
+        config.provider_types.get(name, "unknown")
+        if hasattr(config, "provider_types")
+        else "unknown"
+    )
+    explicit_path = _resolve_models_path(provider_cfg, config, name)
+    if explicit_path and explicit_path.startswith(("https://", "http://")):
+        models_url = explicit_path
+    elif explicit_path:
+        models_url = f"{base_url}{explicit_path}"
+    else:
+        models_url = f"{base_url}{default_models_path(ptype)}"
+    if not auth_ready:
+        results["endpoints"]["models"] = {
+            "url": models_url,
+            "status": None,
+            "ok": False,
+            "skipped": "provider not ready",
+        }
+        return
+    try:
+        resp = await client.get(models_url, headers=auth_headers)
+        results["endpoints"]["models"] = {
+            "url": models_url,
+            "status": resp.status_code,
+            "ok": resp.status_code < 400,
+        }
+    except Exception as exc:
+        results["endpoints"]["models"] = {
+            "url": models_url,
+            "status": None,
+            "ok": False,
+            "error": str(exc),
+        }
+
+
+def _endpoint_url(
+    config: Any, name: str, ep_name: str, face_host: str, face_path: str
+) -> str | None:
+    """The URL a typed endpoint's requests actually reach.
+
+    Asked of the pool the runtime routes through rather than rebuilt here: the
+    path is the shim's, the descriptor's per-format one and the operator's
+    override in a precedence this module would have to copy, and a copy drifts
+    (#1595 review — the probe posted to ``…/v2/v1/embeddings`` while the
+    gateway called ``…/v2/embed``).  A provider the pool did not parse falls
+    back to the face's own host and path, so the probe still names something
+    when the endpoint is configured but disabled.
+    """
+    info = (getattr(config, f"{ep_name}_provider_infos", None) or {}).get(name)
+    if info is not None:
+        return info.upstream_url("")
+    if not face_host:
+        return None
+    return f"{face_host}{face_path}"
+
+
 async def _check_post_endpoint(
     client: Any,
-    base_url: str,
+    url: str,
     auth_headers: dict[str, str],
-    path: str,
     ep_name: str,
     results: dict[str, Any],
 ) -> None:
     """Probe a POST endpoint for reachability."""
-    url = f"{base_url}{path}"
-    _check_double_prefix(base_url, path, ep_name, results)
     try:
         resp = await client.post(url, headers=auth_headers, json={})
         results["endpoints"][ep_name] = {
