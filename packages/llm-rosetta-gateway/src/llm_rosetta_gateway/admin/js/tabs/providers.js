@@ -3074,19 +3074,60 @@ async function _saveProvider() {
   else { showToast(res.error || t('toast.error'), 'error'); }
 }
 
+/** The lanes a model entry lists, as `(provider, upstream)` pairs. */
+function _entryLanes(cfg) {
+  if (typeof cfg === 'string') return [[cfg, null]];
+  if (!cfg || typeof cfg !== 'object') return [];
+  if (Array.isArray(cfg.providers)) {
+    return cfg.providers.map((item) => (typeof item === 'string'
+      ? [item, null] : [item.name || '', item.upstream_model ?? null]));
+  }
+  return cfg.provider ? [[cfg.provider, cfg.upstream_model ?? null]] : [];
+}
+
+/** The models one provider delete touches, split by what happens to each.
+ *
+ *  Mirrors the backend's cascade: the lanes naming the provider are removed,
+ *  and an entry is deleted only when no other lane is left.  An entry the
+ *  dialog did not list at all would still change, so both lists have to come
+ *  from the same rule the delete applies (#1593).
+ */
+function _providerModelImpact(name) {
+  const deleted = [];
+  const trimmed = [];
+  for (const [m, cfg] of Object.entries((S.configData && S.configData.models) || {})) {
+    const lanes = _entryLanes(cfg);
+    const named = lanes.filter(([provider]) => provider === name).length;
+    if (!named) continue;
+    if (named === lanes.length) deleted.push(m);
+    else trimmed.push(m);
+  }
+  return { deleted, trimmed };
+}
+
 function deleteProvider(name) {
   _pendingDeleteProvider = name;
   document.getElementById('deleteConfirmMsg').innerHTML = t('confirm.typeToConfirm', {name: '<strong>' + esc(name) + '</strong>'});
   document.getElementById('deleteConfirmInput').value = '';
   document.getElementById('deleteConfirmBtn').disabled = true;
-  // Show affected models if any
-  const affected = Object.entries(S.configData.models || {})
-    .filter(([, v]) => (typeof v === 'object' ? v.provider : v) === name)
-    .map(([m]) => m);
+  // Which models change, split by what happens to them: an entry that only
+  // this provider serves is deleted, one that others still serve loses a lane.
+  // The dialog used to call every one of them a deletion, and the backend
+  // then deleted them all — a model five providers were serving vanished with
+  // one lane (#1593).
+  const affected = _providerModelImpact(name);
   const el = document.getElementById('deleteAffectedModels');
-  if (affected.length > 0) {
-    el.innerHTML = `<div style="color:#cf222e;font-weight:600;margin-bottom:4px">${t('confirm.cascadeWarning', {count: affected.length})}</div>`
-      + affected.map(m => `<div style="color:var(--text-dim)">• ${esc(m)}</div>`).join('');
+  const blocks = [];
+  if (affected.deleted.length > 0) {
+    blocks.push(`<div style="color:#cf222e;font-weight:600;margin-bottom:4px">${esc(t('confirm.cascadeDelete', {count: affected.deleted.length}))}</div>`
+      + affected.deleted.map(m => `<div style="color:var(--text-dim)">• ${esc(m)}</div>`).join(''));
+  }
+  if (affected.trimmed.length > 0) {
+    blocks.push(`<div style="font-weight:600;margin:${blocks.length ? '8px' : '0'} 0 4px">${esc(t('confirm.cascadeTrim', {count: affected.trimmed.length}))}</div>`
+      + affected.trimmed.map(m => `<div style="color:var(--text-dim)">• ${esc(m)}</div>`).join(''));
+  }
+  if (blocks.length > 0) {
+    el.innerHTML = blocks.join('');
     el.style.display = 'block';
   } else {
     el.style.display = 'none';
@@ -3118,12 +3159,12 @@ async function confirmDeleteProvider() {
   const res = await api.del(`/admin/api/config/providers/${encodeURIComponent(name)}?cascade=true`);
   closeModal('deleteConfirmModal');
   if (res.ok) {
-    const cascaded = res.cascade_deleted_models || [];
-    if (cascaded.length > 0) {
-      showToast(t('toast.providerDeleted',{name}) + ` (+${cascaded.length} models)`);
-    } else {
-      showToast(t('toast.providerDeleted',{name}));
-    }
+    const deleted = res.cascade_deleted_models || [];
+    const trimmed = res.cascade_trimmed_models || [];
+    const parts = [];
+    if (trimmed.length) parts.push(t('toast.cascadeTrimmed', {n: trimmed.length}));
+    if (deleted.length) parts.push(t('toast.cascadeModels', {n: deleted.length}));
+    showToast(t('toast.providerDeleted', {name}) + (parts.length ? ` (${parts.join(', ')})` : ''));
     loadConfig();
   } else { showToast(res.error || t('toast.error'), 'error'); }
 }

@@ -122,6 +122,52 @@ def _remove_provider_from_entry(
     return None
 
 
+def _remove_all_lanes_of_provider(
+    models: dict[str, Any], name: str, provider: str
+) -> str | None:
+    """Remove every lane of *provider* from the model entry *name*.
+
+    The provider is being deleted, so every lane that names it is unusable;
+    unlike :func:`_remove_provider_from_entry` there is nothing to
+    disambiguate, and all of them go.  The entry survives with its other
+    providers: a cascade that dropped the whole entry took lanes that had
+    nothing to do with the deleted provider, and a model that five other
+    providers were still serving disappeared with one click (#1593).
+
+    Args:
+        models: The config's ``models`` mapping, changed in place.
+        name: The model entry to trim.
+        provider: The provider being removed from the document.
+
+    Returns:
+        ``"deleted"`` when the entry named no other lane and is gone;
+        ``"trimmed"`` when it kept the lanes that remain; ``None`` when it
+        does not name *provider* at all.
+    """
+    existing = models.get(name)
+    if existing is None:
+        return None
+    lanes = _lanes_named(existing, provider)
+    if not lanes:
+        return None
+    if isinstance(existing, str) or (
+        isinstance(existing, dict) and "providers" not in existing
+    ):
+        del models[name]
+        return "deleted"
+    if not isinstance(existing, dict):
+        return None
+    remaining = [item for item in existing["providers"] if _lane_of(item) not in lanes]
+    if not remaining:
+        del models[name]
+        return "deleted"
+    if len(remaining) == 1:
+        _collapse_to_single_provider(models, name, existing, remaining[0])
+    else:
+        existing["providers"] = remaining
+    return "trimmed"
+
+
 def _collapse_to_single_provider(
     models: dict[str, Any],
     name: str,

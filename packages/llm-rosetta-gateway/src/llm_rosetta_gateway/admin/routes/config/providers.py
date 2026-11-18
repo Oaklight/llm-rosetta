@@ -19,6 +19,7 @@ from .._shared import (
 )
 
 from .bulk import Lane, _merge_outcome, _merge_provider_into_model, lane_key
+from .model_providers import _lanes_named, _remove_all_lanes_of_provider
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -168,6 +169,17 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
     )
 
 
+def _models_naming(models: dict[str, Any], provider: str) -> list[str]:
+    """The model entries that route through *provider* on any lane.
+
+    Reads the same lane rule the cascade removes with, so the refusal and the
+    cascade can never disagree about which entries the delete touches.
+    """
+    return [
+        model_name for model_name, cfg in models.items() if _lanes_named(cfg, provider)
+    ]
+
+
 async def delete_provider(request: Any, **kwargs: Any) -> Response:
     """Remove a provider entry."""
     name = request.path_params["name"]
@@ -184,23 +196,7 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
 
         # Check if any model still references this provider
         models = ctx.data.get("models", {})
-
-        def _model_references_provider(model_cfg: Any, provider_name: str) -> bool:
-            if isinstance(model_cfg, str):
-                return model_cfg == provider_name
-            if isinstance(model_cfg, dict):
-                if "providers" in model_cfg:
-                    for entry in model_cfg["providers"]:
-                        pn = entry if isinstance(entry, str) else entry.get("name", "")
-                        if pn == provider_name:
-                            return True
-                    return False
-                return model_cfg.get("provider", "") == provider_name
-            return False
-
-        referencing = [
-            m for m, p in models.items() if _model_references_provider(p, name)
-        ]
+        referencing = _models_naming(models, name)
 
         from .._shared import _qp
 
@@ -213,12 +209,16 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
                 status_code=409,
             )
 
-        # Cascade: remove referencing models first
+        # Cascade: drop this provider's lanes, keep the models that others serve
         cascade_deleted: list[str] = []
+        cascade_trimmed: list[str] = []
         if referencing and cascade:
             for model_name in referencing:
-                del models[model_name]
-                cascade_deleted.append(model_name)
+                outcome = _remove_all_lanes_of_provider(models, model_name, name)
+                if outcome == "deleted":
+                    cascade_deleted.append(model_name)
+                elif outcome == "trimmed":
+                    cascade_trimmed.append(model_name)
 
         del providers[name]
         ctx.commit()
@@ -234,6 +234,8 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
     }
     if cascade_deleted:
         result["cascade_deleted_models"] = cascade_deleted
+    if cascade_trimmed:
+        result["cascade_trimmed_models"] = cascade_trimmed
     return JSONResponse(result)
 
 
