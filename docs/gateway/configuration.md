@@ -200,12 +200,32 @@ stale。不掩盖的只有两类 —— `sha256` 不符，以及 body 不是可�
 }
 ```
 
-端点键为 `embeddings_format` / `embeddings_path` / `embeddings_shim`、`rerank_format` / `rerank_path` / `rerank_shim`，以及 `decisions_format` / `decisions_path` / `decisions_shim`。每个端点的优先级：
+每个端点的设置也可以写进以该端点命名的块里。两种写法是同一个设置；管理面板写出的是块。
 
-1. **shim**：`<type>_shim`；否则使用提供方级的 `shim` 或 `type`，但仅当该 shim 的 `model_type` 与端点一致；
-2. **格式**：显式的 `<type>_format` 优先于 shim 的格式；
-3. **路径**：显式的 `<type>_path` 优先于 shim 的 `connection.default_path`（仅当最终格式就是该 shim 的格式时才使用），其次是该格式自身的默认路径（Cohere 使用 `/v2/...`；Google 的 embedding 路径携带模型）；
-4. **连接**：条目中非空的 `base_url` / `api_key` 优先于 shim 默认值。
+```jsonc
+"providers": {
+  // 一个账号、两家厂商：聊天在一家，embedding 在另一家。
+  "frankenservice": {
+    "type": "google_generate",
+    "base_url": "https://generativelanguage.googleapis.com",
+    "api_key": "${FRANKEN_KEY}",
+    "embeddings": {
+      "shim": "cohere--embedding",
+      "base_url": "https://api.cohere.com/v2"
+    }
+  }
+}
+```
+
+一个提供方条目是一个**账号**：一份凭据、一个 key ring、一次刷新。每个类型端点都是它的一个**面**，可以落在另一家厂商的主机上 —— 所以 `base_url` 属于面，而不只属于条目。块内的字段是 `shim`、`format`、`path`、`enabled` 与 `base_url`。扁平的 `embeddings_format` / `embeddings_path` / `embeddings_shim` / `embeddings_enabled`（以及 `rerank_*`、`decisions_*` 两组）仍然可读，加载时会改写成块（`config_version` 5）。
+
+每个端点的优先级：
+
+1. **shim**：块内的 `shim`（或扁平的 `<type>_shim`）；否则使用提供方级的 `shim` 或 `type`，但仅当该 shim 的 `model_type` 与端点一致；
+2. **格式**：显式的格式优先于 shim 的格式；
+3. **路径**：显式的路径优先于 shim 的 `connection.default_path`（仅当最终格式就是该 shim 的格式时才使用），其次是该格式自身的默认路径（Cohere 使用 `/v2/...`；Google 的 embedding 路径携带模型）；
+4. **主机**：端点自己的 `base_url`；否则条目的 `base_url`；否则 shim 的 `connection.base_url`。若端点继承条目的主机、而它自己的 shim 声明了另一个主机，启动时会写一条日志，同时点出两个主机和修法 —— 这种组合几乎总是块出现之前写下的条目，请求会发往错误的厂商；
+5. **凭据**：条目的（`base_url` / `api_key` 默认值来自 shim）。一个条目就是一份凭据；两家厂商两把 key 就是两个条目。
 
 `<type>_shim` 若不属于该能力，启动时会报错并指明该 shim 的类别。gateway 把每个提供方的身份记录为 `(model_type, format)` 对；LLM 模型若被路由到身份为 `embeddings`、`rerank` 或 `decisions` 的提供方，会被拒绝。
 
