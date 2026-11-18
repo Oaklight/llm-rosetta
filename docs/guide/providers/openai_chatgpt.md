@@ -117,10 +117,18 @@ llm-rosetta-gateway credential chatgpt --out record.json
 | `previous_response_id` | 去掉 —— 通道不保留服务端状态，历史必须放在 `input` 里 |
 | `temperature`、`top_p`、`max_output_tokens`、`top_logprobs` | 去掉 |
 | `background`、`conversation`、`max_tool_calls`、`metadata`、`moderation`、`multi_agent`、`prompt`、`prompt_cache_retention`、`safety_identifier`、`truncation`、`user` | 去掉 |
+| `input` 中 role 为 `system` 或 `developer` 的条目 | 移出 `input` —— 开头的条目并入 `instructions`，中途的改写为用 `<system>…</system>` 包裹的 user 轮次 |
 
 被去掉的字段会出现在请求日志的已应用变换列表里（`drop_refused_fields(...)`），请求本身
 仍然成功。`instructions` 承载系统提示，`input` 承载完整历史，函数工具按通道期望的命名空间
 发送。
+
+**`input` 中不允许出现 system 条目。** 只要数组中任意位置（包括**第一条**）出现这类条目，
+通道就用 `400 {"detail":"System messages are not allowed"}` 拒绝整个请求——这不只是对话
+中途出现 system 的情况。把系统提示当作 `input` 条目而不是 `instructions` 发送的 Responses
+客户端，第一个请求就会被拒；从 Chat Completions 转换来的请求，中途的 system 消息也会保留
+成条目。因此 shim 执行 IR 层提升变换（`hoist_late_system_messages()`）：在别的通道上它
+只是缓存前缀的优化，在这条通道上是硬性要求。
 
 **必须流式。** 通道只返回 SSE，因此即使客户端只要一次完整响应，网关也会强制上游
 `stream: true`。非流式客户端会在任何上游调用之前收到 `400` 并指明需要 `stream=true`：
@@ -173,5 +181,6 @@ llm-rosetta-gateway credential chatgpt --out record.json
 | 启动时提示“需要交互式登录” | `<data_dir>/shim-auth/<provider>` 下没有记录 | 完成登录并安装记录 |
 | 粘贴时记录被拒绝 | ID token 已过期，或属于另一个客户端 | 重新登录并尽快粘贴 |
 | `subscription_sharing_user_not_eligible` | 账号不在该通道 | 换用有资格的账号；这不是瞬时错误 |
+| `400 {"detail":"System messages are not allowed"}` | 请求带了 `system`/`developer` 的 `input` 条目，shim 现在会把它提升出去 | 升级到这条通道带提升变换的版本；客户端无需改动 |
 | 几次请求后出现 `usage_limit_exceeded` | 套餐窗口或应用的周上限 | 暂停；打开用量页 |
 | 登录后请求仍然 401 | 记录装在了别的提供方名下 | 两个提供方就是两个账号，需分别安装 |
