@@ -217,7 +217,9 @@ stale。不掩盖的只有两类 —— `sha256` 不符，以及 body 不是可�
 }
 ```
 
-一个提供方条目是一个**账号**：一份凭据、一个 key ring、一次刷新。每个类型端点都是它的一个**面**，可以落在另一家厂商的主机上 —— 所以 `base_url` 属于面，而不只属于条目。块内的字段是 `shim`、`format`、`path`、`enabled` 与 `base_url`。扁平的 `embeddings_format` / `embeddings_path` / `embeddings_shim` / `embeddings_enabled`（以及 `rerank_*`、`decisions_*` 两组）仍然可读，加载时会改写成块（`config_version` 5）。
+一个提供方条目是一个**账号**：一份凭据、一个 key ring、一次刷新。每个类型端点都是它的一个**面**，可以落在另一家厂商的主机上 —— 所以 `base_url` 属于面，而不只属于条目。块内的字段是 `shim`、`format`、`path`、`enabled` 与 `base_url`。
+
+`base_url` 是主机，`path` 是该主机上的路径 —— 请求发往 `base_url` + `path`。版本段属于 `path`（或 shim 的默认路径），不属于 `base_url`：写成 `base_url: "https://api.cohere.com/v2"` 而端点路径是 `/v1/embeddings`，实际请求的是 `/v2/v1/embeddings`，真实厂商会返回 404。扁平的 `embeddings_format` / `embeddings_path` / `embeddings_shim` / `embeddings_enabled`（以及 `rerank_*`、`decisions_*` 两组）仍然可读，加载时会改写成块（`config_version` 5）。
 
 每个端点的优先级：
 
