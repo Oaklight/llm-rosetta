@@ -18,7 +18,7 @@ from typing import Any
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
-CURRENT_VERSION = 4
+CURRENT_VERSION = 5
 
 
 def _migrate_v0_to_v1(raw: dict[str, Any]) -> None:
@@ -330,11 +330,65 @@ def _serving_providers(raw: dict[str, Any]) -> dict[str, set[str]]:
     return serving
 
 
+def _migrate_v4_to_v5(raw: dict[str, Any]) -> None:
+    """Fold a provider entry's flat endpoint keys into its face blocks.
+
+    Before (v4):
+        providers.{name}.embeddings_shim / embeddings_format /
+        embeddings_path / embeddings_enabled
+
+    After (v5):
+        providers.{name}.embeddings.shim / format / path / enabled
+
+    The flat keys stay readable (``config/typed.py::face_value`` falls back to
+    them), so this changes no behaviour — it makes the document say which
+    facts belong to one endpoint.  The nesting is what lets an endpoint carry
+    its own ``base_url``, which a flat ``embeddings_base_url`` would otherwise
+    have had to add a fourth key for.
+
+    The legacy ``<type>_providers`` sections are left alone: each of those is
+    one face by construction, and its keys are read with ``format_key="format"``
+    rather than the descriptor's name.
+
+    A key whose value is empty is moved as well — the form writes ``""`` to
+    mean "cleared", and leaving the flat twin behind would make the entry
+    carry two spellings of one setting that disagree.
+    """
+    from ..config.typed import _typed_descriptors
+
+    providers = raw.get("providers")
+    if not isinstance(providers, dict):
+        return
+    suffixes = ("shim", "format", "path", "enabled")
+    for cfg in providers.values():
+        if not isinstance(cfg, dict):
+            continue
+        for descriptor in _typed_descriptors():
+            name = descriptor.name
+            keys = [f"{name}_{suffix}" for suffix in suffixes]
+            if not any(key in cfg for key in keys):
+                continue
+            block = cfg.get(name)
+            if block is not None and not isinstance(block, dict):
+                # Leave a block the parser will reject for the parser to
+                # report, rather than silently swapping it for a new one.
+                continue
+            block = dict(block or {})
+            for suffix in suffixes:
+                flat = f"{name}_{suffix}"
+                if flat in cfg and suffix not in block:
+                    block[suffix] = cfg[flat]
+                cfg.pop(flat, None)
+            if block:
+                cfg[name] = block
+
+
 _MIGRATIONS: list[tuple[int, Any]] = [
     (0, _migrate_v0_to_v1),
     (1, _migrate_v1_to_v2),
     (2, _migrate_v2_to_v3),
     (3, _migrate_v3_to_v4),
+    (4, _migrate_v4_to_v5),
 ]
 
 

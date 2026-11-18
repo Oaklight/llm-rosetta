@@ -66,8 +66,9 @@ class TestMigrationV0ToV1:
         }
         migrate(raw)
         prov = raw["providers"]["jina"]
-        assert prov["rerank_format"] == "jina"
-        assert prov["rerank_path"] == "/v1/rerank"
+        # v4→v5 folds the flat endpoint keys into the endpoint's own block.
+        assert prov["rerank"]["format"] == "jina"
+        assert prov["rerank"]["path"] == "/v1/rerank"
         assert prov["api_key"] == "j-test"
         assert "rerank_providers" not in raw
 
@@ -85,7 +86,7 @@ class TestMigrationV0ToV1:
         }
         migrate(raw)
         assert "jina" in raw["providers"]
-        assert raw["providers"]["jina"]["rerank_format"] == "jina"
+        assert raw["providers"]["jina"]["rerank"]["format"] == "jina"
         assert raw["providers"]["jina"]["api_key"] == "j-test"
 
     def test_embedding_provider_merged(self):
@@ -105,8 +106,8 @@ class TestMigrationV0ToV1:
         }
         migrate(raw)
         prov = raw["providers"]["openai"]
-        assert prov["embeddings_format"] == "openai"
-        assert prov["embeddings_path"] == "/v1/embeddings"
+        assert prov["embeddings"]["format"] == "openai"
+        assert prov["embeddings"]["path"] == "/v1/embeddings"
         assert prov["api_key"] == "sk-test"
 
     def test_rerank_models_migrated(self):
@@ -265,9 +266,9 @@ class TestMigrationV1ToV2:
         }
         migrate(raw)
         prov = raw["providers"]["openai"]
-        assert prov["embeddings_format"] == "openai"
-        assert prov["embeddings_path"] == "/v1/embeddings"
-        assert prov["embeddings_shim"] == "openai--embedding"
+        assert prov["embeddings"]["format"] == "openai"
+        assert prov["embeddings"]["path"] == "/v1/embeddings"
+        assert prov["embeddings"]["shim"] == "openai--embedding"
         assert "embedding_format" not in prov
 
     def test_model_type_renamed(self):
@@ -349,7 +350,7 @@ class TestMigrationV1ToV2:
             "embedding_models": {"text-embed-3": "openai"},
         }
         migrate(raw)
-        assert raw["providers"]["openai"]["embeddings_format"] == "openai"
+        assert raw["providers"]["openai"]["embeddings"]["format"] == "openai"
         assert raw["models"]["text-embed-3"]["type"] == "embeddings"
         assert raw["config_version"] == CURRENT_VERSION
 
@@ -373,10 +374,11 @@ class TestMigrationV2ToV3:
         }
         migrate(raw)
         prov = raw["providers"]["ts"]
-        assert prov["decisions_format"] == "systemone"
-        assert prov["decisions_path"] == "/v1/systemone"
-        assert prov["decisions_shim"] == "typesafe--systemone"
+        assert prov["decisions"]["format"] == "systemone"
+        assert prov["decisions"]["path"] == "/v1/systemone"
+        assert prov["decisions"]["shim"] == "typesafe--systemone"
         assert "decision_format" not in prov
+        assert "decisions_format" not in prov
 
     def test_model_type_renamed(self):
         raw = {
@@ -559,7 +561,7 @@ class TestConfigIOIntegration:
         assert raw["config_version"] == CURRENT_VERSION
         assert "rerank_providers" not in raw
         assert "jina" in raw["providers"]
-        assert raw["providers"]["jina"]["rerank_format"] == "jina"
+        assert raw["providers"]["jina"]["rerank"]["format"] == "jina"
 
         # Verify written back to disk
         with open(config_path) as f:
@@ -647,7 +649,7 @@ class TestConfigIOIntegration:
         raw = io.load_raw(config_path)
 
         assert raw["providers"]["openai"]["api_key"] == "${OPENAI_API_KEY}"
-        assert raw["providers"]["openai"]["embeddings_format"] == "openai"
+        assert raw["providers"]["openai"]["embeddings"]["format"] == "openai"
         assert "embedding_providers" not in raw
 
     def test_v1_pool_sections_written_back_renamed(self, tmp_path):

@@ -1355,6 +1355,10 @@ th.sortable:focus-visible { outline:2px solid var(--accent);outline-offset:-2px;
   margin: 4px 0 0; font-size: 11px; line-height: 1.4; color: var(--neg);
 }
 .field-error[hidden] { display: none; }
+/* An endpoint that will forward to the provider's own host although its shim
+   belongs to another vendor: not an error yet (the operator may be mid-edit),
+   so it is marked, not refused — the same ink a required field wears. */
+input.is-host-mismatch { border-color: var(--neg); }
 
 /* ── A field with a picker ────────────────────────────────────────────
    The allowed-models field: type names, or tick the ones this deployment

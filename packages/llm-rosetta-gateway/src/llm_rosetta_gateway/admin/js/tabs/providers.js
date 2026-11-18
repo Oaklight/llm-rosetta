@@ -1754,8 +1754,8 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
     // The stored shim names the choice; without one, the bare format does.  A
     // shim this config names but that is no longer registered falls back to
     // the format it served.
-    const shimName = provCfg ? (provCfg[desc.config_shim_key] || '') : '';
-    const formatName = provCfg ? (provCfg[desc.config_format_key] || '') : '';
+    const shimName = provCfg ? (_faceValue(provCfg, desc, 'shim') || '') : '';
+    const formatName = provCfg ? (_faceValue(provCfg, desc, 'format') || '') : '';
     const preferred = shimName || formatName;
     picker.setTree(tree.roots, preferred);
     // The picker keeps a value the tree does not offer (a dialect this build
@@ -1774,14 +1774,29 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
       // and nothing else.  A shim's default path need not equal its format's.
       pathEl.dataset.defaultPath = shimDef.default_path || _descPathFor(desc, fmt);
       pathEl.value = provCfg
-        ? (provCfg[desc.config_path_key] || pathEl.dataset.defaultPath)
+        ? (_faceValue(provCfg, desc, 'path') || pathEl.dataset.defaultPath)
         : '';
     }
     // Enabled unless the entry says otherwise; the endpoint keeps its
     // configuration either way, so the operator can turn it back on.
     const enabledEl = document.getElementById(`provTypeEnabled_${desc.name}`);
     if (enabledEl) {
-      enabledEl.checked = !(provCfg && provCfg[`${desc.name}_enabled`] === false);
+      enabledEl.checked = !(provCfg && _faceValue(provCfg, desc, 'enabled') === false);
+    }
+    // The face's own host.  Empty means "inherit the provider's base_url", so
+    // the placeholder shows what that is: an endpoint on another vendor has to
+    // say so here, or it forwards to the chat host (#1595).
+    const faceBaseEl = document.getElementById(`provFaceBase_${desc.name}`);
+    if (faceBaseEl) {
+      const stored = _faceValue(provCfg, desc, 'base_url') || '';
+      const inherited = (provCfg && provCfg.base_url) || '';
+      const shimHost = (shimMap[shimName] || {}).default_base_url || '';
+      faceBaseEl.value = stored;
+      faceBaseEl.placeholder = inherited || t('placeholder.endpointBaseUrl');
+      faceBaseEl.dataset.inherited = inherited;
+      faceBaseEl.dataset.shimHost = shimHost;
+      _markFaceHostMismatch(desc, faceBaseEl);
+      faceBaseEl.oninput = () => _markFaceHostMismatch(desc, faceBaseEl);
     }
     _renderEndpointStatus(desc, provCfg);
   }
@@ -1896,6 +1911,46 @@ function _buildProvCapCheckboxes() {
  * Build non-LLM endpoint sections inside #provNonLlmSections from model_types metadata.
  * Called each time the provider modal opens.
  */
+/** One endpoint's settings, from the face block the panel writes.
+ *
+ *  The runtime reads `<type>: {shim, format, path, enabled, base_url}` first and
+ *  falls back to the flat `<type>_shim` keys a config written before the block
+ *  still carries (`config/typed.py::face_value`).  The payload folds a flat
+ *  entry into a block on the way out, so this normally sees the block; the flat
+ *  fallback is for a document that arrived some other way.
+ */
+function _faceValue(cfg, desc, field) {
+  if (!cfg) return undefined;
+  const block = cfg[desc.name];
+  if (block && typeof block === 'object' && !Array.isArray(block)) {
+    const value = block[field];
+    if (value !== undefined && (field === 'enabled' || value)) return value;
+  }
+  if (field === 'enabled') return cfg[`${desc.name}_enabled`];
+  const flatKey = { shim: desc.config_shim_key, format: desc.config_format_key, path: desc.config_path_key }[field];
+  return flatKey ? cfg[flatKey] : undefined;
+}
+
+/** Warn, on the endpoint's own row, when it will forward to the chat host.
+ *
+ *  The runtime logs this too (`config/typed.py::_face_base_url`); the panel
+ *  says it where the operator can act on it — an endpoint whose shim belongs
+ *  to another vendor but that inherits the provider's host is one save away
+ *  from sending every embedding to the language API.
+ */
+function _markFaceHostMismatch(desc, el) {
+  const inherited = el.dataset.inherited || '';
+  const shimHost = el.dataset.shimHost || '';
+  let mismatch = false;
+  if (!el.value.trim() && inherited && shimHost) {
+    try {
+      mismatch = new URL(inherited).hostname !== new URL(shimHost).hostname;
+    } catch { mismatch = false; }
+  }
+  el.classList.toggle('is-host-mismatch', mismatch);
+  el.title = mismatch ? t('hint.endpointHostMismatch') : '';
+}
+
 function _buildProvEndpointSections() {
   const container = document.getElementById('provNonLlmSections');
   if (!container) return;
@@ -1940,6 +1995,11 @@ function _buildProvEndpointSections() {
           <label>${esc(pathLabel)}</label>
           <input type="text" id="provPath_${desc.name}" placeholder="${esc(_descPathFor(desc, (desc.formats || [])[0]))}">
         </div>
+      </div>
+      <div class="form-group">
+        <label>${esc(t('label.endpointBaseUrl'))} <span style="font-weight:normal;color:var(--text-dim)">${esc(t('label.inheritsProviderBase'))}</span></label>
+        <input type="text" id="provFaceBase_${desc.name}" placeholder="${esc(t('placeholder.endpointBaseUrl'))}">
+        <div class="field-hint">${esc(t('hint.endpointBaseUrl'))}</div>
       </div>`;
     container.appendChild(section);
     const picker = createTypePicker({
@@ -2447,7 +2507,7 @@ function _getProviderCaps(cfg, provName) {
   // Check non-LLM capabilities via metadata-driven format keys
   let hasNonLlmCap = false;
   for (const desc of S.configData?.model_types || []) {
-    if (!desc.is_llm && (cfg[desc.config_format_key] || cfg[desc.config_shim_key])) {
+    if (!desc.is_llm && (_faceValue(cfg, desc, 'format') || _faceValue(cfg, desc, 'shim'))) {
       caps.push(desc.name);
       hasNonLlmCap = true;
     }
@@ -2959,29 +3019,31 @@ async function _saveProvider() {
       // came from.  Writing it as the bare format would turn "unknown shim" —
       // which the panel reports and the operator can fix — into an unknown
       // dialect, which nothing validates.
+      const storedCfg = S.configData?.providers?.[_editingProviderName || name];
       const storedShim = desc.config_shim_key
-        ? (S.configData?.providers?.[_editingProviderName || name]?.[desc.config_shim_key] || '')
+        ? (_faceValue(storedCfg, desc, 'shim') || '')
         : '';
       const keepAsShim = !choice.shim && storedShim && value === storedShim;
-      if (desc.config_shim_key) {
-        body[desc.config_shim_key] = keepAsShim ? storedShim : choice.shim;
-      }
-      body[desc.config_format_key] = keepAsShim ? '' : choice.format;
-      body[desc.config_path_key] =
-        document.getElementById(`provPath_${desc.name}`)?.value?.trim()
+      // The endpoint's own block, written whole on every save: it is where the
+      // endpoint's host lives, and a save that dropped it would send the lane
+      // back to the entry's base_url — the misroute #1595 is about.
+      const block = {};
+      if (desc.config_shim_key) block.shim = keepAsShim ? storedShim : choice.shim;
+      block.format = keepAsShim ? '' : choice.format;
+      block.path = document.getElementById(`provPath_${desc.name}`)?.value?.trim()
         || _descPathFor(desc, choice.format);
+      const baseUrlEl = document.getElementById(`provFaceBase_${desc.name}`);
+      const baseUrl = baseUrlEl ? baseUrlEl.value.trim() : '';
+      if (baseUrl) block.base_url = baseUrl;
       // An endpoint that keeps its configuration but stops routing sends
-      // `false`; enabled sends `''`, which the save path drops so the key is
-      // only present when it says something.
+      // `false`; an enabled one carries no `enabled` key at all.
       const typeEnabled = document.getElementById(`provTypeEnabled_${desc.name}`);
-      body[`${desc.name}_enabled`] = typeEnabled && !typeEnabled.checked ? false : '';
+      if (typeEnabled && !typeEnabled.checked) block.enabled = false;
+      body[desc.name] = block;
     } else {
-      if (desc.config_shim_key) body[desc.config_shim_key] = '';
-      body[desc.config_format_key] = '';
-      body[desc.config_path_key] = '';
       // A capability the provider no longer declares has no endpoint to
-      // enable or disable; clear the flag with the declaration.
-      body[`${desc.name}_enabled`] = '';
+      // enable or disable; the empty block clears what it held.
+      body[desc.name] = {};
     }
   }
   const provTimeoutVal = document.getElementById('provTimeout').value.trim();
