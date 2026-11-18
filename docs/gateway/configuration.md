@@ -288,10 +288,12 @@ Precedence for each endpoint:
    (Cohere uses `/v2/...`; Google's embedding path carries the model)
 4. **host**: the endpoint's own `base_url`; otherwise the entry's `base_url`;
    otherwise the shim's `connection.base_url`. An endpoint that inherits the
-   entry's host while its shim declares a different one is logged at startup,
-   naming both hosts and the fix — that combination is almost always an entry
-   written before the block existed, and it sends the endpoint to the wrong
-   vendor.
+   entry's host while no shim serving it declares that host is logged at
+   startup, naming the hosts and the fix — that combination is almost always an
+   entry written before the block existed, and it sends the endpoint to the
+   wrong vendor. A dialect several vendors serve is not one vendor's host:
+   `embeddings: {format: "openai"}` on SiliconFlow is accepted, because
+   `siliconflow--embedding` serves it and declares SiliconFlow's host.
 5. **credential**: the entry's (`base_url` / `api_key` defaults come from the
    shim). One entry is one credential; two vendors with two keys are two
    entries.
