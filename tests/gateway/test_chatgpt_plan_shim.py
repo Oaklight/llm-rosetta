@@ -319,6 +319,119 @@ class TestTheModelList:
         assert ids == []
 
 
+class TestNoSystemItemReachesTheRoute:
+    """The route refuses a system item anywhere in ``input``, first included.
+
+    It answers ``400 {"detail":"System messages are not allowed"}``, so this is
+    not the late-message case the hoist transform was written for — a Responses
+    client that sends its prompt as an ``input`` item instead of ``instructions``
+    trips it on its first request, and a Chat Completions source that keeps a
+    mid-conversation system message keeps an item too.
+    """
+
+    def _convert(self, source: str, body: dict) -> dict:
+        from llm_rosetta.pipeline.chat import ConversionPipeline
+
+        return ConversionPipeline(
+            source,
+            "open_responses",
+            target_shim=SHIM,
+            upstream_model="gpt-5.1",
+        ).convert_request(body)
+
+    @staticmethod
+    def _roles(body: dict) -> list[str]:
+        return [
+            item.get("role", "")
+            for item in body.get("input", [])
+            if isinstance(item, dict)
+        ]
+
+    def test_the_leading_item_is_hoisted_into_instructions(self):
+        """The very shape the route refused: a prompt carried as an item."""
+        out = self._convert(
+            "open_responses",
+            {
+                "model": "gpt-5.1",
+                "input": [
+                    {
+                        "type": "message",
+                        "role": "developer",
+                        "content": [{"type": "input_text", "text": "You are Codex."}],
+                    },
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "hi"}],
+                    },
+                ],
+                "stream": True,
+            },
+        )
+
+        assert self._roles(out) == ["user"]
+        assert out["instructions"] == "You are Codex."
+
+    def test_a_late_system_item_becomes_a_user_turn(self):
+        out = self._convert(
+            "open_responses",
+            {
+                "model": "gpt-5.1",
+                "input": [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "hi"}],
+                    },
+                    {
+                        "type": "message",
+                        "role": "system",
+                        "content": [{"type": "input_text", "text": "note"}],
+                    },
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "again"}],
+                    },
+                ],
+                "stream": True,
+            },
+        )
+
+        assert self._roles(out) == ["user", "user", "user"]
+        assert any(
+            part.get("text") == "<system>\nnote\n</system>"
+            for item in out["input"]
+            for part in item.get("content", [])
+        )
+
+    def test_a_chat_completions_source_keeps_no_system_item(self):
+        out = self._convert(
+            "chat_completions",
+            {
+                "model": "gpt-5.1",
+                "messages": [
+                    {"role": "system", "content": "S"},
+                    {"role": "user", "content": "hi"},
+                    {"role": "assistant", "content": "yo"},
+                    {"role": "system", "content": "S2"},
+                    {"role": "user", "content": "again"},
+                ],
+                "stream": True,
+            },
+        )
+
+        assert "system" not in self._roles(out)
+        assert "developer" not in self._roles(out)
+        assert out["instructions"] == "S"
+
+    def test_the_shim_declares_the_transform(self):
+        """A capability the route requires, not a lane preference."""
+        assert [repr(t) for t in shim().ir_transforms] == [
+            "hoist_late_system_messages()"
+        ]
+
+
 class TestDroppedFieldsAreReported:
     """A drop the operator cannot see looks like it worked.
 

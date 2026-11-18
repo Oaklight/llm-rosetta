@@ -34,7 +34,10 @@ list again after a plan change.
 ## Request surface
 
 `store: false` is forced; `previous_response_id` and the fields listed in
-`llm/open_responses/transforms.py` are stripped. Streaming is required — a
-non-streaming Responses client is refused with `400` naming `stream=true`.
-Only the `web_search` hosted tool is declared. The plan allowance is in-band
-only: the probe classifies refusals and is never polled.
+`llm/transforms.py` are stripped. A `system`/`developer` item anywhere in
+`input` is refused by the route (`400 System messages are not allowed`), so the
+shim also runs the IR hoist transform: leading items become `instructions`,
+late ones user turns. Streaming is required — a non-streaming Responses client
+is refused with `400` naming `stream=true`. Only the `web_search` hosted tool is
+declared. The plan allowance is in-band only: the probe classifies refusals and
+is never polled.

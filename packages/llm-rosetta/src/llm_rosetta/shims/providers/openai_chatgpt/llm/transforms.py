@@ -1,7 +1,7 @@
 """ChatGPT plan route: the request surface it narrows, and its model list.
 
 The plan route speaks the same Open Responses wire format as the OpenAI API
-and accepts a good deal less of it.  Two facts belong to the vendor, so they
+and accepts a good deal less of it.  Three facts belong to the vendor, so they
 live here rather than in the converter:
 
 * **A list of fields the route refuses.**  A client is entitled to send them —
@@ -13,6 +13,16 @@ live here rather than in the converter:
   value and the route rejects it; an omitted value is rejected too.  This is
   the request side — ``store_default`` on the shim only shapes the response
   echo.
+* **No system message is allowed in ``input``.**  The route answers
+  ``400 {"detail":"System messages are not allowed"}`` for a ``system`` or
+  ``developer`` item anywhere in the array — the *first* item included, so this
+  is not the late-message case alone.  A Responses client that sends its prompt
+  as an input item instead of ``instructions`` trips it on the very first
+  request, and a request converted from Chat Completions keeps any
+  mid-conversation system message as an item.  So the hoist transform is
+  mandatory on this lane, not the cache-prefix nicety it is elsewhere: it moves
+  leading items into ``instructions`` and rewrites late ones as
+  ``<system>…</system>`` user turns.
 
 ``previous_response_id`` is in the strip list for a different reason: the route
 keeps no server-side conversation state, so the client must send its history in
@@ -35,9 +45,21 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from llm_rosetta.transforms import Transform, _NamedTransform, force_fields
+from llm_rosetta.transforms import (
+    Transform,
+    _NamedTransform,
+    force_fields,
+    hoist_late_system_messages,
+)
 
 logger = logging.getLogger(__name__)
+
+#: The route refuses a ``system``/``developer`` input item anywhere in
+#: ``input``, the first one included, so system text has to leave the array:
+#: leading items become ``instructions``, late ones user-role envelopes.  The
+#: IR-level transform does exactly that, and it is why this shim needs it while
+#: a cache-prefix-motivated lane merely wants it.
+ir_transforms = (hoist_late_system_messages(),)
 
 #: Fields the plan route rejects.  Every one is a legitimate Responses field,
 #: so the client may well have set it; the route refuses the whole request.
