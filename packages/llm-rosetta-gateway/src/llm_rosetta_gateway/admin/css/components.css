@@ -2903,11 +2903,38 @@ button.shim-update.unknown { color: var(--tag-warn); }
   border-radius: var(--radius);
   padding: 16px;
 }
+/* The head is a fixed two-row grid: the title line (mark, name, badges) and
+   the counts line under the name.  One flex line made the layout depend on
+   how long the vendor's name is — the name wrapped, the counts wrapped under
+   it, and a card grew taller than its neighbours while its badges slid to
+   wherever the name happened to end.  The counts now always have their own
+   line, the name always has the full width of its column, and every card's
+   head is the same height whatever it is called. */
 .shim-vendor-head {
-  display: flex; align-items: center; gap: 8px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 8px; row-gap: 1px;
   width: 100%; padding: 0; margin: 0;
   background: none; border: 0; color: inherit; font: inherit;
   text-align: left; cursor: pointer;
+}
+.shim-vendor-head > .shim-vendor-logo,
+.shim-vendor-head > .shim-vendor-chevron { grid-row: 1 / span 2; }
+.shim-vendor-head > .shim-vendor-chevron { margin-left: 0; }
+.shim-vendor-title {
+  display: flex; align-items: center; gap: 6px;
+  grid-column: 2; grid-row: 1;
+  min-width: 0;
+}
+.shim-vendor-head > .shim-vendor-meta { grid-column: 2; grid-row: 2; }
+.shim-vendor-title > .tag { flex: 0 0 auto; }
+/* A name too long for its column shortens rather than reflows; the tooltip
+   carries the whole of it. */
+.shim-vendor-name {
+  min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .shim-vendor-head:hover .shim-vendor-name { color: var(--accent); }
 .shim-vendor-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
@@ -2980,20 +3007,31 @@ button.shim-update.unknown { color: var(--tag-warn); }
   border-radius: var(--radius);
 }
 
-/* Same disclosure as a vendor card: the head is the click target and the
-   body stays closed until the operator opens the package they want. */
+/* Same disclosure as a vendor card, and the same head grid: the title row
+   (marks, name, tier) over the counts, so a package with a long label is
+   exactly as tall as one with a short label. */
 .shim-card-head {
-  display: flex; align-items: center; gap: 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 10px; row-gap: 1px;
   width: 100%; padding: 0; margin: 0;
   background: none; border: 0; color: inherit; font: inherit;
   text-align: left; cursor: pointer;
 }
-.shim-card-head:hover .shim-name { color: var(--accent); }
+.shim-card-head > .shim-vendor-logo,
+.shim-card-head > .shim-vendor-chevron { grid-row: 1 / span 2; }
+.shim-card-head > .shim-vendor-chevron { margin-left: 0; }
+.shim-card-head > .shim-vendor-title { grid-column: 2; grid-row: 1; }
+.shim-card-head > .shim-vendor-meta { grid-column: 2; grid-row: 2; }
+.shim-card-head:hover .shim-vendor-name { color: var(--accent); }
 .shim-card-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .shim-card.is-open .shim-card-head { padding-bottom: 2px; }
 .shim-card.is-open .shim-vendor-chevron { transform: rotate(180deg); }
-/* The provenance tag must not shrink away beside a long shim name. */
-.shim-card-head > .tag { flex: 0 0 auto; }
+/* The provenance tag must not shrink away beside a long shim name; it sits
+   in the title column with the name, which is the only column that shrinks. */
+.shim-card-head .shim-vendor-title > .tag { flex: 0 0 auto; }
 .shim-card-head .shim-vendor-logo { flex: 0 0 auto; display: inline-flex; gap: 2px; width: auto; }
 /* A keyless pool is several vendors behind one key: one FREE plate says what
    the card is about, where four vendor marks would only say whose. */
@@ -3069,7 +3107,10 @@ button.shim-update.unknown { color: var(--tag-warn); }
   font-size: 10px; font-weight: 700;
 }
 .shim-vendor-name { font-size: 14px; font-weight: 600; }
-.shim-vendor-meta { font-size: 12px; color: var(--text-muted); }
+/* The counts are one line, always: they are the card's second fact, and a
+   wrapped one changed the card's height with the length of anything else on
+   the row. */
+.shim-vendor-meta { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 
 .shims-sources { display: flex; flex-direction: column; gap: 8px; }
 .shims-sources-head { margin-bottom: 4px; }
