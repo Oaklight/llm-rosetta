@@ -60,7 +60,7 @@ def identity_category(wire_format: str, cfg: dict[str, Any]) -> str | None:
         and (
             (
                 desc.config_format_key
-                and face_value(cfg, desc.config_format_key, desc.name)
+                and face_value(cfg, str(desc.config_format_key), desc.name)
             )
             or (
                 desc.config_shim_key
