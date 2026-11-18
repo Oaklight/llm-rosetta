@@ -72,6 +72,75 @@ def _declared(cfg: dict[str, Any], key: str, type_name: str) -> Any:
     return cfg[legacy]
 
 
+def face_section(cfg: dict[str, Any], type_name: str) -> dict[str, Any]:
+    """The ``<type>:`` block one provider entry declares for an endpoint.
+
+    A provider is an *account*; each model type is a *face* of it, and the two
+    are not the same fact.  An aggregator key signs one vendor's chat lane and
+    another vendor's embeddings lane on the same account, so the endpoint's
+    host is a property of the face:
+
+    .. code-block:: jsonc
+
+        "frankenservice": {
+          "type": "google_generate",
+          "base_url": "https://generativelanguage.googleapis.com",
+          "api_key": "...",
+          "embeddings": {"shim": "cohere--embedding",
+                         "base_url": "https://api.cohere.com/v2"}
+        }
+
+    The flat ``embeddings_shim`` / ``embeddings_format`` / ``embeddings_path``
+    / ``embeddings_enabled`` keys are the same block spelled without the
+    nesting, kept readable (and written into the block by the migration) for
+    configs written before it existed — and are what the legacy
+    ``<type>_providers`` sections use, since each of those is one face already.
+
+    Args:
+        cfg: A provider entry.
+        type_name: The model type, e.g. ``"embeddings"``.
+
+    Returns:
+        The block as a mapping (possibly empty).  A block that is not a
+        mapping is reported and treated as absent rather than crashing the
+        parse of every other endpoint on the entry.
+    """
+    block = cfg.get(type_name)
+    if block is None:
+        return {}
+    if not isinstance(block, dict):
+        logger.warning(
+            "config: %r must be a mapping of endpoint settings, got %s; "
+            "the key is ignored",
+            type_name,
+            type(block).__name__,
+        )
+        return {}
+    return block
+
+
+def face_value(cfg: dict[str, Any], key: str, type_name: str) -> Any:
+    """Read one endpoint setting: the face block first, then the flat key.
+
+    The block's field name is the flat key without its ``<type>_`` prefix —
+    ``embeddings_shim`` → ``embeddings: {shim: …}``, ``embeddings_path`` →
+    ``path``, ``embeddings_enabled`` → ``enabled``.
+
+    An explicit value in the block wins over the flat key, and an empty one
+    falls through — the same "an empty value means the operator said nothing"
+    rule :func:`_declared` applies, so a form that writes ``""`` into the
+    block cannot hide a value the flat key still holds.  ``enabled`` decides
+    by presence, so ``false`` is a value there like it is in the flat key.
+    """
+    field = key[len(type_name) + 1 :] if key.startswith(f"{type_name}_") else key
+    block = face_section(cfg, type_name)
+    if field in block:
+        value = block[field]
+        if field == "enabled" or isinstance(value, bool) or value:
+            return value
+    return _declared(cfg, key, type_name)
+
+
 @dataclass(frozen=True)
 class _TypedKeys:
     """The config keys and defaults one typed endpoint is parsed with."""
@@ -269,7 +338,7 @@ def parse_typed_provider(
     """
     if not isinstance(cfg, dict) or cfg.get("enabled") is False:
         return None
-    endpoint_flag = _declared(cfg, keys.enabled_key, keys.type_name)
+    endpoint_flag = face_value(cfg, keys.enabled_key, keys.type_name)
     if endpoint_flag is False:
         return None
     if endpoint_flag not in (None, "") and not isinstance(endpoint_flag, bool):
@@ -284,7 +353,7 @@ def parse_typed_provider(
             endpoint_flag,
         )
     shim = resolve_endpoint_shim(cfg, type_name=keys.type_name, shim_key=keys.shim_key)
-    explicit_format = _declared(cfg, keys.format_key, keys.type_name) or ""
+    explicit_format = face_value(cfg, keys.format_key, keys.type_name) or ""
     if require_declared_format and not explicit_format and shim is None:
         return None
 
@@ -331,7 +400,7 @@ def typed_path(
     wire_format: str,
 ) -> str:
     """The upstream endpoint path an entry resolves to."""
-    path = _declared(cfg, keys.path_key, keys.type_name) or ""
+    path = face_value(cfg, keys.path_key, keys.type_name) or ""
     if not path and shim is not None and wire_format == shim.format:
         path = shim.default_path or ""
     if not path:
@@ -427,10 +496,11 @@ def typed_provider_info(
     effective = _apply_shim_defaults(cfg, shim) if shim is not None else cfg
     if credential_owner is None and refuse_unowned_minted:
         _refuse_unowned_minted_credential(name, effective, shim, keys.type_name)
+    base_url = _face_base_url(name, cfg, keys.type_name, effective, shim)
     info = ProviderInfo(
         name=f"{keys.type_name}:{name}",
         api_key=effective.get("api_key", ""),
-        base_url=effective.get("base_url", "").rstrip("/"),
+        base_url=base_url,
         auth_header_fn=(
             google_auth if wire_format == "google_generate" else openai_auth
         ),
@@ -440,6 +510,63 @@ def typed_provider_info(
     if credential_owner is not None:
         share_credential(info, credential_owner)
     return info
+
+
+def _face_base_url(
+    name: str,
+    cfg: dict[str, Any],
+    type_name: str,
+    effective: dict[str, Any],
+    shim: Any,
+) -> str:
+    """The host one typed endpoint forwards to.
+
+    The face's own ``base_url`` wins; without one the endpoint inherits the
+    entry's, which is what it always did.  Inheritance is checked rather than
+    assumed: an endpoint shim that declares a different host is almost always
+    an entry written before the face existed, and sending it the LLM host is a
+    silent misroute rather than a configuration error — so the mismatch is
+    logged here and shown on the endpoint's row in the panel.
+
+    Args:
+        name: The provider's config key, for the warning.
+        cfg: The raw provider entry.
+        type_name: The model type whose face this is.
+        effective: The entry after shim defaults, i.e. what the connection
+            is built from.
+        shim: The endpoint's shim, or ``None``.
+
+    Returns:
+        The base URL with any trailing slash removed.
+    """
+    declared = face_section(cfg, type_name).get("base_url") or ""
+    base_url = declared or effective.get("base_url", "")
+    if declared or shim is None:
+        return str(base_url).rstrip("/")
+    endpoint_host = getattr(getattr(shim, "connection", None), "base_url", None) or ""
+    if endpoint_host and _host(endpoint_host) != _host(base_url):
+        logger.warning(
+            "Provider %r: the %s endpoint inherits base_url %r, but its shim "
+            "%r forwards to %r; give the endpoint its own `%s: {base_url: ...}` "
+            "if the two are different vendors",
+            name,
+            type_name,
+            base_url,
+            getattr(shim, "name", "?"),
+            endpoint_host,
+            type_name,
+        )
+    return str(base_url).rstrip("/")
+
+
+def _host(url: str) -> str:
+    """The host of *url*, for comparing two endpoints; the text otherwise."""
+    from urllib.parse import urlsplit
+
+    try:
+        return (urlsplit(url).hostname or "").lower() or url
+    except ValueError:
+        return url
 
 
 def resolve_endpoint_shim(cfg: dict[str, Any], *, type_name: str, shim_key: str) -> Any:
@@ -466,7 +593,7 @@ def resolve_endpoint_shim(cfg: dict[str, Any], *, type_name: str, shim_key: str)
     """
     from llm_rosetta.shims import get_shim
 
-    declared = _declared(cfg, shim_key, type_name)
+    declared = face_value(cfg, shim_key, type_name)
     if declared:
         shim = get_shim(declared)
         if shim is None:

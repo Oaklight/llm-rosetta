@@ -358,6 +358,38 @@ def _normalise_endpoint_flags(masked: dict[str, Any]) -> None:
             legacy = legacy_config_key(canonical, desc.name)
             if legacy is not None and legacy in masked:
                 masked[canonical] = masked[legacy]
+        _normalise_face_block(masked, desc)
+
+
+def _normalise_face_block(masked: dict[str, Any], desc: Any) -> None:
+    """Give the endpoint its face block when the file still spells it flat.
+
+    The panel reads an endpoint's settings from ``<type>: {shim, format, path,
+    enabled, base_url}`` (``config/typed.py::face_value``), and a config written
+    before that block existed carries the flat ``<type>_shim`` keys instead.
+    Folding them here — at read time, for the payload only — keeps the browser
+    to one spelling, and keeps the migration and the read-side fallback from
+    being the only two things that know both.
+
+    The block is written only when the entry has no block of its own: an entry
+    that already nests is the operator's own document, and a save from the
+    panel writes it back unchanged.
+    """
+    if isinstance(masked.get(desc.name), dict):
+        return
+    block: dict[str, Any] = {}
+    for field, canonical in (
+        ("shim", desc.config_shim_key),
+        ("format", desc.config_format_key),
+        ("path", desc.config_path_key),
+        ("enabled", f"{desc.name}_enabled"),
+    ):
+        if canonical and masked.get(canonical) not in (None, "", False):
+            block[field] = masked[canonical]
+        elif canonical and field == "enabled" and canonical in masked:
+            block[field] = masked[canonical]
+    if block:
+        masked[desc.name] = block
 
 
 def _mask_provider_entry(name: str, cfg: Any) -> dict[str, Any]:

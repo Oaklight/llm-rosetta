@@ -664,6 +664,40 @@ def _apply_optional_provider_fields(
             entry[flag] = val
         elif flag in body:
             entry.pop(flag, None)
+    _apply_face_blocks(entry, body)
+
+
+def _apply_face_blocks(entry: dict[str, Any], body: dict[str, Any]) -> None:
+    """Store each typed endpoint's ``<type>:`` block as the editor sent it.
+
+    A provider entry is an account; each typed endpoint is a face of it, and
+    its block holds the settings that belong to the face alone — the shim, the
+    path, the switch, and the ``base_url`` when the face lives on another
+    vendor than the entry's chat lane (#1595).  An empty block is removed
+    rather than written, so a capability the provider dropped leaves no empty
+    mapping behind.
+
+    Only a mapping is accepted: the parser reports a block of any other type
+    and ignores it, and storing one here would make the editor's own mistake
+    survive a save it could have refused.
+    """
+    from ...model_types import all_model_types
+
+    for desc in all_model_types():
+        if desc.is_llm or desc.name not in body:
+            continue
+        block = body[desc.name]
+        if not isinstance(block, dict):
+            continue
+        cleaned = {
+            key: value
+            for key, value in block.items()
+            if value not in (None, "") or key == "enabled"
+        }
+        if cleaned:
+            entry[desc.name] = cleaned
+        else:
+            entry.pop(desc.name, None)
 
 
 def _typed_enable_keys() -> list[str]:

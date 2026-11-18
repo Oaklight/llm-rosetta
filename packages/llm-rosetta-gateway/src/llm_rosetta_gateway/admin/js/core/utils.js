@@ -438,10 +438,17 @@ export function providerTypeName(cfg, name) {
   if (!cfg) return name;
   if (cfg.shim) return cfg.shim;
   if (cfg.type && cfg.type !== name) return cfg.type;
+  // A provider that serves an endpoint and no chat lane names no `type`; the
+  // endpoint's shim is then its identity.  Read from the endpoint's own block
+  // first and the flat key after it — the runtime's order
+  // (`config/typed.py::face_value`), so the card names the shim the gateway
+  // loads.
   for (const desc of S.configData?.model_types || []) {
-    if (!desc.is_llm && desc.config_shim_key && cfg[desc.config_shim_key]) {
-      return cfg[desc.config_shim_key];
-    }
+    if (desc.is_llm || !desc.config_shim_key) continue;
+    const block = cfg[desc.name];
+    const nested = block && typeof block === 'object' ? block.shim : '';
+    const named = nested || cfg[desc.config_shim_key];
+    if (named) return named;
   }
   return name;
 }
