@@ -265,7 +265,14 @@ spellings are the same setting; the block is what the admin panel writes.
 A provider entry is an **account**: one credential, one key ring, one refresh.
 Each typed endpoint is a **face** of it and may stand on another vendor's host,
 so `base_url` belongs to the face, not only to the entry. The block's fields are
-`shim`, `format`, `path`, `enabled` and `base_url`. The flat keys
+`shim`, `format`, `path`, `enabled` and `base_url`.
+
+`base_url` is a host, and `path` is the path on it — the request goes to
+`base_url` + `path`. A version segment belongs in `path` (or in the shim's
+default path), not in `base_url`: writing
+`base_url: "https://api.cohere.com/v2"` with an endpoint path of
+`/v1/embeddings` asks for `/v2/v1/embeddings`, which a real vendor answers with
+a 404. The flat keys
 `embeddings_format` / `embeddings_path` / `embeddings_shim` /
 `embeddings_enabled` (and the `rerank_*` and `decisions_*` groups) still read,
 and a load rewrites them into the block (`config_version` 5).
