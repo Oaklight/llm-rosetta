@@ -244,19 +244,50 @@ dialect directly, or name a shim for that capability:
 }
 ```
 
-The endpoint keys are `embeddings_format` / `embeddings_path` / `embeddings_shim`,
-`rerank_format` / `rerank_path` / `rerank_shim`, and `decisions_format` /
-`decisions_path` / `decisions_shim`. Precedence for each endpoint:
+Each endpoint's settings also fit in one block named after it. The two
+spellings are the same setting; the block is what the admin panel writes.
 
-1. **shim**: `<type>_shim`; otherwise the provider-wide `shim` or `type` when
-   that shim's `model_type` matches the endpoint
-2. **format**: an explicit `<type>_format` beats the shim's format
-3. **path**: an explicit `<type>_path` beats the shim's
-   `connection.default_path` (used only when the effective format is the
-   shim's), then the format's own default (Cohere uses `/v2/...`; Google's
-   embedding path carries the model)
-4. **connection**: a non-empty `base_url` / `api_key` in the entry beats the
-   shim's defaults
+```jsonc
+"providers": {
+  // One account, two vendors: chat on one, embeddings on another.
+  "frankenservice": {
+    "type": "google_generate",
+    "base_url": "https://generativelanguage.googleapis.com",
+    "api_key": "${FRANKEN_KEY}",
+    "embeddings": {
+      "shim": "cohere--embedding",
+      "base_url": "https://api.cohere.com/v2"
+    }
+  }
+}
+```
+
+A provider entry is an **account**: one credential, one key ring, one refresh.
+Each typed endpoint is a **face** of it and may stand on another vendor's host,
+so `base_url` belongs to the face, not only to the entry. The block's fields are
+`shim`, `format`, `path`, `enabled` and `base_url`. The flat keys
+`embeddings_format` / `embeddings_path` / `embeddings_shim` /
+`embeddings_enabled` (and the `rerank_*` and `decisions_*` groups) still read,
+and a load rewrites them into the block (`config_version` 5).
+
+Precedence for each endpoint:
+
+1. **shim**: the block's `shim` (or the flat `<type>_shim`); otherwise the
+   provider-wide `shim` or `type` when that shim's `model_type` matches the
+   endpoint
+2. **format**: an explicit format beats the shim's format
+3. **path**: an explicit path beats the shim's `connection.default_path` (used
+   only when the effective format is the shim's), then the format's own default
+   (Cohere uses `/v2/...`; Google's embedding path carries the model)
+4. **host**: the endpoint's own `base_url`; otherwise the entry's `base_url`;
+   otherwise the shim's `connection.base_url`. An endpoint that inherits the
+   entry's host while its shim declares a different one is logged at startup,
+   naming both hosts and the fix — that combination is almost always an entry
+   written before the block existed, and it sends the endpoint to the wrong
+   vendor.
+5. **credential**: the entry's (`base_url` / `api_key` defaults come from the
+   shim). One entry is one credential; two vendors with two keys are two
+   entries.
 
 A `<type>_shim` that does not serve that capability is rejected at startup with
 an error naming the shim's category. The gateway records each provider's
