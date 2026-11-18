@@ -159,6 +159,188 @@ class TestTheMismatchIsReported:
         ]
 
 
+class TestTheGuardrailReachesEverySpelling:
+    def test_a_format_only_face_is_checked_against_the_format_s_shim(
+        self, gateway_warnings
+    ):
+        """The docs list `format:` first, and it misroutes like the shim."""
+        _config(
+            {
+                "type": "google_generate",
+                "base_url": "https://generativelanguage.googleapis.com",
+                "api_key": "k",
+                "embeddings": {"format": "cohere"},
+            }
+        )
+
+        messages = [record.getMessage() for record in gateway_warnings]
+        assert any("inherits base_url" in message for message in messages), messages
+        assert any("api.cohere.com" in message for message in messages), messages
+
+    @pytest.mark.parametrize(
+        "type_name,format_name,host",
+        [
+            ("embeddings", "openai", "https://api.siliconflow.cn/v1"),
+            ("embeddings", "openai", "https://open.bigmodel.cn/api/paas/v4"),
+            ("embeddings", "openai", "https://api.z.ai/api/paas/v4"),
+            ("embeddings", "openai", "https://ark.cn-beijing.volces.com/api/v3"),
+            ("rerank", "cohere", "https://api.siliconflow.cn/v1"),
+            ("rerank", "cohere", "https://open.bigmodel.cn/api/paas/v4"),
+            ("rerank", "cohere", "https://api.z.ai/api/paas/v4"),
+            ("rerank", "cohere", "https://openrouter.ai/api/v1"),
+        ],
+    )
+    def test_a_vendor_serving_its_own_dialect_does_not_warn(
+        self, gateway_warnings, type_name, format_name, host
+    ):
+        """A dialect several vendors serve is not one vendor's host.
+
+        ``embeddings: {format: "openai"}`` on SiliconFlow is served by
+        ``siliconflow--embedding``, and the request goes to SiliconFlow's own
+        host.  Answering with the *first* registered shim of the pair —
+        OpenAI's — warned on all eight shipped vendor entries that spell their
+        face this way, while routing correctly (#1595 review).
+        """
+        _config(
+            {
+                "type": "chat_completions",
+                "base_url": host,
+                "api_key": "k",
+                type_name: {"format": format_name},
+            }
+        )
+
+        assert not [
+            record
+            for record in gateway_warnings
+            if "inherits base_url" in record.getMessage()
+        ]
+
+    def test_a_migrated_flat_face_on_the_vendor_s_own_host_does_not_warn(
+        self, gateway_warnings
+    ):
+        """A v4 document: the migration must not turn a quiet config loud."""
+        raw: dict[str, Any] = {
+            "providers": {
+                "silicon": {
+                    "type": "chat_completions",
+                    "base_url": "https://api.siliconflow.cn/v1",
+                    "api_key": "k",
+                    "embeddings_format": "openai",
+                }
+            },
+            "models": {},
+        }
+
+        migrate(raw)
+        assert raw["providers"]["silicon"]["embeddings"] == {"format": "openai"}
+        GatewayConfig(raw)
+
+        assert not [
+            record
+            for record in gateway_warnings
+            if "inherits base_url" in record.getMessage()
+        ]
+
+    def test_a_plaintext_host_against_an_https_shim_is_a_mismatch(
+        self, gateway_warnings
+    ):
+        """A hostname comparison called these the same place."""
+        _config(
+            {
+                "type": "chat_completions",
+                "base_url": "http://api.cohere.com",
+                "api_key": "k",
+                "embeddings_shim": "cohere--embedding",
+            }
+        )
+
+        assert any(
+            "inherits base_url" in record.getMessage() for record in gateway_warnings
+        )
+
+    def test_the_guardrail_compares_origins_not_hostnames(self, gateway_warnings):
+        """Two local services on one host and two ports are not one service.
+
+        Calls the check directly with a stand-in shim: a real one on the chat
+        host would be the same vendor, and the point here is the comparison.
+        """
+        from types import SimpleNamespace
+
+        from llm_rosetta_gateway.config.typed import _face_base_url
+
+        shim = SimpleNamespace(
+            name="stub--embedding",
+            format="openai",
+            connection=SimpleNamespace(base_url="http://127.0.0.1:8002/v1"),
+        )
+        _face_base_url(
+            "p",
+            {},
+            "embeddings",
+            {"base_url": "http://127.0.0.1:8001/v1"},
+            shim,
+            "openai",
+        )
+
+        assert any(
+            "inherits base_url" in record.getMessage() for record in gateway_warnings
+        )
+
+    def test_the_guardrail_sees_a_scheme_difference(self, gateway_warnings):
+        from types import SimpleNamespace
+
+        from llm_rosetta_gateway.config.typed import _face_base_url
+
+        shim = SimpleNamespace(
+            name="stub--embedding",
+            format="openai",
+            connection=SimpleNamespace(base_url="https://api.cohere.com"),
+        )
+        _face_base_url(
+            "p", {}, "embeddings", {"base_url": "http://api.cohere.com"}, shim, "openai"
+        )
+
+        assert any(
+            "inherits base_url" in record.getMessage() for record in gateway_warnings
+        )
+
+    def test_the_same_origin_does_not_warn(self, gateway_warnings):
+        from types import SimpleNamespace
+
+        from llm_rosetta_gateway.config.typed import _face_base_url
+
+        shim = SimpleNamespace(
+            name="stub--embedding",
+            format="openai",
+            connection=SimpleNamespace(base_url="https://api.cohere.com/"),
+        )
+        _face_base_url(
+            "p",
+            {},
+            "embeddings",
+            {"base_url": "https://api.cohere.com:443"},
+            shim,
+            "openai",
+        )
+
+        assert not [
+            record
+            for record in gateway_warnings
+            if "inherits base_url" in record.getMessage()
+        ]
+
+    def test_a_trailing_slash_and_a_default_port_do_not_differ(self):
+        from llm_rosetta_gateway.config.typed import _origin
+
+        assert _origin("https://api.cohere.com/") == _origin(
+            "https://api.cohere.com:443"
+        )
+        assert _origin("http://x.example") == _origin("http://x.example:80")
+        assert _origin("http://x.example") != _origin("https://x.example")
+        assert _origin("http://127.0.0.1:8001") != _origin("http://127.0.0.1:8002")
+
+
 class TestTheFaceReader:
     def test_the_block_wins_over_the_flat_key(self):
         cfg = {"embeddings_shim": "flat--a", "embeddings": {"shim": "block--b"}}
@@ -297,6 +479,54 @@ class TestTheMigration:
         section = raw["embeddings_providers"]["jina"]
         assert section["format"] == "jina"
         assert "embeddings" not in section
+
+
+class TestTheSaveAfterTheFold:
+    def test_a_shim_only_entry_is_still_saveable(self, tmp_path):
+        """The v5 fold moves the shim; the save check has to find it there.
+
+        `_missing_provider_fields_error` looked for the shim under the flat
+        key alone, so an entry the migration had already folded — the shape the
+        docs list second — came back 400 asking for a base_url the shim was
+        supplying (#1595 review).
+        """
+        from llm_rosetta_gateway.admin.routes.config.payload import (
+            _mask_provider_entry,
+        )
+        from llm_rosetta_gateway.admin.routes.config.providers import (
+            _missing_provider_fields_error,
+        )
+        from llm_rosetta_gateway.config import load_gateway_config
+
+        path = tmp_path / "config.jsonc"
+        path.write_text(
+            json.dumps(
+                {
+                    "providers": {
+                        "acme-embed": {
+                            "api_key": "k",
+                            "embeddings_shim": "cohere--embedding",
+                        }
+                    },
+                    "models": {},
+                }
+            )
+        )
+        load_gateway_config(str(path))
+        on_disk = json.loads(path.read_text())
+        entry = on_disk["providers"]["acme-embed"]
+        assert "embeddings_shim" not in entry, "the load folded the key"
+
+        payload: dict[str, Any] = _mask_provider_entry("acme-embed", entry)
+        error = _missing_provider_fields_error(
+            payload,
+            payload.get("api_key", ""),
+            payload.get("base_url", ""),
+            "acme-embed",
+            on_disk["providers"],
+        )
+
+        assert error is None
 
 
 class TestTheSave:

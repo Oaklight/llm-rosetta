@@ -28,6 +28,7 @@ import { filteredEmptyHtml } from '../core/empty.js';
 import { providerFormError } from '../core/form-validate.js';
 import { isDialogPristine, markDialogPristine } from '../core/dialog.js';
 import { typeOptionHtml } from '../core/type-switch.js';
+import { readFace, faceSaveBlock, faceHostMismatch, faceRow } from '../core/face-host.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -1785,16 +1786,21 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
     }
     // The face's own host.  Empty means "inherit the provider's base_url", so
     // the placeholder shows what that is: an endpoint on another vendor has to
-    // say so here, or it forwards to the chat host (#1595).
+    // say so here, or it forwards to the chat host (#1595).  `faceRow` reads
+    // the stored host and the candidate hosts together, so a face naming only
+    // a format is compared against that format's shims rather than against
+    // nothing (#1595 review).
     const faceBaseEl = document.getElementById(`provFaceBase_${desc.name}`);
     if (faceBaseEl) {
-      const stored = _faceValue(provCfg, desc, 'base_url') || '';
-      const inherited = (provCfg && provCfg.base_url) || '';
-      const shimHost = (shimMap[shimName] || {}).default_base_url || '';
-      faceBaseEl.value = stored;
-      faceBaseEl.placeholder = inherited || t('placeholder.endpointBaseUrl');
-      faceBaseEl.dataset.inherited = inherited;
-      faceBaseEl.dataset.shimHost = shimHost;
+      const row = faceRow({
+        entry: provCfg,
+        desc,
+        shims: S.configData?.registered_shims || [],
+      });
+      faceBaseEl.value = row.host;
+      faceBaseEl.placeholder = row.inherited || t('placeholder.endpointBaseUrl');
+      faceBaseEl.dataset.inherited = row.inherited;
+      faceBaseEl.dataset.shimHosts = JSON.stringify(row.candidates);
       _markFaceHostMismatch(desc, faceBaseEl);
       faceBaseEl.oninput = () => _markFaceHostMismatch(desc, faceBaseEl);
     }
@@ -1911,42 +1917,34 @@ function _buildProvCapCheckboxes() {
  * Build non-LLM endpoint sections inside #provNonLlmSections from model_types metadata.
  * Called each time the provider modal opens.
  */
-/** One endpoint's settings, from the face block the panel writes.
- *
- *  The runtime reads `<type>: {shim, format, path, enabled, base_url}` first and
- *  falls back to the flat `<type>_shim` keys a config written before the block
- *  still carries (`config/typed.py::face_value`).  The payload folds a flat
- *  entry into a block on the way out, so this normally sees the block; the flat
- *  fallback is for a document that arrived some other way.
- */
+/** One endpoint's setting: the face block first, the flat key after it. */
 function _faceValue(cfg, desc, field) {
-  if (!cfg) return undefined;
-  const block = cfg[desc.name];
-  if (block && typeof block === 'object' && !Array.isArray(block)) {
-    const value = block[field];
-    if (value !== undefined && (field === 'enabled' || value)) return value;
-  }
-  if (field === 'enabled') return cfg[`${desc.name}_enabled`];
-  const flatKey = { shim: desc.config_shim_key, format: desc.config_format_key, path: desc.config_path_key }[field];
-  return flatKey ? cfg[flatKey] : undefined;
+  const flatKey = {
+    shim: desc.config_shim_key,
+    format: desc.config_format_key,
+    path: desc.config_path_key,
+    base_url: `${desc.name}_base_url`,
+  }[field];
+  return readFace(cfg, desc.name, field, flatKey);
 }
 
 /** Warn, on the endpoint's own row, when it will forward to the chat host.
  *
  *  The runtime logs this too (`config/typed.py::_face_base_url`); the panel
- *  says it where the operator can act on it — an endpoint whose shim belongs
- *  to another vendor but that inherits the provider's host is one save away
- *  from sending every embedding to the language API.
+ *  says it where the operator can act on it.  The comparison is the shared
+ *  `faceHostMismatch`, over the same candidate hosts `faceRow` resolved, so
+ *  the panel and the gateway agree about what "another vendor" means (origin,
+ *  not hostname alone; every shim of the format, not the first one).
  */
 function _markFaceHostMismatch(desc, el) {
-  const inherited = el.dataset.inherited || '';
-  const shimHost = el.dataset.shimHost || '';
-  let mismatch = false;
-  if (!el.value.trim() && inherited && shimHost) {
-    try {
-      mismatch = new URL(inherited).hostname !== new URL(shimHost).hostname;
-    } catch { mismatch = false; }
+  let candidates = [];
+  try {
+    candidates = JSON.parse(el.dataset.shimHosts || '[]');
+  } catch {
+    candidates = [];
   }
+  const mismatch = !el.value.trim()
+    && faceHostMismatch(el.dataset.inherited, candidates);
   el.classList.toggle('is-host-mismatch', mismatch);
   el.title = mismatch ? t('hint.endpointHostMismatch') : '';
 }
@@ -3027,19 +3025,18 @@ async function _saveProvider() {
       // The endpoint's own block, written whole on every save: it is where the
       // endpoint's host lives, and a save that dropped it would send the lane
       // back to the entry's base_url — the misroute #1595 is about.
-      const block = {};
-      if (desc.config_shim_key) block.shim = keepAsShim ? storedShim : choice.shim;
-      block.format = keepAsShim ? '' : choice.format;
-      block.path = document.getElementById(`provPath_${desc.name}`)?.value?.trim()
-        || _descPathFor(desc, choice.format);
+      // The block's shape lives in `core/face-host.js` with the reader, so the
+      // line that carries the face's host has a test that can red it.
       const baseUrlEl = document.getElementById(`provFaceBase_${desc.name}`);
-      const baseUrl = baseUrlEl ? baseUrlEl.value.trim() : '';
-      if (baseUrl) block.base_url = baseUrl;
-      // An endpoint that keeps its configuration but stops routing sends
-      // `false`; an enabled one carries no `enabled` key at all.
       const typeEnabled = document.getElementById(`provTypeEnabled_${desc.name}`);
-      if (typeEnabled && !typeEnabled.checked) block.enabled = false;
-      body[desc.name] = block;
+      body[desc.name] = faceSaveBlock({
+        host: baseUrlEl ? baseUrlEl.value : '',
+        shim: desc.config_shim_key ? (keepAsShim ? storedShim : choice.shim) : '',
+        format: keepAsShim ? '' : choice.format,
+        path: document.getElementById(`provPath_${desc.name}`)?.value?.trim()
+          || _descPathFor(desc, choice.format),
+        enabled: !(typeEnabled && !typeEnabled.checked),
+      });
     } else {
       // A capability the provider no longer declares has no endpoint to
       // enable or disable; the empty block clears what it held.
