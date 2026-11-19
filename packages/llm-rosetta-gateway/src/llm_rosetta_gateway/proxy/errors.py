@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
@@ -10,13 +11,14 @@ from typing import Any
 from llm_rosetta_gateway._vendor.httpserver import Response
 
 from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta.capabilities import ToolNameMap
 from llm_rosetta.routing import ResolvedRoute
 from llm_rosetta.shims.provider_shim import SoftErrorPattern
 
 from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta_gateway.observability.error_dump import dump_error
 
-from ..middleware.error_annotate import annotate_tool_collisions
+from ..middleware.error_annotate import ToolSchemaLocator, annotate_tool_errors
 from ..middleware.error_format import (
     detect_api_format_from_provider,
     format_error_response,
@@ -44,7 +46,11 @@ from ..transport.sse_format import (
 
 logger = get_logger()
 
-_COLLISION_HINT_STATUSES = frozenset({400, 422})
+#: Statuses that reject the request body rather than the request's right to
+#: make it.  Both tool hints describe a defect in the client's own tool list,
+#: which is what such a status may be about — not an auth, not-found or
+#: rate-limit status, where the tool list is incidental.
+_BODY_REJECTION_STATUSES = frozenset({400, 422})
 
 
 async def _upstream_error_passthrough(
@@ -64,6 +70,7 @@ async def _upstream_error_passthrough(
     error_phase: str = "upstream",
     is_streaming: bool = False,
     tool_name_collisions: dict[str, int] | None = None,
+    tool_name_map: ToolNameMap | None = None,
 ) -> Response:
     """Log, dump, capture, and return a sanitized upstream error response.
 
@@ -72,8 +79,14 @@ async def _upstream_error_passthrough(
             the client's own tool list is a plausible cause of the rejection.
             Recorded in the error dump, and appended to the client's error
             message on a request-body rejection (see
-            :data:`_COLLISION_HINT_STATUSES`) — not on an auth, not-found or
+            :data:`_BODY_REJECTION_STATUSES`) — not on an auth, not-found or
             rate-limit status, where the collision is incidental.
+        tool_name_map: The request leg's client↔upstream tool-name pairing.
+            When the upstream's rejection names a tool — by an index into the
+            list it received, or by a renamed spelling — this is what turns
+            that reference back into the client's own declaration, so the
+            message the client reads points at a tool it can find.  ``None``
+            leaves such messages as the upstream wrote them.
     """
     log_upstream_error(
         resp_status,
@@ -113,13 +126,60 @@ async def _upstream_error_passthrough(
             )
         )
     return Response(
-        body=annotate_tool_collisions(
+        body=annotate_tool_errors(
             sanitize_upstream_error(resp_raw_content),
-            tool_name_collisions if resp_status in _COLLISION_HINT_STATUSES else None,
+            tool_name_collisions if resp_status in _BODY_REJECTION_STATUSES else None,
+            hint_for=_tool_schema_hint(
+                route,
+                body,
+                target_body,
+                tool_name_map,
+                status=resp_status,
+            ),
         ),
         status_code=resp_status,
         content_type="application/json",
     )
+
+
+def _tool_schema_hint(
+    route: ResolvedRoute,
+    body: dict[str, Any],
+    target_body: dict[str, Any],
+    tool_name_map: ToolNameMap | None,
+    *,
+    status: int,
+) -> Callable[[str], str | None] | None:
+    """Build the tool-schema attribution for one error, when it can apply.
+
+    The hint is computed from the upstream's message at rewrite time — that is
+    where the tool reference lives — so this returns the locator's bound
+    method rather than a sentence.  Nothing is read until it is called, and a
+    status that is not a body rejection gets no locator at all.
+
+    Args:
+        route: The route the request took; supplies both dialects.
+        body: The client's own request, which holds the declarations the hint
+            must name.
+        target_body: The converted request the upstream received, which holds
+            the positions and names the upstream's message refers to.
+        tool_name_map: The client↔upstream name pairing, or ``None`` when no
+            conversion ran (a passthrough path with nothing to attribute).
+        status: The upstream's HTTP status.
+
+    Returns:
+        A callable returning the hint for a message, or ``None`` when the
+        attribution cannot apply.
+    """
+    if tool_name_map is None or status not in _BODY_REJECTION_STATUSES:
+        return None
+    return ToolSchemaLocator(
+        upstream_format=route.target_provider,
+        client_format=route.source_provider,
+        upstream_body=target_body,
+        client_body=body,
+        name_map=tool_name_map,
+    ).hint
 
 
 async def _connection_error_response(
@@ -652,6 +712,7 @@ async def _soft_error_response(
     extra_headers: dict[str, str] | None = None,
     capture_state: Any | None = None,
     tool_name_collisions: dict[str, int] | None = None,
+    tool_name_map: ToolNameMap | None = None,
 ) -> Response | None:
     """Return an error response if *resp_body* matches a soft-error pattern."""
     matched = _check_soft_errors(route.soft_error_patterns, resp_body)
@@ -673,6 +734,7 @@ async def _soft_error_response(
         capture_state=capture_state,
         error_phase="soft_error",
         tool_name_collisions=tool_name_collisions,
+        tool_name_map=tool_name_map,
     )
 
 

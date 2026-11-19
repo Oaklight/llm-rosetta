@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from .errors import (  # noqa: F401
-    _COLLISION_HINT_STATUSES,
+    _BODY_REJECTION_STATUSES,
     _upstream_error_passthrough,
     _connection_error_response,
     _handle_401,
@@ -56,7 +56,7 @@ from .streaming import (  # noqa: F401
 
 
 __all__ = [
-    "_COLLISION_HINT_STATUSES",
+    "_BODY_REJECTION_STATUSES",
     "_upstream_error_passthrough",
     "_connection_error_response",
     "_handle_401",

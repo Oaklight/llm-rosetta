@@ -652,6 +652,7 @@ async def _non_streaming_from_stream(  # noqa: C901 - one branch per refusal kin
                 error_phase="stream_header",
                 is_streaming=True,
                 tool_name_collisions=pipeline.tool_name_collisions,
+                tool_name_map=pipeline.tool_name_map,
             ),
             profile,
         )
@@ -910,6 +911,7 @@ async def handle_non_streaming(  # noqa: C901
             extra_headers=extra_headers,
             capture_state=capture_state,
             tool_name_collisions=pipeline.tool_name_collisions,
+            tool_name_map=pipeline.tool_name_map,
         )
         if resp.is_error
         else await _soft_error_response(
@@ -923,6 +925,7 @@ async def handle_non_streaming(  # noqa: C901
             extra_headers=extra_headers,
             capture_state=capture_state,
             tool_name_collisions=pipeline.tool_name_collisions,
+            tool_name_map=pipeline.tool_name_map,
         )
     )
     if _err is not None:

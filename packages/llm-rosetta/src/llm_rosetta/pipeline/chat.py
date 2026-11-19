@@ -607,6 +607,21 @@ class ConversionPipeline:
         return dict(self._ctx.metadata.get("_tool_name_collisions", {}))
 
     @property
+    def tool_name_map(self) -> ToolNameMap:
+        """The client↔upstream tool-name pairing the request leg produced.
+
+        The response and streaming legs translate names through this same map,
+        and so does anything that has to explain an upstream rejection in the
+        client's own terms: an upstream naming ``tools[16]`` or a sanitized
+        spelling names a tool the client knows by another one.
+
+        Empty before :meth:`convert_request` and when nothing was renamed, in
+        which case :meth:`ToolNameMap.to_client` falls back to the input name.
+        Live state — read it, do not mutate it.
+        """
+        return self._name_map
+
+    @property
     def profile(self) -> dict[str, float]:
         """Per-phase timing data collected during conversion.
 
