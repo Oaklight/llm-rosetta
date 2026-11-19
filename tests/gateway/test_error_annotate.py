@@ -180,7 +180,10 @@ class TestToolSchemaLocator:
         )
         assert "the client's tool 'send_message'" in hint
         assert "declaration #17" in hint
-        assert "tools[0].functionDeclarations[16]" in hint
+        # The parenthetical names the *client's* declaration.  The
+        # rejected-position clause below repeats the same path under either
+        # spelling, so only the parentheses can tell them apart.
+        assert "(tools[0].functionDeclarations[16])" in hint
         # The within-tool path is translated out of Chat's ``function`` wrapper.
         assert "tools[0].functionDeclarations[16].name" in hint
 
@@ -257,6 +260,68 @@ class TestToolSchemaLocator:
         )
         assert "the client's tool 'two'" in hint
         assert "tools[0].functionDeclarations[1].parameters" in hint
+
+    def test_a_full_path_at_the_upstream_schema_field_is_translated(self):
+        """Messages' ``input_schema`` reaches a Chat client as ``parameters``.
+
+        The field is spelled in the upstream's own path, not in an
+        ``In context=(...)`` tuple, so this is the case the per-dialect
+        translation has to handle by itself.
+        """
+        locator = ToolSchemaLocator(
+            upstream_format="messages",
+            client_format="chat_completions",
+            upstream_body={"tools": [{"name": "one"}, {"name": "send"}]},
+            client_body=_chat_tools(["one", "send"]),
+        )
+        hint = _hint(
+            locator,
+            "Invalid 'tools[1].input_schema.properties.count': '1' is not of "
+            "type 'integer'",
+        )
+        assert "tools[1].function.parameters.properties.count" in hint
+
+    def test_chat_schema_field_is_translated_for_a_messages_client(self):
+        """The reverse crossing: Chat's ``parameters`` becomes ``input_schema``."""
+        locator = ToolSchemaLocator(
+            upstream_format="chat_completions",
+            client_format="messages",
+            upstream_body=_chat_tools(["one", "send"]),
+            client_body={
+                "tools": [
+                    {"name": "one", "input_schema": {}},
+                    {"name": "send", "input_schema": {}},
+                ]
+            },
+        )
+        hint = _hint(
+            locator,
+            "Invalid 'tools[1].function.parameters.properties.count': '1' is "
+            "not of type 'integer'",
+        )
+        assert "tools[1].input_schema.properties.count" in hint
+
+    def test_a_container_holding_one_declaration_identifies_it(self):
+        """``tools[0]`` names Google's container; a lone child is what it means."""
+        locator = ToolSchemaLocator(
+            upstream_format="google_generate",
+            client_format="google_generate",
+            upstream_body=_genai_tools(["send_message"]),
+            client_body=_genai_tools(["send_message"]),
+        )
+        hint = _hint(locator, "Unknown name 'x' at 'tools[0]'")
+        assert "the client's tool 'send_message'" in hint
+        assert "declaration #1 (tools[0].functionDeclarations[0])" in hint
+
+    def test_a_container_holding_several_declarations_gets_no_hint(self):
+        """A container names none of its children, and a guess would mislead."""
+        locator = ToolSchemaLocator(
+            upstream_format="google_generate",
+            client_format="chat_completions",
+            upstream_body=_genai_tools(["one", "two", "three"]),
+            client_body=_chat_tools(["one", "two", "three"]),
+        )
+        assert locator.hint("Unknown name 'x' at 'tools[0]'") is None
 
     def test_a_nested_upstream_path_is_rendered_in_the_clients_dialect(self):
         """Google's nesting and Chat's ``function`` wrapper both disappear."""
