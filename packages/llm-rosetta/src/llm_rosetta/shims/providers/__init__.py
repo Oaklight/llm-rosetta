@@ -1017,9 +1017,9 @@ def _parse_batch(
 
     Raises:
         ValueError: The block is not a mapping, carries an unknown key, a
-            non-string path, a non-boolean ``supports_files``, a dialect the
-            pair does not offer, or a declaration for a format with no batch
-            record at all.
+            non-string path, a non-boolean ``supports_files``, or a dialect other than
+            ``emulated`` that the pair does not offer (a format with no batch
+            record offers none, so only ``emulated`` is accepted there).
     """
     raw = cfg.get("batch")
     if raw is None:

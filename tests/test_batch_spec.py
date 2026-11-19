@@ -29,6 +29,7 @@ from llm_rosetta.formats.batch import (
     BatchSpec,
     batch_spec_for,
     batch_spec_for_dialect,
+    batch_specs_for_dialect,
     check_batch_specs,
 )
 
@@ -138,12 +139,15 @@ def test_the_state_maps_land_in_the_normalized_vocabulary():
         assert not unknown, f"{spec.format}: {unknown}"
 
 
-def test_the_dialect_table_has_one_owner_per_id():
-    """Two formats share ``openai_file``; the file variant is reachable."""
-    assert BY_DIALECT["openai_file"].format == "chat_completions"
-    assert BY_DIALECT["anthropic_inline"].format == "messages"
-    assert BY_DIALECT["gemini_inline"].format == "google_generate"
-    assert BY_DIALECT["gemini_file"].format == "google_generate"
+def test_the_dialect_table_lists_every_owner_per_id():
+    """Two formats share ``openai_file``; the file variant owns its own id."""
+    assert [s.format for s in BY_DIALECT["openai_file"]] == [
+        "chat_completions",
+        "open_responses",
+    ]
+    assert [s.format for s in BY_DIALECT["anthropic_inline"]] == ["messages"]
+    assert [s.format for s in BY_DIALECT["gemini_inline"]] == ["google_generate"]
+    assert [s.format for s in BY_DIALECT["gemini_file"]] == ["google_generate"]
     assert set(BY_DIALECT) == set(DIALECTS)
 
 
@@ -151,6 +155,77 @@ def test_the_declarable_dialects_are_the_codecs_plus_emulated():
     assert DECLARABLE_DIALECTS == (*BY_DIALECT, "emulated")
     assert batch_spec_for_dialect("emulated") is None
     assert batch_spec_for_dialect("nonsense") is None
+    assert batch_specs_for_dialect("emulated") == ()
+
+
+def test_an_ambiguous_dialect_lookup_refuses_instead_of_picking_one():
+    """``openai_file`` is owned by two records; the first must not win."""
+    with pytest.raises(ValueError, match="shared by.*chat_completions.*open_responses"):
+        batch_spec_for_dialect("openai_file")
+    owners = {s.format: s for s in batch_specs_for_dialect("openai_file")}
+    assert owners["open_responses"].supported_endpoints == ("/v1/responses",)
+    assert owners["chat_completions"].supported_endpoints == ("/v1/chat/completions",)
+
+
+def test_the_gemini_file_dialect_resolves_to_file_variant_facts():
+    spec = batch_spec_for_dialect("gemini_file")
+    assert spec is not None
+    assert (spec.dialect, spec.container) == ("gemini_file", "file")
+    assert spec.limits.max_bytes == 2 * 1024**3
+    assert spec.file_results_path is not None
+    inline = batch_spec_for("llm", "google_generate")
+    assert inline is not None
+    assert inline.container == "inline"
+    assert inline.limits.max_bytes == 20 * 1024 * 1024
+    assert inline.file_variant is spec
+    assert spec.file_variant is None
+
+
+def _bad(monkeypatch, **changes):
+    import dataclasses
+
+    broken = dataclasses.replace(BATCH_SPECS[0], **changes)
+    monkeypatch.setattr(
+        "llm_rosetta.formats.batch.BATCH_SPECS", (broken, *BATCH_SPECS[1:])
+    )
+
+
+@pytest.mark.parametrize(
+    ("changes", "match"),
+    [
+        ({"dialect": "openai_fil"}, "dialect is not one of"),
+        ({"container": "none"}, "container 'none'"),
+        ({"item_key": "customid"}, "item_key 'customid'"),
+        ({"supported_endpoints": ()}, "supported_endpoints is empty"),
+        ({"state_map": {"x": "runnin"}}, "state_map values runnin"),
+    ],
+)
+def test_the_gate_refuses_a_malformed_record(monkeypatch, changes, match):
+    _bad(monkeypatch, **changes)
+    with pytest.raises(RuntimeError, match=match):
+        check_batch_specs()
+
+
+def test_the_gate_refuses_a_malformed_file_variant(monkeypatch):
+    import dataclasses
+
+    gemini = BATCH_SPECS[-1]
+    assert gemini.file_variant is not None
+    variant = dataclasses.replace(gemini.file_variant, dialect="gemini_fil")
+    broken = dataclasses.replace(gemini, file_variant=variant)
+    monkeypatch.setattr(
+        "llm_rosetta.formats.batch.BATCH_SPECS", (*BATCH_SPECS[:-1], broken)
+    )
+    with pytest.raises(RuntimeError, match="gemini_fil"):
+        check_batch_specs()
+
+
+def test_the_container_vocabulary_has_no_none():
+    from typing import get_args
+
+    from llm_rosetta.formats.batch import BatchContainer
+
+    assert set(get_args(BatchContainer)) == {"file", "inline"}
 
 
 def test_the_openai_records_differ_only_in_endpoint():
@@ -179,7 +254,7 @@ def test_gemini_records_its_file_variant_and_has_no_item_cap():
     assert spec is not None
 
     assert spec.file_dialect == "gemini_file"
-    # The documented ceiling is the 20 MB inline body; no item count is
+    # The inline ceiling is the 20 MB body; no item count is
     # published, so none is recorded.
     assert spec.limits.max_items is None
     assert spec.limits.max_bytes == 20 * 1024 * 1024
