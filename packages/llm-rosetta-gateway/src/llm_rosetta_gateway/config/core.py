@@ -34,6 +34,7 @@ from .parse import (
     parse_model_failover,
     parse_model_overrides,
     parse_models,
+    apply_shim_default_capabilities,
 )
 from .resolve import (
     resolve,
@@ -277,6 +278,12 @@ class GatewayConfig:
             # The unfiltered map: a lane naming a switched-off provider is
             # skipped like a missing one, and the log has to say which it is.
             known_providers=all_providers,
+        )
+        apply_shim_default_capabilities(
+            raw.get("models", {}),
+            self.models,
+            self.model_capabilities,
+            self.provider_shim_names,
         )
 
         raw_models = raw.get("models", {})

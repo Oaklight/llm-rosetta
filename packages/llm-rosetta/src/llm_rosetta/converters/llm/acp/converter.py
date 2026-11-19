@@ -108,7 +108,9 @@ class AcpConverter(BaseConverter):
         return {
             "model": ir_request.get("model", ""),
             "system": render_system(ir_request.get("system_instruction")),
-            "prompt": render_messages(cast(list[dict[str, Any]], messages)),
+            "prompt": render_messages(
+                cast(list[dict[str, Any]], messages), warnings=context.warnings
+            ),
         }
 
     def _report_uncarried_config(
