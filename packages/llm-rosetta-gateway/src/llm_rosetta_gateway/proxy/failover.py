@@ -15,9 +15,11 @@ standing:
 Trying another lane or provider at all is a product decision rather than a
 routing one — the second one is a different prompt cache and possibly a
 different model build — so it is opt-in per model (``failover_on_error``, or
-the older ``failover_on_quota``).  What the budget allows is
-:class:`FailoverBudget`: one sibling retry and one cross-provider retry for a
-content-level refusal, one cross-provider retry for a credential-level one.
+the older ``failover_on_quota``).  What a content-level refusal may spend is
+:class:`FailoverBudget` — one sibling retry, then one cross-provider retry.  A
+credential-level refusal is not capped by a count: it excludes the account
+that refused and asks the resolver again, so the walk covers the route's
+remaining accounts and stops when there are none.
 
 Both handlers use this module the same way: ask :func:`prepare_failover`, and
 when it returns a target, run the whole request again against it and record the
@@ -48,12 +50,17 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class FailoverBudget:
-    """What this request has already spent on retries.
+    """What this request has already spent on content-level retries.
 
-    A credential-level refusal earns the same single cross-provider retry it
-    always did.  A content-level one earns two: the sibling lane first, then —
-    only if that lane has none left, or its sibling refused in turn — another
-    provider.  That bounds a request at three upstream attempts.
+    A content-level refusal earns two: the sibling lane first, then — only if
+    that lane has none left, or its sibling refused in turn — another
+    provider.  That bounds a request's *content* retries at two.
+
+    A credential-level refusal is not counted here.  It excludes one account
+    and asks the resolver again; the exclusion set only grows, so the walk is
+    bounded by the route's accounts rather than by a retry count.  The count
+    is why a request with four lanes, two unpaid, used to come back 402 with
+    two healthy accounts untouched.
     """
 
     #: How many retries this request has made.  The bound is on the count, not
@@ -139,8 +146,13 @@ def prepare_failover(
         else:
             return None
     else:
-        if budget.cross_retried:
-            return None
+        # A credential-level refusal is one account's state: exclude every
+        # lane of the provider that refused and keep walking.  The budget used
+        # to stop after one cross-provider retry, which ended the request on
+        # the second refusal even when the route held more accounts — four
+        # lanes, two unpaid, two healthy, and the client got the 402.  The
+        # exclusion set only grows and the resolver picks from what is left,
+        # so the walk is bounded by the route, not by a count.
         target = reselect_after_credential_refusal(
             selection, exclude=route.provider_name, resolve=config.resolve
         )
