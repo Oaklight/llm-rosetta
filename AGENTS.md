@@ -349,6 +349,12 @@ result = run_sync(
 - **No AI co-author tags in commits.** Do not add `Co-authored-by` lines for AI
   tools in git commit messages. Disclose AI usage in PR descriptions instead.
 
+Reviews are tiered by risk, and a PR is checked against in-flight PRs before it
+opens (`python scripts/dev/pr_overlap.py`). Keep one concern per PR, request
+review only when CI is fully green, and fill in
+`.github/pull_request_template.md`. The rules are in the "Pull requests"
+section of `CONTRIBUTING.md`.
+
 ## Release process
 
 Releases are triggered manually via GitHub Actions, not by tag push.
