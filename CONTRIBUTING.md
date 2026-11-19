@@ -108,9 +108,11 @@ imported inside the function, and `getLogger(__name__)` becoming
 
 Record an intended difference with a reason in a file of `qualified.name  reason`
 lines and pass it with `--allow FILE` (use `undefined-global:<name>` or
-`decorator-census:<decorator>` for those two checks). CI runs the same check on pull requests
-titled `refactor(...)` or labelled `pure-move`, and reads
-`.github/pure-move-allow.txt` when it exists.
+`decorator-census:<decorator>` for those two checks). The `Pure move` workflow runs the same
+check on pull requests titled `refactor(...)` or labelled `pure-move`, including
+when the label is added or the title edited after the PR was opened. It reads
+`.github/pure-move-allow.txt` from the **base branch**, so a PR cannot exempt
+itself: land the allow-file entry first, in its own reviewed change.
 
 ## License
 

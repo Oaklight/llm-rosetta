@@ -1,0 +1,61 @@
+name: Pure move
+
+# A refactor PR claims "no behaviour change"; reviewers cannot see a dropped
+# `@classmethod` in a 2000-line move.  This workflow compares every def, method
+# and class-level assignment of the changed files by AST between the PR base and
+# the PR head and fails on a def that is missing or moved with a difference.
+#
+# It is its own workflow because it must also run when a PR is labelled or
+# retitled: with the default `pull_request` types a `pure-move` label added
+# after the PR was opened starts no run.  Giving the main CI workflow those
+# types would re-run every job on each label change.
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened, labeled, unlabeled, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  pure-move:
+    # Runs for titles that start with `refactor(` and for PRs labelled
+    # `pure-move`.  While it is skipped for ordinary PRs it cannot be a
+    # required check without blocking all of them.
+    if: >-
+      startsWith(github.event.pull_request.title, 'refactor(') ||
+      contains(github.event.pull_request.labels.*.name, 'pure-move')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # The tool needs the merge base of the PR and its base branch.
+          fetch-depth: 0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Check that the refactor is a pure move
+        # `shell: bash` is what turns on `pipefail`; the default `run` shell is
+        # `bash -e` without it, and a failing check would then show as green
+        # because `tee` is the last command in the pipe.
+        shell: bash
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+        run: |
+          args=()
+          # Accepted differences are read from the BASE branch.  A PR that
+          # needs an exemption must land it first, in review; the head cannot
+          # grant itself one.
+          if git cat-file -e "$BASE_REF:.github/pure-move-allow.txt" 2>/dev/null; then
+            git show "$BASE_REF:.github/pure-move-allow.txt" > "$RUNNER_TEMP/pure-move-allow.txt"
+            args+=(--allow "$RUNNER_TEMP/pure-move-allow.txt")
+          fi
+          if [ -f .github/pure-move-allow.txt ] \
+            && ! git diff --quiet "$BASE_REF" HEAD -- .github/pure-move-allow.txt; then
+            echo "::warning file=.github/pure-move-allow.txt::This PR changes the allow-file; the base branch's copy is used, so the change has no effect on this run."
+          fi
+          python scripts/dev/check_move.py "$BASE_REF" HEAD "${args[@]}" --markdown \
+            | tee -a "$GITHUB_STEP_SUMMARY"

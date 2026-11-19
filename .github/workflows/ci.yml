@@ -116,46 +116,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/dev/check_shim_workflow.py
 
-  pure-move:
-    # A refactor PR claims "no behaviour change"; reviewers cannot see a dropped
-    # `@classmethod` in a 2000-line move.  This job compares every def, method and
-    # class-level assignment of the changed files by AST between the PR base and
-    # the PR head and fails on a def that is missing or moved with a difference.
-    # It runs for titles that start with `refactor(` and for PRs labelled
-    # `pure-move`.  An accepted difference goes in `.github/pure-move-allow.txt`
-    # (`qualified.name  reason`, one per line).
-    if: >-
-      github.event_name == 'pull_request' &&
-      (startsWith(github.event.pull_request.title, 'refactor(') ||
-      contains(github.event.pull_request.labels.*.name, 'pure-move'))
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          # The tool needs the merge base of the PR and its base branch.
-          fetch-depth: 0
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Check that the refactor is a pure move
-        # `shell: bash` is what turns on `pipefail`; the default `run` shell is
-        # `bash -e` without it, and a failing check would then show as green
-        # because `tee` is the last command in the pipe.
-        shell: bash
-        env:
-          BASE_REF: origin/${{ github.base_ref }}
-        run: |
-          args=()
-          if [ -f .github/pure-move-allow.txt ]; then
-            args+=(--allow .github/pure-move-allow.txt)
-          fi
-          # `pipefail` (from `shell: bash` above) keeps the tool's exit status.
-          python scripts/dev/check_move.py "$BASE_REF" HEAD "${args[@]}" --markdown \
-            | tee -a "$GITHUB_STEP_SUMMARY"
-
   docs-build:
     # The docs live on two orphan branches, and Read the Docs builds them by
     # running *their* .readthedocs.yaml: a pre_build that clones this
