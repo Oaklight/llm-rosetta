@@ -35,13 +35,24 @@ Reported categories:
 * ``type-checking``   added item inside ``if TYPE_CHECKING:`` (ignorable)
 * ``import-hoisted``  the only difference is a function-local import that is now
   a module-level import of the same name in the head file (ignorable)
+* ``logger-name``     the only difference is ``getLogger(__name__)`` becoming
+  ``getLogger("<literal>")`` where the literal is the base module's dotted name
+  (ignorable)
+* ``undefined-global`` (FAILS) a matched function reads a module-level name that
+  its head module does not define, though its base module did (a lost
+  ``logger`` or constant); found with ``symtable``
+* ``decorator-census`` (FAILS) the number of ``@staticmethod``, ``@classmethod``
+  and ``@property`` decorators differs between base and head over the changed
+  files
 
 A class is compared by its decorators, keywords and docstring only; its bases
 are not compared, because a split into mixins changes them.
 
 An ``--allow`` file lists accepted pairs, one ``qualified.name  reason`` per
 line (``#`` starts a comment).  The name may be the base or the head qualified
-name.  An allowed item is reported but does not fail the run.
+name.  An undefined-global item is allowed as ``undefined-global:<qualified.name>``
+and a census mismatch as ``decorator-census:<decorator>``.  An allowed item is
+reported but does not fail the run.
 
 Exit status: 0 clean, 1 a ``missing`` / ``moved-with-diff`` item is not
 allowed, 2 usage or parse error.  Standard library only, Python >= 3.10.
@@ -52,10 +63,13 @@ from __future__ import annotations
 import argparse
 import ast
 import copy
+import builtins
 import difflib
 import subprocess
+import symtable
 import sys
 import textwrap
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -86,6 +100,7 @@ class Item:
     src: str
     node: ast.AST = field(repr=False)
     typecheck: bool = False
+    undefined: frozenset[str] = frozenset()
 
     @property
     def label(self) -> str:
@@ -163,6 +178,7 @@ def collect(text: str, path: str) -> list[Item]:
     tree = ast.parse(text, filename=path)
     lines = text.splitlines()
     items: list[Item] = []
+    undefined = undefined_globals(text, path, tree)
 
     def add(kind: str, qual: str, node: ast.stmt, dump_node: ast.AST, tc: bool):
         items.append(
@@ -175,6 +191,9 @@ def collect(text: str, path: str) -> list[Item]:
                 src=_segment(lines, node),
                 node=node,
                 typecheck=tc,
+                undefined=undefined.get(qual, frozenset())
+                if kind == FUNC
+                else frozenset(),
             )
         )
 
@@ -270,6 +289,155 @@ def import_hoisted(base: Item, head: Item, head_imports: set[str]) -> bool:
     return stripper.removed > 0 and ast.dump(stripped) == head.dump
 
 
+CENSUS_DECORATORS = ("staticmethod", "classmethod", "property")
+
+_MODULE_DUNDERS = frozenset(
+    {"__name__", "__file__", "__doc__", "__spec__", "__package__", "__loader__"}
+)
+
+
+def _census_nodes(node: ast.AST):
+    """Yield the defs under ``node``, skipping ``if TYPE_CHECKING:`` bodies."""
+    for child in ast.iter_child_nodes(node):
+        if isinstance(child, ast.If) and _is_type_checking(child.test):
+            for sub in child.orelse:
+                yield from _census_nodes_with_self(sub)
+            continue
+        yield from _census_nodes_with_self(child)
+
+
+def _census_nodes_with_self(node: ast.AST):
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        yield node
+    yield from _census_nodes(node)
+
+
+def decorator_census(text: str) -> Counter[str]:
+    """Count the census decorators on every def of a module.
+
+    Stubs under ``if TYPE_CHECKING:`` are not counted: they are ignorable
+    additions and carry the decorators of the real def they describe.
+    """
+    census: Counter[str] = Counter()
+    for node in _census_nodes(ast.parse(text)):
+        for deco in node.decorator_list:
+            if isinstance(deco, ast.Name):
+                name = deco.id
+            elif isinstance(deco, ast.Attribute):
+                name = deco.attr
+            else:
+                continue
+            if name in CENSUS_DECORATORS:
+                census[name] += 1
+    return census
+
+
+def _walk_tables(table: symtable.SymbolTable):
+    yield table
+    for child in table.get_children():
+        yield from _walk_tables(child)
+
+
+def _globals_read(table: symtable.SymbolTable) -> set[str]:
+    out: set[str] = set()
+    for sub in _walk_tables(table):
+        out.update(
+            s.get_name()
+            for s in sub.get_symbols()
+            if s.is_global() and s.is_referenced()
+        )
+    return out
+
+
+def undefined_globals(
+    text: str, path: str, tree: ast.Module | None = None
+) -> dict[str, frozenset[str]]:
+    """Map a def's qualified name to the module-level names it reads but lacks."""
+    tree = tree or ast.parse(text)
+    star = any(
+        isinstance(n, ast.ImportFrom) and any(a.name == "*" for a in n.names)
+        for n in ast.walk(tree)
+    )
+    if star:
+        return {}
+    module = symtable.symtable(text, path, "exec")
+    defined = {
+        s.get_name()
+        for s in module.get_symbols()
+        if s.is_assigned() or s.is_imported() or s.is_namespace()
+    }
+    for sub in _walk_tables(module):
+        defined.update(
+            s.get_name()
+            for s in sub.get_symbols()
+            if s.is_declared_global() and s.is_assigned()
+        )
+    known = defined | set(dir(builtins)) | _MODULE_DUNDERS
+    result: dict[str, set[str]] = {}
+
+    def visit(table: symtable.SymbolTable, prefix: str) -> None:
+        for child in table.get_children():
+            kind = child.get_type()
+            if kind == "class":
+                visit(child, f"{prefix}{child.get_name()}.")
+            elif kind == "function":
+                lost = _globals_read(child) - known
+                if lost:
+                    result.setdefault(prefix + child.get_name(), set()).update(lost)
+
+    visit(module, "")
+    return {k: frozenset(v) for k, v in result.items()}
+
+
+class _NormaliseLoggers(ast.NodeTransformer):
+    """Replace the argument of ``getLogger(...)`` with a fixed placeholder."""
+
+    def __init__(self) -> None:
+        self.dunder_name = 0
+        self.literals: list[str] = []
+
+    def visit_Call(self, node: ast.Call) -> ast.AST:
+        self.generic_visit(node)
+        func = node.func
+        name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", None)
+        if name == "getLogger" and len(node.args) == 1 and not node.keywords:
+            arg = node.args[0]
+            if isinstance(arg, ast.Name) and arg.id == "__name__":
+                self.dunder_name += 1
+            elif isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                self.literals.append(arg.value)
+            else:
+                return node
+            node.args = [ast.Constant("<logger>")]
+        return node
+
+
+def _module_parts(path: str) -> list[str]:
+    parts = Path(path).with_suffix("").parts
+    return [p for p in parts if p != "__init__"]
+
+
+def logger_renamed(base: Item, head: Item) -> bool:
+    """Tell whether only ``getLogger(__name__)`` became ``getLogger("<literal>")``.
+
+    The literal must be the dotted name of the base module, so the logger keeps
+    the name it had before the move.
+    """
+    if base.kind == CLASS or head.kind == CLASS:
+        return False
+    nb, nh = _NormaliseLoggers(), _NormaliseLoggers()
+    db = ast.dump(nb.visit(copy.deepcopy(base.node)))
+    dh = ast.dump(nh.visit(copy.deepcopy(head.node)))
+    if db != dh or not nb.dunder_name or not nh.literals or nh.dunder_name:
+        return False
+    parts = _module_parts(base.file)
+    for literal in nh.literals:
+        want = literal.split(".")
+        if parts[-len(want) :] != want:
+            return False
+    return True
+
+
 # --------------------------------------------------------------------------
 # Matching
 # --------------------------------------------------------------------------
@@ -286,6 +454,9 @@ class Report:
     missing: list[Item] = field(default_factory=list)
     added: list[Item] = field(default_factory=list)
     type_checking: list[Item] = field(default_factory=list)
+    logger_name: list[tuple[Item, Item]] = field(default_factory=list)
+    undefined_global: list[tuple[Item, Item, list[str]]] = field(default_factory=list)
+    census: dict[str, tuple[int, int]] = field(default_factory=dict)
     allowed: dict[str, str] = field(default_factory=dict)
     unused_allow: list[str] = field(default_factory=list)
 
@@ -328,7 +499,9 @@ def match(
         (report.unchanged if same else report.moved_identical).append((b, h))
 
     def record_diff(b: Item, h: Item) -> None:
-        if import_hoisted(b, h, head_imports.get(h.file, set())):
+        if logger_renamed(b, h):
+            report.logger_name.append((b, h))
+        elif import_hoisted(b, h, head_imports.get(h.file, set())):
             report.import_hoisted.append((b, h))
         else:
             report.moved_with_diff.append((b, h))
@@ -347,19 +520,39 @@ def match(
             record_diff(b, same_h[0])
 
     report.missing = base_rem
+    pairs = (
+        report.unchanged
+        + report.moved_identical
+        + report.moved_with_diff
+        + report.import_hoisted
+        + report.logger_name
+    )
+    for b, h in pairs:
+        lost = sorted(h.undefined - b.undefined)
+        if h.kind == FUNC and lost:
+            report.undefined_global.append((b, h, lost))
     for h in head_rem:
         (report.type_checking if h.typecheck else report.added).append(h)
     return report
+
+
+def _failing_keys(report: Report) -> list[tuple[str, ...]]:
+    keys: list[tuple[str, ...]] = [(b.qual, h.qual) for b, h in report.moved_with_diff]
+    keys += [(m.qual,) for m in report.missing]
+    keys += [(f"undefined-global:{h.qual}",) for _, h, _ in report.undefined_global]
+    keys += [
+        (f"decorator-census:{name}",)
+        for name, (nb, nh) in report.census.items()
+        if nb != nh
+    ]
+    return keys
 
 
 def apply_allow(report: Report, allow: dict[str, str]) -> None:
     """Record which allow-file entries cover a failing item."""
     report.allowed = {}
     used: set[str] = set()
-    failing = [(b.qual, h.qual) for b, h in report.moved_with_diff] + [
-        (m.qual, m.qual) for m in report.missing
-    ]
-    for names in failing:
+    for names in _failing_keys(report):
         for name in names:
             if name in allow:
                 report.allowed[name] = allow[name]
@@ -377,6 +570,32 @@ def failing_diffs(report: Report) -> list[tuple[Item, Item]]:
 
 def failing_missing(report: Report) -> list[Item]:
     return [m for m in report.missing if not report.is_allowed(m.qual)]
+
+
+def failing_undefined(report: Report) -> list[tuple[Item, Item, list[str]]]:
+    return [
+        t
+        for t in report.undefined_global
+        if not report.is_allowed(f"undefined-global:{t[1].qual}")
+    ]
+
+
+def failing_census(report: Report) -> list[str]:
+    return [
+        name
+        for name, (nb, nh) in report.census.items()
+        if nb != nh and not report.is_allowed(f"decorator-census:{name}")
+    ]
+
+
+def has_failures(report: Report) -> bool:
+    """Tell whether any un-allowed failing item remains."""
+    return bool(
+        failing_diffs(report)
+        or failing_missing(report)
+        or failing_undefined(report)
+        or failing_census(report)
+    )
 
 
 def load_allow(path: str) -> dict[str, str]:
@@ -402,18 +621,25 @@ def run_check(repo: str, base: str, head: str, allow: dict[str, str]) -> Report:
     base_items: list[Item] = []
     head_items: list[Item] = []
     head_imports: dict[str, set[str]] = {}
+    census_base: Counter[str] = Counter()
+    census_head: Counter[str] = Counter()
     for path in changed_files(repo, merge_base, head):
         old = read_at(repo, merge_base, path)
         new = read_at(repo, head, path)
         try:
             if old is not None:
                 base_items += collect(old, path)
+                census_base += decorator_census(old)
             if new is not None:
                 head_items += collect(new, path)
                 head_imports[path] = module_imports(new)
+                census_head += decorator_census(new)
         except SyntaxError as exc:
             raise RuntimeError(f"cannot parse {path}: {exc}") from exc
     report = match(base_items, head_items, head_imports)
+    report.census = {
+        name: (census_base[name], census_head[name]) for name in CENSUS_DECORATORS
+    }
     apply_allow(report, allow)
     return report
 
@@ -445,6 +671,9 @@ def _counts(report: Report) -> list[tuple[str, int]]:
         ("added", len(report.added)),
         ("type-checking (ignored)", len(report.type_checking)),
         ("import-hoisted (ignored)", len(report.import_hoisted)),
+        ("logger-name (ignored)", len(report.logger_name)),
+        ("undefined-global", len(report.undefined_global)),
+        ("decorator-census mismatches", sum(a != b for a, b in report.census.values())),
     ]
 
 
@@ -462,24 +691,31 @@ def render_text(report: Report) -> str:
         out += ["  " + line for line in compact_diff(b, h)]
     for m in report.missing:
         out.append(f"\nMISSING{_allow_note(report, m.qual)}: {m.label}")
+    for _, h, names in report.undefined_global:
+        note = _allow_note(report, f"undefined-global:{h.qual}")
+        out.append(f"\nUNDEFINED-GLOBAL{note}: {h.label} reads {', '.join(names)}")
+    for name, (nb, nh) in report.census.items():
+        if nb != nh:
+            note = _allow_note(report, f"decorator-census:{name}")
+            out.append(f"\nDECORATOR-CENSUS{note}: @{name} base={nb} head={nh}")
     for b, h in report.import_hoisted:
         out.append(f"\nimport-hoisted (ignored): {b.label} -> {h.label}")
+    for b, h in report.logger_name:
+        out.append(f"\nlogger-name (ignored): {b.label} -> {h.label}")
     for h in report.type_checking:
         out.append(f"\ntype-checking addition (ignored): {h.label}")
     for h in report.added:
         out.append(f"\nadded: {h.label}")
     for name in report.unused_allow:
         out.append(f"\nwarning: allow entry matches nothing failing: {name}")
-    bad = len(failing_diffs(report)) + len(failing_missing(report))
-    out.append("\nRESULT: " + ("FAIL" if bad else "OK"))
+    out.append("\nRESULT: " + ("FAIL" if has_failures(report) else "OK"))
     return "\n".join(out)
 
 
 def render_markdown(report: Report) -> str:
     """Render the report as a markdown summary for a PR body."""
-    bad = failing_diffs(report) or failing_missing(report)
     out = [
-        f"### Pure-move check: {'FAIL' if bad else 'OK'}",
+        f"### Pure-move check: {'FAIL' if has_failures(report) else 'OK'}",
         "",
         "| Category | Count |",
         "| --- | ---: |",
@@ -492,7 +728,23 @@ def render_markdown(report: Report) -> str:
     if report.missing:
         out += ["", "**missing**"]
         out += [f"- `{m.label}`{_allow_note(report, m.qual)}" for m in report.missing]
+    if report.undefined_global:
+        out += ["", "**undefined-global**"]
+        for _, h, names in report.undefined_global:
+            note = _allow_note(report, f"undefined-global:{h.qual}")
+            lost = ", ".join(f"`{n}`" for n in names)
+            out.append(f"- `{h.label}` reads {lost}{note}")
+    mismatches = [(n, c) for n, c in report.census.items() if c[0] != c[1]]
+    if mismatches:
+        out += ["", "**decorator-census**"]
+        for name, (nb, nh) in mismatches:
+            note = _allow_note(report, f"decorator-census:{name}")
+            out.append(f"- `@{name}`: base {nb}, head {nh}{note}")
     sections = (
+        (
+            "logger-name (ignored)",
+            [f"`{b.label}` -> `{h.label}`" for b, h in report.logger_name],
+        ),
         (
             "import-hoisted (ignored)",
             [f"`{b.label}` -> `{h.label}`" for b, h in report.import_hoisted],
@@ -530,7 +782,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(render_markdown(report) if args.markdown else render_text(report))
-    return 1 if failing_diffs(report) or failing_missing(report) else 0
+    return 1 if has_failures(report) else 0
 
 
 if __name__ == "__main__":

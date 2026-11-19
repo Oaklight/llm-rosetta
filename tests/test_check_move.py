@@ -253,3 +253,129 @@ def test_markdown_output(make_repo, capsys):
 def test_bad_ref_is_usage_error(make_repo):
     repo = make_repo({"a.py": BASE}, {"a.py": BASE + "\nx = 1\n"})
     assert check_move.main(["nope", "HEAD", "--repo", str(repo)]) == 2
+
+
+def test_decorator_census_mismatch_fails_alone(make_repo, capsys):
+    # A new `@property` in head-only glue code leaves every def matched, so only
+    # the census can see it.
+    repo = make_repo(
+        {"a.py": BASE},
+        {
+            "a.py": BASE
+            + textwrap.dedent(
+                """
+
+                class Glue:
+                    @property
+                    def value(self):
+                        return 1
+                """
+            )
+        },
+    )
+    assert _run(repo) == 1
+    report = _report(repo)
+    assert not report.moved_with_diff and not report.missing
+    assert report.census["property"] == (0, 1)
+    assert "DECORATOR-CENSUS" in capsys.readouterr().out
+
+
+def test_decorator_census_mismatch_can_be_allowed(make_repo, tmp_path):
+    glue = "\n\nclass G:\n    @property\n    def v(self):\n        return 1\n"
+    repo = make_repo({"a.py": BASE}, {"a.py": BASE + glue})
+    allow = tmp_path / "allow.txt"
+    allow.write_text("decorator-census:property  new glue property\n")
+    assert _run(repo, "--allow", str(allow)) == 0
+
+
+def test_decorator_census_balanced_move_passes(make_repo):
+    repo = make_repo({"a.py": BASE}, {"a.py": "", "b.py": BASE})
+    assert _report(repo).census["classmethod"] == (1, 1)
+    assert _run(repo) == 0
+
+
+LIMIT_MODULE = """\
+LIMIT = 3
+
+
+def f():
+    return LIMIT
+"""
+
+
+def test_undefined_global_after_move_fails(make_repo, capsys):
+    repo = make_repo(
+        {"a.py": LIMIT_MODULE},
+        {"a.py": "LIMIT = 3\n", "b.py": "def f():\n    return LIMIT\n"},
+    )
+    assert _run(repo) == 1
+    report = _report(repo)
+    assert [(h.qual, names) for _, h, names in report.undefined_global] == [
+        ("f", ["LIMIT"])
+    ]
+    assert "UNDEFINED-GLOBAL" in capsys.readouterr().out
+
+
+def test_undefined_global_resolved_by_import_passes(make_repo):
+    repo = make_repo(
+        {"a.py": LIMIT_MODULE},
+        {
+            "a.py": "LIMIT = 3\n",
+            "b.py": "from a import LIMIT\n\n\ndef f():\n    return LIMIT\n",
+        },
+    )
+    assert _run(repo) == 0
+    assert not _report(repo).undefined_global
+
+
+def test_undefined_global_allowed(make_repo, tmp_path):
+    repo = make_repo(
+        {"a.py": LIMIT_MODULE},
+        {"a.py": "LIMIT = 3\n", "b.py": "def f():\n    return LIMIT\n"},
+    )
+    allow = tmp_path / "allow.txt"
+    allow.write_text("undefined-global:f  b.py gets LIMIT injected\n")
+    assert _run(repo, "--allow", str(allow)) == 0
+
+
+def test_lost_logger_in_method_fails(make_repo):
+    before = (
+        "import logging\n\nlogger = logging.getLogger(__name__)\n\n\n"
+        "class C:\n    def m(self):\n        logger.info('x')\n"
+    )
+    after = "class C:\n    def m(self):\n        logger.info('x')\n"
+    repo = make_repo({"a.py": before}, {"a.py": after})
+    assert _run(repo) == 1
+    assert [(h.qual, n) for _, h, n in _report(repo).undefined_global] == [
+        ("C.m", ["logger"])
+    ]
+
+
+def test_logger_name_literal_ignored(make_repo, capsys):
+    before = "import logging\n\nlogger = logging.getLogger(__name__)\n"
+    after = 'import logging\n\nlogger = logging.getLogger("pkg.a")\n'
+    repo = make_repo({"pkg/a.py": before}, {"pkg/a.py": "", "pkg/b.py": after})
+    assert _run(repo) == 0
+    report = _report(repo)
+    assert len(report.logger_name) == 1 and not report.moved_with_diff
+    assert "logger-name (ignored)" in capsys.readouterr().out
+
+
+def test_logger_name_wrong_literal_fails(make_repo):
+    before = "import logging\n\nlogger = logging.getLogger(__name__)\n"
+    after = 'import logging\n\nlogger = logging.getLogger("pkg.other")\n'
+    repo = make_repo({"pkg/a.py": before}, {"pkg/a.py": "", "pkg/b.py": after})
+    assert _run(repo) == 1
+
+
+def test_census_ignores_type_checking_stub_decorators(make_repo):
+    stub = (
+        "\n\nfrom typing import TYPE_CHECKING\n\n"
+        "if TYPE_CHECKING:\n\n"
+        "    class S:\n"
+        "        @staticmethod\n"
+        "        def s() -> int: ...\n"
+    )
+    repo = make_repo({"a.py": BASE}, {"a.py": BASE + stub})
+    assert _report(repo).census["staticmethod"] == (0, 0)
+    assert _run(repo) == 0
