@@ -13,7 +13,7 @@ from llm_rosetta_gateway._vendor.httpserver import Response
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.capabilities import ToolNameMap
 from llm_rosetta.routing import ResolvedRoute
-from llm_rosetta.shims.provider_shim import SoftErrorPattern
+from llm_rosetta.shims.provider_shim import SoftErrorPattern, resolve_format
 
 from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta_gateway.observability.error_dump import dump_error
@@ -165,6 +165,8 @@ def _tool_schema_hint(
             the positions and names the upstream's message refers to.
         tool_name_map: The client↔upstream name pairing, or ``None`` when no
             conversion ran (a passthrough path with nothing to attribute).
+            An empty map on a same-format route is treated the same way: the
+            sentence would only restate the path the client already wrote.
         status: The upstream's HTTP status.
 
     Returns:
@@ -173,6 +175,11 @@ def _tool_schema_hint(
     """
     if tool_name_map is None or status not in _BODY_REJECTION_STATUSES:
         return None
+    # A passthrough route wrote the very body the upstream read, so the
+    # sentence would only restate the client's own path back to it.  The hint
+    # is worth sending when a conversion or a rename actually happened.
+    if not tool_name_map and _same_format(route.source_provider, route.target_provider):
+        return None
     return ToolSchemaLocator(
         upstream_format=route.target_provider,
         client_format=route.source_provider,
@@ -180,6 +187,16 @@ def _tool_schema_hint(
         client_body=body,
         name_map=tool_name_map,
     ).hint
+
+
+def _same_format(source: ProviderType, target: ProviderType) -> bool:
+    """Whether both ends of a route name one wire format.
+
+    Compared after shim and legacy-name resolution, so ``openai_chat`` and
+    ``chat_completions`` — the same body shape under two spellings — count as
+    one format.
+    """
+    return resolve_format(source) == resolve_format(target)
 
 
 async def _connection_error_response(

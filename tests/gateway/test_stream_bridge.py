@@ -215,3 +215,101 @@ def test_a_chat_client_keeps_the_echo_fields_the_stream_stated():
     assert body["system_fingerprint"] == "fp_abc"
     assert body["service_tier"] == "default"
     assert profile["usage"]["prompt_tokens"] == 5
+
+
+class _RefusingStream:
+    """A stream-only upstream that refuses before the stream starts."""
+
+    status_code = 400
+    is_error = True
+
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    async def read_error(self) -> str:
+        return self._text
+
+    async def close(self) -> None:
+        return None
+
+
+class _RefusingTransport:
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    async def send(self, *args, **kwargs):
+        raise AssertionError("a stream-only upstream is never asked for JSON")
+
+    async def send_streaming(self, provider_info, url, body, **kwargs):
+        return _RefusingStream(self._text)
+
+    async def close(self) -> None:
+        return None
+
+
+def test_the_stream_bridge_reports_a_refusal_in_the_clients_terms():
+    """A pre-stream 400 names the client's tool, not the upstream's path.
+
+    The bridge forwards the request leg's name map to the error path; without
+    it the client is pointed at ``tools[1].function.parameters``, a key its own
+    Messages body does not have.
+    """
+    messages_body = {
+        "model": "m",
+        "max_tokens": 16,
+        "messages": [{"role": "user", "content": "hi"}],
+        "tools": [
+            {"name": "one", "input_schema": {"type": "object"}},
+            {
+                "name": "send",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"count": {"type": "integer"}},
+                },
+            },
+        ],
+    }
+    pipeline = ConversionPipeline("messages", "chat_completions")
+    target_body = pipeline.convert_request(messages_body)
+    route = ResolvedRoute(
+        source_provider="messages",
+        target_provider="chat_completions",
+        provider_name="stub",
+    )
+    upstream_error = json.dumps(
+        {
+            "error": {
+                "type": "invalid_request_error",
+                "message": (
+                    "Invalid 'tools[1].function.parameters.properties.count': "
+                    "'1' is not of type 'integer'"
+                ),
+            }
+        }
+    )
+
+    response, _ = asyncio.run(
+        _non_streaming_from_stream(
+            route=route,
+            provider_info=build_provider_info(
+                "chat_completions",
+                {"base_url": "http://upstream.invalid/v1", "api_key": "k"},
+            ),
+            pipeline=pipeline,
+            target_body=target_body,
+            body=messages_body,
+            model="m",
+            transport=_RefusingTransport(upstream_error),
+            metadata_store=None,
+            extra_headers=None,
+            persistence=None,
+            capture_state=None,
+            entry_id=None,
+            profile={},
+        )
+    )
+
+    assert response.status_code == 400
+    message = json.loads(response.body)["error"]["message"]
+    assert "the client's tool 'send'" in message
+    assert "tools[1].input_schema.properties.count" in message

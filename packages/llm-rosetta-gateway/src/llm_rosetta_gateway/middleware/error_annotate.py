@@ -346,19 +346,25 @@ class ToolSchemaLocator:
 
         A reference may stop short of the declaration — Google nests its
         declarations, so ``tools[0]`` names a container rather than a tool.  It
-        still identifies one when that container holds a single declaration.
+        still identifies one when exactly one declaration extends the
+        reference.  A container with several children names none of them, so it
+        resolves to ``None``: a guess would point the client at a declaration
+        the upstream never named.
         """
         best: ToolDeclaration | None = None
         best_length = 0
+        extending: list[ToolDeclaration] = []
         for declaration in self._upstream_declarations:
             declared = _split_path(declaration.path)
             if _is_prefix(declared, segments):
                 if len(declared) > best_length:
                     best, best_length = declaration, len(declared)
                 continue
-            if best is None and _is_prefix(segments, declared):
-                best = declaration
-        return best
+            if _is_prefix(segments, declared):
+                extending.append(declaration)
+        if best is not None:
+            return best
+        return extending[0] if len(extending) == 1 else None
 
     def _declaration_named(self, name: str) -> ToolDeclaration | None:
         """The forwarded declaration that carries *name*."""

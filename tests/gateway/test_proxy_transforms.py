@@ -19,6 +19,7 @@ from llm_rosetta.routing import ResolvedRoute
 from llm_rosetta_gateway.transport._base import UpstreamResponse
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
+    SoftErrorPattern,
     _reset_registry,
     register_shim,
 )
@@ -143,6 +144,7 @@ def _make_route(
     shim_name: str | None = None,
     source: ProviderType = "openai_chat",
     target: ProviderType = "openai_chat",
+    soft_error_patterns: tuple = (),
 ) -> ResolvedRoute:
     """Create a ResolvedRoute for tests."""
     return ResolvedRoute(
@@ -151,6 +153,7 @@ def _make_route(
         provider_name="test-provider",
         shim_name=shim_name,
         upstream_model=model,
+        soft_error_patterns=soft_error_patterns,
     )
 
 
@@ -441,7 +444,13 @@ class TestToolSchemaAttribution:
         assert message.startswith("Invalid 'tools[16].function.name'")
         assert "the client's tool 'send_message'" in message
         assert "declaration #17" in message
-        assert "tools[0].functionDeclarations[16]" in message
+        # The parenthetical must name the *client's* declaration: the
+        # rejected-position clause repeats the same path either way.
+        assert "(tools[0].functionDeclarations[16])" in message
+        assert (
+            "the rejected position in the request is "
+            "tools[0].functionDeclarations[16].name" in message
+        )
 
     def test_a_sanitized_name_reports_the_clients_spelling(self):
         """The wire carries the rewritten name; the hint carries the client's."""
@@ -494,6 +503,92 @@ class TestToolSchemaAttribution:
             "message"
         ]
         assert "[llm-rosetta]" not in message
+
+    def test_a_passthrough_route_gets_no_schema_hint(self):
+        """Same format on both sides: the client already holds the path it wrote.
+
+        ``pipeline.tool_name_map`` is a map even when nothing was converted, so
+        the call site has to tell an empty one from a rename.
+        """
+        response = self._run(
+            {
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "hi"}],
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {"name": "exec", "parameters": {}},
+                    }
+                ],
+            },
+            source="chat_completions",
+            message="Invalid 'tools[0].function.name': bad",
+        )
+        assert response.status_code == 400
+        message = json.loads(response.body)["error"]["message"]
+        assert "[llm-rosetta]" not in message
+
+
+class TestToolSchemaAttributionOnSoftError:
+    """The soft-error path forwards the name map too (``_soft_error_response``).
+
+    A shim pattern turns a 200 whose body carries an error into the status the
+    client sees; the message is annotated on the same path as a real 4xx.
+    """
+
+    def test_a_soft_error_body_carries_the_schema_hint(self):
+        pattern = SoftErrorPattern(
+            pattern="is not of type",
+            status_code=400,
+            message="upstream reported a schema rejection in a 200 body",
+        )
+        transport = _make_mock_transport(
+            {
+                "error": {
+                    "type": "invalid_request_error",
+                    "message": (
+                        "Invalid 'tools[1].function.parameters.properties.count': "
+                        "'1' is not of type 'integer'"
+                    ),
+                }
+            },
+            status_code=200,
+        )
+
+        async def run():
+            response, _ = await handle_non_streaming(
+                _make_route(
+                    source="messages",
+                    target="chat_completions",
+                    soft_error_patterns=(pattern,),
+                ),
+                _make_provider_info(),
+                {
+                    "model": "test-model",
+                    "max_tokens": 16,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "tools": [
+                        {"name": "one", "input_schema": {"type": "object"}},
+                        {
+                            "name": "send",
+                            "input_schema": {
+                                "type": "object",
+                                "properties": {"count": {"type": "integer"}},
+                            },
+                        },
+                    ],
+                },
+                selection=_sel_ctx("messages"),
+                transport=transport,
+                metadata_store=ProviderMetadataStore(),
+            )
+            return response
+
+        response = asyncio.run(run())
+        assert response.status_code == 400
+        message = json.loads(response.body)["error"]["message"]
+        assert "the client's tool 'send'" in message
+        assert "tools[1].input_schema.properties.count" in message
 
 
 class _ErrorStream:
