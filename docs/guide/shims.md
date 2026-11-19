@@ -75,6 +75,9 @@ packages/llm-rosetta/src/llm_rosetta/shims/providers/
 │   ├── provider.yaml            # 厂商清单：只有注释
 │   ├── auth.py                  # 厂商级凭据交换
 │   └── llm/open_responses/provider.yaml
+├── antigravity/
+│   ├── provider.yaml            # 厂商清单：无密钥，token 在 agent 手里
+│   └── llm/acp/provider.yaml    # transport: acp，argv ["agy", "acp"]
 └── ...
 ```
 
@@ -92,7 +95,7 @@ loader 会读错的树 —— 叶子不在规范路径上、把厂商目录当�
 
 每个叶子目录包含：
 
-- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`），以及可选的 `logo`、`display_name`、`hint_msg`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embeddings_shim` / `rerank_shim` / `decisions_shim` 指向它，而不必写裸格式。
+- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`，以及上游不是 HTTP 的通道所需的 `connection.transport` 与 `connection.acp_argv`），以及可选的 `logo`、`display_name`、`hint_msg`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embeddings_shim` / `rerank_shim` / `decisions_shim` 指向它，而不必写裸格式。
 - **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
 
 #### 厂商清单（可选）
