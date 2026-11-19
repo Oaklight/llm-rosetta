@@ -35,12 +35,6 @@ from .preflight import (  # noqa: F401
     _run_preflight,
 )
 
-from .stream_merge import (  # noqa: F401
-    _merge_tool_call_delta,
-    _merge_choice_delta,
-    merge_chat_completion_events,
-)
-
 from .engine import (  # noqa: F401
     _inject_stream_flags,
     detect_stream_request,
@@ -83,9 +77,6 @@ __all__ = [
     "_build_preflight_body",
     "_extract_preflight_input_tokens",
     "_run_preflight",
-    "_merge_tool_call_delta",
-    "_merge_choice_delta",
-    "merge_chat_completion_events",
     "_inject_stream_flags",
     "detect_stream_request",
     "extract_model",
