@@ -11,6 +11,7 @@ from llm_rosetta_gateway._vendor.httpclient import AsyncClient, Response as Http
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from ...config import GatewayConfig
+from ...admin_api import admin_context
 from ._shared import parse_json_body
 
 # In-memory store: task_id → {status, result, asyncio_task, started, ...}
@@ -115,9 +116,7 @@ def _get_gateway_config(request: Any) -> GatewayConfig | None:
     cfg = getattr(request.app, "gateway_config", None)
     if cfg is not None:
         return cfg
-    from llm_rosetta_gateway.app import _state as _app_state
-
-    return _app_state._config
+    return admin_context(request).served_config()
 
 
 async def start_test(request: Any) -> Response:

@@ -19,3 +19,8 @@ def set_config(config: GatewayConfig) -> None:
     """Record the config the app serves."""
     global _config
     _config = config
+
+
+def get_config() -> GatewayConfig | None:
+    """Return the config the app serves, or ``None`` before ``create_app`` ran."""
+    return _config

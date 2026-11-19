@@ -120,9 +120,9 @@ from ._cache import (  # noqa: F401
 from ._scan import (  # noqa: F401
     _load_local_dir,
     _scan_dir,
-    _selection_predicate,
     _selection_report,
     _unmatched_patterns,
+    selection_predicate,
 )
 from ._legs import (  # noqa: F401
     _DEFAULT_PORTS,
@@ -874,6 +874,7 @@ __all__ = [
     "ShimSourceStatus",
     "ShimLoadReport",
     "rebuild_shims",
+    "selection_predicate",
     "resolve_remote",
     "is_supported_archive_url",
     "normalize_mirror",

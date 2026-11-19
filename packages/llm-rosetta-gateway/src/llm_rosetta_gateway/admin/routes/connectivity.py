@@ -6,7 +6,7 @@ from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta_gateway.providers import default_models_path
-from llm_rosetta_gateway.transport.provider_info import _VERSION_SUFFIXES
+from llm_rosetta_gateway.transport.provider_info import VERSION_SUFFIXES
 
 from ...config.typed import face_value
 from ._shared import _resolve_models_path
@@ -282,7 +282,7 @@ def _check_double_prefix(
     base_url: str, path: str, endpoint_name: str, results: dict
 ) -> None:
     """Warn if base_url and path share a version prefix."""
-    m = _VERSION_SUFFIXES.search(base_url)
+    m = VERSION_SUFFIXES.search(base_url)
     if m and path.startswith(m.group()):
         results["warnings"].append(
             f"{endpoint_name}: base_url ends with '{m.group()}' and "

@@ -1,4 +1,4 @@
-"""The 0.10.0-era ``gateway.admin`` re-export paths warn, then go in 0.16.0."""
+"""The 0.10.0-era ``gateway.admin`` re-export paths are gone."""
 
 import importlib
 import sys
@@ -8,38 +8,19 @@ import pytest
 import llm_rosetta_gateway.observability as obs
 from llm_rosetta_gateway.admin.routes.profiling import ProfilerState
 
-_ADMIN_REEXPORTS = [
-    (
-        "llm_rosetta_gateway.admin.metrics",
-        "llm_rosetta_gateway.observability.metrics",
-        ["MetricsCollector", "_RollingWindow"],
-    ),
-    (
-        "llm_rosetta_gateway.admin.persistence",
-        "llm_rosetta_gateway.observability.persistence",
-        ["PersistenceManager", "DEFAULT_SUCCESS_MAX"],
-    ),
-    (
-        "llm_rosetta_gateway.admin.request_log",
-        "llm_rosetta_gateway.observability.request_log",
-        ["RequestLog", "RequestLogEntry"],
-    ),
+_REMOVED_ADMIN_PATHS = [
+    "llm_rosetta_gateway.admin.metrics",
+    "llm_rosetta_gateway.admin.persistence",
+    "llm_rosetta_gateway.admin.request_log",
 ]
 
 
-def _import_fresh(module_path: str):
-    """Import *module_path* from scratch so its import-time warning fires."""
+@pytest.mark.parametrize("module_path", _REMOVED_ADMIN_PATHS)
+def test_admin_reexport_paths_removed(module_path):
+    """The 0.10.0-era re-export paths are gone; use ``observability.*``."""
     sys.modules.pop(module_path, None)
-    return importlib.import_module(module_path)
-
-
-@pytest.mark.parametrize(("module_path", "canonical_path", "names"), _ADMIN_REEXPORTS)
-def test_admin_reexport_paths_warn(module_path, canonical_path, names):
-    with pytest.warns(DeprecationWarning, match=f"{module_path} is deprecated"):
-        module = _import_fresh(module_path)
-    canonical = importlib.import_module(canonical_path)
-    for name in names:
-        assert getattr(module, name) is getattr(canonical, name)
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module(module_path)
 
 
 def test_ops_log_path_removed() -> None:

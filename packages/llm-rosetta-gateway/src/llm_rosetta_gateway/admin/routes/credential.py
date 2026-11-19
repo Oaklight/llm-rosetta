@@ -18,7 +18,7 @@ import json
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.providers import _account_token_for
+from llm_rosetta_gateway.providers import account_token_for
 from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
 from llm_rosetta_gateway.transport.token_refresh import (
     force_refresh,
@@ -245,7 +245,7 @@ async def get_provider_credential(request: Any, name: str) -> Response:
             # digest everywhere else, and a raw subject would be one surface
             # that can be correlated across providers.  ``summary`` is where
             # the exchange may say which account this is, in its own words.
-            "account": _account_token_for(exchange.account_id(ctx)),
+            "account": account_token_for(exchange.account_id(ctx)),
             "summary": summary,
             "credential": pinfo.credential_token,
             "refresh_interval": pinfo.token_refresh_interval,
