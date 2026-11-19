@@ -20,17 +20,16 @@ as they do when you run `agy` yourself.
 
 ## Why `agy` and not the API
 
-Calling Code Assist directly with Antigravity's own OAuth client is what
-magpie used to do, and magpie retired it: Google suspends accounts it sees
-calling Code Assist outside Antigravity's client (`internal/plugin/withdrawn.go`
-in magpie's source). The replacement magpie recommends — and the one taken
-here — is to drive the vendor's CLI. `agy` therefore owns the credential, and
-this shim declares none.
+Calling Code Assist directly with Antigravity's own OAuth client is the route
+Google suspends accounts for: it sees a request that is not coming from
+Antigravity's own client. Driving the vendor's CLI keeps every request inside
+the client Google expects. `agy` therefore owns the credential, and this shim
+declares none.
 
 | Route | Who owns the sign-in | Status |
 |:---|:---|:---|
-| Code Assist API with Antigravity's OAuth client | the gateway | withdrawn — accounts get suspended |
-| `agy acp` (this shim) | `agy` | the recommended route |
+| Code Assist API with Antigravity's OAuth client | the gateway | not offered — accounts get suspended |
+| `agy acp` (this shim) | `agy` | the route this repository supports |
 
 ## Shims
 
