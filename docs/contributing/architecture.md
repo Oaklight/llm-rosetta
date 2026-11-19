@@ -256,6 +256,16 @@ cannot recover is what no event carries — the facts the table above lists per
 dialect — so a folded reply matches a streamed one, not the body the vendor's
 JSON API would have returned.
 
+One class of those facts is recoverable by the caller, and the bridge does
+recover it.  A Chat-compatible stream repeats its response-level echo fields —
+`service_tier`, `system_fingerprint` — on every chunk, so `FormatSpec` names
+them per format in `stream_echo_fields`, the gateway collects the first value
+each chunk states, and `fold_response_events(response=…)` puts them back.  A
+dialect that declares none (Responses, Messages) leaves the envelope empty, and
+a field the stream never states stays absent rather than becoming a guess.  That
+is what keeps the fold from handing a Chat client less than the Chat-only
+merger it replaced did.
+
 One reassembly serves every dialect.  The Chat Completions bridge came first and
 re-merged that dialect's own chunks (`proxy/stream_merge.py`); measured against
 the fold it differed only by what the writer always adds — `refusal: null`,
