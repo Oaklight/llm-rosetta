@@ -10,6 +10,9 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 import {
   blockRow,
@@ -17,6 +20,12 @@ import {
   routingWeight,
   sharePercent,
 } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/quota-lines.js';
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const I18N_JS = join(
+  HERE,
+  '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/i18n.js',
+);
 
 /** A translator that records what it was asked for. */
 function translator() {
@@ -133,4 +142,33 @@ test('a repeated-refusal block asks for its translated reason', () => {
   const { t, calls } = translator();
   blockRow({ until: '2026-11-02T12:00:00Z', reason: 'repeated refusals' }, t);
   assert.ok(calls.some(([key]) => key === 'quota.blockReason.repeatedRefusals'));
+});
+
+test('a park with no expiry gets its own sentence, not "until —"', () => {
+  const { t, calls } = translator();
+
+  const row = blockRow({ until: null, reason: 'balance exhausted' }, t);
+
+  assert.ok(calls.some(([key]) => key === 'quota.blockedPermanent'), 'its own row');
+  assert.ok(
+    calls.some(([key]) => key === 'quota.blockReason.balance'),
+    'the machine reason is translated, not shown raw',
+  );
+  assert.ok(!calls.some(([key]) => key === 'quota.blocked'), 'a dated row would lie');
+  assert.doesNotMatch(row.text, /—/, 'no missing-value dash');
+  // The dictionary is text the node runner cannot import (i18n.js pulls in
+  // state.js); the sentence itself is checked where it is written.
+  const dictionary = readFileSync(I18N_JS, 'utf8');
+  const sentence = dictionary.match(/'quota\.blockedPermanent':'([^']+)'/);
+  assert.ok(sentence, 'the key is declared');
+  assert.match(sentence[1], /clears it/, 'the row says what lifts the park');
+});
+
+test('a dated block keeps the dated sentence', () => {
+  const { t, calls } = translator();
+
+  blockRow({ until: '2026-11-19T21:00:00Z', reason: 'repeated refusals' }, t);
+
+  assert.ok(calls.some(([key]) => key === 'quota.blocked'));
+  assert.ok(!calls.some(([key]) => key === 'quota.blockedPermanent'));
 });

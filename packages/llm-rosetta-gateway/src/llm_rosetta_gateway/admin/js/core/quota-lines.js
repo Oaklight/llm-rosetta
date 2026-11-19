@@ -53,6 +53,7 @@ export function appliedWeight(routing) {
 const BLOCK_REASON_KEYS = {
   'keyless lane rate limited': 'quota.blockReason.keyless',
   'repeated refusals': 'quota.blockReason.repeatedRefusals',
+  'balance exhausted': 'quota.blockReason.balance',
 };
 
 function blockReasonLabel(reason, t) {
@@ -103,10 +104,17 @@ export function routingRows(routing, t) {
   return rows;
 }
 
-/** The row for a live provider-wide cooldown, or `null`. */
+/** The row for a live provider-wide cooldown, or `null`.
+ *
+ *  A block with no `until` is a permanent park — the vendor said the account
+ *  cannot pay.  It gets its own sentence because "skipped until —" reads as a
+ *  missing value: the park has no time box, and the row says what lifts it. */
 export function blockRow(block, t) {
   if (!block) return null;
-  const until = block.until ? new Date(block.until).toLocaleString() : '—';
   const reason = blockReasonLabel(block.reason || '', t) || '—';
+  if (!block.until) {
+    return { tone: 'warn', text: t('quota.blockedPermanent', { reason }) };
+  }
+  const until = new Date(block.until).toLocaleString();
   return { tone: 'warn', text: t('quota.blocked', { until, reason }) };
 }
