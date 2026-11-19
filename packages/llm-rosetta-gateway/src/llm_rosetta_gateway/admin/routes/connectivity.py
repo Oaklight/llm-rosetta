@@ -47,6 +47,29 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
             {"error": "Provider has no base_url configured"}, status_code=400
         )
 
+    # A lane that is not reached over HTTP has no host to dial: its
+    # ``base_url`` is a placeholder the transport contract wants, and probing
+    # it would report a DNS failure about a lane that is working.  The
+    # transport answers this question itself when it can.
+    lane = str(provider_cfg.get("transport") or "")
+    pinfo = config.providers.get(name) if hasattr(config, "providers") else None
+    if not lane and pinfo is not None:
+        lane = getattr(pinfo, "transport", "http")
+    if lane and lane != "http":
+        return JSONResponse(
+            {
+                "provider": name,
+                "base_url": base_url,
+                "transport": lane,
+                "endpoints": {},
+                "warnings": [
+                    f"This lane is served over {lane!r}, not HTTP: there is no host "
+                    "to dial and no HTTP endpoint to probe. Its reachability is "
+                    "whatever the local agent answers on the next request."
+                ],
+            }
+        )
+
     from llm_rosetta_gateway._vendor.httpclient import AsyncClient
 
     proxy = provider_cfg.get("proxy") or getattr(config, "proxy", None)
