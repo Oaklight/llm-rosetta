@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import {
+  entryHasLane,
   findLane,
   laneBody,
   laneKey,
@@ -159,7 +160,7 @@ test('the drawer can add a lane without preselecting a provider', () => {
   const body = bodyOf(MODELS, 'function addModelLane(');
   assert.match(
     body,
-    /openModelModal\(name, '', caps, '', undefined, modelType\)/,
+    /openModelModal\(name, '', caps, '', undefined, modelType, \{ addLane: true \}\)/,
     'an edit of the first provider would read as the way to add a lane',
   );
   const detail = bodyOf(MODELS, 'function _modelDetailHtml(');
@@ -236,4 +237,68 @@ test('a one-element lane list keeps its own switch in the drawer', () => {
   assert.match(body, /const switchHtml = lanes\s*\n?\s*\? laneSwitchHtml\(/);
   assert.match(body, /toggleModelProvider\(/, 'the switch names the lane');
   assert.match(body, /model\.laneOff/, 'a lane that is off says so');
+});
+
+// ── the save that says "saved" ──
+
+test('entryHasLane reads both entry shapes and the lane with no upstream', () => {
+  const list = {
+    providers: [{ name: 'p', upstream_model: 'fast' }, { name: 'q' }],
+  };
+  assert.equal(entryHasLane(list, 'p', 'fast'), true);
+  assert.equal(entryHasLane(list, 'q', undefined), true, 'the absent upstream is a lane');
+  assert.equal(entryHasLane(list, 'p', 'eco'), false);
+  assert.equal(entryHasLane(list, 'r'), false, 'a dropped provider is not found');
+
+  const short = { provider: 'p', upstream_model: 'fast' };
+  assert.equal(entryHasLane(short, 'p', 'fast'), true);
+  assert.equal(entryHasLane(short, 'p'), false);
+  assert.equal(entryHasLane('p', 'p', ''), true, 'the legacy string entry');
+
+  assert.equal(entryHasLane(undefined, 'p', 'fast'), false, 'no entry says nothing');
+});
+
+test('the lane add is sent as an intent and checked against the stored entry', () => {
+  const body = bodyOf(MODELS, 'async function _saveModel(');
+  assert.match(body, /if \(addingLane\) body\.add_lane = true;/, 'the request says so');
+  assert.match(
+    body,
+    /entryHasLane\(res\.entry, provider, body\.upstream_model\)/,
+    'the toast describes what the server kept, not what was sent',
+  );
+  assert.match(
+    body,
+    /t\('toast\.laneNotSaved', \{lane: laneLabel\(provider, body\.upstream_model\)\}\)/,
+    'a dropped lane is reported',
+  );
+  assert.match(
+    bodyOf(MODELS, 'function openModelModal('),
+    /dataset\.addLane = addLane \? '1' : ''/,
+    'every other entry point clears the intent',
+  );
+});
+
+test('the response that dropped the lane is the one the editor now refuses', () => {
+  // The measured answer of the bug: `ok` with the lane absent from the entry.
+  const dropped = {
+    ok: true,
+    model: 'deepseek-v4.1-flash',
+    provider: 'other',
+    entry: {
+      providers: [{ name: 'deepseek', upstream_model: 'deepseek-v4.1-flash' }],
+      capabilities: ['text', 'tools'],
+    },
+  };
+  assert.equal(entryHasLane(dropped.entry, 'other', undefined), false);
+
+  // The same save once the endpoint keeps the lane it was sent.
+  const kept = {
+    ...dropped,
+    merged: true,
+    entry: {
+      ...dropped.entry,
+      providers: [...dropped.entry.providers, { name: 'other' }],
+    },
+  };
+  assert.equal(entryHasLane(kept.entry, 'other', undefined), true);
 });

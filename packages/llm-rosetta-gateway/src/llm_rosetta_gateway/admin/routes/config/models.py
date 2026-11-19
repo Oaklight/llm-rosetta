@@ -258,6 +258,8 @@ def _append_lane(existing: dict[str, Any], provider: str, body: dict[str, Any]) 
 
     A provider may join several times; the lane — provider and upstream model
     — is what is checked, and the lane carries the upstream the caller named.
+    A lane that names none is the one that serves the model's own name; it is
+    a lane like any other, so the ``upstream_model`` key is simply absent.
     """
     lane_entry: dict[str, Any] = {"name": provider}
     if body.get("upstream_model"):
@@ -281,10 +283,11 @@ def _update_multi_provider_entry(
 ) -> None:
     """Update a multi-provider model entry without destroying the providers list.
 
-    ``provider`` joins the list when the caller asked to merge and the entry
-    does not name it yet.
+    ``provider`` joins the list when the caller asked to add a lane — either
+    ``add_lane`` (the editor's own "+ add lane") or ``merge`` (the confirmed
+    second-provider path) — and the entry does not name it yet.
     """
-    if provider and body.get("merge"):
+    if provider and (body.get("merge") or body.get("add_lane")):
         _append_lane(existing, provider, body)
     if "capabilities" in body:
         existing["capabilities"] = body["capabilities"]
@@ -363,6 +366,13 @@ def _write_model_entry(
     routed through a different provider and the caller did not ask to merge:
     silently replacing the entry would drop the first provider's model.
 
+    A lane the entry does not list is added only on an explicit request —
+    ``add_lane`` from the editor's "+ add lane", or the confirmed ``merge``.
+    An absent ``upstream_model`` is a lane (the one serving the model's own
+    name), not "no lane": treating it as an edit silently dropped every lane
+    the operator added with a blank upstream field, and rewriting a
+    single-provider entry that way dropped its upstream alias.
+
     Args:
         models_section: The config's ``models`` mapping, changed in place.
         name: Model name being written.
@@ -375,25 +385,28 @@ def _write_model_entry(
     """
     if isinstance(existing, str):
         existing = {"provider": existing}
+    add_lane = bool(body.get("add_lane"))
     if (
         isinstance(existing, dict)
         and "providers" in existing
         and not body.get("_force_single")
     ):
         # Naming a lane the entry does not list is a request to add it; that
-        # still needs the caller to confirm, exactly as a second provider does.
+        # still needs the caller to confirm, exactly as a second provider does
+        # — unless the caller already said ``add_lane``.
         body_upstream = body.get("upstream_model")
         lane = lane_key(provider, body_upstream)
-        if (
-            body_upstream is not None
-            and lane not in _declared_lanes(existing)
-            and not body.get("merge")
+        if lane not in _declared_lanes(existing) and not (
+            add_lane or body.get("merge")
         ):
-            return _second_lane_confirmation(name, provider, existing), False
+            # An unnamed lane is not distinguishable from an edit of the model
+            # as a whole here, so only a named one is offered as a lane.
+            if body_upstream is not None:
+                return _second_lane_confirmation(name, provider, existing), False
         _update_multi_provider_entry(existing, body, provider)
         return None, lane in _declared_lanes(existing)
     if isinstance(existing, dict) and existing.get("provider") != provider:
-        if not body.get("merge"):
+        if not (body.get("merge") or add_lane):
             return (
                 JSONResponse(
                     {
@@ -411,14 +424,28 @@ def _write_model_entry(
     if (
         isinstance(existing, dict)
         and body.get("upstream_model") is not None
-        and lane_key(provider, body.get("upstream_model"))
-        != lane_key(existing.get("provider", ""), existing.get("upstream_model"))
+        and (
+            lane_key(provider, body.get("upstream_model"))
+            != lane_key(existing.get("provider", ""), existing.get("upstream_model"))
+        )
     ):
         # The same provider, a different upstream model: that is a second lane,
         # not an edit of the first one.  Silently replacing the entry would
         # drop the lane the model already serves.
-        if not body.get("merge"):
+        if not (body.get("merge") or add_lane):
             return _second_lane_confirmation(name, provider, existing), False
+        models_section[name] = _to_multi_provider_entry(existing, provider, body)
+        return None, True
+    if (
+        add_lane
+        and isinstance(existing, dict)
+        and lane_key(provider, body.get("upstream_model"))
+        != lane_key(provider, existing.get("upstream_model"))
+    ):
+        # The editor's own lane add: the lane names no upstream (it serves the
+        # model's name), which no branch above can tell from an edit.  The
+        # single-provider entry becomes a ``providers[]`` entry rather than
+        # being rewritten, so the lane it already serves keeps its upstream.
         models_section[name] = _to_multi_provider_entry(existing, provider, body)
         return None, True
     models_section[name] = _build_model_entry(
@@ -493,6 +520,10 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
         "provider": provider,
         "capabilities": body.get("capabilities", ["text"]),
         "models": list(ctx.new_config.models),
+        # The entry as stored, so the editor can check that what it sent is
+        # what the server kept: a lane it added must appear here.  The answer
+        # used to say only `ok`, and a dropped lane still showed "saved".
+        "entry": ctx.data.get("models", {}).get(name),
     }
     if merged:
         result["merged"] = True
