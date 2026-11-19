@@ -18,6 +18,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+from .content_ops import AcpContentOps
+
 _LABELS = {
     "system": "System",
     "user": "User",
@@ -26,8 +28,12 @@ _LABELS = {
 }
 
 
-def _text_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return the message's own content as ACP blocks, unlabelled."""
+def _text_blocks(message: dict[str, Any], warnings: Any = None) -> list[dict[str, Any]]:
+    """Return the message's own content as ACP blocks, unlabelled.
+
+    An image goes through :meth:`AcpContentOps.ir_image_to_p`, so one that
+    cannot ride inline (a URL) is reported to *warnings*, not dropped quietly.
+    """
     blocks: list[dict[str, Any]] = []
     for part in message.get("content") or []:
         if not isinstance(part, dict):
@@ -38,15 +44,9 @@ def _text_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
             if isinstance(text, str) and text:
                 blocks.append({"type": "text", "text": text})
         elif kind == "image":
-            data = part.get("image_data") or {}
-            if data.get("data"):
-                blocks.append(
-                    {
-                        "type": "image",
-                        "data": data["data"],
-                        "mimeType": data.get("media_type") or "image/png",
-                    }
-                )
+            block = AcpContentOps.ir_image_to_p(part, warnings=warnings)  # type: ignore[arg-type]
+            if block is not None:
+                blocks.append(block)
         elif kind == "tool_call":
             # A replayed call is history the model wrote.  Rendering it as text
             # keeps the transcript readable; the calls themselves are not
@@ -61,12 +61,15 @@ def _text_blocks(message: dict[str, Any]) -> list[dict[str, Any]]:
     return blocks
 
 
-def render_messages(messages: Sequence[Any]) -> list[dict[str, Any]]:
+def render_messages(
+    messages: Sequence[Any], warnings: Any = None
+) -> list[dict[str, Any]]:
     """Render IR messages as the ACP content blocks of one prompt turn.
 
     Args:
         messages: The IR messages, in order.  Typed message shapes are read
             as mappings; anything else is skipped.
+        warnings: Sink for the losses the rendering records (a dropped image).
 
     Returns:
         ACP content blocks.  Adjacent messages of the same role are rendered
@@ -79,7 +82,7 @@ def render_messages(messages: Sequence[Any]) -> list[dict[str, Any]]:
             continue
         role = str(message.get("role") or "")
         label = _LABELS.get(role, role or "Message")
-        own = _text_blocks(message)
+        own = _text_blocks(message, warnings)
         lead = [b for b in own if b.get("type") == "text"]
         if lead:
             text = "\n".join(b["text"] for b in lead)

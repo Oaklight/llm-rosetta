@@ -125,6 +125,29 @@ def _note_skipped_provider(
         )
 
 
+def apply_shim_default_capabilities(
+    raw_models: dict[str, Any],
+    models: dict[str, ModelRoute],
+    model_capabilities: dict[str, list[str]],
+    shim_names: dict[str, str | None],
+) -> None:
+    """Give a model with no ``capabilities`` its first provider's shim default.
+
+    An explicit per-model ``capabilities`` list is never touched.  The shim of
+    the route's first provider decides, the same provider ``/v1/models`` names.
+    """
+    from llm_rosetta.shims import resolve_shim
+
+    for name, route in models.items():
+        value = raw_models.get(name)
+        if isinstance(value, dict) and "capabilities" in value:
+            continue
+        shim_name = shim_names.get(route.providers[0].name)
+        shim = resolve_shim(shim_name) if shim_name else None
+        if shim is not None and shim.default_capabilities:
+            model_capabilities[name] = list(shim.default_capabilities)
+
+
 def parse_model_route(
     name: str,
     value: Any,

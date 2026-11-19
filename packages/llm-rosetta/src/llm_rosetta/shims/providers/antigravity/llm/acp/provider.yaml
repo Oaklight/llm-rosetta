@@ -15,6 +15,12 @@ format: acp
 group_label: Google (Antigravity)
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/antigravity.svg
 
+# What a model on this lane has when its config entry declares no
+# ``capabilities``.  Images ride as inline ACP blocks and thought chunks come
+# back as thinking blocks; client tools are dropped (``acp/tool_ops.py``), so
+# ``tools`` is not declared.
+default_capabilities: [text, vision, reasoning]
+
 connection:
   # The lane is reached by starting a process, not by dialing this host.  It
   # is a placeholder that must be a URL (the transport contract is shared
