@@ -38,9 +38,9 @@ jobs:
           python-version: "3.11"
 
       - name: Check that the refactor is a pure move
-        # `shell: bash` is what turns on `pipefail`; the default `run` shell is
-        # `bash -e` without it, and a failing check would then show as green
-        # because `tee` is the last command in the pipe.
+        # `shell: bash` is an explicit pin: it runs `bash -eo pipefail`, so the
+        # exit status of `check_move.py | tee` does not depend on the runner's
+        # default shell.
         shell: bash
         env:
           BASE_REF: origin/${{ github.base_ref }}

@@ -42,17 +42,24 @@ Reported categories:
   its head module does not define, though its base module did (a lost
   ``logger`` or constant); found with ``symtable``
 * ``decorator-census`` (FAILS) the number of ``@staticmethod``, ``@classmethod``
-  and ``@property`` decorators differs between base and head over the changed
-  files
+  and ``@property`` decorators differs between base and head over the defs that
+  were matched between the two sides.  Added defs are not counted (a split may
+  add a decorated helper), nor are defs under ``if TYPE_CHECKING:``; a dropped
+  decorator on a moved def is counted
 
 A class is compared by its decorators, keywords and docstring only; its bases
 are not compared, because a split into mixins changes them.
 
-An ``--allow`` file lists accepted pairs, one ``qualified.name  reason`` per
-line (``#`` starts a comment).  The name may be the base or the head qualified
-name.  An undefined-global item is allowed as ``undefined-global:<qualified.name>``
-and a census mismatch as ``decorator-census:<decorator>``.  An allowed item is
-reported but does not fail the run.
+An ``--allow`` file lists accepted pairs, one ``path::qualified.name  reason``
+per line (``#`` starts a comment), where ``path`` is the repo-relative path of
+the file holding the def.  A moved-with-diff entry matches the head path or the
+base path of the pair, so either end of a def that moved between files works;
+a missing def is keyed on its base path.  An undefined-global item is allowed
+as ``undefined-global:<head path>::<qualified.name>``.  A census mismatch is
+allowed as ``decorator-census:<decorator>``; the census is a global count, so
+that entry is not tied to a file.  A bare ``qualified.name`` (the older format)
+is rejected with an error, because it would excuse a same-named def in every
+file.  An allowed item is reported but does not fail the run.
 
 Exit status: 0 clean, 1 a ``missing`` / ``moved-with-diff`` item is not
 allowed, 2 usage or parse error.  Standard library only, Python >= 3.10.
@@ -105,6 +112,11 @@ class Item:
     @property
     def label(self) -> str:
         return f"{self.file}:{self.qual}"
+
+    @property
+    def key(self) -> str:
+        """The allow-file key: ``path::qualified.name``."""
+        return f"{self.file}::{self.qual}"
 
 
 # --------------------------------------------------------------------------
@@ -296,40 +308,39 @@ _MODULE_DUNDERS = frozenset(
 )
 
 
-def _census_nodes(node: ast.AST):
-    """Yield the defs under ``node``, skipping ``if TYPE_CHECKING:`` bodies."""
-    for child in ast.iter_child_nodes(node):
-        if isinstance(child, ast.If) and _is_type_checking(child.test):
-            for sub in child.orelse:
-                yield from _census_nodes_with_self(sub)
+def _decorator_names(item: Item) -> list[str]:
+    """Return the census decorators on the def of ``item``."""
+    if item.kind != FUNC:
+        return []
+    names = []
+    for deco in getattr(item.node, "decorator_list", []):
+        if isinstance(deco, ast.Name):
+            name = deco.id
+        elif isinstance(deco, ast.Attribute):
+            name = deco.attr
+        else:
             continue
-        yield from _census_nodes_with_self(child)
+        if name in CENSUS_DECORATORS:
+            names.append(name)
+    return names
 
 
-def _census_nodes_with_self(node: ast.AST):
-    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-        yield node
-    yield from _census_nodes(node)
+def decorator_census(pairs: list[tuple[Item, Item]]) -> dict[str, tuple[int, int]]:
+    """Count the census decorators over the matched pairs.
 
-
-def decorator_census(text: str) -> Counter[str]:
-    """Count the census decorators on every def of a module.
-
-    Stubs under ``if TYPE_CHECKING:`` are not counted: they are ignorable
-    additions and carry the decorators of the real def they describe.
+    Only a def present on both sides counts, so an added helper never fails the
+    census while a decorator dropped from a moved def does.  A pair with a
+    side under ``if TYPE_CHECKING:`` is skipped: such stubs carry the decorators
+    of the real def they describe.
     """
-    census: Counter[str] = Counter()
-    for node in _census_nodes(ast.parse(text)):
-        for deco in node.decorator_list:
-            if isinstance(deco, ast.Name):
-                name = deco.id
-            elif isinstance(deco, ast.Attribute):
-                name = deco.attr
-            else:
-                continue
-            if name in CENSUS_DECORATORS:
-                census[name] += 1
-    return census
+    base: Counter[str] = Counter()
+    head: Counter[str] = Counter()
+    for b, h in pairs:
+        if b.typecheck or h.typecheck:
+            continue
+        base.update(_decorator_names(b))
+        head.update(_decorator_names(h))
+    return {name: (base[name], head[name]) for name in CENSUS_DECORATORS}
 
 
 def _walk_tables(table: symtable.SymbolTable):
@@ -460,6 +471,15 @@ class Report:
     allowed: dict[str, str] = field(default_factory=dict)
     unused_allow: list[str] = field(default_factory=list)
 
+    def matched_pairs(self) -> list[tuple[Item, Item]]:
+        return (
+            self.unchanged
+            + self.moved_identical
+            + self.moved_with_diff
+            + self.import_hoisted
+            + self.logger_name
+        )
+
     def is_allowed(self, *names: str) -> str | None:
         for n in names:
             if n in self.allowed:
@@ -520,26 +540,20 @@ def match(
             record_diff(b, same_h[0])
 
     report.missing = base_rem
-    pairs = (
-        report.unchanged
-        + report.moved_identical
-        + report.moved_with_diff
-        + report.import_hoisted
-        + report.logger_name
-    )
-    for b, h in pairs:
+    for b, h in report.matched_pairs():
         lost = sorted(h.undefined - b.undefined)
         if h.kind == FUNC and lost:
             report.undefined_global.append((b, h, lost))
+    report.census = decorator_census(report.matched_pairs())
     for h in head_rem:
         (report.type_checking if h.typecheck else report.added).append(h)
     return report
 
 
 def _failing_keys(report: Report) -> list[tuple[str, ...]]:
-    keys: list[tuple[str, ...]] = [(b.qual, h.qual) for b, h in report.moved_with_diff]
-    keys += [(m.qual,) for m in report.missing]
-    keys += [(f"undefined-global:{h.qual}",) for _, h, _ in report.undefined_global]
+    keys: list[tuple[str, ...]] = [(b.key, h.key) for b, h in report.moved_with_diff]
+    keys += [(m.key,) for m in report.missing]
+    keys += [(f"undefined-global:{h.key}",) for _, h, _ in report.undefined_global]
     keys += [
         (f"decorator-census:{name}",)
         for name, (nb, nh) in report.census.items()
@@ -562,21 +576,19 @@ def apply_allow(report: Report, allow: dict[str, str]) -> None:
 
 def failing_diffs(report: Report) -> list[tuple[Item, Item]]:
     return [
-        (b, h)
-        for b, h in report.moved_with_diff
-        if not report.is_allowed(b.qual, h.qual)
+        (b, h) for b, h in report.moved_with_diff if not report.is_allowed(b.key, h.key)
     ]
 
 
 def failing_missing(report: Report) -> list[Item]:
-    return [m for m in report.missing if not report.is_allowed(m.qual)]
+    return [m for m in report.missing if not report.is_allowed(m.key)]
 
 
 def failing_undefined(report: Report) -> list[tuple[Item, Item, list[str]]]:
     return [
         t
         for t in report.undefined_global
-        if not report.is_allowed(f"undefined-global:{t[1].qual}")
+        if not report.is_allowed(f"undefined-global:{t[1].key}")
     ]
 
 
@@ -599,13 +611,24 @@ def has_failures(report: Report) -> bool:
 
 
 def load_allow(path: str) -> dict[str, str]:
-    """Parse an allow-file into ``{qualified.name: reason}``."""
+    """Parse an allow-file into ``{key: reason}``.
+
+    A key is ``path::qualified.name``, ``undefined-global:path::qualified.name``
+    or ``decorator-census:<decorator>``.  A bare ``qualified.name`` raises
+    ``ValueError``: it would match a same-named def in every file.
+    """
     allow: dict[str, str] = {}
     for raw in Path(path).read_text(encoding="utf-8").splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
             continue
         name, _, reason = line.partition(" ")
+        if "::" not in name and not name.startswith("decorator-census:"):
+            raise ValueError(
+                f"allow entry `{name}` has no file path; write it as "
+                f"`<path>::{name.removeprefix('undefined-global:')}` "
+                "(an entry without a path would excuse the name in every file)"
+            )
         allow[name] = reason.strip() or "(no reason given)"
     return allow
 
@@ -621,25 +644,18 @@ def run_check(repo: str, base: str, head: str, allow: dict[str, str]) -> Report:
     base_items: list[Item] = []
     head_items: list[Item] = []
     head_imports: dict[str, set[str]] = {}
-    census_base: Counter[str] = Counter()
-    census_head: Counter[str] = Counter()
     for path in changed_files(repo, merge_base, head):
         old = read_at(repo, merge_base, path)
         new = read_at(repo, head, path)
         try:
             if old is not None:
                 base_items += collect(old, path)
-                census_base += decorator_census(old)
             if new is not None:
                 head_items += collect(new, path)
                 head_imports[path] = module_imports(new)
-                census_head += decorator_census(new)
         except SyntaxError as exc:
             raise RuntimeError(f"cannot parse {path}: {exc}") from exc
     report = match(base_items, head_items, head_imports)
-    report.census = {
-        name: (census_base[name], census_head[name]) for name in CENSUS_DECORATORS
-    }
     apply_allow(report, allow)
     return report
 
@@ -679,20 +695,20 @@ def _counts(report: Report) -> list[tuple[str, int]]:
 
 def _allow_note(report: Report, *names: str) -> str:
     tag = report.is_allowed(*names)
-    return f" (allowed: {report.allowed[tag]})" if tag else ""
+    return f" (allowed by {tag}: {report.allowed[tag]})" if tag else ""
 
 
 def render_text(report: Report) -> str:
     """Render the report as plain text."""
     out = ["move check: " + ", ".join(f"{k}={v}" for k, v in _counts(report))]
     for b, h in report.moved_with_diff:
-        note = _allow_note(report, b.qual, h.qual)
+        note = _allow_note(report, b.key, h.key)
         out.append(f"\nMOVED-WITH-DIFF{note}: {b.label} -> {h.label}")
         out += ["  " + line for line in compact_diff(b, h)]
     for m in report.missing:
-        out.append(f"\nMISSING{_allow_note(report, m.qual)}: {m.label}")
+        out.append(f"\nMISSING{_allow_note(report, m.key)}: {m.label}")
     for _, h, names in report.undefined_global:
-        note = _allow_note(report, f"undefined-global:{h.qual}")
+        note = _allow_note(report, f"undefined-global:{h.key}")
         out.append(f"\nUNDEFINED-GLOBAL{note}: {h.label} reads {', '.join(names)}")
     for name, (nb, nh) in report.census.items():
         if nb != nh:
@@ -722,16 +738,16 @@ def render_markdown(report: Report) -> str:
     ]
     out += [f"| {k} | {v} |" for k, v in _counts(report)]
     for b, h in report.moved_with_diff:
-        note = _allow_note(report, b.qual, h.qual)
+        note = _allow_note(report, b.key, h.key)
         out += ["", f"**moved-with-diff**{note}: `{b.label}` -> `{h.label}`"]
         out += ["", "```diff", *compact_diff(b, h), "```"]
     if report.missing:
         out += ["", "**missing**"]
-        out += [f"- `{m.label}`{_allow_note(report, m.qual)}" for m in report.missing]
+        out += [f"- `{m.label}`{_allow_note(report, m.key)}" for m in report.missing]
     if report.undefined_global:
         out += ["", "**undefined-global**"]
         for _, h, names in report.undefined_global:
-            note = _allow_note(report, f"undefined-global:{h.qual}")
+            note = _allow_note(report, f"undefined-global:{h.key}")
             lost = ", ".join(f"`{n}`" for n in names)
             out.append(f"- `{h.label}` reads {lost}{note}")
     mismatches = [(n, c) for n, c in report.census.items() if c[0] != c[1]]
@@ -771,14 +787,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n")[0])
     parser.add_argument("base", help="base ref (its merge base with head is used)")
     parser.add_argument("head", nargs="?", default="HEAD", help="head ref")
-    parser.add_argument("--allow", help="file of `qualified.name  reason` lines")
+    parser.add_argument("--allow", help="file of `path::qualified.name  reason` lines")
     parser.add_argument("--markdown", action="store_true", help="print markdown")
     parser.add_argument("--repo", default=".", help="repository directory")
     args = parser.parse_args(argv)
     try:
         allow = load_allow(args.allow) if args.allow else {}
         report = run_check(args.repo, args.base, args.head, allow)
-    except (RuntimeError, OSError) as exc:
+    except (RuntimeError, OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(render_markdown(report) if args.markdown else render_text(report))

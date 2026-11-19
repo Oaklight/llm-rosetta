@@ -100,15 +100,21 @@ class), including decorators, arguments, annotations, body and docstring.
 Comments and formatting are ignored. It exits nonzero on a def that is
 `missing` or `moved-with-diff`. It also fails on a changed census of
 `@staticmethod`, `@classmethod` and `@property` decorators over the changed
-files, and on `undefined-global`: a moved function that reads a module-level
+files (only defs matched between base and head count, so a split that adds a
+decorated helper passes, while a decorator dropped from a moved def fails), and
+on `undefined-global`: a moved function that reads a module-level
 name (a lost `logger` or constant) its new module does not define. Added
 `if TYPE_CHECKING:` stubs, a module-level import of a name that used to be
 imported inside the function, and `getLogger(__name__)` becoming
 `getLogger("<old module name>")` are reported but do not fail.
 
-Record an intended difference with a reason in a file of `qualified.name  reason`
-lines and pass it with `--allow FILE` (use `undefined-global:<name>` or
-`decorator-census:<decorator>` for those two checks). The `Pure move` workflow runs the same
+Record an intended difference with a reason in a file of
+`path::qualified.name  reason` lines and pass it with `--allow FILE`. The path
+is the repo-relative file of the def; for a def that moved between files, the
+head or the base path both work. Use `undefined-global:<head path>::<name>` and
+`decorator-census:<decorator>` for those two checks; the census counts across
+all files, so that entry is not tied to a path. A bare `qualified.name` is
+rejected, because it would excuse the name in every file. The `Pure move` workflow runs the same
 check on pull requests titled `refactor(...)` or labelled `pure-move`, including
 when the label is added or the title edited after the PR was opened. It reads
 `.github/pure-move-allow.txt` from the **base branch**, so a PR cannot exempt
