@@ -19,14 +19,17 @@ if TYPE_CHECKING:
     from ....types.ir.response import UsageInfo
     from .content_ops import OpenResponsesContentOps
     from .stream_context import MessageItemState, OpenResponsesStreamContext
-    from .tool_ops import OpenResponsesToolOps
 
     class OpenResponsesMixinHost(BaseConverter):
         """Members the mixins read from the final converter or a sibling."""
 
         _CONVERTER_TAG: str
         content_ops: OpenResponsesContentOps
-        tool_ops: OpenResponsesToolOps
+        # Kept ``Any`` like ``BaseConverter.tool_ops``: this declaration is
+        # inherited by the converter, and a narrower class type would leak
+        # ``OpenResponsesToolOps``'s ``ToolDefinition | list`` return union
+        # into every caller of ``converter.tool_ops``.
+        tool_ops: Any
 
         def _get_response_id_prefix(
             self, context: ConversionContext | StreamContext | None = None
