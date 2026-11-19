@@ -41,9 +41,45 @@ from ._common import (  # noqa: F401  (private names stay importable from here)
     _where,
     logger,
 )
+from ..._vendor import aiosqlite  # noqa: F401
+from ..maintenance import Policy, Registry, Step, StepContext  # noqa: F401
+from ..retention import RetentionPolicy, RetentionTracker  # noqa: F401
+from ..visibility import MAX_TS, MIN_TS, VisibilityFilter  # noqa: F401
+from .legacy import _read_jsonl, _read_jsonl_gz  # noqa: F401
 from .manager import PersistenceManager
+from .schema import (  # noqa: F401
+    _adopt_pre_registry_schema,
+    _apply_migration,
+    _migration_steps,
+    _recorded_version,
+)
+from llm_rosetta.formats import canonical_model_type  # noqa: F401, E402
+from llm_rosetta.observability.usage.normalize import (  # noqa: F401, E402
+    DEFAULT_MODEL_TYPE,
+    LEDGER_COLUMNS,
+)
+from llm_rosetta.observability.usage.report import USAGE_WINDOWS  # noqa: F401, E402
+from llm_rosetta.observability.usage.semantics import (  # noqa: F401, E402
+    ADDITIVE_CACHE_STANDARDS,
+)
 
+# The module this package replaced had no ``__all__``; the names a consumer
+# could import from it (and a star-import used to yield) stay importable.
 __all__ = [
+    "ADDITIVE_CACHE_STANDARDS",
+    "DEFAULT_MODEL_TYPE",
+    "LEDGER_COLUMNS",
+    "MAX_TS",
+    "MIN_TS",
+    "USAGE_WINDOWS",
+    "Policy",
+    "Registry",
+    "RetentionPolicy",
+    "RetentionTracker",
+    "Step",
+    "StepContext",
+    "VisibilityFilter",
+    "canonical_model_type",
     "PersistenceManager",
     "DEFAULT_SUCCESS_MAX",
     "DEFAULT_MAX_AGE_DAYS",
