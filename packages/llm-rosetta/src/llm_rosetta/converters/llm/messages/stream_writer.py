@@ -4,6 +4,12 @@ LLM-Rosetta - Messages API stream writer (IR events -> provider SSE events).
 The per-event handlers :class:`MessagesConverter` dispatches to through
 ``_IR_TO_P_DISPATCH``, plus the block-tracking helpers they share; kept here
 so the converter module stays focused on the request/response interfaces.
+
+``_handle_ir_citation_delta_to_p`` and ``_handle_ir_refusal_delta_to_p`` are
+deliberate overrides of the same-named defaults on
+:class:`~llm_rosetta.converters.base.converter.BaseConverter`, not copies of
+them: this mixin precedes ``BaseConverter`` in the MRO, so these bodies win,
+and an edit to the base versions does not reach Messages.
 """
 
 from collections.abc import Mapping
