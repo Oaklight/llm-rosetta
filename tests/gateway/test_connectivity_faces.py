@@ -169,3 +169,48 @@ class TestTheProbeSeesTheFace:
         assert embedded, posted
         assert "models/:embedContent" not in embedded[0], embedded
         assert "text-embedding-004" in embedded[0], embedded
+
+
+class TestALaneWithNoHost:
+    """An agent lane's ``base_url`` is a placeholder, not an address.
+
+    The transport contract wants a base_url on every provider, so an ACP lane
+    carries one it never dials.  Probing it reported a DNS failure about a lane
+    that was working, and the panel drew the lane as broken.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_non_http_lane_is_not_dialled(self, tmp_path, probe):
+        request = _request(
+            tmp_path,
+            {
+                "type": "openai--chat_completions",
+                "base_url": "http://agy.local",
+                "transport": "acp",
+            },
+        )
+
+        response = await connectivity.test_provider_connectivity(request, "mix")
+        body = json.loads(response.body)
+
+        assert body["transport"] == "acp"
+        assert body["endpoints"] == {}
+        assert body["warnings"], body
+        assert probe.calls == []
+
+    @pytest.mark.asyncio
+    async def test_an_http_lane_is_still_dialled(self, tmp_path, probe):
+        """The guard reads the transport, not the base_url's spelling."""
+        request = _request(
+            tmp_path,
+            {
+                "type": "openai--chat_completions",
+                "base_url": "http://agy.local",
+                "api_key": "k",
+                "transport": "http",
+            },
+        )
+
+        await connectivity.test_provider_connectivity(request, "mix")
+
+        assert probe.calls
