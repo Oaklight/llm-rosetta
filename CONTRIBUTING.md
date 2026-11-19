@@ -98,12 +98,17 @@ The tool compares every function, method, class and class-level assignment of
 the changed files by qualified name (and by bare name when a method changes
 class), including decorators, arguments, annotations, body and docstring.
 Comments and formatting are ignored. It exits nonzero on a def that is
-`missing` or `moved-with-diff`. Added `if TYPE_CHECKING:` stubs and a
-module-level import of a name that used to be imported inside the function are
-reported but do not fail.
+`missing` or `moved-with-diff`. It also fails on a changed census of
+`@staticmethod`, `@classmethod` and `@property` decorators over the changed
+files, and on `undefined-global`: a moved function that reads a module-level
+name (a lost `logger` or constant) its new module does not define. Added
+`if TYPE_CHECKING:` stubs, a module-level import of a name that used to be
+imported inside the function, and `getLogger(__name__)` becoming
+`getLogger("<old module name>")` are reported but do not fail.
 
 Record an intended difference with a reason in a file of `qualified.name  reason`
-lines and pass it with `--allow FILE`. CI runs the same check on pull requests
+lines and pass it with `--allow FILE` (use `undefined-global:<name>` or
+`decorator-census:<decorator>` for those two checks). CI runs the same check on pull requests
 titled `refactor(...)` or labelled `pure-move`, and reads
 `.github/pure-move-allow.txt` when it exists.
 
