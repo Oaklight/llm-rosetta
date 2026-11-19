@@ -112,18 +112,18 @@ function _tokensPerSecond(e) {
   const tip = hasTtft
     ? t('log.tokPerSecGen', {ttft: String(Math.round(ttft))})
     : t('log.tokPerSec');
-  return ` <span class="log-tps" title="${esc(tip)}">${t('unit.tokPerSec', {n: shown})}</span>`;
+  return ` <span class="log-tps" title="${esc(tip)}">${esc(t('unit.tokPerSec', {n: shown}))}</span>`;
 }
 
 function renderLogs(entries, total) {
   const tbody = document.getElementById('logTable');
   if (entries.length === 0) {
-    tbody.innerHTML = `<tr class="log-empty-row" role="row"><td colspan="9" role="cell" style="color:var(--text-dim)">${t('empty.logs')}</td></tr>`;
+    tbody.innerHTML = `<tr class="log-empty-row" role="row"><td colspan="9" role="cell" style="color:var(--text-dim)">${esc(t('empty.logs'))}</td></tr>`;
   } else {
     tbody.innerHTML = entries.map((e, idx) => {
       const time = new Date(e.timestamp).toLocaleString(undefined, {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
       const statusCls = e.status_code < 400 ? 'tag-ok' : 'tag-error';
-      const modeBadge = e.is_stream ? `<span class="tag is-pill tag-stream">${t('stream.mode')}</span>` : '';
+      const modeBadge = e.is_stream ? `<span class="tag is-pill tag-stream">${esc(t('stream.mode'))}</span>` : '';
       const keyLabel = e.api_key_label || '—';
       const hasError = !!e.error_detail;
       // A field the gateway had to supply (the target required it and the
@@ -156,8 +156,8 @@ function renderLogs(entries, total) {
         <td class="log-mode" role="cell" aria-labelledby="thLogMode">${modeBadge}</td>
         <td class="log-key" role="cell" aria-labelledby="thLogApiKey">${esc(keyLabel)}</td>
         <td class="log-ip" role="cell" aria-labelledby="thLogClientIp">${esc(clientIp)}</td>
-        <td class="log-status" role="cell" aria-labelledby="thLogStatus"><span class="tag is-pill ${statusCls}">${e.status_code}${hasDetail ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump(${jsArg(e.id)})" title="${esc(t('btn.viewErrorDump'))}" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
-        <td class="log-tokens" role="cell" aria-labelledby="thLogTokens" style="font-size:12px">${e.total_tokens != null ? fmtTokens(e.total_tokens) : '—'}${e.cache_read_tokens ? `<br><span title="${t('token.cacheRead')}" style="color:var(--info);font-size:10px;cursor:help">C↓ ${fmtTokens(e.cache_read_tokens)}</span>` : ''}${e.reasoning_tokens ? `<br><span title="${t('token.reasoning')}" style="color:var(--neg);font-size:10px;cursor:help">R ${fmtTokens(e.reasoning_tokens)}</span>` : ''}</td>
+        <td class="log-status" role="cell" aria-labelledby="thLogStatus"><span class="tag is-pill ${statusCls}">${esc(e.status_code)}${hasDetail ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump(${jsArg(e.id)})" title="${esc(t('btn.viewErrorDump'))}" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
+        <td class="log-tokens" role="cell" aria-labelledby="thLogTokens" style="font-size:12px">${e.total_tokens != null ? fmtTokens(e.total_tokens) : '—'}${e.cache_read_tokens ? `<br><span title="${esc(t('token.cacheRead'))}" style="color:var(--info);font-size:10px;cursor:help">C↓ ${fmtTokens(e.cache_read_tokens)}</span>` : ''}${e.reasoning_tokens ? `<br><span title="${esc(t('token.reasoning'))}" style="color:var(--neg);font-size:10px;cursor:help">R ${fmtTokens(e.reasoning_tokens)}</span>` : ''}</td>
         <td class="log-duration" role="cell" aria-labelledby="thLogDuration">${_durationCell(e)}${_tokensPerSecond(e)}</td>
       </tr>`;
       if (hasDetail) {
@@ -364,7 +364,7 @@ function updateFilterOptions() {
   const pSel = document.getElementById('filterProvider');
   // preserve selection
   const mVal = mSel.value, pVal = pSel.value;
-  mSel.innerHTML = `<option value="">${t('filter.allModels')}</option>` + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+  mSel.innerHTML = `<option value="">${esc(t('filter.allModels'))}</option>` + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
   // A native select cannot show the provider logo, so this filter is a menu.
   const menu = document.getElementById('logProviderMenu');
   if (menu) {
@@ -374,7 +374,7 @@ function updateFilterOptions() {
     const empty = document.createElement('div');
     empty.className = 'menu-item pp-row';
     empty.dataset.provider = '';
-    empty.innerHTML = `<span class="pp-name">${t('filter.allProviders')}</span>`;
+    empty.innerHTML = `<span class="pp-name">${esc(t('filter.allProviders'))}</span>`;
     empty.onclick = () => selectLogProvider('');
     menu.prepend(empty);
   }
@@ -391,7 +391,7 @@ function _syncLogProviderBtn(name) {
   if (!val) return;
   val.innerHTML = name
     ? `${providerLogoHtml(name)}<span>${esc(name)}</span>`
-    : `<span>${t('filter.allProviders')}</span>`;
+    : `<span>${esc(t('filter.allProviders'))}</span>`;
 }
 
 function selectLogProvider(name) {
@@ -415,7 +415,7 @@ function updateKeyFilterOptions() {
   const kVal = kSel.value;
   const keys = (S.keysData && S.keysData.keys) || [];
   const labels = [...new Set([...keys.map(k => k.label), ...S.logKeyLabels].filter(Boolean))].sort();
-  kSel.innerHTML = `<option value="">${t('filter.allKeys')}</option>` + labels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
+  kSel.innerHTML = `<option value="">${esc(t('filter.allKeys'))}</option>` + labels.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
   kSel.value = kVal;
 }
 

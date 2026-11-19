@@ -260,7 +260,7 @@ async function runTest(model, type, extraParam, provider) {
             if (statusCode >= 400) {
               const errMsg = body?.error?.message || JSON.stringify(body?.error || body);
               output.textContent = t('test.errorStatus', {status: statusCode, msg: errMsg});
-              meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--neg)">${statusCode}</span></div>`;
+              meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${elapsed}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--neg)">${esc(statusCode)}</span></div>`;
               resolve();
               return;
             }
@@ -273,7 +273,7 @@ async function runTest(model, type, extraParam, provider) {
             } else {
               // Chat completion result
               if (body?.usage) {
-                meta.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${body.usage.prompt_tokens || '?'} in / ${body.usage.completion_tokens || '?'} out</div>`;
+                meta.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${esc(body.usage.prompt_tokens || '?')} in / ${esc(body.usage.completion_tokens || '?')} out</div>`;
               }
               const choice = body?.choices?.[0];
               if (type === 'tools' && choice?.message?.tool_calls) {
@@ -322,7 +322,7 @@ async function runTest(model, type, extraParam, provider) {
       const errText = await res.text();
       output.className = 'test-output';
       output.textContent = t('test.errorStatus', {status: res.status, msg: errText});
-      meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${((performance.now()-t0)/1000).toFixed(2)}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--neg)">${res.status}</span></div>`;
+      meta.innerHTML += `<div class="meta-item"><strong>Time:</strong> ${((performance.now()-t0)/1000).toFixed(2)}s</div><div class="meta-item"><strong>Status:</strong> <span style="color:var(--neg)">${esc(res.status)}</span></div>`;
       resDetails.style.display = '';
       resBody.textContent = errText;
       return;
@@ -377,7 +377,7 @@ registerTestType('embedding', {
   },
   renderResult: (body, outputEl, metaEl) => {
     if (body?.usage) {
-      metaEl.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${body.usage.prompt_tokens || '?'} in</div>`;
+      metaEl.innerHTML += `<div class="meta-item"><strong>Tokens:</strong> ${esc(body.usage.prompt_tokens || '?')} in</div>`;
     }
     const dim = body?.data?.[0]?.embedding?.length;
     outputEl.textContent = dim ? `Embedding OK — ${dim} dimensions` : t('test.emptyResponse');
