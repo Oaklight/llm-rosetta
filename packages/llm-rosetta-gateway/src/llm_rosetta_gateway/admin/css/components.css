@@ -3141,7 +3141,43 @@ button.shim-update.unknown { color: var(--tag-warn); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .shim-card-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; }
+.shim-card-actions .shim-card-tools { margin-left: auto; }
 .shim-empty { grid-column: 1 / -1; }
+
+/* The package card's overflow menu: the "⋯" at the end of the action row, on
+   the same baseline as the buttons it sits beside.  It is not in the head
+   because the head is a <button>, and a button cannot hold one. */
+.shim-card-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.shim-card-tools { position: relative; display: inline-flex; }
+/* Wider than the row-action menu it borrows: this one carries a sentence
+   ("Install a specific ref…"), not a one-word verb. */
+.shim-card-menu { min-width: 200px; }
+
+/* The ref form the menu opens: one line, and it stays hidden until asked for,
+   because loading a commit is the exception to what the card offers. */
+.shim-ref-form {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  padding: 8px 10px; margin: 0 0 2px;
+  background: var(--surface-2); border: 1px solid var(--hairline); border-radius: 8px;
+}
+.shim-ref-form[hidden] { display: none; }
+/* The label owns the first row: beside the input it squeezed the field to
+   nothing and pushed both buttons to a third. */
+.shim-ref-label { flex: 1 0 100%; font-size: 12px; color: var(--text-dim); }
+.shim-ref-form .input { flex: 1 1 140px; min-width: 0; }
+.shim-empty { grid-column: 1 / -1; }
+
+/* The section a query adds under the Installed list: catalogue entries the
+   gateway does not have, painted with the same cards the Available view uses.
+   Its own grid, so the vendor cards above and the package cards below keep
+   their own column rhythm instead of mixing ranks in one track. */
+.shim-section-head {
+  grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px;
+  margin: 10px 0 -2px; padding-top: 12px; border-top: 1px solid var(--hairline);
+  font-size: 12px; font-weight: 600; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.shim-grid-inline { grid-column: 1 / -1; }
 
 
 /* ── Shims page: vendor sections and logos ─────────────────────────── */
