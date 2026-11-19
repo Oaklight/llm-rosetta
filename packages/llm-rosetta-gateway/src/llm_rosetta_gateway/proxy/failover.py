@@ -145,6 +145,17 @@ def prepare_failover(
             selection, exclude=route.provider_name, resolve=config.resolve
         )
     if target is None:
+        if decision.scope is RefusalScope.CREDENTIAL:
+            # The client receives the upstream's own refusal, whatever status
+            # it was, so this line is the only trace of why the request was
+            # not tried anywhere else: the route had no other usable lane.
+            get_logger().warning(
+                "No other lane for model %s after %s on %s; "
+                "returning the upstream refusal",
+                selection.model,
+                getattr(decision.signal, "reason", None) or "upstream refusal",
+                lane_label(route.provider_name, route.upstream_model),
+            )
         return None
     new_route, new_pinfo = target
     reason = getattr(decision.signal, "reason", None) or "upstream refusal"
