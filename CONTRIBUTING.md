@@ -128,6 +128,73 @@ when the label is added or the title edited after the PR was opened. It reads
 `.github/pure-move-allow.txt` from the **base branch**, so a PR cannot exempt
 itself: land the allow-file entry first, in its own reviewed change.
 
+## Pull requests
+
+Every PR uses `.github/pull_request_template.md`. The rules below decide how
+much review a PR needs and in what order PRs merge.
+
+### Review tiers
+
+Tick one risk tier in the template. When a PR spans tiers, it takes the
+highest.
+
+| Tier | Typical change | Review |
+| --- | --- | --- |
+| Pure move | Code moves with no logic edit | One reviewer checks only that the mechanical proof is credible. CI green plus the proof can merge. |
+| Boundary or contract change | Imports, public API, config schema, wire format | One reviewer plus the maintainer. |
+| Runtime-behaviour change | Logic that runs differently after the PR | One or two reviewers who read the logic. |
+| Security-relevant | Auth, keys, credentials, sanitizing, network exposure | Always reviewed, ideally by someone other than the author's usual reviewer. |
+
+For a pure move, state the mechanical proof in the template: the move-check
+summary (`scripts/dev/check_move.py`) and a clean `ty` run
+(`python scripts/dev/run_ty.py`; CI runs `ty` with zero diagnostics on `master`).
+Give the equivalent evidence by hand only where a tool cannot run.
+
+### Who reviews what
+
+Reviewer assignment follows the path, not the author's choice. The repository
+has no `CODEOWNERS` file, because the area-to-person split cannot be verified
+from the repository. Until it can, ask the maintainer (`@Oaklight`) to assign
+the reviewer for the area:
+
+| Paths | Area |
+| --- | --- |
+| `packages/llm-rosetta/src/llm_rosetta/{converters,formats,ir,types,pipeline}/` | Conversion: converters, format catalog, IR |
+| `packages/llm-rosetta/src/llm_rosetta/shims/` and `llm_rosetta_gateway/shims/` | Shims and external shim sources |
+| `packages/llm-rosetta-gateway/src/llm_rosetta_gateway/{app,proxy,routing,pipelines,transport}/` | Gateway request path |
+| `packages/llm-rosetta-gateway/src/llm_rosetta_gateway/{auth.py,keystore.py,middleware,quota}/` | Security-relevant: credentials, auth, rotation |
+| `packages/llm-rosetta-gateway/src/llm_rosetta_gateway/{admin,observability,ops,jobs,maintenance,config}/` | Gateway operations, admin, telemetry, config |
+| `.github/`, `scripts/`, `Makefile`, `docker/`, `pyproject.toml` | Build, CI, tooling |
+
+### Series and overlap
+
+Before you open a PR, run the overlap check:
+
+```bash
+python scripts/dev/pr_overlap.py            # current branch against origin/master
+python scripts/dev/pr_overlap.py --local    # also other local branches
+python scripts/dev/pr_overlap.py --fail-on-overlap   # exit 1 on overlap
+```
+
+It lists every open PR that touches the same files. It needs the `gh` CLI and
+always exits 0 unless you pass `--fail-on-overlap`.
+
+If a PR overlaps, merge a series one PR at a time and rebase the rest after
+each merge.
+
+### Small PRs
+
+- One refactor or one concern per PR.
+- Follow-on mechanical edits (allowlist regeneration, doc touch-ups) go after
+  the PR they depend on. Do not open them as independent PRs.
+
+### Requesting review
+
+Request review only after CI is fully green. Do not skip the `ty` hook: it
+passes on `master`, so a failure is a real diagnostic or a local environment
+that does not match CI (use `python scripts/dev/run_ty.py`). If you skipped any
+hook, name it and the reason in the template.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
