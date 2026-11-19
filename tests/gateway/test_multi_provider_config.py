@@ -391,3 +391,53 @@ def pick(strategy, providers=None, **kwargs) -> str:
     if providers is None:
         return strategy.select(**kwargs).name
     return strategy.select(providers, **kwargs).name
+
+
+class TestAProviderThatIsNotRouted:
+    """The log says why a lane was dropped, and it says the true reason.
+
+    The routed map has disabled providers filtered out, so a lane naming one
+    used to be reported as "not found" — the document contradicts that, and
+    the message was the only trace of a lane the panel still shows.
+    """
+
+    PROVIDERS = {
+        "a": {
+            "type": "chat_completions",
+            "api_key": "k",
+            "base_url": "https://a.example.com",
+        },
+        "off": {
+            "type": "chat_completions",
+            "api_key": "k",
+            "base_url": "https://off.example.com",
+            "enabled": False,
+        },
+    }
+
+    def test_a_disabled_provider_is_named_disabled(self, gateway_warnings):
+        config = _make_config(
+            {"m": {"providers": [{"name": "a"}, {"name": "off"}]}}, dict(self.PROVIDERS)
+        )
+
+        messages = " ".join(r.getMessage() for r in gateway_warnings)
+        assert [entry.name for entry in config.models["m"].providers] == ["a"]
+        assert "provider 'off' is disabled, skipping" in messages
+        assert "not found" not in messages
+
+    def test_a_provider_absent_from_the_document_is_named_missing(
+        self, gateway_warnings
+    ):
+        _make_config({"m": {"providers": [{"name": "a"}, {"name": "ghost"}]}})
+
+        messages = " ".join(r.getMessage() for r in gateway_warnings)
+        assert "provider 'ghost' not found, skipping" in messages
+        assert "is disabled" not in messages
+
+    def test_a_single_provider_entry_is_named_too(self, gateway_warnings):
+        """This shape used to be silent: the model just disappeared."""
+        config = _make_config({"m": {"provider": "off"}}, dict(self.PROVIDERS))
+
+        assert "m" not in config.models
+        messages = " ".join(r.getMessage() for r in gateway_warnings)
+        assert "provider 'off' is disabled, skipping" in messages
