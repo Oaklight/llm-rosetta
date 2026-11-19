@@ -11,3 +11,13 @@ connection:
 # supported on this proxy. Each response request is independent."), returns a
 # ``gen-...`` id with no ``resp_`` prefix, and emits none of the OpenAI
 # lifecycle/echo fields.  No profile traits are declared, by design.
+tools:
+  # A client's tool container goes upstream as the client wrote it.  Measured
+  # live 2026-11-19: a container holding one function is accepted (200) on
+  # four vendor models behind this proxy — ``openai/gpt-5-nano``,
+  # ``anthropic/claude-haiku-4.5``, ``google/gemini-2.5-flash`` and
+  # ``deepseek/deepseek-chat`` — so the capability belongs to the proxy rather
+  # than to the model it routes to.  A container must carry a ``description``;
+  # the writer emits ``""`` when the client gave none, which this proxy
+  # accepts.
+  tool_groups: true

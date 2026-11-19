@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from pathlib import Path
 
@@ -1182,7 +1184,32 @@ class TestFreeSourceShim:
 
 
 class TestToolGroupsShimDeclarations:
-    """DeepSeek and Volcengine open_responses shims declare tool_groups: true."""
+    """Which shipping shims carry a client's tool container, and which fold it in."""
+
+    #: Upstreams measured to accept ``{"type": "namespace", ...}``.  The split
+    #: is a per-upstream fact, not a property of the base format: the Responses
+    #: family is the only one with the construct, yet the neutral base declares
+    #: none and a proxy may still flatten it.
+    PASS_THROUGH = (
+        "openai--open_responses",
+        "openrouter--open_responses",
+        "deepseek--open_responses",
+        "volcengine--open_responses",
+        "openai_chatgpt--open_responses",
+    )
+
+    #: Targets that get the flat list.  ``open_responses`` is the vendor-neutral
+    #: base, which has no grouping concept at all; ``opencode--open_responses``
+    #: could not be measured (403 without a Go subscription, 402 without a Zen
+    #: balance), so it keeps the flat list until someone probes it; everything
+    #: outside the Responses family has no slot for a container.
+    FLATTEN = (
+        "open_responses",
+        "opencode--open_responses",
+        "chat_completions",
+        "messages",
+        "google_generate",
+    )
 
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
@@ -1190,24 +1217,24 @@ class TestToolGroupsShimDeclarations:
 
         load_providers()
 
-    def test_deepseek_open_responses_enables_tool_groups(self):
-        shim = get_shim("deepseek--open_responses")
+    @pytest.mark.parametrize("shim_name", PASS_THROUGH)
+    def test_a_carrying_shim_declares_tool_groups(self, shim_name: str):
+        shim = get_shim(shim_name)
         assert shim is not None
         assert shim.tools.tool_groups is True
 
-    def test_volcengine_open_responses_enables_tool_groups(self):
-        shim = get_shim("volcengine--open_responses")
-        assert shim is not None
-        assert shim.tools.tool_groups is True
+    def test_an_unmeasured_shim_leaves_tool_groups_off(self):
+        """The default is off, and ``opencode`` is where that shows.
 
-    def test_default_shim_leaves_tool_groups_off(self):
-        shim = get_shim("openai--open_responses")
+        No shim is turned on by inference: a provider carries a container only
+        after someone measured it doing so, which is why the flag defaults to
+        ``False`` and this one stays there.
+        """
+        shim = get_shim("opencode--open_responses")
         assert shim is not None
         assert shim.tools.tool_groups is False
 
-    @pytest.mark.parametrize(
-        "shim_name", ["deepseek--open_responses", "volcengine--open_responses"]
-    )
+    @pytest.mark.parametrize("shim_name", PASS_THROUGH)
     def test_shipping_shims_preserve_containers_in_conversion(self, shim_name: str):
         from llm_rosetta.pipeline import ConversionPipeline
 
@@ -1244,9 +1271,7 @@ class TestToolGroupsShimDeclarations:
         assert tools[1]["description"] == "Task management tools."
         assert [c["name"] for c in tools[1]["tools"]] == ["wait", "edit"]
 
-    @pytest.mark.parametrize(
-        "shim_name", ["deepseek--open_responses", "volcengine--open_responses"]
-    )
+    @pytest.mark.parametrize("shim_name", PASS_THROUGH)
     def test_a_namespace_tool_choice_is_reported_not_silently_dropped(
         self, shim_name: str
     ):
@@ -1327,6 +1352,88 @@ class TestToolGroupsShimDeclarations:
         )
         assert body["tool_choice"] is not None
         assert pipe.warnings == []
+
+    # The matrix itself: one request, every target that could plausibly carry a
+    # container.  A top-level ``wait`` beside a ``wait`` inside ``tasks`` is the
+    # shape that tells the two answers apart — a flat list has to qualify the
+    # child to ``tasks_wait`` to keep the two calls separable, while a target
+    # that carries the container leaves the child under the client's own name
+    # and puts the group back on the wire.
+    MATRIX_REQUEST = {
+        "model": "test-model",
+        "tool_choice": "auto",
+        "tools": [
+            {"type": "function", "name": "wait", "parameters": {}},
+            {
+                "type": "namespace",
+                "name": "tasks",
+                "description": "Task management tools.",
+                "tools": [{"type": "function", "name": "wait", "parameters": {}}],
+            },
+        ],
+        "input": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "hi"}],
+            }
+        ],
+    }
+
+    @classmethod
+    def _tools(cls, target: str) -> list:
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipe = ConversionPipeline("open_responses", target)
+        return pipe.convert_request(dict(cls.MATRIX_REQUEST))["tools"]
+
+    @pytest.mark.parametrize("target", PASS_THROUGH)
+    def test_a_group_carrying_target_keeps_the_container(self, target: str):
+        tools = self._tools(target)
+        containers = [t for t in tools if t.get("type") == "namespace"]
+        assert len(containers) == 1, tools
+        assert containers[0]["name"] == "tasks"
+        assert containers[0]["description"] == "Task management tools."
+        assert [c["name"] for c in containers[0]["tools"]] == ["wait"], (
+            "the container's members are the client's own names; the group "
+            "travels on the wire, so the child does not need qualifying"
+        )
+        assert [t["name"] for t in tools if t.get("type") != "namespace"] == ["wait"]
+
+    @pytest.mark.parametrize("target", FLATTEN)
+    def test_a_token_only_target_folds_the_group_into_the_child(self, target: str):
+        tools = self._tools(target)
+        assert "namespace" not in json.dumps(tools), tools
+        assert "tasks_wait" in json.dumps(tools), (
+            "the child has to be told apart from the top-level 'wait' by name "
+            "alone, which is the whole cost this change removes"
+        )
+
+    def test_every_shipping_responses_shim_is_on_one_side_of_the_matrix(self):
+        """A new built-in Responses shim has to be classified, not defaulted.
+
+        Both lists are reviewed by hand against a live probe, so the point of
+        this check is that adding a provider forces that review instead of
+        leaving the new lane flattening because nobody thought about it.
+        External shims are out of scope: they are installed into the
+        environment and this repository cannot probe them.
+        """
+        from pathlib import Path
+
+        from llm_rosetta.shims import providers as builtins_pkg
+
+        builtin_root = Path(builtins_pkg.__file__).parent
+        shipping = {
+            s.name
+            for s in list_shims()
+            if s.format == "open_responses"
+            and s.manifest is not None
+            and builtin_root in Path(s.manifest.path).parents
+        }
+        classified = set(self.PASS_THROUGH) | set(self.FLATTEN)
+        assert shipping <= classified, shipping - classified
+        assert not (set(self.PASS_THROUGH) & set(self.FLATTEN))
+        assert set(self.PASS_THROUGH) <= shipping
 
 
 class TestRequestConstraintDeclarations:

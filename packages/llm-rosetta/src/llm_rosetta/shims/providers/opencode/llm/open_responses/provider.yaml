@@ -30,3 +30,10 @@ quota:
 # cannot describe both models, so none is declared here: ``store_default: true``
 # would fabricate a field the upstream never returns, and a shim-level
 # ``response_id_prefix`` would have to be wrong for one of the two families.
+#
+# ``tools.tool_groups`` is left off because this lane could not be measured,
+# not because it was measured and refused (attempted 2026-11-19): the Go lane
+# answers 403 "An active OpenCode Go subscription is required" and the Zen
+# lane 402 "Insufficient balance".  A proxy's Responses surface accepting a
+# ``{"type": "namespace", ...}`` container therefore stays unproven here, and
+# the tool list is flattened until someone with a live credential probes it.

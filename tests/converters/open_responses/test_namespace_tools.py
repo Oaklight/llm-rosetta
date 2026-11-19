@@ -293,6 +293,10 @@ class TestNamespaceRequestConversion:
         in ``_passthrough``.  Left alone that dict still holds the original
         name, so a tool renamed to break a collision would reintroduce it on
         the wire and disagree with every other part of the request.
+
+        The rename only exists on a flat target: one that carries the group
+        keeps the child's own name and hands the container back instead — the
+        companion test below.  The neutral base is the flat side here.
         """
         request = {
             "model": "test-model",
@@ -312,11 +316,45 @@ class TestNamespaceRequestConversion:
                 }
             ],
         }
-        pipe = ConversionPipeline("openai_responses", "openai_responses")
+        pipe = ConversionPipeline("open_responses", "open_responses")
         upstream = pipe.convert_request(request)
 
         names = [t.get("name") for t in upstream["tools"]]
         assert names == ["wait", "agents_wait"], names
+
+    def test_a_carrying_target_keeps_the_passthrough_tool_inside_its_container(self):
+        """The other side of the same request: no rename, the container instead.
+
+        A target that puts the group on the wire separates the two ``wait``
+        tools by position, so the hosted tool goes back out under the name the
+        client gave it, inside the client's container.
+        """
+        request = {
+            "model": "test-model",
+            "tools": [
+                {"type": "function", "name": "wait", "parameters": {}},
+                {
+                    "type": "namespace",
+                    "name": "agents",
+                    "tools": [{"type": "local_shell", "name": "wait"}],
+                },
+            ],
+            "input": [
+                {
+                    "type": "message",
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "go"}],
+                }
+            ],
+        }
+        pipe = ConversionPipeline("open_responses", "openai--open_responses")
+        upstream = pipe.convert_request(request)
+
+        assert upstream["tools"][0]["name"] == "wait"
+        container = upstream["tools"][1]
+        assert container["type"] == "namespace"
+        assert container["name"] == "agents"
+        assert [child["name"] for child in container["tools"]] == ["wait"]
 
     def test_passthrough_tool_without_a_name_does_not_gain_one(self):
         """Nameless hosted tools must not acquire the synthesized IR name."""
@@ -535,3 +573,197 @@ class TestNamespaceRequestConversion:
         result = pipeline.convert_request(request)
         tool_names = [t["name"] for t in result.get("tools", [])]
         assert "exec" in tool_names
+
+
+# ===========================================================================
+# Round trips
+# ===========================================================================
+
+
+def _grouping(ir_tools: list[Any]) -> list[tuple[Any, Any, Any]]:
+    """The part of a tool list a container has to reproduce exactly."""
+    return [
+        (t.get("name"), t.get("tool_group"), t.get("tool_group_description"))
+        for t in ir_tools
+    ]
+
+
+def _round_trip_request(**overrides: Any) -> dict[str, Any]:
+    request: dict[str, Any] = {
+        "model": "gpt-5",
+        "tool_choice": "auto",
+        "tools": [
+            _func_tool("plain", "A tool declared on its own"),
+            _ns_tool(
+                "tasks",
+                description="Task management tools.",
+                children=[
+                    _func_tool("exec", "Run a command"),
+                    _func_tool("wait", "Wait for a process"),
+                ],
+            ),
+        ],
+        "input": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": [{"type": "input_text", "text": "hi"}],
+            },
+        ],
+    }
+    request.update(overrides)
+    return request
+
+
+class TestContainerRoundTrip:
+    """A→IR→A and A→IR→B for a container and for the ``tool_choice`` beside it.
+
+    The IR keeps every tool flat, with ``tool_group`` recording where it came
+    from; a writer that can carry the group rebuilds the container on the way
+    out.  With the grouping in the IR the correctness question is no longer
+    "is the name right" but "did the IR survive the round trip unchanged", so
+    these tests compare names, groups, group descriptions and order rather
+    than the wire shape alone.
+    """
+
+    def _ctx(self, *, carries_groups: bool) -> ConversionContext:
+        ctx = ConversionContext()
+        ctx.options["tool_groups"] = carries_groups
+        return ctx
+
+    def test_a_carrying_target_round_trips_the_grouping_through_the_wire(self):
+        converter = OpenAIResponsesConverter()
+        ir = converter.request_from_provider(_round_trip_request())
+        assert _grouping(ir["tools"]) == [
+            ("plain", None, None),
+            ("exec", "tasks", "Task management tools."),
+            ("wait", "tasks", "Task management tools."),
+        ]
+
+        wire, _ = converter.request_to_provider(
+            ir, context=self._ctx(carries_groups=True)
+        )
+        assert [t["type"] for t in wire["tools"]] == ["function", "namespace"]
+        assert wire["tools"][1]["name"] == "tasks"
+
+        back = converter.request_from_provider(wire)
+        assert _grouping(back["tools"]) == _grouping(ir["tools"]), (
+            "the container is the client's own, so reading it back has to "
+            "produce the same names, groups and order the client's grouping "
+            "produced the first time"
+        )
+
+    def test_a_token_only_target_round_trips_its_own_flat_names(self):
+        """The other half of the matrix: a flat wire invents no grouping.
+
+        This is the behaviour the flat targets keep.  Its cost is visible
+        here — the group is gone from the second read — which is why the
+        carry path exists rather than being a formatting preference.
+        """
+        converter = OpenAIResponsesConverter()
+        ir = converter.request_from_provider(_round_trip_request())
+
+        wire, _ = converter.request_to_provider(
+            ir, context=self._ctx(carries_groups=False)
+        )
+        assert [t["type"] for t in wire["tools"]] == ["function"] * 3
+
+        back = converter.request_from_provider(wire)
+        assert [t.get("tool_group") for t in back["tools"]] == [None, None, None]
+
+    def test_every_ordinary_tool_choice_survives_the_round_trip(self):
+        """A selector that names no container is not made lossy by any of this."""
+        converter = OpenAIResponsesConverter()
+        for wire_choice, ir_mode in [
+            ("auto", "auto"),
+            ("required", "any"),
+            ("none", "none"),
+            ({"type": "function", "name": "plain"}, "tool"),
+        ]:
+            ir = converter.request_from_provider(
+                _round_trip_request(tool_choice=wire_choice)
+            )
+            assert ir["tool_choice"]["mode"] == ir_mode, wire_choice
+            wire, _ = converter.request_to_provider(
+                ir, context=self._ctx(carries_groups=True)
+            )
+            assert wire["tool_choice"] == wire_choice, ir_mode
+
+    def test_a_container_addressed_tool_choice_is_the_one_documented_loss(self):
+        """The IR has no group slot for a selector, so this shape degrades.
+
+        Pinned rather than fixed: the IR ``ToolChoice`` states a tool by name,
+        and a call inside a container cannot be addressed by a top-level name
+        on any upstream measured so far.  The read leg reports the drop and
+        falls back to ``auto``, which is what the writer can then reproduce.
+        """
+        converter = OpenAIResponsesConverter()
+        ctx = ConversionContext()
+        ir = converter.request_from_provider(
+            _round_trip_request(
+                tool_choice={
+                    "type": "namespace",
+                    "name": "tasks",
+                    "tools": [{"type": "function", "name": "exec"}],
+                }
+            ),
+            context=ctx,
+        )
+        assert ir["tool_choice"]["mode"] == "auto"
+        assert any("namespace tool_choice" in w for w in ctx.warnings)
+
+        wire, _ = converter.request_to_provider(
+            ir, context=self._ctx(carries_groups=True)
+        )
+        assert wire["tool_choice"] == "auto"
+
+    def test_the_wire_a_carrying_target_writes_is_a_fixed_point(self):
+        """A→IR→B→IR→B: the container the writer emits reads back unchanged.
+
+        Idempotence is the property that makes the pass-through safe to sit in
+        a request loop — a second turn carrying the previous body must not
+        shift a name or reshape a container.
+        """
+        import json
+
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        def convert(body: dict[str, Any]) -> dict[str, Any]:
+            pipe = ConversionPipeline("open_responses", "openai--open_responses")
+            return pipe.convert_request(body)
+
+        first = convert(dict(_round_trip_request()))
+        second = convert(json.loads(json.dumps(first)))
+        assert second["tools"] == first["tools"]
+
+    def test_the_response_leg_returns_the_call_to_its_container(self):
+        """A→IR→B→IR: the upstream's ``(name, namespace)`` reaches the client."""
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        pipe = ConversionPipeline("open_responses", "openai--open_responses")
+        pipe.convert_request(dict(_round_trip_request()))
+
+        out = pipe.convert_response(
+            {
+                "id": "resp_1",
+                "object": "response",
+                "created_at": 1,
+                "status": "completed",
+                "model": "gpt-5",
+                "output": [
+                    {
+                        "type": "function_call",
+                        "id": "fc_1",
+                        "call_id": "call_1",
+                        "name": "exec",
+                        "namespace": "tasks",
+                        "arguments": "{}",
+                    }
+                ],
+                "usage": {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2},
+            }
+        )
+        calls = [i for i in out["output"] if i.get("type") == "function_call"]
+        assert len(calls) == 1
+        assert calls[0]["name"] == "exec"
+        assert calls[0]["namespace"] == "tasks"
