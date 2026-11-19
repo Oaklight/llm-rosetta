@@ -118,12 +118,12 @@ def _response_status_reason(response: dict[str, Any]) -> str:
 
 
 def _stream_finish_reason(response: dict[str, Any]) -> str:
-    """Decide the streamed terminal reason from the partial body it carries.
+    """Decide the streamed terminal reason from the body the frame carries.
 
-    A ``response.completed`` event carries the output list, so this reader has
-    the parts the JSON reader has; the other dialects' finish chunks do not,
-    and the base stream finalizer upgrades their ``stop`` from accumulated
-    calls.
+    A ``response.completed`` event usually carries the output list, so this
+    reader has the parts the JSON reader has.  The list is optional, so the
+    base stream finalizer runs afterwards and upgrades a ``stop`` from the
+    calls the stream opened — the same fallback the other dialects use.
     """
     status = response.get("status", "completed")
     calls_the_client = status == "completed" and any(
@@ -1352,7 +1352,12 @@ class OpenResponsesConverter(BaseConverter):
         # is redundant with response.created and is re-synthesised by
         # _handle_ir_stream_start_to_p on the to_provider side.
 
-        return events
+        # ``_stream_finish_reason`` decides from the completed frame's own
+        # output list; this dialect is not required to repeat that list, so a
+        # frame that carries none would finish a tool turn as a normal stop.
+        # The context remembers every client call the stream opened, and the
+        # finalizer applies it to the finish this chunk produced (#1601).
+        return self.finalize_stream_finish(events, context)
 
     # --- from_provider handlers ---
 
