@@ -272,7 +272,11 @@ class GatewayConfig:
         self.provider_key_affinity = parse_key_affinity_overrides(self._raw_providers)
 
         self.models, self.model_capabilities, self.model_upstream_names = parse_models(
-            raw.get("models", {}), self._raw_providers
+            raw.get("models", {}),
+            self._raw_providers,
+            # The unfiltered map: a lane naming a switched-off provider is
+            # skipped like a missing one, and the log has to say which it is.
+            known_providers=all_providers,
         )
 
         raw_models = raw.get("models", {})

@@ -68,6 +68,7 @@ def parse_entry_capabilities(raw: Any, *, label: str) -> tuple[str, ...] | None:
 def parse_models(
     raw_models: dict[str, Any],
     raw_providers: dict[str, dict[str, str]],
+    known_providers: dict[str, dict[str, str]] | None = None,
 ) -> tuple[dict[str, ModelRoute], dict[str, list[str]], dict[str, str]]:
     """Parse model routing entries from config.
 
@@ -77,7 +78,11 @@ def parse_models(
       - ``"model": {"providers": ["p1", "p2"]}`` (equal weight)
       - ``"model": {"providers": [{"name": "p1", "weight": 3}, ...]}``
 
-    Models referencing disabled/missing providers are silently skipped.
+    Models referencing missing providers are skipped.  A provider the operator
+    switched off keeps its place in the document but takes no traffic, so its
+    lanes are skipped too — and named as disabled rather than missing, which
+    is what *known_providers* is for: it is the unfiltered map, and the only
+    way to tell the two apart.
 
     Returns:
         Tuple of (models, model_capabilities, model_upstream_names).
@@ -86,7 +91,9 @@ def parse_models(
     model_capabilities: dict[str, list[str]] = {}
     model_upstream_names: dict[str, str] = {}
     for name, value in raw_models.items():
-        route = parse_model_route(name, value, raw_providers)
+        route = parse_model_route(
+            name, value, raw_providers, known_providers=known_providers
+        )
         if route is None:
             continue
         models[name] = route
@@ -97,10 +104,33 @@ def parse_models(
     return models, model_capabilities, model_upstream_names
 
 
+def _note_skipped_provider(
+    model_name: str,
+    provider: str,
+    known_providers: dict[str, dict[str, str]] | None,
+) -> None:
+    """Say why a lane was dropped, and whether the provider exists at all.
+
+    The routed map has the disabled providers filtered out, so a lane naming
+    one used to be reported as "not found" — a statement the document
+    contradicts, and the only trace of a lane the panel still shows.
+    """
+    if known_providers is not None and provider in known_providers:
+        logger.warning(
+            "Model %r: provider %r is disabled, skipping", model_name, provider
+        )
+    else:
+        logger.warning(
+            "Model %r: provider %r not found, skipping", model_name, provider
+        )
+
+
 def parse_model_route(
     name: str,
     value: Any,
     raw_providers: dict[str, dict[str, str]],
+    *,
+    known_providers: dict[str, dict[str, str]] | None = None,
 ) -> ModelRoute | None:
     """Resolve a single model config entry to a :class:`ModelRoute`.
 
@@ -108,6 +138,7 @@ def parse_model_route(
     """
     if isinstance(value, str):
         if value not in raw_providers:
+            _note_skipped_provider(name, value, known_providers)
             return None
         return ModelRoute([ProviderEntry(value)], name)
     if not isinstance(value, dict):
@@ -120,9 +151,12 @@ def parse_model_route(
             f"'providers' — use one or the other"
         )
     if "providers" in value:
-        return parse_multi_provider(name, value, raw_providers)
+        return parse_multi_provider(
+            name, value, raw_providers, known_providers=known_providers
+        )
     provider_name = value["provider"]
     if provider_name not in raw_providers:
+        _note_skipped_provider(name, provider_name, known_providers)
         return None
     # A single-provider entry carries a routing block like any other: without
     # this the panel would write a block the runtime never reads.
@@ -285,6 +319,8 @@ def parse_multi_provider(
     model_name: str,
     value: dict[str, Any],
     raw_providers: dict[str, dict[str, str]],
+    *,
+    known_providers: dict[str, dict[str, str]] | None = None,
 ) -> ModelRoute | None:
     """Parse a multi-provider model entry.
 
@@ -333,11 +369,7 @@ def parse_multi_provider(
         if isinstance(item, dict) and item.get("enabled") is False:
             continue
         if pname not in raw_providers:
-            logger.warning(
-                "Model %r: provider %r not found, skipping",
-                model_name,
-                pname,
-            )
+            _note_skipped_provider(model_name, pname, known_providers)
             continue
         upstream = item.get("upstream_model") if isinstance(item, dict) else None
         caps = item.get("capabilities") if isinstance(item, dict) else None
