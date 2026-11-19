@@ -379,13 +379,20 @@ class AcpTransport:
     # -- acquiring a session ------------------------------------------------
 
     async def _acquire_turn(
-        self, provider_info: ProviderInfo, body: dict[str, Any]
+        self, provider_info: ProviderInfo, body: dict[str, Any], deadline: float
     ) -> tuple[_Turn, dict[str, Any]]:
         """Find or open the session this request belongs to.
 
+        Session setup is part of the turn and runs against the same deadline:
+        ``session/new``, ``session/resume``, ``session/load`` and
+        ``set_config_option`` are requests to the same agent as the prompt, and
+        an agent that is sick at session open would otherwise never reach the
+        deadline meant to bound it.  A setup that runs out of time drops the
+        process, the way an exited one is dropped.
+
         Raises:
-            AcpTurnError: The prompt is empty, the agent could not start, or
-                it refused to open a session.
+            AcpTurnError: The prompt is empty, the agent could not start, it
+                refused to open a session, or opening one ran past *deadline*.
         """
         prompt = body.get("prompt")
         if not isinstance(prompt, list) or not prompt:
@@ -408,12 +415,30 @@ class AcpTransport:
             await agent.lock.acquire()
             held.append(agent.lock)
             if key is not None:
-                turn = await self._reuse(provider_info, body, key, agent, digests, held)
+                turn = await self._reuse(
+                    provider_info, body, key, agent, digests, held, deadline
+                )
                 if turn is not None:
                     return turn, _start_of(turn)
                 self._ledger.drop(key)
-            turn = await self._open(provider_info, body, key, agent, digests, held)
+            turn = await self._open(
+                provider_info, body, key, agent, digests, held, deadline
+            )
             return turn, _start_of(turn)
+        except _TurnDeadline:
+            for lock in reversed(held):
+                if lock.locked():
+                    lock.release()
+            # A process that cannot open a session inside the turn's budget is
+            # not usable for this request or the next: it stays half-read in
+            # its slot, and every later turn queues behind it.
+            self._drop_agent(agent)
+            raise AcpTurnError(
+                f"ACP agent for provider {provider_info.config_name!r} did not "
+                f"open a session within {self._timeout:.1f}s; the process was "
+                f"dropped. Check the agent on the gateway host.",
+                status_code=503,
+            ) from None
         except BaseException:
             for lock in reversed(held):
                 if lock.locked():
@@ -428,6 +453,7 @@ class AcpTransport:
         agent: _Agent,
         digests: tuple[str, ...],
         held: list[asyncio.Lock],
+        deadline: float,
     ) -> _Turn | None:
         """Continue the recorded session, when the request may ride on it."""
         entry = self._ledger.get(key)
@@ -443,11 +469,11 @@ class AcpTransport:
             await self._forget(entry)
             return None
         if not entry.live:
-            resumed = await self._resume(provider_info, agent, entry, cwd)
+            resumed = await self._resume(provider_info, agent, entry, cwd, deadline)
             if resumed is None:
                 await self._forget(entry)
                 return None
-        model = await self._match_model(provider_info, agent, entry, body)
+        model = await self._match_model(provider_info, agent, entry, body, deadline)
         entry.touch()
         return _Turn(
             agent=agent,
@@ -460,7 +486,12 @@ class AcpTransport:
         )
 
     async def _resume(
-        self, provider_info: ProviderInfo, agent: _Agent, entry: LedgerEntry, cwd: str
+        self,
+        provider_info: ProviderInfo,
+        agent: _Agent,
+        entry: LedgerEntry,
+        cwd: str,
+        deadline: float,
     ) -> str | None:
         """Bring a recorded session back, or report that it is gone.
 
@@ -470,7 +501,9 @@ class AcpTransport:
         """
         if agent.can_resume():
             try:
-                await agent.client.resume_session(entry.session_id, cwd, [])
+                await _bounded(
+                    agent.client.resume_session(entry.session_id, cwd, []), deadline
+                )
             except JSONRPCException as exc:
                 logger.info(
                     "ACP provider %r could not resume session %s: %s",
@@ -483,7 +516,9 @@ class AcpTransport:
             return entry.session_id
         if agent.can_load():
             try:
-                await agent.client.load_session(entry.session_id, cwd, [])
+                await _bounded(
+                    agent.client.load_session(entry.session_id, cwd, []), deadline
+                )
             except JSONRPCException as exc:
                 logger.info(
                     "ACP provider %r could not load session %s: %s",
@@ -518,11 +553,12 @@ class AcpTransport:
         agent: _Agent,
         digests: tuple[str, ...],
         held: list[asyncio.Lock],
+        deadline: float,
     ) -> _Turn:
         """Open a new session and send the whole conversation into it."""
         cwd = _workspace(provider_info, body)
         try:
-            session = await agent.client.new_session(cwd, [])
+            session = await _bounded(agent.client.new_session(cwd, []), deadline)
         except JSONRPCException as exc:
             message = str(exc)
             raise AcpTurnError(
@@ -535,7 +571,7 @@ class AcpTransport:
         requested = str(body.get("model") or "")
         if requested and requested != model:
             model = await self._switch_model(
-                provider_info, agent, session_id, requested
+                provider_info, agent, session_id, requested, deadline
             )
         turn = _Turn(
             agent=agent,
@@ -571,13 +607,14 @@ class AcpTransport:
         agent: _Agent,
         entry: LedgerEntry,
         body: dict[str, Any],
+        deadline: float,
     ) -> str:
         """Bring the session onto the model this request names, if it differs."""
         requested = str(body.get("model") or "")
         if not requested or requested == entry.model:
             return entry.model or requested
         model = await self._switch_model(
-            provider_info, agent, entry.session_id, requested
+            provider_info, agent, entry.session_id, requested, deadline
         )
         entry.model = model or entry.model
         return entry.model or requested
@@ -588,6 +625,7 @@ class AcpTransport:
         agent: _Agent,
         session_id: str,
         requested: str,
+        deadline: float,
     ) -> str:
         """Ask the agent to change the session's model.
 
@@ -596,7 +634,10 @@ class AcpTransport:
         than pretending the requested one is in force.
         """
         try:
-            await agent.client.set_config_option(session_id, "model", requested)
+            await _bounded(
+                agent.client.set_config_option(session_id, "model", requested),
+                deadline,
+            )
         except JSONRPCException as exc:
             logger.warning(
                 "ACP agent for provider %r refused model %r: %s",
@@ -615,18 +656,26 @@ class AcpTransport:
         body: dict[str, Any],
         collect: list[dict[str, Any]] | None = None,
         *,
+        deadline: float | None = None,
         opened: _Turn | None = None,
         start: dict[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Send this request's prompt blocks into the session, then settle."""
+        """Send this request's prompt blocks into the session, then settle.
+
+        *deadline* is the end of the whole turn's budget — setup included — as
+        an event-loop time.  The caller computes it before acquiring a
+        session, so an agent that is slow at session open cannot spend the
+        prompt's time without being seen to.
+        """
+        if deadline is None:
+            deadline = asyncio.get_running_loop().time() + self._timeout
         turn = opened
         if turn is None:
-            turn, start = await self._acquire_turn(provider_info, body)
+            turn, start = await self._acquire_turn(provider_info, body, deadline)
         if start is None:
             start = _start_of(turn)
         client = turn.agent.client
         session_id = turn.session_id
-        deadline = asyncio.get_running_loop().time() + self._timeout
         if collect is not None:
             collect.append(start)
         try:
@@ -663,37 +712,30 @@ class AcpTransport:
                         f"conversation was closed. The agent process may have "
                         f"exited — check it on the gateway host."
                     )
-                    error = {"type": CHUNK_ERROR, "message": message}
-                    if collect is not None:
-                        collect.append(error)
-                    yield error
+                    yield _failure(collect, message)
                     return
             except _TurnDeadline:
                 await self._forget(turn.entry)
                 turn.finished = True
+                # A process that let one turn run past its deadline keeps its
+                # half-read pipe; leaving it in the pool makes every later
+                # turn wait behind it.  Dropped, the next turn starts a fresh
+                # process instead.
+                self._drop_agent(turn.agent)
                 await _cancel_quietly(client, session_id)
                 message = (
                     f"ACP agent for provider {provider_info.config_name!r} did not "
                     f"finish the turn within {self._timeout:.1f}s; the session was "
                     f"closed."
                 )
-                error = {"type": CHUNK_ERROR, "message": message}
-                if collect is not None:
-                    collect.append(error)
-                yield error
+                yield _failure(collect, message)
                 return
             except JSONRPCException as exc:
                 # What the agent recorded of a failed turn is unknown, so the
                 # session cannot be reused: the next turn opens a fresh one.
                 turn.finished = True
                 await self._forget(turn.entry)
-                error = {
-                    "type": CHUNK_ERROR,
-                    "message": _sign_in_message(provider_info, str(exc)),
-                }
-                if collect is not None:
-                    collect.append(error)
-                yield error
+                yield _failure(collect, _sign_in_message(provider_info, str(exc)))
                 await _close_quietly(client, session_id)
                 return
             turn.finished = True
@@ -808,8 +850,13 @@ class AcpTransport:
         text, the same way a refused session does.
         """
         updates: list[dict[str, Any]] = []
+        # One budget for the whole turn.  Computed before the session is
+        # acquired, because opening one is a request to the same agent.
+        deadline = asyncio.get_running_loop().time() + self._timeout
         try:
-            async for _chunk in self._run_turn(provider_info, body, collect=updates):
+            async for _chunk in self._run_turn(
+                provider_info, body, collect=updates, deadline=deadline
+            ):
                 pass
         except AcpTurnError as exc:
             return UpstreamResponse(
@@ -862,7 +909,11 @@ class AcpTransport:
         which is what a caller needs before it commits to a 200 SSE response.
         """
         try:
-            turn, start = await self._acquire_turn(provider_info, body)
+            # The budget is set before the session is opened: opening one is a
+            # request to the same agent, and it is passed on to the prompt so
+            # both spend the same allowance.
+            deadline = asyncio.get_running_loop().time() + self._timeout
+            turn, start = await self._acquire_turn(provider_info, body, deadline)
         except AcpTurnError as exc:
             return _AcpStream.refused(exc.status_code, str(exc))
         except OSError as exc:
@@ -872,7 +923,7 @@ class AcpTransport:
                 f"ACP agent for provider {provider_info.config_name!r} could not "
                 f"be reached: {exc}",
             )
-        return _AcpStream(self, provider_info, body, turn, start)
+        return _AcpStream(self, provider_info, body, turn, start, deadline)
 
 
 class _AcpStream(UpstreamStream):
@@ -885,6 +936,7 @@ class _AcpStream(UpstreamStream):
         body: dict[str, Any],
         turn: _Turn,
         start: dict[str, Any],
+        deadline: float,
     ) -> None:
         self.status_code = 200
         self._transport = transport
@@ -892,6 +944,7 @@ class _AcpStream(UpstreamStream):
         self._body = body
         self._turn = turn
         self._start = start
+        self._deadline = deadline
         self._error = ""
 
     @classmethod
@@ -904,6 +957,7 @@ class _AcpStream(UpstreamStream):
         stream._body = {}
         stream._turn = None  # ty: ignore[invalid-assignment]
         stream._start = None
+        stream._deadline = 0.0
         stream._error = message
         return stream
 
@@ -915,7 +969,11 @@ class _AcpStream(UpstreamStream):
             return
         try:
             async for chunk in self._transport._run_turn(
-                self._provider_info, self._body, opened=self._turn, start=self._start
+                self._provider_info,
+                self._body,
+                deadline=self._deadline,
+                opened=self._turn,
+                start=self._start,
             ):
                 if self._turn is None:
                     # ``close()`` ran while this turn was in flight; the
@@ -995,12 +1053,33 @@ class _TurnDeadline(Exception):
     """The agent stopped answering inside the turn's deadline."""
 
 
+async def _bounded(coro: Any, deadline: float) -> Any:
+    """Await one session-setup call within what is left of the turn's budget.
+
+    Setup is a request to the same agent as the prompt, so it spends the same
+    allowance; an agent that never answers ``session/new`` would otherwise
+    hold the caller — and, through the process lock, every later turn on that
+    lane — with no deadline in force at all.
+
+    Raises:
+        _TurnDeadline: *deadline* passed before the call answered.
+    """
+    remaining = deadline - asyncio.get_running_loop().time()
+    try:
+        return await asyncio.wait_for(coro, max(remaining, 0.0))
+    except asyncio.TimeoutError as exc:  # noqa: UP041 - 3.10 spelling
+        raise _TurnDeadline from exc
+
+
 async def _cancel_quietly(client: ACPClient, session_id: str) -> None:
     """Ask the agent to stop the turn, then close the session.
 
-    Both requests are bounded: this runs on a lane whose turn has already
-    failed or been cancelled, and an agent that stopped answering would
-    otherwise never give the turn's locks back.
+    ``session/cancel`` is a *notification*: it never waits for a reply, so it
+    cannot park on an agent that has stopped reading — the bound here only
+    covers a write that blocks on a full pipe.  ``session/close`` is the
+    request that can wait forever, and that is where the bound earns its
+    keep; both are bounded because this runs on a lane whose turn has already
+    failed or been cancelled and must not keep the turn's locks.
     """
     try:
         await asyncio.wait_for(client.cancel(session_id), CLEANUP_TIMEOUT)
@@ -1032,6 +1111,14 @@ def _blocks_of(body: dict[str, Any]) -> list[dict[str, Any]]:
         block for block in body.get("prompt") or [] if isinstance(block, dict)
     )
     return blocks
+
+
+def _failure(collect: list[dict[str, Any]] | None, message: str) -> dict[str, Any]:
+    """The turn's error chunk, recorded for a caller that collects chunks."""
+    chunk = {"type": CHUNK_ERROR, "message": message}
+    if collect is not None:
+        collect.append(chunk)
+    return chunk
 
 
 def _error_of(updates: list[dict[str, Any]]) -> str | None:

@@ -56,6 +56,10 @@ FAKE_AGENT = textwrap.dedent(
         send({"jsonrpc": "2.0", "method": "session/update",
               "params": {"sessionId": session_id, "update": body}})
 
+    # One line per process, so a test can tell a replaced agent from a reused
+    # one: a process that has to be thrown away shows up as a second pid.
+    note("start", pid=os.getpid())
+
     def capabilities():
         if MODE == "resume":
             return {"sessionCapabilities": {"resume": {}}}
@@ -79,6 +83,8 @@ FAKE_AGENT = textwrap.dedent(
                 "authMethods": [{"id": "oauth-personal", "name": "Sign in"}],
             }})
         elif method == "session/new":
+            if MODE == "mute-new":
+                continue
             if MODE == "signed-out":
                 send({"jsonrpc": "2.0", "id": req_id, "error": {
                     "code": -32603,
@@ -542,6 +548,78 @@ class TestACancelledTurn:
             await transport.close()
 
         assert held is None
+
+
+class TestASessionThatNeverOpens:
+    """Setup spends the turn's budget, because setup is a request too.
+
+    ``session/new``, ``session/resume``, ``session/load`` and
+    ``set_config_option`` go to the same agent as the prompt.  A deadline that
+    started after they returned left an agent that ignores them — the local
+    CLI's "sick at startup" — with no bound at all, and with the process lock
+    behind it.
+    """
+
+    async def test_a_session_new_that_never_answers_times_out(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport(timeout=0.2)
+        provider = _provider(monkeypatch, tmp_path, "mute-new", conversation="conv-1")
+        try:
+            resp = await asyncio.wait_for(
+                transport.send(provider, "", _turn("[User]\none")), 5.0
+            )
+        finally:
+            await transport.close()
+
+        assert resp.status_code == 503
+        assert "did not open a session" in resp.error_text
+
+    async def test_the_stream_reports_it_as_a_status(self, monkeypatch, tmp_path):
+        transport = AcpTransport(timeout=0.2)
+        provider = _provider(monkeypatch, tmp_path, "mute-new", conversation="conv-1")
+        try:
+            stream = await asyncio.wait_for(
+                transport.send_streaming(provider, "", _turn("[User]\none")), 5.0
+            )
+            error = await stream.read_error()
+        finally:
+            await transport.close()
+
+        assert stream.status_code == 503
+        assert "did not open a session" in error
+
+
+class TestAProcessThatStopped:
+    """One timed-out turn must not take the provider with it.
+
+    The process that let a turn run past its deadline keeps its half-read
+    pipe.  While it stays in its slot, every later turn on that lane waits
+    behind its lock — a first client gets a clean 502 and everyone after it
+    hangs until the gateway restarts.
+    """
+
+    async def test_a_timed_out_process_is_replaced_for_the_next_turn(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport(timeout=0.2)
+        provider = _provider(monkeypatch, tmp_path, "stalls", conversation="conv-1")
+        try:
+            first = await asyncio.wait_for(
+                transport.send(provider, "", _turn("[User]\none")), 5.0
+            )
+            second = await asyncio.wait_for(
+                transport.send(provider, "", _turn("[User]\ntwo")), 5.0
+            )
+        finally:
+            await transport.close()
+
+        assert first.status_code == 502
+        assert second.status_code == 502
+        # Two processes, not one: the wedged one left its slot.
+        starts = [entry["pid"] for entry in _log(tmp_path) if entry["kind"] == "start"]
+        assert len(starts) == 2, starts
+        assert starts[0] != starts[1]
 
 
 class TestSessionResumeAndLoad:
