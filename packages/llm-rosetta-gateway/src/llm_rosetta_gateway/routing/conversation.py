@@ -1,19 +1,16 @@
-"""The conversation a request belongs to, derived from the request itself.
+"""The conversation a request belongs to, for the routing page and the lanes.
 
-The admin routing page shows one line per conversation, so the request log has
-to carry an identity that is the same on every turn of one conversation and
-different between conversations.  This module derives it from the client that
-sent the request and the first message of its history — the same seed the
-upstream session identity uses, and for the same reason: history is
-append-only, so the first message is identical on every turn where a longer
-prefix would change as the conversation grows.
+The identity itself lives in
+:mod:`~llm_rosetta_gateway.routing.session_identity`, which reads the carrier a
+client sets before falling back to a guess.  This module is the stage that puts
+it on the selection context, and the ``ContextVar`` the request log reads after
+the handler returns.
 
-Only the digest is written to the log.  The seed is not stored and the digest
-is not reversible: it names a conversation, it does not describe one.
-
-A request whose client or first message cannot be read derives no id at all.
-Readers then fall back to the grouping they used before this value existed
-rather than inventing an identity two different conversations could share.
+The stage runs for every chat request, not only for providers that declare a
+session header: the request log records the id whatever lane served the
+request, so the routing page can group by conversation across lanes.  Only the
+digest is published.  The carrier is not stored and the digest is not
+reversible: it names a conversation, it does not describe one.
 """
 
 from __future__ import annotations
@@ -23,6 +20,7 @@ import hashlib
 from typing import TYPE_CHECKING, Any
 
 from .prefix import compute_affinity_identity, extract_prefix_from_ir
+from .session_identity import SessionIdentity, identify
 from .stage import RoutingStage
 
 if TYPE_CHECKING:
@@ -40,7 +38,11 @@ def conversation_id(
     client_key_hash: str | None,
     ir_request: dict[str, Any] | None,
 ) -> str | None:
-    """Derive the conversation id for one request.
+    """Derive the conversation id for one request from its converted body.
+
+    A fallback for callers that hold no raw request body — the typed routes,
+    and the stages' own tests.  A real chat request is identified from the
+    carrier the client set, which this function cannot see.
 
     Args:
         client_key_hash: The authenticated client's key hash, or ``None``
@@ -64,9 +66,10 @@ def conversation_id(
 class ConversationIdentity(RoutingStage):
     """Record which conversation the request belongs to.
 
-    Runs for every chat request, not only for the providers that declare a
-    session header: the request log records the id whatever lane served the
-    request, so the routing page can group by conversation across lanes.
+    A carrier the client set wins; failing one, the request's own opening is
+    hashed, and the source says so.  A consumer that stores state must read
+    :attr:`SessionIdentity.declared` — two conversations in one project can
+    share an opening, so a derived id may name both.
     """
 
     __slots__ = ()
@@ -76,9 +79,17 @@ class ConversationIdentity(RoutingStage):
     provides = frozenset({"identity"})
 
     def run(self, ctx: SelectionContext) -> None:
-        """Set the conversation id on the selection context."""
-        ctx.with_conversation(
-            conversation_id(ctx.identity.client, ctx.ir_request),
+        """Set the session identity on the selection context."""
+        fallback = conversation_id(ctx.identity.client, ctx.ir_request)
+        ctx.with_session(
+            identify(
+                ctx.headers,
+                ctx.source_body,
+                body_fallback=SessionIdentity(fallback, "derived:opening")
+                if fallback is not None
+                else None,
+                client=ctx.identity.client,
+            )
         )
 
 

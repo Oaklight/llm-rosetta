@@ -325,6 +325,11 @@ async def _handle_llm(
         model, source_provider, pinned_provider=_pinned_provider(request, _kctx)
     )
     selection.with_client(_kctx.key_hash if _kctx else None)
+    # The conversation identity is read from the request as the client sent
+    # it: a carrier header, a body metadata field, or — failing both — the
+    # opening.  Handing it over here keeps that read before conversion, where a
+    # converter has not moved a cache mark.
+    selection.with_source_request(request.headers, body)
 
     # A model with rules needs the request in IR form before the chain runs;
     # one without them never pays for the extra read leg.
@@ -399,6 +404,17 @@ async def _handle_llm(
     )
     capture_state = getattr(request.app, "capture_state", None)
 
+    # Which transport carries this lane: a provider that names one of the
+    # app's extra transports gets it, everything else the HTTP transport.
+    # ``app.transport`` is read at request time so a replaced attribute
+    # (an embedder's transport, a test's stub) is honoured.
+    lane_transport = (
+        getattr(request.app, "transports", {}).get(
+            getattr(provider_info, "transport", "http")
+        )
+        or request.app.transport
+    )
+
     if is_stream:
         preflight_override = get_preflight_tokens_override(request)
         preflight = (
@@ -412,7 +428,7 @@ async def _handle_llm(
             provider_info,
             body,
             reported_model=model,
-            transport=request.app.transport,
+            transport=lane_transport,
             metadata_store=store,
             extra_headers=extra_headers,
             entry_id=ctx.entry_id,
@@ -429,7 +445,7 @@ async def _handle_llm(
             route,
             provider_info,
             body,
-            transport=request.app.transport,
+            transport=lane_transport,
             metadata_store=store,
             extra_headers=extra_headers,
             persistence=ctx.dump_store,

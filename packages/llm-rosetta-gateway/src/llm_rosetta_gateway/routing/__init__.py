@@ -18,6 +18,12 @@ from __future__ import annotations
 
 from .context import Identity, SelectionContext
 from .conversation import ConversationIdentity, conversation_id
+from .session_identity import (
+    SESSION_HEADERS,
+    SESSION_HEADER_PATTERN,
+    SessionIdentity,
+    identify,
+)
 from .eligibility import (
     BLOCKED,
     CAPABILITY,
@@ -95,7 +101,10 @@ __all__ = [
     "RulesStage",
     "SameFormatStage",
     "SelectionContext",
+    "SESSION_HEADERS",
+    "SESSION_HEADER_PATTERN",
     "SessionHeaderAffinity",
+    "SessionIdentity",
     "StageOrderError",
     "Unavailable",
     "WeightedRoundRobinStrategy",
@@ -103,6 +112,7 @@ __all__ = [
     "classify_unavailable",
     "compute_affinity_identity",
     "conversation_id",
+    "identify",
     "create_strategy",
     "extract_prefix_from_ir",
     "facts_from_ir",
