@@ -20,6 +20,7 @@ from llm_rosetta.ir.primitives.finish_reason import (
     client_tool_calls_in,
     reason_for_completed_turn,
 )
+from llm_rosetta.pipeline import StreamProcessor
 
 CLIENT_CALL = {
     "type": "tool_call",
@@ -108,6 +109,66 @@ def test_a_responses_function_call_is_a_tool_call_turn():
     assert ir["choices"][0]["finish_reason"]["reason"] == "tool_calls"
 
 
+def _responses_call_added(call_id: str = "call_a") -> dict[str, Any]:
+    """The frame a Responses stream opens a client call with."""
+    return {
+        "type": "response.output_item.added",
+        "output_index": 0,
+        "item": {
+            "type": "function_call",
+            "id": "fc_1",
+            "call_id": call_id,
+            "name": "f",
+            "arguments": "",
+        },
+    }
+
+
+def _responses_completed(output: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """The frame a Responses stream ends with; ``output`` is optional."""
+    response: dict[str, Any] = {
+        "id": "resp_1",
+        "model": "m",
+        "created_at": 1,
+        "status": "completed",
+    }
+    if output is not None:
+        response["output"] = output
+    return {"type": "response.completed", "response": response}
+
+
+def _run_responses_stream(*frames: dict[str, Any]) -> list[Any]:
+    converter = OpenResponsesConverter()
+    context = StreamContext()
+    events: list[Any] = []
+    for frame in frames:
+        events.extend(converter.stream_response_from_provider(frame, context))
+    return events
+
+
+def _messages_view(ir_events: list[Any]) -> tuple[list[dict[str, Any]], list[str]]:
+    """Write IR events as Messages; report the blocks and stop reasons sent."""
+    converter = MessagesConverter()
+    context = StreamContext()
+    blocks: list[dict[str, Any]] = []
+    stop_reasons: list[str] = []
+    for event in ir_events:
+        produced = converter.stream_response_to_provider(event, context)
+        for chunk in produced if isinstance(produced, list) else [produced]:
+            if not chunk:
+                continue
+            if chunk.get("type") == "content_block_start":
+                blocks.append(chunk["content_block"])
+            elif chunk.get("type") == "message_delta":
+                stop_reasons.append(chunk["delta"]["stop_reason"])
+    return blocks, stop_reasons
+
+
+def _finish_reason(ir_events: list[Any]) -> str | None:
+    finishes = [event for event in ir_events if event["type"] == "finish"]
+    return finishes[-1]["finish_reason"]["reason"] if finishes else None
+
+
 def test_a_responses_stream_without_an_output_list_is_a_tool_call_turn():
     """A completed frame need not repeat the call the stream already opened.
 
@@ -115,54 +176,116 @@ def test_a_responses_stream_without_an_output_list_is_a_tool_call_turn():
     reason from, and it may carry no ``output`` list at all; the call is then
     known only from the earlier ``response.output_item.added`` (#1601).
     """
-    converter = OpenResponsesConverter()
-    context = StreamContext()
-    ir_events: list[Any] = []
-    ir_events.extend(
-        converter.stream_response_from_provider(
-            {
-                "type": "response.output_item.added",
-                "output_index": 0,
-                "item": {
-                    "type": "function_call",
-                    "id": "fc_1",
-                    "call_id": "call_a",
-                    "name": "f",
-                    "arguments": "",
-                },
-            },
-            context,
-        )
-    )
-    ir_events.extend(
-        converter.stream_response_from_provider(
-            {
-                "type": "response.completed",
-                "response": {
-                    "id": "resp_1",
-                    "model": "m",
-                    "created_at": 1,
-                    "status": "completed",
-                },
-            },
-            context,
-        )
-    )
+    ir_events = _run_responses_stream(_responses_call_added(), _responses_completed())
 
-    finishes = [event for event in ir_events if event["type"] == "finish"]
-    assert finishes and finishes[-1]["finish_reason"]["reason"] == "tool_calls"
+    assert _finish_reason(ir_events) == "tool_calls"
 
     # A Messages client must be asked to run the tool, not told the reply is
     # complete — the symptom the issue measured.
-    messages = MessagesConverter()
-    out_context = StreamContext()
-    stop_reasons = []
-    for event in ir_events:
-        produced = messages.stream_response_to_provider(event, out_context)
-        for chunk in produced if isinstance(produced, list) else [produced]:
-            if chunk and chunk.get("type") == "message_delta":
-                stop_reasons.append(chunk["delta"]["stop_reason"])
+    blocks, stop_reasons = _messages_view(ir_events)
+    assert [(block["type"], block["id"]) for block in blocks] == [
+        ("tool_use", "call_a")
+    ]
     assert stop_reasons and stop_reasons[-1] == "tool_use"
+
+
+def test_a_responses_frame_that_contradicts_the_opened_call_still_runs_it():
+    """The opened call outranks a frame that says nothing about it.
+
+    A Messages stream cannot retract the ``tool_use`` block it already sent,
+    so a frame whose ``output`` list carries only a message must not tell the
+    client ``end_turn``.  All four chat readers behave this way.
+    """
+    ir_events = _run_responses_stream(
+        _responses_call_added(),
+        _responses_completed(
+            [{"type": "message", "content": [{"type": "output_text", "text": "hi"}]}]
+        ),
+    )
+
+    assert _finish_reason(ir_events) == "tool_calls"
+    blocks, stop_reasons = _messages_view(ir_events)
+    assert [(block["type"], block["id"]) for block in blocks] == [
+        ("tool_use", "call_a")
+    ]
+    assert stop_reasons and stop_reasons[-1] == "tool_use"
+
+
+def test_a_responses_hosted_call_only_turn_still_finishes_normally():
+    """A provider-executed call is not something the client has to run.
+
+    Widening the reader's call set to the hosted item types would flip this
+    turn to ``tool_calls`` and tell a Messages client to run a tool it never
+    declared.
+    """
+    ir_events = _run_responses_stream(
+        _responses_completed(
+            [{"type": "web_search_call", "id": "ws_1", "status": "completed"}]
+        )
+    )
+
+    assert _finish_reason(ir_events) == "stop"
+    blocks, stop_reasons = _messages_view(ir_events)
+    assert [block["type"] for block in blocks] == []
+    assert stop_reasons and stop_reasons[-1] == "end_turn"
+
+
+def test_a_responses_tool_turn_survives_the_stream_processor():
+    """The serving path, not just converter to converter.
+
+    ``StreamProcessor`` wraps both readers and adds the deferred flush, the
+    transforms and the ``on_ir_event`` callback; a regression that appears
+    only there would not be caught by the converter-level case.
+    """
+    observed: list[Any] = []
+    processor = StreamProcessor(
+        target_converter=OpenResponsesConverter(),
+        source_converter=MessagesConverter(),
+        from_ctx=OpenResponsesConverter.create_stream_context(),
+        to_ctx=MessagesConverter.create_stream_context(),
+        on_ir_event=observed.append,
+    )
+
+    produced: list[dict[str, Any]] = []
+    produced.extend(processor.process_chunk(_responses_call_added()))
+    produced.extend(processor.process_chunk(_responses_completed()))
+    produced.extend(processor.process_chunk(None))
+
+    blocks = [
+        chunk["content_block"]
+        for chunk in produced
+        if chunk.get("type") == "content_block_start"
+    ]
+    stop_reasons = [
+        chunk["delta"]["stop_reason"]
+        for chunk in produced
+        if chunk.get("type") == "message_delta"
+    ]
+    assert [(block["type"], block["id"]) for block in blocks] == [
+        ("tool_use", "call_a")
+    ]
+    assert stop_reasons and stop_reasons[-1] == "tool_use"
+
+    # An observer sees the upgraded finish, not the pre-upgrade one.
+    assert [event for event in observed if event["type"] == "finish"][-1][
+        "finish_reason"
+    ]["reason"] == "tool_calls"
+
+
+def test_the_iterator_reports_the_same_reason_without_a_context():
+    """The documented entry point must not answer differently from the route.
+
+    ``iter_stream_from_provider`` builds its own context when the caller
+    passes none, so a caller following the docstring gets the tool turn the
+    pipeline reports (#1601).
+    """
+    events = list(
+        OpenResponsesConverter().iter_stream_from_provider(
+            [_responses_call_added(), _responses_completed()]
+        )
+    )
+
+    assert _finish_reason(events) == "tool_calls"
 
 
 @pytest.mark.parametrize(
