@@ -367,7 +367,7 @@ class BatchDeclaration:
     ``unsupported`` rather than being downgraded to a gateway-run emulation.
 
     Attributes:
-        dialect: Codec id from :data:`llm_rosetta.formats.batch.BY_DIALECT`
+        dialect: Codec id from :data:`llm_rosetta.formats.batch.DECLARABLE_DIALECTS`
             (``openai_file``, ``anthropic_inline``, ``gemini_inline``,
             ``gemini_file``), or ``"emulated"`` for an upstream with no batch
             API that the gateway may run itself.  It must be one this shim's

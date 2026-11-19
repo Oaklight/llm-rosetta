@@ -9,6 +9,7 @@ from llm_rosetta.formats.batch import (
     BatchSpec,
     batch_spec_for,
     batch_spec_for_dialect,
+    batch_specs_for_dialect,
 )
 from llm_rosetta.formats.catalog import (
     BY_PAIR,
@@ -37,6 +38,7 @@ __all__ = [
     "FormatSpec",
     "batch_spec_for",
     "batch_spec_for_dialect",
+    "batch_specs_for_dialect",
     "canonical_model_type",
     "detect_format",
     "legacy_model_type",

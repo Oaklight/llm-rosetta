@@ -25,13 +25,15 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Literal
+from typing import Literal, get_args
 
 from llm_rosetta.formats.catalog import BY_PAIR
 from llm_rosetta.formats.spec import FormatSpec
+from llm_rosetta.types.ir.batch import BatchJobState
 
-#: How a dialect delivers its request container.
-BatchContainer = Literal["file", "inline", "none"]
+#: How a dialect delivers its request container.  A format with no batch
+#: surface has no record, so there is no "none" value.
+BatchContainer = Literal["file", "inline"]
 
 #: How results are joined back to requests: a client-supplied string, or the
 #: ordinal (the only dialect that preserves order is Gemini's inline route).
@@ -73,9 +75,8 @@ class BatchSpec:
         model_type: The pair's model type (``llm`` today).
         format: The pair's wire format.
         dialect: Codec id — which code builds and parses the containers.
-        container: How requests are delivered.  ``none`` would mean the
-            dialect has no batch surface at all; such a format simply has no
-            record, so the value exists only for a record that reserves one.
+        container: How requests are delivered: ``file`` or ``inline``.  A
+            format with no batch surface has no record at all.
         create_path: Upstream path template for job creation.  Placeholders
             (``{model}``, ``{batch_id}``, ``{file_id}``) are filled by the
             codec; the templates are relative to the upstream base URL, as the
@@ -98,9 +99,13 @@ class BatchSpec:
             vendor states it.  ``None`` means not documented or not stated.
         discount: Whether the vendor bills batch work at a discount.  Display
             only — the gateway never computes prices.
-        file_dialect: The second codec id for a format whose file variant is a
-            distinct container (``google_generate``: inline ``gemini_inline``,
-            file ``gemini_file``).  ``None`` when the format has one container.
+        file_variant: The record for a format's second container, when the
+            file variant has facts of its own (``google_generate``: inline
+            ``gemini_inline``, file ``gemini_file`` with a different byte
+            ceiling and result destination).  ``None`` when the format has one
+            container.  A variant is a full record on the same pair; it is
+            reached through :attr:`file_dialect` / :func:`batch_specs_for_dialect`,
+            not through :data:`BATCH_BY_PAIR`.
     """
 
     model_type: str
@@ -118,7 +123,12 @@ class BatchSpec:
     file_results_path: str | None = None
     result_retention_days: float | None = None
     discount: bool = False
-    file_dialect: str | None = None
+    file_variant: BatchSpec | None = None
+
+    @property
+    def file_dialect(self) -> str | None:
+        """The file variant's codec id, or ``None`` when there is none."""
+        return None if self.file_variant is None else self.file_variant.dialect
 
     @property
     def format_spec(self) -> FormatSpec:
@@ -173,6 +183,36 @@ _GEMINI_STATES: Mapping[str, str] = MappingProxyType(
         "JOB_STATE_CANCELLED": "cancelled",
         "JOB_STATE_EXPIRED": "expired",
     }
+)
+
+#: The Gemini file variant: the same create endpoint, an input JSONL uploaded
+#: through the Files API, and results written to a file the job names.  Facts
+#: are from the Gemini Batch API guide
+#: (https://ai.google.dev/gemini-api/docs/batch-api, fetched 2026-11-19):
+#:
+#: * "The maximum allowed file size for an input file is 2GB" — recorded as
+#:   2 GiB; the guide does not say whether GB is binary (unverified unit).
+#: * Each input line carries a ``key`` that the response line repeats, so the
+#:   join key is a client string, unlike the inline route's ordinal.
+#: * Results are downloaded from the file named on the finished job
+#:   (``dest.fileName``) at ``/download/v1beta/{file_id}:download?alt=media``,
+#:   where ``{file_id}`` is the full ``files/...`` name.
+#: * Result retention and a per-file item cap are not stated there, so both
+#:   are ``None`` (unverified), not guessed.
+_GEMINI_FILE = BatchSpec(
+    model_type="llm",
+    format="google_generate",
+    dialect="gemini_file",
+    container="file",
+    create_path="/v1beta/models/{model}:batchGenerateContent",
+    retrieve_path="/v1beta/batches/{batch_id}",
+    cancel_path="/v1beta/batches/{batch_id}:cancel",
+    file_results_path="/download/v1beta/{file_id}:download?alt=media",
+    item_key="custom_id",
+    state_map=_GEMINI_STATES,
+    supported_endpoints=("/v1beta/models/{model}:generateContent",),
+    limits=BatchLimits(max_bytes=2 * 1024 * 1024 * 1024, window_hours=24),
+    discount=True,
 )
 
 #: The measured batch records.  Values are from the vendor documentation as
@@ -245,18 +285,20 @@ BATCH_SPECS: tuple[BatchSpec, ...] = (
         cancel_path="/v1beta/batches/{batch_id}:cancel",
         # Inline results come back on the job resource in request order, so
         # the ordinal is the join key.  The file variant is the same endpoint
-        # with a different input/output container, so it is named by
-        # ``file_dialect`` alone; this record's own container is the inline
-        # one the create call uses by default.
+        # with a different container and its own facts (``_GEMINI_FILE``);
+        # this record is the inline one the create call uses by default.
         item_key="index",
         state_map=_GEMINI_STATES,
         supported_endpoints=("/v1beta/models/{model}:generateContent",),
+        # "Keep the total request size under 20MB" — the Gemini Batch API
+        # guide (https://ai.google.dev/gemini-api/docs/batch-api, fetched
+        # 2026-11-19).  Whether MB is binary is not stated; 20 MiB is assumed.
         limits=BatchLimits(
             max_bytes=20 * 1024 * 1024,
             window_hours=24,
         ),
         discount=True,
-        file_dialect="gemini_file",
+        file_variant=_GEMINI_FILE,
     ),
 )
 
@@ -265,32 +307,39 @@ BATCH_BY_PAIR: dict[tuple[str, str], BatchSpec] = {
     (spec.model_type, spec.format): spec for spec in BATCH_SPECS
 }
 
-#: ``dialect id → batch record``.  Two formats may share one codec
-#: (``chat_completions`` and ``open_responses`` both use ``openai_file``), and
-#: they differ only in ``supported_endpoints``.
-BY_DIALECT: dict[str, BatchSpec] = {}
+#: ``dialect id → every record that owns it``.  Two formats may share one codec
+#: (``chat_completions`` and ``open_responses`` both use ``openai_file``) and
+#: differ in ``supported_endpoints``, so a dialect alone does not name one
+#: record; a file variant is listed under its own dialect id.
+BY_DIALECT: dict[str, tuple[BatchSpec, ...]] = {}
 for _spec in BATCH_SPECS:
-    BY_DIALECT.setdefault(_spec.dialect, _spec)
-    if _spec.file_dialect is not None:
-        BY_DIALECT.setdefault(_spec.file_dialect, _spec)
-del _spec
+    for _owner in (_spec, *((_spec.file_variant,) if _spec.file_variant else ())):
+        BY_DIALECT[_owner.dialect] = (*BY_DIALECT.get(_owner.dialect, ()), _owner)
+del _spec, _owner
 
 #: The dialect ids a shim may declare, plus the gateway's own fallback.
 DECLARABLE_DIALECTS: tuple[str, ...] = (*BY_DIALECT, "emulated")
 
 
 def check_batch_specs() -> None:
-    """Refuse a batch record the catalog does not know, or a duplicate pair.
+    """Refuse a malformed batch record.
 
     The catalog already guarantees that every pair has a converter (the
     import-time check in :mod:`llm_rosetta.converters.registry`), so a pair
-    that is in the catalog has one; a batch record can only be wrong by
-    naming a pair that is not.
+    that is in the catalog has one.  Beyond the join, each record (and each
+    file variant) must name a codec in :data:`DIALECTS`, a known container and
+    item key, at least one supported endpoint, and a state map whose values
+    are all in the normalized :data:`~llm_rosetta.types.ir.batch.BatchJobState`
+    vocabulary.
 
     Raises:
-        RuntimeError: A pair repeats, or is absent from the format catalog.
+        RuntimeError: A pair repeats, is absent from the format catalog, or a
+            record carries a value outside the vocabularies above.
     """
     seen: set[tuple[str, str]] = set()
+    states = set(get_args(BatchJobState))
+    containers = set(get_args(BatchContainer))
+    item_keys = set(get_args(BatchItemKey))
     for spec in BATCH_SPECS:
         pair = (spec.model_type, spec.format)
         if pair in seen:
@@ -303,6 +352,39 @@ def check_batch_specs() -> None:
                 f"Batch spec for {pair!r} has no format catalog entry, so it "
                 f"has no converter binding. Add the FormatSpec first."
             )
+        variant = spec.file_variant
+        if variant is not None and (
+            (variant.model_type, variant.format) != pair
+            or variant.file_variant is not None
+        ):
+            raise RuntimeError(
+                f"Batch spec for {pair!r}: a file variant must be on the same "
+                f"pair and cannot carry a variant of its own"
+            )
+        for record in (spec, *((variant,) if variant else ())):
+            where = f"Batch spec for {pair!r} ({record.dialect!r})"
+            if record.dialect not in DIALECTS:
+                raise RuntimeError(
+                    f"{where}: dialect is not one of {', '.join(DIALECTS)}"
+                )
+            if record.container not in containers:
+                raise RuntimeError(
+                    f"{where}: container {record.container!r} is not one of "
+                    f"{', '.join(sorted(containers))}"
+                )
+            if record.item_key not in item_keys:
+                raise RuntimeError(
+                    f"{where}: item_key {record.item_key!r} is not one of "
+                    f"{', '.join(sorted(item_keys))}"
+                )
+            if not record.supported_endpoints:
+                raise RuntimeError(f"{where}: supported_endpoints is empty")
+            bad = sorted({v for v in record.state_map.values() if v not in states})
+            if bad:
+                raise RuntimeError(
+                    f"{where}: state_map values {', '.join(bad)} are not in "
+                    f"the normalized BatchJobState vocabulary"
+                )
 
 
 check_batch_specs()
@@ -324,8 +406,28 @@ def batch_spec_for(model_type: str, format: str) -> BatchSpec | None:
     return BATCH_BY_PAIR.get((model_type, format))
 
 
+def batch_specs_for_dialect(dialect: str) -> tuple[BatchSpec, ...]:
+    """Every batch record that owns *dialect*; empty for an unknown id.
+
+    ``emulated`` resolves to an empty tuple: it is a gateway mode, not a codec.
+    A file variant (``gemini_file``) resolves to its own record.
+
+    Args:
+        dialect: A codec id (``openai_file``, ``anthropic_inline``, …).
+
+    Returns:
+        The owning records, in declaration order.
+    """
+    return BY_DIALECT.get(dialect, ())
+
+
 def batch_spec_for_dialect(dialect: str) -> BatchSpec | None:
-    """The batch record that owns *dialect*, or ``None`` for an unknown id.
+    """The one batch record that owns *dialect*, or ``None`` for an unknown id.
+
+    A dialect shared by several formats (``openai_file``) does not name one
+    record, and picking the first would hand an ``open_responses`` lane the
+    ``chat_completions`` endpoints, so the lookup refuses.  Use
+    :func:`batch_spec_for` with the pair, or :func:`batch_specs_for_dialect`.
 
     ``emulated`` resolves to ``None``: it is a gateway mode, not a codec.
 
@@ -334,8 +436,19 @@ def batch_spec_for_dialect(dialect: str) -> BatchSpec | None:
 
     Returns:
         The record, or ``None``.
+
+    Raises:
+        ValueError: More than one record owns *dialect*.
     """
-    return BY_DIALECT.get(dialect)
+    owners = batch_specs_for_dialect(dialect)
+    if len(owners) > 1:
+        raise ValueError(
+            f"Batch dialect {dialect!r} is shared by "
+            f"{', '.join(f'{s.model_type}/{s.format}' for s in owners)}; "
+            f"look the record up by pair with batch_spec_for(model_type, format) "
+            f"or list owners with batch_specs_for_dialect()"
+        )
+    return owners[0] if owners else None
 
 
 __all__ = [
@@ -350,5 +463,6 @@ __all__ = [
     "BatchSpec",
     "batch_spec_for",
     "batch_spec_for_dialect",
+    "batch_specs_for_dialect",
     "check_batch_specs",
 ]
