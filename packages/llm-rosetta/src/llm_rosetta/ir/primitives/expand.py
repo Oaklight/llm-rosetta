@@ -30,12 +30,14 @@ the event that ends it.  That is the same correspondence the cross-leg harness
 pins (``tests/converters/test_leg_agreement.py``), which is also this module's
 first witness.
 
-Multi-choice: ``choice_index`` is written on the events that carry it — the
-deltas, ``tool_call_start``, ``finish`` — only when a response has more than one
-choice, the IR's convention being that an absent index means the only one.
-Block boundaries deliberately carry none: no reader produces a choice index on
-one, and a field nothing reads is a field with no meaning.  A fold that needs
-to attribute a block to a choice can read the deltas inside it.
+Multi-choice: ``choice_index`` is written on every event that belongs to a
+choice — the deltas, the block boundaries, ``tool_call_start``,
+``tool_result``, ``finish`` — only when a response has more than one choice,
+the IR's convention being that an absent index means the only one.  A block
+boundary carries it because a block *is* one choice's: a fold that had to
+infer the owner from the following delta attributed the block to choice 0
+whenever the block opened without one, which put a second choice's text in the
+first choice's message.
 """
 
 from __future__ import annotations
@@ -135,7 +137,9 @@ def _expand_choice(
         metadata = part.get("provider_metadata")
 
         if is_text_part(part):
-            events.append(_block_start(block_index, "text", metadata))
+            events.append(
+                _block_start(block_index, "text", metadata, choice_index, multi)
+            )
             events.append(
                 _tagged(
                     {
@@ -147,14 +151,16 @@ def _expand_choice(
                     multi,
                 )
             )
-            events.append(_block_end(block_index))
+            events.append(_block_end(block_index, choice_index, multi))
             text_block = block_index
             block_index += 1
         elif is_reasoning_part(part):
             events.extend(_reasoning_events(part, block_index, choice_index, multi))
             block_index += 1
         elif is_refusal_part(part):
-            events.append(_block_start(block_index, "refusal", metadata))
+            events.append(
+                _block_start(block_index, "refusal", metadata, choice_index, multi)
+            )
             events.append(
                 _tagged(
                     {
@@ -166,7 +172,7 @@ def _expand_choice(
                     multi,
                 )
             )
-            events.append(_block_end(block_index))
+            events.append(_block_end(block_index, choice_index, multi))
             block_index += 1
         elif is_citation_part(part):
             events.append(
@@ -176,7 +182,7 @@ def _expand_choice(
             events.extend(_tool_call_events(part, call_index, choice_index, multi))
             call_index += 1
         elif is_tool_result_part(part):
-            events.append(_tool_result_event(part))
+            events.append(_tool_result_event(part, choice_index, multi))
 
     return events, block_index
 
@@ -234,9 +240,9 @@ def _reasoning_events(
     if metadata:
         delta["provider_metadata"] = dict(metadata)
     return [
-        _block_start(block_index, "thinking", metadata),
+        _block_start(block_index, "thinking", metadata, choice_index, multi),
         _tagged(delta, choice_index, multi),
-        _block_end(block_index),
+        _block_end(block_index, choice_index, multi),
     ]
 
 
@@ -270,7 +276,7 @@ def _tool_call_events(
     return [_tagged(start, choice_index, multi), _tagged(delta, choice_index, multi)]
 
 
-def _tool_result_event(part: Any) -> IRStreamEvent:
+def _tool_result_event(part: Any, choice_index: int, multi: bool) -> IRStreamEvent:
     """One provider-executed tool result, delivered whole."""
     event: dict[str, Any] = {
         "type": "tool_result",
@@ -282,7 +288,7 @@ def _tool_result_event(part: Any) -> IRStreamEvent:
             event[key] = part[key]
     if part.get("provider_metadata"):
         event["provider_metadata"] = dict(part["provider_metadata"])
-    return cast(IRStreamEvent, event)
+    return cast(IRStreamEvent, _tagged(event, choice_index, multi))
 
 
 def _tagged(event: dict[str, Any], choice_index: int, multi: bool) -> Any:
@@ -292,7 +298,9 @@ def _tagged(event: dict[str, Any], choice_index: int, multi: bool) -> Any:
     return event
 
 
-def _block_start(block_index: int, block_type: str, metadata: Any) -> Any:
+def _block_start(
+    block_index: int, block_type: str, metadata: Any, choice_index: int, multi: bool
+) -> Any:
     event: dict[str, Any] = {
         "type": "content_block_start",
         "block_index": block_index,
@@ -300,8 +308,10 @@ def _block_start(block_index: int, block_type: str, metadata: Any) -> Any:
     }
     if isinstance(metadata, dict) and metadata:
         event["provider_metadata"] = dict(metadata)
-    return event
+    return _tagged(event, choice_index, multi)
 
 
-def _block_end(block_index: int) -> Any:
-    return {"type": "content_block_end", "block_index": block_index}
+def _block_end(block_index: int, choice_index: int, multi: bool) -> Any:
+    return _tagged(
+        {"type": "content_block_end", "block_index": block_index}, choice_index, multi
+    )

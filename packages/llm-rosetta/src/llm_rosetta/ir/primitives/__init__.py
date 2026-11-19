@@ -27,6 +27,7 @@ from .body import (  # noqa: F401
 from .cache_breakpoints import inject_cache_breakpoints  # noqa: F401
 from .call_unwind import unwind_parallel_tool_calls_ir  # noqa: F401
 from .expand import expand_response  # noqa: F401
+from .fold import fold_response_events  # noqa: F401
 from .native import (  # noqa: F401
     LEGACY_FINISH_REASON_KEY,
     LEGACY_PROMPT_FEEDBACK_KEY,
@@ -79,6 +80,7 @@ __all__ = [
     "default_message_field",
     "default_tool_description",
     "flatten_system_content",
+    "fold_response_events",
     "generated_group_id",
     "group_tools",
     "hoist_late_system_messages",

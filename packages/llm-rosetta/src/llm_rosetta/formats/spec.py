@@ -35,6 +35,12 @@ class FormatSpec:
         default_path: Default upstream endpoint path, for the path-configured
             model types (embedding, rerank, decision).
         models_path: Path used by the connectivity probe to list models.
+        stream_echo_fields: Response-level fields this dialect repeats on its
+            streaming chunks, named as the IR response spells them.  The IR
+            event vocabulary has none for a field that describes the whole
+            response, so a caller that has to rebuild a body from a stream
+            reads them off the first chunk (``chat_completions``:
+            ``service_tier``, ``system_fingerprint``).
     """
 
     model_type: str
@@ -54,3 +60,4 @@ class FormatSpec:
     route_path: str | None = None
     default_path: str | None = None
     models_path: str | None = None
+    stream_echo_fields: tuple[str, ...] = ()

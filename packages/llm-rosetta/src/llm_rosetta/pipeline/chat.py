@@ -1067,6 +1067,102 @@ class ConversionPipeline:
         if on_ir_ready is not None:
             on_ir_ready(ir_response)
 
+        return self._ir_response_to_source(ir_response, ctx, started_at=t_total)
+
+    def convert_stream_events(
+        self,
+        events: list[dict[str, Any]],
+        *,
+        on_ir_ready: Callable[[dict[str, Any]], None] | None = None,
+        response: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Fold IR stream events into one source-format response body.
+
+        The path for a client that asked for a single body while the upstream
+        answered with a stream (a shim's ``connection.stream_required``).  The
+        events the stream processor produced are folded back into the response
+        they describe, and that response then takes the ordinary response leg
+        — the same custom-tool restore, tool-name restore, source shim
+        transforms and source writer :meth:`convert_response` uses, so the two
+        cannot answer differently.
+
+        Must be called after :meth:`convert_request`.
+
+        Args:
+            events: IR stream events from this pipeline's stream processor.
+            on_ir_ready: Optional callback invoked with the folded response.
+            response: Envelope facts the caller already knows (``id``,
+                ``model``, ``created``), for a stream whose ``stream_start``
+                never reached the fold.
+
+        Returns:
+            The source-format response body.
+
+        Raises:
+            ConversionError: If the source writer refuses the folded turn.
+            RuntimeError: If called before :meth:`convert_request`.
+        """
+        ctx = self.context  # raises RuntimeError if not ready
+
+        if self._baseline:
+            # A same-format baseline forwards chunks untouched; there is no
+            # IR leg to fold, so the caller's events are what it already had.
+            raise RuntimeError(
+                "convert_stream_events() needs an IR conversion; a baseline "
+                "(same-format passthrough) pipeline has none"
+            )
+
+        t_total = time.perf_counter()
+        ctx.warnings.leg = "response"
+        from llm_rosetta.ir.primitives import fold_response_events
+
+        with recording_to(ctx.warnings):
+            folded = fold_response_events(events, response=response)
+        # The turn's own parts decide a ``stop`` that owes the client a tool
+        # answer — the same rule every body reader applies, and the reason the
+        # fold does not trust the terminal event's reason alone: a terminal
+        # event may carry an empty ``output`` array.
+        self._target_converter._finalize_completed_turn(folded)
+        self._profile["response_from_target_ms"] = round(
+            (time.perf_counter() - t_total) * 1000, 2
+        )
+        # The response leg takes a plain body: ``IRResponse`` is a TypedDict,
+        # which is not assignable to ``dict`` (a reader of either may mutate).
+        ir_response: dict[str, Any] = dict(folded)
+
+        if on_ir_ready is not None:
+            on_ir_ready(ir_response)
+
+        return self._ir_response_to_source(ir_response, ctx, started_at=t_total)
+
+    def _ir_response_to_source(
+        self,
+        ir_response: dict[str, Any],
+        ctx: ConversionContext,
+        *,
+        started_at: float | None = None,
+    ) -> dict[str, Any]:
+        """Write a read-back IR response in the source dialect.
+
+        The tail both response legs share: restore what the request leg
+        changed, hand the source writer its own shim traits, and apply the
+        source shim's post-IR transforms to the body it produced.
+
+        Args:
+            ir_response: The turn, as the target reader (or the fold) built it.
+            ctx: The conversion context, whose options pick the source traits.
+            started_at: When the caller's response leg began, for
+                ``response_conversion_ms``.  The leg starts before the target
+                read, so the total has to span that too; ``None`` starts the
+                clock here, which is what a caller with nothing earlier gets.
+
+        Returns:
+            The source-format response body.
+
+        Raises:
+            ConversionError: If the source writer refuses the turn.
+        """
+        t_total = time.perf_counter() if started_at is None else started_at
         # Restore custom tool types downgraded by enforce_custom_tools
         if self._ir_request is not None:
             custom_names = get_custom_tool_names(self._ir_request)

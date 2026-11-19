@@ -741,10 +741,10 @@ class OpenResponsesConverter(BaseConverter):
         body: dict[str, Any] = {}
         output: list[dict[str, Any]] = []
         for choice in choices or [None]:
-            # One fold per choice: the events carry no choice on a block, and
-            # a writer that opened a second item would need one.  Folding each
-            # choice on its own gives every choice its own items, which is
-            # what the body has always done.
+            # One fold per choice keeps every choice's items in that choice's
+            # own output entry; the body numbers message items across the whole
+            # response afterwards (`_renumber_message_items`), because each
+            # fold starts its own count.
             one = cast(IRResponse, dict(ir_response))
             if choice is not None:
                 one["choices"] = [choice]
@@ -2330,6 +2330,13 @@ class OpenResponsesConverter(BaseConverter):
         item = ctx.current_message_item if ctx is not None else None
         if item is not None:
             item.accumulated_refusal += refusal
+        if ctx is not None and refusal:
+            # The part carries words now, so a finish repeating them in
+            # ``refusal_text`` must not open a second one.  Recorded on the
+            # words rather than on the block: a refusal block that opened and
+            # stayed empty writes nothing, and suppressing the finish's
+            # synthesis for it dropped the words entirely.
+            ctx._refusal_part_written = True
 
         delta_event: dict[str, Any] = {
             "type": ResponsesEventType.REFUSAL_DELTA,
@@ -2669,10 +2676,17 @@ class OpenResponsesConverter(BaseConverter):
         # part yet: open one and write them, so a reader sees the words as
         # content instead of a status with nothing behind it.  The spec carries
         # a refusal as an output part, and every dialect that reads it back
-        # reads it there (#1314).
+        # reads it there (#1314).  When the turn already wrote the part — a
+        # folded response carries one — the words are already on the wire and
+        # opening a second part doubled them.
         opening: list[dict[str, Any]] = []
         refusal_text = provider_metadata.get("refusal_text")
-        if context is not None and reason == "refusal" and refusal_text:
+        if (
+            context is not None
+            and reason == "refusal"
+            and refusal_text
+            and not context._refusal_part_written
+        ):
             block_index = context.next_block_index()
             produced_events = [
                 self._handle_ir_content_block_start_to_p(
