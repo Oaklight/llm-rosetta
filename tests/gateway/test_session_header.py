@@ -29,6 +29,8 @@ def _apply(
     client_hash: str,
     *,
     key_affinity: bool = True,
+    headers: dict | None = None,
+    body: dict | None = None,
 ) -> ProviderInfo:
     """Run the stage-2 decisions the way a proxy handler does."""
     ctx = SelectionContext("m", "chat_completions")
@@ -36,6 +38,7 @@ def _apply(
     ctx.with_key_affinity(key_affinity)
     ctx.with_provider_info(pi)
     ctx.with_ir_request(ir)
+    ctx.with_source_request(headers or {}, body)
     return _apply_request_stages(ctx)
 
 
@@ -130,3 +133,47 @@ class TestSessionDerivation:
         out = _apply(pi, _ir("x"), "h")
 
         assert out is pi
+
+
+class TestTheAgentLane:
+    """An ACP lane is told the conversation, and only a declared one.
+
+    The agent keeps a conversation inside a session it owns, so the id decides
+    reuse — and a derived id names a group of log rows, not a conversation,
+    which is why it must not reach the ledger.
+    """
+
+    def _acp(self) -> ProviderInfo:
+        return _pi(transport="acp")
+
+    def test_a_declared_header_becomes_the_conversation(self):
+        out = _apply(
+            self._acp(),
+            _ir("x"),
+            "h",
+            headers={"x-claude-code-session-id": "sess-1"},
+        )
+
+        assert out.acp_conversation_id is not None
+        assert len(out.acp_conversation_id) == 32
+
+    def test_a_body_carrier_becomes_the_conversation(self):
+        out = _apply(
+            self._acp(),
+            _ir("x"),
+            "h",
+            body={"metadata": {"user_id": {"session_id": "sess-2"}}},
+        )
+
+        assert out.acp_conversation_id is not None
+
+    def test_a_derived_id_never_reaches_the_lane(self):
+        """Nothing was declared, so the request gets a session of its own."""
+        out = _apply(self._acp(), _ir("x"), "h")
+
+        assert out.acp_conversation_id is None
+
+    def test_an_http_lane_is_untouched(self):
+        out = _apply(_pi(), _ir("x"), "h", headers={"x-opencode-session": "s"})
+
+        assert out.acp_conversation_id is None
