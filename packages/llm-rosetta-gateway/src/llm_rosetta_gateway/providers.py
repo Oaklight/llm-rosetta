@@ -694,6 +694,25 @@ def build_provider_info(
             )
         raise ValueError(message)
 
+    # The config key, when the caller has one: two providers of the same shim
+    # are two accounts, and the exchange must be able to tell them apart.
+    provider_key = config_name or shim_name or provider_type
+
+    # Which transport carries this lane.  A config key wins over the shim's
+    # declaration, and a name with no transport behind it is refused here —
+    # beside the provider it belongs to — rather than on its first request.
+    from .transport import TRANSPORT_NAMES
+
+    lane_transport = str(
+        cfg.get("transport")
+        or (shim.connection.transport if shim is not None else "http")
+    )
+    if lane_transport not in TRANSPORT_NAMES:
+        raise ValueError(
+            f"Provider '{provider_key}': unknown transport {lane_transport!r}; "
+            f"available: {', '.join(TRANSPORT_NAMES)}"
+        )
+
     quota_raw = cfg.get("quota")
     quota_cfg: dict[str, Any] = quota_raw if isinstance(quota_raw, dict) else {}
     shim_quota = getattr(shim, "quota", None) if shim is not None else None
@@ -722,7 +741,6 @@ def build_provider_info(
 
     # The config key, when the caller has one: two providers of the same shim
     # are two accounts, and the exchange must be able to tell them apart.
-    provider_key = config_name or shim_name or provider_type
     auth_context, auth_account_id = _bind_auth_exchange(
         provider_key, cfg, exchange, data_dir
     )
@@ -773,6 +791,12 @@ def build_provider_info(
             shim.connection.request_id_format if shim is not None else None
         ),
         stream_required=bool(shim.connection.stream_required if shim else False),
+        transport=lane_transport,
+        acp_argv=(
+            tuple(cfg["acp_argv"])
+            if isinstance(cfg.get("acp_argv"), (list, tuple))
+            else (shim.connection.acp_argv if shim is not None else None)
+        ),
         quota_probe_id=quota_probe,
         quota_url=quota_url,
         quota_in_band=quota_in_band,

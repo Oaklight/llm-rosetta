@@ -357,6 +357,38 @@ def test_fetch_models_reports_startup_when_not_ready():
     assert "not support" not in body["error"].lower()
 
 
+def test_fetch_models_names_a_lane_that_has_no_http_list():
+    """An ACP provider's ``base_url`` is a placeholder, not a host to dial.
+
+    Listing it as a connection failure would send an operator looking for a
+    network problem on a lane that never makes an HTTP request at all.
+    """
+    pinfo = ProviderInfo(
+        name="acp",
+        api_key="",
+        base_url="http://agy.local",
+        auth_header_fn=openai_auth,
+        url_template="{base_url}/acp-turn",
+        keyless=True,
+        transport="acp",
+        acp_argv=("agy", "acp"),
+    )
+    config = _Config({"antigravity": pinfo})
+    request = _Request(_App(), "antigravity")
+    request.app.gateway_config = config
+
+    _PROBES.clear()
+    with patch(
+        "llm_rosetta_gateway._vendor.httpclient.AsyncClient", new=_FakeUpstreamClient
+    ):
+        resp = asyncio.run(fetch_upstream_models(request))
+    body = json.loads(resp.body)
+
+    assert "served over 'acp'" in body["error"]
+    assert "agy.local" not in body["error"]
+    assert _PROBES == [], "the placeholder host was dialed"
+
+
 class _Resp:
     def __init__(self, status: int) -> None:
         self.status_code = status

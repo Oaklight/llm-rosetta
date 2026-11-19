@@ -82,7 +82,9 @@ def test_the_coalesce_bound_is_inclusive():
 def test_vendored_httpserver_matches_the_lock():
     lock = json.loads((_VENDOR / "zerodep.lock.json").read_text("utf-8"))
 
-    assert lock["source"]["ref"] == "v2026.11.4"
+    # The tag the bundle was last fetched from.  ``acp``/``jsonrpc`` entered
+    # the bundle at v2026.11.11; the hashes below are what actually moved.
+    assert lock["source"]["ref"] == "v2026.11.11"
     assert lock["modules"]["httpserver"]["version"] == "0.7.1"
     for filename, expected in lock["modules"]["httpserver"]["files"].items():
         actual = hashlib.sha256((_VENDOR / filename).read_bytes()).hexdigest()
