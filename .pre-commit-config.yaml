@@ -10,8 +10,8 @@ repos:
     hooks:
       - id: ty
         name: ty check
-        description: Type check with ty.
-        entry: ty check
+        description: Type check with ty, resolving this checkout's sources first (same result as CI in any worktree).
+        entry: python scripts/dev/run_ty.py
         language: system
         pass_filenames: false
         require_serial: true
