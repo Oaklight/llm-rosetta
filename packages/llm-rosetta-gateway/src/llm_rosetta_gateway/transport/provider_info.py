@@ -241,6 +241,8 @@ class ProviderInfo:
         session_id_format: str | None = None,
         request_id_format: str | None = None,
         stream_required: bool = False,
+        transport: str = "http",
+        acp_argv: tuple[str, ...] | None = None,
         quota_probe_id: str | None = None,
         quota_url: str | None = None,
         quota_in_band: bool = False,
@@ -317,6 +319,14 @@ class ProviderInfo:
         # A shim whose upstream only answers SSE: the non-streaming handler
         # forces streaming and reassembles the reply.
         self.stream_required = stream_required
+        # Which transport carries this provider's requests.  ``"http"`` posts
+        # a JSON body; ``"acp"`` runs a local agent CLI over stdio.  The
+        # gateway picks the transport by this name, so a provider that names
+        # one it has not got fails at config load, not on its first request.
+        self.transport = transport
+        # The agent command an ``acp`` transport starts, when the shim
+        # declares one; ``None`` takes the transport's default.
+        self.acp_argv = acp_argv
 
         # Quota probe declaration and the shim's implementations.  The
         # declaration names one probe; ``bind_provider_quota`` resolves it to

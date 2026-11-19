@@ -90,7 +90,9 @@ def test_verify_false_gets_its_own_context(tmp_path, monkeypatch):
 def test_vendored_httpclient_matches_the_lock():
     lock = json.loads((_VENDOR / "zerodep.lock.json").read_text("utf-8"))
 
-    assert lock["source"]["ref"] == "v2026.11.4"
+    # The tag the bundle was last fetched from.  ``acp``/``jsonrpc`` entered
+    # the bundle at v2026.11.11; the hashes below are what actually moved.
+    assert lock["source"]["ref"] == "v2026.11.11"
     assert lock["modules"]["httpclient"]["version"] == "0.6.4"
     for entry in lock["modules"].values():
         for filename, expected in entry["files"].items():

@@ -144,6 +144,21 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
             }
         )
 
+    # A lane whose upstream is a local process has no models endpoint to
+    # dial: its ``base_url`` is a placeholder.  Say that, instead of reporting
+    # a connection failure against a host that was never meant to answer.
+    lane_transport = getattr(pinfo, "transport", "http")
+    if lane_transport != "http":
+        return JSONResponse(
+            {
+                "error": (
+                    f"Provider '{provider_name}' is served over {lane_transport!r}, "
+                    "which has no HTTP model list. Ask the local agent for its "
+                    "models and add them to the gateway config by hand."
+                )
+            }
+        )
+
     # Build the models listing URL.  Explicit ``models_path`` in the
     # provider config takes precedence (e.g. ``/v1/models`` for Jina).
     raw_cfg = getattr(config, "_raw_providers", {}).get(provider_name, {})
