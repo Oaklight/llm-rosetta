@@ -56,8 +56,10 @@ the file holding the def.  A moved-with-diff entry matches the head path or the
 base path of the pair, so either end of a def that moved between files works;
 a missing def is keyed on its base path.  An undefined-global item is allowed
 as ``undefined-global:<head path>::<qualified.name>``.  A census mismatch is
-allowed as ``decorator-census:<decorator>``; the census is a global count, so
-that entry is not tied to a file.  A bare ``qualified.name`` (the older format)
+allowed as ``decorator-census:<decorator>`` (``decorator-census:property``; the
+report prints the exact entry, and the ``@``-prefixed spelling
+``decorator-census:@property`` is accepted too); the census is a global count,
+so that entry is not tied to a file.  A bare ``qualified.name`` (the older format)
 is rejected with an error, because it would excuse a same-named def in every
 file.  An allowed item is reported but does not fail the run.
 
@@ -614,7 +616,9 @@ def load_allow(path: str) -> dict[str, str]:
     """Parse an allow-file into ``{key: reason}``.
 
     A key is ``path::qualified.name``, ``undefined-global:path::qualified.name``
-    or ``decorator-census:<decorator>``.  A bare ``qualified.name`` raises
+    or ``decorator-census:<decorator>``.  A leading ``@`` on the decorator is
+    stripped, so ``decorator-census:@property`` is the key
+    ``decorator-census:property``.  A bare ``qualified.name`` raises
     ``ValueError``: it would match a same-named def in every file.
     """
     allow: dict[str, str] = {}
@@ -629,6 +633,8 @@ def load_allow(path: str) -> dict[str, str]:
                 f"`<path>::{name.removeprefix('undefined-global:')}` "
                 "(an entry without a path would excuse the name in every file)"
             )
+        if name.startswith("decorator-census:@"):
+            name = "decorator-census:" + name.removeprefix("decorator-census:@")
         allow[name] = reason.strip() or "(no reason given)"
     return allow
 
@@ -713,7 +719,10 @@ def render_text(report: Report) -> str:
     for name, (nb, nh) in report.census.items():
         if nb != nh:
             note = _allow_note(report, f"decorator-census:{name}")
-            out.append(f"\nDECORATOR-CENSUS{note}: @{name} base={nb} head={nh}")
+            out.append(
+                f"\nDECORATOR-CENSUS{note}: @{name} base={nb} head={nh}"
+                f" (allow entry: decorator-census:{name})"
+            )
     for b, h in report.import_hoisted:
         out.append(f"\nimport-hoisted (ignored): {b.label} -> {h.label}")
     for b, h in report.logger_name:
@@ -755,7 +764,10 @@ def render_markdown(report: Report) -> str:
         out += ["", "**decorator-census**"]
         for name, (nb, nh) in mismatches:
             note = _allow_note(report, f"decorator-census:{name}")
-            out.append(f"- `@{name}`: base {nb}, head {nh}{note}")
+            out.append(
+                f"- `@{name}`: base {nb}, head {nh}{note}"
+                f" (allow entry: `decorator-census:{name}`)"
+            )
     sections = (
         (
             "logger-name (ignored)",
