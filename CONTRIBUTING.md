@@ -91,6 +91,30 @@ removal is intentional, record it with a reason in
 `scripts/dev/public_api_allowlist.json`. Additions and optional parameters are
 reported for information only.
 
+## Checking that a refactor is a pure move
+
+A refactor that only moves code (splitting a module, relocating methods into
+mixins) should change no definition. A reviewer cannot see a dropped
+`@classmethod` in a large move, so compare the two sides by AST:
+
+```bash
+python scripts/dev/check_move.py origin/master          # head defaults to HEAD
+python scripts/dev/check_move.py origin/master --markdown   # paste into the PR body
+```
+
+The tool compares every function, method, class and class-level assignment of
+the changed files by qualified name (and by bare name when a method changes
+class), including decorators, arguments, annotations, body and docstring.
+Comments and formatting are ignored. It exits nonzero on a def that is
+`missing` or `moved-with-diff`. Added `if TYPE_CHECKING:` stubs and a
+module-level import of a name that used to be imported inside the function are
+reported but do not fail.
+
+Record an intended difference with a reason in a file of `qualified.name  reason`
+lines and pass it with `--allow FILE`. CI runs the same check on pull requests
+titled `refactor(...)` or labelled `pure-move`, and reads
+`.github/pure-move-allow.txt` when it exists.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).
