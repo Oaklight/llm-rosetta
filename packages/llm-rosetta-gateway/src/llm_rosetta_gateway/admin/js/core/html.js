@@ -48,6 +48,13 @@ export function jsArg(v) {
 // and `render` refuses anything else, so a plain string can never reach
 // innerHTML through this path.  Handler arguments still use `jsArg` — wrap the
 // call in `raw()` since its output is already attribute-safe.
+//
+// Quote every attribute value that holds an interpolation: `title="${v}"`,
+// never `title=${v}`.  `esc` leaves whitespace and `=` alone, so an unquoted
+// value such as `" onmouseover="window.__pwned=1` adds attributes of its own.
+// tests/js/innerhtml-lint.test.mjs fails on an unquoted position.  `html`
+// protects HTML quoting only: `style="…${v}"` and `<script>` context are not
+// covered (see the lint's scope note).
 
 const SAFE = Symbol('SafeHtml');
 

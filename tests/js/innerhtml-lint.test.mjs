@@ -11,6 +11,13 @@
  * Scope: the scanner reads what the assignment spells out.  It does not follow
  * a variable assigned earlier (`el.innerHTML = markup`), and it does not check
  * that an escaper suits its position (that is admin-handlers.test.mjs).
+ *
+ * Two more positions are outside it, because html protects HTML quoting only:
+ * `style="...${v}"` (eight occurrences across seven files), where `esc` does
+ * not stop `;` or `)` — providers.js `background:${dotColor}` takes
+ * `desc.color` from the shim descriptor — and `<script>` context (none today).
+ * The one position the lint does enforce inside html`` is the unquoted
+ * attribute value (`title=${v}`), which it rejects.
  */
 
 import assert from 'node:assert/strict';
@@ -19,7 +26,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
 
-import { isSafeExpr, keyCounts, scanSource } from './innerhtml-scan.mjs';
+import { isSafeExpr, keyCounts, scanSource, scanUnquoted } from './innerhtml-scan.mjs';
 import { LEGACY } from './innerhtml-legacy.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -93,4 +100,29 @@ test('admin js: no new unescaped innerHTML interpolation, and LEGACY only shrink
     [],
     'LEGACY entry no longer present: delete it from tests/js/innerhtml-legacy.mjs',
   );
+});
+
+test('scanner: an unquoted attribute value in html`` is flagged, quoted forms are not', () => {
+  const flagged = (src) => scanUnquoted(src).map((f) => f.expr);
+  assert.deepEqual(flagged('x = html`<div title=${p}>`;'), ['p']);
+  assert.deepEqual(flagged('x = html`<div title = ${p}>`;'), ['p']);
+  assert.deepEqual(flagged('x = html`<a href="/u" title=${p}>${q}</a>`;'), ['p']);
+  assert.deepEqual(flagged('x = `${xs.map(x => html`<i data-id=${x}>`)}`;'), ['x']);
+  assert.deepEqual(flagged('x = html`<div title="${p}">`;'), []);
+  assert.deepEqual(flagged("x = html`<div title='${p}'>`;"), []);
+  assert.deepEqual(flagged('x = html`<div class="a ${p}">${q}</div>`;'), []);
+  assert.deepEqual(flagged('x = html`<div onclick="f(${jsArg(p)})">`;'), []);
+  // Plain templates and comments are not html`` templates.
+  assert.deepEqual(flagged('x = `<div title=${p}>`;'), []);
+  assert.deepEqual(flagged('// html`<div title=${p}>`'), []);
+});
+
+test('admin js: no html`` template interpolates an unquoted attribute value', () => {
+  const bad = [];
+  for (const file of adminFiles()) {
+    for (const { line, expr } of scanUnquoted(readFileSync(file, 'utf8'))) {
+      bad.push(`${relative(ADMIN_JS, file)}:${line} \${${expr}}`);
+    }
+  }
+  assert.deepEqual(bad, [], 'quote the attribute value: title="${v}", not title=${v}');
 });

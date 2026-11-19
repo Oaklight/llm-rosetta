@@ -38,17 +38,21 @@ function skipComment(src, i) {
 function parseTemplate(src, i) {
   const interps = [];
   i++;
+  let chunk = i; // where the literal text before the next interpolation starts
   while (i < src.length && src[i] !== '`') {
     if (src[i] === '\\') {
       i += 2;
     } else if (src[i] === '$' && src[i + 1] === '{') {
       const start = i + 2;
+      const before = src.slice(chunk, i);
       const r = scanExpr(src, start, '}');
       interps.push({
         expr: src.slice(start, r.end).replace(/\s+/g, ' ').trim(),
         templates: r.templates,
+        before,
       });
       i = r.end + 1;
+      chunk = i;
     } else {
       i++;
     }
@@ -143,6 +147,28 @@ export function scanSource(src) {
       r = scanExpr(src, start, ';');
     }
     for (const expr of offenders(r.templates, [])) found.push({ line, expr });
+  }
+  return found;
+}
+
+const HTML_TAG = /(^|[^\w$`])html`/g;
+
+/** Interpolations of an html`` template that sit in an unquoted attribute
+ *  value position (`title=${v}`): [{line, expr}].  `esc` leaves whitespace and
+ *  `=` alone, so such a value can add attributes of its own; the position
+ *  must be quoted (`title="${v}"`). */
+export function scanUnquoted(src) {
+  const found = [];
+  HTML_TAG.lastIndex = 0;
+  let m;
+  while ((m = HTML_TAG.exec(src))) {
+    const tick = m.index + m[0].length - 1;
+    const lineStart = src.lastIndexOf('\n', tick) + 1;
+    if (/^\s*(?:\/\/|\*|\/\*)/.test(src.slice(lineStart, tick))) continue;
+    const line = src.slice(0, tick).split('\n').length;
+    for (const it of parseTemplate(src, tick).interps) {
+      if (/=\s*$/.test(it.before)) found.push({ line, expr: it.expr });
+    }
   }
   return found;
 }
