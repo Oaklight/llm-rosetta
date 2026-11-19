@@ -363,7 +363,7 @@ def _auth_context(provider: str, cfg: dict[str, Any], state_dir: str | None) -> 
     )
 
 
-def _account_token_for(account_id: str | None) -> str | None:
+def account_token_for(account_id: str | None) -> str | None:
     """Return the opaque form of a shim exchange's account identity.
 
     The subject an exchange reports is an identity a panel may want to show;
@@ -413,7 +413,7 @@ def _credential_token(
         # A shim exchange names its own account identity (the signed-in
         # subject, not the bearer that subject currently holds — the access
         # token rotates, the account does not).
-        return _account_token_for(account_id)
+        return account_token_for(account_id)
     if exchange:
         # An exchange with no account identity is one provider per identity,
         # exactly like a provider with no credential.

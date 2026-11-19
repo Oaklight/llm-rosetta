@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 from llm_rosetta_gateway._compat import sync_compat as _sync_compat
 
 from ._state import set_config
+from .admin_context import GatewayAdminContext
 
 if TYPE_CHECKING:
     from ..shims import ShimLoadReport
@@ -536,6 +537,7 @@ async def create_app(
     app.internal_token = internal_token  # type: ignore
     app.auth_state = auth_state  # type: ignore
     app.keystore = keystore  # type: ignore
+    app.admin = GatewayAdminContext()  # type: ignore
 
     if not ext.skip_admin_setup:
         await setup_admin(

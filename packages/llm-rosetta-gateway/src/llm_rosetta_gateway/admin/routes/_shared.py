@@ -12,6 +12,7 @@ from collections.abc import AsyncGenerator
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
+from ...admin_api import admin_context
 from ...config import ConfigIO, GatewayConfig, async_config_lock
 
 logger = logging.getLogger("llm-rosetta-gateway")
@@ -402,7 +403,6 @@ async def _reload_gateway_config(
     """
     import asyncio
 
-    from llm_rosetta_gateway.app import _state as _app_state
     from ...shim_sources import apply_shim_sources, shims_signature
 
     config_io = _get_config_io(request)
@@ -432,7 +432,7 @@ async def _reload_gateway_config(
     recovery_result = await recovery.execute()
     request.app.provider_validation_warnings = recovery_result.get("disabled", [])
     new_config = GatewayConfig(raw, maintenance=maintenance, config_path=config_path)
-    _app_state._config = new_config
+    admin_context(request).publish_config(new_config)
     request.app.gateway_config = new_config
 
     # A theme saved from the admin panel must reach the next page load.

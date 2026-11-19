@@ -154,7 +154,8 @@ supported format and forwards them to any configured upstream provider.
 | `middleware/` | Auth, rate limiting, error format, hop limit, headers |
 | `transport/` | Upstream transports: `http` (HTTP/SSE), `acp` (a local agent CLI over stdio JSON-RPC); a provider picks one with `connection.transport` |
 | `ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
-| `admin/` | Admin panel and its routes, over the observability layer |
+| `admin/` | Admin panel and its routes, over the observability layer; reaches the gateway through `admin_api.py` (see *Admin boundary*) |
+| `admin_api.py` | The `AdminContext` protocols admin depends on; `create_app` exposes the adapter (`app/admin_context.py`) as `app.admin` |
 | `observability/` | Telemetry: metrics, request log, SQLite persistence, ops log, error dumps, capture, retention, sanitizing, profiler state; `observability/usage/cli.py` is the `llm-rosetta-usage` console script |
 | `_vendor/` | Vendored modules (DO NOT EDIT) |
 
@@ -167,6 +168,17 @@ The gateway reaches core only through a named surface: `llm_rosetta.api`, `llm_r
 its submodules).  `tests/gateway/test_core_surface_boundary.py` enforces this
 over every gateway file, `admin/` included.  Imports outside the surface sit on
 a shrinking legacy allowlist; do not add to it, use the surface.  See #1630.
+
+### Admin boundary
+
+`admin/**` imports from the gateway only `admin`, `admin_api` and
+`_vendor.httpserver`.  New needs become a member of `AdminContext` in
+`admin_api.py` plus its implementation in `app/admin_context.py`.  Imports that
+predate the rule sit on `_LEGACY_ALLOWLIST` in
+`tests/gateway/test_admin_import_boundary.py`; the list may only shrink
+(regenerate with `python tests/gateway/test_admin_import_boundary.py`).  Only
+`app/factory.py` imports `admin` (`setup_admin`, `register_admin_routes`).
+Admin never imports `app._state`.
 
 ### IR type system
 

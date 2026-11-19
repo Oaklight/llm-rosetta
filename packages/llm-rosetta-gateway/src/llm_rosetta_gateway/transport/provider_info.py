@@ -179,7 +179,7 @@ class KeyRing:
 
 # Version-prefix segments that may appear at the end of base_url AND
 # at the start of a url_template path, causing duplication.
-_VERSION_SUFFIXES = re.compile(r"/v\d+(?:beta\d?)?$", re.IGNORECASE)
+VERSION_SUFFIXES = re.compile(r"/v\d+(?:beta\d?)?$", re.IGNORECASE)
 
 
 def normalize_base_url(base_url: str, url_template: str) -> str:
@@ -194,7 +194,7 @@ def normalize_base_url(base_url: str, url_template: str) -> str:
     after ``{base_url}``) are left alone — the ``/v1`` in base_url is
     needed.
     """
-    m = _VERSION_SUFFIXES.search(base_url)
+    m = VERSION_SUFFIXES.search(base_url)
     if not m:
         return base_url
     suffix = m.group()  # e.g. "/v1", "/v1beta", "/v3"

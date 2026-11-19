@@ -103,7 +103,7 @@ def _scan_dir(
                 error=f"{MANIFEST_FILENAME}: {problem}",
             )
 
-    keep = _selection_predicate(include, exclude)
+    keep = selection_predicate(include, exclude)
     # What the source ships beyond what it loads is known only here: ``keep`` is
     # asked about every leaf the scan parses before the leaf is dropped, so a
     # refused name is a shipped shim the selection declined.  Without that
@@ -164,7 +164,7 @@ def _scan_dir(
     )
 
 
-def _selection_predicate(
+def selection_predicate(
     include: Collection[str], exclude: Collection[str]
 ) -> Callable[[str], bool]:
     """Build the name predicate an ``include``/``exclude`` pair declares.

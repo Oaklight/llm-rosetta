@@ -281,7 +281,7 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
     # card's unticked row, not in the inventory of what runs.  A shim stopped
     # by `shims.disabled` is a different case — it is installed and switched
     # off, and the switch lives here — so only the selection is consulted.
-    from ....shims.sources import _selection_predicate
+    from ....shims.sources import selection_predicate
 
     keepers: dict[str, Any] = {}
     for status in (
@@ -289,7 +289,7 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
     ):
         location = getattr(status, "location", "")
         if location:
-            keepers[location] = _selection_predicate(
+            keepers[location] = selection_predicate(
                 getattr(status, "include", ()) or (),
                 getattr(status, "exclude", ()) or (),
             )

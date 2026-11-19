@@ -11,6 +11,7 @@ from llm_rosetta.ir.passes.enforcement import _apply_config_reasoning_override
 from llm_rosetta.shims import get_shim, list_shims
 from llm_rosetta.shims.provider_shim import match_model_reasoning
 
+from ....admin_api import admin_context
 from ....config import GatewayConfig
 from ....providers import (
     BASE_FORMATS,
@@ -108,9 +109,7 @@ def _get_gateway_config(request: Any) -> GatewayConfig | None:
     cfg = getattr(request.app, "gateway_config", None)
     if cfg is not None:
         return cfg
-    from llm_rosetta_gateway.app import _state as _app_state
-
-    return _app_state._config
+    return admin_context(request).served_config()
 
 
 def _get_version() -> str:
