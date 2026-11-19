@@ -102,6 +102,7 @@ class _Agent:
     """One provider's agent process and its handshake result."""
 
     client: ACPClient
+    slot: int = 0
     info: Any = None
     auth_methods: list[str] = field(default_factory=list)
     #: Held for the length of a turn.  One stdio connection carries every
@@ -170,8 +171,11 @@ class AcpTransport:
         ledger: AcpSessionLedger | None = None,
     ) -> None:
         self._timeout = timeout
-        self._agents: dict[str, _Agent] = {}
-        self._locks: dict[str, asyncio.Lock] = {}
+        # One *pool* per provider: the operator may run more than one agent
+        # process for a provider, and a session is bound to the process that
+        # holds it for as long as it lives.
+        self._agents: dict[str, list[_Agent]] = {}
+        self._starting: dict[str, asyncio.Lock] = {}
         self._ledger = ledger or AcpSessionLedger()
 
     @property
@@ -185,73 +189,132 @@ class AcpTransport:
         argv = getattr(provider_info, "acp_argv", None)
         return list(argv) if argv else list(DEFAULT_AGENT_ARGV)
 
-    async def _agent(self, provider_info: ProviderInfo) -> _Agent:
+    def _processes(self, provider_info: ProviderInfo) -> int:
+        """How many agent processes this provider may run."""
+        return max(1, int(getattr(provider_info, "acp_processes", 1) or 1))
+
+    async def _agent(self, provider_info: ProviderInfo, slot: int = 0) -> _Agent:
+        """Start (once) and return the pool member *slot* for this provider."""
         key = provider_info.config_name
-        agent = self._agents.get(key)
+        pool = self._agents.setdefault(key, [])
+        while len(pool) <= slot:
+            pool.append(None)  # ty: ignore[invalid-argument-type]
+        agent = pool[slot]
         if agent is not None:
             return agent
-        lock = self._locks.setdefault(key, asyncio.Lock())
+        lock = self._starting.setdefault(f"{key}#{slot}", asyncio.Lock())
         async with lock:
-            agent = self._agents.get(key)
+            agent = pool[slot]
             if agent is not None:
                 return agent
-            argv = self._argv(provider_info)
-            client = ACPClient(argv)
-            try:
-                await client.start()
-                info = await client.initialize(
-                    InitializeParams(
-                        client_info=ImplementationInfo(
-                            name="llm-rosetta-gateway", version=""
-                        ),
-                        client_capabilities=ClientCapabilities(
-                            fs=FsCapabilities(),
-                            terminal=False,
-                        ),
-                    )
-                )
-            except (OSError, JSONRPCException) as exc:
-                await client.stop()
-                raise AcpTurnError(
-                    f"provider {provider_info.config_name!r}: could not start the "
-                    f"ACP agent {argv!r}: {exc}",
-                    status_code=503,
-                ) from exc
-            agent = _Agent(
-                client=client,
-                info=info,
-                auth_methods=[m.id for m in (info.auth_methods or [])],
-            )
-            self._agents[key] = agent
-            logger.info(
-                "ACP agent for provider %r: %s %s (auth: %s; resume: %s, load: %s)",
-                key,
-                getattr(info.agent_info, "name", "unknown"),
-                getattr(info.agent_info, "version", ""),
-                ", ".join(agent.auth_methods) or "none advertised",
-                agent.can_resume(),
-                agent.can_load(),
-            )
+            agent = await self._start(provider_info, slot)
+            pool[slot] = agent
             return agent
+
+    async def _start(self, provider_info: ProviderInfo, slot: int) -> _Agent:
+        """Start one agent process and complete the handshake."""
+        argv = self._argv(provider_info)
+        client = ACPClient(argv)
+        try:
+            await client.start()
+            info = await client.initialize(
+                InitializeParams(
+                    client_info=ImplementationInfo(
+                        name="llm-rosetta-gateway", version=""
+                    ),
+                    client_capabilities=ClientCapabilities(
+                        fs=FsCapabilities(),
+                        terminal=False,
+                    ),
+                )
+            )
+        except (OSError, JSONRPCException) as exc:
+            await client.stop()
+            raise AcpTurnError(
+                f"provider {provider_info.config_name!r}: could not start the "
+                f"ACP agent {argv!r}: {exc}",
+                status_code=503,
+            ) from exc
+        agent = _Agent(
+            client=client,
+            slot=slot,
+            info=info,
+            auth_methods=[m.id for m in (info.auth_methods or [])],
+        )
+        logger.info(
+            "ACP agent for provider %r (process %d): %s %s (auth: %s; "
+            "resume: %s, load: %s)",
+            provider_info.config_name,
+            slot,
+            getattr(info.agent_info, "name", "unknown"),
+            getattr(info.agent_info, "version", ""),
+            ", ".join(agent.auth_methods) or "none advertised",
+            agent.can_resume(),
+            agent.can_load(),
+        )
+        return agent
+
+    def _slot_for(self, provider_info: ProviderInfo, entry: LedgerEntry | None) -> int:
+        """Which process serves this request.
+
+        A session keeps the process that opened it.  A new session goes to the
+        process with the fewest sessions bound to it, so a provider that runs
+        several spreads its conversations rather than piling them on one.
+        """
+        processes = self._processes(provider_info)
+        if entry is not None and entry.agent_slot < processes:
+            return entry.agent_slot
+        counts = [0] * processes
+        for held in self._ledger.entries_of(provider_info.config_name):
+            if held.agent_slot < processes:
+                counts[held.agent_slot] += 1
+        return counts.index(min(counts))
+
+    def _pool(self, provider_name: str) -> list[_Agent]:
+        return [a for a in self._agents.get(provider_name, []) if a is not None]
 
     async def close(self) -> None:
         """Stop every agent process this transport started."""
-        for key, agent in list(self._agents.items()):
-            try:
-                await agent.client.stop()
-            except Exception:  # noqa: BLE001 - shutdown must not raise
-                logger.debug("ACP agent %r did not stop cleanly", key, exc_info=True)
+        for key, pool in list(self._agents.items()):
+            for agent in pool:
+                if agent is None:
+                    continue
+                try:
+                    await agent.client.stop()
+                except Exception:  # noqa: BLE001 - shutdown must not raise
+                    logger.debug(
+                        "ACP agent %r did not stop cleanly", key, exc_info=True
+                    )
             self._ledger.drop_provider(key)
         self._agents.clear()
-        self._locks.clear()
+        self._starting.clear()
 
     async def aclose_provider(self, provider_name: str) -> None:
-        """Stop one provider's agent, and forget its sessions."""
-        agent = self._agents.pop(provider_name, None)
-        self._locks.pop(provider_name, None)
+        """Stop one provider's agent processes, and forget its sessions."""
+        pool = self._agents.pop(provider_name, [])
+        self._starting = {
+            k: v for k, v in self._starting.items() if not k.startswith(provider_name)
+        }
         self._ledger.drop_provider(provider_name)
-        if agent is not None:
-            await agent.client.stop()
+        for agent in pool:
+            if agent is not None:
+                await agent.client.stop()
+
+    async def sweep(self) -> int:
+        """Give back sessions nobody has used for their provider's TTL.
+
+        Called periodically rather than only on the next claim: an idle
+        gateway would otherwise keep every agent session — and the transcript
+        the agent holds for it — alive until traffic returned.
+
+        Returns:
+            How many sessions were closed.
+        """
+        closed = 0
+        for entry in self._ledger.expire():
+            await self._close_entry(entry)
+            closed += 1
+        return closed
 
     # -- the conversation a request belongs to ------------------------------
 
@@ -281,9 +344,10 @@ class AcpTransport:
         prompt = body.get("prompt")
         if not isinstance(prompt, list) or not prompt:
             raise AcpTurnError("the acp turn carries no prompt", status_code=400)
-        agent = await self._agent(provider_info)
-        digests = block_digests(prompt)
         key = self._key(provider_info)
+        entry = self._ledger.get(key) if key is not None else None
+        agent = await self._agent(provider_info, self._slot_for(provider_info, entry))
+        digests = block_digests(prompt)
         held: list[asyncio.Lock] = []
 
         try:
@@ -432,12 +496,18 @@ class AcpTransport:
             digests=digests,
         )
         if key is not None:
+            self._ledger.set_limits(
+                key.provider,
+                max_sessions=getattr(provider_info, "acp_max_sessions", None),
+                idle_ttl=getattr(provider_info, "acp_session_ttl", None),
+            )
             entry = LedgerEntry(
                 key=key,
                 session_id=session_id,
                 cwd=cwd,
                 model=turn.model,
                 seen=tuple(digests),
+                agent_slot=agent.slot,
                 live=True,
             )
             turn.entry = entry
@@ -575,10 +645,17 @@ class AcpTransport:
         await self._close_entry(entry)
 
     async def _close_entry(self, entry: LedgerEntry) -> None:
-        """Close one recorded session."""
+        """Close one recorded session on the process that holds it."""
         entry.live = False
-        agent = self._agents.get(entry.key.provider)
+        agent = self._agent_at(entry.key.provider, entry.agent_slot)
         await _close_quietly(agent.client if agent else None, entry.session_id)
+
+    def _agent_at(self, provider_name: str, slot: int) -> _Agent | None:
+        """The pool member at *slot*, without starting one that is not running."""
+        pool = self._agents.get(provider_name) or []
+        if 0 <= slot < len(pool):
+            return pool[slot]
+        return None
 
     # -- UpstreamTransport --------------------------------------------------
 

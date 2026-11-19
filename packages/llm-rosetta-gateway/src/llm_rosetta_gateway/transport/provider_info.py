@@ -243,6 +243,9 @@ class ProviderInfo:
         stream_required: bool = False,
         transport: str = "http",
         acp_argv: tuple[str, ...] | None = None,
+        acp_processes: int = 1,
+        acp_max_sessions: int | None = None,
+        acp_session_ttl: float | None = None,
         quota_probe_id: str | None = None,
         quota_url: str | None = None,
         quota_in_band: bool = False,
@@ -327,6 +330,13 @@ class ProviderInfo:
         # The agent command an ``acp`` transport starts, when the shim
         # declares one; ``None`` takes the transport's default.
         self.acp_argv = acp_argv
+        # How many agent processes this provider may run, and the two bounds
+        # on the sessions they hold.  All three default from the transport;
+        # ``None`` means "keep the default", which is why they are not
+        # normalised here.
+        self.acp_processes = max(1, int(acp_processes or 1))
+        self.acp_max_sessions = acp_max_sessions
+        self.acp_session_ttl = acp_session_ttl
         # The conversation this request belongs to, when the client declared
         # one.  Only an ``acp`` lane reads it: its agent keeps a conversation
         # inside a session of its own, so the id is what decides reuse.  A

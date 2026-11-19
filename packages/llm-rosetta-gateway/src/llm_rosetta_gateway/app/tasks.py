@@ -41,6 +41,31 @@ async def _periodic_token_rotation(app: App) -> None:
 _FLUSH_METRICS_INTERVAL = 30  # seconds
 
 
+_SWEEP_INTERVAL = 60  # seconds
+
+
+async def _periodic_sweep(app: App) -> None:
+    """Periodically let each transport give back what nobody is using.
+
+    A transport that holds upstream state — the ACP lane's agent sessions —
+    expires it on its own schedule, but only when a request arrives.  An idle
+    gateway would otherwise keep every such session alive until traffic came
+    back, which is exactly when nobody is there to notice the cost.  A
+    transport without a ``sweep`` has nothing to give back and is skipped.
+    """
+    while True:
+        await asyncio.sleep(_SWEEP_INTERVAL)
+        transports = dict(getattr(app, "transports", {}) or {})
+        for transport in transports.values():
+            sweep = getattr(transport, "sweep", None)
+            if sweep is None:
+                continue
+            try:
+                await sweep()
+            except Exception as exc:  # noqa: BLE001 - a sweep must not die
+                logger.warning("Periodic transport sweep failed: %s", exc)
+
+
 _CLEANUP_INTERVAL = 7 * 24 * 3600  # weekly
 
 

@@ -175,6 +175,44 @@ class AcpSessionLedger:
         self._ttl = idle_ttl
         self._max_sessions = max_sessions
         self._max_blocks = max_blocks
+        # Per-provider overrides, registered by the transport from the
+        # provider's own config.  Absent means the defaults above apply.
+        self._ttls: dict[str, float] = {}
+        self._caps: dict[str, int] = {}
+
+    # -- per-provider limits ------------------------------------------------
+
+    def set_limits(
+        self,
+        provider: str,
+        *,
+        max_sessions: int | None = None,
+        idle_ttl: float | None = None,
+    ) -> None:
+        """Apply one provider's own session limits.
+
+        The operator may give a busy provider more sessions, or a quiet one a
+        shorter idle life.  Either value may be left out, in which case the
+        ledger's default applies — the same question answered per provider
+        rather than once for the process.
+
+        Args:
+            provider: The provider's config name.
+            max_sessions: How many of its sessions may be held at once.
+            idle_ttl: Seconds one of its unconsumed sessions is kept.
+        """
+        if max_sessions is not None:
+            self._caps[provider] = max(1, int(max_sessions))
+        if idle_ttl is not None:
+            self._ttls[provider] = max(0.0, float(idle_ttl))
+
+    def ttl_of(self, provider: str) -> float:
+        """The idle TTL that applies to *provider*'s sessions."""
+        return self._ttls.get(provider, self._ttl)
+
+    def cap_of(self, provider: str) -> int:
+        """How many sessions *provider* may hold at once."""
+        return self._caps.get(provider, self._max_sessions)
 
     # -- reading ------------------------------------------------------------
 
@@ -245,9 +283,13 @@ class AcpSessionLedger:
         return dropped
 
     def expire(self, *, now: float | None = None) -> list[LedgerEntry]:
-        """Return, and forget, entries idle longer than the TTL."""
+        """Return, and forget, entries idle longer than their provider's TTL."""
         moment = time.monotonic() if now is None else now
-        stale = [e for e in self._entries.values() if moment - e.last_used > self._ttl]
+        stale = [
+            e
+            for e in self._entries.values()
+            if moment - e.last_used > self.ttl_of(e.key.provider)
+        ]
         for entry in stale:
             self._entries.pop(entry.key, None)
             self._locks.pop(entry.key, None)
@@ -262,7 +304,7 @@ class AcpSessionLedger:
         its sessions are busy, and come back under it once they are not.
         """
         held = self.entries_of(keep.key.provider)
-        overflow = len(held) - self._max_sessions
+        overflow = len(held) - self.cap_of(keep.key.provider)
         dropped: list[LedgerEntry] = []
         for entry in held:
             if overflow <= 0:
@@ -284,7 +326,7 @@ class AcpSessionLedger:
         at its cap must displace one, and the displacement has to happen
         before the new session exists to be counted.
         """
-        return len(self.entries_of(provider)) < self._max_sessions
+        return len(self.entries_of(provider)) < self.cap_of(provider)
 
 
 __all__ = [
