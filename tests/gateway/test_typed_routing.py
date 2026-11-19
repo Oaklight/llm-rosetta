@@ -10,6 +10,7 @@ reading removed is passed over, and a route with nothing left reports the same
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
@@ -54,6 +55,28 @@ def _raw(*, model: dict | None = None) -> dict:
             else {"providers": ["jina-a", "jina-b"], "type": "embeddings"},
         },
     }
+
+
+class _CollectingHandler(logging.Handler):
+    """Collect the gateway logger's own records; it does not propagate."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+@pytest.fixture()
+def gateway_warnings():
+    logger = logging.getLogger("llm-rosetta-gateway")
+    handler = _CollectingHandler()
+    logger.addHandler(handler)
+    try:
+        yield handler.records
+    finally:
+        logger.removeHandler(handler)
 
 
 def _spend(config: GatewayConfig, provider: str, probe: str = "p-typed") -> None:
@@ -135,6 +158,87 @@ class TestTheCandidatePool:
         route = GatewayConfig(_raw()).resolve_typed("embeddings", "emb")
 
         assert route.provider_name == "jina-a"
+
+    def test_a_lane_turned_off_is_not_a_candidate(self):
+        """The Models page switch is one control for every model type.
+
+        A typed route that kept reading a closed lane would serve traffic the
+        operator just turned off, so the pool drops it — and a model whose
+        first lane is off resolves to the second, not to the first.
+        """
+        raw = _raw(
+            model={
+                "providers": [
+                    {"name": "jina-a", "enabled": False},
+                    {"name": "jina-b"},
+                ],
+                "type": "embeddings",
+            }
+        )
+        config = GatewayConfig(raw)
+
+        entries = config.typed_model_candidates["embeddings"]["emb"]
+        route = config.resolve_typed("embeddings", "emb")
+
+        assert [entry.name for entry in entries] == ["jina-b"]
+        assert route.provider_name == "jina-b"
+        # The panel lists a typed model with the provider from this map; a
+        # closed first lane left here shows the wrong provider beside the model.
+        assert config.embeddings_models["emb"] == "jina-b"
+
+    def test_a_model_with_every_lane_off_has_no_route(self):
+        """Closing all lanes is the typed half of "no candidate is usable".
+
+        The model stays in the document, so this is a route that cannot be
+        built — the same answer the chat pool gives when every lane is off.
+        """
+        raw = _raw(
+            model={
+                "providers": [
+                    {"name": "jina-a", "enabled": False},
+                    {"name": "jina-b", "enabled": False},
+                ],
+                "type": "embeddings",
+            }
+        )
+        config = GatewayConfig(raw)
+
+        assert "emb" not in config.typed_model_candidates.get("embeddings", {})
+        with pytest.raises(KeyError):
+            config.resolve_typed("embeddings", "emb")
+
+    def test_the_all_off_warning_names_the_closed_lanes(self, gateway_warnings):
+        """The message must send the operator to the switch, not to the format.
+
+        A model whose typed lanes are all closed is not a provider missing the
+        endpoint; saying so points at a field that is set.
+        """
+        raw = _raw(
+            model={
+                "providers": [
+                    {"name": "jina-a", "enabled": False},
+                    {"name": "chat-only"},
+                ],
+                "type": "embeddings",
+            }
+        )
+        raw["providers"]["chat-only"] = {
+            "api_key": "key-c",
+            "base_url": "https://c.example.test",
+            "type": "openai_chat",
+        }
+
+        GatewayConfig(raw)
+
+        messages = [
+            record.getMessage()
+            for record in gateway_warnings
+            if "has type=embeddings" in record.getMessage()
+        ]
+        assert messages == [
+            "Model 'emb' has type=embeddings but every lane that serves "
+            "embeddings is switched off; the model has no route"
+        ]
 
 
 class TestEligibilityComesFirst:

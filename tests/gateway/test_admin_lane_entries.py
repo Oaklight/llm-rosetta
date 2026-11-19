@@ -315,6 +315,187 @@ class TestLaneAdminEndpoints:
         assert entry["upstream_model"] == "legacy-top-level"
 
     @pytest.mark.asyncio
+    async def test_the_last_lane_is_refused_not_deleted(self, tmp_path: Path):
+        """Removing the only lane is the model delete, and says so.
+
+        An entry with no lane cannot route, so the removal route points at the
+        model delete instead of quietly turning one action into the other.
+        """
+        raw = _raw(lanes=[{"name": "p", "upstream_model": "fast"}])
+        request = _post_request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "p", "upstream_model": "fast"},
+        )
+
+        response = await remove_model_provider(request)
+
+        assert response.status_code == 409
+        assert "delete the model" in json.loads(response.body)["error"]
+        assert _on_disk(request)["models"] == raw["models"]
+
+    @pytest.mark.asyncio
+    async def test_a_single_provider_entry_keeps_its_lane(self, tmp_path: Path):
+        """The shorthand entry has one lane, so it is not removable either."""
+        raw = _single("fast")
+        request = _post_request(tmp_path, raw, name=MODEL, body={"provider": "p"})
+
+        response = await remove_model_provider(request)
+
+        assert response.status_code == 409
+        assert _on_disk(request)["models"] == raw["models"]
+
+    @pytest.mark.asyncio
+    async def test_a_lane_marked_enabled_cannot_reopen_the_model(self, tmp_path: Path):
+        """The panel never writes `enabled: true` on a lane; a hand edit can.
+
+        Letting it clear the entry's own `enabled: false` would reopen a model
+        that was closed as a whole — the mirror of the bug this collapse fixes.
+        """
+        raw = _raw()
+        raw["models"][MODEL]["enabled"] = False
+        raw["models"][MODEL]["providers"] = [
+            {"name": "p", "upstream_model": "fast"},
+            {"name": "p", "upstream_model": "eco", "enabled": True},
+        ]
+        request = _post_request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "p", "upstream_model": "fast"},
+        )
+
+        await remove_model_provider(request)
+
+        entry = _on_disk(request)["models"][MODEL]
+        assert entry["provider"] == "p"
+        assert entry["upstream_model"] == "eco"
+        assert entry["enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_collapsing_keeps_the_survivors_own_state(self, tmp_path: Path):
+        """Removing one lane must not switch the other one on.
+
+        The collapse drops the lane's weight — one lane takes everything —
+        but keeps its on/off flag, capability override, and the entry-level
+        routing the survivor now inherits.
+        """
+        raw = _raw()
+        raw["models"][MODEL]["routing"] = {"strategy": "affinity"}
+        raw["models"][MODEL]["providers"] = [
+            {"name": "p", "upstream_model": "fast"},
+            {
+                "name": "p",
+                "upstream_model": "eco",
+                "enabled": False,
+                "capabilities": ["text"],
+            },
+        ]
+        request = _post_request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "p", "upstream_model": "fast"},
+        )
+
+        await remove_model_provider(request)
+
+        entry = _on_disk(request)["models"][MODEL]
+        assert entry["provider"] == "p"
+        assert entry["upstream_model"] == "eco"
+        assert entry["enabled"] is False
+        assert entry["capabilities"] == ["text"]
+        assert entry["routing"] == {"strategy": "affinity"}
+
+    @pytest.mark.asyncio
+    async def test_collapsing_keeps_the_entry_keys_it_does_not_own(
+        self, tmp_path: Path
+    ):
+        """Every per-model key the parser reads survives the collapse.
+
+        `parse_model_overrides` reads these on the entry; a key missing from the
+        collapse table would be reset by removing an unrelated lane.
+        """
+        raw = _raw()
+        raw["models"][MODEL].update(
+            {
+                "failover_on_error": False,
+                "max_tool_description_length": 500,
+                "timeout": 30.0,
+                "flatten_system": True,
+                "url_template": "https://x/{model}",
+            }
+        )
+        request = _post_request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "p", "upstream_model": "fast"},
+        )
+
+        await remove_model_provider(request)
+
+        entry = _on_disk(request)["models"][MODEL]
+        assert entry["failover_on_error"] is False
+        assert entry["max_tool_description_length"] == 500
+        assert entry["timeout"] == 30.0
+        assert entry["flatten_system"] is True
+        assert entry["url_template"] == "https://x/{model}"
+
+    @pytest.mark.asyncio
+    async def test_collapsing_keeps_the_legacy_spellings_too(self, tmp_path: Path):
+        """`strategy` and `failover_on_quota` are still read, so they still count.
+
+        Dropping them would reset a model to the default strategy and re-enable
+        failover for a model whose author opted out.
+        """
+        raw = _raw()
+        raw["models"][MODEL]["strategy"] = "ordered"
+        raw["models"][MODEL]["failover_on_quota"] = False
+        request = _post_request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "p", "upstream_model": "fast"},
+        )
+
+        await remove_model_provider(request)
+
+        entry = _on_disk(request)["models"][MODEL]
+        assert entry["strategy"] == "ordered"
+        assert entry["failover_on_quota"] is False
+        config = GatewayConfig(_on_disk(request))
+        assert type(config.models[MODEL].strategy).__name__ == "OrderedStrategy"
+        # The opt-out is an absence: `parse_model_failover` omits the model.
+        assert MODEL not in config.model_failover
+
+    @pytest.mark.asyncio
+    async def test_an_empty_lane_capability_list_keeps_the_entrys(self, tmp_path: Path):
+        """`[]` on a lane means "inherit", so the entry's list is what it keeps.
+
+        Dropping the entry's list instead fell back to the default `['text']`,
+        so a vision model lost `vision` when an unrelated lane was removed.
+        """
+        raw = _raw()
+        raw["models"][MODEL]["capabilities"] = ["text", "vision"]
+        raw["models"][MODEL]["providers"] = [
+            {"name": "p", "upstream_model": "fast"},
+            {"name": "p", "upstream_model": "eco", "capabilities": []},
+        ]
+        request = _post_request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "p", "upstream_model": "fast"},
+        )
+
+        await remove_model_provider(request)
+
+        entry = _on_disk(request)["models"][MODEL]
+        assert entry["capabilities"] == ["text", "vision"]
+
+    @pytest.mark.asyncio
     async def test_the_undeclared_lane_is_addressed_as_empty(self, tmp_path: Path):
         """``""`` names the lane without an upstream; absent means "not said"."""
         raw = _raw()

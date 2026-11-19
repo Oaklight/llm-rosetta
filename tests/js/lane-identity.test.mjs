@@ -202,3 +202,38 @@ test('rows are not draggable when one provider holds two lanes', () => {
     'a duplicated name would make the order say two things at once',
   );
 });
+
+test('the lane switch reads the lane flag, not the provider flag', () => {
+  // A lane closed for this model and a provider closed for every model are
+  // two different switches.  The row shows the lane's own state, says the
+  // provider's beside the name, and only the lane control appears here.
+  const rows = bodyOf(MODELS, 'function _providerMenuRows(');
+  assert.match(rows, /const laneOff = p\.enabled === false/);
+  assert.match(rows, /const accountOff = disabledProviders\.has\(p\.name\)/);
+  assert.match(rows, /on: !laneOff/, 'the switch shows the lane, not the account');
+  assert.match(rows, /t\('model\.laneAccountOff'\)/, 'the account off is stated');
+  assert.doesNotMatch(
+    rows,
+    /toggleModel\(/,
+    'the provider-wide switch lives on the Providers page',
+  );
+});
+
+test('the drawer closes and deletes the model from its own actions', () => {
+  const detail = bodyOf(MODELS, 'function _modelDetailHtml(');
+  assert.match(detail, /toggleModel\(\$\{jsArg\(name\)\}\)/, 'the enable/disable action');
+  assert.match(detail, /btn\.disable/, 'a model that is on offers Disable');
+  assert.match(detail, /btn\.enable/, 'a model that is off offers Enable');
+  assert.match(detail, /deleteModel\(\$\{jsArg\(name\)\}/, 'delete stays the model delete');
+});
+
+test('a one-element lane list keeps its own switch in the drawer', () => {
+  // `providers: [x]` carries a lane flag; `provider: x` does not, and the
+  // model switch writes the entry flag instead.  Offering the lane switch for
+  // the shorthand shape would write a key the entry does not have a place for.
+  const body = bodyOf(MODELS, 'function _detailProviderRows(');
+  assert.match(body, /const lanes = info && Array\.isArray\(info\.providers\)/);
+  assert.match(body, /const switchHtml = lanes\s*\n?\s*\? laneSwitchHtml\(/);
+  assert.match(body, /toggleModelProvider\(/, 'the switch names the lane');
+  assert.match(body, /model\.laneOff/, 'a lane that is off says so');
+});

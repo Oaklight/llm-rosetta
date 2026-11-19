@@ -735,13 +735,22 @@ async function toggleProviderCapability(model, provider, upstream, checkbox) {
   showToast(t('toast.capsSet', { provider: laneLabel(provider, upstream) }));
 }
 
-/** One menu row per provider: its own on/off switch, weight, test and remove. */
+/** One menu row per provider: its own on/off switch, weight, test and remove.
+ *
+ *  The switch reads the lane's own flag, not the provider's: a lane closed
+ *  for this model is not the same switch as the provider closed for every
+ *  model, and showing the provider's state here would make the click that
+ *  turns a lane back on look like it turns the provider back on.  When the
+ *  provider is off, the row says so beside the name and the switch still
+ *  moves only the lane flag, which takes effect when the provider returns. */
 function _providerMenuRows(name, info, disabledProviders) {
   const details = _getProviderDetails(info);
   const modelType = _getModelType(info);
   return details.map(p => {
     const opts = _laneOpts(info, p);
-    const off = _providerEntryOff(p, disabledProviders);
+    const laneOff = p.enabled === false;
+    const accountOff = disabledProviders.has(p.name);
+    const off = laneOff || accountOff;
     const n = esc(name);
     const pn = esc(p.name);
     const w = p.weight || 1;
@@ -761,24 +770,35 @@ function _providerMenuRows(name, info, disabledProviders) {
     const grip = draggable
       ? laneGripHtml({ title: t('model.reorderHint') })
       : '';
+    // Two different offs, said once each.  The lane's own is the switch; the
+    // provider's is a note, because this row cannot undo it.
+    const laneNote = laneOff
+      ? `<span class="pm-note">${t('model.laneOff')}</span>`
+      : '';
+    const accountNote = accountOff
+      ? `<span class="pm-note is-account">${t('model.laneAccountOff')}</span>`
+      : '';
+    const label = laneLabel(p.name, upstream);
     return `<div class="provider-menu-row${off ? ' pm-off' : ''}" role="menuitem"${drag}>
       ${grip}
       ${laneSwitchHtml({
-        name: p.name,
-        on: !off,
-        title: off ? t('provider.disabled') : t('provider.enabled'),
+        name: label,
+        on: !laneOff,
+        title: laneOff ? t('hint.laneOn') : t('hint.laneOff'),
         onchange: `toggleModelProvider(${jsArg(name)},${jsArg(p.name)},${jsArg(upstream)})`,
       })}
       <div class="pm-id">
         <span class="pm-idline">${_pmLogo(p.name)}<button type="button" class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel(${jsArg(p.name)})">${esc(_providerLabel(p.name))}</button></span>
-        <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
+        <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}${laneNote}${accountNote}</span>
       </div>
       ${modelType === 'llm'
         ? _capPicker(name, p)
         : `<span class="tag is-square ${_typeBadgeClass(modelType)}" title="${esc(typeLabelAlt(modelType))}">${_CAP_ICONS[modelType] || ''}</span>`}
-      ${laneWeightInputHtml({ model: name, provider: p.name, upstream, weight: w, title: t('label.weight') })}
-      ${_testGroup(name, modelType, opts, p.name)}
-      <button class="btn btn-sm pd-remove" title="${t('btn.remove')}" onclick="removeProviderFromModel(${jsArg(name)},${jsArg(p.name)},${jsArg(upstream)})">✕</button>
+      <div class="pm-actions">
+        ${laneWeightInputHtml({ model: name, provider: p.name, upstream, weight: w, title: t('label.weight') })}
+        ${_testGroup(name, modelType, opts, p.name)}
+        <button class="btn btn-sm pd-remove" title="${t('btn.remove')}" aria-label="${t('btn.remove')} ${esc(label)}" onclick="removeProviderFromModel(${jsArg(name)},${jsArg(p.name)},${jsArg(upstream)})">✕</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -943,21 +963,45 @@ window.applyModelRoute = applyModelRoute;
 
 /** Provider rows: the dropdown's rows for a multi entry, a plain one otherwise.
  *
- *  A single-provider entry has no providers[] to switch or remove, so it gets
- *  the name, its upstream and a test button and nothing that would fail. */
+ *  A single-provider entry has no list to add to or remove from, so it gets
+ *  the name, its upstream and a test button and nothing that would fail.  It
+ *  carries a lane switch only when the entry is a one-element `providers[]`:
+ *  that shape has a lane flag of its own, and it is the only control that
+ *  turns such a lane back on — the model's own switch writes the entry flag,
+ *  which is a different key.  The shorthand entry (`provider: x`) has no lane
+ *  flag at all, so the drawer's model switch is its control. */
 function _detailProviderRows(name, info, disabledProviders) {
-  if (Array.isArray(info && info.providers) && info.providers.length > 1) {
+  const lanes = info && Array.isArray(info.providers) ? info.providers : null;
+  if (lanes && lanes.length > 1) {
     return _providerMenuRows(name, info, disabledProviders);
   }
   const [p] = _getProviderDetails(info);
   if (!p) return '';
   const modelType = _getModelType(info);
   const opts = _laneOpts(info, p);
-  const off = _providerEntryOff(p, disabledProviders);
+  const laneOff = p.enabled === false;
+  const accountOff = disabledProviders.has(p.name);
+  const off = laneOff || accountOff;
+  const upstream = p.upstream_model || '';
+  const switchHtml = lanes
+    ? laneSwitchHtml({
+      name: laneLabel(p.name, upstream),
+      on: !laneOff,
+      title: laneOff ? t('hint.laneOn') : t('hint.laneOff'),
+      onchange: `toggleModelProvider(${jsArg(name)},${jsArg(p.name)},${jsArg(upstream)})`,
+    })
+    : '';
+  const note = laneOff
+    ? `<span class="pm-note">${t('model.laneOff')}</span>`
+    : '';
+  const accountNote = accountOff
+    ? `<span class="pm-note is-account">${t('model.laneAccountOff')}</span>`
+    : '';
   return `<div class="provider-menu-row pd-single${off ? ' pm-off' : ''}">
+      ${switchHtml}
       <span class="pm-id">
         <span class="pm-idline">${_pmLogo(p.name)}<button type="button" class="provider-link pm-name" title="${esc(p.name)}" onclick="goToProviderFromModel(${jsArg(p.name)})">${esc(_providerLabel(p.name))}</button></span>
-        <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}</span>
+        <span class="pm-upstream">${p.upstream_model ? `→ ${esc(p.upstream_model)}` : ''}${note}${accountNote}</span>
       </span>
       ${_testGroup(name, modelType, opts, p.name)}
     </div>`;
@@ -966,6 +1010,7 @@ function _detailProviderRows(name, info, disabledProviders) {
 /** The detail block for one model. */
 function _modelDetailHtml(name, info, disabledProviders) {
   const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
+  const modelEnabled = typeof info === 'object' ? info.enabled !== false : true;
   const capList = caps.map(c =>
     `<span class="tag is-square cap-badge-${c}" title="${esc(capLabel(c))}">${_capIcons[c] || ''}<span>${esc(capLabel(c))}</span></span>`,
   ).join('');
@@ -973,6 +1018,7 @@ function _modelDetailHtml(name, info, disabledProviders) {
       <div class="md-row"><span class="md-label">${t('label.capabilities')}</span><span class="md-caps">${capList}</span></div>
       <div class="md-providers">${_detailProviderRows(name, info, disabledProviders)}${_fallbackRowHtml(name, info)}${_addLaneHtml(name)}</div>
       <div class="md-actions">
+        <button class="btn btn-sm" onclick="toggleModel(${jsArg(name)})">${modelEnabled ? t('btn.disable') : t('btn.enable')}</button>
         <button class="btn btn-sm" onclick="editModel(${jsArg(name)},${jsArg(_getProviderDetails(info)[0]?.name || '')})">${t('btn.edit')}</button>
         <button class="btn btn-sm" onclick="cloneModel(${jsArg(name)})">${t('btn.clone')}</button>
         <button class="btn btn-sm btn-danger" onclick="deleteModel(${jsArg(name)}, this)">${t('btn.delete')}</button>

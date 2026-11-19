@@ -1040,7 +1040,9 @@ canvas { width: 100%; height: 160px; }
 .md-add-lane:hover { color: var(--text); }
 /* The entry-level fallback: reported, not a lane of its own. */
 .md-fallback { color: var(--text-dim); }
-.md-actions { display: flex; gap: 6px; justify-content: flex-end; margin-top: 8px; }
+/* Four actions now (the model's own switch joined Edit, Clone and Delete).
+   They wrap rather than push the last one out of the drawer. */
+.md-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; margin-top: 8px; }
 /* The model side panel is the third drawer and takes the same frame as the
    other two: one 1px edge on the side that stands free, the panel corner on
    the corners that do, no shadow, and the one scrim behind it. */
@@ -1122,14 +1124,27 @@ canvas { width: 100%; height: 160px; }
 }
 .provider-menu-row + .provider-menu-row { border-top: 1px solid var(--hairline); }
 .provider-menu-row:hover { background: var(--surface-2); }
-.provider-menu-row .pm-id { min-width: 0; }
-/* A single-provider row has no switch, weight or remove: the test button takes
-   the right edge, where it sits in a multi-provider row too. */
-.provider-menu-row.pd-single { grid-template-columns: minmax(0, 1fr) auto; }
-/* A multi-provider row: grip, switch, name, caps, weight, test, remove.  The
-   grip is the order control — the same drag the Routing board offers. */
+.provider-menu-row .pm-id { min-width: 0; display: flex; flex-direction: column; }
+/* The identity line shrinks and its name truncates: an inline-flex line kept
+   its content width, so a long provider name ran over the switch beside it. */
+.provider-menu-row .pm-idline { display: flex; min-width: 0; max-width: 100%; }
+.provider-menu-row .pm-name { flex: 1 1 auto; min-width: 0; }
+/* A single-provider row has no weight or remove: the test button takes the
+   right edge, where it sits in a multi-provider row too.  The switch cell is
+   reserved so a row that has one (`providers: [x]`) and one that does not
+   (`provider: x`) line their names up. */
+.provider-menu-row.pd-single { grid-template-columns: auto minmax(0, 1fr) auto; }
+.provider-menu-row.pd-single.md-fallback { grid-template-columns: minmax(0, 1fr) auto; }
+/* A multi-provider row: grip, switch, name, caps, actions.  The grip is the
+   order control — the same drag the Routing board offers.  Weight, test and
+   remove are one grid cell so they wrap together instead of leaving the
+   remove button alone on a second line under 440 px. */
 .provider-menu-row:has(.pm-grip) {
-  grid-template-columns: auto auto minmax(0, 1fr) auto auto auto auto;
+  grid-template-columns: auto auto minmax(0, 1fr) auto minmax(0, auto);
+}
+.pm-actions {
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 6px; flex-wrap: wrap; min-width: 0;
 }
 .pm-grip {
   cursor: grab; color: var(--text-dim); letter-spacing: -1px;
@@ -1149,6 +1164,43 @@ canvas { width: 100%; height: 160px; }
 }
 .provider-menu-row.pm-off .pm-name,
 .provider-menu-row.pm-off .pm-upstream { opacity: 0.45; }
+/* Two kinds of "off" in one row, and they are not the same switch.  The
+   lane's own off is a note the switch can undo; the provider's is stated
+   apart and links to the place that can. */
+.provider-menu-row .pm-note {
+  display: inline-block; margin-left: 6px; padding: 0 4px;
+  border: 1px solid var(--hairline); border-radius: 3px;
+  font-size: 10px; color: var(--text-dim);
+}
+.provider-menu-row .pm-note.is-account { color: var(--warn); border-color: var(--warn); }
+/* A provider that is off everywhere is already dimmed by `pm-off` on its
+   name and upstream; the mode has no second dimming rule, so the note beside
+   the name is what says why the switch is still checked. */
+/* The popover is 480 px wide, which is wider than a phone.  Under that the
+   row stacks: identity first, then the controls, so no control is pushed off
+   the edge or wrapped away from its row. */
+/* 480px of panel plus both margins does not fit a viewport narrower than
+   ~512px, so the width rule comes first and holds through 560px.  It is a
+   percentage, not `100vw`: the panel is `position: fixed`, so its width and
+   `positionMenu`'s clamp both resolve against the fixed containing block,
+   while `100vw` includes a classic scrollbar the block excludes — 10px of
+   difference put the left edge at -2 on a phone with a scrolling page. */
+@media (max-width: 560px) {
+  .provider-menu { min-width: 0; width: calc(100% - 32px); }
+}
+@media (max-width: 440px) {
+  /* A grid row has a fixed cell per control; on a phone the controls outnumber
+     the cells and the switch lands on a line of its own above the name.  A
+     wrapping flex row keeps grip + switch + name together and sends only the
+     action cluster below, which is the reading order the row has anyway. */
+  .provider-menu-row,
+  .provider-menu-row:has(.pm-grip),
+  .provider-menu-row.pd-single {
+    display: flex; flex-wrap: wrap; align-items: center; row-gap: 6px;
+  }
+  .provider-menu-row .pm-id { flex: 1 1 0; }
+  .provider-menu-row .pm-actions { flex: 1 1 100%; justify-content: flex-start; }
+}
 .provider-menu-row .pd-weight {
   width: 44px; padding: 2px 4px; font-size: 11px; text-align: center;
   border: 1px solid var(--hairline); border-radius: 3px;
@@ -1583,7 +1635,7 @@ input.is-host-mismatch { border-color: var(--neg); }
    clipped by its own span, so the cell itself no longer has to hide the
    overhang. */
 #tab-models .model-provider-cell { overflow:visible; }
-#tab-models .model-provider-cell .provider-link {
+#tab-models .model-provider-cell > .provider-link {
   /* inline-flex, not block: the link is a jump to the provider card, so it
      must cover its text and not the whole 28% column under the pointer. */
   display:inline-flex; align-items:center; gap:6px; vertical-align:middle;
@@ -1593,9 +1645,9 @@ input.is-host-mismatch { border-color: var(--neg); }
   max-width:calc(100% + 20px); min-width:0;
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-#tab-models .model-provider-cell .provider-link > span { min-width:0; }
+#tab-models .model-provider-cell > .provider-link > span { min-width:0; }
 /* The gap spaces the pair; the logo's own right margin would space it twice. */
-#tab-models .model-provider-cell .provider-link .pm-logo { margin-right:0; }
+#tab-models .model-provider-cell > .provider-link .pm-logo { margin-right:0; }
 /* The chip keeps its frame, and its label sits on the same line as the
    single-provider names: 1 px border + 10 px padding to the left. */
 #tab-models .model-provider-cell .provider-multi-btn { margin-left:-11px; }

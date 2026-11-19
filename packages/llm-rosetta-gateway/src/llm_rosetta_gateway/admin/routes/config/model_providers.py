@@ -82,13 +82,19 @@ def _remove_provider_from_entry(
     success (caller should commit).  ``upstream`` names the lane when the
     provider appears more than once; without it a multi-lane provider is a
     409 rather than a guess.
+
+    The last declared lane is refused rather than removed: an entry with no
+    lane is not routable, so removing the last one and deleting the model
+    would be one keystroke apart with no way back but the editor.  The lane
+    can be switched off instead, and deleting is the model delete action.
     """
     existing = models[name]
     lane, ambiguity = _target_lane(name, existing, provider, upstream)
     if ambiguity is not None:
         return ambiguity
 
-    # Single-provider shorthand (string or dict without "providers")
+    # Single-provider shorthand (string or dict without "providers"): that one
+    # lane is the whole model, so it is not removable here either.
     if isinstance(existing, str) or (
         isinstance(existing, dict) and "providers" not in existing
     ):
@@ -97,8 +103,7 @@ def _remove_provider_from_entry(
                 {"error": f"Provider '{provider}' not found on model '{name}'"},
                 status_code=404,
             )
-        del models[name]
-        return None
+        return _last_lane_refusal(name)
 
     if not isinstance(existing, dict):
         return JSONResponse({"error": "Invalid model entry"}, status_code=400)
@@ -113,13 +118,29 @@ def _remove_provider_from_entry(
         )
 
     if not new_list:
-        del models[name]
-    elif len(new_list) == 1:
+        return _last_lane_refusal(name)
+    if len(new_list) == 1:
         _collapse_to_single_provider(models, name, existing, new_list[0])
     else:
         existing["providers"] = new_list
 
     return None
+
+
+def _last_lane_refusal(name: str) -> JSONResponse:
+    """The 409 for removing a model's only lane.
+
+    A model entry needs one lane to stay routable.  Removing the last one is
+    the model delete action, a different button with its own confirmation, so
+    the removal route points at it instead of deleting the model here.
+    """
+    return JSONResponse(
+        {
+            "error": f"'{name}' has one lane left; turn it off, or delete "
+            "the model instead"
+        },
+        status_code=409,
+    )
 
 
 def _remove_all_lanes_of_provider(
@@ -174,7 +195,29 @@ def _collapse_to_single_provider(
     existing: dict[str, Any],
     sole: Any,
 ) -> None:
-    """Collapse a multi-provider model to single-provider format."""
+    """Collapse a multi-provider model to single-provider format.
+
+    The survivor keeps everything the lane row showed: its weight is dropped
+    (one lane takes all the traffic), but the lane's own on/off state and
+    capability override move to the entry, because the collapse happens while
+    other lanes are being removed and silently re-enabling the survivor — or
+    widening its capabilities — would be an edit nobody asked for.
+
+    A lane's ``enabled`` can only *close* the collapsed entry.  The panel writes
+    a closed lane as ``False`` and an open one by deleting the key, so
+    ``True`` is hand-written; letting it clear the entry's own ``enabled:
+    false`` would reopen a model that was closed as a whole, which is the same
+    mistake one scope up.
+
+    ``failover_on_error`` belongs to the model entry, not to a lane — the entry
+    parser reads it there and nowhere else.  It is carried because the model it
+    configures is still that model after a lane is removed.
+
+    The table below is every per-model key the parser reads, plus the legacy
+    spellings it still honours (``strategy``, ``failover_on_quota``) so that an
+    old entry keeps its behaviour.  A key missing from it would be reset by
+    removing an unrelated lane.
+    """
     sole_name = sole if isinstance(sole, str) else sole.get("name", "")
     entry: dict[str, Any] = {"provider": sole_name}
     # A lane that declares no upstream of its own is served by the entry-level
@@ -194,9 +237,27 @@ def _collapse_to_single_provider(
         "reasoning_override",
         "url_template",
         "stream_url_template",
+        "max_tool_description_length",
+        # Routing is the entry's, not a lane's: dropping it would reset the
+        # strategy of a model nobody asked to change.  The legacy spellings go
+        # with their canonical keys: `strategy_for` still reads `strategy`, and
+        # `parse_model_failover` still reads `failover_on_quota`.
+        "routing",
+        "strategy",
+        "failover_on_error",
+        "failover_on_quota",
     ):
         if key in existing:
             entry[key] = existing[key]
+    if isinstance(sole, dict):
+        if sole.get("enabled") is False:
+            entry["enabled"] = False
+        # An empty list on a lane means "inherit", the same thing it means to
+        # `_set_provider_attrs`; the entry's own list is what it inherits, so
+        # the collapse leaves that list alone.
+        caps = sole.get("capabilities")
+        if caps:
+            entry["capabilities"] = caps
     models[name] = entry
 
 
@@ -404,15 +465,14 @@ async def remove_model_provider(request: Any, **kwargs: Any) -> Response:
         return ctx.error
     assert ctx.new_config is not None
 
-    deleted = name not in ctx.new_config.models and name not in models
+    # The model is never deleted here: the last lane is refused, so a model
+    # with lanes left always survives with the lanes that remain.
     result: dict[str, Any] = {
         "ok": True,
         "model": name,
         "removed_provider": provider,
         "removed_upstream_model": upstream,
     }
-    if deleted:
-        result["deleted"] = name
     result["models"] = list(ctx.new_config.models)
     return JSONResponse(result)
 
