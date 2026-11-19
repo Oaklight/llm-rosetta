@@ -1,21 +1,32 @@
 """The ACP transport: drive a local agent CLI over stdio JSON-RPC.
 
 ACP is not HTTP, so this transport does not POST a body anywhere.  It keeps
-one agent process per configured provider, opens one session per request,
-sends the request's prompt blocks, and turns ``session/update`` notifications
-into the chunk shapes the ``acp`` converter reads.
+an agent process per configured provider, and a *session* per conversation:
+the agent holds the transcript, so the next turn of that conversation carries
+only what is new.
+
+Two things decide what happens to a request:
+
+* **Which conversation it belongs to.**  A client that declares one
+  (:attr:`SessionIdentity.declared`) gets a session of its own, which survives
+  across turns.  A request that declares none opens a session, uses it, and
+  closes it — a guessed identity is worse than no reuse, because one agent
+  session keyed on a guess would hand one conversation's transcript to
+  another.
+* **Whether its history still matches what the agent was shown.**  The ledger
+  (``acp_ledger``) keeps one digest per prompt block the session has seen.  A
+  history that extends it reuses the session and sends the tail; anything else
+  closes the session and replays the whole conversation into a fresh one.
+
+Turns of one session are serialised: two HTTP requests for one conversation
+must not interleave inside one agent session.  Turns that share a process also
+take that process's lock, because one stdio connection carries them.
 
 The protocol implementation itself is vendored (``_vendor/acp.py``, from
 zerodep): the client, the JSON-RPC framing and the session queues.  What
 lives here is the part that is this gateway's own: how a provider's process is
-started, which agent command serves it, how a refused session is reported, and
-how the agent's events become chunks.
-
-Phase 1 is deliberately stateless per request: each request opens a session,
-sends the whole conversation, and closes it.  Session reuse across requests
-depends on the agent's history agreeing with the client's, which needs a
-ledger this slice does not keep yet; replaying the conversation is slower but
-cannot silently lose a turn.
+started, which agent command serves it, when a session is reused or resumed,
+how a refused session is reported, and how the agent's events become chunks.
 """
 
 from __future__ import annotations
@@ -37,6 +48,13 @@ from .._vendor.acp import (
 from .._vendor.jsonrpc import JSONRPCException
 from ..transport._base import UpstreamConnectionError, UpstreamResponse, UpstreamStream
 from ..transport.provider_info import ProviderInfo
+from .acp_ledger import (
+    EXTENDS,
+    AcpSessionLedger,
+    LedgerEntry,
+    SessionKey,
+    block_digests,
+)
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -86,6 +104,19 @@ class _Agent:
     client: ACPClient
     info: Any = None
     auth_methods: list[str] = field(default_factory=list)
+    #: Held for the length of a turn.  One stdio connection carries every
+    #: session of this process, so two prompts must not be written into it at
+    #: once even when their sessions differ.
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+
+    def can_resume(self) -> bool:
+        """Whether the agent advertises ``session/resume``."""
+        return _capability(self.info, "resume") is not None
+
+    def can_load(self) -> bool:
+        """Whether the agent advertises ``session/load``."""
+        caps = getattr(self.info, "agent_capabilities", None)
+        return bool(getattr(caps, "load_session", False))
 
 
 @dataclass
@@ -95,6 +126,33 @@ class _Turn:
     agent: _Agent
     session_id: str
     model: str
+    #: Where this request's own blocks start: everything before it is already
+    #: in the agent's transcript.
+    tail_start: int = 0
+    #: The ledger entry this turn keeps up to date, when it has one.
+    entry: LedgerEntry | None = None
+    #: Locks this turn holds, released together when it ends.
+    held: list[asyncio.Lock] = field(default_factory=list, repr=False)
+    #: Digests of every block the agent will have seen once this turn lands.
+    digests: tuple[str, ...] = ()
+    released: bool = False
+
+    def release(self) -> None:
+        """Give back the locks this turn took, once."""
+        if self.released:
+            return
+        self.released = True
+        for lock in reversed(self.held):
+            if lock.locked():
+                lock.release()
+        self.held.clear()
+
+
+def _capability(info: Any, name: str) -> Any:
+    """Return one of the agent's advertised session capabilities."""
+    caps = getattr(info, "agent_capabilities", None)
+    session_caps = getattr(caps, "session_capabilities", None)
+    return getattr(session_caps, name, None)
 
 
 def _looks_like_sign_in(message: str) -> bool:
@@ -105,10 +163,21 @@ def _looks_like_sign_in(message: str) -> bool:
 class AcpTransport:
     """Transport for providers whose upstream is a local ACP agent."""
 
-    def __init__(self, *, timeout: float = 300.0) -> None:
+    def __init__(
+        self,
+        *,
+        timeout: float = 300.0,
+        ledger: AcpSessionLedger | None = None,
+    ) -> None:
         self._timeout = timeout
         self._agents: dict[str, _Agent] = {}
         self._locks: dict[str, asyncio.Lock] = {}
+        self._ledger = ledger or AcpSessionLedger()
+
+    @property
+    def ledger(self) -> AcpSessionLedger:
+        """The session ledger this transport keeps."""
+        return self._ledger
 
     # -- agent lifecycle ----------------------------------------------------
 
@@ -155,11 +224,13 @@ class AcpTransport:
             )
             self._agents[key] = agent
             logger.info(
-                "ACP agent for provider %r: %s %s (auth: %s)",
+                "ACP agent for provider %r: %s %s (auth: %s; resume: %s, load: %s)",
                 key,
                 getattr(info.agent_info, "name", "unknown"),
                 getattr(info.agent_info, "version", ""),
                 ", ".join(agent.auth_methods) or "none advertised",
+                agent.can_resume(),
+                agent.can_load(),
             )
             return agent
 
@@ -170,39 +241,174 @@ class AcpTransport:
                 await agent.client.stop()
             except Exception:  # noqa: BLE001 - shutdown must not raise
                 logger.debug("ACP agent %r did not stop cleanly", key, exc_info=True)
+            self._ledger.drop_provider(key)
         self._agents.clear()
         self._locks.clear()
 
     async def aclose_provider(self, provider_name: str) -> None:
-        """Stop one provider's agent, if it is running."""
+        """Stop one provider's agent, and forget its sessions."""
         agent = self._agents.pop(provider_name, None)
         self._locks.pop(provider_name, None)
+        self._ledger.drop_provider(provider_name)
         if agent is not None:
             await agent.client.stop()
 
-    # -- turn execution -----------------------------------------------------
+    # -- the conversation a request belongs to ------------------------------
 
-    async def _open_turn(
+    def _key(self, provider_info: ProviderInfo) -> SessionKey | None:
+        """The ledger key for this request, or ``None`` for a one-off session.
+
+        A lane carries a conversation id only when the client declared one
+        (see ``routing.session``); without it the request gets a session of
+        its own, which is closed when the turn ends.
+        """
+        conversation = getattr(provider_info, "acp_conversation_id", None)
+        if not conversation:
+            return None
+        return SessionKey(provider=provider_info.config_name, conversation=conversation)
+
+    # -- acquiring a session ------------------------------------------------
+
+    async def _acquire_turn(
         self, provider_info: ProviderInfo, body: dict[str, Any]
     ) -> tuple[_Turn, dict[str, Any]]:
-        """Start the agent and open a session; raise :class:`AcpTurnError`.
+        """Find or open the session this request belongs to.
 
-        Opening is separate from prompting so a streaming request can learn
-        that the lane refuses *before* the response headers go out: a
-        signed-out agent becomes a 503, not an empty 200 SSE stream.
+        Raises:
+            AcpTurnError: The prompt is empty, the agent could not start, or
+                it refused to open a session.
         """
-        agent = await self._agent(provider_info)
-        client = agent.client
         prompt = body.get("prompt")
         if not isinstance(prompt, list) or not prompt:
             raise AcpTurnError("the acp turn carries no prompt", status_code=400)
-        cwd = str(
-            getattr(provider_info, "acp_cwd", None)
-            or body.get("cwd")
-            or _default_workspace(provider_info)
-        )
+        agent = await self._agent(provider_info)
+        digests = block_digests(prompt)
+        key = self._key(provider_info)
+        held: list[asyncio.Lock] = []
+
         try:
-            session = await client.new_session(cwd, [])
+            if key is not None:
+                session_lock = self._ledger.lock_for(key)
+                await session_lock.acquire()
+                held.append(session_lock)
+            await agent.lock.acquire()
+            held.append(agent.lock)
+            if key is not None:
+                turn = await self._reuse(provider_info, body, key, agent, digests, held)
+                if turn is not None:
+                    return turn, _start_of(turn)
+                self._ledger.drop(key)
+            turn = await self._open(provider_info, body, key, agent, digests, held)
+            return turn, _start_of(turn)
+        except BaseException:
+            for lock in reversed(held):
+                if lock.locked():
+                    lock.release()
+            raise
+
+    async def _reuse(
+        self,
+        provider_info: ProviderInfo,
+        body: dict[str, Any],
+        key: SessionKey,
+        agent: _Agent,
+        digests: tuple[str, ...],
+        held: list[asyncio.Lock],
+    ) -> _Turn | None:
+        """Continue the recorded session, when the request may ride on it."""
+        entry = self._ledger.get(key)
+        if entry is None:
+            return None
+        cwd = _workspace(provider_info, body)
+        if entry.cwd != cwd:
+            # A different working directory is a different workspace; the
+            # agent's session cannot be moved, so it is not this request's.
+            await self._forget(entry)
+            return None
+        if self._ledger.relationship_for(entry, digests) != EXTENDS:
+            await self._forget(entry)
+            return None
+        if not entry.live:
+            resumed = await self._resume(provider_info, agent, entry, cwd)
+            if resumed is None:
+                await self._forget(entry)
+                return None
+        model = await self._match_model(provider_info, agent, entry, body)
+        entry.touch()
+        return _Turn(
+            agent=agent,
+            session_id=entry.session_id,
+            model=model,
+            tail_start=len(entry.seen),
+            entry=entry,
+            held=held,
+            digests=digests,
+        )
+
+    async def _resume(
+        self, provider_info: ProviderInfo, agent: _Agent, entry: LedgerEntry, cwd: str
+    ) -> str | None:
+        """Bring a recorded session back, or report that it is gone.
+
+        ``session/resume`` continues without replaying; ``session/load``
+        replays the transcript first, and those updates are discarded here —
+        the client is not asking for its own history back.
+        """
+        if agent.can_resume():
+            try:
+                await agent.client.resume_session(entry.session_id, cwd, [])
+            except JSONRPCException as exc:
+                logger.info(
+                    "ACP provider %r could not resume session %s: %s",
+                    provider_info.config_name,
+                    entry.session_id,
+                    exc,
+                )
+                return None
+            entry.live = True
+            return entry.session_id
+        if agent.can_load():
+            try:
+                await agent.client.load_session(entry.session_id, cwd, [])
+            except JSONRPCException as exc:
+                logger.info(
+                    "ACP provider %r could not load session %s: %s",
+                    provider_info.config_name,
+                    entry.session_id,
+                    exc,
+                )
+                return None
+            replayed = _drain_queue(agent.client, entry.session_id)
+            if replayed:
+                logger.debug(
+                    "ACP provider %r replayed %d updates loading session %s",
+                    provider_info.config_name,
+                    replayed,
+                    entry.session_id,
+                )
+            entry.live = True
+            return entry.session_id
+        logger.info(
+            "ACP provider %r advertises neither session/resume nor session/load; "
+            "conversation %s replays into a fresh session",
+            provider_info.config_name,
+            entry.key.conversation,
+        )
+        return None
+
+    async def _open(
+        self,
+        provider_info: ProviderInfo,
+        body: dict[str, Any],
+        key: SessionKey | None,
+        agent: _Agent,
+        digests: tuple[str, ...],
+        held: list[asyncio.Lock],
+    ) -> _Turn:
+        """Open a new session and send the whole conversation into it."""
+        cwd = _workspace(provider_info, body)
+        try:
+            session = await agent.client.new_session(cwd, [])
         except JSONRPCException as exc:
             message = str(exc)
             raise AcpTurnError(
@@ -214,24 +420,74 @@ class AcpTransport:
         model = _current_model(getattr(session, "config_options", None))
         requested = str(body.get("model") or "")
         if requested and requested != model:
-            try:
-                await client.set_config_option(session_id, "model", requested)
-                model = requested
-            except JSONRPCException as exc:
-                logger.warning(
-                    "ACP agent for provider %r refused model %r: %s",
-                    provider_info.config_name,
-                    requested,
-                    exc,
-                )
-        start = {
-            "type": CHUNK_SESSION_START,
-            "session_id": session_id,
-            "model": model or requested,
-        }
-        return _Turn(
-            agent=agent, session_id=session_id, model=model or requested
-        ), start
+            model = await self._switch_model(
+                provider_info, agent, session_id, requested
+            )
+        turn = _Turn(
+            agent=agent,
+            session_id=session_id,
+            model=model or requested,
+            tail_start=0,
+            held=held,
+            digests=digests,
+        )
+        if key is not None:
+            entry = LedgerEntry(
+                key=key,
+                session_id=session_id,
+                cwd=cwd,
+                model=turn.model,
+                seen=tuple(digests),
+                live=True,
+            )
+            turn.entry = entry
+            for displaced in self._ledger.put(entry):
+                await self._close_entry(displaced)
+        return turn
+
+    async def _match_model(
+        self,
+        provider_info: ProviderInfo,
+        agent: _Agent,
+        entry: LedgerEntry,
+        body: dict[str, Any],
+    ) -> str:
+        """Bring the session onto the model this request names, if it differs."""
+        requested = str(body.get("model") or "")
+        if not requested or requested == entry.model:
+            return entry.model or requested
+        model = await self._switch_model(
+            provider_info, agent, entry.session_id, requested
+        )
+        entry.model = model or entry.model
+        return entry.model or requested
+
+    async def _switch_model(
+        self,
+        provider_info: ProviderInfo,
+        agent: _Agent,
+        session_id: str,
+        requested: str,
+    ) -> str:
+        """Ask the agent to change the session's model.
+
+        A refusal is not fatal: the turn then runs on the model the session
+        already has, which the caller reports as the response's model rather
+        than pretending the requested one is in force.
+        """
+        try:
+            await agent.client.set_config_option(session_id, "model", requested)
+        except JSONRPCException as exc:
+            logger.warning(
+                "ACP agent for provider %r refused model %r: %s",
+                provider_info.config_name,
+                requested,
+                exc,
+            )
+            return ""
+        return requested
+
+    # -- turn execution -----------------------------------------------------
 
     async def _run_turn(
         self,
@@ -240,58 +496,89 @@ class AcpTransport:
         collect: list[dict[str, Any]] | None = None,
         *,
         opened: _Turn | None = None,
+        start: dict[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Open a session (unless already open), send the prompt, then close."""
-        if opened is None:
-            turn, start = await self._open_turn(provider_info, body)
-        else:
-            turn = opened
-            start = {
-                "type": CHUNK_SESSION_START,
-                "session_id": turn.session_id,
-                "model": turn.model,
-            }
+        """Send this request's prompt blocks into the session, then settle."""
+        turn = opened
+        if turn is None:
+            turn, start = await self._acquire_turn(provider_info, body)
+        if start is None:
+            start = _start_of(turn)
         client = turn.agent.client
         session_id = turn.session_id
         if collect is not None:
             collect.append(start)
-        yield start
-
-        text = _prompt_text(body.get("prompt") or [])
-        images: list[Any] = [
-            b
-            for b in body.get("prompt") or []
-            if isinstance(b, dict) and b.get("type") == "image"
-        ]
         try:
-            async for update in client.prompt(session_id, text, images or None):
-                chunk = _chunk_of(update)
-                if chunk is None:
-                    continue
+            yield start
+
+            blocks = [b for b in body.get("prompt") or [] if isinstance(b, dict)]
+            sending = blocks[turn.tail_start :]
+            text = _prompt_text(sending)
+            images: list[Any] = [b for b in sending if b.get("type") == "image"]
+            try:
+                async for update in client.prompt(session_id, text, images or None):
+                    chunk = _chunk_of(update)
+                    if chunk is None:
+                        continue
+                    if collect is not None:
+                        collect.append(chunk)
+                    yield chunk
+                result = client.prompt_result(session_id)
+            except JSONRPCException as exc:
+                # What the agent recorded of a failed turn is unknown, so the
+                # session cannot be reused: the next turn opens a fresh one.
+                await self._forget(turn.entry)
+                error = {
+                    "type": CHUNK_ERROR,
+                    "message": _sign_in_message(provider_info, str(exc)),
+                }
                 if collect is not None:
-                    collect.append(chunk)
-                yield chunk
-            result = client.prompt_result(session_id)
-        except JSONRPCException as exc:
-            message = str(exc)
-            error = {
-                "type": CHUNK_ERROR,
-                "message": _sign_in_message(provider_info, message),
+                    collect.append(error)
+                yield error
+                await _close_quietly(client, session_id)
+                return
+            self._settle(turn, provider_info)
+            stop = {
+                "type": CHUNK_STOP,
+                "stop_reason": getattr(result, "stop_reason", "") or "end_turn",
             }
             if collect is not None:
-                collect.append(error)
-            yield error
-            await _close_quietly(client, session_id)
-            return
+                collect.append(stop)
+            yield stop
+        finally:
+            turn.release()
 
-        stop = {
-            "type": CHUNK_STOP,
-            "stop_reason": getattr(result, "stop_reason", "") or "end_turn",
-        }
-        if collect is not None:
-            collect.append(stop)
-        yield stop
-        await _close_quietly(client, session_id)
+    def _settle(self, turn: _Turn, provider_info: ProviderInfo) -> None:
+        """Record what the agent has now seen, or close a one-off session."""
+        entry = turn.entry
+        if entry is None:
+            return
+        entry.remember(turn.digests, max_blocks=self._ledger.max_blocks)
+        entry.live = True
+        entry.touch()
+        if not entry.seen:
+            # Too long to track: the session is closed rather than left to
+            # accumulate a record the next turn could never compare against.
+            logger.info(
+                "ACP provider %r: conversation %s is past %d blocks; "
+                "its session will not be reused",
+                provider_info.config_name,
+                entry.key.conversation,
+                self._ledger.max_blocks,
+            )
+
+    async def _forget(self, entry: LedgerEntry | None) -> None:
+        """Close a session and forget it, so the next turn starts fresh."""
+        if entry is None:
+            return
+        self._ledger.drop(entry.key)
+        await self._close_entry(entry)
+
+    async def _close_entry(self, entry: LedgerEntry) -> None:
+        """Close one recorded session."""
+        entry.live = False
+        agent = self._agents.get(entry.key.provider)
+        await _close_quietly(agent.client if agent else None, entry.session_id)
 
     # -- UpstreamTransport --------------------------------------------------
 
@@ -333,15 +620,15 @@ class AcpTransport:
     ) -> UpstreamStream:
         """Open a turn and expose its chunks as they arrive.
 
-        The session is opened here rather than on the first iteration: a
+        The session is acquired here rather than on the first iteration: a
         refusal then becomes ``stream.status_code`` and ``read_error()``,
         which is what a caller needs before it commits to a 200 SSE response.
         """
         try:
-            turn, _start = await self._open_turn(provider_info, body)
+            turn, start = await self._acquire_turn(provider_info, body)
         except AcpTurnError as exc:
             return _AcpStream.refused(exc.status_code, str(exc))
-        return _AcpStream(self, provider_info, body, turn)
+        return _AcpStream(self, provider_info, body, turn, start)
 
 
 class _AcpStream(UpstreamStream):
@@ -353,12 +640,14 @@ class _AcpStream(UpstreamStream):
         provider_info: ProviderInfo,
         body: dict[str, Any],
         turn: _Turn,
+        start: dict[str, Any],
     ) -> None:
         self.status_code = 200
         self._transport = transport
         self._provider_info = provider_info
         self._body = body
         self._turn = turn
+        self._start = start
         self._error = ""
 
     @classmethod
@@ -370,6 +659,7 @@ class _AcpStream(UpstreamStream):
         stream._provider_info = None  # ty: ignore[invalid-assignment]
         stream._body = {}
         stream._turn = None  # ty: ignore[invalid-assignment]
+        stream._start = None
         stream._error = message
         return stream
 
@@ -381,7 +671,7 @@ class _AcpStream(UpstreamStream):
             return
         try:
             async for chunk in self._transport._run_turn(
-                self._provider_info, self._body, opened=self._turn
+                self._provider_info, self._body, opened=self._turn, start=self._start
             ):
                 yield chunk
         except AcpTurnError as exc:
@@ -393,10 +683,29 @@ class _AcpStream(UpstreamStream):
         return self._error
 
     async def close(self) -> None:
-        return None
+        if self._turn is not None:
+            self._turn.release()
 
 
 # -- helpers ---------------------------------------------------------------
+
+
+def _start_of(turn: _Turn) -> dict[str, Any]:
+    """The ``session_start`` chunk for a turn that is already open."""
+    return {
+        "type": CHUNK_SESSION_START,
+        "session_id": turn.session_id,
+        "model": turn.model,
+    }
+
+
+def _workspace(provider_info: ProviderInfo, body: dict[str, Any]) -> str:
+    """Where the agent runs for this request."""
+    return str(
+        getattr(provider_info, "acp_cwd", None)
+        or body.get("cwd")
+        or _default_workspace(provider_info)
+    )
 
 
 def _default_workspace(provider_info: ProviderInfo) -> str:
@@ -424,6 +733,30 @@ def _prompt_text(prompt: list[dict[str, Any]]) -> str:
         for block in prompt
         if isinstance(block, dict) and block.get("type") == "text"
     )
+
+
+def _drain_queue(client: ACPClient, session_id: str) -> int:
+    """Discard updates an agent replayed while loading a session.
+
+    ``session/load`` replays the transcript as ``session/update``
+    notifications before it answers, so by the time the call returns they are
+    already queued.  The client is not asking for its own history back, and
+    forwarding it would duplicate the whole conversation into the reply.
+    """
+    pending_of = getattr(client, "_existing_queue", None)
+    if pending_of is None:
+        return 0
+    pending = pending_of(session_id)
+    if pending is None:
+        return 0
+    drained = 0
+    while not pending.empty():
+        try:
+            pending.get_nowait()
+        except asyncio.QueueEmpty:  # pragma: no cover - empty() raced
+            break
+        drained += 1
+    return drained
 
 
 def _current_model(config_options: Any) -> str:
@@ -500,9 +833,9 @@ def _sign_in_message(provider_info: ProviderInfo, message: str) -> str:
     )
 
 
-async def _close_quietly(client: ACPClient, session_id: str) -> None:
+async def _close_quietly(client: ACPClient | None, session_id: str) -> None:
     """Close a session, ignoring an agent that has gone away."""
-    if not session_id:
+    if client is None or not session_id:
         return
     try:
         await client.close_session(session_id)

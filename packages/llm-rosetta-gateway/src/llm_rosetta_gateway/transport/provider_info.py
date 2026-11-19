@@ -327,6 +327,12 @@ class ProviderInfo:
         # The agent command an ``acp`` transport starts, when the shim
         # declares one; ``None`` takes the transport's default.
         self.acp_argv = acp_argv
+        # The conversation this request belongs to, when the client declared
+        # one.  Only an ``acp`` lane reads it: its agent keeps a conversation
+        # inside a session of its own, so the id is what decides reuse.  A
+        # *derived* id never reaches here — an agent session keyed on a guess
+        # would hand one conversation's transcript to another.
+        self.acp_conversation_id: str | None = None
 
         # Quota probe declaration and the shim's implementations.  The
         # declaration names one probe; ``bind_provider_quota`` resolves it to
@@ -572,6 +578,21 @@ class ProviderInfo:
 
         clone = copy.copy(self)
         clone.session_id = session_id
+        return clone
+
+    def with_acp_conversation(self, conversation_id: str | None) -> ProviderInfo:
+        """Return a shallow copy naming the conversation an ACP lane serves.
+
+        Only an agent-served lane reads it.  Returns ``self`` unchanged when
+        *conversation_id* is empty or the lane is not ACP, so a caller can
+        apply it unconditionally.
+        """
+        if not conversation_id or self.transport != "acp":
+            return self
+        import copy
+
+        clone = copy.copy(self)
+        clone.acp_conversation_id = conversation_id
         return clone
 
 

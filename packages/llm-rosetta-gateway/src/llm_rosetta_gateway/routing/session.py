@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .prefix import compute_affinity_identity, extract_prefix_from_ir
 from .stage import RoutingStage
@@ -49,7 +49,12 @@ class SessionHeaderAffinity(RoutingStage):
     def run(self, ctx: SelectionContext) -> None:
         """Derive the session id and set it on the provider's transport config."""
         provider_info = ctx.provider_info
-        if provider_info is None or not provider_info.session_header:
+        if provider_info is None:
+            return
+        if getattr(provider_info, "transport", "http") == "acp":
+            _serve_agent_lane(ctx, provider_info)
+            return
+        if not provider_info.session_header:
             return
         opencode = provider_info.session_id_format == "opencode"
         # The conversation identity is already this value's digest (see
@@ -76,3 +81,19 @@ class SessionHeaderAffinity(RoutingStage):
                 session_id = hashlib.sha256(seed.encode("utf-8")).hexdigest()[:32]
         ctx.with_upstream_session_id(session_id)
         ctx.with_provider_info(provider_info.with_session(session_id))
+
+
+def _serve_agent_lane(ctx: SelectionContext, provider_info: Any) -> None:
+    """Hand an agent-served lane the conversation the client declared.
+
+    An ACP agent keeps a conversation inside a session it owns, so the id is
+    what decides whether a turn continues an existing session or opens one.
+    Only a **declared** id may be used: a derived one names a plausible
+    grouping of log rows, and two conversations can share it, which would hand
+    one conversation's transcript to another.  A lane with no declared id
+    therefore keeps one session per request, and says so by carrying none.
+    """
+    session = ctx.identity.session
+    if not session.declared:
+        return
+    ctx.with_provider_info(provider_info.with_acp_conversation(session.value))
