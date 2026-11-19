@@ -158,12 +158,18 @@ item unless it is rewritten. The shim therefore runs the IR hoist transform
 (`hoist_late_system_messages()`), which is a cache-prefix nicety on other lanes
 and a requirement on this one.
 
-**Streaming is required.** The route answers SSE only, so the gateway forces
-`stream: true` upstream even when the client asked for one response. A
-non-streaming client is refused with a `400` naming `stream=true` before any
-upstream call: reassembling a Responses stream into one JSON body is not
-implemented yet ([#1061](https://github.com/Oaklight/llm-rosetta/issues/1061)).
-Most agent clients stream, so this affects only simple callers.
+**Streaming is required upstream, not from the client.** The route answers SSE
+only, so the gateway forces `stream: true` upstream even when the client asked
+for one response. A non-streaming client is served normally: the gateway
+consumes the event stream and folds it back into the single response those
+events describe, then writes it in the client's own dialect. That works for
+every source format — a Messages client, a Responses client or a Chat
+Completions client all get one body back.
+
+Two things a folded reply cannot carry are the ones no stream event carries:
+per-item message ids and `status`, and a text part's `annotations`. The content,
+tool calls, reasoning and `stop_reason` are the stream's own, so a folded reply
+matches a streamed one, not the JSON body the Platform API would have returned.
 
 ## Limitations
 
@@ -176,7 +182,8 @@ Most agent clients stream, so this affects only simple callers.
 - **Plan windows**: Plus shares a 5-hour window across apps, and each app has a
   weekly cap. The cap lives in your ChatGPT settings, not behind an API, which
   is why the panel only links to it.
-- **Non-streaming clients** are refused (above).
+- **A folded non-streaming reply is the stream's, not the body's** — item ids,
+  `status` and `annotations` have no event to ride on (above).
 
 ## Errors
 

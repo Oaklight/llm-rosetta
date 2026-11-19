@@ -238,6 +238,32 @@ The cross-leg harness (`tests/converters/test_leg_agreement.py`) compares the
 two legs in the IR's vocabulary for every dialect — the invariant the fold was a
 means to.
 
+### The other direction: a stream folded back into a body
+
+`ir.primitives.fold_response_events()` is the primitive's inverse.  It is not a
+writer; it is what the gateway needs when an upstream refuses `stream: false`
+(a shim's `connection.stream_required`): the request has to go out as a stream,
+and a client that asked for one body has to get one.  The stream processor
+already converts each chunk into IR events, so folding those events is the
+answer, and `ConversionPipeline.convert_stream_events()` writes the result
+through the ordinary response leg — custom-tool restore, tool-name restore, the
+source shim's transforms and the source writer are the same code the JSON path
+runs, so the two cannot answer differently.
+
+The round trip is the property: `fold(expand(turn))` is `turn`, compared with
+the harness's own turn view, for every case in the cross-leg table.  What it
+cannot recover is what no event carries — the facts the table above lists per
+dialect — so a folded reply matches a streamed one, not the body the vendor's
+JSON API would have returned.
+
+One reassembly serves every dialect.  The Chat Completions bridge came first and
+re-merged that dialect's own chunks (`proxy/stream_merge.py`); measured against
+the fold it differed only by what the writer always adds — `refusal: null`,
+`annotations: []`, `logprobs: null` — and by re-serialised argument spacing, so
+it was removed rather than kept as a second way to answer the same question.  A
+Chat client behind a stream-only upstream now gets the same body a Chat upstream
+would have returned.
+
 ## Round-Trip Compatibility
 
 All conversion paths must maintain **round-trip compatibility**. Every change must be tested against these scenarios:
