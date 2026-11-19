@@ -33,6 +33,15 @@ One chat converter per API standard:
 | `messages` | Anthropic Messages API | `converters/llm/messages/` |
 | `google_generate` | Google generateContent API | `converters/llm/google_generate/` |
 | `google_interactions` | Google Interactions API | `converters/llm/google_interactions/` |
+| `acp` | Agent Client Protocol (a local agent CLI over stdio) | `converters/llm/acp/` |
+
+`acp` is an **upstream-only** lane: an agent process is the model endpoint, so
+the converter writes a turn body (system string, ``[Role]``-labelled prompt
+blocks, model) and assembles replies from the agent's ``session/update``
+notifications.  It implements no source direction — no client speaks ACP to
+the gateway.  Tool declarations are reported as losses (no bridge yet).  The
+matching transport is `transport/acp.py`, chosen per provider by
+`connection.transport`; the vendored protocol client is `_vendor/acp.py`.
 
 `OpenResponsesConverter` implements the vendor-neutral Open Responses spec (the
 base of both Responses classes); `OpenAIResponsesConverter` derives from it as
@@ -143,7 +152,7 @@ supported format and forwards them to any configured upstream provider.
 | `quota/` | Provider quota probing and quota-aware credential rotation |
 | `maintenance/` | Maintenance steps: backfills, config, dumps, keystore, migrations, startup |
 | `middleware/` | Auth, rate limiting, error format, hop limit, headers |
-| `transport/` | Upstream HTTP transport |
+| `transport/` | Upstream transports: `http` (HTTP/SSE), `acp` (a local agent CLI over stdio JSON-RPC); a provider picks one with `connection.transport` |
 | `ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
 | `admin/` | Admin panel and its routes, over the observability layer |
 | `observability/` | Telemetry: metrics, request log, SQLite persistence, ops log, error dumps, capture, retention, sanitizing, profiler state; `observability/usage/cli.py` is the `llm-rosetta-usage` console script |

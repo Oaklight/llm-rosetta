@@ -488,6 +488,10 @@
           "format": "uri",
           "description": "Default upstream base URL."
         },
+        "transport": {
+          "type": "string",
+          "description": "How this lane reaches its upstream: 'http' (the default) or 'acp', which drives an agent CLI over stdio JSON-RPC instead of POSTing a body."
+        },
         "api_key_env": {
           "type": "string",
           "description": "Environment variable name for the API key (e.g. 'OPENAI_API_KEY')."
@@ -558,6 +562,14 @@
         "token_command_env": {
           "type": "string",
           "description": "Environment variable the command reads the operator's key from. Declaring it says the key is the command's input rather than a second credential, so a configured api_key is passed under this name and the command's stdout is what goes upstream."
+        },
+        "acp_argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "The agent command an 'acp' lane starts, as argv (e.g. ['agy', 'acp']). Only read when transport is 'acp'."
         },
         "token_refresh_interval": {
           "type": "integer",

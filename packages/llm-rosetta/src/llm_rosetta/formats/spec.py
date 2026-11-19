@@ -41,6 +41,9 @@ class FormatSpec:
             response, so a caller that has to rebuild a body from a stream
             reads them off the first chunk (``chat_completions``:
             ``service_tier``, ``system_fingerprint``).
+        upstream_only: The format is a target and never a source.  No client
+            sends it to the gateway, so it has no route, no SSE key and no
+            detector; it is reachable only as a provider's own upstream.
     """
 
     model_type: str
@@ -61,3 +64,4 @@ class FormatSpec:
     default_path: str | None = None
     models_path: str | None = None
     stream_echo_fields: tuple[str, ...] = ()
+    upstream_only: bool = False

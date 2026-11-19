@@ -1,0 +1,18 @@
+# Google Antigravity — through the vendor's own CLI, over ACP.
+#
+# The lane does not call Google's Code Assist API.  It runs the local
+# ``agy`` CLI (``agy acp``) and speaks the Agent Client Protocol to it, so
+# the Google sign-in, the access token and the project stay with agy, exactly
+# as they do when agy is used on its own.
+#
+# Why not call Code Assist directly: Google suspends accounts it sees calling
+# Code Assist outside Antigravity's own client.  Driving the vendor's CLI
+# keeps the request inside the client Google expects.
+group_label: Google (Antigravity)
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/antigravity.svg
+
+connection:
+  # This lane sends no credential: agy authenticates itself and the gateway
+  # never sees the token.  Declared here because a credential fact belongs to
+  # the vendor manifest, not to a leaf.
+  keyless: true

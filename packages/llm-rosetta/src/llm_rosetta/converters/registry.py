@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
+from llm_rosetta.converters.llm.acp.converter import AcpConverter
 from llm_rosetta.converters.llm.chat_completions.converter import (
     ChatCompletionsConverter,
 )
@@ -58,6 +59,7 @@ _CONVERTER_CLASSES: dict[str, dict[str, type]] = {
         "open_responses": OpenResponsesConverter,
         "google_generate": GoogleGenerateConverter,
         "google_interactions": GoogleInteractionsConverter,
+        "acp": AcpConverter,
     },
     "embeddings": cast(dict[str, type], _EMBEDDING_CONVERTERS),
     "rerank": cast(dict[str, type], _RERANK_CONVERTERS),

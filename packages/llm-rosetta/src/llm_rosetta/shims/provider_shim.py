@@ -215,9 +215,24 @@ class ConnectionConfig:
     """Encoding for the per-request id: ``"opencode"`` or ``None``."""
     stream_required: bool = False
     """Whether the upstream refuses non-streaming inference requests.
-
     If set, the gateway forces ``stream: true`` upstream and reassembles the
     SSE reply for a client that asked for a non-streaming response.
+    """
+    transport: str = "http"
+    """How the gateway reaches this upstream.
+
+    ``"http"`` (the default) posts a JSON body to a URL.  ``"acp"`` runs a
+    local agent CLI and speaks the Agent Client Protocol to it over stdio —
+    no URL is dialed, and the request body is the lane's own turn shape.  The
+    gateway refuses a name it has no transport for at config load rather than
+    on the first request.
+    """
+    acp_argv: tuple[str, ...] | None = None
+    """The agent command an ``acp`` transport starts.
+
+    The argv a vendor's CLI ships in (``["agy", "acp"]`` for Antigravity),
+    declared by the shim because it is a vendor fact.  ``None`` takes the
+    transport's own default.
     """
     token_command: tuple[str, ...] | None = None
     """Command that mints the upstream credential, declared by the shim.

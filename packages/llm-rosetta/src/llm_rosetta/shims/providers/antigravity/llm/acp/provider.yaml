@@ -1,0 +1,33 @@
+# Antigravity, served by the vendor's own CLI over ACP.
+#
+# ``agy`` owns the Google sign-in; this lane never sees a credential, so the
+# vendor manifest declares it keyless.  Sign in on the gateway host first:
+# run ``agy`` in a terminal and complete the Google sign-in (or
+# ``agy acp --login``).  An unsigned-in agent refuses to open a session, and
+# the gateway reports that as a 503 naming the sign-in step.
+#
+# The account rules are Google's: it may suspend an account it sees used
+# outside Antigravity's own client.  Running agy is the least indirect way to
+# use the plan; it is still a plan that can be lost.  See the provider guide.
+name: antigravity--acp
+model_type: llm
+format: acp
+group_label: Google (Antigravity)
+logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/antigravity.svg
+
+connection:
+  # The lane is reached by starting a process, not by dialing this host.  It
+  # is a placeholder that must be a URL (the transport contract is shared
+  # with the HTTP lanes) and is never opened.
+  base_url: http://agy.local
+  transport: acp
+  acp_argv: ["agy", "acp"]
+
+hint_msg:
+  en: >-
+    Runs the local agy CLI over ACP. Google may suspend an account it sees
+    used outside Antigravity's own client; use an account you can afford to
+    lose. Sign in on the gateway host first (run agy in a terminal).
+  zh: >-
+    通过 ACP 驱动本机 agy CLI。Google 可能封禁被判定在 Antigravity 之外使用的账号，
+    请只使用可以承受损失的账号。先在网关主机上登录（在终端运行 agy）。
