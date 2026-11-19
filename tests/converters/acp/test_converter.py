@@ -14,7 +14,7 @@ import pytest
 
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.llm.acp import AcpConverter, target_finish_reason
-from llm_rosetta.conversion_warnings import WarningSink
+from llm_rosetta.conversion_warnings import ConversionWarning, WarningSink
 from llm_rosetta.types.ir import IRRequest, IRResponse
 
 
@@ -106,6 +106,40 @@ class TestTheTurnBody:
 
         assert "tools" not in body
         assert any("tool" in str(w).lower() for w in warnings)
+
+    def test_generation_settings_are_reported_one_by_one(self):
+        """A turn carries a prompt and a model; sampling parameters are lost."""
+        ir: IRRequest = {
+            "model": "m",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+            "generation": {"temperature": 0.2, "max_tokens": 64},
+        }
+        ctx = _context()
+        body, warnings = _converter().request_to_provider(ir, context=ctx)
+
+        assert "temperature" not in body
+        losses = [w for w in warnings if isinstance(w, ConversionWarning)]
+        assert {w.subject for w in losses} == {
+            "generation.temperature",
+            "generation.max_tokens",
+        }
+        assert {w.code for w in losses} == {"dropped"}
+
+    def test_an_unset_setting_is_not_reported_again(self):
+        """``None`` is reported once, by the pass that drops it, not by ACP."""
+        ir: IRRequest = {
+            "model": "m",
+            "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
+            # ``None`` is how a source writes "named no value"; the shared
+            # pass drops it before the converter sees the request.
+            "generation": cast(Any, {"temperature": 0.2, "top_p": None}),
+        }
+        ctx = _context()
+        _body, warnings = _converter().request_to_provider(ir, context=ctx)
+
+        losses = [w for w in warnings if isinstance(w, ConversionWarning)]
+        reported = [w for w in losses if "sampling parameters" in str(w)]
+        assert [w.subject for w in reported] == ["generation.temperature"]
 
 
 class TestTheResponse:

@@ -28,7 +28,7 @@ import time
 from collections.abc import Mapping
 from typing import Any, cast
 
-from llm_rosetta.conversion_warnings import FAILED, report_loss
+from llm_rosetta.conversion_warnings import DROPPED, FAILED, report_loss
 
 from ....types.ir.request import IRRequest
 from ....types.ir.response import FinishReason, IRResponse, UsageInfo
@@ -103,12 +103,36 @@ class AcpConverter(BaseConverter):
             string, and the conversation as ACP content blocks.
         """
         self._apply_tool_config(ir_request, {}, context)
+        self._report_uncarried_config(ir_request, context)
         messages = list(ir_request.get("messages") or [])
         return {
             "model": ir_request.get("model", ""),
             "system": render_system(ir_request.get("system_instruction")),
             "prompt": render_messages(cast(list[dict[str, Any]], messages)),
         }
+
+    def _report_uncarried_config(
+        self, ir_request: IRRequest, ctx: ConversionContext
+    ) -> None:
+        """Report the generation settings an ACP turn cannot carry.
+
+        The turn body is a prompt and a model: ACP has no field for sampling
+        parameters, and the agent's own session options are not a place to
+        write them from here.  Dropping them silently would tell the caller
+        nothing, so each one present is reported the way a dropped tool is.
+        """
+        config = ir_request.get("generation") or {}
+        if not isinstance(config, dict):
+            return
+        for key in sorted(config):
+            if config.get(key) is None:
+                continue
+            report_loss(
+                "ACP turns carry no sampling parameters; the setting was dropped.",
+                code=DROPPED,
+                subject=f"generation.{key}",
+                warnings=ctx.warnings,
+            )
 
     def _do_request_from_provider(
         self,
