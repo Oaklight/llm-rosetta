@@ -173,11 +173,16 @@ Before you open a PR, run the overlap check:
 ```bash
 python scripts/dev/pr_overlap.py            # current branch against origin/master
 python scripts/dev/pr_overlap.py --local    # also other local branches
-python scripts/dev/pr_overlap.py --fail-on-overlap   # exit 1 on overlap
+python scripts/dev/pr_overlap.py --fail-on-overlap   # gate: 1 overlap, 2 unverified
 ```
 
-It lists every open PR that touches the same files. It needs the `gh` CLI and
-always exits 0 unless you pass `--fail-on-overlap`.
+It lists every open PR that touches the same files, and leaves out the PR of
+the branch itself (matched by branch name, by head commit, or by
+`$GITHUB_HEAD_REF`), so `--head HEAD` or a SHA works in a detached checkout. It
+needs the `gh` CLI and exits 0 unless you pass `--fail-on-overlap`. That gate
+exits 1 on overlap and 2 when the check could not complete (`gh` missing or
+failing, bad output, or 200 open PRs so the list may be truncated); a gate does
+not pass on a check that did not finish.
 
 If a PR overlaps, merge a series one PR at a time and rebase the rest after
 each merge.
