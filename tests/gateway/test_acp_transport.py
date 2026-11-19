@@ -14,6 +14,7 @@ rather than inferring it from the reply.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -102,6 +103,13 @@ FAKE_AGENT = textwrap.dedent(
                 update(sid, {"sessionUpdate": "agent_message_chunk",
                              "content": {"type": "text", "text": "replayed"}})
             send({"jsonrpc": "2.0", "id": req_id, "result": {}})
+        elif method == "session/set_config_option":
+            note(
+                "config",
+                config=msg["params"].get("configId"),
+                value=msg["params"].get("value"),
+            )
+            send({"jsonrpc": "2.0", "id": req_id, "result": {}})
         elif method == "session/prompt":
             sid = msg["params"]["sessionId"]
             text = "".join(
@@ -110,6 +118,10 @@ FAKE_AGENT = textwrap.dedent(
                 if block.get("type") == "text"
             )
             note("prompt", session=sid, text=text)
+            if MODE in ("stalls", "wedged"):
+                continue
+            if MODE == "exits":
+                sys.exit(3)
             if MODE == "fails":
                 send({"jsonrpc": "2.0", "id": req_id, "error": {
                     "code": -32603, "message": "model call failed",
@@ -124,6 +136,8 @@ FAKE_AGENT = textwrap.dedent(
             send({"jsonrpc": "2.0", "id": req_id,
                   "result": {"stopReason": "end_turn"}})
         elif method == "session/close":
+            if MODE == "wedged":
+                continue
             note("close", session=msg["params"]["sessionId"])
             send({"jsonrpc": "2.0", "id": req_id, "result": {}})
         elif req_id is not None:
@@ -299,11 +313,14 @@ class TestSessionReuse:
         try:
             await transport.send(provider, "", _turn("[User]\none"))
             await transport.send(provider, "", _turn("[User]\none"))
+            # Read inside the turn's life: close() drops the ledger, so an
+            # assertion after it would pass whether or not a session was held.
+            held = transport.ledger.entries_of("antigravity")
         finally:
             await transport.close()
+        assert held == []
 
         assert _kinds(tmp_path).count("new") == 2
-        assert transport.ledger.entries_of("antigravity") == []
 
     async def test_a_failed_turn_leaves_no_session_to_reuse(
         self, monkeypatch, tmp_path
@@ -315,6 +332,8 @@ class TestSessionReuse:
             second = await transport.send(
                 provider, "", _turn("[User]\none", "[Assistant]\ntwo")
             )
+            # Inside the transport's life: close() drops the ledger.
+            held = transport.ledger.entries_of("antigravity")
         finally:
             await transport.close()
 
@@ -322,7 +341,7 @@ class TestSessionReuse:
         # "the agent broke", so a failed turn is a failure, not an empty 200.
         assert first.status_code == 502
         assert "model call failed" in first.error_text
-        assert transport.ledger.entries_of("antigravity") == []
+        assert held == []
         assert _kinds(tmp_path).count("new") == 2
         # The retry opens its own session rather than continuing the failed one.
         assert second.status_code == 502
@@ -401,11 +420,12 @@ class TestAnAbandonedStream:
             assert (await iterator.__anext__())["type"] == "session_start"
             await stream.close()
             remaining = [chunk async for chunk in iterator]
+            held = transport.ledger.get(SessionKey("antigravity", "conv-1"))
         finally:
             await transport.close()
 
         assert remaining == []
-        assert transport.ledger.get(SessionKey("antigravity", "conv-1")) is None
+        assert held is None
         assert "close" in _kinds(tmp_path)
 
     async def test_a_consumer_that_never_iterates_still_releases_the_turn(
@@ -425,6 +445,103 @@ class TestAnAbandonedStream:
 
         assert second.body is not None
         assert _kinds(tmp_path).count("new") == 2
+
+
+class TestAnAgentThatDies:
+    """End of process is not end of turn.
+
+    The vendored client signals both with the same sentinel, so a transport
+    that trusted the end of its iteration would report a turn the model never
+    finished as a clean stop (#1601's shape).  A dead process also keeps its
+    slot unless it is taken out, and every later turn is then written into a
+    pipe nobody reads.
+    """
+
+    async def test_a_process_that_exits_mid_turn_is_a_failure(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "exits", conversation="conv-1")
+        try:
+            resp = await transport.send(provider, "", _turn("[User]\none"))
+        finally:
+            await transport.close()
+
+        assert resp.status_code == 502
+        assert resp.body is None
+
+    async def test_the_stream_says_the_agent_went_away(self, monkeypatch, tmp_path):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "exits", conversation="conv-1")
+        try:
+            stream = await transport.send_streaming(provider, "", _turn("[User]\none"))
+            chunks = [chunk async for chunk in stream]
+        finally:
+            await transport.close()
+
+        assert chunks[-1]["type"] == "error"
+        assert "without reporting a stop" in chunks[-1]["message"]
+        # No stop chunk: the turn never reached one.
+        assert not any(chunk["type"] == "stop" for chunk in chunks)
+
+    async def test_the_dead_process_is_replaced_on_the_next_turn(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "exits", conversation="conv-1")
+        try:
+            first = await transport.send(provider, "", _turn("[User]\none"))
+            second = await transport.send(provider, "", _turn("[User]\ntwo"))
+        finally:
+            await transport.close()
+
+        # Both are failures the transport reports, not exceptions out of send.
+        assert first.status_code == 502
+        assert second.status_code == 502
+        # Each request reached a process of its own: the dead one left its slot.
+        prompts = [entry for entry in _log(tmp_path) if entry["kind"] == "prompt"]
+        assert len(prompts) == 2
+        assert _kinds(tmp_path).count("new") == 2
+
+
+class TestACancelledTurn:
+    """Cancelling frees the slot even when the agent answers nothing.
+
+    Cleanup is itself a request to the same agent, and the locks a turn holds
+    are given back only after the cleanup returns.  An unbounded close made
+    cancellation — and every timeout built on it — inert: the task parked in
+    ``session/close`` instead of unwinding.
+    """
+
+    async def test_cancelling_a_turn_gives_its_locks_back(self, monkeypatch, tmp_path):
+        from llm_rosetta_gateway.transport import acp as acp_module
+
+        monkeypatch.setattr(acp_module, "CLEANUP_TIMEOUT", 0.05)
+        transport = AcpTransport(timeout=30.0)
+        provider = _provider(monkeypatch, tmp_path, "wedged", conversation="conv-1")
+
+        async def consume() -> None:
+            stream = await transport.send_streaming(provider, "", _turn("[User]\none"))
+            async for _chunk in stream:
+                pass
+
+        try:
+            task = asyncio.create_task(consume())
+            await _await_prompt(tmp_path)
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+            held = transport.ledger.get(SessionKey("antigravity", "conv-1"))
+            # The session lock is free: the next turn is acquired at once,
+            # where a lock left behind would hold it past this timeout.
+            second = await asyncio.wait_for(
+                transport.send_streaming(provider, "", _turn("[User]\none")), 1.0
+            )
+            await second.close()
+        finally:
+            await transport.close()
+
+        assert held is None
 
 
 class TestSessionResumeAndLoad:
@@ -567,6 +684,91 @@ class TestTurnSerialisation:
         assert prompts == ["[User]\none", "[User]\ntwo"]
 
 
+class TestTheTurnDeadline:
+    """An agent that stops answering must not hold the lane forever."""
+
+    async def test_a_stalled_turn_ends_with_an_error_and_closes_the_session(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport(timeout=0.2)
+        provider = _provider(monkeypatch, tmp_path, "stalls", conversation="conv-1")
+        try:
+            stream = await transport.send_streaming(provider, "", _turn("[User]\none"))
+            chunks = [chunk async for chunk in stream]
+            held = transport.ledger.get(SessionKey("antigravity", "conv-1"))
+        finally:
+            await transport.close()
+
+        assert chunks[-1]["type"] == "error"
+        assert "did not finish the turn" in chunks[-1]["message"]
+        # A timed-out turn is not reusable: what the agent recorded is unknown.
+        assert held is None
+        assert "close" in _kinds(tmp_path)
+
+    async def test_a_stalled_turn_is_a_failure_when_it_is_not_streamed(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport(timeout=0.2)
+        provider = _provider(monkeypatch, tmp_path, "stalls")
+        try:
+            resp = await transport.send(provider, "", _turn("[User]\none"))
+        finally:
+            await transport.close()
+
+        assert resp.status_code == 502
+        assert "did not finish the turn" in resp.error_text
+
+
+class TestTheModelSwitch:
+    """A request that names another model moves the session onto it."""
+
+    async def test_a_new_session_is_switched_to_the_requested_model(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok", conversation="conv-1")
+        body = _turn("[User]\none")
+        body["model"] = "gemini-3.1-flash"
+        try:
+            await transport.send(provider, "", body)
+        finally:
+            await transport.close()
+
+        configs = [e for e in _log(tmp_path) if e["kind"] == "config"]
+        assert configs == [
+            {"kind": "config", "config": "model", "value": "gemini-3.1-flash"}
+        ]
+
+    async def test_a_reused_session_switches_when_the_model_changes(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok", conversation="conv-1")
+        try:
+            await transport.send(provider, "", _turn("[User]\none"))
+            body = _turn("[User]\none", "[Assistant]\ntwo")
+            body["model"] = "gemini-3.1-flash"
+            await transport.send(provider, "", body)
+        finally:
+            await transport.close()
+
+        configs = [e for e in _log(tmp_path) if e["kind"] == "config"]
+        assert configs[-1]["value"] == "gemini-3.1-flash"
+        # The session was kept: only its model moved.
+        assert _kinds(tmp_path).count("new") == 1
+
+    async def test_a_turn_with_no_prompt_is_a_client_error(self, monkeypatch, tmp_path):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok", conversation="conv-1")
+        try:
+            resp = await transport.send(provider, "", {"model": "m", "prompt": []})
+        finally:
+            await transport.close()
+
+        assert resp.status_code == 400
+        assert "carries no prompt" in resp.error_text
+
+
 def _digests_for(messages: list[str]) -> tuple[str, ...]:
     from llm_rosetta_gateway.transport.acp_ledger import block_digests
 
@@ -579,3 +781,19 @@ async def _spin() -> None:
 
     for _ in range(5):
         await asyncio.sleep(0)
+
+
+async def _await_prompt(tmp_path: Any, timeout: float = 5.0) -> None:
+    """Wait until the fake agent has received a prompt.
+
+    At that instant the gateway is parked waiting for an update it will never
+    receive, which is the state a cancellation test has to cancel from —
+    sleeping a fixed interval would either race or slow the suite down.
+    """
+    loop = asyncio.get_running_loop()
+    end = loop.time() + timeout
+    while loop.time() < end:
+        if any(entry["kind"] == "prompt" for entry in _log(tmp_path)):
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError("the fake agent never received the prompt")

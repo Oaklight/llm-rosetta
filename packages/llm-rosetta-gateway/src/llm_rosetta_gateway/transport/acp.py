@@ -83,6 +83,13 @@ _SIGN_IN_HINTS = (
     "login",
 )
 
+#: How long a *cleanup* request — ``session/cancel``, ``session/close`` — may
+#: take.  Cleanup runs on the way out of a turn, often because the caller was
+#: cancelled, and an unresponsive agent must not be able to park it: the locks
+#: the turn holds are only given back after the cleanup returns, so a cleanup
+#: that waits forever is a slot that never comes back.
+CLEANUP_TIMEOUT = 5.0
+
 
 class AcpTurnError(UpstreamConnectionError):
     """The agent refused or failed the turn.
@@ -103,6 +110,10 @@ class _Agent:
 
     client: ACPClient
     slot: int = 0
+    #: The provider config name this process belongs to.  Held here so a
+    #: process that dies can be taken out of its own pool without the caller
+    #: having to remember which pool that was.
+    provider: str = ""
     info: Any = None
     auth_methods: list[str] = field(default_factory=list)
     #: Held for the length of a turn.  One stdio connection carries every
@@ -165,6 +176,20 @@ def _looks_like_sign_in(message: str) -> bool:
     return any(hint in lowered for hint in _SIGN_IN_HINTS)
 
 
+def _agent_gone(agent: _Agent) -> bool:
+    """Whether the process behind *agent* has exited.
+
+    Read from the vendored client's own state, which it does not expose as a
+    property: the reader task ends at end-of-file, and the process carries a
+    return code once it has exited.
+    """
+    task = getattr(agent.client, "_reader_task", None)
+    if task is not None and task.done():
+        return True
+    process = getattr(agent.client, "_process", None)
+    return process is not None and process.returncode is not None
+
+
 class AcpTransport:
     """Transport for providers whose upstream is a local ACP agent."""
 
@@ -174,11 +199,15 @@ class AcpTransport:
         timeout: float = 300.0,
         ledger: AcpSessionLedger | None = None,
     ) -> None:
+        #: How long one turn may take before the agent is asked to stop.
+        #: ACP turns have no deadline of their own, and an agent that stops
+        #: answering would otherwise hold this session's lock — and, with one
+        #: process, the lane — until the transport closes.
         self._timeout = timeout
         # One *pool* per provider: the operator may run more than one agent
         # process for a provider, and a session is bound to the process that
         # holds it for as long as it lives.
-        self._agents: dict[str, list[_Agent]] = {}
+        self._agents: dict[str, list[_Agent | None]] = {}
         self._starting: dict[str, asyncio.Lock] = {}
         self._ledger = ledger or AcpSessionLedger()
 
@@ -202,7 +231,7 @@ class AcpTransport:
         key = provider_info.config_name
         pool = self._agents.setdefault(key, [])
         while len(pool) <= slot:
-            pool.append(None)  # ty: ignore[invalid-argument-type]
+            pool.append(None)
         agent = pool[slot]
         if agent is not None:
             return agent
@@ -242,6 +271,7 @@ class AcpTransport:
         agent = _Agent(
             client=client,
             slot=slot,
+            provider=provider_info.config_name,
             info=info,
             auth_methods=[m.id for m in (info.auth_methods or [])],
         )
@@ -294,7 +324,15 @@ class AcpTransport:
         self._starting.clear()
 
     async def aclose_provider(self, provider_name: str) -> None:
-        """Stop one provider's agent processes, and forget its sessions."""
+        """Stop one provider's agent processes, and forget its sessions.
+
+        The counterpart of re-pointing a provider at another account: the
+        processes were started with the old ``acp_argv`` and hold sessions of
+        the old sign-in, so both go.  Nothing calls it yet — a config reload
+        rebuilds the whole app today — and it stays because the reload slice
+        needs a way to drop one lane without dropping the process that serves
+        the others.
+        """
         pool = self._agents.pop(provider_name, [])
         # ``<provider>#<slot>`` — split rather than prefix-match, so a provider
         # named ``anti`` does not clear the start locks of ``antigravity``.
@@ -352,6 +390,10 @@ class AcpTransport:
         prompt = body.get("prompt")
         if not isinstance(prompt, list) or not prompt:
             raise AcpTurnError("the acp turn carries no prompt", status_code=400)
+        # A process that exited between turns still occupies its slot; taking
+        # it out first is what makes this request start a fresh one instead of
+        # writing into a dead pipe.
+        self._prune_gone(provider_info.config_name)
         key = self._key(provider_info)
         entry = self._ledger.get(key) if key is not None else None
         agent = await self._agent(provider_info, self._slot_for(provider_info, entry))
@@ -584,6 +626,7 @@ class AcpTransport:
             start = _start_of(turn)
         client = turn.agent.client
         session_id = turn.session_id
+        deadline = asyncio.get_running_loop().time() + self._timeout
         if collect is not None:
             collect.append(start)
         try:
@@ -594,7 +637,9 @@ class AcpTransport:
             text = _prompt_text(sending)
             images: list[Any] = [b for b in sending if b.get("type") == "image"]
             try:
-                async for update in client.prompt(session_id, text, images or None):
+                async for update in _prompt_updates(
+                    client, session_id, text, images, deadline
+                ):
                     chunk = _chunk_of(update)
                     if chunk is None:
                         continue
@@ -602,6 +647,41 @@ class AcpTransport:
                         collect.append(chunk)
                     yield chunk
                 result = client.prompt_result(session_id)
+                if result is None:
+                    # End of iteration is not a completion.  The vendored
+                    # client signals end-of-process and end-of-turn with the
+                    # same sentinel, and only a turn that reached its stop (or
+                    # its ack) stores a result — so no result means the agent
+                    # went away mid-turn.  A stop chunk here would tell the
+                    # client the model finished answering.
+                    turn.finished = True
+                    await self._forget(turn.entry)
+                    self._drop_agent(turn.agent)
+                    message = (
+                        f"ACP agent for provider {provider_info.config_name!r} "
+                        f"ended the turn without reporting a stop; the "
+                        f"conversation was closed. The agent process may have "
+                        f"exited — check it on the gateway host."
+                    )
+                    error = {"type": CHUNK_ERROR, "message": message}
+                    if collect is not None:
+                        collect.append(error)
+                    yield error
+                    return
+            except _TurnDeadline:
+                await self._forget(turn.entry)
+                turn.finished = True
+                await _cancel_quietly(client, session_id)
+                message = (
+                    f"ACP agent for provider {provider_info.config_name!r} did not "
+                    f"finish the turn within {self._timeout:.1f}s; the session was "
+                    f"closed."
+                )
+                error = {"type": CHUNK_ERROR, "message": message}
+                if collect is not None:
+                    collect.append(error)
+                yield error
+                return
             except JSONRPCException as exc:
                 # What the agent recorded of a failed turn is unknown, so the
                 # session cannot be reused: the next turn opens a fresh one.
@@ -626,12 +706,18 @@ class AcpTransport:
                 collect.append(stop)
             yield stop
         finally:
-            if not turn.finished:
-                # The caller went away mid-turn — a closed tab, a cancelled
-                # response.  What the agent recorded is unknown, so the
-                # session is given back rather than reused with a hole in it.
-                await self._abandon(turn)
-            turn.release()
+            try:
+                if not turn.finished:
+                    # The caller went away mid-turn — a closed tab, a
+                    # cancelled response.  What the agent recorded is unknown,
+                    # so the session is given back rather than reused with a
+                    # hole in it.
+                    await self._abandon(turn)
+            finally:
+                # Release even when the cleanup above is itself cancelled or
+                # fails: the locks are the slot, and a slot that is never
+                # given back takes the lane down with it.
+                turn.release()
 
     async def _abandon(self, turn: _Turn) -> None:
         """Give back a session whose turn did not finish."""
@@ -681,6 +767,29 @@ class AcpTransport:
             return pool[slot]
         return None
 
+    def _drop_agent(self, agent: _Agent) -> None:
+        """Take a process that has gone away out of its pool.
+
+        The vendored client reports end-of-process as the end of a turn's
+        iteration, and a client whose process has exited answers every later
+        request with a connection error while still occupying its slot.  The
+        slot is emptied here so the next turn starts a fresh process, and the
+        sessions it held are marked dead so they resume — or replay — instead
+        of being prompted into a corpse.
+        """
+        pool = self._agents.get(agent.provider) or []
+        if 0 <= agent.slot < len(pool) and pool[agent.slot] is agent:
+            pool[agent.slot] = None
+        for held in self._ledger.entries_of(agent.provider):
+            if held.agent_slot == agent.slot:
+                held.live = False
+
+    def _prune_gone(self, provider_name: str) -> None:
+        """Evict every process of *provider_name* whose process has exited."""
+        for agent in self._pool(provider_name):
+            if _agent_gone(agent):
+                self._drop_agent(agent)
+
     # -- UpstreamTransport --------------------------------------------------
 
     async def send(
@@ -707,6 +816,20 @@ class AcpTransport:
                 status_code=exc.status_code,
                 body=None,
                 raw_content=str(exc).encode(),
+            )
+        except OSError as exc:
+            # A write into an exited process raises here rather than as a turn
+            # failure.  It must still leave through the response contract: an
+            # exception out of ``send`` skips the status the proxy reports on,
+            # and the dead process keeps its slot until the app restarts.
+            self._prune_gone(provider_info.config_name)
+            return UpstreamResponse(
+                status_code=502,
+                body=None,
+                raw_content=(
+                    f"ACP agent for provider {provider_info.config_name!r} "
+                    f"could not be reached: {exc}"
+                ).encode(),
             )
         failure = _error_of(updates)
         if failure is not None:
@@ -742,6 +865,13 @@ class AcpTransport:
             turn, start = await self._acquire_turn(provider_info, body)
         except AcpTurnError as exc:
             return _AcpStream.refused(exc.status_code, str(exc))
+        except OSError as exc:
+            self._prune_gone(provider_info.config_name)
+            return _AcpStream.refused(
+                502,
+                f"ACP agent for provider {provider_info.config_name!r} could not "
+                f"be reached: {exc}",
+            )
         return _AcpStream(self, provider_info, body, turn, start)
 
 
@@ -817,6 +947,66 @@ class _AcpStream(UpstreamStream):
 
 
 # -- helpers ---------------------------------------------------------------
+
+
+async def _prompt_updates(
+    client: ACPClient,
+    session_id: str,
+    text: str,
+    images: list[Any],
+    deadline: float,
+) -> AsyncIterator[dict[str, Any]]:
+    """Yield the turn's updates, giving up when the deadline passes.
+
+    ACP has no turn timeout, and an agent that stops answering keeps the
+    session — and the process lock that serialises the lane — forever.  The
+    wait is per update rather than around the whole loop so the deadline is
+    also a *stall* deadline: a turn that keeps producing is allowed to finish.
+
+    Raises:
+        _TurnDeadline: No update arrived before *deadline*.
+    """
+    updates = client.prompt(session_id, text, images or None).__aiter__()
+    loop = asyncio.get_running_loop()
+    try:
+        while True:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise _TurnDeadline
+            try:
+                yield await asyncio.wait_for(updates.__anext__(), remaining)
+            except StopAsyncIteration:
+                return
+            except asyncio.TimeoutError as exc:  # noqa: UP041 - 3.10 spelling
+                raise _TurnDeadline from exc
+    finally:
+        # Leaving early — a deadline, or a caller that stopped reading — must
+        # release the agent's queue, or the vendored client keeps a getter
+        # waiting on a turn nobody will read.
+        aclose = getattr(updates, "aclose", None)
+        if aclose is not None:
+            try:
+                await aclose()
+            except Exception:  # noqa: BLE001 - closing must not mask the turn
+                logger.debug("ACP prompt stream did not close cleanly", exc_info=True)
+
+
+class _TurnDeadline(Exception):
+    """The agent stopped answering inside the turn's deadline."""
+
+
+async def _cancel_quietly(client: ACPClient, session_id: str) -> None:
+    """Ask the agent to stop the turn, then close the session.
+
+    Both requests are bounded: this runs on a lane whose turn has already
+    failed or been cancelled, and an agent that stopped answering would
+    otherwise never give the turn's locks back.
+    """
+    try:
+        await asyncio.wait_for(client.cancel(session_id), CLEANUP_TIMEOUT)
+    except Exception:  # noqa: BLE001 - a stuck agent must not raise here
+        logger.debug("ACP session %s did not cancel cleanly", session_id)
+    await _close_quietly(client, session_id)
 
 
 def _blocks_of(body: dict[str, Any]) -> list[dict[str, Any]]:
@@ -996,11 +1186,16 @@ def _sign_in_message(provider_info: ProviderInfo, message: str) -> str:
 
 
 async def _close_quietly(client: ACPClient | None, session_id: str) -> None:
-    """Close a session, ignoring an agent that has gone away."""
+    """Close a session, ignoring an agent that has gone away.
+
+    Bounded for the same reason the cancel is: a close is a request to the
+    same agent, so an agent that has stopped reading would otherwise keep the
+    turn — and the slot behind it — until the transport closes.
+    """
     if client is None or not session_id:
         return
     try:
-        await client.close_session(session_id)
+        await asyncio.wait_for(client.close_session(session_id), CLEANUP_TIMEOUT)
     except Exception:  # noqa: BLE001 - closing must not mask the turn
         logger.debug("ACP session %s did not close cleanly", session_id, exc_info=True)
 
