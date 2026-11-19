@@ -141,6 +141,10 @@ jobs:
           python-version: "3.11"
 
       - name: Check that the refactor is a pure move
+        # `shell: bash` is what turns on `pipefail`; the default `run` shell is
+        # `bash -e` without it, and a failing check would then show as green
+        # because `tee` is the last command in the pipe.
+        shell: bash
         env:
           BASE_REF: origin/${{ github.base_ref }}
         run: |
@@ -148,7 +152,7 @@ jobs:
           if [ -f .github/pure-move-allow.txt ]; then
             args+=(--allow .github/pure-move-allow.txt)
           fi
-          # `pipefail` (the default shell) keeps the tool's exit status.
+          # `pipefail` (from `shell: bash` above) keeps the tool's exit status.
           python scripts/dev/check_move.py "$BASE_REF" HEAD "${args[@]}" --markdown \
             | tee -a "$GITHUB_STEP_SUMMARY"
 
