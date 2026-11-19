@@ -60,9 +60,6 @@ from .metadata import (
 from .fidelity import (
     _fidelity_check_and_dump,
 )
-from .stream_merge import (
-    merge_chat_completion_events,
-)
 
 logger = get_logger()
 
@@ -450,7 +447,83 @@ async def close_resources(
     store.clear()
 
 
-async def _non_streaming_from_stream(
+def _stream_envelope(route: ResolvedRoute) -> dict[str, Any]:
+    """The echo fields a source dialect's stream will supply, as a body keeps them.
+
+    The catalog names them per format (``FormatSpec.stream_echo_fields``), so
+    the gateway does not have to know which dialect repeats which field: a
+    Responses stream declares none and the envelope stays empty.  Only chat
+    routes reach the stream-required bridge, so the model type is ``llm``.
+    """
+    from llm_rosetta.formats import BY_PAIR
+    from llm_rosetta.provider_names import canonical_provider_name
+
+    source = canonical_provider_name(route.source_provider)
+    spec = BY_PAIR.get(("llm", source))
+    fields = spec.stream_echo_fields if spec is not None else ()
+    return dict.fromkeys(fields)
+
+
+def _gather_echo_fields(chunk: dict[str, Any], envelope: dict[str, Any]) -> None:
+    """Keep the echo fields *chunk* states, once each.
+
+    A Chat-compatible stream repeats them on every chunk, so the first chunk
+    that states one settles it.  A field the stream never states stays absent
+    rather than becoming a guess.
+    """
+    for key in envelope:
+        if envelope[key] is None and chunk.get(key) is not None:
+            envelope[key] = chunk[key]
+
+
+async def _folded_response(
+    pipeline: ConversionPipeline,
+    ir_events: list[dict[str, Any]],
+    *,
+    route: ResolvedRoute,
+    provider_info: ProviderInfo,
+    body: dict[str, Any],
+    target_body: dict[str, Any],
+    model: str,
+    persistence: Any | None,
+    entry_id: str | None,
+    profile: dict[str, Any],
+    envelope: dict[str, Any] | None = None,
+) -> dict[str, Any] | Response:
+    """Fold a stream-required upstream's events into the source client's body.
+
+    Args:
+        envelope: Response-level facts the source stream's chunks carried and
+            no IR event does (``service_tier``, ``system_fingerprint``).
+
+    Returns:
+        The source-format response body, or the error ``Response`` to send
+        when the source writer refuses the folded turn (a terminal state that
+        dialect cannot express).  The dump is written here so the JSON bridge
+        and the ordinary JSON path report a refusal the same way.
+    """
+    try:
+        return pipeline.convert_stream_events(ir_events, response=envelope)
+    except (ConversionError, UnrepresentableFinishReason) as exc:
+        profile.update(pipeline.profile)
+        await dump_error(
+            persistence,
+            request_body=body,
+            response_text=str(exc),
+            converted_body=target_body,
+            model=model,
+            source_provider=route.source_provider,
+            target_provider=route.target_provider,
+            provider_name=route.provider_name,
+            status_code=502,
+            error_phase="response",
+            upstream_url=str(provider_info.base_url),
+            request_log_id=entry_id,
+        )
+        return error_response_for_source(route.source_provider, 502, str(exc))
+
+
+async def _non_streaming_from_stream(  # noqa: C901 - one branch per refusal kind
     *,
     route: ResolvedRoute,
     provider_info: ProviderInfo,
@@ -472,11 +545,17 @@ async def _non_streaming_from_stream(
     """Serve a non-streaming client from an upstream that only streams.
 
     A shim declares ``connection.stream_required`` when the vendor refuses
-    ``stream: false``.  The request is sent as a stream, the source-format
-    events are reassembled into one body, and the result is returned as
-    ordinary JSON.  Only Chat Completions clients are supported: every other
-    source format has a different terminal-event shape, and synthesizing one
-    without a measured sample would be guesswork.
+    ``stream: false``.  The request is sent as a stream, the IR events the
+    processor produces are folded back into the response they describe, and
+    that response is written in the client's own dialect and returned as
+    ordinary JSON.
+
+    The fold is format-agnostic, so one implementation serves every source
+    format — Chat Completions, Messages, Responses, Google and Interactions
+    alike.  It is the same response leg a JSON upstream's answer takes
+    (:meth:`ConversionPipeline.convert_stream_events`), so a synthesized reply
+    cannot disagree with a real one about the turn's content or its terminal
+    reason.
 
     A refused attempt is classified exactly as on the other two paths: a 401
     a refresh can fix is retried, an in-band quota refusal demotes the
@@ -491,18 +570,6 @@ async def _non_streaming_from_stream(
         _failover_budget: What a failover has already spent.  Set on a retry,
             so the next refusal only gets what is left of the budget.
     """
-    if route.source_provider != "chat_completions":
-        return (
-            error_response_for_source(
-                route.source_provider,
-                400,
-                "This upstream only answers streaming requests, and the gateway "
-                "can only reassemble a non-streaming reply for the Chat "
-                "Completions format. Retry with stream=true.",
-            ),
-            profile,
-        )
-
     budget = _failover_budget or FailoverBudget()
     target_body = _inject_stream_flags(route.target_provider, target_body, stream=True)
     upstream_url = provider_info.upstream_url(model, stream=True)
@@ -590,10 +657,16 @@ async def _non_streaming_from_stream(
         )
 
     store = metadata_store or _default_metadata_store
-    processor = pipeline.create_stream_processor(
-        on_ir_event=store.cache_from_stream_event,
-    )
+    ir_events: list[dict[str, Any]] = []
+
+    def _observe(ir_event: dict[str, Any]) -> None:
+        """Cache the metadata every event may carry, and keep the IR stream."""
+        store.cache_from_stream_event(ir_event)
+        ir_events.append(ir_event)
+
+    processor = pipeline.create_stream_processor(on_ir_event=_observe)
     events: list[dict[str, Any]] = []
+    envelope = _stream_envelope(route)
     async with stream:
         async for chunk in stream:
             stream_error = await _detect_stream_chunk_error(
@@ -611,13 +684,33 @@ async def _non_streaming_from_stream(
                     ),
                     profile,
                 )
+            _gather_echo_fields(chunk, envelope)
             events.extend(processor.process_chunk(chunk))
     try:
         events.extend(processor.process_chunk(None))
     except Exception:  # noqa: BLE001 - a flush failure is not a lost reply
         logger.debug("Stream flush failed during reassembly", exc_info=True)
 
-    merged = merge_chat_completion_events(events)
+    # One reassembly for every source dialect: the IR events the processor
+    # produced are folded back into the response they describe, and the
+    # ordinary response leg writes that in the client's own format — the same
+    # code a JSON upstream's answer takes, so a synthesized reply cannot
+    # disagree with a real one.
+    merged = await _folded_response(
+        pipeline,
+        ir_events,
+        route=route,
+        provider_info=provider_info,
+        body=body,
+        target_body=target_body,
+        model=model,
+        persistence=persistence,
+        entry_id=entry_id,
+        profile=profile,
+        envelope=envelope,
+    )
+    if isinstance(merged, Response):
+        return merged, profile
     usage = getattr(processor, "get_accumulated_usage", lambda: None)()
     if usage:
         profile["usage"] = usage

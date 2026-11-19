@@ -9,13 +9,99 @@ surface (the preview route refuses most hosted tools).
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
+from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.shims import get_shim
 from llm_rosetta.shims.providers import get_model_list_transform, load_providers
 from llm_rosetta_gateway.providers import build_provider_info
 
 SHIM = "openai_chatgpt--open_responses"
+
+#: The Responses events the plan route answers a one-word reply with, trimmed
+#: to what a fold needs.  The terminal event carries an empty ``output`` on
+#: purpose: the route does that, and the fold must reconstruct the turn from
+#: the item events rather than from the terminal payload (#1061).
+_PLAN_STREAM: list[dict] = [
+    {
+        "type": "response.created",
+        "response": {
+            "id": "resp_1",
+            "object": "response",
+            "created_at": 1763000000,
+            "model": "gpt-5.1",
+            "status": "in_progress",
+            "output": [],
+        },
+    },
+    {
+        "type": "response.output_item.added",
+        "output_index": 0,
+        "item": {
+            "type": "message",
+            "id": "msg_1",
+            "role": "assistant",
+            "status": "in_progress",
+            "content": [],
+        },
+    },
+    {
+        "type": "response.content_part.added",
+        "output_index": 0,
+        "content_index": 0,
+        "part": {"type": "output_text", "text": "", "annotations": []},
+    },
+    {
+        "type": "response.output_text.delta",
+        "output_index": 0,
+        "content_index": 0,
+        "delta": "hello",
+    },
+    {
+        "type": "response.output_item.done",
+        "output_index": 0,
+        "item": {
+            "type": "message",
+            "id": "msg_1",
+            "role": "assistant",
+            "status": "completed",
+            "content": [{"type": "output_text", "text": "hello", "annotations": []}],
+        },
+    },
+    {
+        "type": "response.completed",
+        "response": {
+            "id": "resp_1",
+            "object": "response",
+            "created_at": 1763000000,
+            "model": "gpt-5.1",
+            "status": "completed",
+            "output": [],
+            "usage": {"input_tokens": 5, "output_tokens": 2, "total_tokens": 7},
+        },
+    },
+]
+
+
+def _pipeline() -> ConversionPipeline:
+    """A Messages → Responses pipeline with its request already converted.
+
+    The fold writes through the response leg, which needs the request leg's
+    context (custom-tool marks, the tool-name map, the source traits), so the
+    test builds the pipeline the gateway would have built.
+    """
+    pipeline = ConversionPipeline("messages", "open_responses", target_shim=SHIM)
+    pipeline.convert_request(
+        {
+            "model": "gpt-5.1",
+            "max_tokens": 32,
+            "messages": [{"role": "user", "content": "hi"}],
+        }
+    )
+    return pipeline
+
 
 #: The shape the plan route answers, trimmed to what matters.
 MODELS_BODY = {
@@ -208,12 +294,14 @@ class TestStreamingIsRequired:
             is True
         )
 
-    def test_a_non_streaming_responses_client_is_refused_clearly(self):
-        """Not silently broken or empty: the gateway says what to do.
+    def test_a_non_streaming_client_is_served_by_the_fold(self):
+        """A Messages client gets one body back, not a refusal.
 
-        Reassembly exists for Chat Completions sources only, so a Responses
-        client that did not ask to stream is told to ask again rather than
-        handed a synthesised body the gateway would have to guess at.
+        The route answers SSE only, so the gateway streams upstream and folds
+        the events back into the response they describe.  This used to be a
+        documented ``400`` because reassembly existed for Chat Completions
+        clients alone (#1061); the IR fold serves every source format, so a
+        Messages or Responses client behind the plan lane now works.
         """
         import asyncio
 
@@ -221,24 +309,65 @@ class TestStreamingIsRequired:
         from llm_rosetta_gateway.proxy.engine import _non_streaming_from_stream
 
         route = ResolvedRoute(
-            source_provider="open_responses",
+            source_provider="messages",
             target_provider="open_responses",
             provider_name="chatgpt",
             shim_name=SHIM,
             upstream_model="gpt-5.1",
         )
-        response, _ = asyncio.run(
+
+        class _Stream:
+            status_code = 200
+            is_error = False
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return None
+
+            async def close(self):
+                return None
+
+            async def read_error(self):
+                return ""
+
+            def __aiter__(self):
+                async def gen():
+                    for chunk in _PLAN_STREAM:
+                        yield chunk
+
+                return gen()
+
+        class _Transport:
+            def __init__(self):
+                self.streamed: list[bool] = []
+
+            async def send(self, *args, **kwargs):
+                raise AssertionError("a stream-only upstream is never asked for JSON")
+
+            async def send_streaming(self, provider_info, url, body, **kwargs):
+                provider_info.auth_headers()
+                self.streamed.append(body.get("stream"))
+                return _Stream()
+
+            async def close(self):
+                return None
+
+        transport = _Transport()
+        response, profile = asyncio.run(
             _non_streaming_from_stream(
                 route=route,
                 provider_info=build_provider_info("open_responses", {}, shim_name=SHIM),
-                # The refusal happens before either is touched, which is the
-                # point: nothing is sent upstream for a client that cannot be
-                # served.
-                pipeline=None,  # ty: ignore[invalid-argument-type]
-                target_body={},
-                body={},
-                model="m",
-                transport=None,  # ty: ignore[invalid-argument-type]
+                pipeline=_pipeline(),
+                target_body={"model": "gpt-5.1", "input": "hi"},
+                body={
+                    "model": "gpt-5.1",
+                    "max_tokens": 32,
+                    "messages": [{"role": "user", "content": "hi"}],
+                },
+                model="gpt-5.1",
+                transport=transport,
                 metadata_store=None,
                 extra_headers=None,
                 persistence=None,
@@ -248,8 +377,109 @@ class TestStreamingIsRequired:
             )
         )
 
-        assert response.status_code == 400
-        assert b"stream=true" in response.body
+        assert transport.streamed == [True]
+        assert response.status_code == 200
+        body = json.loads(response.body)
+        assert body["type"] == "message"
+        assert body["content"] == [{"type": "text", "text": "hello", "citations": None}]
+        assert body["stop_reason"] == "end_turn"
+        assert profile["usage"]["prompt_tokens"] == 5
+
+
+#: A plan-lane turn whose only item is a function call, ending on a plain
+#: ``stop`` — the shape the route actually sends (milo measured it: the
+#: ``response.completed`` carries ``status: completed`` and no tool terminal
+#: reason, because the route has no such word).
+_PLAN_TOOL_STREAM: list[dict] = [
+    {
+        "type": "response.created",
+        "response": {
+            "id": "resp_2",
+            "object": "response",
+            "created_at": 1763000000,
+            "model": "gpt-5.1",
+            "status": "in_progress",
+            "output": [],
+        },
+    },
+    {
+        "type": "response.output_item.added",
+        "output_index": 0,
+        "item": {
+            "type": "function_call",
+            "id": "fc_1",
+            "call_id": "call_a",
+            "name": "get_weather",
+            "arguments": "",
+            "status": "in_progress",
+        },
+    },
+    {
+        "type": "response.function_call_arguments.delta",
+        "output_index": 0,
+        "item_id": "fc_1",
+        "delta": '{"city": ',
+    },
+    {
+        "type": "response.function_call_arguments.delta",
+        "output_index": 0,
+        "item_id": "fc_1",
+        "delta": '"Paris"}',
+    },
+    {
+        "type": "response.output_item.done",
+        "output_index": 0,
+        "item": {
+            "type": "function_call",
+            "id": "fc_1",
+            "call_id": "call_a",
+            "name": "get_weather",
+            "arguments": '{"city": "Paris"}',
+            "status": "completed",
+        },
+    },
+    {
+        "type": "response.completed",
+        "response": {
+            "id": "resp_2",
+            "object": "response",
+            "created_at": 1763000000,
+            "model": "gpt-5.1",
+            "status": "completed",
+            "output": [],
+            "usage": {"input_tokens": 9, "output_tokens": 6, "total_tokens": 15},
+        },
+    },
+]
+
+
+class TestTheFoldedTurn:
+    def test_a_plan_tool_turn_is_a_tool_turn_for_the_client(self):
+        """The route says ``stop``; the folded parts are what make it a call.
+
+        ``_finalize_completed_turn`` is the one line that turns it, and no
+        other test reaches it: a Messages client would otherwise be told
+        ``end_turn`` for a turn whose only content is a tool call, which is the
+        difference between running the tool and believing the model finished.
+        """
+        pipeline = _pipeline()
+        events: list[dict] = []
+        processor = pipeline.create_stream_processor(on_ir_event=events.append)
+        for chunk in _PLAN_TOOL_STREAM:
+            processor.process_chunk(chunk)
+        processor.process_chunk(None)
+
+        body = pipeline.convert_stream_events(events)
+
+        assert body["stop_reason"] == "tool_use"
+        assert body["content"] == [
+            {
+                "type": "tool_use",
+                "id": "call_a",
+                "name": "get_weather",
+                "input": {"city": "Paris"},
+            }
+        ]
 
 
 class TestTheModelList:

@@ -9,7 +9,6 @@ from types import SimpleNamespace
 
 import pytest
 
-from llm_rosetta_gateway.proxy import merge_chat_completion_events
 from llm_rosetta_gateway.quota.models import (
     QuotaReading,
     QuotaWindow,
@@ -619,78 +618,10 @@ class TestKeyRingDemotion:
 # ---------------------------------------------------------------------------
 # Stream reassembly
 # ---------------------------------------------------------------------------
-
-
-class TestMergeChatCompletionEvents:
-    def test_merges_content_and_usage(self):
-        merged = merge_chat_completion_events(
-            [
-                {
-                    "id": "chatcmpl-1",
-                    "created": 123,
-                    "model": "m",
-                    "choices": [
-                        {"index": 0, "delta": {"role": "assistant", "content": "he"}}
-                    ],
-                },
-                {
-                    "id": "chatcmpl-1",
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {"content": "llo"},
-                            "finish_reason": "stop",
-                        }
-                    ],
-                    "usage": {"prompt_tokens": 3, "completion_tokens": 2},
-                },
-            ]
-        )
-        assert merged["object"] == "chat.completion"
-        assert merged["choices"][0]["message"]["content"] == "hello"
-        assert merged["choices"][0]["finish_reason"] == "stop"
-        assert merged["usage"]["completion_tokens"] == 2
-
-    def test_merges_tool_calls_by_index(self):
-        merged = merge_chat_completion_events(
-            [
-                {
-                    "id": "x",
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {
-                                "tool_calls": [
-                                    {
-                                        "index": 0,
-                                        "id": "call_1",
-                                        "type": "function",
-                                        "function": {"name": "read", "arguments": "{"},
-                                    }
-                                ]
-                            },
-                        }
-                    ],
-                },
-                {
-                    "id": "x",
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {
-                                "tool_calls": [
-                                    {"index": 0, "function": {"arguments": '"p":1}'}}
-                                ]
-                            },
-                            "finish_reason": "tool_calls",
-                        }
-                    ],
-                },
-            ]
-        )
-        call = merged["choices"][0]["message"]["tool_calls"][0]
-        assert call["function"]["name"] == "read"
-        assert call["function"]["arguments"] == '{"p":1}'
+# The stream-required bridge used to re-merge Chat Completions chunks here.
+# It folds IR events now (`llm_rosetta.ir.primitives.fold_response_events`),
+# so the turn-level coverage lives with that primitive in ``tests/test_fold.py``
+# and the bridge itself is pinned in ``tests/gateway/test_chatgpt_plan_shim.py``.
 
 
 class TestDeferredQuotaPolling:
