@@ -842,6 +842,7 @@ async def handle_streaming(  # noqa: C901
                 error_phase="stream_header",
                 is_streaming=True,
                 tool_name_collisions=pipeline.tool_name_collisions,
+                tool_name_map=pipeline.tool_name_map,
             ),
             profile,
         )

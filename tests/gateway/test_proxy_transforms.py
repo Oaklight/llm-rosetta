@@ -372,6 +372,130 @@ class TestToolCollisionHint:
         assert "[llm-rosetta]" not in json.loads(response.body)["error"]["message"]
 
 
+class TestToolSchemaAttribution:
+    """An upstream schema rejection names the client's own tool (#1427).
+
+    The client sends one body shape; the upstream rejects another.  What the
+    client gets back must point at a declaration it can find in the request it
+    wrote, while keeping the upstream's own words.
+    """
+
+    def _run(
+        self,
+        body: dict[str, Any],
+        *,
+        source: ProviderType,
+        message: str,
+        status_code: int = 400,
+    ):
+        transport = _make_mock_transport(
+            {"error": {"type": "invalid_request_error", "message": message}},
+            status_code=status_code,
+        )
+
+        async def run():
+            response, _ = await handle_non_streaming(
+                _make_route(source=source, target="openai_chat"),
+                _make_provider_info(),
+                body,
+                selection=_sel_ctx(source),
+                transport=transport,
+                metadata_store=ProviderMetadataStore(),
+            )
+            return response
+
+        return asyncio.run(run())
+
+    @staticmethod
+    def _genai_body(names: list[str]) -> dict[str, Any]:
+        return {
+            "model": "test-model",
+            "contents": [{"role": "user", "parts": [{"text": "hi"}]}],
+            "tools": [
+                {
+                    "functionDeclarations": [
+                        {
+                            "name": name,
+                            "description": "d",
+                            "parameters": {"type": "OBJECT", "properties": {}},
+                        }
+                        for name in names
+                    ]
+                }
+            ],
+        }
+
+    def test_an_upstream_index_maps_to_the_clients_declaration(self):
+        names = [f"tool{i}" for i in range(16)] + ["send_message"]
+        response = self._run(
+            self._genai_body(names),
+            source="google_generate",
+            message=(
+                "Invalid 'tools[16].function.name': string does not match "
+                "pattern '^[a-zA-Z0-9_-]+$'"
+            ),
+        )
+        assert response.status_code == 400
+        message = json.loads(response.body)["error"]["message"]
+        # The upstream's own words are kept, verbatim, above the attribution.
+        assert message.startswith("Invalid 'tools[16].function.name'")
+        assert "the client's tool 'send_message'" in message
+        assert "declaration #17" in message
+        assert "tools[0].functionDeclarations[16]" in message
+
+    def test_a_sanitized_name_reports_the_clients_spelling(self):
+        """The wire carries the rewritten name; the hint carries the client's."""
+        response = self._run(
+            {
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "hi"}],
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": {"name": "mcp/srv read", "parameters": {}},
+                    }
+                ],
+            },
+            source="chat_completions",
+            message=(
+                "Invalid 'tools[0].function.name': string does not match "
+                "pattern '^[a-zA-Z0-9_-]+$'"
+            ),
+        )
+        message = json.loads(response.body)["error"]["message"]
+        assert "the client's tool 'mcp/srv read'" in message
+        assert "declaration #1" in message
+
+    def test_a_named_function_maps_to_the_clients_declaration(self):
+        """OpenAI's validator names the function instead of indexing the list."""
+        response = self._run(
+            self._genai_body(["send_message"]),
+            source="google_generate",
+            message=(
+                "Invalid schema for function 'send_message': "
+                '"1" is not of type "integer"'
+            ),
+        )
+        message = json.loads(response.body)["error"]["message"]
+        assert "declaration #1" in message
+        assert "tools[0].functionDeclarations[0].parameters" in message
+
+    @pytest.mark.parametrize("status_code", [429, 500])
+    def test_a_non_body_rejection_carries_no_schema_hint(self, status_code):
+        """Only a request-body rejection can be about the tool list."""
+        response = self._run(
+            self._genai_body(["send_message"]),
+            source="google_generate",
+            message="Invalid schema for function 'send_message': bad",
+            status_code=status_code,
+        )
+        assert response.status_code == status_code
+        message = json.loads(response.body if response.body else b"{}")["error"][
+            "message"
+        ]
+        assert "[llm-rosetta]" not in message
+
+
 class _ErrorStream:
     """Minimal error ``UpstreamStream`` for the pre-stream 4xx path."""
 
