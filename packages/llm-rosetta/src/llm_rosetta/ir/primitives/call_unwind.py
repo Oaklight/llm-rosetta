@@ -233,6 +233,11 @@ def unwind_parallel_tool_calls_ir(
     kept, their place in the turn is not.  A turn whose non-call parts
     already precede every call keeps its order and is not reported.
 
+    In scope is the position of non-call parts within their assistant turn;
+    a result message reordered to follow the call its id names is out of
+    scope and unreported by design — the pairing is id-keyed, so that move
+    loses nothing.
+
     The original request is NOT modified; a new dict is returned only
     when changes are needed.
 
@@ -267,7 +272,8 @@ def unwind_parallel_tool_calls_ir(
             if len(tool_messages) != n_calls:
                 report_loss(
                     f"Unwind: mismatch — {n_calls} tool calls but "
-                    f"{len(tool_messages)} tool results; skipping reorder",
+                    f"{len(tool_messages)} tool result message(s); "
+                    "skipping reorder",
                     code=DOWNGRADED,
                     warnings=warnings,
                 )
@@ -283,9 +289,9 @@ def unwind_parallel_tool_calls_ir(
                 kinds = ", ".join(dict.fromkeys(moved))
                 report_loss(
                     f"Unwind: moved {len(moved)} non-tool-call part(s) "
-                    f"({kinds}) of an assistant turn with {n_calls} tool "
-                    "calls ahead of the first call; their position relative "
-                    "to the calls is not preserved",
+                    f"({kinds}) ahead of the first call in the assistant "
+                    f"turn at message index {i} ({n_calls} tool calls); "
+                    "their position relative to the calls is not preserved",
                     code=DOWNGRADED,
                     subject="content_order",
                     warnings=warnings,

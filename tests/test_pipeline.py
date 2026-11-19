@@ -573,6 +573,63 @@ class TestConversionPipeline:
         assert "messages" in target
         assert target["model"] == "gpt-4"
 
+    def test_unwind_reports_into_the_pipelines_own_sink(self):
+        """The pipeline hands its own sink to the transforms it runs (#1492).
+
+        Passing a sink straight to ``apply_ir_transforms`` pins that
+        function's contract, not this call site: delete ``warnings=
+        ctx.warnings`` here and such a test stays green while every unwound
+        request in production loses its report.  This test builds the sink
+        the way a caller does — one ``ConversionPipeline`` — and reads only
+        what the pipeline collected.
+        """
+        from llm_rosetta.pipeline import ConversionPipeline
+
+        shim = _make_shim(name="test-shim-unwind", ir_transforms=(unwind_transform(),))
+        body = {
+            "model": "gpt-4o",
+            "messages": [
+                {"role": "user", "content": "check the weather in two cities"},
+                {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "c1",
+                            "type": "function",
+                            "function": {"name": "fn_a", "arguments": "{}"},
+                        },
+                        {
+                            "id": "c2",
+                            "type": "function",
+                            "function": {"name": "fn_b", "arguments": "{}"},
+                        },
+                    ],
+                },
+                {"role": "tool", "tool_call_id": "c1", "content": "a"},
+                {"role": "tool", "tool_call_id": "c2", "content": "b"},
+            ],
+        }
+
+        def _put_text_between_the_calls(ir: dict[str, Any]) -> None:
+            ir["messages"][1]["content"].insert(
+                1, {"type": "text", "text": "between the calls"}
+            )
+
+        pipeline = ConversionPipeline(
+            "chat_completions", "chat_completions", target_shim=shim
+        )
+        out = pipeline.convert_request(body, on_ir_ready=_put_text_between_the_calls)
+
+        assert [w.subject for w in pipeline.warnings] == ["content_order"]
+        # The reorder the report names really happened: the text moved ahead
+        # of the first call and the calls became sequential pairs.
+        assert out["messages"][1]["content"] == "between the calls"
+        assert out["messages"][1]["tool_calls"][0]["function"]["name"] == "fn_a"
+        assert out["messages"][2]["role"] == "tool"
+        assert out["messages"][3]["tool_calls"][0]["function"]["name"] == "fn_b"
+        assert out["messages"][4]["role"] == "tool"
+
     @pytest.mark.parametrize("target_provider", ["google", "google_generate"])
     def test_google_target_emits_rest_body(self, target_provider):
         """Every google provider name selects the REST body shape (#882).

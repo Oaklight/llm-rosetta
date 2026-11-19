@@ -366,3 +366,51 @@ class TestUnwindReportsTheReorder:
 
         assert len(sink) == 1
         assert "moved 2 non-tool-call part(s) (text, reasoning)" in sink[0]
+
+    def test_two_unwound_turns_are_told_apart_by_message_index(self):
+        """Two turns in one request name different messages, so both logs differ.
+
+        Without the index the two reports are byte-identical, and a log with
+        two entries reads as one entry written twice (#1492 review).
+        """
+        sink = WarningSink()
+        with recording_to(sink):
+            unwind_parallel_tool_calls_ir(
+                {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "text": "go"}],
+                        },
+                        {
+                            "role": "assistant",
+                            "content": [
+                                _tc("c1"),
+                                {"type": "text", "text": "first"},
+                                _tc("c2", city="LA"),
+                            ],
+                        },
+                        {"role": "tool", "content": [_tr("c1")]},
+                        {"role": "tool", "content": [_tr("c2")]},
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "text": "again"}],
+                        },
+                        {
+                            "role": "assistant",
+                            "content": [
+                                _tc("c3"),
+                                {"type": "text", "text": "second"},
+                                _tc("c4", city="LA"),
+                            ],
+                        },
+                        {"role": "tool", "content": [_tr("c3")]},
+                        {"role": "tool", "content": [_tr("c4")]},
+                    ]
+                }
+            )
+
+        assert len(sink) == 2
+        assert "message index 1" in sink[0]
+        assert "message index 5" in sink[1]
+        assert str(sink[0]) != str(sink[1])
