@@ -50,6 +50,10 @@ FORMAT_SPECS: tuple[FormatSpec, ...] = (
         usage_shape="openai_details",
         route_path="/v1/chat/completions",
         models_path="/models",
+        # Echo fields a Chat-compatible stream repeats on every chunk.  A
+        # non-streaming body has to put them back, and no IR event carries
+        # them.
+        stream_echo_fields=("service_tier", "system_fingerprint"),
     ),
     FormatSpec(
         model_type="llm",

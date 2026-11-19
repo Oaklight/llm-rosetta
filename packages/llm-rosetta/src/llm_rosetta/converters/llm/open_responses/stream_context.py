@@ -107,6 +107,13 @@ class OpenResponsesStreamContext(StreamContext):
     _inbound_message_item_id: str = ""
     _inbound_message_phase: str = ""
 
+    # Whether this turn already wrote a refusal as a content part.  The finish
+    # handler synthesises one from ``provider_metadata.refusal_text`` for a
+    # source dialect that recorded a refusal no block held (#1314); when the
+    # turn's own parts already carry it, opening a second one doubles the
+    # words on the wire.
+    _refusal_part_written: bool = False
+
     def start_message_item(
         self,
         item_id: str,

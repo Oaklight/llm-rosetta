@@ -3244,6 +3244,140 @@ class TestStreamingRefusal:
         assert result[1]["part"]["type"] == "refusal"
         assert result[1]["part"]["refusal"] == "I cannot help with that."
 
+    def test_a_refusal_the_turn_already_wrote_is_not_written_twice(self):
+        """The finish synthesises a refusal part only when none was written.
+
+        A source dialect may record a refusal with no content block, and then
+        the finish event's ``refusal_text`` is the only place the words exist
+        (#1314), so the writer opens the part.  A folded response carries the
+        part already, and opening a second one put the words on the wire twice
+        — ``'I cannot help.I cannot help.'`` in a Responses body.
+        """
+        pipeline = ConversionPipeline("open_responses", "open_responses")
+        pipeline.convert_request({"model": "m", "input": "hi"})
+        events = [
+            {"type": "stream_start", "response_id": "r1", "model": "m", "created": 1},
+            {"type": "text_delta", "text": "Hello", "choice_index": 0},
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "refusal"},
+                "choice_index": 0,
+                "provider_metadata": {"refusal_text": "I cannot help."},
+            },
+        ]
+
+        body = pipeline.convert_stream_events(events)
+
+        parts = body["output"][0]["content"]
+        assert [part for part in parts if part["type"] == "refusal"] == [
+            {
+                "type": "refusal",
+                "refusal": "I cannot help.",
+                "annotations": [],
+                "logprobs": [],
+            }
+        ]
+
+    def test_a_refusal_with_no_block_is_still_written(self):
+        """#1314's shape: the words exist only in the finish metadata.
+
+        The writer synthesises the part for this turn, which is the reason the
+        synthesis exists at all.  A guard that suppressed it unconditionally
+        would answer a refusal turn with nothing behind the status.
+        """
+        pipeline = ConversionPipeline("open_responses", "open_responses")
+        pipeline.convert_request({"model": "m", "input": "hi"})
+        events = [
+            {"type": "stream_start", "response_id": "r1", "model": "m", "created": 1},
+            {"type": "text_delta", "text": "Hello", "choice_index": 0},
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "refusal"},
+                "choice_index": 0,
+                "provider_metadata": {"refusal_text": "I cannot help."},
+            },
+        ]
+
+        body = pipeline.convert_stream_events(events)
+
+        refusal = [p for p in body["output"][0]["content"] if p["type"] == "refusal"]
+        assert len(refusal) == 1
+        assert refusal[0]["refusal"] == "I cannot help."
+
+    def test_an_empty_refusal_delta_does_not_claim_the_words(self):
+        """The guard is the words, not the event: ``refusal: ''`` writes none.
+
+        A reader can emit an empty delta to open the block.  Counting that as
+        "already wrote" would suppress the finish's synthesis and leave the
+        turn with an empty refusal part.
+        """
+        pipeline = ConversionPipeline("open_responses", "open_responses")
+        pipeline.convert_request({"model": "m", "input": "hi"})
+        events = [
+            {"type": "stream_start", "response_id": "r1", "model": "m", "created": 1},
+            {"type": "text_delta", "text": "Hello", "choice_index": 0},
+            {
+                "type": "content_block_start",
+                "block_index": 1,
+                "block_type": "refusal",
+                "choice_index": 0,
+            },
+            {
+                "type": "refusal_delta",
+                "refusal": "",
+                "block_index": 1,
+                "choice_index": 0,
+            },
+            {"type": "content_block_end", "block_index": 1, "choice_index": 0},
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "refusal"},
+                "choice_index": 0,
+                "provider_metadata": {"refusal_text": "I cannot help."},
+            },
+        ]
+
+        body = pipeline.convert_stream_events(events)
+
+        refusal = [p for p in body["output"][0]["content"] if p["type"] == "refusal"]
+        assert len(refusal) == 1
+        assert refusal[0]["refusal"] == "I cannot help."
+
+    def test_an_empty_refusal_block_does_not_swallow_the_finish_words(self):
+        """The guard records words, not a block.
+
+        A refusal block that opens and never receives a delta writes nothing.
+        Recording that as "already written" suppressed the finish's synthesis
+        too, and the turn answered with no refusal at all — the words dropped
+        by the very guard that exists to stop them being doubled.
+        """
+        pipeline = ConversionPipeline("open_responses", "open_responses")
+        pipeline.convert_request({"model": "m", "input": "hi"})
+        events = [
+            {"type": "stream_start", "response_id": "r1", "model": "m", "created": 1},
+            {"type": "text_delta", "text": "Hello", "choice_index": 0},
+            {
+                "type": "content_block_start",
+                "block_index": 1,
+                "block_type": "refusal",
+                "choice_index": 0,
+            },
+            {"type": "content_block_end", "block_index": 1, "choice_index": 0},
+            {
+                "type": "finish",
+                "finish_reason": {"reason": "refusal"},
+                "choice_index": 0,
+                "provider_metadata": {"refusal_text": "I cannot help."},
+            },
+        ]
+
+        body = pipeline.convert_stream_events(events)
+
+        parts = body["output"][0]["content"]
+        refusal = [part for part in parts if part["type"] == "refusal"]
+        assert len(refusal) == 1
+        assert refusal[0]["refusal"] == "I cannot help."
+
     def test_content_block_end_text_unchanged(self):
         """ContentBlockEndEvent for text blocks still emits output_text.done."""
         ctx = OpenAIResponsesStreamContext()

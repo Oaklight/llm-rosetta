@@ -87,11 +87,17 @@ class ContentBlockStartEvent(TypedDict):
     ``responses_phase`` when the item declares one): a response can hold
     several message items, and the writer needs that to keep them apart
     (#997).
+
+    ``choice_index`` names the choice the block belongs to, on the same
+    absent-means-the-only-one rule the deltas follow.  It is written only when
+    a response has more than one choice, and it is what lets a folder put the
+    block in the right message without reading the deltas that follow.
     """
 
     type: Required[Literal["content_block_start"]]
     block_index: Required[int]  # 0-based block index
     block_type: Required[str]  # "text", "thinking", "tool_use", etc.
+    choice_index: NotRequired[int]
     provider_metadata: NotRequired[dict[str, Any]]
 
 
@@ -103,6 +109,7 @@ class ContentBlockEndEvent(TypedDict):
 
     type: Required[Literal["content_block_end"]]
     block_index: Required[int]  # 0-based block index
+    choice_index: NotRequired[int]
 
 
 # ============================================================================
@@ -258,6 +265,7 @@ class ToolResultEvent(TypedDict):
     ]  # absent means "infer", as on ToolResultPart
     is_error: NotRequired[bool]
     block_index: NotRequired[int]  # Provider content block index (e.g. Anthropic)
+    choice_index: NotRequired[int]
     provider_metadata: NotRequired[dict[str, Any]]
 
 

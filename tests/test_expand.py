@@ -301,19 +301,30 @@ def test_a_second_choice_is_tagged():
     assert [f["choice_index"] for f in finishes] == [0, 1]
 
 
-def test_block_boundaries_are_not_tagged():
-    """No reader produces a choice index on a block, so none is written.
+def test_a_block_boundary_names_its_choice():
+    """A block belongs to a choice, so the boundary says which one.
 
-    A field nothing reads is a field with no meaning; a fold that needs to
-    attribute a block to a choice can read the delta inside it.
+    It used to carry none, on the argument that a fold could read the delta
+    inside it.  That is not true of the block itself: the fold opens the block
+    when the start arrives, before any delta says anything, and a second
+    choice's text landed in the first choice's message.  The index is written
+    only when the response has more than one choice, like every other tagged
+    event.
     """
     response = _response([{"type": "text", "text": "hello"}], choices=2)
     response["choices"][1]["message"]["content"] = [{"type": "text", "text": "world"}]
 
     starts = [e for e in _expand(response) if e["type"] == "content_block_start"]
+    ends = [e for e in _expand(response) if e["type"] == "content_block_end"]
 
     assert [s["block_index"] for s in starts] == [0, 1]
-    assert all("choice_index" not in s for s in starts)
+    assert [s["choice_index"] for s in starts] == [0, 1]
+    assert [e["choice_index"] for e in ends] == [0, 1]
+
+    single = _expand(_response([{"type": "text", "text": "hello"}], choices=1))
+    assert all(
+        "choice_index" not in e for e in single if e["type"].startswith("content_block")
+    )
 
 
 def test_the_events_do_not_alias_the_response():
