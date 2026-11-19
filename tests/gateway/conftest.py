@@ -7,6 +7,7 @@ Provides a minimal httpbin-compatible HTTP server, a SOCKS5 proxy server
 from __future__ import annotations
 
 import json
+import logging
 import os
 import select
 import socket
@@ -282,3 +283,32 @@ def socks5_auth_url():
     thread.start()
     yield f"socks5://testuser:testpass@127.0.0.1:{port}"
     server.shutdown()
+
+
+class _CollectingHandler(logging.Handler):
+    """Keeps the gateway's own log records, whatever the run imported first."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+@pytest.fixture
+def gateway_warnings():
+    """Records what the gateway logger emits during the test.
+
+    That logger is created with ``propagate = False``, so caplog — which
+    listens on the root logger — does not see its records once
+    ``llm_rosetta_gateway.logging`` has been imported.  A handler on the
+    logger itself is one path under every pytest version.
+    """
+    logger = logging.getLogger("llm-rosetta-gateway")
+    handler = _CollectingHandler()
+    logger.addHandler(handler)
+    try:
+        yield handler.records
+    finally:
+        logger.removeHandler(handler)

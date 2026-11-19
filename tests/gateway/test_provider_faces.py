@@ -14,7 +14,6 @@ the admin payload that folds them for the panel.
 from __future__ import annotations
 
 import json
-import logging
 from typing import Any
 
 import pytest
@@ -22,36 +21,6 @@ import pytest
 from llm_rosetta_gateway.config.core import GatewayConfig
 from llm_rosetta_gateway.config.typed import face_section, face_value
 from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION, migrate
-
-
-class _CollectingHandler(logging.Handler):
-    """Keeps the gateway's own log records, whatever the run imported first."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.records: list[logging.LogRecord] = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        self.records.append(record)
-
-
-@pytest.fixture
-def gateway_warnings():
-    """Records the gateway logger emits during the test.
-
-    That logger is created with ``propagate = False``, so caplog — which
-    listens on the root logger — only sees its records while
-    ``llm_rosetta_gateway.logging`` has not been imported yet in the process,
-    and whether it has been is decided by the rest of the run.  A handler on
-    the logger that emits is one path under every pytest version.
-    """
-    logger = logging.getLogger("llm-rosetta-gateway")
-    handler = _CollectingHandler()
-    logger.addHandler(handler)
-    try:
-        yield handler.records
-    finally:
-        logger.removeHandler(handler)
 
 
 def _config(entry: dict, *, models: dict | None = None) -> GatewayConfig:

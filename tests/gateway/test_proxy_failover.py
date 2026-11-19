@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from typing import Any, cast
 
 import pytest
@@ -56,35 +55,6 @@ def _clean_quota_state():
     QUOTA_STATE.clear()
     yield
     QUOTA_STATE.clear()
-
-
-class _CollectingHandler(logging.Handler):
-    """Keeps the gateway's own log records, whatever the run imported first."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.records: list[logging.LogRecord] = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        self.records.append(record)
-
-
-@pytest.fixture
-def gateway_warnings():
-    """Records the gateway logger emits during the test.
-
-    That logger is created with ``propagate = False``, so caplog — which
-    listens on the root logger — does not see its records once
-    ``llm_rosetta_gateway.logging`` has been imported.  A handler on the
-    logger itself is one path under every pytest version.
-    """
-    logger = logging.getLogger("llm-rosetta-gateway")
-    handler = _CollectingHandler()
-    logger.addHandler(handler)
-    try:
-        yield handler.records
-    finally:
-        logger.removeHandler(handler)
 
 
 class _Probe:
@@ -904,20 +874,71 @@ class TestTheConfigFile:
             )
 
 
-class TestTheBudgetIsOneFailover:
-    """The exclusion alone cannot bound the budget: with a third provider the
-    round-robin would happily try it.  Measuring with three providers is what
-    makes the ``attempted`` guard load-bearing."""
+class TestTheCredentialWalk:
+    """A credential refusal excludes that account; the walk continues.
 
-    def test_a_second_refusal_does_not_reach_a_third_provider(self):
+    Four accounts, two unpaid and two healthy: the request must reach a
+    healthy one.  The walk is bounded by the route — every refusal adds its
+    provider to the exclusion set and the resolver picks from what is left —
+    not by a retry count.  The count is why the operator's request came back
+    402 after two hops with two healthy lanes untouched.
+    """
+
+    def test_a_second_refusal_reaches_the_third_provider(self):
+        """The retry budget used to end the request on the second refusal.
+
+        The operator's route held four accounts: two unpaid (a reseller and
+        the vendor), two healthy.  The walk stopped after the second 402 and
+        returned it, although both healthy accounts were in the route.
+        """
         config = _config(providers=("a", "b", "c"), opt_in=True)
         transport = _Transport(_refused(), _refused(), _ok())
 
         response, profile = _run(config, transport)
 
-        assert response.status_code == 429
-        assert transport.calls == ["https://a.test", "https://b.test"]
+        assert response.status_code == 200
+        assert transport.calls == [
+            "https://a.test",
+            "https://b.test",
+            "https://c.test",
+        ]
         assert profile["failover"]["to"] == "b"
+        assert profile["failover"]["profile"]["failover"]["to"] == "c"
+
+    def test_two_unpaid_accounts_do_not_end_a_four_lane_route(self):
+        """The production shape: 402 twice, then a healthy lane must serve."""
+        config = _config(providers=("a", "b", "c", "d"), probe=False, opt_in=True)
+        transport = _Transport(_payment_required(), _payment_required(), _ok())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 200
+        assert transport.calls == [
+            "https://a.test",
+            "https://b.test",
+            "https://c.test",
+        ]
+        assert profile["failover"]["profile"]["failover"]["to"] == "c"
+
+    def test_every_account_refusing_still_reports_the_refusal(self):
+        """The walk is bounded by the route: four lanes, four refusals, one answer."""
+        config = _config(providers=("a", "b", "c", "d"), probe=False, opt_in=True)
+        transport = _Transport(
+            _payment_required(),
+            _payment_required(),
+            _payment_required(),
+            _payment_required(),
+        )
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 402
+        assert transport.calls == [
+            "https://a.test",
+            "https://b.test",
+            "https://c.test",
+            "https://d.test",
+        ]
 
 
 def _two_lane_config() -> GatewayConfig:
