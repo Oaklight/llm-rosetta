@@ -612,13 +612,24 @@ class BaseConverter(ABC):
         so the guard below only covers converters defined outside the
         package.
 
+        A context is created when the caller passes none.  The terminal
+        reason of a turn is decided from the calls the stream opened, and
+        that memory lives on the context, so an iterator that threaded
+        ``None`` through would answer ``stop`` for a tool turn where the
+        serving path answers ``tool_calls``.  The iterator therefore always
+        reports the same reasons the pipeline does, and with them the
+        lifecycle events a context enables.
+
         Args:
             chunks: Iterable of provider-native stream chunks.
-            context: Optional stream context for stateful conversions.
+            context: Optional stream context for stateful conversions; one is
+                created for this iterator when omitted.
 
         Yields:
             IR stream events.
         """
+        if context is None:
+            context = self.create_stream_context()
         for chunk in chunks:
             yield from self.stream_response_from_provider(chunk, context=context)
         try:
