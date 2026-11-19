@@ -265,7 +265,11 @@ Three facts had to be added before that held outside the single-choice cases:
 - A refusal's words can arrive only on the finish.  The Chat reader accumulates
   `delta.refusal` on its context and puts the text in
   `finish.provider_metadata.refusal_text`; a body spells a refusal as a content
-  part, so the fold writes that part when no block opened one.
+  part, so the fold writes that part when no block opened one.  The Responses
+  writer already synthesised that part from the same metadata, for a source
+  that recorded no block (#1314), so it now skips the synthesis when the turn
+  wrote the part itself — the two claims otherwise put the words on the wire
+  twice.
 - A response-level echo field is the exception the caller closes, below.
 
 One class of those facts is recoverable by the caller, and the bridge does
