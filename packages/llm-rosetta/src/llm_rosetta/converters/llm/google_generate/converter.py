@@ -81,6 +81,12 @@ class GoogleGenerateConverter(
 
     _RESPONSE_ID_PREFIX = ""
 
+    # The mixins annotate ``tool_ops`` with the concrete ops class so their
+    # bodies type-check.  Re-declare it as the base contract's ``Any`` here so
+    # the converter's public attribute keeps the type it had before the split;
+    # otherwise callers see the ops class's ``ToolDefinition | list | None``.
+    tool_ops: Any
+
     content_ops_class = GoogleGenerateContentOps
     tool_ops_class = GoogleGenerateToolOps
     message_ops_class = GoogleGenerateMessageOps
