@@ -17,7 +17,9 @@ import { t, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, esc, showToast, withBusyButton } from '../core/utils.js';
 import { jsArg, logoUrl } from '../core/html.js';
 import {
-  hasPattern, keptShims, packageLogoUrl, selectionMaps, shortRef,
+  availableNotInstalled, catalogueMatches, executeRefInstall, hasPattern,
+  keptShims, packageLogoUrl, removeSourcesWrite, selectionMaps, selectionOf,
+  selectionWrite, shortRef,
 } from '../core/shim-selection.js';
 import { toggleCard } from '../core/disclosure.js';
 
@@ -307,17 +309,60 @@ export function toggleShimVendor(vendor) {
 /** Whether a catalogue package passes the search and tier filters. */
 function _matchesPackage(p, f) {
   if (f.tier && (p.tier || (p.free ? 'free' : 'paid')) !== f.tier) return false;
-  if (!f.q) return true;
-  const hay = `${p.key} ${p.label} ${(p.shims || []).join(' ')} ${(p.formats || []).join(' ')}`
-    .toLowerCase();
-  return hay.includes(f.q);
+  return catalogueMatches(p, f.q);
+}
+
+/**
+ * Catalogue packages a query names that are not installed.
+ *
+ * The rule — a query is required, the tier and origin filters apply — lives in
+ * `shim-selection.js`, where it is testable without a DOM; this is the page's
+ * one-line binding to it.
+ */
+function _availableNotInstalled(f) {
+  return availableNotInstalled(_packages, f);
+}
+
+/**
+ * The card's overflow menu: one action today — load this package at a ref the
+ * operator names instead of the one the catalogue pins.
+ *
+ * It is a menu rather than a fourth button because the action is the rare
+ * one: a released tag is right for almost everyone, and an operator pinning a
+ * commit is deliberately stepping off it.  The button stays out of the head's
+ * click target (`stopPropagation`) so opening the menu never closes the card.
+ */
+function _packageMenu(p) {
+  const id = esc(`shimMenu-${p.key}`);
+  const item = p.installed
+    ? `<div class="menu-item" role="menuitem" tabindex="0"
+              onclick="closeMenus();openShimRefForm(${jsArg(p.key)})">${esc(t('shimPage.pinAtRef'))}</div>`
+    : `<div class="menu-item" role="menuitem" tabindex="0"
+              onclick="closeMenus();openShimRefForm(${jsArg(p.key)})">${esc(t('shimPage.installAtRef'))}</div>`;
+  return `<span class="shim-card-tools">
+      <button type="button" class="icon-btn more-menu-toggle" aria-haspopup="true"
+              aria-expanded="false" aria-label="${esc(t('shimPage.cardMenu'))} ${esc(p.label)}"
+              title="${esc(t('shimPage.cardMenu'))} ${esc(p.label)}"
+              onclick="event.stopPropagation();toggleMoreMenu(this)">&#8943;</button>
+      <div class="menu more-menu shim-card-menu" role="menu" id="${id}">${item}</div>
+    </span>`;
+}
+
+/** The ref form a menu action opens, hidden until asked for. */
+function _refForm(p) {
+  return `<form class="shim-ref-form" hidden onsubmit="event.preventDefault();installShimAtRef(this, ${jsArg(p.key)})">
+      <label class="shim-ref-label" for="shimRef-${esc(p.key)}">${esc(t('shimPage.refLabel'))}</label>
+      <input type="text" id="shimRef-${esc(p.key)}" name="ref" class="input is-sm"
+             placeholder="${esc(t('shimPage.refPlaceholder'))}" autocomplete="off" spellcheck="false">
+      <button type="submit" class="btn btn-sm btn-primary">${esc(t('shimPage.refInstall'))}</button>
+      <button type="button" class="btn btn-sm" onclick="closeShimRefForm(${jsArg(p.key)})">${esc(t('btn.cancel'))}</button>
+    </form>`;
 }
 
 /** The saved selection of one package, as declaration lists. */
-function _selectionOf(key) {
+function _selectionOf(p) {
   const section = (S.configData && S.configData.shims) || {};
-  return { include: section.include && section.include[key],
-           exclude: section.exclude && section.exclude[key] };
+  return selectionOf(section, p);
 }
 
 /** Packages stay closed until they are the one being worked on, as vendors do. */
@@ -325,7 +370,9 @@ const _openPackages = new Set();
 
 export function toggleShimPackage(key) {
   toggleCard({
-    root: '#shimCatalogGrid', card: '.shim-card', attr: 'package', key,
+    // Both lists paint this card: the Available view, and the "not installed"
+    // section a search adds under the Installed rows.
+    root: '.shim-grid', card: '.shim-card', attr: 'package', key,
     open: _openPackages, head: '.shim-card-head', body: '.shim-card-body',
   });
 }
@@ -400,9 +447,9 @@ function _packageCard(p) {
   const link = _sourceLink(p.source_repo, 'shim-repo');
   const tier = p.tier || (p.free ? 'free' : 'paid');
   const tierTag = `<span class="tag is-square is-${esc(tier)}">${esc(t('shimPage.' + tier))}</span>`;
-  const kept = new Set(keptShims(p.shims, _selectionOf(p.key)));
+  const kept = new Set(keptShims(p.shims, _selectionOf(p)));
   const loaded = new Set(p.installed_shims || []);
-  const { include, exclude } = _selectionOf(p.key);
+  const { include, exclude } = _selectionOf(p);
   const pattern = hasPattern(include) || hasPattern(exclude);
   const rows = pattern
     ? `<p class="field-hint">${esc(t('shimPage.patternNote'))}</p>`
@@ -440,19 +487,19 @@ function _packageCard(p) {
         <svg class="shim-vendor-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div class="shim-card-body" id="${bodyId}"${open ? '' : ' hidden'}>
+        ${_refForm(p)}
         <div class="shim-chips">${(p.formats || []).map((f) => `<span class="tag is-plain">${esc(f)}</span>`).join('') || '<span class="tag is-plain">—</span>'}${link ? ' ' + link : ''}</div>
         ${_packagePinLine(p)}
         <div class="shim-card-shims" role="group" aria-label="${esc(t('shimPage.chooseShims'))}">${rows}</div>
         ${p.installed ? '' : `<p class="shim-trust" role="note">${esc(t('shimPage.trustWarning'))}</p>`}
-        <div class="shim-card-actions">${actions}</div>
+        <div class="shim-card-actions"><span class="shim-card-buttons">${actions}</span>${_packageMenu(p)}</div>
       </div>
     </article>`;
 }
 
 /** The ticked shims of one card, and how many it offers. */
 function _cardSelection(key) {
-  const card = [...document.querySelectorAll('#shimCatalogGrid .shim-card')]
-    .find((c) => c.dataset.package === key);
+  const card = _cardOf(key);
   const boxes = card ? [...card.querySelectorAll('input[data-shim]')] : [];
   // The name rides in `data-shim`: a bare checkbox's value is the string "on".
   return {
@@ -528,10 +575,15 @@ export async function updateShimPackage(btn, key) {
     showToast(t('shimPage.noneSelected'), 'error');
     return;
   }
-  const { include, exclude } = _mapsWith(key, checked, total);
+  const maps = _mapsWith(key, checked, total);
+  // A pinned package (an explicit remote) keeps its selection on the entry;
+  // writing only the preset-keyed maps would be a no-op that reports success.
+  const section = (S.configData && S.configData.shims) || {};
+  const pkg = _packages.find((p) => p.key === key) || { key };
+  const body = selectionWrite(section, pkg, maps);
   await withBusyButton(btn, async () => {
     try {
-      await _mustWrite(() => api.put('/admin/api/config/shims', {include, exclude}));
+      await _mustWrite(() => api.put('/admin/api/config/shims', body));
       const r = await _mustWrite(() => api.post('/admin/api/config/shims/reload', {}));
       S.configData = await api.get('/admin/api/config');
       await loadShimsPage();
@@ -568,12 +620,113 @@ export async function upgradeShimPackage(btn, key) {
   });
 }
 
-/** Drop a preset from `shims.presets` and reload, so its shims unregister. */
+/** The card element of one package, in whichever list is showing it. */
+function _cardOf(key) {
+  return [...document.querySelectorAll('#shimCatalogGrid .shim-card, #shimGrid .shim-card')]
+    .find((c) => c.dataset.package === key);
+}
+
+/** Open one card's ref form, and put the cursor in it. */
+export function openShimRefForm(key) {
+  const card = _cardOf(key);
+  if (!card) return;
+  // Opening the form inside a closed card is a no-op the operator cannot see,
+  // so the body opens first — the same disclosure the head controls.
+  if (card.querySelector('.shim-card-body')?.hidden) {
+    toggleShimPackage(key);
+  }
+  const form = card.querySelector('.shim-ref-form');
+  if (!form) return;
+  form.hidden = false;
+  form.querySelector('input[name="ref"]')?.focus();
+}
+
+/** Hide one card's ref form, and forget what was typed in it. */
+export function closeShimRefForm(key) {
+  const form = _cardOf(key)?.querySelector('.shim-ref-form');
+  if (!form) return;
+  form.hidden = true;
+  const input = form.querySelector('input[name="ref"]');
+  if (input) input.value = '';
+}
+
+/**
+ * Load a package at the ref the operator typed.
+ *
+ * A preset pins a released tag and its archive digest, so another ref cannot
+ * ride on it: `shims.remotes` merges over a preset with the same URL, and the
+ * preset's `sha256` was computed for bytes this ref does not have.  The key
+ * therefore leaves `presets` and an explicit remote takes its place — same URL
+ * and path, the chosen ref, no mirror.
+ *
+ * The write lands before anything is fetched, and a ref the repository does
+ * not have fails the fetch.  That is the one failure that must not stay on
+ * disk, so the previous section is restored and reloaded: a typo costs a
+ * toast, not the next startup.
+ */
+export async function installShimAtRef(form, key) {
+  const pkg = _packages.find((p) => p.key === key);
+  if (!pkg) return;
+  const input = form.querySelector('input[name="ref"]');
+  const ref = (input?.value || '').trim();
+  if (!ref) {
+    showToast(t('shimPage.refRequired'), 'error');
+    input?.focus();
+    return;
+  }
+  const section = (S.configData && S.configData.shims) || {};
+  const wasInstalled = !!pkg.installed;
+  await withBusyButton(form.querySelector('button[type="submit"]'), async () => {
+    try {
+      // Write, reload, undo-if-broken is one tested sequence
+      // (`executeRefInstall`); the page only supplies the calls.
+      const outcome = await executeRefInstall({
+        section,
+        pkg,
+        ref,
+        io: {
+          writeShims: (body) => _mustWrite(() => api.put('/admin/api/config/shims', body)),
+          reload: () => _mustWrite(() => api.post('/admin/api/config/shims/reload', {})),
+          readConfig: async () => {
+            S.configData = await api.get('/admin/api/config');
+            _openPackages.add(key);
+            await loadShimsPage();
+          },
+        },
+      });
+      if (!outcome.ok) {
+        showToast(t('shimPage.refFailed',
+          {ref, error: outcome.error || t('toast.error')}), 'error');
+        return;
+      }
+      showToast(t(wasInstalled ? 'shimPage.refPinned' : 'shimPage.refInstalled',
+        {key, ref}));
+    } catch (e) {
+      // A refused write (a 400 from validation) leaves the previous section
+      // on disk already; only a reload failure after a successful write
+      // needed the restore, and that path is inside the helper.
+      S.configData = await api.get('/admin/api/config');
+      await loadShimsPage();
+      showToast(t('shimPage.refFailed', {ref, error: String(e.message || e)}), 'error');
+    }
+  });
+}
+
+/**
+ * Remove a package, whichever shape installed it, and reload.
+ *
+ * A preset-installed package leaves `shims.presets`; a ref install has no
+ * preset at all and leaves an explicit remote. Rewriting `presets` alone left
+ * the pinned package loading while the toast said it was removed, so the
+ * write is built from the live section and drops both carriers.
+ */
 export async function removeShimPackage(btn, key) {
-  const presets = _presets().filter((k) => k !== key);
+  const pkg = _packages.find((p) => p.key === key) || { key };
+  const section = (S.configData && S.configData.shims) || {};
+  const next = removeSourcesWrite(section, pkg);
   await withBusyButton(btn, async () => {
     try {
-      await _mustWrite(() => api.put('/admin/api/config/shims', {presets}));
+      await _mustWrite(() => api.put('/admin/api/config/shims', next));
       const r = await _mustWrite(() => api.post('/admin/api/config/shims/reload', {}));
       S.configData = await api.get('/admin/api/config');
       await loadShimsPage();
@@ -625,13 +778,32 @@ function renderShimsPage() {
     }
     for (const rs of groups.values()) rs.sort(shimRowOrder);
     const sorted = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-    if (count) count.textContent = _loaded
-      ? t('shimPage.count', {shown: rows.length, total: _shims.length,
-                             vendors: plural(sorted.length, 'shimPage.vendors', 'shimPage.vendorOne')})
+    const extra = _availableNotInstalled(f);
+    const rowsHtml = sorted.map(([v, rs]) => _vendorCard(v, rs)).join('');
+    const extraHtml = extra.length
+      ? `<div class="shim-section-head">`
+        + `<span>${esc(t('shimPage.notInstalled'))}</span>`
+        + `<span class="shim-vendor-meta">${esc(plural(extra.length, 'shimPage.packages', 'shimPage.packageOne'))}</span>`
+        + `</div>`
+        + `<div class="shim-grid shim-grid-inline">${extra.map(_packageCard).join('')}</div>`
       : '';
-    installed.innerHTML = sorted.length
-      ? sorted.map(([v, rs]) => _vendorCard(v, rs)).join('')
+    installed.innerHTML = sorted.length || extra.length
+      ? rowsHtml + extraHtml
       : '<div class="shim-empty">' + esc(t('shim.inventory.empty')) + '</div>';
+    // The count covers both halves: a query that matched only catalogue
+    // entries would otherwise read "0 of 0 vendors" above two visible cards.
+    if (count) {
+      // A query that matched only catalogue entries has no installed half to
+      // report: "0 of 52 shims · 0 vendors" above one visible card is noise.
+      const more = plural(extra.length, 'shimPage.availableMore',
+        'shimPage.availableMoreOne');
+      count.textContent = !_loaded ? ''
+        : rows.length || !extra.length
+          ? t('shimPage.count', {shown: rows.length, total: _shims.length,
+                                 vendors: plural(sorted.length, 'shimPage.vendors', 'shimPage.vendorOne')})
+            + (extra.length ? ' · ' + more : '')
+          : more;
+    }
   } else if (_view === 'available') {
     const f = _filters();
     const packages = _packages.filter((p) => _matchesPackage(p, f));
@@ -686,6 +858,7 @@ Object.assign(window, {
   loadShimsPage, renderShimsPage, setShimsView, toggleShimVendor,
   toggleShimPackage, upgradeShimPackage,
   installShimPackage, updateShimPackage, removeShimPackage, shimToggleEnabled,
+  openShimRefForm, closeShimRefForm, installShimAtRef,
   // Repainted on a language change: the per-shim rows carry translated marks.
   repaintShimCatalog: () => { if (_view === 'available') renderShimsPage(); },
 });

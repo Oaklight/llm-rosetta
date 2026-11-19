@@ -215,6 +215,57 @@ class TestMergeShimSourcesBody:
         )
         assert merged == {"paths": ["/a"], "strict": True, "presets": ["alcf"]}
 
+    def test_a_pinned_selection_lands_on_the_entry(self):
+        """The body **Save selection** sends for a pinned package.
+
+        The panel writes the maps and the entries together, with the entry
+        carrying the selection — a merge that dropped ``remotes`` would leave
+        the package loading at full width while the save reported success.
+        """
+        from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
+
+        section = {
+            "remotes": [
+                {"url": "https://github.com/o/free", "path": "p", "ref": "main"}
+            ]
+        }
+        body = {
+            "include": {},
+            "exclude": {},
+            "remotes": [
+                {
+                    "url": "https://github.com/o/free",
+                    "path": "p",
+                    "ref": "main",
+                    "include": ["kilo_free--chat_completions"],
+                }
+            ],
+        }
+        merged = _merge_shim_sources_body(section, body)
+        assert merged["remotes"][0]["include"] == ["kilo_free--chat_completions"]
+        assert "include" not in merged and "exclude" not in merged
+
+    def test_a_rollback_body_puts_the_keyed_maps_back(self):
+        """The snapshot a failed ref install restores.
+
+        The ref write clears the keyed maps; a restore body that named only
+        ``presets``/``remotes`` would leave the narrowed package loading every
+        shim it ships.
+        """
+        from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
+
+        section = {"presets": ["argo"], "remotes": []}
+        restored = _merge_shim_sources_body(
+            section,
+            {
+                "presets": ["argo"],
+                "remotes": [],
+                "include": {"argo": ["argo--messages"]},
+                "exclude": {},
+            },
+        )
+        assert restored["include"] == {"argo": ["argo--messages"]}
+
 
 class TestCheckRemoteUpdates:
     """``check_remote_updates`` answers "is the pinned commit still HEAD?"."""
