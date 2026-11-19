@@ -223,6 +223,45 @@ class TestTheDerivedId:
     def test_no_history_derives_nothing(self):
         assert identify({}, {"messages": []}).source == "none"
 
+    def test_a_system_prompt_does_not_name_the_conversation(self):
+        """The system prompt is the project's, identical for every conversation.
+
+        Stopping the opening at it hashed the system prompt alone, so two
+        conversations in one project shared a digest — the exact collapse this
+        id must not have, since it is what the log groups by.
+        """
+        first = {
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant."},
+                _user("fix the parser"),
+            ]
+        }
+        second = {
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant."},
+                _user("write the docs"),
+            ]
+        }
+        one = identify({}, first)
+        two = identify({}, second)
+        assert one.source == "derived:opening"
+        assert one.value != two.value
+
+    def test_a_developer_prompt_does_not_name_it_either(self):
+        first = {
+            "messages": [
+                {"role": "developer", "content": "Project rules."},
+                _user("fix the parser"),
+            ]
+        }
+        second = {
+            "messages": [
+                {"role": "developer", "content": "Project rules."},
+                _user("write the docs"),
+            ]
+        }
+        assert identify({}, first).value != identify({}, second).value
+
 
 class TestFallbacks:
     def test_a_body_fallback_is_used_when_nothing_is_readable(self):

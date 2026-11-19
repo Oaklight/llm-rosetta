@@ -137,6 +137,10 @@ class _Turn:
     #: Digests of every block the agent will have seen once this turn lands.
     digests: tuple[str, ...] = ()
     released: bool = False
+    #: Whether the turn reached its stop (or its error) chunk.  A turn that
+    #: did not is abandoned: the agent may have recorded half of it, so the
+    #: session is closed rather than reused.
+    finished: bool = False
 
     def release(self) -> None:
         """Give back the locks this turn took, once."""
@@ -351,7 +355,7 @@ class AcpTransport:
         key = self._key(provider_info)
         entry = self._ledger.get(key) if key is not None else None
         agent = await self._agent(provider_info, self._slot_for(provider_info, entry))
-        digests = block_digests(prompt)
+        digests = block_digests(_blocks_of(body))
         held: list[asyncio.Lock] = []
 
         try:
@@ -585,7 +589,7 @@ class AcpTransport:
         try:
             yield start
 
-            blocks = [b for b in body.get("prompt") or [] if isinstance(b, dict)]
+            blocks = _blocks_of(body)
             sending = blocks[turn.tail_start :]
             text = _prompt_text(sending)
             images: list[Any] = [b for b in sending if b.get("type") == "image"]
@@ -601,6 +605,7 @@ class AcpTransport:
             except JSONRPCException as exc:
                 # What the agent recorded of a failed turn is unknown, so the
                 # session cannot be reused: the next turn opens a fresh one.
+                turn.finished = True
                 await self._forget(turn.entry)
                 error = {
                     "type": CHUNK_ERROR,
@@ -611,7 +616,8 @@ class AcpTransport:
                 yield error
                 await _close_quietly(client, session_id)
                 return
-            self._settle(turn, provider_info)
+            turn.finished = True
+            await self._settle(turn, provider_info)
             stop = {
                 "type": CHUNK_STOP,
                 "stop_reason": getattr(result, "stop_reason", "") or "end_turn",
@@ -620,12 +626,26 @@ class AcpTransport:
                 collect.append(stop)
             yield stop
         finally:
+            if not turn.finished:
+                # The caller went away mid-turn — a closed tab, a cancelled
+                # response.  What the agent recorded is unknown, so the
+                # session is given back rather than reused with a hole in it.
+                await self._abandon(turn)
             turn.release()
 
-    def _settle(self, turn: _Turn, provider_info: ProviderInfo) -> None:
+    async def _abandon(self, turn: _Turn) -> None:
+        """Give back a session whose turn did not finish."""
+        turn.finished = True
+        await self._forget(turn.entry)
+        await _close_quietly(turn.agent.client, turn.session_id)
+
+    async def _settle(self, turn: _Turn, provider_info: ProviderInfo) -> None:
         """Record what the agent has now seen, or close a one-off session."""
         entry = turn.entry
         if entry is None:
+            # A request that declared no conversation gets one session for its
+            # own, and nothing will ever come back for it.
+            await _close_quietly(turn.agent.client, turn.session_id)
             return
         entry.remember(turn.digests, max_blocks=self._ledger.max_blocks)
         entry.live = True
@@ -671,7 +691,13 @@ class AcpTransport:
         *,
         extra_headers: dict[str, str] | None = None,
     ) -> UpstreamResponse:
-        """Run one turn to completion and return what it produced."""
+        """Run one turn to completion and return what it produced.
+
+        A turn that failed is reported as a failure, not as an empty answer: a
+        non-streaming client cannot tell "the model said nothing" from "the
+        agent broke", so the error chunk becomes the response's status and
+        text, the same way a refused session does.
+        """
         updates: list[dict[str, Any]] = []
         try:
             async for _chunk in self._run_turn(provider_info, body, collect=updates):
@@ -681,6 +707,13 @@ class AcpTransport:
                 status_code=exc.status_code,
                 body=None,
                 raw_content=str(exc).encode(),
+            )
+        failure = _error_of(updates)
+        if failure is not None:
+            return UpstreamResponse(
+                status_code=503 if _looks_like_sign_in(failure) else 502,
+                body=None,
+                raw_content=failure.encode(),
             )
         payload = {
             "updates": updates,
@@ -754,21 +787,69 @@ class _AcpStream(UpstreamStream):
             async for chunk in self._transport._run_turn(
                 self._provider_info, self._body, opened=self._turn, start=self._start
             ):
+                if self._turn is None:
+                    # ``close()`` ran while this turn was in flight; the
+                    # session has been given back, so nothing more is read.
+                    return
                 yield chunk
         except AcpTurnError as exc:
             self.status_code = exc.status_code
             self._error = str(exc)
             yield {"type": CHUNK_ERROR, "message": str(exc)}
+        finally:
+            # A consumer that stops reading — a closed tab, a cancelled
+            # response — still has to give the session back, or the turn's
+            # locks are held until the transport closes.
+            await self.close()
 
     async def read_error(self) -> str:
         return self._error
 
     async def close(self) -> None:
-        if self._turn is not None:
-            self._turn.release()
+        """Release the turn, giving its session back if it never finished."""
+        turn = self._turn
+        if turn is None:
+            return
+        self._turn = None
+        if not turn.finished:
+            await self._transport._abandon(turn)
+        turn.release()
 
 
 # -- helpers ---------------------------------------------------------------
+
+
+def _blocks_of(body: dict[str, Any]) -> list[dict[str, Any]]:
+    """The prompt blocks this turn sends, system instruction first.
+
+    The converter keeps the system instruction in its own body field, because
+    that is the shape an IR round-trip reads back; an agent needs it inside
+    the prompt, where every other thing it is told lives.  Rendering it as the
+    first block — labelled the way :func:`render_messages` labels a system
+    message — is what stops a chat client's system instruction from vanishing:
+    a lane that silently drops it is the one behaviour a chat lane must not
+    have.
+
+    Because the block is first and never moves, the ledger's digest of "what
+    the agent has seen" covers it on every turn, and a session opened before
+    it changed diverges rather than continuing.
+    """
+    blocks: list[dict[str, Any]] = []
+    system = body.get("system")
+    if isinstance(system, str) and system.strip():
+        blocks.append({"type": "text", "text": f"[System]\n{system}"})
+    blocks.extend(
+        block for block in body.get("prompt") or [] if isinstance(block, dict)
+    )
+    return blocks
+
+
+def _error_of(updates: list[dict[str, Any]]) -> str | None:
+    """The message of the turn's error chunk, if it produced one."""
+    for chunk in updates:
+        if chunk.get("type") == CHUNK_ERROR:
+            return str(chunk.get("message") or "") or "the ACP turn failed"
+    return None
 
 
 def _start_of(turn: _Turn) -> dict[str, Any]:

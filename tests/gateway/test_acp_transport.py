@@ -318,10 +318,117 @@ class TestSessionReuse:
         finally:
             await transport.close()
 
-        assert first.status_code == 200  # the error arrives as a chunk
+        # A non-streaming client cannot tell "the model said nothing" from
+        # "the agent broke", so a failed turn is a failure, not an empty 200.
+        assert first.status_code == 502
+        assert "model call failed" in first.error_text
         assert transport.ledger.entries_of("antigravity") == []
         assert _kinds(tmp_path).count("new") == 2
+        # The retry opens its own session rather than continuing the failed one.
+        assert second.status_code == 502
+
+
+class TestTheSystemInstruction:
+    """A chat lane must not drop the system instruction silently."""
+
+    async def test_the_system_instruction_reaches_the_agent(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok", conversation="conv-1")
+        body = _turn("[User]\nhi")
+        body["system"] = "SYSTEM-MARKER: be exact."
+        try:
+            await transport.send(provider, "", body)
+        finally:
+            await transport.close()
+
+        prompts = [e["text"] for e in _log(tmp_path) if e["kind"] == "prompt"]
+        assert "SYSTEM-MARKER" in prompts[0]
+        # Labelled, so the model can tell instructions from the user's turn.
+        assert prompts[0].startswith("[System]")
+
+    async def test_it_is_sent_once_and_never_again_on_later_turns(
+        self, monkeypatch, tmp_path
+    ):
+        """It is the first block, so a reused session already has it."""
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok", conversation="conv-1")
+        first = _turn("[User]\none")
+        first["system"] = "SYSTEM-MARKER"
+        second = _turn("[User]\none", "[Assistant]\ntwo")
+        second["system"] = "SYSTEM-MARKER"
+        try:
+            await transport.send(provider, "", first)
+            await transport.send(provider, "", second)
+        finally:
+            await transport.close()
+
+        prompts = [e["text"] for e in _log(tmp_path) if e["kind"] == "prompt"]
+        assert "SYSTEM-MARKER" in prompts[0]
+        assert "SYSTEM-MARKER" not in prompts[1]
+        assert prompts[1] == "[Assistant]\ntwo"
+
+    async def test_a_changed_system_instruction_reopens_the_session(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok", conversation="conv-1")
+        first = _turn("[User]\none")
+        first["system"] = "one"
+        second = _turn("[User]\none", "[Assistant]\ntwo")
+        second["system"] = "two"
+        try:
+            await transport.send(provider, "", first)
+            await transport.send(provider, "", second)
+        finally:
+            await transport.close()
+
+        assert _kinds(tmp_path).count("new") == 2
+
+
+class TestAnAbandonedStream:
+    """A consumer that stops reading still gives its session back."""
+
+    async def test_closing_the_stream_mid_turn_closes_the_session(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok", conversation="conv-1")
+        try:
+            stream = await transport.send_streaming(provider, "", _turn("[User]\none"))
+            iterator = stream.__aiter__()
+            assert (await iterator.__anext__())["type"] == "session_start"
+            await stream.close()
+            remaining = [chunk async for chunk in iterator]
+        finally:
+            await transport.close()
+
+        assert remaining == []
+        assert transport.ledger.get(SessionKey("antigravity", "conv-1")) is None
+        assert "close" in _kinds(tmp_path)
+
+    async def test_a_consumer_that_never_iterates_still_releases_the_turn(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok", conversation="conv-1")
+        try:
+            stream = await transport.send_streaming(provider, "", _turn("[User]\none"))
+            await stream.close()
+            # The lock the turn took is free again, so the next turn proceeds.
+            second = await transport.send(
+                provider, "", _turn("[User]\none", "[User]\ntwo")
+            )
+        finally:
+            await transport.close()
+
         assert second.body is not None
+        assert _kinds(tmp_path).count("new") == 2
+
+
+class TestSessionResumeAndLoad:
+    """A session that outlived its process is brought back, not replayed blind."""
 
     async def test_resume_continues_a_session_the_process_has_forgotten(
         self, monkeypatch, tmp_path

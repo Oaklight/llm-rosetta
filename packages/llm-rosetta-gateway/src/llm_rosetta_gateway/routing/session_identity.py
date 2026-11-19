@@ -281,20 +281,35 @@ def _opening(messages: Sequence[Any]) -> list[Any]:
     Leading agent messages are carried along, so two projects that share a
     preamble but differ in it still separate; a preamble with no user words
     after it falls back to that preamble alone, which is the known collision.
+
+    A system or developer message is carried, but it does not *name* the
+    conversation: its text is the project's instructions, identical for every
+    conversation that uses them, so stopping at it would hash the system
+    prompt alone and merge every conversation in the project.
     """
     opening: list[Any] = [messages[0]]
     for message in messages[1:_MAX_OPENING]:
         role = _role_of(message)
-        if role in ("system", "developer"):
+        if role in _AGENT_ROLES:
             continue
         if role != "user":
             break
-        if len(opening) == 1 and _user_wrote(opening[0]):
+        if len(opening) == 1 and _names_conversation(opening[0]):
             break
         opening.append(message)
         if _user_wrote(message):
             return opening
     return opening[:1]
+
+
+#: Roles whose text is context the agent was given, never words the user typed
+#: about this conversation.
+_AGENT_ROLES = frozenset({"system", "developer"})
+
+
+def _names_conversation(message: Any) -> bool:
+    """Whether a message's own text identifies the conversation."""
+    return _role_of(message) not in _AGENT_ROLES and _user_wrote(message)
 
 
 def _role_of(message: Any) -> str:
