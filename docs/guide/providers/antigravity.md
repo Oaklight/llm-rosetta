@@ -120,10 +120,25 @@ lane could not carry.
 - **No tool calling yet.** A request that declares tools still succeeds, but
   the model cannot call them. This is the first thing to arrive in the next
   phase, over an MCP bridge to the agent.
-- **One session per request.** Each request opens a session, sends the whole
-  conversation and closes it: replaying the history cannot silently lose a
-  turn, while reusing the agent's session across requests needs a ledger that
-  does not exist yet. Expect the agent to re-read the history each turn.
+- **One session per conversation, when the client names it.** A request that
+  declares a conversation id (`x-claude-code-session-id`, `x-opencode-session`,
+  any `x-<vendor>-session-id` with the shape of an id, or the body's
+  `metadata.user_id.session_id` / `prompt_cache_key`) keeps its agent session
+  across turns: the ledger knows which prompt blocks the agent has already
+  seen, so the next turn sends only the new tail. A history that no longer
+  extends that record — a rewritten turn, a compaction — closes the session and
+  replays everything into a fresh one. A request that declares nothing still
+  gets one session per request, because a guessed identity could hand one
+  conversation's transcript to another.
+- **A restart replays every conversation once.** The ledger is volatile: it
+  describes live agent sessions, so it starts empty and the first turn of each
+  conversation after a restart sends the whole history again.
+- **Processes and sessions are bounded.** `acp.processes` (default 1) sets how
+  many agent processes the provider runs — one process serves its sessions one
+  turn at a time, so this is what lets two conversations run at once;
+  `acp.max_sessions` (default 32) and `acp.session_ttl` (seconds, default
+  1800) bound what those processes hold, and an idle session is given back by a
+  periodic sweep rather than only when the next request arrives.
 - **The agent's own tools are its business.** `agy` may act on the host it
   runs on. Give it a working directory you are willing to let a model write in
   — the gateway points it at a scratch directory under the system temp dir
