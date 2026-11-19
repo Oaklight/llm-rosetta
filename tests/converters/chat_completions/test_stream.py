@@ -1902,15 +1902,29 @@ class TestIterStreamFromProvider:
         assert ctx.is_ended is True
 
     def test_iter_stream_without_context(self):
-        """iter_stream_from_provider works without context (no lifecycle events)."""
+        """The iterator supplies a context of its own.
+
+        A caller that passes none still gets the lifecycle events and the
+        cross-chunk memory a context provides: the terminal reason of a turn
+        is decided from the calls the stream opened, so the iterator must not
+        answer differently from the pipeline (``#1601``).
+        """
         chunks = [
-            {"choices": [{"index": 0, "delta": {"content": "Hi"}}]},
+            {
+                "id": "chatcmpl-abc",
+                "object": "chat.completion.chunk",
+                "model": "gpt-4",
+                "created": 1700000000,
+                "choices": [{"index": 0, "delta": {"content": "Hi"}}],
+            },
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
         ]
         events = list(self.converter.iter_stream_from_provider(chunks))
         types = [e["type"] for e in events]
+        assert "stream_start" in types
         assert "text_delta" in types
-        assert "stream_start" not in types
-        assert "stream_end" not in types
+        assert "finish" in types
+        assert "stream_end" in types
 
     def test_iter_stream_safe_for_converters_without_none_support(self):
         """iter_stream_from_provider gracefully handles converters that reject None."""
