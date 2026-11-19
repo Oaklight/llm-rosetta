@@ -41,3 +41,24 @@ export function laneLabel(name, upstream) {
 export function laneBody(name, upstream, fields) {
   return { provider: name, upstream_model: upstream || '', ...(fields || {}) };
 }
+
+/** Whether a saved model entry holds the lane `(name, upstream)`.
+ *
+ *  The model editor sends the lane it means to add and the endpoint answers
+ *  with the entry it stored; without this check a save that the server
+ *  dropped still showed "saved".  Both entry shapes count: a `providers[]`
+ *  list, and the shorthand that names one provider at the entry level. */
+export function entryHasLane(entry, name, upstream) {
+  if (!entry) return false;
+  const key = laneKey(name, upstream);
+  if (typeof entry === 'string') return laneKey(entry, '') === key;
+  const lanes = Array.isArray(entry.providers) ? entry.providers : null;
+  if (lanes) {
+    return lanes.some((lane) => (
+      typeof lane === 'string'
+        ? laneKey(lane, '') === key
+        : laneKey(lane.name, lane.upstream_model) === key
+    ));
+  }
+  return laneKey(entry.provider, entry.upstream_model) === key;
+}

@@ -694,3 +694,120 @@ class TestTheEditorAddsASecondLane:
         assert payload["ok"] is True
         lanes = _on_disk(request)["models"][MODEL]["providers"]
         assert [lane.get("upstream_model") for lane in lanes] == ["fast", "eco"]
+
+
+def _two_providers(*, lanes: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """The multi-lane model with a second provider the editor may add."""
+    raw = _raw(lanes=lanes)
+    raw["providers"]["q"] = {"type": "openai", "base_url": "https://q.test"}
+    return raw
+
+
+class TestTheAddLaneButton:
+    """The drawer's "+ add lane" with a blank upstream field.
+
+    The field is optional: a lane that names no upstream serves the model's own
+    name, so the editor sends no ``upstream_model`` at all.  The endpoint read
+    that absence as "this is an edit, not a lane" and dropped the lane while
+    answering ``ok`` — the toast said "saved" and the lane list did not change.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_lane_with_no_upstream_is_stored(self, tmp_path: Path):
+        raw = _two_providers()
+        request = _request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "q", "capabilities": ["text"], "add_lane": True},
+        )
+
+        payload = json.loads((await put_model(request)).body)
+
+        assert payload["ok"] is True
+        lanes = _on_disk(request)["models"][MODEL]["providers"]
+        assert [lane.get("name") for lane in lanes] == ["p", "p", "q"]
+        assert "upstream_model" not in lanes[-1]
+
+    @pytest.mark.asyncio
+    async def test_the_response_carries_the_entry_the_editor_checks(
+        self, tmp_path: Path
+    ):
+        """The truth the panel reports comes from this field, not from ``ok``."""
+        request = _request(
+            tmp_path,
+            _two_providers(),
+            name=MODEL,
+            body={"provider": "q", "add_lane": True},
+        )
+
+        payload = json.loads((await put_model(request)).body)
+
+        assert (
+            payload["entry"]["providers"]
+            == _on_disk(request)["models"][MODEL]["providers"]
+        )
+        assert {"name": "q"} in payload["entry"]["providers"]
+
+    @pytest.mark.asyncio
+    async def test_a_lane_added_to_a_single_provider_entry_keeps_the_first(
+        self, tmp_path: Path
+    ):
+        """The shorthand entry becomes ``providers[]``; its upstream survives."""
+        raw = _single("fast")
+        raw["providers"]["q"] = {"type": "openai", "base_url": "https://q.test"}
+        request = _request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "p", "add_lane": True},
+        )
+
+        payload = json.loads((await put_model(request)).body)
+
+        assert payload["ok"] is True
+        entry = _on_disk(request)["models"][MODEL]
+        assert "provider" not in entry
+        assert entry["providers"] == [
+            {"name": "p", "weight": 1, "upstream_model": "fast"},
+            {"name": "p", "weight": 1},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_adding_the_lane_it_already_has_changes_nothing(self, tmp_path: Path):
+        request = _request(
+            tmp_path,
+            _two_providers(),
+            name=MODEL,
+            body={"provider": "p", "upstream_model": "fast", "add_lane": True},
+        )
+
+        payload = json.loads((await put_model(request)).body)
+
+        assert payload["ok"] is True
+        lanes = _on_disk(request)["models"][MODEL]["providers"]
+        assert [lane.get("upstream_model") for lane in lanes] == ["fast", "eco"]
+
+    @pytest.mark.asyncio
+    async def test_an_edit_without_the_flag_still_does_not_add_a_lane(
+        self, tmp_path: Path
+    ):
+        """The empty upstream field is also how an edit of the model is sent.
+
+        Only ``add_lane`` may turn it into a lane; an edit that carried no lane
+        must keep working, which is why the endpoint cannot decide this alone.
+        """
+        raw = _raw()
+        request = _request(
+            tmp_path,
+            raw,
+            name=MODEL,
+            body={"provider": "p", "capabilities": ["text", "vision"]},
+        )
+
+        payload = json.loads((await put_model(request)).body)
+
+        assert payload["ok"] is True
+        entry = _on_disk(request)["models"][MODEL]
+        assert entry["providers"] == raw["models"][MODEL]["providers"]
+        assert entry["capabilities"] == ["text", "vision"]

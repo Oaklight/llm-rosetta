@@ -10,7 +10,7 @@ import { initLogoSelect, setLogoSelectOptions, syncLogoSelect } from '../compone
 import { mergeReasoningOverride } from '../core/reasoning-override.js';
 import { providerRowsHtml, syncPickerBtn, openPickerMenu } from '../components/provider-picker.js';
 import { laneGripHtml, laneSwitchHtml, laneWeightInputHtml } from '../components/provider-row.js';
-import { findLane, laneBody, laneKey, laneLabel } from '../core/lanes.js';
+import { entryHasLane, findLane, laneBody, laneKey, laneLabel } from '../core/lanes.js';
 import { jsArg, logoUrl } from '../core/html.js';
 import {
   openDialog, closeDialog, isDialogPristine,
@@ -243,10 +243,16 @@ function toggleModelProviderPicker(btn) {
 }
 window.toggleModelProviderPicker = toggleModelProviderPicker;
 
-function openModelModal(model, provider, capabilities, upstreamModel, sourceModel, modelType) {
+function openModelModal(model, provider, capabilities, upstreamModel, sourceModel, modelType, opts) {
   // sourceModel: when cloning, the original model name to read reasoning from
   // (the visible name field is left blank so the user picks a new name).
   // modelType: the type the payload derived for this entry; a new model is chat.
+  // opts.addLane: the "+ add lane" entry point.  It is the one intent that
+  //   adds a lane, and it must be explicit: an empty upstream field is also
+  //   what an ordinary edit of a multi-lane model sends, and the endpoint
+  //   cannot tell "the lane that serves the model's name" from "no lane".
+  const addLane = !!(opts && opts.addLane);
+  document.getElementById('modelName').dataset.addLane = addLane ? '1' : '';
   document.getElementById('modelModalTitle').textContent = model ? t('modal.editModel') : t('modal.addModel');
   document.getElementById('modelName').value = model || '';
   document.getElementById('modelName').dataset.originalName = model || '';
@@ -1344,7 +1350,7 @@ function addModelLane(name) {
   if (!info) return;
   const caps = typeof info === 'string' ? ['text'] : (info.capabilities || ['text']);
   const modelType = (typeof info === 'object' && info.type) ? info.type : null;
-  openModelModal(name, '', caps, '', undefined, modelType);
+  openModelModal(name, '', caps, '', undefined, modelType, { addLane: true });
 }
 window.addModelLane = addModelLane;
 
@@ -1646,8 +1652,21 @@ async function _saveModel() {
   if (originalName && originalName !== name) {
     body.rename_from = originalName;
   }
+  // The drawer's "+ add lane" says so explicitly: the endpoint adds a lane
+  // only on request, because a blank upstream field is also an ordinary edit.
+  const addingLane = document.getElementById('modelName').dataset.addLane === '1';
+  if (addingLane) body.add_lane = true;
   const res = await api.put(`/admin/api/config/models/${encodeURIComponent(name)}`, body);
   if (res.ok) {
+    // A save the server accepted is not yet a save that kept the lane: the
+    // endpoint answers with the entry it stored, and the toast must describe
+    // that entry, not the request.  This is what made a dropped lane read as
+    // "saved".
+    if (addingLane && !entryHasLane(res.entry, provider, body.upstream_model)) {
+      showToast(t('toast.laneNotSaved', {lane: laneLabel(provider, body.upstream_model)}), 'error');
+      window.loadConfig();
+      return;
+    }
     const msg = res.merged ? t('toast.modelMerged', {name, provider: res.provider}) : t('toast.modelSaved', {name});
     showToast(msg);
     closeModelDrawer();
