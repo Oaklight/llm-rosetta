@@ -320,7 +320,9 @@ def _ring_recovery(pinfo: Any, name: str) -> tuple[datetime, str] | None:
             ends.append((lane_end, RATE_LIMITED))
         if probe:
             demotion = QUOTA_STATE.demotion(probe, fingerprint)
-            if demotion is not None:
+            if demotion is not None and demotion.until is not None:
+                # A permanent park names no end; it cannot date the ring, and
+                # `ends` staying empty is how the caller learns that.
                 ends.append((demotion.until, SPENT))
             # A reading can say the allowance is spent without the gateway
             # having demoted anything: the probe was polled, or the key was

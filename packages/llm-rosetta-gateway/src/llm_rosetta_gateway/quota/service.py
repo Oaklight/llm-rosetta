@@ -410,6 +410,18 @@ async def read_provider_quota(
             # in-band demotion taken before the window reset.  An advisory
             # reading does not: it was made with another credential.
             QUOTA_STATE.clear_demotion(probe.id, credential)
+            # The same reading is the one signal that lifts a permanent park:
+            # the vendor now says the account can pay.  A dated cooldown is
+            # left alone — it belongs to the rate-limit ladder, not the
+            # balance.
+            identity = getattr(pinfo, "quota_identity", None) or f"@{name}"
+            block = QUOTA_STATE.provider_block(identity)
+            if block is not None and block.permanent:
+                QUOTA_STATE.clear_provider_block(identity)
+                logger.warning(
+                    "Quota: %s reports the account available; park lifted",
+                    name,
+                )
 
     payload: dict[str, Any] = {
         "provider": name,
@@ -483,6 +495,20 @@ def note_upstream_quota_error(
     signal = probe.inband(status_code, body)
     if signal is None:
         return None
+    if signal.permanent:
+        # A balance the vendor said is spent is not a rate limit: parking it
+        # on the 429 ladder is what revived an unpaid account every 20
+        # minutes, at one full request upload per try.  The park has no
+        # expiry; `read_provider_quota` lifts it when a reading reports the
+        # account available, and so does a restart (the state is in memory by
+        # decision — a judgement from one vendor's wording must not outlive
+        # the process).
+        identity = getattr(pinfo, "quota_identity", None) or (
+            f"@{provider_config_key(pinfo)}"
+        )
+        QUOTA_STATE.block_provider(identity, None, signal.reason)
+        logger.warning("Quota: parked %s until cleared (%s)", pinfo.name, signal.reason)
+        return signal
     seconds = signal.cooldown_seconds
     if seconds is None:
         # No cooldown and no reset time: do not guess a window length, but do
@@ -492,7 +518,9 @@ def note_upstream_quota_error(
         # A rotating token is a new key every refresh, so demoting today's
         # fingerprint would forget the refusal at the first rotation.  The
         # upstream account is the stable identity here.
-        identity = getattr(pinfo, "quota_identity", None) or f"@{pinfo.name}"
+        identity = getattr(pinfo, "quota_identity", None) or (
+            f"@{provider_config_key(pinfo)}"
+        )
         QUOTA_STATE.block_provider(identity, seconds, signal.reason)
     else:
         key = pinfo.active_key()
@@ -576,6 +604,10 @@ def provider_offline_until(pinfo: Any) -> datetime | None:
     ends: list[datetime] = []
     block = QUOTA_STATE.provider_block(identity)
     if block is not None:
+        if block.until is None:
+            # A permanent park names no end; the caller reports the route as
+            # unavailable without a date rather than inventing one.
+            return None
         ends.append(block.until)
     disable = QUOTA_STATE.rate_limits.latest_disable(name)
     if disable is not None:

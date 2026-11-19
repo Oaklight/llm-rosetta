@@ -121,7 +121,8 @@ class TestTheBlock:
         assert state.until is not None
         first = QUOTA_STATE.provider_block("@unavail-block-a")
         second = QUOTA_STATE.provider_block("@unavail-block-b")
-        assert first is not None and second is not None
+        assert first is not None and first.until is not None
+        assert second is not None and second.until is not None
         assert state.until == max(first.until, second.until)
 
     def test_one_provider_unblocked_is_not_a_block(self):
