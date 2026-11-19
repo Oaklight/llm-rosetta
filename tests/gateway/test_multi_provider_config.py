@@ -166,6 +166,24 @@ class TestMultiProviderValidation:
         with pytest.raises(ValueError, match="without a 'name' field"):
             _make_config({"gpt-4o": {"providers": [{"weight": 3}]}})
 
+    def test_a_lane_cannot_set_failover_on_error(self):
+        """The key is the model entry's; on a lane it was dropped in silence.
+
+        The admin's collapse promotes an entry-level value, so a lane value
+        that survived to the file would go live the first time a lane was
+        removed — one key, two meanings.  The parser names the scope instead.
+        """
+        with pytest.raises(ValueError, match="set it on the model entry"):
+            _make_config(
+                {
+                    "gpt-4o": {
+                        "providers": [
+                            {"name": "openai_a", "failover_on_error": False},
+                        ]
+                    }
+                }
+            )
+
     def test_invalid_strategy_raises(self):
         """The legacy key is checked by the block parser, which names the path."""
         with pytest.raises(ValueError, match="models.gpt-4o.strategy must be one of"):

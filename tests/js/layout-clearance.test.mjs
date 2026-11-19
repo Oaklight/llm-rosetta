@@ -69,3 +69,8 @@ test('the phone layout reserves room for the tab bar and footer on content', () 
     'tab bar (56px) + status footer (23px) + margin',
   );
 });
+
+test('only the direct provider link gets the model table overhang', () => {
+  assert.match(components.text, /\.model-provider-cell\s*>\s*\.provider-link\s*\{[^}]*margin-left:\s*-20px/);
+  assert.doesNotMatch(components.text, /\.model-provider-cell\s+\.provider-link\s*\{[^}]*margin-left/);
+});

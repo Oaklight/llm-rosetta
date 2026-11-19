@@ -384,7 +384,20 @@ function positionMenu(menu, trigger) {
   const above = r.top - GAP;
   const top = (below < mh && above > below) ? r.top - mh - GAP : r.bottom + GAP;
   menu.style.top = Math.max(EDGE, Math.min(top, vh - mh - EDGE)) + 'px';
-  menu.style.right = Math.max(EDGE, Math.min(vw - r.right, vw - mw - EDGE)) + 'px';
+  const right = Math.max(EDGE, Math.min(vw - r.right, vw - mw - EDGE));
+  menu.style.left = '';
+  menu.style.right = right + 'px';
+  // The figures above are the layout viewport's; the box a fixed element is
+  // placed in can be narrower than that by a scrollbar — measured on a phone:
+  // 420 against 410 — and the arithmetic cannot see it, so a wide menu lands
+  // with its left edge off-screen.  Ask the placed box instead, and hang the
+  // menu from the left margin when it crosses; the width rule leaves the room.
+  if (menu.getBoundingClientRect().left < EDGE) {
+    // One property wins: with `right` left in place as well, the browser
+    // resolves `left` and drops whichever margin its width overflowed.
+    menu.style.right = '';
+    menu.style.left = EDGE + 'px';
+  }
 }
 
 // ===================== Helpers =====================

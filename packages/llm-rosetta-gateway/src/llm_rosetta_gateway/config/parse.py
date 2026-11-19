@@ -140,6 +140,10 @@ def declared_provider_names(value: Any) -> list[str]:
     entry may be the bare provider name.  Typed-endpoint resolution uses
     this so an embedding/rerank/decision model declared with the list
     form is routed instead of being read as ``provider: ''``.
+
+    A lane turned off is still a declaration — the entry keeps it for the
+    operator to switch back on — so it stays in this list.  The typed
+    candidate pool drops it separately.
     """
     if isinstance(value, str):
         return [value] if value else []
@@ -313,6 +317,16 @@ def parse_multi_provider(
                 f"config: model '{model_name}' provider '{pname}' "
                 f"has invalid weight {weight} (must be >= 1)"
             )
+        # `failover_on_error` is a property of the model entry, and the engine
+        # reads it there.  A lane that carries one would be dropped silently by
+        # ProviderEntry, and the admin's collapse would then promote it to the
+        # entry the first time a lane was removed — the same key meaning two
+        # things.  Refusing it keeps the scope single.
+        if isinstance(item, dict) and "failover_on_error" in item:
+            raise ValueError(
+                f"config: model '{model_name}' provider '{pname}' sets "
+                "'failover_on_error' on a lane; set it on the model entry"
+            )
         # A provider the operator turned off keeps its place in the list but
         # takes no traffic, so the model can be narrowed without editing the
         # list by hand.
@@ -483,6 +497,11 @@ def declared_provider_entries(value: Any, *, label: str = "model") -> list[Any]:
     typed model has no ``upstream_model`` per entry — the model's rename map
     covers that — so only the name and the weight survive.
 
+    A lane turned off (``enabled: false``) is left out, as the LLM parser
+    does: the Models page's lane switch is one control for every model type,
+    and a typed route that ignored it would keep serving traffic the operator
+    just closed.
+
     Args:
         value: A model entry: a provider name, or an object with ``provider``
             or ``providers``.
@@ -506,6 +525,8 @@ def declared_provider_entries(value: Any, *, label: str = "model") -> list[Any]:
         if isinstance(item, str):
             entries.append(ProviderEntry(name=item))
         elif isinstance(item, dict) and isinstance(item.get("name"), str):
+            if item.get("enabled") is False:
+                continue
             weight = item.get("weight", 1)
             try:
                 weight = float(weight)
@@ -610,19 +631,36 @@ def distribute_typed_models(config: GatewayConfig, raw_models: dict[str, Any]) -
             continue
 
         type_providers, type_models = pool
-        provider_name = first_pool_provider(value, type_providers)
-        if provider_name:
-            type_models.setdefault(name, provider_name)
+        # The typed pool reads the lanes this model still has on, and it reads
+        # them once: the primary provider and the candidate list must not
+        # disagree, or a model whose first lane is off would resolve to it.
+        candidates = [
+            entry
+            for entry in declared_provider_entries(value, label=f"model '{name}'")
+            if entry.name in type_providers
+        ]
+        if candidates:
+            # The panel builds its model list and its provider column from
+            # `<type>_models`, and the selector from the candidate list; the two
+            # have to name the same lane.
+            type_models.setdefault(name, candidates[0].name)
             # The whole candidate list, so the selector can score and fail
             # over across a typed model's providers rather than reading the
             # first one only.
-            candidates = [
-                entry
-                for entry in declared_provider_entries(value, label=f"model '{name}'")
-                if entry.name in type_providers
-            ]
             config.typed_model_candidates.setdefault(model_type, {})[name] = candidates
             to_remove.append(name)
+        elif any(name_ in type_providers for name_ in declared_provider_names(value)):
+            # Every lane this model declares for the type is switched off —
+            # `declared_provider_names` keeps the closed ones.  That is a route
+            # with no candidate, not a provider missing the endpoint, and the
+            # operator needs to be told which one it is.
+            logger.warning(
+                "Model %r has type=%s but every lane that serves %s is "
+                "switched off; the model has no route",
+                name,
+                model_type,
+                model_type,
+            )
         else:
             warn_skipped_typed_model(name, model_type, value)
 
