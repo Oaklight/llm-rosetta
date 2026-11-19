@@ -17,6 +17,7 @@ from llm_rosetta_gateway.quota.models import (
 from llm_rosetta_gateway.quota.probes import resolve_probe
 from llm_rosetta_gateway.quota.state import QuotaState
 from llm_rosetta_gateway.transport.provider_info import KeyRing
+from llm_rosetta.shims.providers.deepseek.quota import DeepSeekBalanceProbe
 from llm_rosetta.shims.providers.openai.quota import OpenAICodexProbe
 from llm_rosetta.shims.providers.opencode.quota import OpenCodeGoProbe
 
@@ -771,6 +772,7 @@ class TestInBandOnlyLane:
         assert block is not None
         # Bounded and short: the vendor says nothing about a reset, so the
         # gateway must not invent one.
+        assert block.until is not None
         left = (block.until - datetime.now(timezone.utc)).total_seconds()
         assert 0 < left <= 61
 
@@ -1050,3 +1052,142 @@ class TestTheSupportedPayload:
 
         assert blocked["provider_block"]["reason"] == "keyless lane rate limited"
         assert blocked["routing"]["blocked"] is True
+
+
+class TestTheBalancePark:
+    """A permanent signal parks the provider, and nothing puts it on the ladder."""
+
+    IDENTITY = "acct:balance-park-test"
+
+    def _pinfo(self):
+        return SimpleNamespace(
+            name="deepseek",
+            config_name="deepseek",
+            keyless=False,
+            quota_probe="deepseek",
+            quota_probe_impl=DeepSeekBalanceProbe(),
+            quota_identity=self.IDENTITY,
+            token_command=None,
+            mints_credential=False,
+            active_key=lambda: "sk-balance",
+        )
+
+    def test_the_park_has_no_expiry(self):
+        from llm_rosetta_gateway.quota.service import note_upstream_quota_error
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+        signal = note_upstream_quota_error(
+            self._pinfo(),
+            402,
+            json.dumps(
+                {
+                    "error": {
+                        "message": "Insufficient Balance",
+                        "type": "insufficient_balance_error",
+                    }
+                }
+            ),
+        )
+
+        assert signal is not None and signal.permanent
+        block = QUOTA_STATE.provider_block(self.IDENTITY)
+        assert block is not None
+        assert block.permanent is True
+        assert block.reason == "balance exhausted"
+
+    def test_a_healthy_reading_lifts_it(self, monkeypatch):
+        import asyncio
+
+        from llm_rosetta_gateway.quota import service as quota_service
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+        from llm_rosetta_gateway.transport.provider_info import ProviderInfo
+
+        pinfo = ProviderInfo(
+            "deepseek--chat_completions",
+            api_key="sk-balance",
+            base_url="https://api.deepseek.com/v1",
+            auth_header_fn=lambda key: {"Authorization": f"Bearer {key}"},
+            url_template="{base_url}/chat/completions",
+        )
+        pinfo.credential_token = self.IDENTITY
+        pinfo.quota_identity = self.IDENTITY
+        QUOTA_STATE.block_provider(self.IDENTITY, None, "balance exhausted")
+
+        class _Probe:
+            id = "deepseek"
+
+        async def _healthy(pinfo_arg, probe, url, key, *, demote_at):
+            return QuotaReading(
+                probe=probe.id,
+                credential=credential_fingerprint(key),
+                status="ok",
+                windows=[QuotaWindow(name="balance", status="ok")],
+            )
+
+        monkeypatch.setattr(
+            quota_service,
+            "resolve_provider_probe",
+            lambda config, name: (
+                _Probe(),
+                "https://api.deepseek.com/user/balance",
+                None,
+            ),
+        )
+        monkeypatch.setattr(quota_service, "_probe_one", _healthy)
+
+        asyncio.run(
+            quota_service.read_provider_quota(
+                SimpleNamespace(providers={"deepseek": pinfo}), "deepseek"
+            )
+        )
+
+        assert QUOTA_STATE.provider_block(self.IDENTITY) is None
+
+    def test_a_dated_cooldown_is_not_lifted_by_a_reading(self, monkeypatch):
+        """The reading clears the park only: the 429 ladder keeps its clock."""
+        import asyncio
+
+        from llm_rosetta_gateway.quota import service as quota_service
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+        from llm_rosetta_gateway.transport.provider_info import ProviderInfo
+
+        pinfo = ProviderInfo(
+            "deepseek--chat_completions",
+            api_key="sk-balance",
+            base_url="https://api.deepseek.com/v1",
+            auth_header_fn=lambda key: {"Authorization": f"Bearer {key}"},
+            url_template="{base_url}/chat/completions",
+        )
+        pinfo.credential_token = self.IDENTITY
+        pinfo.quota_identity = self.IDENTITY
+        QUOTA_STATE.block_provider(self.IDENTITY, 600, "keyless lane rate limited")
+
+        class _Probe:
+            id = "deepseek"
+
+        async def _healthy(pinfo_arg, probe, url, key, *, demote_at):
+            return QuotaReading(
+                probe=probe.id,
+                credential=credential_fingerprint(key),
+                status="ok",
+                windows=[QuotaWindow(name="balance", status="ok")],
+            )
+
+        monkeypatch.setattr(
+            quota_service,
+            "resolve_provider_probe",
+            lambda config, name: (
+                _Probe(),
+                "https://api.deepseek.com/user/balance",
+                None,
+            ),
+        )
+        monkeypatch.setattr(quota_service, "_probe_one", _healthy)
+
+        asyncio.run(
+            quota_service.read_provider_quota(
+                SimpleNamespace(providers={"deepseek": pinfo}), "deepseek"
+            )
+        )
+
+        assert QUOTA_STATE.provider_block(self.IDENTITY) is not None

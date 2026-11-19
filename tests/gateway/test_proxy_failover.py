@@ -68,6 +68,24 @@ class _Probe:
         return InBandSignal(cooldown_seconds=60, reason="allowance spent")
 
 
+class _BalanceProbe:
+    """A probe that reads the 402 as a spent balance, which has no refill."""
+
+    def inband(self, status_code: int, body: Any) -> Any:
+        from llm_rosetta.shims.quota_probe import InBandSignal
+
+        if status_code != 402:
+            return None
+        error = body.get("error") if isinstance(body, dict) else None
+        if not isinstance(error, dict) or error.get("type") != (
+            "insufficient_balance_error"
+        ):
+            return None
+        return InBandSignal(
+            cooldown_seconds=None, reason="balance exhausted", permanent=True
+        )
+
+
 class _Transport:
     """An upstream that answers with the scripted responses, in order."""
 
@@ -939,6 +957,47 @@ class TestTheCredentialWalk:
             "https://c.test",
             "https://d.test",
         ]
+
+
+class TestTheBalancePark:
+    """A 402 the probe reads as a spent balance is not tried again.
+
+    The rate-limit ladder is the wrong clock for a prepaid account: it put
+    the lane back every few minutes, and each revival cost the client a full
+    request upload before the failover.  The park has no expiry, so the
+    second request must not reach the lane at all.
+    """
+
+    def _config(self) -> GatewayConfig:
+        config = _config(probe=True, opt_in=True)
+        for name in ("a", "b"):
+            config.providers[name].quota_probe_impl = _BalanceProbe()
+        return config
+
+    def test_the_second_request_does_not_reach_the_parked_lane(self):
+        from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+        config = self._config()
+        first = _Transport(_payment_required(), _ok())
+
+        response, profile = _run(config, first)
+
+        assert response.status_code == 200
+        assert first.calls == ["https://a.test", "https://b.test"]
+        identity = config.providers["a"].quota_identity
+        assert identity is not None
+        block = QUOTA_STATE.provider_block(identity)
+        assert block is not None
+        assert block.permanent is True
+        # The 429 ladder never counted it: a balance is not a rate limit.
+        assert QUOTA_STATE.rate_limits.sunk("a") is False
+
+        second = _Transport(_ok())
+        response, profile = _run(config, second)
+
+        assert response.status_code == 200
+        assert second.calls == ["https://b.test"]
+        assert "failover" not in profile, "nothing was refused this time"
 
 
 def _two_lane_config() -> GatewayConfig:

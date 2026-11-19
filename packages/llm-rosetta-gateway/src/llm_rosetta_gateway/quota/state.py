@@ -29,18 +29,29 @@ class Demotion:
     """A credential the quota layer has taken out of rotation.
 
     Attributes:
-        until: When the credential may serve again.
+        until: When the credential may serve again, or ``None`` when nothing
+            in the state dates it — a permanent park, whose only clearing
+            signals are a fresh reading, an operator action or a restart.
         reason: Short description for logs and the admin surface.
         window: Vendor window that refused, when the signal named one.
     """
 
-    until: datetime
+    until: datetime | None
     reason: str
     window: str | None = None
 
+    @property
+    def permanent(self) -> bool:
+        """Whether this state has no expiry of its own."""
+        return self.until is None
+
     def describe(self) -> dict:
         return {
-            "until": self.until.isoformat().replace("+00:00", "Z"),
+            "until": (
+                self.until.isoformat().replace("+00:00", "Z")
+                if self.until is not None
+                else None
+            ),
             "reason": self.reason,
             "window": self.window,
         }
@@ -110,7 +121,9 @@ class QuotaState:
         key = (probe, credential)
         with self._lock:
             current = self._demotions.get(key)
-            if current is not None and current.until > until:
+            # A state with no expiry outlasts any dated one, so a late probe
+            # signal cannot quietly shorten a park.
+            if current is not None and (current.until is None or current.until > until):
                 return
             self._demotions[key] = Demotion(until=until, reason=reason, window=window)
 
@@ -138,7 +151,7 @@ class QuotaState:
             found = self._demotions.get(key)
             if found is None:
                 return None
-            if found.until <= _now():
+            if found.until is not None and found.until <= _now():
                 self._demotions.pop(key, None)
                 return None
             return found
@@ -150,21 +163,32 @@ class QuotaState:
 
     # -- keyless provider cooldowns ---------------------------------------
 
-    def block_provider(self, identity: str, seconds: int, reason: str) -> None:
-        """Stop routing to a keyless upstream for *seconds*."""
-        self._provider_blocks[identity] = Demotion(
-            until=_now() + timedelta(seconds=seconds), reason=reason
-        )
+    def block_provider(self, identity: str, seconds: int | None, reason: str) -> None:
+        """Stop routing to an upstream.
+
+        *seconds* is the cooldown the vendor signal named, or ``None`` for a
+        park with no expiry — a balance the vendor said is spent.  Nothing
+        here is persisted, so a park lives exactly as long as this process;
+        :meth:`clear_provider_block` is how a reading lifts it early.
+        """
+        until = None if seconds is None else _now() + timedelta(seconds=seconds)
+        with self._lock:
+            self._provider_blocks[identity] = Demotion(until=until, reason=reason)
 
     def provider_block(self, identity: str) -> Demotion | None:
         """Return the live cooldown for a keyless upstream, if any."""
         found = self._provider_blocks.get(identity)
         if found is None:
             return None
-        if found.until <= _now():
+        if found.until is not None and found.until <= _now():
             self._provider_blocks.pop(identity, None)
             return None
         return found
+
+    def clear_provider_block(self, identity: str) -> None:
+        """Lift a provider-wide state, dated or not (a reading says it is fine)."""
+        with self._lock:
+            self._provider_blocks.pop(identity, None)
 
     # -- the predicate the key ring asks -----------------------------------
 
