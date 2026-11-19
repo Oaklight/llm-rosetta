@@ -292,8 +292,12 @@ class AcpTransport:
     async def aclose_provider(self, provider_name: str) -> None:
         """Stop one provider's agent processes, and forget its sessions."""
         pool = self._agents.pop(provider_name, [])
+        # ``<provider>#<slot>`` — split rather than prefix-match, so a provider
+        # named ``anti`` does not clear the start locks of ``antigravity``.
         self._starting = {
-            k: v for k, v in self._starting.items() if not k.startswith(provider_name)
+            k: v
+            for k, v in self._starting.items()
+            if k.split("#", 1)[0] != provider_name
         }
         self._ledger.drop_provider(provider_name)
         for agent in pool:
