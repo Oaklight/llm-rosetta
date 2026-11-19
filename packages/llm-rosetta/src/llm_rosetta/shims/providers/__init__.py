@@ -82,11 +82,16 @@ from collections.abc import Callable, Collection
 from typing import Any
 
 from llm_rosetta._vendor.yaml import load as yaml_load
+from llm_rosetta.formats.batch import (
+    DECLARABLE_DIALECTS,
+    batch_spec_for,
+)
 from llm_rosetta.types.ir.constraints import Range, RequestConstraints
 
 from ..auth_exchange import FIELD_KEY_RE, FIELD_LIMIT, FIELD_TEXT_LIMIT
 from ..provider_shim import (
     TYPE_PARAM_KEYS,
+    BatchDeclaration,
     ConnectionConfig,
     ProviderShim,
     QuotaDeclaration,
@@ -981,6 +986,84 @@ def _parse_type_params(
     return dict(raw)
 
 
+#: Keys a leaf's ``batch:`` block may declare, read off the declaration so
+#: the two cannot drift.
+_BATCH_KEYS: tuple[str, ...] = tuple(
+    f.name for f in dataclasses.fields(BatchDeclaration)
+)
+
+_BATCH_PATH_KEYS: tuple[str, ...] = (
+    "create_path",
+    "retrieve_path",
+    "cancel_path",
+    "results_path",
+)
+
+
+def _parse_batch(
+    cfg: dict[str, Any], model_type: str, fmt: str, yaml_path: Path
+) -> BatchDeclaration | None:
+    """Return the batch surface a leaf declares, or ``None`` for none.
+
+    An absent ``batch:`` block is the normal case and means the lane has no
+    batch API this repository declares — a shim written before batch existed
+    keeps loading unchanged.  A present block is validated, because a typo
+    must not read as "no batch": the lane would silently answer
+    ``unsupported`` for a provider that does support batching.
+
+    The declared dialect must be one this shim's own ``(model_type, format)``
+    batch record offers (``emulated`` is allowed for any measured format), so
+    a messages lane cannot name the OpenAI file codec by mistake.
+
+    Raises:
+        ValueError: The block is not a mapping, carries an unknown key, a
+            non-string path, a non-boolean ``supports_files``, a dialect the
+            pair does not offer, or a declaration for a format with no batch
+            record at all.
+    """
+    raw = cfg.get("batch")
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(f"{yaml_path}: batch must be a mapping")
+    unknown = set(raw) - set(_BATCH_KEYS)
+    if unknown:
+        raise ValueError(
+            f"{yaml_path}: unknown batch key(s) {', '.join(sorted(unknown))}; "
+            f"a batch declaration may carry {', '.join(_BATCH_KEYS)}"
+        )
+    dialect = raw.get("dialect")
+    if not isinstance(dialect, str) or not dialect:
+        raise ValueError(
+            f"{yaml_path}: batch must name a dialect (one of "
+            f"{', '.join(DECLARABLE_DIALECTS)})"
+        )
+    spec = batch_spec_for(model_type, fmt)
+    offered: tuple[str, ...] = ()
+    if spec is not None:
+        offered = (spec.dialect, *((spec.file_dialect,) if spec.file_dialect else ()))
+    if dialect != "emulated" and dialect not in offered:
+        raise ValueError(
+            f"{yaml_path}: batch.dialect {dialect!r} is not offered by "
+            f"{model_type}/{fmt}"
+            + (f" (offered: {', '.join(offered)}, or emulated)" if offered else "")
+        )
+    supports_files = raw.get("supports_files", False)
+    if not isinstance(supports_files, bool):
+        raise ValueError(f"{yaml_path}: batch.supports_files must be a boolean")
+    paths: dict[str, str | None] = {}
+    for key in _BATCH_PATH_KEYS:
+        value = raw.get(key)
+        if value is not None and (not isinstance(value, str) or not value):
+            raise ValueError(f"{yaml_path}: batch.{key} must be a path string")
+        paths[key] = value
+    return BatchDeclaration(
+        dialect=dialect,
+        supports_files=supports_files,
+        **paths,
+    )
+
+
 def _declares_identity(cfg: Any) -> bool:
     """Whether a parsed ``provider.yaml`` names a shim."""
     return isinstance(cfg, dict) and any(key in cfg for key in _IDENTITY_KEYS)
@@ -1371,6 +1454,7 @@ def _load_single_provider(
 
     params = _parse_type_params(cfg, model_type, yaml_path)
     request_constraints = _parse_request_constraints(cfg, yaml_path)
+    batch = _parse_batch(cfg, model_type, fmt, yaml_path)
 
     pre_t, post_t, ir_t, resp_t, transforms_mod = _load_transforms(
         provider_dir, group=group, _builtin=_builtin, root=root
@@ -1521,6 +1605,7 @@ def _load_single_provider(
         ),
         quota=quota_decl,
         quota_probes=all_quota_probes,
+        batch=batch,
         tools=tools,
         pre_ir_transforms=pre_t,
         post_ir_transforms=post_t,

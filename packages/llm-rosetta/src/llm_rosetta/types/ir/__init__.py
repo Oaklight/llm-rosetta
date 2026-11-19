@@ -41,6 +41,17 @@ json_schema() are unaffected. Python 3.11+ has no such deviation.
 # ============================================================================
 # 向后兼容类型定义 Backward compatibility type definitions
 # ============================================================================
+# Batch 类型 Batch types
+from .batch import (
+    BatchItem,
+    BatchItemCounts,
+    BatchItemError,
+    BatchJob,
+    BatchJobState,
+    BatchMode,
+    BatchResultItem,
+)
+
 from .configs import (
     CacheConfig,
     GenerationConfig,
@@ -276,6 +287,14 @@ __all__ = [
     "ReasoningConfig",
     "ReasoningEffortLevel",
     "CacheConfig",
+    # ========== Batch 类型 Batch types ==========
+    "BatchItem",
+    "BatchItemCounts",
+    "BatchItemError",
+    "BatchJob",
+    "BatchJobState",
+    "BatchMode",
+    "BatchResultItem",
     # ========== 请求类型 Request types ==========
     "IRInputItem",
     "IRRequest",
