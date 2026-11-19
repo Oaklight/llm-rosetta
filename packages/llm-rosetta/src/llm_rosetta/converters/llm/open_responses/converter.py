@@ -121,9 +121,12 @@ def _stream_finish_reason(response: dict[str, Any]) -> str:
     """Decide the streamed terminal reason from the body the frame carries.
 
     A ``response.completed`` event usually carries the output list, so this
-    reader has the parts the JSON reader has.  The list is optional, so the
-    base stream finalizer runs afterwards and upgrades a ``stop`` from the
-    calls the stream opened — the same fallback the other dialects use.
+    reader has the parts the JSON reader has.  That list is optional, and it
+    is not the last word: the frame's list decides when it names the call,
+    and the opened call decides when the list says nothing about it.  The
+    base stream finalizer applies the second half from the calls the stream
+    opened, so a frame that omits or contradicts them cannot finish a tool
+    turn as a normal stop.
     """
     status = response.get("status", "completed")
     calls_the_client = status == "completed" and any(
@@ -1352,11 +1355,15 @@ class OpenResponsesConverter(BaseConverter):
         # is redundant with response.created and is re-synthesised by
         # _handle_ir_stream_start_to_p on the to_provider side.
 
-        # ``_stream_finish_reason`` decides from the completed frame's own
-        # output list; this dialect is not required to repeat that list, so a
-        # frame that carries none would finish a tool turn as a normal stop.
-        # The context remembers every client call the stream opened, and the
-        # finalizer applies it to the finish this chunk produced (#1601).
+        # ``_stream_finish_reason`` reads the completed frame's own output
+        # list, which this dialect may omit or contradict.  The frame's list
+        # decides when it names the call, and the opened call decides when
+        # the list says nothing about it: the context remembers every client
+        # call the stream opened, and the finalizer applies that to the
+        # finish this chunk produced (#1601).  A stream that names its call
+        # only in ``output_item.done`` stays a normal stop — ``added``
+        # precedes ``done`` in this dialect, so that stream is out of spec
+        # and no ``tool_call_start`` was emitted for the memory to hold.
         return self.finalize_stream_finish(events, context)
 
     # --- from_provider handlers ---
