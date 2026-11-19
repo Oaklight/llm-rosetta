@@ -24,11 +24,11 @@ Dependency direction::
     types.ir  <-  ir.primitives  <-  ir.passes  <-  converters
                   ir.tools      <-
 
-A module in ``ir.primitives`` or ``ir.tools`` imports nothing from
-``converters`` — the direction is enforced by ``tests/test_ir_import_boundary.py``.
-A pass may use the converter *base* contracts (``ConversionContext``) and the
-shim contract, because a pass is where a target's declared capabilities enter
-the IR; it must not import a converter family.
+No module in ``ir`` imports anything from ``converters`` — the direction is
+enforced by ``tests/test_ir_import_boundary.py``.  ``ConversionContext`` and
+``StreamContext`` live in ``ir.context`` (``converters.base.context``
+re-exports them).  A pass may use the shim contract, because a pass is where a
+target's declared capabilities enter the IR.
 
 ``llm_rosetta.transforms`` and ``llm_rosetta.capabilities`` are facades over
 this package, and the modules that used to live under

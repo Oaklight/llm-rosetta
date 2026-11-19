@@ -1,9 +1,9 @@
-"""The IR primitive/tool layer must not import ``converters``, at any depth.
+"""The IR layer must not import ``converters``, at any depth.
 
 The direction is ``types.ir <- ir.primitives/ir.tools <- ir.passes <-
-converters``.  ``ir.passes`` is deliberately exempt: a pass applies a target's
-declared capabilities, so it may use the converter *base* contract
-(``ConversionContext``) and the shim contract — but not a converter family.
+converters``.  The whole of ``ir`` (passes included) imports nothing from
+``converters``: the context contract a pass needs lives in ``ir.context``, and
+``converters.base.context`` re-exports it for old import paths.
 """
 
 from __future__ import annotations
@@ -89,6 +89,22 @@ def test_primitives_and_tools_never_import_converters():
         for path in layer.rglob("*.py"):
             offenders.extend(_converter_imports(path, path.read_text()))
     assert offenders == []
+
+
+def test_ir_as_a_whole_never_imports_converters():
+    """No allowed exceptions: ``ir.passes`` uses ``ir.context`` instead."""
+    offenders: list[str] = []
+    for path in _IR.rglob("*.py"):
+        offenders.extend(_converter_imports(path, path.read_text()))
+    assert offenders == []
+
+
+def test_context_old_path_re_exports_the_same_objects():
+    from llm_rosetta.converters.base import context as legacy
+    import llm_rosetta.ir.context as canonical
+
+    for name in ("ConversionContext", "StreamContext", "ImageFetcher", "MetadataMode"):
+        assert getattr(legacy, name) is getattr(canonical, name)
 
 
 def test_guard_catches_absolute_relative_and_dynamic_imports():

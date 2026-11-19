@@ -165,8 +165,10 @@ The logic that operates on IR values lives in `ir/`:
 | `ir/tools/` | Stateless tool helpers (intrinsic kinds, call ids, error markers) |
 | `ir/passes/` | Capability passes (vision, reasoning, custom tools, names) |
 
-`ir/primitives` and `ir/tools` must not import `converters`; a pass may use the
-converter *base* contracts and the shim contract. `llm_rosetta.transforms` and
+Nothing in `ir/` may import `converters` (enforced by
+`tests/test_ir_import_boundary.py`); `ConversionContext` / `StreamContext` live
+in `ir/context.py` and `converters/base/context.py` re-exports them. A pass may
+use the shim contract. `llm_rosetta.transforms` and
 `llm_rosetta.capabilities` are facades, and the old
 `converters/base/{helpers,tools}/*` submodule paths re-export from `ir/`.
 
