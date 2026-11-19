@@ -226,6 +226,16 @@ part 类型。跨腿 harness（`tests/converters/test_leg_agreement.py`）对每
 harness 自己的 turn view 比较）。它拿不回来的是事件本身没有的东西——即上表逐个 dialect
 列出的那些事实——所以折叠结果与流式回复一致，而不是厂商 JSON API 会返回的 body。
 
+要让这条性质在单选项以外的情形也成立，先补了三件事：
+
+- 一个块属于某个 choice。多于一个 choice 时，`content_block_start` 与
+  `content_block_end` 带上 `choice_index`：折叠在 block_start 到达时就开部件，早于任何
+  delta 说明它归谁，而过去每个块都开在默认的那个 choice 上。
+- 拒绝语可能只在 finish 上出现。Chat 读取器把 `delta.refusal` 累加到 context，再把文本
+  放进 `finish.provider_metadata.refusal_text`；而响应体把拒绝写成内容部件，所以没有块
+  开过它时，折叠自己补出这个部件。
+- 响应级回显字段是调用方补上的例外，见上一段。
+
 其中一类事实调用方可以补上，这条桥就这么做。Chat 兼容的流会在每个 chunk 上重复它的
 响应级回显字段——`service_tier`、`system_fingerprint`——因此 `FormatSpec` 用
 `stream_echo_fields` 按格式声明它们，网关取每个字段第一次出现的值，
