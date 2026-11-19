@@ -696,9 +696,10 @@ async function renderDumps() {
         try { errPreview = JSON.parse(e.response_text).error?.message || JSON.parse(e.response_text).detail || e.response_text; } catch { errPreview = e.response_text; }
         if (errPreview.length > 60) errPreview = errPreview.slice(0, 60) + '…';
       }
-      const did = esc(e.dump_id||e.id||'');
-      const chk = S._selectedDumpIds && S._selectedDumpIds.has(did) ? ' checked' : '';
-      const dumpHlStyle = S._highlightDumpId === did ? ' style="background:color-mix(in srgb, var(--accent) 20%, transparent)"' : '';
+      const rawDid = e.dump_id||e.id||'';
+      const did = esc(rawDid);
+      const chk = S._selectedDumpIds && S._selectedDumpIds.has(rawDid) ? ' checked' : '';
+      const dumpHlStyle = S._highlightDumpId === rawDid ? ' style="background:color-mix(in srgb, var(--accent) 20%, transparent)"' : '';
       return `<tr role="row"${dumpHlStyle}>
         <td class="dump-check" role="cell" aria-labelledby="dumpThSelect"><input type="checkbox" class="row-check" data-id="${did}" onchange="updateDumpBulk()"${chk}></td>
         <td class="dump-time" role="cell" aria-labelledby="dumpThTime">${time}</td>

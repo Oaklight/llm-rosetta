@@ -215,3 +215,13 @@ test('the download walk pages by cursor, not by offset', () => {
   assert.match(walk, /dumpQuery\(filters, page\)/, 'and sends it through the builder');
   assert.doesNotMatch(walk, /offset/, 'an offset would shift under the walk');
 });
+
+test('the error-dump table looks a row up by its raw id and escapes it only for output', () => {
+  const start = dashboard.indexOf("const rawDid = ");
+  assert.ok(start > 0, 'the row builder keeps the raw id');
+  const row = dashboard.slice(start, start + 700);
+  assert.match(row, /const did = esc\(rawDid\)/, 'the escaped id is derived from the raw one');
+  assert.match(row, /_selectedDumpIds\.has\(rawDid\)/, 'selection is keyed by the raw id');
+  assert.match(row, /_highlightDumpId === rawDid/, 'so is the highlight');
+  assert.doesNotMatch(row, /\.has\(did\)|=== did\b/, 'the escaped id never reaches a lookup');
+});
