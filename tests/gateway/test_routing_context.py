@@ -14,6 +14,7 @@ from llm_rosetta_gateway.routing import (
     RoutingChain,
     RoutingStage,
     SelectionContext,
+    SessionIdentity,
     StageOrderError,
 )
 
@@ -76,7 +77,10 @@ class TestSelectionContext:
         ctx = _ctx()
         ctx.with_client("hash-1")
         ctx.with_conversation("first message")
-        assert ctx.identity == Identity(client="hash-1", conversation="first message")
+        assert ctx.identity == Identity(
+            client="hash-1",
+            session=SessionIdentity("first message", "derived:opening"),
+        )
 
     def test_conversation_can_be_absent(self):
         ctx = _ctx()

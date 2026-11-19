@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Any
 
 from llm_rosetta.provider_names import canonical_provider_name
 
+from .session_identity import SessionIdentity
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -33,21 +35,29 @@ class Identity:
 
     Filled in two steps, because the two halves become knowable at different
     times: the client is known once the request has been authenticated, the
-    conversation only once the request body has been converted to the IR.
+    conversation only once the request's body has been read.
 
     Attributes:
         client: SHA-256 of the client's gateway API key, or ``None`` when the
             request carried no key at all (a keyless deployment, or auth
             switched off).  Stable for the life of that credential.
-        conversation: A value that is the same on every turn of one
-            conversation and different between conversations, or ``None`` when
-            the request carries nothing to key a conversation on.  Derived
-            from the first message, which appending history leaves alone, so
-            it does not drift as the conversation grows.
+        session: The conversation the request belongs to, with the source it
+            was read from.  See :mod:`~llm_rosetta_gateway.routing.session_identity`:
+            a value the client declared is safe to key state on, a derived one
+            is not.
     """
 
     client: str | None = None
-    conversation: str | None = None
+    session: SessionIdentity = SessionIdentity()
+
+    @property
+    def conversation(self) -> str | None:
+        """The conversation id, whatever produced it.
+
+        The name the request log and the upstream session header already use;
+        a consumer that stores state must read ``session.declared`` instead.
+        """
+        return self.session.value
 
 
 class SelectionContext:
@@ -82,6 +92,8 @@ class SelectionContext:
         "pinned",
         "key_affinity",
         "upstream_session_id",
+        "headers",
+        "source_body",
     )
 
     def __init__(self, model: str, source_format: str) -> None:
@@ -145,6 +157,10 @@ class SelectionContext:
         self.pinned: str | None = None
         self.key_affinity = True
         self.upstream_session_id: str | None = None
+        # The request as the client sent it, for the conversation identity:
+        # headers any casing, and the body before any converter touched it.
+        self.headers: Mapping[str, str] = {}
+        self.source_body: Mapping[str, Any] | None = None
 
     # -- the config's view -------------------------------------------------
 
@@ -180,13 +196,42 @@ class SelectionContext:
         self.identity = replace(self.identity, client=key_hash)
 
     def with_conversation(self, conversation: str | None) -> None:
-        """Record the conversation the request belongs to.
+        """Record a conversation id with no carrier behind it.
+
+        Kept for callers that already hold a derived value; a real request
+        goes through :meth:`with_session`, which records the source too.
+        """
+        self.identity = replace(
+            self.identity,
+            session=SessionIdentity(conversation, "derived:opening")
+            if conversation is not None
+            else SessionIdentity(),
+        )
+
+    def with_session(self, session: SessionIdentity) -> None:
+        """Record the conversation identity of the request.
 
         Args:
-            conversation: The derived conversation value, or ``None`` when the
-                request carried nothing to derive one from.
+            session: The identity and the carrier that produced it.
         """
-        self.identity = replace(self.identity, conversation=conversation)
+        self.identity = replace(self.identity, session=session)
+
+    def with_source_request(
+        self,
+        headers: Mapping[str, str] | None = None,
+        body: Mapping[str, Any] | None = None,
+    ) -> None:
+        """Hand the context the request as the client sent it.
+
+        The conversation identity is read from these before any conversion:
+        a header carrier needs no body, and a body carrier must be read from
+        the original bytes, where a per-turn cache mark has not been moved by
+        a converter yet.
+        """
+        if headers is not None:
+            self.headers = dict(headers)
+        if body is not None:
+            self.source_body = body
 
     def choose(self, entry: ProviderEntry) -> None:
         """Record the provider this request will be served by."""
