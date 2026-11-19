@@ -434,6 +434,33 @@ class TestAnAbandonedStream:
         assert held is None
         assert "close" in _kinds(tmp_path)
 
+    async def test_a_one_off_session_is_closed_when_its_consumer_leaves(
+        self, monkeypatch, tmp_path
+    ):
+        """A request with no conversation carrier owns a session nobody keeps.
+
+        Nothing will come back for it, so a consumer that disconnects after
+        the first chunk must still see ``session/close`` sent for it.
+        """
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok")
+        try:
+            stream = await transport.send_streaming(provider, "", _turn("[User]\none"))
+            iterator = stream.__aiter__()
+            first = await iterator.__anext__()
+            assert first["type"] == "session_start"
+            await stream.close()
+            remaining = [chunk async for chunk in iterator]
+            held = transport.ledger.entries_of("antigravity")
+        finally:
+            await transport.close()
+
+        assert remaining == []
+        assert held == []
+        assert [e["session"] for e in _log(tmp_path) if e["kind"] == "close"] == [
+            first["session_id"]
+        ]
+
     async def test_a_consumer_that_never_iterates_still_releases_the_turn(
         self, monkeypatch, tmp_path
     ):
@@ -579,7 +606,11 @@ class TestASessionThatNeverOpens:
             await transport.close()
 
         assert resp.status_code == 503
-        assert "did not open a session" in resp.error_text
+        assert resp.error_text == (
+            "ACP agent for provider 'antigravity' did not open a session "
+            "within 0.2s; the process was dropped. Check the agent on the "
+            "gateway host."
+        )
 
     async def test_the_stream_reports_it_as_a_status(self, monkeypatch, tmp_path):
         transport = AcpTransport(timeout=0.2)
@@ -593,7 +624,41 @@ class TestASessionThatNeverOpens:
             await transport.close()
 
         assert stream.status_code == 503
-        assert "did not open a session" in error
+        assert error == (
+            "ACP agent for provider 'antigravity' did not open a session "
+            "within 0.2s; the process was dropped. Check the agent on the "
+            "gateway host."
+        )
+
+    async def test_a_timed_out_session_new_drops_the_stalled_process(
+        self, monkeypatch, tmp_path
+    ):
+        """The process that never opened a session leaves the pool.
+
+        Left in its slot it stays half-read, and every later request on the
+        lane queues behind its lock.
+        """
+        transport = AcpTransport(timeout=0.2)
+        provider = _provider(monkeypatch, tmp_path, "mute-new", conversation="conv-1")
+        try:
+            first = await asyncio.wait_for(
+                transport.send(provider, "", _turn("[User]\none")), 5.0
+            )
+            pooled = transport._pool("antigravity")
+            second = await asyncio.wait_for(
+                transport.send(provider, "", _turn("[User]\ntwo")), 5.0
+            )
+        finally:
+            await transport.close()
+
+        assert first.status_code == 503
+        assert second.status_code == 503
+        # The stalled agent is not in the pool after its timeout.
+        assert pooled == []
+        # Two processes, not one: the second request started its own.
+        starts = [entry["pid"] for entry in _log(tmp_path) if entry["kind"] == "start"]
+        assert len(starts) == 2, starts
+        assert starts[0] != starts[1]
 
 
 class TestAProcessThatStopped:
