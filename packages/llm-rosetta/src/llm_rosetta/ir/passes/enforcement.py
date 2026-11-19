@@ -17,7 +17,7 @@ from ..tools.intrinsic import (
     make_intrinsic_tool_definition as _make_intrinsic_tool_definition,
 )
 
-from llm_rosetta.converters.base.context import ConversionContext, StreamContext
+from ..context import ConversionContext, StreamContext
 from ..primitives.image_limit import strip_images_for_non_vision
 from ..primitives.parts import iter_tool_call_parts
 from llm_rosetta.conversion_warnings import WarningSink, report_drop
