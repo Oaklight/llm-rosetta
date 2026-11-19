@@ -1266,8 +1266,31 @@ export function typeLabelAlt(name) {
   return typeNamesMode() === 'i18n' ? _typeNameEn(name) : capLabel(name);
 }
 
+let _strictI18n = null;
+
+/** Force strict mode on or off; `null` goes back to the environment's flag. */
+export function setStrictI18n(value) {
+  _strictI18n = value === null || value === undefined ? null : !!value;
+}
+
+/** Whether `t()` throws on a missing key instead of guessing a label.
+ *
+ *  Off in production.  On when `window.__ROSETTA_STRICT_I18N__` is truthy or
+ *  the page address carries `?strictI18n=1`, so a missing key fails loudly in
+ *  a test run or a debugging session instead of showing a guessed English
+ *  label. */
+export function strictI18nEnabled() {
+  if (_strictI18n !== null) return _strictI18n;
+  if (globalThis.__ROSETTA_STRICT_I18N__) return true;
+  const search = globalThis.location && globalThis.location.search;
+  return typeof search === 'string' && /[?&]strictI18n=(?:1|true)(?:&|$)/.test(search);
+}
+
 export function t(key, params) {
   let s = (I18N[S.currentLang] && I18N[S.currentLang][key]) || I18N.en[key];
+  if (s == null && strictI18nEnabled()) {
+    throw new Error(`Missing i18n key: ${key}`);
+  }
   // Convention-based fallback for unknown keys
   if (s == null) {
     if (key.startsWith('label.')) {

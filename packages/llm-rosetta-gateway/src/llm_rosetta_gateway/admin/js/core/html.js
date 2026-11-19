@@ -40,6 +40,61 @@ export function jsArg(v) {
 }
 
 
+// ---- Auto-escaping templates ------------------------------------------------
+//
+// `html` is the escaped-by-default way to build markup: every `${...}` is run
+// through `esc` unless it is already a SafeHtml (a nested `html` result, a
+// `raw()` string, or an array of those).  The result is a branded SafeHtml,
+// and `render` refuses anything else, so a plain string can never reach
+// innerHTML through this path.  Handler arguments still use `jsArg` — wrap the
+// call in `raw()` since its output is already attribute-safe.
+
+const SAFE = Symbol('SafeHtml');
+
+class SafeHtml {
+  constructor(value) {
+    this.value = value;
+    this[SAFE] = true;
+  }
+  toString() {
+    return this.value;
+  }
+}
+
+/** True for a value built by `html` or `raw`. */
+export function isSafeHtml(v) {
+  return v instanceof SafeHtml;
+}
+
+function _part(v) {
+  if (v === null || v === undefined || v === false) return '';
+  if (v instanceof SafeHtml) return v.value;
+  if (Array.isArray(v)) return v.map(_part).join('');
+  return esc(v);
+}
+
+/** Mark a string as trusted markup (static HTML, or `jsArg` output). */
+export function raw(str) {
+  return new SafeHtml(String(str === null || str === undefined ? '' : str));
+}
+
+/** Tagged template: interpolations are escaped unless already SafeHtml. */
+export function html(strings, ...values) {
+  let out = strings[0];
+  for (let i = 0; i < values.length; i++) out += _part(values[i]) + strings[i + 1];
+  return new SafeHtml(out);
+}
+
+/** Set `el.innerHTML` from a SafeHtml; a plain string is a programming error. */
+export function render(el, safeHtml) {
+  if (!(safeHtml instanceof SafeHtml)) {
+    throw new TypeError('render() takes SafeHtml (html`` or raw()), not ' + typeof safeHtml);
+  }
+  el.innerHTML = safeHtml.value;
+  return el;
+}
+
+
 /**
  * Point a logo at the gateway rather than at the host that holds it.
  *

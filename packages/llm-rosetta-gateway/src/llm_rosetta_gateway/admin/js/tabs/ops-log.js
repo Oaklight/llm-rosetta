@@ -56,7 +56,7 @@ _opsJumpInput?.addEventListener?.('blur', () => { _opsJumpDirty = false; });
 function renderOpsLog(entries, total) {
   const tbody = document.getElementById('opsLogTable');
   if (entries.length === 0) {
-    tbody.innerHTML = `<tr class="ops-empty-row" role="row"><td colspan="5" role="cell" style="color:var(--text-dim)">${t('empty.opsLog')}</td></tr>`;
+    tbody.innerHTML = `<tr class="ops-empty-row" role="row"><td colspan="5" role="cell" style="color:var(--text-dim)">${esc(t('empty.opsLog'))}</td></tr>`;
   } else {
     tbody.innerHTML = entries.map((e, idx) => {
       const time = new Date(e.timestamp).toLocaleString(undefined, {month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit'});
