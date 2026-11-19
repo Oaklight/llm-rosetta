@@ -306,5 +306,6 @@ class TestNoRawValueLeaks:
     )
     def test_the_digest_is_all_that_survives(self, headers, body):
         identity = identify(headers, body)
+        assert identity.value is not None
         assert "secret-session-id" not in identity.value
         assert "secret-session-id" not in identity.source

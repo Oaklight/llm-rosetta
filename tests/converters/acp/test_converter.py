@@ -8,6 +8,8 @@ client source format.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 import pytest
 
 from llm_rosetta.converters.base.context import ConversionContext
@@ -180,5 +182,6 @@ class TestReadingTheBodyBack:
         body, _ = _converter().request_to_provider(ir)
         back = _converter().request_from_provider(body)
 
-        assert [m["role"] for m in back["messages"]] == ["user", "assistant"]
-        assert back["messages"][1]["content"] == [{"type": "text", "text": "hello"}]
+        messages = cast(list[dict[str, Any]], back["messages"])
+        assert [m["role"] for m in messages] == ["user", "assistant"]
+        assert messages[1]["content"] == [{"type": "text", "text": "hello"}]

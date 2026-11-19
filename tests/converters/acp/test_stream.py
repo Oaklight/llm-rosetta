@@ -8,6 +8,8 @@ as a loss rather than as an empty successful turn.
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.llm.acp import AcpConverter
 
@@ -21,7 +23,13 @@ def _context() -> StreamContext:
 
 
 def _types(events) -> list[str]:
-    return [event["type"] for event in events]
+    return [dict(event)["type"] for event in events]
+
+
+def _only(events) -> dict[str, Any]:
+    """The one event a chunk produced, as a plain mapping ty can index."""
+    assert len(events) == 1
+    return dict(events[0])
 
 
 class TestTheChunks:
@@ -37,7 +45,7 @@ class TestTheChunks:
         )
 
         assert _types(first) == ["stream_start"]
-        assert first[0]["response_id"] == "s1"
+        assert _only(first)["response_id"] == "s1"
         assert second == []
 
     def test_text_and_thought_become_deltas(self):
@@ -66,7 +74,7 @@ class TestTheChunks:
             {"type": "usage", "used": 42, "size": 1000}
         )
 
-        usage = events[0]["usage"]
+        usage = cast(dict[str, Any], _only(events)["usage"])
         assert usage["prompt_tokens"] == 42
         assert usage["completion_tokens"] == 0
 
