@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from llm_rosetta.conversion_warnings import DOWNGRADED, WarningSink, recording_to
 from llm_rosetta.converters.base.tools.call_unwind import (
     unwind_parallel_tool_calls_ir,
 )
@@ -271,3 +272,97 @@ class TestUnwindMultiTurn:
         result = unwind_parallel_tool_calls_ir(req)
         assert result["model"] == "gemini25flash"
         assert result["tools"] == [{"type": "function", "name": "test"}]
+
+
+class TestUnwindReportsTheReorder:
+    """A moved non-call part is reported, not silently relocated (#1492)."""
+
+    @staticmethod
+    def _two_call_request(first_content: list[dict]) -> dict:
+        """One assistant turn with two calls, answered in order."""
+        return {
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "go"}]},
+                {"role": "assistant", "content": first_content},
+                {"role": "tool", "content": [_tr("c1")]},
+                {"role": "tool", "content": [_tr("c2")]},
+            ]
+        }
+
+    def test_a_part_after_the_first_call_is_reported(self):
+        """``[c1, text A, c2]``: text A moves ahead of c1, and says so."""
+        sink = WarningSink()
+        with recording_to(sink):
+            result = unwind_parallel_tool_calls_ir(
+                self._two_call_request(
+                    [
+                        _tc("c1"),
+                        {"type": "text", "text": "between the calls"},
+                        _tc("c2", city="LA"),
+                    ]
+                )
+            )
+
+        # The move itself: all non-call parts are ahead of the first call.
+        first_assistant = result["messages"][1]["content"]
+        assert [p["type"] for p in first_assistant] == ["text", "tool_call"]
+
+        assert len(sink) == 1
+        assert sink[0].code == DOWNGRADED
+        assert sink[0].subject == "content_order"
+        assert "moved 1 non-tool-call part(s) (text)" in sink[0]
+        assert "2 tool calls" in sink[0]
+
+    def test_a_reasoning_part_after_the_first_call_is_reported(self):
+        """Reasoning moves the same way, and the report names it."""
+        sink = WarningSink()
+        with recording_to(sink):
+            unwind_parallel_tool_calls_ir(
+                self._two_call_request(
+                    [
+                        _tc("c1"),
+                        {"type": "reasoning", "reasoning": "thinking"},
+                        _tc("c2", city="LA"),
+                    ]
+                ),
+                warnings=sink,
+            )
+
+        assert len(sink) == 1
+        assert "(reasoning)" in sink[0]
+
+    def test_parts_already_ahead_of_the_calls_are_not_reported(self):
+        """``[text A, c1, c2]`` keeps its order, so there is nothing to say."""
+        sink = WarningSink()
+        with recording_to(sink):
+            unwind_parallel_tool_calls_ir(
+                self._two_call_request(
+                    [
+                        {"type": "text", "text": "Let me check both"},
+                        _tc("c1"),
+                        _tc("c2", city="LA"),
+                    ]
+                ),
+                warnings=sink,
+            )
+
+        assert list(sink) == []
+
+    def test_several_moved_parts_are_counted_in_one_report(self):
+        """``[text A, c1, text B, reasoning R, c2]``: one report, two parts."""
+        sink = WarningSink()
+        with recording_to(sink):
+            unwind_parallel_tool_calls_ir(
+                self._two_call_request(
+                    [
+                        {"type": "text", "text": "A"},
+                        _tc("c1"),
+                        {"type": "text", "text": "B"},
+                        {"type": "reasoning", "reasoning": "R"},
+                        _tc("c2", city="LA"),
+                    ]
+                )
+            )
+
+        assert len(sink) == 1
+        assert "moved 2 non-tool-call part(s) (text, reasoning)" in sink[0]

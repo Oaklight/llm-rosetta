@@ -116,6 +116,7 @@ def apply_ir_transforms(
     request_id: str = "-",
     hoist_system_messages: bool = True,
     converter: _HasIntrinsicTransforms | None = None,
+    warnings: WarningSink | None = None,
 ) -> dict[str, Any]:
     """Apply converter-intrinsic and shim-driven IR-level transforms.
 
@@ -138,6 +139,9 @@ def apply_ir_transforms(
         converter: Target converter instance.  When provided, its
             ``_INTRINSIC_IR_TRANSFORMS`` are prepended to the transform
             chain.
+        warnings: The conversion's sink.  A transform that rewrites the
+            request reports the change through it; ``None`` leaves the
+            reports to the conversion in progress, then to the log.
 
     Returns:
         The IR request dict after all applicable transforms.  Always
@@ -163,6 +167,7 @@ def apply_ir_transforms(
         model_capabilities=model_capabilities,
         request_id=request_id,
         hoist_system_messages=hoist_system_messages,
+        warnings=warnings,
     )
     return _apply_ir_transforms_exec(combined, ir_request, ctx)
 
@@ -905,6 +910,7 @@ class ConversionPipeline:
             request_id=request_id,
             hoist_system_messages=self._hoist_system_messages,
             converter=self._target_converter,
+            warnings=ctx.warnings,
         )
         self._profile["ir_transforms_ms"] = round((time.perf_counter() - t0) * 1000, 2)
 
