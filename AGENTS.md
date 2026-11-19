@@ -270,7 +270,7 @@ contributing guide, style guide, and architecture guide on ReadTheDocs.
 
 ## Definition of done
 
-1. `make lint` and `make test` exit 0
+1. `make lint` and `make test` exit 0. The `ty` pre-commit hook (`scripts/dev/run_ty.py`) must pass without `SKIP=ty`; it matches CI from any worktree, so a failure is a real diagnostic
 2. `ruff check --fix && ruff format` applied to changed files
 3. New code has tests in `tests/`
 4. Google-style docstrings on public APIs; comments in English

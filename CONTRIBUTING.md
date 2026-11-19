@@ -22,7 +22,15 @@ pre-commit install
 make test
 make test-js   # admin UI: node --test over tests/js/ (skipped when node is absent)
 make check-public-api  # public surface vs the latest stable tag
+python scripts/dev/run_ty.py   # ty, same result as CI in any worktree (the pre-commit `ty` hook)
 ```
+
+`ty` resolves imports through the active environment. An editable install that
+points at another checkout (for example the main checkout, while you work in a
+separate worktree) makes plain `ty check` type-check your tests against that
+checkout's sources and report spurious diagnostics. `scripts/dev/run_ty.py`
+puts this checkout's sources first, so the result matches CI. Do not commit
+with `SKIP=ty`.
 
 ## Running the full suite on another machine
 
