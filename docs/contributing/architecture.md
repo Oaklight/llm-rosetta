@@ -256,6 +256,18 @@ cannot recover is what no event carries — the facts the table above lists per
 dialect — so a folded reply matches a streamed one, not the body the vendor's
 JSON API would have returned.
 
+Three facts had to be added before that held outside the single-choice cases:
+
+- A block belongs to a choice.  `content_block_start` and `content_block_end`
+  carry `choice_index` when a response has more than one choice, because the
+  fold opens the block when the start arrives — before any delta says whose it
+  is — and used to open every one on the default choice.
+- A refusal's words can arrive only on the finish.  The Chat reader accumulates
+  `delta.refusal` on its context and puts the text in
+  `finish.provider_metadata.refusal_text`; a body spells a refusal as a content
+  part, so the fold writes that part when no block opened one.
+- A response-level echo field is the exception the caller closes, below.
+
 One class of those facts is recoverable by the caller, and the bridge does
 recover it.  A Chat-compatible stream repeats its response-level echo fields —
 `service_tier`, `system_fingerprint` — on every chunk, so `FormatSpec` names
