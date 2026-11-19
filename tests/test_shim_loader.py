@@ -143,6 +143,8 @@ class TestLoadProviders:
         expected = {
             # Grouped vendor shims use the canonical ``<provider>--<base>`` form.
             "anthropic--messages",
+            # An upstream lane driven over ACP: no HTTP model API at all.
+            "antigravity--acp",
             # Embedding and rerank shims.
             "cohere--chat_completions",
             "cohere--embedding",
@@ -369,6 +371,7 @@ class TestLoadProviders:
             "openai--chat_completions": "chat_completions",
             "openai--open_responses": "open_responses",
             "openai_chatgpt--open_responses": "open_responses",
+            "antigravity--acp": "acp",
             "openrouter--chat_completions": "chat_completions",
             "openrouter--messages": "messages",
             "openrouter--open_responses": "open_responses",
@@ -926,6 +929,8 @@ class TestDeclaredGrouping:
             "zai--messages",
             "zai--embedding",
             "zai--rerank",
+            # Antigravity's vendor title names the product, not the directory.
+            "antigravity--acp",
         }
         shims = load_providers()
         assert all(

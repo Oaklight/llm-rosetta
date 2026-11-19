@@ -41,10 +41,20 @@ def test_llm_specs_carry_a_route_and_an_sse_key():
     from llm_rosetta_gateway.transport.sse_format import SSE_FORMATTERS
 
     for spec in FORMAT_SPECS:
-        if spec.model_type != "llm":
+        if spec.model_type != "llm" or spec.upstream_only:
             continue
         assert spec.route_path, spec.format
         assert spec.sse in SSE_FORMATTERS, spec.format
+
+
+def test_an_upstream_only_format_carries_no_source_surface():
+    """Nothing to serve and nothing to detect: the flag and the fields agree."""
+    upstream_only = [spec for spec in FORMAT_SPECS if spec.upstream_only]
+    assert upstream_only, "no upstream-only record; the flag guards nothing"
+    for spec in upstream_only:
+        assert spec.route_path is None, spec.format
+        assert spec.sse is None, spec.format
+        assert spec.detect is None, spec.format
 
 
 def test_detection_order_follows_priorities():

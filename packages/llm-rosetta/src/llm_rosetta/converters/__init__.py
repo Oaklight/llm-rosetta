@@ -16,6 +16,7 @@ from .embeddings import (
     OpenAIEmbeddingConverter,
     VoyageEmbeddingConverter,
 )
+from .llm.acp import AcpConverter
 from .llm.chat_completions import ChatCompletionsConverter
 from .llm.google_generate import GoogleGenerateConverter
 from .llm.google_interactions import GoogleInteractionsConverter
@@ -57,6 +58,7 @@ __all__ = [
     "GoogleGenAIConverter",  # deprecated alias,
     "GoogleConverter",
     "GoogleInteractionsConverter",
+    "AcpConverter",
     "OpenAIResponsesConverter",
     "OpenResponsesConverter",
     "JinaRerankConverter",

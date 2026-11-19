@@ -340,6 +340,34 @@ def _report_shim_removals(config: GatewayConfig, report: ShimLoadReport | None) 
     report_shim_removals(config.raw_providers, report)
 
 
+def _lane_transports(
+    ext: GatewayExtensions, transport: Any, timeout: float | None
+) -> dict[str, Any]:
+    """Build the non-HTTP transports a provider may name.
+
+    ``http`` is deliberately absent: that slot is ``app.transport``, which a
+    caller (or a test) may replace after the app is built, and a registry copy
+    of it would keep routing to the object it replaced.
+
+    An embedder that supplies its own transport supplies it for every lane
+    too: the gateway does not silently start local processes behind its back.
+
+    Args:
+        ext: The caller's extensions, whose ``transport`` wins when set.
+        transport: The transport to use for every lane, when the caller has one.
+        timeout: The server's own timeout, which an agent turn adopts; ``None``
+            leaves the ACP transport on its default, because a turn has no
+            server-side deadline to inherit.
+    """
+    from ..transport import AcpTransport
+
+    if ext.transport is not None:
+        return {"acp": transport}
+    if timeout is None:
+        return {"acp": AcpTransport()}
+    return {"acp": AcpTransport(timeout=timeout)}
+
+
 @_sync_compat
 async def create_app(
     config: GatewayConfig,
@@ -391,6 +419,7 @@ async def create_app(
         if ext.transport is not None
         else HttpTransport(timeout=config.upstream_timeout)
     )
+    transports = _lane_transports(ext, transport, config.upstream_timeout)
 
     app = App(
         max_body_size=ext.max_body_size
@@ -496,6 +525,12 @@ async def create_app(
 
     # --- App-level state ---
     app.transport = transport  # type: ignore
+    # The non-HTTP transports, by the name a provider declares.  ``http``
+    # resolves to ``app.transport`` itself, so replacing that attribute (an
+    # embedder, a test) moves every HTTP lane with it.  An embedder that
+    # supplies its own transport supplies it for every lane too: the gateway
+    # does not silently start local processes behind their back.
+    app.transports = transports  # type: ignore
     app.metadata_store = metadata_store  # type: ignore
     app.internal_token = internal_token  # type: ignore
     app.auth_state = auth_state  # type: ignore
@@ -631,6 +666,18 @@ async def run_gateway(
             await jobs.stop()
         if deferred is not None:
             await deferred.shutdown()
+        # An ACP transport owns agent subprocesses; they outlive a request and
+        # must not outlive the server.
+        acp_transport = getattr(app, "transports", {}).get("acp")
+        if acp_transport is not None and acp_transport is not getattr(
+            app, "transport", None
+        ):
+            close_acp = getattr(acp_transport, "close", None)
+            if close_acp is not None:
+                try:
+                    await close_acp()
+                except Exception:  # noqa: BLE001 - shutdown reports nothing
+                    logger.debug("ACP transport did not stop cleanly", exc_info=True)
         # Cancel token refresh tasks (both static and deferred-startup ones)
         all_refresh = refresh_tasks + getattr(app, "_token_refresh_tasks", [])
         for task in all_refresh:

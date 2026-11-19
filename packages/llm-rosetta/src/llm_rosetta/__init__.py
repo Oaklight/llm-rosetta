@@ -20,6 +20,7 @@ from .converters.decisions.pipeline import DecisionConversionPipeline
 from .converters.embeddings.pipeline import EmbeddingConversionPipeline
 from .converters.rerank.pipeline import RerankConversionPipeline
 from .converters import (
+    AcpConverter,
     BaseConverter,
     ChatCompletionsConverter,
     CohereEmbeddingConverter,
@@ -95,6 +96,7 @@ __all__ = [
     "GoogleGenAIConverter",  # deprecated alias
     "GoogleConverter",
     "GoogleInteractionsConverter",
+    "AcpConverter",
     "OpenAIResponsesConverter",
     "OpenResponsesConverter",
     # Embedding converters

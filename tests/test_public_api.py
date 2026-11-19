@@ -36,6 +36,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "GoogleInteractionsConverter",
             "OpenAIResponsesConverter",
             "OpenResponsesConverter",
+            "AcpConverter",
             # Embedding converters
             "OpenAIEmbeddingConverter",
             "JinaEmbeddingConverter",

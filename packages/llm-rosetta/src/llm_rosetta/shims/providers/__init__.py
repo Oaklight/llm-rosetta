@@ -637,6 +637,36 @@ def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
     return fmt, model_type
 
 
+def _parse_connection_argv(raw: Any, shim_name: str) -> tuple[str, ...] | None:
+    """Read a shim's ``connection.acp_argv`` as an argv tuple.
+
+    A string would be split on whitespace by a shell and a list of non-strings
+    would fail somewhere inside the subprocess call; refusing both here puts
+    the error beside the file that has it.
+
+    Args:
+        raw: The declared value: a list of strings, or ``None``.
+        shim_name: The shim's name, for the message.
+
+    Returns:
+        The argv, or ``None`` when the shim declares none.
+
+    Raises:
+        ValueError: The value is not a list of non-empty strings.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, (list, tuple)) or not raw:
+        raise ValueError(
+            f"{shim_name}: connection.acp_argv must be a non-empty list of "
+            f"strings (e.g. ['agy', 'acp'])"
+        )
+    argv = tuple(str(part) for part in raw)
+    if any(not part for part in argv):
+        raise ValueError(f"{shim_name}: connection.acp_argv has an empty element")
+    return argv
+
+
 def _parse_connection_token_command(
     raw: Any, provider_dir: Path, name: str
 ) -> tuple[str, ...] | None:
@@ -1512,6 +1542,8 @@ def _load_single_provider(
         session_id_format=conn_raw.get("session_id_format"),
         request_id_format=conn_raw.get("request_id_format"),
         stream_required=bool(conn_raw.get("stream_required", False)),
+        transport=str(conn_raw.get("transport") or "http"),
+        acp_argv=_parse_connection_argv(conn_raw.get("acp_argv"), cfg.get("name", "")),
         token_command=_parse_connection_token_command(
             conn_raw.get("token_command"),
             command_dir or provider_dir,

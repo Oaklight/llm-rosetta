@@ -123,6 +123,19 @@ FORMAT_SPECS: tuple[FormatSpec, ...] = (
         sse="google_interactions",
         models_path="/v1beta/models",
     ),
+    FormatSpec(
+        model_type="llm",
+        format="acp",
+        picker_order=95,
+        wire_family="openai",
+        url_template="{base_url}/acp-turn",
+        base_url_hint="http://agy.local",
+        # A target and never a source: no client speaks ACP to the gateway,
+        # so there is no route to register and no SSE formatter to describe.
+        # The flag says that once, rather than each consumer re-deriving it
+        # from two absent fields.
+        upstream_only=True,
+    ),
     # -- embeddings -----------------------------------------------------
     FormatSpec(
         model_type="embeddings",

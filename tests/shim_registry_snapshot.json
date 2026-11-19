@@ -12,6 +12,18 @@
     "free_source": false
   },
   {
+    "name": "antigravity--acp",
+    "model_type": "llm",
+    "format": "acp",
+    "base_url": "http://agy.local",
+    "api_key_env": null,
+    "default_path": null,
+    "group": null,
+    "group_label": "Google (Antigravity)",
+    "display_name": null,
+    "free_source": false
+  },
+  {
     "name": "cohere--chat_completions",
     "model_type": "llm",
     "format": "chat_completions",
