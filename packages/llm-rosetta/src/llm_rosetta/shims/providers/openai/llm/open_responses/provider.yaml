@@ -13,6 +13,18 @@ connection:
   base_url: https://api.openai.com/v1
 
 tools:
+  # A client's tool container goes upstream as the client wrote it,
+  # ``{"type": "namespace", "name", "description", "tools"}``.  Measured live
+  # 2026-11-19: a container holding one function is accepted (200), and a call
+  # inside it comes back as ``{"name": "wait", "namespace": "tasks"}``, which is
+  # what the response leg resolves the client's identity from.  A container
+  # *name* is held to one token — ``"ta sks"`` is 400 "A tool identifier must
+  # fit in one message header field." and ``"my.tools"`` is 400 "must not
+  # contain '.'".  A flat target never shows that rule, because it folds the
+  # group into the child name and the naming pass legalises the result; here
+  # the group travels on its own and no pass legalises it yet, so such a
+  # container is rejected rather than repaired.
+  tool_groups: true
   # Kinds this provider can accept from cross-format translation.  Measured
   # against the live API: `image_generation` needs no configuration and is
   # accepted bare, `code_interpreter` takes a synthesised `container: auto`.
