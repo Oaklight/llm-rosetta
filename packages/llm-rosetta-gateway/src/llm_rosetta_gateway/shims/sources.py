@@ -32,25 +32,16 @@ the download and the extracted tree are size-capped.
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
-import io
-import json
-import logging
 import os
-import re
 import shutil
-import tarfile
 import threading
 import time
 import uuid
-import zipfile
-from fnmatch import fnmatch
-from urllib.parse import quote, urlsplit
-from collections.abc import Callable, Collection, Mapping, Sequence
-from dataclasses import dataclass, field, replace
-from pathlib import Path, PurePosixPath
-from typing import Any, Literal, cast
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
+from pathlib import Path
+from typing import Any
 
 from llm_rosetta.shims.provider_shim import (
     _clear_registry_caches,
@@ -59,41 +50,105 @@ from llm_rosetta.shims.provider_shim import (
     staging_registry,
     unregister_shim,
 )
-from llm_rosetta.shims.providers import load_providers, load_providers_from_dir
+from llm_rosetta.shims.providers import (  # noqa: F401
+    load_providers,
+    load_providers_from_dir,
+)
 
-from .manifest import (
+# ``MAX_ARCHIVE_BYTES`` is bound into this module and read here (the size
+# check in ``_install_archive``), which is what keeps the tests'
+# ``monkeypatch.setattr(sources_mod, "MAX_ARCHIVE_BYTES", ...)`` live.  The
+# check must stay in the module that reads the name; the same holds for
+# ``_atomic_replace`` and ``_extract_archive``.
+from ._types import (  # noqa: F401
+    DEFAULT_CACHE_DIRNAME,
+    HTTP_TIMEOUT,
+    HttpGet,
+    MAX_ARCHIVE_BYTES,
+    MAX_ARCHIVE_MEMBERS,
+    MAX_EXTRACTED_BYTES,
+    REMOTE_TTL_SECONDS,
+    RefreshMode,
+    ShimArchiveMismatch,
+    ShimArchiveUnusable,
+    ShimLoadReport,
+    ShimSourceError,
+    ShimSourceStatus,
+    ShimSourceUnreachable,
+    _ARCHIVE_SUFFIXES,
+    _DRIVE_RE,
+    _GITHUB_RE,
+    _REFRESH_MODES,
+    _SHA256_RE,
+    _SHA_RE,
+    logger,
+)
+
+# These names keep the import surface this module had before the split: it
+# imported them from ``.manifest``, so callers could take them from here.
+from .manifest import (  # noqa: F401
     MANIFEST_FILENAME,
     ShimManifestError,
     core_version_problem,
     read_shim_manifest,
 )
-
-logger = logging.getLogger(__name__)
-
-#: Download cap for a remote archive.
-MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
-#: Cap on the total uncompressed size written to disk.
-MAX_EXTRACTED_BYTES = 256 * 1024 * 1024
-#: Cap on the number of archive members.
-MAX_ARCHIVE_MEMBERS = 20_000
-#: Default re-fetch interval for an unpinned remote (seconds).
-REMOTE_TTL_SECONDS = 24 * 3600
-#: HTTP timeout for fetch + ref resolution (seconds).
-HTTP_TIMEOUT = 30.0
-#: Default cache directory name, resolved next to the config file by the gateway.
-DEFAULT_CACHE_DIRNAME = "shims-cache"
-
-_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
-_SHA256_RE = re.compile(r"^[0-9a-fA-F]{64}$")
-_DRIVE_RE = re.compile(r"^[A-Za-z]:$")
-_GITHUB_RE = re.compile(
-    r"^https?://github\.com/(?P<owner>[^/]+)/(?P<repo>[^/]+?)(?:\.git)?/?$"
+from ._spec import (  # noqa: F401
+    _RemoteSpec,
+    _cache_key,
+    _derive_name,
+    _parse_github,
+    _parse_remote_spec,
+    _parse_selection,
+    _validate_url_scheme,
+    is_supported_archive_url,
+    normalize_mirror,
+    normalize_subpath,
 )
-_ARCHIVE_SUFFIXES = (".tar.gz", ".tgz", ".tar", ".zip")
+from ._cache import (  # noqa: F401
+    _atomic_replace,
+    _chosen_legs,
+    _chosen_legs_lock,
+    _file_lock,
+    _leg_subpath,
+    _needs_fetch,
+    _read_stamp,
+    _remote_failure,
+    _remote_subdir,
+    _stamp_leg,
+    _write_stamp,
+)
+from ._scan import (  # noqa: F401
+    _load_local_dir,
+    _scan_dir,
+    _selection_predicate,
+    _selection_report,
+    _unmatched_patterns,
+)
+from ._legs import (  # noqa: F401
+    _DEFAULT_PORTS,
+    _archive_url,
+    _auth_headers,
+    _bearer_headers,
+    _exhausted_error,
+    _is_unreachable,
+    _leg_headers,
+    _leg_plan,
+    _log_leg_failure,
+    _mirror_slot,
+    _resolve_github_head,
+    _same_origin,
+    _url_origin,
+)
+from ._archive import (  # noqa: F401
+    _common_root_prefix,
+    _extract_archive,
+    _extract_tar,
+    _extract_zip,
+    _sniff_archive,
+    _strip_prefix,
+    _validate_member_name,
+)
 
-RefreshMode = Literal["auto", "always", "never"]
-_REFRESH_MODES: tuple[RefreshMode, ...] = ("auto", "always", "never")
-HttpGet = Callable[..., bytes]
 
 # In-process guard: a rebuild must not be observed half-empty by another thread.
 _rebuild_lock = threading.Lock()
@@ -102,182 +157,6 @@ _rebuild_lock = threading.Lock()
 #: ``extra_remotes``.  Tracked so a later rebuild can drop exactly those while
 #: leaving shims registered in-process via ``register_shim`` alone.
 _source_shims: set[str] = set()
-
-#: The leg that last served each remote source, keyed by its cache directory
-#: name, so a working mirror is not re-probed on every fetch.  Process-local:
-#: a restart costs one failed connect, which is the documented cost of the
-#: lazy (non-pre-probing) selection.
-_chosen_legs: dict[str, str] = {}
-_chosen_legs_lock = threading.Lock()
-
-
-class ShimSourceError(RuntimeError):
-    """Raised when a declared shim source cannot be loaded (``strict`` mode)."""
-
-
-class ShimArchiveMismatch(ShimSourceError):
-    """The downloaded archive does not match the configured ``sha256``.
-
-    Distinct from a transient fetch failure: the bytes are *wrong*, not
-    missing, so the stale-cache fallback must not paper over it.
-    """
-
-
-class ShimArchiveUnusable(ShimSourceError):
-    """A downloaded body is not an archive the loader can install.
-
-    A corruption signal, not a network symptom: the server answered and the
-    bytes arrived, they just are not the source.  A body the reader aborts for
-    crossing :data:`MAX_ARCHIVE_BYTES` is the same verdict reached earlier, so
-    it is raised while the stream is still being read, not only after the
-    download.  Like a digest mismatch, this is never masked with the stale
-    cache.
-    """
-
-
-class ShimSourceUnreachable(ShimSourceError):
-    """No configured leg could be reached (a transport failure on every leg).
-
-    A transport failure — connection refused, DNS failure, timeout — is the
-    only condition that makes the loader try a declared mirror.  A server that
-    answers (even with an error) or bytes that do not match their pin are the
-    source's verdict, not a network symptom, so they raise a plain
-    :class:`ShimSourceError` instead.
-    """
-
-
-@dataclass(frozen=True)
-class ShimSourceStatus:
-    """Outcome of loading one declared shim source.
-
-    Attributes:
-        kind: ``"path"`` for a local directory, ``"remote"`` for a fetched
-            archive.
-        location: The declared directory path or remote URL.
-        name: Remote name (derived when not given).  ``None`` for paths.
-        ok: Whether the source loaded.  A stale-cache fallback counts as ok.
-        shim_count: Number of shims registered from this source.
-        shim_names: Names of the shims registered from this source.
-        resolved_dir: Absolute directory that was scanned.
-        error: Failure reason when ``ok`` is ``False``.
-        from_cache: Whether the remote was served from the cache.
-        stale: Whether a stale cache was used because the fetch failed.
-        fetched_at: Unix time of the (cached or fresh) archive.
-        resolved_ref: Concrete ref the archive was fetched at (a HEAD fetch is
-            pinned to its commit SHA here).
-        checksum_ok: ``True``/``False`` when a ``sha256`` pin was checked.
-        ref: The ref the declaration named (``None`` for a HEAD fetch), so the
-            update check can ask about the same ref it fetched.
-        token_env: The environment variable the declaration names for its
-            credential (the name, never the token), so a private repository is
-            checked with the same credential it was fetched with.
-        leg: Which URL served the archive: ``"primary"`` or ``"mirror"``.
-            ``None`` when the source never resolved.
-        archive_url: The concrete URL the archive was fetched from (the
-            expanded mirror template when ``leg`` is ``"mirror"``).
-        unreachable: Whether the source failed because no leg could be
-            reached, as opposed to a server answer or a bad archive.
-        include: The ``include`` selection the source's declaration carried,
-            as written (exact names and ``*`` globs).
-        exclude: The ``exclude`` selection, as written.
-        unmatched: ``include`` patterns that selected nothing from what this
-            source ships.  A name the package stopped shipping lands here,
-            which is how a stale config is visible instead of silently empty.
-        unmatched_excludes: ``exclude`` patterns that matched nothing the
-            source ships.  An exclude is measured against the shipped set, not
-            the loaded one, so a pattern that hit a shim already gone is told
-            apart from one that hit a shim the selection dropped.
-        emptied_includes: ``include`` patterns whose every hit the ``exclude``
-            dropped, when that left the source with nothing loaded.  Every
-            pattern "matched", so neither of the fields above reports it, and
-            yet the outcome is the one the include warning exists for: the
-            operator believes a shim is running and nothing loads.
-        manifest_shims: The shim names the source's ``shims.yaml`` declares.
-            Empty when it ships no manifest, which is the legacy scan layout.
-        declined: The names the selection dropped — a shim the source ships, or
-            a leaf it refused before validation could have failed it.  A loaded
-            name is never here; ``shim_names`` plus this is the set a pattern
-            can match, which is what makes an ``exclude`` that hit nothing
-            visible at all.
-    """
-
-    kind: Literal["path", "remote"]
-    location: str
-    name: str | None = None
-    ok: bool = True
-    shim_count: int = 0
-    shim_names: tuple[str, ...] = ()
-    resolved_dir: str | None = None
-    error: str | None = None
-    from_cache: bool = False
-    stale: bool = False
-    fetched_at: float | None = None
-    resolved_ref: str | None = None
-    checksum_ok: bool | None = None
-    ref: str | None = None
-    token_env: str | None = None
-    leg: Literal["primary", "mirror"] | None = None
-    archive_url: str | None = None
-    unreachable: bool = False
-    include: tuple[str, ...] = ()
-    exclude: tuple[str, ...] = ()
-    unmatched: tuple[str, ...] = ()
-    unmatched_excludes: tuple[str, ...] = ()
-    emptied_includes: tuple[str, ...] = ()
-    manifest_shims: tuple[str, ...] = ()
-    declined: tuple[str, ...] = ()
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-safe view for the admin API."""
-        return {
-            "kind": self.kind,
-            "location": self.location,
-            "name": self.name,
-            "ok": self.ok,
-            "shim_count": self.shim_count,
-            "shim_names": list(self.shim_names),
-            "resolved_dir": self.resolved_dir,
-            "error": self.error,
-            "from_cache": self.from_cache,
-            "stale": self.stale,
-            "fetched_at": self.fetched_at,
-            "resolved_ref": self.resolved_ref,
-            "checksum_ok": self.checksum_ok,
-            "ref": self.ref,
-            "token_env": self.token_env,
-            "leg": self.leg,
-            "archive_url": self.archive_url,
-            "unreachable": self.unreachable,
-            "include": list(self.include),
-            "exclude": list(self.exclude),
-            "unmatched": list(self.unmatched),
-            "unmatched_excludes": list(self.unmatched_excludes),
-            "emptied_includes": list(self.emptied_includes),
-            "manifest_shims": list(self.manifest_shims),
-            "declined": list(self.declined),
-        }
-
-
-@dataclass
-class ShimLoadReport:
-    """Result of a :func:`rebuild_shims` call."""
-
-    sources: list[ShimSourceStatus] = field(default_factory=list)
-    total_shims: int = 0
-    rebuilt_at: float = 0.0
-
-    def failures(self) -> list[ShimSourceStatus]:
-        """Return the sources that failed to load."""
-        return [s for s in self.sources if not s.ok]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-safe view for the admin API."""
-        return {
-            "sources": [s.to_dict() for s in self.sources],
-            "total_shims": self.total_shims,
-            "rebuilt_at": self.rebuilt_at,
-            "failure_count": len(self.failures()),
-        }
 
 
 # ---------------------------------------------------------------------------
@@ -592,594 +471,6 @@ def _scan_status(status: ShimSourceStatus) -> ShimSourceStatus:
     return replace(scanned, leg=status.leg, archive_url=status.archive_url)
 
 
-@dataclass(frozen=True)
-class _RemoteSpec:
-    """A normalized remote spec plus its resolved cache paths."""
-
-    url: str
-    name: str
-    ref: str | None
-    subpath: str
-    archive: str
-    sha256: str | None
-    token_env: str | None
-    refresh: RefreshMode
-    github: tuple[str, str] | None
-    source_dir: Path
-    stamp_path: Path
-    mirror_url: str | None = None
-    mirror_sha256: str | None = None
-    mirror_token_env: str | None = None
-    #: Scan directory inside the *mirror's* archive.  ``None`` inherits
-    #: ``subpath``: the legs need different paths only when the archives they
-    #: serve are laid out differently.
-    mirror_subpath: str | None = None
-    #: Selection carried from the declaration: exact names and ``*`` globs to
-    #: keep, and to drop.  Both empty means "load everything the source ships".
-    include: tuple[str, ...] = ()
-    exclude: tuple[str, ...] = ()
-
-
-def normalize_subpath(value: Any, *, where: str) -> str:
-    """Normalize a declared scan directory, refusing anything that can escape.
-
-    Both a source's ``path`` and a mirror's ``path`` name a directory inside an
-    extracted archive.  ``None`` and ``""`` mean the extraction root, as does
-    ``"."``; anything else must be a relative path of ordinary components, so a
-    declaration cannot point at an absolute location or walk out of the cache
-    directory (the extractor already refuses such members; this refuses the
-    *declaration*).
-
-    Args:
-        value: The declared value.
-        where: The config key, for the error message.
-
-    Returns:
-        The normalized relative path, or ``""`` for the archive root.
-
-    Raises:
-        ValueError: On a non-string, an absolute path, a backslash spelling, or
-            a ``..`` component.
-    """
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        raise ValueError(f"{where} must be a string path")
-    if "\\" in value:
-        raise ValueError(f"{where} must use '/' separators")
-    text = value
-    if text in ("", ".", "./"):
-        return ""
-    if text.startswith("/"):
-        raise ValueError(f"{where} must be a relative path inside the archive")
-    if len(text) > 1 and text[1] == ":":
-        raise ValueError(f"{where} must be a relative path inside the archive")
-    parts = [part for part in text.split("/") if part not in ("", ".")]
-    if not parts:
-        return ""
-    if any(part == ".." for part in parts):
-        raise ValueError(f"{where} must not contain '..'")
-    return "/".join(parts)
-
-
-def normalize_mirror(
-    value: Any,
-) -> tuple[str, str | None, str | None, str | None] | None:
-    """Validate a ``mirror`` declaration and return its parts.
-
-    A mirror is a second URL for the same source, used only when the primary
-    is unreachable.  It is an ordinary archive URL template, so any host can
-    serve it — a public CDN and an internal mirror are declared the same way.
-
-    Accepted shapes::
-
-        "mirror": "https://mirror.example/shims@{ref}.tar.gz"
-        "mirror": {"url_template": "https://cdn.example/gh/o/r@{ref}/dist/shims.tar.gz",
-                   "sha256": "0123…abcd",
-                   "token_env": "MIRROR_TOKEN",
-                   "path": "."}
-
-    The bytes a mirror serves need not be the primary's bytes (a CDN serving a
-    committed ``dist/<name>.tar.gz`` differs from the forge's repository
-    tarball), so the mirror carries its own ``sha256``.
-
-    A mirror never receives the primary's ``token_env``: that credential
-    belongs to the primary's origin.  A mirror that needs its own declares it
-    here.
-
-    ``path`` is the directory to scan inside the mirror's archive.  Omitted, it
-    inherits the source's ``path`` — the common case, where both legs serve the
-    same tree.  It exists because a committed ``dist`` archive is laid out from
-    the providers directory (``providers/`` at its root) while the forge
-    tarball keeps the repository's ``src/<package>/providers``: one path cannot
-    address both, and the mirror descriptor is what describes the mirror's
-    bytes.
-
-    Args:
-        value: The declared ``mirror``: ``None``, a template string, or an
-            object with ``url_template`` and optional ``sha256`` /
-            ``token_env`` / ``path``.
-
-    Returns:
-        ``(url_template, sha256 or None, token_env or None, path or None)``,
-        or ``None`` when no mirror is declared.
-
-    Raises:
-        ValueError: On an unknown shape, an unknown key, a template that is
-            not an archive URL the loader accepts, a malformed digest, or a
-            ``path`` that is not a relative directory inside the archive.
-    """
-    if value is None:
-        return None
-    pin: Any = None
-    token_env: Any = None
-    subpath: Any = None
-    if isinstance(value, str):
-        template = value
-    elif isinstance(value, Mapping):
-        unknown = set(value) - {"url_template", "sha256", "token_env", "path"}
-        if unknown:
-            names = ", ".join(sorted(str(key) for key in unknown))
-            raise ValueError(
-                f"unknown mirror key(s): {names} "
-                "(expected url_template, sha256, token_env, path)"
-            )
-        template = value.get("url_template")
-        pin = value.get("sha256")
-        token_env = value.get("token_env")
-        subpath = value.get("path")
-        if not isinstance(template, str) or not template:
-            raise ValueError("mirror requires a non-empty 'url_template'")
-    else:
-        raise ValueError(
-            "mirror must be a URL template string or an object with 'url_template'"
-        )
-    if not template:
-        raise ValueError("mirror requires a non-empty 'url_template'")
-    if pin is not None and (not isinstance(pin, str) or not _SHA256_RE.match(pin)):
-        raise ValueError("mirror 'sha256' must be 64 hexadecimal characters")
-    if token_env is not None and (not isinstance(token_env, str) or not token_env):
-        raise ValueError("mirror 'token_env' must be an environment variable name")
-    if not is_supported_archive_url(template):
-        raise ValueError(
-            "mirror 'url_template' must be an archive URL "
-            "(.tar.gz/.tgz/.tar/.zip), a GitHub repository URL, or contain "
-            "'{ref}'"
-        )
-    try:
-        _validate_url_scheme(template)
-    except ShimSourceError as exc:
-        raise ValueError(str(exc)) from None
-    # An absent ``path`` inherits the source's (``None``); a declared one — even
-    # ``"."`` or ``""`` — names the mirror's own scan directory.
-    declared_path = (
-        None if subpath is None else normalize_subpath(subpath, where="mirror 'path'")
-    )
-    return template, pin, token_env, declared_path
-
-
-def _parse_remote_spec(
-    spec: Mapping[str, Any], cache_root: str | os.PathLike[str] | None
-) -> _RemoteSpec:
-    """Validate and normalize a remote spec, resolving its cache paths.
-
-    Raises:
-        ShimSourceError: On a missing/blank ``url``, an unknown ``archive`` or
-            ``refresh`` value, or when no cache directory is available.
-    """
-    if not isinstance(spec, Mapping):
-        raise ShimSourceError("remote source must be a mapping")
-    url = spec.get("url")
-    if not isinstance(url, str) or not url:
-        raise ShimSourceError("remote source requires a non-empty 'url'")
-
-    archive = spec.get("archive") or "auto"
-    if archive not in ("auto", "tar.gz", "zip"):
-        raise ShimSourceError(f"invalid archive type {archive!r}")
-    refresh_raw = spec.get("refresh") or "auto"
-    if refresh_raw not in _REFRESH_MODES:
-        raise ShimSourceError(
-            f"invalid refresh mode {refresh_raw!r} (expected auto/always/never)"
-        )
-    refresh = cast("RefreshMode", refresh_raw)
-    if cache_root is None:
-        raise ShimSourceError("remote sources require a cache directory")
-
-    _validate_url_scheme(url)
-    github = _parse_github(url)
-    try:
-        subpath = normalize_subpath(spec.get("path"), where="'path'")
-        mirror = normalize_mirror(spec.get("mirror"))
-    except ValueError as exc:
-        raise ShimSourceError(str(exc)) from None
-    mirror_url, mirror_sha256, mirror_token_env, mirror_subpath = mirror or (
-        None,
-        None,
-        None,
-        None,
-    )
-    if mirror_url and spec.get("sha256") and not mirror_sha256:
-        # A pinned source relies on the pin to notice bytes it did not approve.
-        # The mirror is the path an on-path attacker can force (make the
-        # primary unreachable, serve whatever the mirror answers), so an
-        # unpinned mirror would quietly undo the pin it was declared beside.
-        raise ShimSourceError(
-            "a mirror must declare its own 'sha256' when the source pins its "
-            "primary: the two legs serve different bytes, and an unpinned "
-            "mirror would serve bytes the pin never approved"
-        )
-    name = spec.get("name") or _derive_name(url, github)
-    ref = spec.get("ref") or None
-    include = _parse_selection(spec.get("include"), where="'include'")
-    exclude = _parse_selection(spec.get("exclude"), where="'exclude'")
-    root = Path(cache_root)
-    key = _cache_key(name, url, ref)
-    return _RemoteSpec(
-        url=url,
-        name=name,
-        ref=ref,
-        subpath=subpath,
-        archive=archive,
-        sha256=spec.get("sha256") or None,
-        token_env=spec.get("token_env") or None,
-        refresh=refresh,
-        github=github,
-        source_dir=root / key,
-        stamp_path=root / f"{key}.stamp.json",
-        mirror_url=mirror_url,
-        mirror_sha256=mirror_sha256,
-        mirror_token_env=mirror_token_env,
-        mirror_subpath=mirror_subpath,
-        include=include,
-        exclude=exclude,
-    )
-
-
-def _parse_selection(value: Any, *, where: str) -> tuple[str, ...]:
-    """Normalize an ``include`` / ``exclude`` declaration.
-
-    Args:
-        value: The declared value: ``None``, a single name, or a list of them.
-        where: The config key, for the error message.
-
-    Returns:
-        The declared patterns, in declaration order.  Empty when nothing was
-        declared, which means "no restriction" for ``include``.
-
-    Raises:
-        ShimSourceError: On a non-string entry, or a blank one.
-    """
-    if value is None:
-        return ()
-    if not isinstance(value, (list, tuple)):
-        raise ShimSourceError(f"remote source {where} must be a list of shim names")
-    patterns: list[str] = []
-    for item in value:
-        if not isinstance(item, str) or not item:
-            raise ShimSourceError(
-                f"remote source {where} entries must be non-empty strings"
-            )
-        patterns.append(item)
-    return tuple(patterns)
-
-
-def _needs_fetch(
-    spec: _RemoteSpec,
-    cached: Mapping[str, Any],
-    has_cache: bool,
-    now: float,
-    ttl: int,
-) -> bool:
-    """Decide whether *spec* must be (re)fetched.
-
-    A ``sha256`` pin is re-checked against the *cached* archive, not just at
-    fetch time: the cache satisfies the pin only when the stamp records the same
-    digest, so a rotated or tampered upstream source is still detected on a warm
-    cache.  A mismatch always forces a re-fetch (which then fails loudly) even
-    under ``refresh: "never"`` — serving bytes that are not the pinned ones is
-    never the intent of a pin.
-
-    The pin checked is the one belonging to the leg that produced the cache: a
-    cache fetched through the mirror is judged by the mirror's pin, because the
-    two legs legitimately serve different bytes.  A stamp written before legs
-    were recorded came from the primary.
-    """
-    pinned = spec.mirror_sha256 if _stamp_leg(cached) == "mirror" else spec.sha256
-    if has_cache and pinned is not None:
-        cached_digest = str(cached.get("sha256") or "")
-        if cached_digest.lower() != pinned.lower():
-            return True
-    if spec.refresh == "never":
-        return not has_cache
-    if has_cache and spec.github is not None and pinned is None:
-        # Stamps written before refs were resolved — or written while the API
-        # was unreachable — hold the literal ref; a commit is what the update
-        # check can compare against.  Checked after ``never``: the operator's
-        # schedule wins, and the pin is re-resolved on the next fetch it allows.
-        #
-        # A digest pin is exempt: the bytes are the identity, the commit adds
-        # nothing to the verdict, and re-pinning is what made a warm cache
-        # cold — one API attempt on every reload, in exactly the environment
-        # the mirror exists for (#1433).
-        if not _SHA_RE.match(str(cached.get("resolved_ref") or "")):
-            return True
-    if spec.refresh == "always":
-        return True
-    if spec.sha256 is not None or spec.mirror_sha256 is not None:
-        return not has_cache
-    if spec.ref and _SHA_RE.match(spec.ref):
-        return not has_cache
-    fetched_at = cached.get("fetched_at", 0.0) if cached else 0.0
-    return not has_cache or (now - fetched_at) > ttl
-
-
-def _leg_subpath(spec: _RemoteSpec, leg: str) -> str:
-    """Return the scan directory for *leg* inside its archive.
-
-    A mirror that declares its own ``path`` is described by it; otherwise the
-    two legs share the source's path, which is the case when both serve the
-    same tree.
-    """
-    if leg == "mirror" and spec.mirror_subpath is not None:
-        return spec.mirror_subpath
-    return spec.subpath
-
-
-def _remote_subdir(spec: _RemoteSpec, leg: str) -> Path:
-    """Return the cache subdirectory that holds the provider directories."""
-    subpath = _leg_subpath(spec, leg)
-    return spec.source_dir / subpath if subpath else spec.source_dir
-
-
-def _stamp_leg(stamp: Mapping[str, Any]) -> Literal["primary", "mirror"]:
-    """Return the leg a cache stamp records; pre-leg stamps were primary."""
-    return "mirror" if stamp.get("leg") == "mirror" else "primary"
-
-
-def _remote_failure(
-    location: str, name: str | None, exc: Exception
-) -> ShimSourceStatus:
-    """Build a failed remote status from an exception."""
-    return ShimSourceStatus(
-        kind="remote",
-        location=location,
-        name=name,
-        ok=False,
-        error=f"{type(exc).__name__}: {exc}",
-        unreachable=isinstance(exc, ShimSourceUnreachable),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Local directories
-# ---------------------------------------------------------------------------
-
-
-def _load_local_dir(directory: str | os.PathLike[str]) -> ShimSourceStatus:
-    """Scan one local directory, reporting failure instead of raising."""
-    return _scan_dir(Path(directory), kind="path", location=str(directory))
-
-
-def _scan_dir(
-    directory: Path,
-    *,
-    kind: Literal["path", "remote"],
-    location: str,
-    name: str | None = None,
-    from_cache: bool = False,
-    stale: bool = False,
-    fetched_at: float | None = None,
-    resolved_ref: str | None = None,
-    ref: str | None = None,
-    token_env: str | None = None,
-    include: tuple[str, ...] = (),
-    exclude: tuple[str, ...] = (),
-) -> ShimSourceStatus:
-    """Run the loader over *directory* and fold the result into a status.
-
-    A source that ships ``shims.yaml`` is loaded exactly as it declares: entries
-    the manifest does not list are never read.  A source without one is scanned
-    as before, and the selection still applies — by name, against each parsed
-    leaf.
-
-    Where the manifest names the paths, the selection is resolved *before* the
-    scan: entries it drops are removed from the allowed paths, so their
-    ``provider.yaml`` is not opened.  The name predicate is the second gate,
-    and the only one a manifest-less source has.
-    """
-    base: dict[str, Any] = {
-        "kind": kind,
-        "location": location,
-        "name": name,
-        "resolved_dir": str(directory),
-        "from_cache": from_cache,
-        "stale": stale,
-        "fetched_at": fetched_at,
-        "resolved_ref": resolved_ref,
-        "ref": ref,
-        "token_env": token_env,
-        "include": include,
-        "exclude": exclude,
-    }
-    if not directory.is_dir():
-        return ShimSourceStatus(
-            **base,
-            ok=False,
-            error=f"not a directory: {directory}",
-        )
-
-    try:
-        manifest = read_shim_manifest(directory)
-    except ShimManifestError as exc:
-        # A manifest that cannot be honoured is not a reason to scan the tree it
-        # meant to bound: that fallback would parse exactly what it excluded.
-        return ShimSourceStatus(
-            **base,
-            ok=False,
-            error=f"{MANIFEST_FILENAME}: {exc}",
-        )
-
-    if manifest is not None and manifest.core:
-        # A package that tracks its branch can bring a shape this core cannot
-        # read; the floor it declares is checked before anything is loaded, so
-        # the failure names the version rather than surfacing as a bad leaf.
-        problem = core_version_problem(manifest.core)
-        if problem:
-            return ShimSourceStatus(
-                **base,
-                ok=False,
-                error=f"{MANIFEST_FILENAME}: {problem}",
-            )
-
-    keep = _selection_predicate(include, exclude)
-    # What the source ships beyond what it loads is known only here: ``keep`` is
-    # asked about every leaf the scan parses before the leaf is dropped, so a
-    # refused name is a shipped shim the selection declined.  Without that
-    # record an ``exclude`` that matches nothing cannot be told from one that
-    # matches a shim the selection already dropped — both leave no trace.
-    declined: list[str] = []
-
-    def selected(shim_name: str) -> bool:
-        keep_it = keep(shim_name)
-        if not keep_it:
-            declined.append(shim_name)
-        return keep_it
-
-    only_paths: set[str] | None = None
-    if manifest is not None:
-        only_paths = {entry.path for entry in manifest.entries if selected(entry.name)}
-
-    try:
-        shims = load_providers_from_dir(
-            directory,
-            on_error="warn",
-            only_paths=only_paths,
-            keep_names=selected,
-        )
-    except Exception as exc:
-        return ShimSourceStatus(
-            **base,
-            ok=False,
-            error=f"{type(exc).__name__}: {exc}",
-        )
-
-    names = tuple(s.name for s in shims)
-    declined_names = tuple(n for n in dict.fromkeys(declined) if n not in names)
-    unmatched, unmatched_excludes, emptied_includes = _selection_report(
-        location, names, declined_names, include=include, exclude=exclude
-    )
-    if manifest is not None:
-        declared = set(manifest.names)
-        for shim_name in names:
-            if shim_name not in declared:
-                logger.warning(
-                    "Shim source %s: %s declares no shim named %r, but the "
-                    "entry's path loads one; fix the manifest",
-                    location,
-                    MANIFEST_FILENAME,
-                    shim_name,
-                )
-    return ShimSourceStatus(
-        **base,
-        ok=True,
-        shim_count=len(names),
-        shim_names=names,
-        unmatched=unmatched,
-        unmatched_excludes=unmatched_excludes,
-        emptied_includes=emptied_includes,
-        manifest_shims=manifest.names if manifest is not None else (),
-        declined=declined_names,
-    )
-
-
-def _selection_predicate(
-    include: Collection[str], exclude: Collection[str]
-) -> Callable[[str], bool]:
-    """Build the name predicate an ``include``/``exclude`` pair declares.
-
-    An empty ``include`` selects everything, and ``exclude`` wins over
-    ``include``: an operator who names both meant to drop, not to keep.  Both
-    sides are ``fnmatch`` patterns, so an exact name and ``vendor_*`` are
-    spelled the same way.
-    """
-
-    def keep(shim_name: str) -> bool:
-        if include and not any(fnmatch(shim_name, p) for p in include):
-            return False
-        return not any(fnmatch(shim_name, p) for p in exclude)
-
-    return keep
-
-
-def _unmatched_patterns(
-    patterns: Collection[str], shipped: Collection[str]
-) -> tuple[str, ...]:
-    """The selection *patterns* that matched none of *shipped*.
-
-    Both directions are read against everything the source ships — the shims it
-    loaded and the ones the selection declined — because that is the set a
-    pattern can match.  A name dropped by the selection is by construction
-    absent from the loaded set, so matching against the loaded set alone would
-    call every ``exclude`` that did its job unmatched.
-    """
-    return tuple(
-        pattern
-        for pattern in patterns
-        if not any(fnmatch(shipped_name, pattern) for shipped_name in shipped)
-    )
-
-
-def _selection_report(
-    location: str,
-    names: tuple[str, ...],
-    declined: tuple[str, ...],
-    *,
-    include: Collection[str],
-    exclude: Collection[str],
-) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
-    """Measure both selection directions and log what matched nothing.
-
-    A pattern is matched against everything the source ships — the shims it
-    loaded and the ones the selection declined — because that is the set a
-    pattern can hit.  An ``include`` whose every hit the ``exclude`` then drops
-    matches every pattern and still leaves the source empty, so it is reported
-    on its own: the operator believes a shim is running and nothing loads.
-
-    Returns:
-        ``(unmatched, unmatched_excludes, emptied_includes)``.
-    """
-    shipped = names + declined
-    unmatched = _unmatched_patterns(include, shipped)
-    unmatched_excludes = _unmatched_patterns(exclude, shipped)
-    emptied_includes = (
-        tuple(pattern for pattern in include if pattern not in unmatched)
-        if include and not names
-        else ()
-    )
-    for pattern in unmatched:
-        logger.warning(
-            "Shim source %s: include %r matched no shim; it loads: %s",
-            location,
-            pattern,
-            ", ".join(names) or "nothing",
-        )
-    for pattern in unmatched_excludes:
-        logger.warning(
-            "Shim source %s: exclude %r matched no shim; it ships: %s",
-            location,
-            pattern,
-            ", ".join(shipped) or "nothing",
-        )
-    for pattern in emptied_includes:
-        logger.warning(
-            "Shim source %s: include %r selected only shims the exclude "
-            "drops; it loads: nothing",
-            location,
-            pattern,
-        )
-    return unmatched, unmatched_excludes, emptied_includes
-
-
 # ---------------------------------------------------------------------------
 # Remote fetch + extract
 # ---------------------------------------------------------------------------
@@ -1349,63 +640,6 @@ def _install_archive(
     return digest
 
 
-def _mirror_slot(declared: str | None, resolved: str | None) -> str | None:
-    """Which ref the mirror leg's ``{ref}`` is filled with.
-
-    A declared ref wins: a tag-addressed mirror publishes one directory per
-    release, and that spelling must not depend on api.github.com answering.
-    With no declared ref the source tracks its branch, and the mirror is
-    addressed by the commit the forge resolved — the pinned commit and the
-    mirror's bytes then name the same tree, which the old ``sha256`` pair used
-    to guarantee.  ``None`` leaves the placeholder as ``HEAD``, which the
-    caller's URL builder turns into a leg that 404s rather than a wrong tree.
-
-    Args:
-        declared: The remote's ``ref``, when the operator pinned one.
-        resolved: The commit a GitHub primary resolved to, when it could.
-
-    Returns:
-        The value for the mirror's ``{ref}``.
-    """
-    return declared or resolved
-
-
-def _leg_plan(
-    spec: _RemoteSpec,
-    primary_url: str,
-    *,
-    ref: str | None,
-    mirror_ref: str | None = None,
-) -> list[tuple[str, str, str | None]]:
-    """Return the legs to try, in order, as ``(leg, url, sha256 pin)``.
-
-    *ref* fills the primary's ``{ref}`` (the resolved commit when the forge
-    resolved one); *mirror_ref* fills the mirror's, defaulting to the same
-    value.  The caller passes the declared ref for the mirror so its URL does
-    not depend on the forge's API.
-
-    The leg that last served this source is tried first, so a mirror chosen
-    because the primary was unreachable is not re-probed on every fetch.  If
-    the remembered leg fails with a transport error, the other leg is still
-    tried — the mirror may be down while the primary has recovered.
-    """
-    legs: list[tuple[str, str, str | None]] = [("primary", primary_url, spec.sha256)]
-    if spec.mirror_url:
-        mirror_slot = ref if mirror_ref is None else mirror_ref
-        legs.append(
-            (
-                "mirror",
-                spec.mirror_url.replace("{ref}", mirror_slot or "HEAD"),
-                spec.mirror_sha256,
-            )
-        )
-    with _chosen_legs_lock:
-        chosen = _chosen_legs.get(spec.source_dir.name)
-    if chosen == "mirror" and len(legs) == 2:
-        legs.reverse()
-    return legs
-
-
 def _fetch_first_usable(
     legs: Sequence[tuple[str, str, str | None]],
     spec: _RemoteSpec,
@@ -1515,414 +749,6 @@ def _fetch_first_usable(
     raise ShimSourceError("remote source has no URL to fetch")  # pragma: no cover
 
 
-def _log_leg_failure(
-    spec: _RemoteSpec,
-    url: str,
-    exc: BaseException,
-    unreachable: bool,
-    next_leg: tuple[str, str, str | None],
-) -> None:
-    """Say which leg failed and which one is about to be tried."""
-    logger.warning(
-        "Shim source %s: %s %s (%s); trying the %s %s",
-        spec.url,
-        url,
-        "unreachable" if unreachable else "failed",
-        exc,
-        next_leg[0],
-        next_leg[1],
-    )
-
-
-def _exhausted_error(
-    exc: BaseException,
-    *,
-    spec: _RemoteSpec,
-    leg: str,
-    url: str,
-    failures: list[str],
-    all_unreachable: bool,
-    unusable: bool = False,
-) -> ShimSourceError:
-    """The error for a leg that failed and has no untried leg behind it.
-
-    A failure of every leg with every one of them a transport failure is
-    :class:`ShimSourceUnreachable`; a body that could not be installed is
-    :class:`ShimArchiveUnusable`; anything else is a plain source error.  When
-    more than one leg failed the message names each.
-
-    The type is the rule: ``_resolve_remote_source`` re-raises the two
-    "the bytes are wrong" classes instead of degrading to the cache, and
-    degrades everything else.
-    """
-    if all_unreachable:
-        if len(failures) == 1:
-            where = url if url == spec.url else f"{url} (source {spec.url})"
-            return ShimSourceUnreachable(
-                f"cannot reach {where}: {type(exc).__name__}: {exc}"
-            )
-        return ShimSourceUnreachable(
-            f"no leg reachable for source {spec.url}: " + "; ".join(failures)
-        )
-    error_type: type[ShimSourceError] = (
-        ShimArchiveUnusable if unusable else ShimSourceError
-    )
-    if len(failures) > 1:
-        return error_type(
-            f"no usable leg for source {spec.url}: " + "; ".join(failures)
-        )
-    return error_type(f"{leg} {url}: {type(exc).__name__}: {exc}")
-
-
-def _is_unreachable(exc: BaseException) -> bool:
-    """Whether *exc* is a transport failure — no response from the server.
-
-    Only this class of failure falls back to the mirror.  An HTTP status is a
-    response from the source itself, and a bad archive is the source's
-    verdict; neither is a network symptom to route around.
-
-    The transport subclasses are named rather than taking ``OSError`` whole:
-    what is left of ``OSError`` here is local (a permission error, a path of
-    the wrong type), which says nothing about whether the host answers.
-    """
-    from llm_rosetta_gateway._vendor.httpclient import (
-        HTTPError,
-        HttpConnectionError,
-        HttpTimeoutError,
-    )
-
-    if isinstance(exc, HTTPError):
-        return False
-    return isinstance(
-        exc, (HttpConnectionError, HttpTimeoutError, ConnectionError, TimeoutError)
-    )
-
-
-def _leg_headers(
-    headers: dict[str, str],
-    *,
-    leg: str,
-    url: str,
-    primary_url: str,
-    spec: _RemoteSpec,
-) -> dict[str, str]:
-    """Request headers for one leg.
-
-    A bearer token belongs to the origin that declared it.  The primary's
-    ``token_env`` therefore rides only on a leg whose origin is the primary's:
-    a mirror on another host never sees it, and one that needs a credential
-    declares its own ``token_env``.
-    """
-    token_env = spec.token_env
-    if leg == "mirror":
-        if spec.mirror_token_env:
-            token_env = spec.mirror_token_env
-        elif not _same_origin(url, primary_url):
-            token_env = None
-    leg_headers = {
-        name: value
-        for name, value in headers.items()
-        if name.lower() != "authorization"
-    }
-    if token_env:
-        leg_headers.update(_bearer_headers(token_env))
-    return leg_headers
-
-
-def _same_origin(first: str, second: str) -> bool:
-    """Whether two URLs share a scheme, host and port."""
-    left, right = _url_origin(first), _url_origin(second)
-    return left is not None and left == right
-
-
-#: The port a URL scheme implies when it names none.
-_DEFAULT_PORTS = {"http": 80, "https": 443}
-
-
-def _url_origin(url: str) -> tuple[str, str, int | None] | None:
-    """The ``(scheme, host, port)`` an Authorization header would reach.
-
-    A scheme's default port is filled in, so ``https://h`` and ``https://h:443``
-    are one origin: writing the default explicitly must not cost the credential.
-    """
-    try:
-        parts = urlsplit(url)
-        port = parts.port
-    except ValueError:
-        return None
-    if not parts.hostname:
-        return None
-    scheme = parts.scheme.lower()
-    if port is None:
-        port = _DEFAULT_PORTS.get(scheme)
-    return scheme, parts.hostname.lower(), port
-
-
-def is_supported_archive_url(url: str) -> bool:
-    """Whether the loader can turn *url* into a fetchable archive.
-
-    The rule :func:`_archive_url` applies, exposed so a declared mirror is
-    validated by the same code that will fetch it: a GitHub repository URL, a
-    URL containing ``{ref}``, or a URL ending in one of the archive suffixes.
-    """
-    return (
-        _parse_github(url) is not None
-        or "{ref}" in url
-        or url.lower().endswith(_ARCHIVE_SUFFIXES)
-    )
-
-
-def _archive_url(url: str, ref: str | None, github: tuple[str, str] | None) -> str:
-    """Translate a declared URL into the archive URL to GET."""
-    if github is not None:
-        owner, repo = github
-        return f"https://codeload.github.com/{owner}/{repo}/tar.gz/{ref or 'HEAD'}"
-    if "{ref}" in url:
-        return url.replace("{ref}", ref or "HEAD")
-    if is_supported_archive_url(url):
-        return url
-    raise ShimSourceError(
-        "not a GitHub repository URL and not an archive URL; give an explicit "
-        "archive URL (optionally containing '{ref}') or a GitHub repo URL"
-    )
-
-
-def _resolve_github_head(
-    owner: str,
-    repo: str,
-    *,
-    ref: str | None = None,
-    headers: dict[str, str],
-    http_get: HttpGet,
-    proxy: str | None,
-) -> str:
-    """Resolve a GitHub ref (default: HEAD) to a concrete commit SHA."""
-    target = quote(ref, safe="") if ref else "HEAD"
-    api = f"https://api.github.com/repos/{owner}/{repo}/commits/{target}"
-    data = http_get(api, headers=headers, timeout=HTTP_TIMEOUT, proxy=proxy)
-    payload = json.loads(bytes(data).decode("utf-8"))
-    sha = payload.get("sha")
-    if not isinstance(sha, str) or not _SHA_RE.match(sha):
-        raise ShimSourceError("could not resolve HEAD to a commit SHA")
-    return sha
-
-
-def _extract_archive(
-    data: bytes, dest: Path, *, archive: str, url: str, declared_path: str = ""
-) -> None:
-    """Dispatch to the tar/zip extractor based on the declared or sniffed type."""
-    kind = archive
-    if kind == "auto":
-        kind = _sniff_archive(data, url)
-    if kind == "zip":
-        _extract_zip(data, dest, declared_path=declared_path)
-    else:
-        _extract_tar(data, dest, declared_path=declared_path)
-
-
-def _sniff_archive(data: bytes, url: str) -> Literal["tar.gz", "zip"]:
-    """Guess the archive kind from magic bytes, falling back to the URL."""
-    if data[:2] == b"\x1f\x8b" or data[:2] == b"BZ" or data[:6] == b"\xfd7zXZ\x00":
-        return "tar.gz"
-    if data[:4] == b"PK\x03\x04":
-        return "zip"
-    if url.lower().endswith(".zip"):
-        return "zip"
-    return "tar.gz"
-
-
-def _extract_tar(data: bytes, dest: Path, *, declared_path: str = "") -> None:
-    """Safely extract a tar archive into *dest*."""
-    try:
-        tar = tarfile.open(fileobj=io.BytesIO(data), mode="r:*")
-    except tarfile.TarError as exc:
-        raise ShimSourceError(f"not a valid tar archive: {exc}") from exc
-    with tar:
-        members = tar.getmembers()
-        if len(members) > MAX_ARCHIVE_MEMBERS:
-            raise ShimSourceError("archive has too many members")
-        strip = _common_root_prefix([m.name for m in members], declared_path)
-        total = 0
-        for member in members:
-            # Validate the *original* name: the common-root strip must not be
-            # able to launder a drive prefix or a traversal component.
-            _validate_member_name(member.name)
-            name = _strip_prefix(member.name, strip)
-            if not name:
-                continue
-            if member.issym() or member.islnk():
-                raise ShimSourceError(f"archive contains a link member: {member.name}")
-            if not (member.isdir() or member.isfile()):
-                raise ShimSourceError(
-                    f"archive contains a special member: {member.name}"
-                )
-            target = dest / name
-            if member.isdir():
-                target.mkdir(parents=True, exist_ok=True)
-                continue
-            total += member.size
-            if total > MAX_EXTRACTED_BYTES:
-                raise ShimSourceError("extracted archive exceeds size cap")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            src = tar.extractfile(member)
-            if src is None:
-                continue
-            with src, open(target, "wb") as out:
-                shutil.copyfileobj(src, out, 64 * 1024)
-
-
-def _extract_zip(data: bytes, dest: Path, *, declared_path: str = "") -> None:
-    """Safely extract a zip archive into *dest*."""
-    try:
-        zf = zipfile.ZipFile(io.BytesIO(data))
-    except zipfile.BadZipFile as exc:
-        raise ShimSourceError(f"not a valid zip archive: {exc}") from exc
-    with zf:
-        infos = zf.infolist()
-        if len(infos) > MAX_ARCHIVE_MEMBERS:
-            raise ShimSourceError("archive has too many members")
-        strip = _common_root_prefix([i.filename for i in infos], declared_path)
-        total = 0
-        for info in infos:
-            _validate_member_name(info.filename)
-            name = _strip_prefix(info.filename, strip)
-            if not name:
-                continue
-            mode = info.external_attr >> 16
-            if mode and (mode & 0o170000) == 0o120000:
-                raise ShimSourceError(
-                    f"archive contains a symlink member: {info.filename}"
-                )
-            target = dest / name
-            if info.is_dir():
-                target.mkdir(parents=True, exist_ok=True)
-                continue
-            total += info.file_size
-            if total > MAX_EXTRACTED_BYTES:
-                raise ShimSourceError("extracted archive exceeds size cap")
-            target.parent.mkdir(parents=True, exist_ok=True)
-            with zf.open(info) as src, open(target, "wb") as out:
-                shutil.copyfileobj(src, out, 64 * 1024)
-
-
-def _common_root_prefix(names: Sequence[str], declared_path: str = "") -> str:
-    """Return the single top-level directory all *names* share, else ``""``.
-
-    GitHub/GitLab archives wrap everything in one ``<repo>-<ref>/`` directory
-    whose name varies by ref; stripping it makes a declared ``path`` subpath
-    stable across refs.
-
-    A declared *declared_path* wins over the guess: if it already names the
-    shared root (or a path underneath it), nothing is stripped, otherwise the
-    heuristic would remove the very directory the caller pointed at.
-    """
-    roots = {n.replace("\\", "/").split("/", 1)[0] for n in names if n}
-    if len(roots) != 1:
-        return ""
-    root = next(iter(roots))
-    if root in ("", ".", ".."):
-        return ""
-    declared = declared_path.replace("\\", "/").strip("/")
-    if declared == root or declared.startswith(root + "/"):
-        return ""
-    return root
-
-
-def _strip_prefix(name: str, prefix: str) -> str:
-    """Drop *prefix* and the following slash from *name* (no-op if absent)."""
-    if not prefix:
-        return name
-    if name == prefix:
-        return ""
-    if name.startswith(prefix + "/"):
-        return name[len(prefix) + 1 :]
-    return name
-
-
-def _validate_member_name(name: str) -> None:
-    """Reject archive member names that could escape the extraction root.
-
-    Backslashes are normalised first, so a Windows-style ``..\\`` traversal or
-    a drive-prefixed path cannot slip past the checks (and cannot be laundered
-    by the common-root strip, which runs after validation).
-    """
-    if "\x00" in name:
-        raise ShimSourceError("archive member name contains NUL")
-    normalized = name.replace("\\", "/")
-    parts = PurePosixPath(normalized).parts
-    if normalized.startswith("/") or (parts and _DRIVE_RE.match(parts[0])):
-        raise ShimSourceError(f"archive contains an absolute path: {name}")
-    if ".." in parts:
-        raise ShimSourceError(f"archive contains a traversal path: {name}")
-
-
-# ---------------------------------------------------------------------------
-# Cache helpers
-# ---------------------------------------------------------------------------
-
-
-def _cache_key(name: str, url: str, ref: str | None) -> str:
-    """Return a stable, filesystem-safe cache directory name."""
-    digest = hashlib.sha256(f"{url}@{ref or 'HEAD'}".encode()).hexdigest()[:12]
-    slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", name).strip("-.") or "source"
-    return f"{slug}-{digest}"
-
-
-def _read_stamp(path: Path) -> dict[str, Any]:
-    """Read a cache stamp, returning ``{}`` when missing or unreadable."""
-    try:
-        with open(path, encoding="utf-8") as f:
-            data = json.load(f)
-    except (OSError, ValueError):
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _write_stamp(path: Path, stamp: Mapping[str, Any]) -> None:
-    """Write a cache stamp atomically."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + f".tmp-{uuid.uuid4().hex}")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(dict(stamp), f, indent=2, sort_keys=True)
-    os.replace(tmp, path)
-
-
-def _atomic_replace(src: Path, dest: Path) -> None:
-    """Replace directory *dest* with *src* as atomically as the OS allows."""
-    if dest.exists():
-        old = dest.with_name(f"{dest.name}.old-{uuid.uuid4().hex}")
-        os.replace(dest, old)
-        try:
-            os.replace(src, dest)
-        finally:
-            shutil.rmtree(old, ignore_errors=True)
-    else:
-        os.replace(src, dest)
-
-
-@contextlib.contextmanager
-def _file_lock(path: Path):
-    """Best-effort cross-process advisory lock (POSIX ``flock``)."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle = open(path, "a+")
-    try:
-        try:
-            import fcntl
-
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        except (ImportError, OSError):
-            pass
-        yield
-    finally:
-        try:
-            import fcntl
-
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-        except (ImportError, OSError):
-            pass
-        handle.close()
-
-
 # ---------------------------------------------------------------------------
 # URL / HTTP helpers
 # ---------------------------------------------------------------------------
@@ -1997,54 +823,6 @@ def check_remote_updates(
         entry["update"] = head != pin
         out.append(entry)
     return out
-
-
-def _parse_github(url: str) -> tuple[str, str] | None:
-    """Return ``(owner, repo)`` for a GitHub repository URL, else ``None``."""
-    m = _GITHUB_RE.match(url)
-    if m is None:
-        return None
-    return m.group("owner"), m.group("repo")
-
-
-def _derive_name(url: str, github: tuple[str, str] | None) -> str:
-    """Derive a source name from a URL when none is given."""
-    if github is not None:
-        return github[1]
-    tail = url.rstrip("/").split("/")[-1]
-    return tail or "source"
-
-
-def _validate_url_scheme(url: str) -> None:
-    """Require HTTPS, except loopback HTTP (local test servers)."""
-    scheme = url.split("://", 1)[0].lower() if "://" in url else ""
-    if scheme == "https":
-        return
-    if scheme == "http":
-        host = url.split("://", 1)[1].split("/", 1)[0].split("@")[-1]
-        hostname = host.split(":", 1)[0]
-        if hostname in ("127.0.0.1", "localhost", "::1", "[::1]"):
-            return
-        raise ShimSourceError(
-            "remote shim sources must use https:// (loopback may use http)"
-        )
-    raise ShimSourceError(f"unsupported URL scheme in {url!r}")
-
-
-def _auth_headers(token_env: str | None) -> dict[str, str]:
-    """Build request headers, adding a bearer token when configured."""
-    headers = {"User-Agent": "llm-rosetta-shim-loader", "Accept": "*/*"}
-    if token_env:
-        headers.update(_bearer_headers(token_env))
-    return headers
-
-
-def _bearer_headers(token_env: str) -> dict[str, str]:
-    """The ``Authorization`` header for *token_env*, or an error when it is unset."""
-    token = os.environ.get(token_env)
-    if not token:
-        raise ShimSourceError(f"token_env {token_env!r} is not set in the environment")
-    return {"Authorization": f"Bearer {token}"}
 
 
 def _default_http_get(
