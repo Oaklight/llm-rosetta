@@ -88,7 +88,9 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
-        "max_count": 95,
+        # 99 with the batch job envelope (epic #1509): five record types, the
+        # state and mode literals, and the counts mapping.
+        "max_count": 100,
     },
     "llm_rosetta.types": {
         "items": None,

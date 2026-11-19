@@ -358,6 +358,54 @@ class QuotaDeclaration:
 
 
 @dataclass(frozen=True)
+class BatchDeclaration:
+    """A shim's declaration of its batch surface.
+
+    Batch capability is a provider fact and cannot be inferred from the wire
+    family: an OpenAI-shaped vendor is not automatically a batch vendor.  A
+    shim that declares nothing has none — an undeclared lane answers
+    ``unsupported`` rather than being downgraded to a gateway-run emulation.
+
+    Attributes:
+        dialect: Codec id from :data:`llm_rosetta.formats.batch.BY_DIALECT`
+            (``openai_file``, ``anthropic_inline``, ``gemini_inline``,
+            ``gemini_file``), or ``"emulated"`` for an upstream with no batch
+            API that the gateway may run itself.  It must be one this shim's
+            own ``(model_type, format)`` batch record offers, so a lane cannot
+            name another format's container by mistake.
+        supports_files: Whether the upstream's Files API is usable for uploads.
+            OpenAI's batch surface is built on it; Anthropic's inline create is
+            not.
+        create_path: Path override for job creation, when the vendor serves it
+            somewhere other than the dialect's documented path.  The same
+            precedence applies to the three overrides below: the shim's value
+            wins over the dialect's.
+        retrieve_path: Path override for reading a job's state.
+        cancel_path: Path override for cancelling a job.
+        results_path: Path override for fetching results.
+    """
+
+    dialect: str
+    supports_files: bool = False
+    create_path: str | None = None
+    retrieve_path: str | None = None
+    cancel_path: str | None = None
+    results_path: str | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return the fields as a plain dict, omitting the unset paths."""
+        out: dict[str, Any] = {
+            "dialect": self.dialect,
+            "supports_files": self.supports_files,
+        }
+        for key in ("create_path", "retrieve_path", "cancel_path", "results_path"):
+            value = getattr(self, key)
+            if value:
+                out[key] = value
+        return out
+
+
+@dataclass(frozen=True)
 class ToolsConfig:
     """Tool handling behavior for this provider."""
 
@@ -537,6 +585,8 @@ class ProviderShim:
             third-party disclosure.
         connection: Upstream connection config (URL, API key env,
             models endpoint, model ID field).
+        batch: This lane's batch surface (codec id, Files API support, path
+            overrides).  ``None`` means none.  See :class:`BatchDeclaration`.
         auth: Credential exchange the shim ships in ``auth.py``, for a vendor
             whose credential is not one argv away (an OAuth profile).  See
             :class:`~llm_rosetta.shims.auth_exchange.AuthExchange`.
@@ -607,6 +657,15 @@ class ProviderShim:
     decoder and the error wording.  The gateway only holds the contract and
     the runtime state; it resolves the probe named by ``quota.probe`` against
     this tuple.
+    """
+    batch: BatchDeclaration | None = None
+    """This lane's batch surface, when it has one.
+
+    ``None`` (the default) means the lane has no batch API this repository
+    declares: a batch client asking for it answers ``unsupported``.  The
+    declaration names a codec and path overrides only; the dialect's own
+    limits, state words and item key come from the batch record in
+    :mod:`llm_rosetta.formats.batch`.
     """
     auth: Any | None = None
     """Credential exchange the shim ships in ``auth.py``.
@@ -737,6 +796,7 @@ class ProviderShim:
             "connection": ConnectionConfig(),
             "quota": None,
             "quota_probes": (),
+            "batch": None,
             "auth": None,
             "manifest": None,
             "tools": ToolsConfig(),
