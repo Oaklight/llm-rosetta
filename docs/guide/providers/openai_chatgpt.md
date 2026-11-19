@@ -130,11 +130,14 @@ llm-rosetta-gateway credential chatgpt --out record.json
 成条目。因此 shim 执行 IR 层提升变换（`hoist_late_system_messages()`）：在别的通道上它
 只是缓存前缀的优化，在这条通道上是硬性要求。
 
-**必须流式。** 通道只返回 SSE，因此即使客户端只要一次完整响应，网关也会强制上游
-`stream: true`。非流式客户端会在任何上游调用之前收到 `400` 并指明需要 `stream=true`：
-把 Responses 流重新组装成一个 JSON 响应体尚未实现
-（[#1061](https://github.com/Oaklight/llm-rosetta/issues/1061)）。多数 agent 客户端都是
-流式的，因此这只影响简单的调用方。
+**上游必须流式，客户端不必。** 通道只返回 SSE，因此即使客户端只要一次完整响应，
+网关也会强制上游 `stream: true`。非流式客户端照常得到服务：网关消费事件流，把它折叠回
+这些事件所描述的那一个响应，再用客户端自己的方言写出。任何源格式都支持 —— Messages、
+Responses、Chat Completions 客户端都能拿到一个完整响应体。
+
+折叠出的响应拿不到两样东西，因为流事件里本来就没有它们：逐条的 message id 与 `status`，
+以及文本部件的 `annotations`。内容、工具调用、推理和 `stop_reason` 都来自流本身，所以
+折叠结果与流式回复一致，而不是 Platform API 会返回的那个 JSON 响应体。
 
 ## 限制
 
@@ -144,7 +147,8 @@ llm-rosetta-gateway credential chatgpt --out record.json
 - **无法控制输出长度** —— 被去掉的 `max_output_tokens` 网关无法代为执行。
 - **套餐窗口**：Plus 的 5 小时窗口在多个应用间共享，每个应用另有周上限。上限在你的
   ChatGPT 设置里、不在 API 后面，所以管理台只能给出链接。
-- **非流式客户端**会被拒绝（见上）。
+- **折叠出的非流式回复是流的那一份，不是响应体的那一份** —— 条目 id、`status` 与
+  `annotations` 没有可搭载的事件（见上）。
 
 ## 错误
 

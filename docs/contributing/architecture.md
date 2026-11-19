@@ -213,6 +213,25 @@ stream writer 并排，折叠去掉了这份重复。
 part 类型。跨腿 harness（`tests/converters/test_leg_agreement.py`）对每个 dialect 用 IR
 的词汇比较两条腿——这正是折叠本来要达到的不变量。
 
+### 另一个方向：把流折叠回响应体
+
+`ir.primitives.fold_response_events()` 是这个原语的逆运算。它不是 writer；它是网关在
+上游拒绝 `stream: false`（shim 的 `connection.stream_required`）时需要的东西：请求必须以
+流式发出，而只要一次完整响应的客户端必须拿到一个。流处理器本来就把每个 chunk 转成 IR
+事件，所以折叠这些事件就是答案，`ConversionPipeline.convert_stream_events()` 再把结果
+交给普通的响应腿——自定义工具还原、工具改名还原、源 shim 的变换与源 writer 都是 JSON
+路径上同一份代码，两者不可能给出不同答案。
+
+往返就是那条性质：对跨腿表格里的每个 case，`fold(expand(turn))` 都等于 `turn`（用
+harness 自己的 turn view 比较）。它拿不回来的是事件本身没有的东西——即上表逐个 dialect
+列出的那些事实——所以折叠结果与流式回复一致，而不是厂商 JSON API 会返回的 body。
+
+所有 dialect 共用同一套拼装。Chat Completions 这条桥最早出现，它重新合并该方言自己的
+chunk（`proxy/stream_merge.py`）；与折叠实测比较，差异只有 writer 本来就会补上的字段
+（`refusal: null`、`annotations: []`、`logprobs: null`）以及重新序列化后的参数空格，因此
+删掉它，而不是留作回答同一个问题的第二种做法。面对只返回流式的上游的 Chat 客户端，现在
+拿到的就是 Chat 上游本来会返回的那份响应体。
+
 ## Round-Trip 兼容性
 
 所有转换路径必须保持 **round-trip 兼容性**。每个变更都必须针对以下场景进行测试：
