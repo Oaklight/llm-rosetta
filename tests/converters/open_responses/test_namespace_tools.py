@@ -2,6 +2,8 @@
 
 from typing import Any
 
+import pytest
+
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.llm.open_responses.converter import (
     OpenAIResponsesConverter,
@@ -767,3 +769,67 @@ class TestContainerRoundTrip:
         assert len(calls) == 1
         assert calls[0]["name"] == "exec"
         assert calls[0]["namespace"] == "tasks"
+
+
+class TestIllegalContainerName:
+    """A container name the target's rule rejects is reported, not repaired.
+
+    The container name is the client's own identity for the tools inside it.
+    Repairing it would need a wire-group → client-group translation so the
+    response leg could hand the client back the namespace it wrote, and no
+    such translation exists; a repaired container would therefore return under
+    a namespace the client never wrote.  So the writer leaves the name alone
+    and reports what that costs: the upstream refuses the whole request, and
+    the report says which container and which rule, instead of leaving the
+    client with nothing but the upstream's own 400.
+
+    Pinned from both sides — an illegal name reports, a legal one stays quiet —
+    so returning to "unrepaired *and* unreported" reds a test.
+    """
+
+    @staticmethod
+    def _convert(name: str, target: str = "openai--open_responses"):
+        pipe = ConversionPipeline("open_responses", target)
+        body = pipe.convert_request(
+            {
+                "model": "test-model",
+                "tool_choice": "auto",
+                "tools": [
+                    _func_tool("plain", "A tool declared on its own"),
+                    _ns_tool(name, children=[_func_tool("wait", "Wait for it")]),
+                ],
+                "input": [
+                    {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text": "hi"}],
+                    }
+                ],
+            }
+        )
+        return body, [w for w in pipe.warnings if "not a legal group name" in w]
+
+    @pytest.mark.parametrize("name", ["my.tools", "ta sks"])
+    def test_an_illegal_container_name_is_reported(self, name: str):
+        body, reports = self._convert(name)
+        container = next(t for t in body["tools"] if t.get("type") == "namespace")
+        assert container["name"] == name, (
+            "the name is written as the client gave it; the report, not a "
+            "rename, is what this writer owes the caller"
+        )
+        assert len(reports) == 1, reports
+        assert name in reports[0]
+        assert "reject" in reports[0]
+
+    def test_a_legal_container_name_stays_quiet(self):
+        _, reports = self._convert("tasks")
+        assert reports == []
+
+    @pytest.mark.parametrize("target", ["open_responses", "chat_completions"])
+    def test_a_flattening_target_has_no_container_to_report(self, target: str):
+        body, reports = self._convert("my.tools", target)
+        assert "namespace" not in [t.get("type") for t in body["tools"]]
+        assert reports == [], (
+            "the flat path legalises the folded child name, so there is no "
+            "container left for the upstream to refuse"
+        )
