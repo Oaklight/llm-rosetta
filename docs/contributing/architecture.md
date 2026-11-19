@@ -269,7 +269,9 @@ Three facts had to be added before that held outside the single-choice cases:
   writer already synthesised that part from the same metadata, for a source
   that recorded no block (#1314), so it now skips the synthesis when the turn
   wrote the part itself — the two claims otherwise put the words on the wire
-  twice.
+  twice.  The writer records that on the words it wrote, not on the block it
+  opened: a refusal block that stays empty writes nothing, and treating it as
+  written answered the turn with no refusal at all.
 - A response-level echo field is the exception the caller closes, below.
 
 One class of those facts is recoverable by the caller, and the bridge does
