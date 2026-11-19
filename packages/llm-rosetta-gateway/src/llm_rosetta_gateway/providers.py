@@ -543,6 +543,59 @@ def _resolve_lane_transport(
     return lane_transport
 
 
+def _resolve_acp_limits(cfg: dict[str, Any], provider_key: str) -> dict[str, Any]:
+    """Read one provider's agent-process and session limits.
+
+    The ``acp`` block is the operator's, not the shim's: how many processes to
+    run is a fact about this deployment's memory, and how long to keep a
+    session is a fact about how its clients work.  Every key is optional, and
+    an absent one leaves the transport's default in place.
+
+    Args:
+        cfg: The provider's own config block.
+        provider_key: The config key, used in error messages.
+
+    Returns:
+        The keyword arguments :class:`ProviderInfo` takes for these limits.
+
+    Raises:
+        ValueError: A value is present but is not a positive number.
+    """
+    raw = cfg.get("acp")
+    block: dict[str, Any] = raw if isinstance(raw, dict) else {}
+    limits: dict[str, Any] = {}
+    processes = block.get("processes")
+    if processes is not None:
+        if not isinstance(processes, int) or isinstance(processes, bool):
+            raise ValueError(
+                f"Provider '{provider_key}': acp.processes must be an integer, "
+                f"got {processes!r}"
+            )
+        if processes < 1:
+            raise ValueError(
+                f"Provider '{provider_key}': acp.processes must be >= 1, "
+                f"got {processes}"
+            )
+        limits["acp_processes"] = processes
+    max_sessions = block.get("max_sessions")
+    if max_sessions is not None:
+        if not isinstance(max_sessions, int) or isinstance(max_sessions, bool):
+            raise ValueError(
+                f"Provider '{provider_key}': acp.max_sessions must be an "
+                f"integer, got {max_sessions!r}"
+            )
+        limits["acp_max_sessions"] = max_sessions
+    ttl = block.get("session_ttl")
+    if ttl is not None:
+        if not isinstance(ttl, (int, float)) or isinstance(ttl, bool):
+            raise ValueError(
+                f"Provider '{provider_key}': acp.session_ttl must be a number "
+                f"of seconds, got {ttl!r}"
+            )
+        limits["acp_session_ttl"] = float(ttl)
+    return limits
+
+
 def _bind_auth_exchange(
     provider_key: str,
     cfg: dict[str, Any],
@@ -737,6 +790,7 @@ def build_provider_info(
     # declaration, and a name with no transport behind it is refused here —
     # beside the provider it belongs to — rather than on its first request.
     lane_transport = _resolve_lane_transport(cfg, shim, provider_key)
+    acp_limits = _resolve_acp_limits(cfg, provider_key)
 
     quota_raw = cfg.get("quota")
     quota_cfg: dict[str, Any] = quota_raw if isinstance(quota_raw, dict) else {}
@@ -822,6 +876,7 @@ def build_provider_info(
             if isinstance(cfg.get("acp_argv"), (list, tuple))
             else (shim.connection.acp_argv if shim is not None else None)
         ),
+        **acp_limits,
         quota_probe_id=quota_probe,
         quota_url=quota_url,
         quota_in_band=quota_in_band,

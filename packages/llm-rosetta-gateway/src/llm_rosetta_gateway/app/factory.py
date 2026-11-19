@@ -67,6 +67,7 @@ from .tasks import (
     _flush_now,
     _periodic_cleanup,
     _periodic_flush,
+    _periodic_sweep,
     _periodic_token_rotation,
 )
 
@@ -617,6 +618,7 @@ async def run_gateway(
     flush_task = asyncio.create_task(_periodic_flush(app))
     cleanup_task = asyncio.create_task(_periodic_cleanup(app))
     rotation_task = asyncio.create_task(_periodic_token_rotation(app))
+    sweep_task = asyncio.create_task(_periodic_sweep(app))
 
     persistence = getattr(app, "persistence", None)
     if persistence is not None:
@@ -685,12 +687,13 @@ async def run_gateway(
         flush_task.cancel()
         cleanup_task.cancel()
         rotation_task.cancel()
+        sweep_task.cancel()
         for task in all_refresh:
             try:
                 await task
             except asyncio.CancelledError:
                 pass
-        for bg in (flush_task, cleanup_task, rotation_task):
+        for bg in (flush_task, cleanup_task, rotation_task, sweep_task):
             try:
                 await bg
             except asyncio.CancelledError:
