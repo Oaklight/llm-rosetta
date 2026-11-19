@@ -152,11 +152,19 @@ class InBandSignal:
         cooldown_seconds: How long to demote the credential for.  ``None``
             means "until the probe's next reading says otherwise".
         reason: Short description for logs and the admin surface.
+        permanent: The vendor said the account cannot pay, not that it is out
+            of pace.  A rate limit refills on a timer; a balance does not, so
+            such a refusal must not enter the rate-limit ladder at all.  The
+            gateway parks the provider until a reading says otherwise, an
+            operator action, or a restart — all of which are in memory, by
+            decision: whether a refusal is permanent is a judgement made from
+            one vendor's wording, and it must not outlive the evidence.
     """
 
     window: str | None = None
     cooldown_seconds: int | None = None
     reason: str = "upstream reported the allowance as spent"
+    permanent: bool = False
 
 
 @dataclass(frozen=True, slots=True)

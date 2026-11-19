@@ -3,6 +3,12 @@ model_type: llm
 format: open_responses
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg
 
+# The balance is read from the vendor's own endpoint when the lane points at
+# it; every DeepSeek lane names the probe so a 402 can be classified in band
+# (a reseller lane has no balance URL, and is read in band only).
+quota:
+  probe: deepseek
+
 reasoning:
   thinking_modes:
     enabled: enabled
