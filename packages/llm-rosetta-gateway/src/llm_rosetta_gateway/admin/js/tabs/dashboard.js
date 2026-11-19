@@ -697,6 +697,11 @@ async function renderDumps() {
         if (errPreview.length > 60) errPreview = errPreview.slice(0, 60) + '…';
       }
       const rawDid = e.dump_id||e.id||'';
+      // `did` is escaped once and goes only to data-id.  When this row moves
+      // into html``, put the RAW id (`rawDid`) in the markup and drop `did`:
+      // html`` escapes it again, so `did` would reach the page as `&amp;amp;`
+      // and stop matching the raw `_selectedDumpIds` key (the Keys tab does
+      // the same with `k.id`).
       const did = esc(rawDid);
       const chk = S._selectedDumpIds && S._selectedDumpIds.has(rawDid) ? ' checked' : '';
       const dumpHlStyle = S._highlightDumpId === rawDid ? ' style="background:color-mix(in srgb, var(--accent) 20%, transparent)"' : '';

@@ -1278,7 +1278,12 @@ export function setStrictI18n(value) {
  *  Off in production.  On when `window.__ROSETTA_STRICT_I18N__` is truthy or
  *  the page address carries `?strictI18n=1`, so a missing key fails loudly in
  *  a test run or a debugging session instead of showing a guessed English
- *  label. */
+ *  label.
+ *
+ *  The throw in `t()` sits before the convention fallback, so strict mode also
+ *  rejects keys that would have been derived (`label.*`, `test.*`, the
+ *  `Endpoint` / `Path` suffixes): `t('label.' + newType)` fails instead of
+ *  rendering a guessed label.  This is intended. */
 export function strictI18nEnabled() {
   if (_strictI18n !== null) return _strictI18n;
   if (globalThis.__ROSETTA_STRICT_I18N__) return true;
