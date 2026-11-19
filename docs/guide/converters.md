@@ -298,7 +298,7 @@ name_map.register("filesystem__read_file", "read_file")
 original = name_map.reverse("read_file")  # → "filesystem__read_file"
 ```
 
-## 警告与错误处理
+## 警告与错误处理 {#warnings-and-error-handling}
 
 产出结果的转换方法会返回警告（`list[str]`）——有的作为返回元组的第二个元素（`request_to_provider`、`messages_to_provider`），有的通过 `ConversionContext.warnings` 获取。
 

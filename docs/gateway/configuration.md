@@ -420,7 +420,7 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 
 结合 SSH `LocalForward`，可实现端到端的访问控制。
 
-## 请求体大小
+## 请求体大小 {#request-body-size}
 
 入站服务器默认接受最大 **50 MB** 的请求体。要转发很长的工具密集对话，或把一份文档
 放进视觉请求的部署，可以调高上限：

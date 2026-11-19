@@ -174,7 +174,7 @@ weight × (0.25 + 0.75 × headroom)
 [OpenCode Zen 公共通道](providers/opencode.md#public-free-lane)没有凭据，因此没有按 key
 的额度。它的 429 按下面的规则计入 provider 本身 —— 与其他通道遵循同一条规则。
 
-## 连续 429
+## 连续 429 {#continuous-429s}
 
 一次 429 说明的是一次请求；连续多次说明的是这条通道，网关对两者都会处理 —— 与这条通道
 如何声明额度无关，包括没有任何探针能读取的提供方：
