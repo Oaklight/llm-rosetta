@@ -15,7 +15,7 @@
 
 - [ ] `make lint` and `make test` pass. Result:
 - [ ] `ty` clean (`python scripts/dev/run_ty.py`; new diagnostics: 0):
-- [ ] Pure move only: move-check summary (tool: `check_move.py`, added by a sibling PR):
+- [ ] Pure move only: move-check summary (`python scripts/dev/check_move.py origin/master --markdown`):
 - [ ] Overlap check done: `python scripts/dev/pr_overlap.py` shows no open PR on the same files (the tool leaves out this PR itself), or the merge order is stated here:
 - [ ] CI is fully green before review is requested
 
