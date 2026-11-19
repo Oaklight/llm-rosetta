@@ -18,6 +18,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
+from llm_rosetta.conversion_warnings import WarningSink
+
 from .cache_breakpoints import inject_cache_breakpoints
 from .call_unwind import unwind_parallel_tool_calls_ir
 from .image_limit import truncate_images as _truncate_impl
@@ -43,12 +45,17 @@ class TransformContext:
         request_id: Request identifier for logging.
         hoist_system_messages: Whether to hoist late system messages
             into user-role envelopes for cache prefix stability.
+        warnings: The conversion's sink, when a conversion is driving the
+            transforms.  A transform that rewrites the request reports the
+            change through it; ``None`` falls back to the conversion in
+            progress, then to the log.
     """
 
     model: str = ""
     model_capabilities: list[str] | None = None
     request_id: str = "-"
     hoist_system_messages: bool = True
+    warnings: WarningSink | None = None
 
 
 IRTransform = Callable[[dict[str, Any], TransformContext], dict[str, Any]]
@@ -132,7 +139,7 @@ def unwind_parallel_tool_calls(pattern: str | None = None) -> IRTransform:
         if compiled is not None:
             if not context.model or not compiled.search(context.model):
                 return body
-        return unwind_parallel_tool_calls_ir(body)
+        return unwind_parallel_tool_calls_ir(body, warnings=context.warnings)
 
     label = "unwind_parallel_tool_calls("
     if pattern:

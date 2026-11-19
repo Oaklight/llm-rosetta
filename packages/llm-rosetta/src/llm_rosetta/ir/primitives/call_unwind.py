@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from llm_rosetta.conversion_warnings import DOWNGRADED, report_drop
+from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from llm_rosetta.types.ir import (
     is_message,
     is_tool_call_part,
@@ -41,6 +41,32 @@ def _is_parallel_tool_call_message(message: dict[str, Any]) -> bool:
     content = message.get("content", [])
     tool_calls = [p for p in content if is_tool_call_part(p)]
     return len(tool_calls) > 1
+
+
+def _parts_after_first_call(content: list[Any]) -> list[str]:
+    """Return the types of the non-call parts that sit after the first call.
+
+    The unwind puts every non-call part ahead of the first tool call, so
+    these are the parts whose position it changes.  Their types come back in
+    first-appearance order — the report names them, and the count is how
+    many parts moved.
+
+    Args:
+        content: The assistant turn's content parts, in their original order.
+
+    Returns:
+        One entry per moved part; empty when every non-call part already
+        precedes the calls.
+    """
+    seen_call = False
+    moved: list[str] = []
+    for part in content:
+        if is_tool_call_part(part):
+            seen_call = True
+        elif seen_call:
+            kind = part.get("type") if isinstance(part, dict) else None
+            moved.append(str(kind) if kind else "unknown")
+    return moved
 
 
 def _collect_tool_result_messages(
@@ -89,6 +115,7 @@ def _find_matching_result(
     result_id_map: dict[str, dict[str, Any]],
     tool_messages: list[dict[str, Any]],
     index: int,
+    warnings: Any = None,
 ) -> dict[str, Any] | None:
     """Find the matching tool result message for a given tool_call_id.
 
@@ -99,6 +126,7 @@ def _find_matching_result(
         result_id_map: Mapping of tool_call_id → tool result message.
         tool_messages: Ordered list of tool messages (positional fallback).
         index: Position index for fallback matching.
+        warnings: The conversion's sink, when the caller has one.
 
     Returns:
         The matching tool result message, or None.
@@ -119,9 +147,10 @@ def _find_matching_result(
         )
         return tool_messages[index]
 
-    report_drop(
+    report_loss(
         f"Unwind: no matching result for tool_call_id={tool_call_id} (index {index})",
         subject=tool_call_id,
+        warnings=warnings,
     )
     return None
 
@@ -135,6 +164,7 @@ def _create_sequential_pairs(
     tool_call_parts: list[Any],
     tool_messages: list[dict[str, Any]],
     non_tool_call_parts: list[Any],
+    warnings: Any = None,
 ) -> list[dict[str, Any]]:
     """Convert parallel tool calls into sequential call-result pairs.
 
@@ -143,6 +173,7 @@ def _create_sequential_pairs(
         tool_messages: List of corresponding tool result messages.
         non_tool_call_parts: Non-tool-call content parts (text, reasoning)
             from the original assistant message.
+        warnings: The conversion's sink, when the caller has one.
 
     Returns:
         List of alternating assistant and tool messages.
@@ -152,7 +183,9 @@ def _create_sequential_pairs(
 
     for idx, tc_part in enumerate(tool_call_parts):
         tc_id = tc_part.get("tool_call_id", "")
-        result_msg = _find_matching_result(tc_id, result_map, tool_messages, idx)
+        result_msg = _find_matching_result(
+            tc_id, result_map, tool_messages, idx, warnings
+        )
         if result_msg is None:
             continue
 
@@ -177,6 +210,8 @@ def _create_sequential_pairs(
 
 def unwind_parallel_tool_calls_ir(
     ir_request: dict[str, Any],
+    *,
+    warnings: Any = None,
 ) -> dict[str, Any]:
     """Unwind parallel tool calls into sequential call-result pairs.
 
@@ -192,11 +227,19 @@ def unwind_parallel_tool_calls_ir(
     When tool call count does not match tool result count, the message
     group is left unchanged (safety).
 
+    A turn whose non-call parts (text, reasoning) sit after its first call
+    has those parts moved ahead of the first pair — the split cannot keep
+    their position.  That move is reported as a downgrade: the parts are
+    kept, their place in the turn is not.  A turn whose non-call parts
+    already precede every call keeps its order and is not reported.
+
     The original request is NOT modified; a new dict is returned only
     when changes are needed.
 
     Args:
         ir_request: IR request dict with ``messages`` key.
+        warnings: The conversion's sink, when the caller has one.  ``None``
+            falls back to the conversion in progress, then to the log.
 
     Returns:
         The original or a new IR request with unwound messages.
@@ -222,17 +265,34 @@ def unwind_parallel_tool_calls_ir(
             tool_messages, next_index = _collect_tool_result_messages(messages, i + 1)
 
             if len(tool_messages) != n_calls:
-                report_drop(
+                report_loss(
                     f"Unwind: mismatch — {n_calls} tool calls but "
                     f"{len(tool_messages)} tool results; skipping reorder",
                     code=DOWNGRADED,
+                    warnings=warnings,
                 )
                 transformed.append(msg)
                 i += 1
                 continue
 
+            # Name the parts the split moves.  Only a part that sat after the
+            # first call changes position; the report is what keeps that
+            # reorder from being silent.
+            moved = _parts_after_first_call(content)
+            if moved:
+                kinds = ", ".join(dict.fromkeys(moved))
+                report_loss(
+                    f"Unwind: moved {len(moved)} non-tool-call part(s) "
+                    f"({kinds}) of an assistant turn with {n_calls} tool "
+                    "calls ahead of the first call; their position relative "
+                    "to the calls is not preserved",
+                    code=DOWNGRADED,
+                    subject="content_order",
+                    warnings=warnings,
+                )
+
             pairs = _create_sequential_pairs(
-                tool_call_parts, tool_messages, non_tool_call_parts
+                tool_call_parts, tool_messages, non_tool_call_parts, warnings
             )
             transformed.extend(pairs)
             changed = True

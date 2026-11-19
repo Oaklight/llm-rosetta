@@ -15,6 +15,7 @@ from llm_rosetta.capabilities import (
     strip_reasoning_for_non_reasoning,
 )
 from llm_rosetta.capabilities.enforcement import _apply_config_reasoning_override
+from llm_rosetta.conversion_warnings import DOWNGRADED, WarningSink
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.pipeline import apply_ir_transforms
 from llm_rosetta.shims.provider_shim import (
@@ -329,6 +330,64 @@ class TestApplyIrTransforms:
         result = apply_ir_transforms(ir, shim)
         # After unwind: user + (assistant+tool) + (assistant+tool) = 5
         assert len(result["messages"]) == 5
+
+    def test_unwind_reports_a_moved_part_into_the_given_sink(self):
+        """The shim's unwind reports the reorder through ``warnings`` (#1492)."""
+        ir = {
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "hi"}]},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_call",
+                            "tool_call_id": "call_1",
+                            "tool_name": "fn_a",
+                            "tool_input": {},
+                            "tool_type": "function",
+                        },
+                        {"type": "text", "text": "between the calls"},
+                        {
+                            "type": "tool_call",
+                            "tool_call_id": "call_2",
+                            "tool_name": "fn_b",
+                            "tool_input": {},
+                            "tool_type": "function",
+                        },
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_call_id": "call_1",
+                            "result": "a",
+                        },
+                    ],
+                },
+                {
+                    "role": "tool",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_call_id": "call_2",
+                            "result": "b",
+                        },
+                    ],
+                },
+            ],
+            "tools": [],
+        }
+        shim = _make_shim(name="test-shim-unwind", ir_transforms=(unwind_transform(),))
+        sink = WarningSink()
+        result = apply_ir_transforms(ir, shim, warnings=sink)
+
+        assert len(result["messages"]) == 5
+        assert len(sink) == 1
+        assert sink[0].code == DOWNGRADED
+        assert sink[0].subject == "content_order"
+        assert "moved 1 non-tool-call part(s) (text)" in sink[0]
 
     def test_unwind_pattern_no_match(self):
         """Unwind should NOT fire when model doesn't match pattern."""
