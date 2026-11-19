@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Any, cast
 
 import pytest
@@ -55,6 +56,35 @@ def _clean_quota_state():
     QUOTA_STATE.clear()
     yield
     QUOTA_STATE.clear()
+
+
+class _CollectingHandler(logging.Handler):
+    """Keeps the gateway's own log records, whatever the run imported first."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+@pytest.fixture
+def gateway_warnings():
+    """Records the gateway logger emits during the test.
+
+    That logger is created with ``propagate = False``, so caplog — which
+    listens on the root logger — does not see its records once
+    ``llm_rosetta_gateway.logging`` has been imported.  A handler on the
+    logger itself is one path under every pytest version.
+    """
+    logger = logging.getLogger("llm-rosetta-gateway")
+    handler = _CollectingHandler()
+    logger.addHandler(handler)
+    try:
+        yield handler.records
+    finally:
+        logger.removeHandler(handler)
 
 
 class _Probe:
@@ -101,6 +131,16 @@ def _ok() -> UpstreamResponse:
 
 def _refused() -> UpstreamResponse:
     return UpstreamResponse(status_code=429, body=None, raw_content=_RATE_LIMITED)
+
+
+def _payment_required() -> UpstreamResponse:
+    """A 402 no probe can explain: DeepSeek's "Insufficient Balance"."""
+    raw = (
+        b'{"error": {"message": "Insufficient Balance (request_id: 82e2f84e)"'
+        b', "type": "insufficient_balance_error", "param": null'
+        b', "code": "invalid_request_error"}}'
+    )
+    return UpstreamResponse(status_code=402, body=None, raw_content=raw)
 
 
 def _server_error() -> UpstreamResponse:
@@ -233,6 +273,47 @@ class TestTheFailover:
         assert response.status_code == 429
         assert transport.calls == ["https://a.test"]
         assert "failover" not in profile
+
+    def test_a_402_is_served_by_the_other_provider(self, gateway_warnings):
+        """An unpaid account (`402`) is a refusal like a spent allowance.
+
+        DeepSeek answers 402 ``Insufficient Balance`` and no quota probe can
+        classify it; the status alone has to earn the failover.  The operator
+        saw it returned to the client, which is also what a route with no
+        second lane does — both halves are pinned here.
+        """
+        config = _config(probe=False, opt_in=True)
+        transport = _Transport(_payment_required(), _ok())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 200
+        assert transport.calls == ["https://a.test", "https://b.test"]
+        assert profile["failover"]["reason"] == "upstream 402"
+        # No probe explained it, so it is the credential's state, and the
+        # provider's other lanes share that key.
+        assert profile["failover"]["scope"] == "credential"
+        assert not [r for r in gateway_warnings if "No other lane" in r.getMessage()]
+
+    def test_a_402_with_no_other_lane_says_why_it_was_returned(self, gateway_warnings):
+        """The client gets the upstream's 402 verbatim; the log says why.
+
+        A route with one lane has nowhere to go, and the refusal is the only
+        answer the operator sees.  Without this line the console shows a 402
+        and nothing about the lane that could have served it.
+        """
+        config = _config(providers=("a",), opt_in=True)
+        transport = _Transport(_payment_required())
+
+        response, profile = _run(config, transport)
+
+        assert response.status_code == 402, "the client answer is not changed"
+        assert "failover" not in profile
+        messages = [r.getMessage() for r in gateway_warnings]
+        assert any(
+            "No other lane for model m" in message and "upstream 402" in message
+            for message in messages
+        ), messages
 
     def test_one_retry_budget(self):
         """Two providers tried, then the upstream's own refusal is reported."""
