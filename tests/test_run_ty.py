@@ -81,3 +81,11 @@ def test_main_warns_when_no_environment_is_active(monkeypatch, capsys, tmp_path)
     monkeypatch.setattr(rt.subprocess, "call", lambda cmd, cwd=None: 0)
     assert rt.main([]) == 0
     assert "no virtualenv or conda env is active" in capsys.readouterr().err
+
+
+def test_exit_status_is_the_one_ty_returns(monkeypatch, tmp_path):
+    monkeypatch.setenv("VIRTUAL_ENV", "/v")
+    monkeypatch.setattr(rt, "find_repo_root", lambda start: tmp_path)
+    monkeypatch.setattr(rt, "find_ty", lambda: ["ty"])
+    monkeypatch.setattr(rt.subprocess, "call", lambda cmd, cwd=None: 3)
+    assert rt.main([]) == 3
