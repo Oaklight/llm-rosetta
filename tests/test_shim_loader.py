@@ -466,6 +466,43 @@ class TestLoadProviders:
         assert len(shims) == 1
         assert shims[0].multimodal_tool_result is True
 
+    def test_tool_groups_reads_the_flat_spelling_too(self, tmp_path: Path):
+        """A shim with no ``tools:`` mapping still opts in through the flat key.
+
+        ``tools.tool_groups`` is the documented spelling and the one every
+        shipping carrier uses, but the loader keeps a flat fallback for shims
+        written against the older shape — the same block that carries
+        ``supports_custom_tools`` and ``tool_search_mode``.  Without this test
+        the fallback's ``tool_groups`` read is unreachable code that a silent
+        ``False`` would disable for exactly the shims that depend on it.
+        """
+        d = tmp_path / "flat_config"
+        d.mkdir()
+        (d / "provider.yaml").write_text(
+            "name: flat_config\nmodel_type: llm\nformat: open_responses\n"
+            "tool_groups: true\n"
+        )
+        shims = load_providers_from_dir(tmp_path)
+        assert len(shims) == 1
+        assert shims[0].tools.tool_groups is True
+
+    def test_tool_groups_is_off_when_neither_spelling_says_it(self, tmp_path: Path):
+        """The default is off on both branches of the parser."""
+        flat = tmp_path / "flat_off"
+        flat.mkdir()
+        (flat / "provider.yaml").write_text(
+            "name: flat_off\nmodel_type: llm\nformat: open_responses\n"
+        )
+        grouped = tmp_path / "grouped_off"
+        grouped.mkdir()
+        (grouped / "provider.yaml").write_text(
+            "name: grouped_off\nmodel_type: llm\nformat: open_responses\n"
+            "tools:\n  custom_tools: true\n"
+        )
+        shims = {s.name: s for s in load_providers_from_dir(tmp_path)}
+        assert shims["flat_off"].tools.tool_groups is False
+        assert shims["grouped_off"].tools.tool_groups is False
+
     def test_multimodal_tool_result_false_from_yaml(self, tmp_path: Path):
         """multimodal_tool_result: false is parsed correctly."""
         d = tmp_path / "nomm"

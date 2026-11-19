@@ -1140,6 +1140,7 @@ class OpenResponsesConverter(BaseConverter):
             return self._get_cached_ir_tools_to_p(tools)
 
         rendered: list[Any] = []
+        reported_containers: set[str] = set()
         for entry in group_tools(tools, carries_groups=True):
             if not isinstance(entry, ToolGroup):
                 rendered.extend(self._get_cached_ir_tools_to_p([entry]))
@@ -1156,6 +1157,31 @@ class OpenResponsesConverter(BaseConverter):
             # that is the path the test covers.
             if not children:
                 continue
+            # The container name goes out as the client wrote it.  It is the
+            # client's own identity for these tools, and a rename would need a
+            # wire-group → client-group translation the response leg could undo
+            # — which does not exist, so a repaired container would come back
+            # under a namespace the client never wrote.  The target's name rule
+            # still applies to that name, though, and when it fails the whole
+            # request is refused upstream.  Report it here, where the failure
+            # can be attributed to the container before the upstream answers
+            # (#1610 review).
+            pattern = self._TOOL_NAME_PATTERN
+            if (
+                pattern is not None
+                and not pattern.fullmatch(entry.name)
+                and entry.name not in reported_containers
+            ):
+                reported_containers.add(entry.name)
+                report_loss(
+                    f"Tool container {entry.name!r} is not a legal group name "
+                    f"for this target (it must match {pattern.pattern!r}), so "
+                    "it goes upstream unchanged and the upstream is expected "
+                    "to reject the request; rename the container, or send "
+                    "these tools to a target that flattens the group instead",
+                    code=DOWNGRADED,
+                    subject=entry.name,
+                )
             # ``description`` is required on a container by OpenAI and
             # OpenRouter: probed, an absent one is `400 Missing required
             # parameter: 'tools[0].description'` and `400 Invalid Responses API

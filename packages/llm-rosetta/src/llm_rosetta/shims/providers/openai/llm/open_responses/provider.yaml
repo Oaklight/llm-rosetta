@@ -23,7 +23,10 @@ tools:
   # contain '.'".  A flat target never shows that rule, because it folds the
   # group into the child name and the naming pass legalises the result; here
   # the group travels on its own and no pass legalises it yet, so such a
-  # container is rejected rather than repaired.
+  # container is rejected rather than repaired.  The writer reports it: one
+  # ``DOWNGRADED`` warning names the container and the rule it broke, emitted
+  # before the upstream answers, so the eventual 400 is attributable to the
+  # client's own container name instead of arriving unexplained.
   tool_groups: true
   # Kinds this provider can accept from cross-format translation.  Measured
   # against the live API: `image_generation` needs no configuration and is
