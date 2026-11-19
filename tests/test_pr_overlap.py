@@ -33,27 +33,34 @@ PRS = [
 ]
 
 
-def make_runner(diffs=None, prs=PRS, branches="feat/mine\nfeat/loc\n", fail_gh=False):
-    diffs = diffs or {}
-    calls = []
+class Runner:
+    """A stub for the subprocess call; ``calls`` records every argv."""
 
-    def run(argv):
-        calls.append(list(argv))
+    def __init__(self, diffs, prs, branches, fail_gh):
+        self.diffs = diffs
+        self.prs = prs
+        self.branches = branches
+        self.fail_gh = fail_gh
+        self.calls: list[list[str]] = []
+
+    def __call__(self, argv):
+        self.calls.append(list(argv))
         if argv[:2] == ["git", "rev-parse"]:
             return "feat/mine\n"
         if argv[:2] == ["git", "diff"]:
             head = argv[-1].split("...")[1]
-            return "\n".join(diffs.get(head, [])) + "\n"
+            return "\n".join(self.diffs.get(head, [])) + "\n"
         if argv[:2] == ["git", "for-each-ref"]:
-            return branches
+            return self.branches
         if argv[0] == "gh":
-            if fail_gh:
+            if self.fail_gh:
                 raise RuntimeError("gh is not installed")
-            return json.dumps(prs)
+            return json.dumps(self.prs)
         raise AssertionError(argv)
 
-    run.calls = calls
-    return run
+
+def make_runner(diffs=None, prs=PRS, branches="feat/mine\nfeat/loc\n", fail_gh=False):
+    return Runner(diffs or {}, prs, branches, fail_gh)
 
 
 def test_overlap_lists_other_prs_and_excludes_own(capsys):
