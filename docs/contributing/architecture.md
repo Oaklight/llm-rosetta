@@ -226,6 +226,13 @@ part 类型。跨腿 harness（`tests/converters/test_leg_agreement.py`）对每
 harness 自己的 turn view 比较）。它拿不回来的是事件本身没有的东西——即上表逐个 dialect
 列出的那些事实——所以折叠结果与流式回复一致，而不是厂商 JSON API 会返回的 body。
 
+其中一类事实调用方可以补上，这条桥就这么做。Chat 兼容的流会在每个 chunk 上重复它的
+响应级回显字段——`service_tier`、`system_fingerprint`——因此 `FormatSpec` 用
+`stream_echo_fields` 按格式声明它们，网关取每个字段第一次出现的值，
+`fold_response_events(response=…)` 再放回去。没有这类字段的 dialect（Responses、
+Messages）拿到的是空信封；流从未陈述过的字段保持缺失，而不是变成猜测。正因为如此，
+折叠不会让 Chat 客户端拿到的比它取代的 Chat-only 合并器更少。
+
 所有 dialect 共用同一套拼装。Chat Completions 这条桥最早出现，它重新合并该方言自己的
 chunk（`proxy/stream_merge.py`）；与折叠实测比较，差异只有 writer 本来就会补上的字段
 （`refusal: null`、`annotations: []`、`logprobs: null`）以及重新序列化后的参数空格，因此
