@@ -486,7 +486,13 @@ class TestAnAgentThatDies:
             await transport.close()
 
         assert chunks[-1]["type"] == "error"
-        assert "without reporting a stop" in chunks[-1]["message"]
+        # The whole sentence: an operator reads it, and it is not the
+        # deadline's sentence.
+        assert chunks[-1]["message"] == (
+            "ACP agent for provider 'antigravity' ended the turn without "
+            "reporting a stop; the conversation was closed. The agent process "
+            "may have exited — check it on the gateway host."
+        )
         # No stop chunk: the turn never reached one.
         assert not any(chunk["type"] == "stop" for chunk in chunks)
 
@@ -733,6 +739,12 @@ class TestRefusals:
             await transport.close()
         assert chunks[-1]["type"] == "error"
         assert "model call failed" in chunks[-1]["message"]
+        # The operator reads this sentence whole: the provider prefix, then
+        # the agent's own words.
+        assert (
+            chunks[-1]["message"]
+            == "ACP agent for provider 'antigravity': model call failed"
+        )
 
 
 class TestTurnSerialisation:
@@ -778,7 +790,10 @@ class TestTheTurnDeadline:
             await transport.close()
 
         assert chunks[-1]["type"] == "error"
-        assert "did not finish the turn" in chunks[-1]["message"]
+        assert chunks[-1]["message"] == (
+            "ACP agent for provider 'antigravity' did not finish the turn "
+            "within 0.2s; the session was closed."
+        )
         # A timed-out turn is not reusable: what the agent recorded is unknown.
         assert held is None
         assert "close" in _kinds(tmp_path)
