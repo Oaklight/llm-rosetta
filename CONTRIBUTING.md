@@ -120,8 +120,10 @@ Record an intended difference with a reason in a file of
 `path::qualified.name  reason` lines and pass it with `--allow FILE`. The path
 is the repo-relative file of the def; for a def that moved between files, the
 head or the base path both work. Use `undefined-global:<head path>::<name>` and
-`decorator-census:<decorator>` for those two checks; the census counts across
-all files, so that entry is not tied to a path. A bare `qualified.name` is
+`decorator-census:<decorator>` for those two checks, with the decorator name
+as the report prints it in `(allow entry: ...)`, for example
+`decorator-census:property` (`decorator-census:@property` is accepted too); the
+census counts across all files, so that entry is not tied to a path. A bare `qualified.name` is
 rejected, because it would excuse the name in every file. The `Pure move` workflow runs the same
 check on pull requests titled `refactor(...)` or labelled `pure-move`, including
 when the label is added or the title edited after the PR was opened. It reads

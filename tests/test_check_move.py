@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 import sys
 import textwrap
@@ -458,3 +459,49 @@ def test_census_ignores_type_checking_stub_decorators(make_repo):
     repo = make_repo({"a.py": BASE}, {"a.py": BASE + stub})
     assert _report(repo).census["staticmethod"] == (0, 0)
     assert _run(repo) == 0
+
+
+def _property_drop(make_repo):
+    base = "class Foo:\n    @property\n    def p(self):\n        return 1\n"
+    return make_repo(
+        {"a.py": base}, {"a.py": "", "b.py": base.replace("    @property\n", "")}
+    )
+
+
+def test_printed_census_key_round_trips_through_the_allow_file(
+    make_repo, tmp_path, capsys
+):
+    repo = _property_drop(make_repo)
+    assert _run(repo) == 1
+    out = capsys.readouterr().out
+    match = re.search(r"allow entry: (decorator-census:\S+)\)", out)
+    assert match
+    allow = tmp_path / "allow.txt"
+    allow.write_text(f"b.py::Foo.p  r\n{match.group(1)}  r\n")
+    assert _run(repo, "--allow", str(allow)) == 0
+    assert "matches nothing" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "entry", ["decorator-census:property", "decorator-census:@property"]
+)
+def test_census_allow_accepts_both_spellings(make_repo, tmp_path, capsys, entry):
+    repo = _property_drop(make_repo)
+    allow = tmp_path / "allow.txt"
+    allow.write_text(f"b.py::Foo.p  r\n{entry}  r\n")
+    assert check_move.load_allow(str(allow))["decorator-census:property"] == "r"
+    assert _run(repo, "--allow", str(allow)) == 0
+    assert "matches nothing" not in capsys.readouterr().out
+
+
+def test_unknown_census_decorator_is_reported_unused(make_repo, tmp_path, capsys):
+    repo = _property_drop(make_repo)
+    allow = tmp_path / "allow.txt"
+    allow.write_text(
+        "b.py::Foo.p  r\ndecorator-census:@property  r\ndecorator-census:@nosuch  r\n"
+    )
+    assert _run(repo, "--allow", str(allow)) == 0
+    assert (
+        "allow entry matches nothing failing: decorator-census:nosuch"
+        in capsys.readouterr().out
+    )
