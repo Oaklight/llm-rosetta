@@ -17,16 +17,14 @@ Google 登录、访问 token 与 project 都由 `agy` 保管，与你亲自运�
 
 ## 为什么用 `agy` 而不是直接调 API
 
-用 Antigravity 自己的 OAuth client 直接调 Code Assist，是 magpie 早先的做法，
-而它已经撤回了这条路：Google 会封禁那些被发现在 Antigravity 客户端之外调用
-Code Assist 的账号（magpie 源码 `internal/plugin/withdrawn.go`）。magpie 推荐的
-替代方案 —— 也是这里采用的方案 —— 是驱动厂商 CLI。因此凭据归 `agy` 所有，本
-shim 不声明任何凭据。
+用 Antigravity 自己的 OAuth client 直接调 Code Assist，正是 Google 会封号的做法：
+它看到这个请求并非来自 Antigravity 自己的客户端。驱动厂商 CLI 则让每个请求都留在
+Google 认可的客户端里。因此凭据归 `agy` 所有，本 shim 不声明任何凭据。
 
 | 路线 | 谁持有登录 | 状态 |
 |:---|:---|:---|
-| 用 Antigravity 的 OAuth client 调 Code Assist API | 网关 | 已撤回 —— 账号会被封 |
-| `agy acp`（本 shim） | `agy` | 推荐路线 |
+| 用 Antigravity 的 OAuth client 调 Code Assist API | 网关 | 不提供 —— 账号会被封 |
+| `agy acp`（本 shim） | `agy` | 本仓库支持的路线 |
 
 ## Shim
 
