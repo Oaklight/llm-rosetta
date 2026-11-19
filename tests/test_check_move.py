@@ -190,10 +190,12 @@ def test_allow_file_honoured(make_repo, tmp_path, capsys):
         {"a.py": "", "b.py": BASE.replace("return a + b", "return a - b")},
     )
     allow = tmp_path / "allow.txt"
-    allow.write_text("# accepted\nhelper  intentional sign change\nnothing.here  x\n")
+    allow.write_text(
+        "# accepted\nb.py::helper  intentional sign change\nb.py::nothing.here  x\n"
+    )
     assert _run(repo, "--allow", str(allow)) == 0
     out = capsys.readouterr().out
-    assert "allowed: intentional sign change" in out
+    assert "allowed by b.py::helper: intentional sign change" in out
     assert "nothing.here" in out  # reported as an unused entry
 
 
@@ -255,37 +257,114 @@ def test_bad_ref_is_usage_error(make_repo):
     assert check_move.main(["nope", "HEAD", "--repo", str(repo)]) == 2
 
 
-def test_decorator_census_mismatch_fails_alone(make_repo, capsys):
-    # A new `@property` in head-only glue code leaves every def matched, so only
-    # the census can see it.
-    repo = make_repo(
-        {"a.py": BASE},
-        {
-            "a.py": BASE
-            + textwrap.dedent(
-                """
+GLUE = "\n\nclass Glue:\n    @staticmethod\n    def value():\n        return 1\n"
 
-                class Glue:
-                    @property
-                    def value(self):
-                        return 1
-                """
-            )
-        },
+
+def test_split_adding_decorated_helper_passes(make_repo):
+    # Moving one function and adding a `@staticmethod` helper: added never fails.
+    repo = make_repo(
+        {"a.py": "def f():\n    return 1\n"},
+        {"a.py": "", "b.py": "def f():\n    return 1\n" + GLUE},
     )
-    assert _run(repo) == 1
     report = _report(repo)
-    assert not report.moved_with_diff and not report.missing
-    assert report.census["property"] == (0, 1)
+    assert report.census["staticmethod"] == (0, 0)
+    assert [h.qual for h in report.added] == ["Glue", "Glue.value"]
+    assert _run(repo) == 0
+
+
+def test_dropped_decorator_on_moved_def_fails_census(make_repo, capsys):
+    after = BASE.replace("    @classmethod\n", "")
+    repo = make_repo({"a.py": BASE}, {"a.py": "", "b.py": after})
+    report = _report(repo)
+    assert report.census["classmethod"] == (1, 0)
+    assert _run(repo) == 1
     assert "DECORATOR-CENSUS" in capsys.readouterr().out
 
 
-def test_decorator_census_mismatch_can_be_allowed(make_repo, tmp_path):
-    glue = "\n\nclass G:\n    @property\n    def v(self):\n        return 1\n"
-    repo = make_repo({"a.py": BASE}, {"a.py": BASE + glue})
+def test_census_still_fails_when_the_diff_is_allowed(make_repo, tmp_path, capsys):
+    after = BASE.replace("    @classmethod\n", "")
+    repo = make_repo({"a.py": BASE}, {"a.py": "", "b.py": after})
     allow = tmp_path / "allow.txt"
-    allow.write_text("decorator-census:property  new glue property\n")
+    allow.write_text("a.py::Foo.make  dropped classmethod\n")
+    assert _run(repo, "--allow", str(allow)) == 1
+    out = capsys.readouterr().out
+    assert "DECORATOR-CENSUS:" in out and "allowed by a.py::Foo.make" in out
+    allow.write_text("a.py::Foo.make  x\ndecorator-census:classmethod  y\n")
     assert _run(repo, "--allow", str(allow)) == 0
+
+
+def test_decorator_census_mismatch_can_be_allowed(make_repo, tmp_path):
+    after = BASE.replace("    @classmethod\n", "    @property\n")
+    repo = make_repo({"a.py": BASE}, {"a.py": "", "b.py": after})
+    allow = tmp_path / "allow.txt"
+    allow.write_text(
+        "b.py::Foo.make  became a property\n"
+        "decorator-census:classmethod  r\ndecorator-census:property  r\n"
+    )
+    assert _run(repo, "--allow", str(allow)) == 0
+
+
+TWO_MODULES = "class C:\n    def m(self):\n        return {n}\n"
+
+
+def test_allow_is_keyed_on_the_file(make_repo, tmp_path, capsys):
+    repo = make_repo(
+        {"a.py": TWO_MODULES.format(n=1), "b.py": TWO_MODULES.format(n=1)},
+        {"a.py": TWO_MODULES.format(n=2), "b.py": TWO_MODULES.format(n=3)},
+    )
+    allow = tmp_path / "allow.txt"
+    allow.write_text("a.py::C.m  only a changes\n")
+    assert _run(repo, "--allow", str(allow)) == 1
+    out = capsys.readouterr().out
+    assert "MOVED-WITH-DIFF (allowed by a.py::C.m: only a changes): a.py:C.m" in out
+    assert "MOVED-WITH-DIFF: b.py:C.m" in out
+    allow.write_text("a.py::C.m  x\nb.py::C.m  y\n")
+    assert _run(repo, "--allow", str(allow)) == 0
+
+
+def test_allow_accepts_base_path_of_a_moved_def(make_repo, tmp_path):
+    repo = make_repo(
+        {"a.py": TWO_MODULES.format(n=1)},
+        {"a.py": "", "b.py": TWO_MODULES.format(n=2)},
+    )
+    allow = tmp_path / "allow.txt"
+    allow.write_text("a.py::C.m  base path\n")
+    assert _run(repo, "--allow", str(allow)) == 0
+    allow.write_text("b.py::C.m  head path\n")
+    assert _run(repo, "--allow", str(allow)) == 0
+    allow.write_text("c.py::C.m  wrong file\n")
+    assert _run(repo, "--allow", str(allow)) == 1
+
+
+def test_bare_allow_entry_is_rejected(make_repo, tmp_path, capsys):
+    repo = make_repo(
+        {"a.py": TWO_MODULES.format(n=1)}, {"a.py": TWO_MODULES.format(n=2)}
+    )
+    allow = tmp_path / "allow.txt"
+    allow.write_text("C.m  legacy\n")
+    assert _run(repo, "--allow", str(allow)) == 2
+    err = capsys.readouterr().err
+    assert "no file path" in err and "<path>::C.m" in err
+    allow.write_text("undefined-global:C.m  legacy\n")
+    assert _run(repo, "--allow", str(allow)) == 2
+
+
+def test_markdown_shows_allow_key_with_path(make_repo, tmp_path, capsys):
+    repo = make_repo(
+        {"a.py": TWO_MODULES.format(n=1)}, {"a.py": TWO_MODULES.format(n=2)}
+    )
+    allow = tmp_path / "allow.txt"
+    allow.write_text("a.py::C.m  why\nb.py::C.m  stale\n")
+    assert _run(repo, "--allow", str(allow), "--markdown") == 0
+    out = capsys.readouterr().out
+    assert "(allowed by a.py::C.m: why)" in out
+    assert "Unused allow entries: `b.py::C.m`" in out
+
+
+def test_workflow_does_not_claim_a_default_shell_behaviour():
+    text = (SCRIPT.parents[2] / ".github" / "workflows" / "pure-move.yml").read_text()
+    assert "shell: bash" in text
+    assert "without it" not in text and "turns on `pipefail`" not in text
 
 
 def test_decorator_census_balanced_move_passes(make_repo):
@@ -334,7 +413,7 @@ def test_undefined_global_allowed(make_repo, tmp_path):
         {"a.py": "LIMIT = 3\n", "b.py": "def f():\n    return LIMIT\n"},
     )
     allow = tmp_path / "allow.txt"
-    allow.write_text("undefined-global:f  b.py gets LIMIT injected\n")
+    allow.write_text("undefined-global:b.py::f  b.py gets LIMIT injected\n")
     assert _run(repo, "--allow", str(allow)) == 0
 
 
