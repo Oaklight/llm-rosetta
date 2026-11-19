@@ -108,6 +108,63 @@ def test_a_responses_function_call_is_a_tool_call_turn():
     assert ir["choices"][0]["finish_reason"]["reason"] == "tool_calls"
 
 
+def test_a_responses_stream_without_an_output_list_is_a_tool_call_turn():
+    """A completed frame need not repeat the call the stream already opened.
+
+    ``response.completed`` is the only frame this dialect's reader decides the
+    reason from, and it may carry no ``output`` list at all; the call is then
+    known only from the earlier ``response.output_item.added`` (#1601).
+    """
+    converter = OpenResponsesConverter()
+    context = StreamContext()
+    ir_events: list[Any] = []
+    ir_events.extend(
+        converter.stream_response_from_provider(
+            {
+                "type": "response.output_item.added",
+                "output_index": 0,
+                "item": {
+                    "type": "function_call",
+                    "id": "fc_1",
+                    "call_id": "call_a",
+                    "name": "f",
+                    "arguments": "",
+                },
+            },
+            context,
+        )
+    )
+    ir_events.extend(
+        converter.stream_response_from_provider(
+            {
+                "type": "response.completed",
+                "response": {
+                    "id": "resp_1",
+                    "model": "m",
+                    "created_at": 1,
+                    "status": "completed",
+                },
+            },
+            context,
+        )
+    )
+
+    finishes = [event for event in ir_events if event["type"] == "finish"]
+    assert finishes and finishes[-1]["finish_reason"]["reason"] == "tool_calls"
+
+    # A Messages client must be asked to run the tool, not told the reply is
+    # complete — the symptom the issue measured.
+    messages = MessagesConverter()
+    out_context = StreamContext()
+    stop_reasons = []
+    for event in ir_events:
+        produced = messages.stream_response_to_provider(event, out_context)
+        for chunk in produced if isinstance(produced, list) else [produced]:
+            if chunk and chunk.get("type") == "message_delta":
+                stop_reasons.append(chunk["delta"]["stop_reason"])
+    assert stop_reasons and stop_reasons[-1] == "tool_use"
+
+
 @pytest.mark.parametrize(
     ("finish_reason", "expected"),
     [
