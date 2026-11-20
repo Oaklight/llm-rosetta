@@ -775,7 +775,7 @@ class ProviderShim:
     # ── Backward-compatible alias (read-only) ───────────────────────
     #
     # Three read-only aliases outlive the rest of the legacy surface because
-    # in-repo and standalone-shim-repo code still reads them (#919): ``base``
+    # in-repo and standalone-shim-repo code still reads them: ``base``
     # (the gateway admin payload and the alcf / asksage / opencode-free
     # tests), ``default_path`` (the gateway's typed-route resolver) and
     # ``max_tool_description_length`` (the argo test).  Drop each once its last

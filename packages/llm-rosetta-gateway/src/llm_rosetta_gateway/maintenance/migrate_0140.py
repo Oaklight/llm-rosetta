@@ -1,4 +1,4 @@
-"""``llm-rosetta-migrate`` — the one-shot migration for the 0.14.0 removals (#919).
+"""``llm-rosetta-migrate`` — the one-shot migration for the 0.14.0 removals.
 
 Release 0.14.0 removes the alias tables that translated old provider, shim and
 model-type spellings.  A retired name now fails with an error that names its
@@ -955,7 +955,7 @@ def _build_parser() -> argparse.ArgumentParser:
         prog="llm-rosetta-migrate",
         description=(
             "Migrate a gateway config, a gateway database and source code off the "
-            "names retired in 0.14.0 (#919).  Dry run unless --write is given."
+            "names retired in 0.14.0.  Dry run unless --write is given."
         ),
     )
     parser.add_argument(

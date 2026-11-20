@@ -2,7 +2,7 @@
 
 This table is an **error table, not an alias table**.  A name listed here is
 a spelling an earlier release accepted for a provider type, a shim or a model
-type.  No spelling is translated any more (the alias tables are gone, #919): a
+type.  No spelling is translated any more (the alias tables are gone): a
 name listed here must not fall through to "unknown type" or "no base_url
 configured", so it fails with a message that names its replacement and ends
 with the ``llm-rosetta-migrate`` command.  This module supplies that message.

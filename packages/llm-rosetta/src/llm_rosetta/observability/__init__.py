@@ -11,8 +11,8 @@ retention and header sanitizing — moved to the gateway distribution as
 consumer of those modules is a proxy server; the core neither writes a
 database nor counts requests.
 
-The old paths keep working until the 0.16.0 removal window (#919): importing
-``llm_rosetta.observability.metrics`` warns and resolves to the *same* module
+The old paths are deprecated and will be removed in a later release; until
+then importing ``llm_rosetta.observability.metrics`` warns and resolves to the *same* module
 object as its gateway counterpart, so a store is never opened twice.
 
 Typical usage::
@@ -87,7 +87,7 @@ class _AliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
         source = module.__name__.replace(_TARGET, _ALIAS, 1)
         warnings.warn(
             f"importing {source} is deprecated; use {module.__name__} "
-            f"({_ALIAS}.* will be removed in 0.16.0)",
+            f"({_ALIAS}.* is deprecated and will be removed in a later release)",
             DeprecationWarning,
             stacklevel=2,
         )

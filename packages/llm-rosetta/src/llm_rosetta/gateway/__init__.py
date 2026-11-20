@@ -1,9 +1,9 @@
-"""Deprecated alias for :mod:`llm_rosetta_gateway` (removed in 0.16.0).
+"""Deprecated alias for :mod:`llm_rosetta_gateway`.
 
 The gateway moved to its own distribution (epic #1127, issue #1157).  The
-``llm_rosetta.gateway`` import root keeps working until the 0.16.0 removal
-window (#919): importing it warns, and every submodule resolves to the same
-module object as its ``llm_rosetta_gateway`` counterpart, so state (the
+``llm_rosetta.gateway`` import root is deprecated and will be removed in a
+later release.  Until then it keeps working: importing it warns, and every
+submodule resolves to the same module object as its ``llm_rosetta_gateway`` counterpart, so state (the
 config, the registries) is never duplicated.
 """
 
@@ -32,7 +32,7 @@ except ModuleNotFoundError as exc:
 
 warnings.warn(
     "importing llm_rosetta.gateway is deprecated; use llm_rosetta_gateway "
-    "(llm_rosetta.gateway will be removed in 0.16.0)",
+    "(llm_rosetta.gateway is deprecated and will be removed in a later release)",
     DeprecationWarning,
     stacklevel=2,
 )

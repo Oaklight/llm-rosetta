@@ -17,7 +17,7 @@ rather than keeping its own list.
 Usage::
 
     python scripts/check_shim_removals.py            # the real check
-    python scripts/check_shim_removals.py --version 0.16.0   # what it would say then
+    python scripts/check_shim_removals.py --version 0.20.0   # what it would say then
 
 Exits 0 when the repository is consistent with the version, 1 when it is not,
 and 2 on a usage error.
@@ -72,7 +72,7 @@ DEFAULT_ROOTS = (
 )
 
 #: The changelogs record what happened; their history is not rewritten, and a
-#: "removed in 0.16.0" line is exactly the kind of mention that must survive.
+#: "removed in 0.20.0" line is exactly the kind of mention that must survive.
 #: ``removals.py`` is the manifest itself — it names every shim that is going
 #: away, by design, so scanning it would fail each entry on its own name.  The
 #: source catalogue is the same kind of list: it names the shims each standalone

@@ -176,7 +176,7 @@ def detect_shim_removals(
 def parse_version(text: str) -> tuple[int, ...]:
     """Return the leading numeric release of *text* as a tuple.
 
-    ``"0.16.0.dev17"`` → ``(0, 16, 0)``.  A version with no leading digits
+    ``"0.20.0.dev17"`` → ``(0, 20, 0)``.  A version with no leading digits
     yields ``()``, which compares before everything else and so never reaches a
     removal by accident.
 
@@ -200,7 +200,7 @@ def removals_due(
     """Return the removals whose version has been reached by *version*.
 
     A pre-release of the removal release counts as reaching it
-    (``"0.16.0.dev1"`` → the 0.16.0 removals), because that is the first build
+    (``"0.20.0.dev1"`` → the 0.20.0 removals), because that is the first build
     that could ship the deletion.
 
     Args:

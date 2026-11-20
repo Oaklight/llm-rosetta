@@ -2,7 +2,7 @@
 
 A retired name is an *error*, not an alias.  The gateway used to rewrite such a
 name to its canonical spelling at load time and write the config back; that
-correction is gone (#919).  A ``shim`` / ``type`` value that is a retired
+correction is gone.  A ``shim`` / ``type`` value that is a retired
 spelling is rejected with the retired-names diagnostic
 (:mod:`llm_rosetta.retired_names`): it names the replacement, and for a shim
 that moved to a standalone package it names the ``shims.presets`` entry too.
