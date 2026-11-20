@@ -109,6 +109,7 @@ nav:
   - 首页: index.md
   - 快速入门:
       - 安装: getting-started/installation.md
+      - 迁移到 0.14: guide/migrating-to-0.14.md
       - 核心概念: guide/concepts.md
       - 库快速开始: getting-started/library-quickstart.md
       - 网关快速开始: getting-started/gateway-quickstart.md
