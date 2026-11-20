@@ -644,6 +644,55 @@ def test_scan_skips_a_file_that_config_rewrites(tmp_path, capsys) -> None:
     assert mig.main(["--config", str(conf), "--scan", str(conf), "--write"]) == 0
 
 
+def _versioned(tmp_path: Path, version: int) -> Path:
+    config = dict(
+        config_version=version,
+        providers=dict(
+            main=dict(
+                type="openai_chat",
+                base_url="http://upstream.invalid/v1",
+                api_key="k",
+                embedding_format="openai",
+            )
+        ),
+        models=dict(),
+    )
+    return _write(tmp_path, "// keep me\n" + json.dumps(config, indent=2))
+
+
+def test_a_config_that_passes_check_is_not_rewritten_by_the_first_load(
+    tmp_path,
+) -> None:
+    from llm_rosetta_gateway.config.loader import load_gateway_config
+
+    path = _versioned(tmp_path, 4)
+    assert mig.main(["--config", str(path), "--check"]) == 3
+    assert mig.main(["--config", str(path), "--write"]) == 0
+    assert mig.main(["--config", str(path), "--check"]) == 0
+    written = path.read_bytes()
+    assert b'"config_version": 5' in written and b"// keep me" in written
+    load_gateway_config(str(path))
+    assert path.read_bytes() == written
+    assert sorted(p.name for p in tmp_path.iterdir() if "pre-migration" in p.name) == []
+
+
+def test_a_load_time_migration_the_tool_cannot_run_is_pending(
+    tmp_path, monkeypatch
+) -> None:
+    from llm_rosetta_gateway.maintenance import migrations
+
+    def restructures(raw):
+        raw = dict(raw, moved=True, config_version=migrations.CURRENT_VERSION)
+        return raw, True
+
+    monkeypatch.setattr(migrations, "migrate", restructures)
+    path = _versioned(tmp_path, 3)
+    assert mig.main(["--config", str(path), "--write"]) == 0
+    items = mig.migrate_config_text(path.read_text()).items
+    assert [i.action for i in items] == ["pending"]
+    assert mig.main(["--config", str(path), "--check"]) == 3
+
+
 def test_scan_of_a_clean_tree_exits_0(tmp_path) -> None:
     (tmp_path / "ok.py").write_text('fmt = "chat_completions"\n')
     assert mig.main(["--scan", str(tmp_path)]) == 0

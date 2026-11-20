@@ -216,6 +216,10 @@ class Edits:
         """Replace a string node (a value or a key) with the string *new*."""
         self._edits.append((node.start, node.end, json.dumps(new)))
 
+    def replace_span(self, node: Node, text: str) -> None:
+        """Replace the span of *node* (a literal, for example) with *text*."""
+        self._edits.append((node.start, node.end, text))
+
     def insert(self, offset: int, text: str) -> None:
         """Insert *text* at *offset*."""
         self._edits.append((offset, offset, text))

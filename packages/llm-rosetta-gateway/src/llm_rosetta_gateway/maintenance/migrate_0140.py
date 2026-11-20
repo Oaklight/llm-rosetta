@@ -80,7 +80,8 @@ class Item:
         scope: ``config``, ``db`` or ``scan``.
         action: ``rewrite`` (done, or done on ``--write``), ``add`` (a value
             that must be added alongside a rewrite), ``unmapped`` (needs a
-            person; never changed), ``mention`` (a ``--scan`` hit: advisory,
+            person; never changed), ``pending`` (a load-time migration only
+            the gateway can run; counts for ``--check``), ``mention`` (a ``--scan`` hit: advisory,
             a textual mention that may or may not be a use) or ``note`` (left
             on purpose; informational, never counted in the exit code).
         file: The file the item is about.
@@ -436,6 +437,80 @@ class _ConfigPlanner:
                 self._endpoint_member(root, member, key, "root")
         self._ensure_presets(root)
         self._sweep(root)
+        self._version(root)
+
+    def _version(self, root: Node) -> None:
+        """Keep the gateway's first load from rewriting the file again.
+
+        An old ``config_version`` makes the gateway run its load-time steps and
+        rewrite the whole file (comments dropped) on the first start, so a
+        config this tool left would not stay as it was written.  When those
+        steps change nothing but the version stamp and empty sections (the flat ``embeddings_*``
+        keys this tool writes stay readable, so folding them into blocks
+        changes no behaviour), the stamp is written here.  When they change
+        the structure, the file is reported as ``pending``: only the gateway
+        can run those steps, and ``--check`` exits 3 until it has.
+        """
+        import copy
+
+        from ..config.io import _loads
+        from .migrations import CURRENT_VERSION, migrate
+
+        try:
+            doc = _loads(self.edits.apply())
+        except ValueError:
+            return
+        if not isinstance(doc, dict):
+            return
+        declared = root.member("config_version")
+        if declared is None:
+            # A document with no recorded version predates the key; what the
+            # gateway makes of it is not this tool's to predict.
+            return
+        migrated, changed = migrate(copy.deepcopy(doc))
+        if not changed:
+            return
+        old = doc.get("config_version")
+        rest = {k: v for k, v in doc.items() if k != "config_version"}
+        after = {k: v for k, v in migrated.items() if k != "config_version"}
+        where = "config_version"
+        # Only the version stamp and empty sections the steps would add (an
+        # absent ``models`` becomes ``{}``) differ: nothing a person wrote moves.
+        stamp_only = all(
+            (k in rest and rest[k] == after[k]) or (k not in rest and not after[k])
+            for k in after
+        ) and all(k in after for k in rest)
+        if stamp_only or (isinstance(old, int) and old == CURRENT_VERSION - 1):
+            stamp = str(CURRENT_VERSION)
+            self.edits.replace_span(declared.value, stamp)
+            self.items.append(
+                Item(
+                    "config",
+                    "rewrite",
+                    self.file,
+                    where,
+                    line_of(self.text, declared.value.start),
+                    str(old),
+                    stamp,
+                    detail="so the gateway's first load does not rewrite this file",
+                )
+            )
+            return
+        self.items.append(
+            Item(
+                "config",
+                "pending",
+                self.file,
+                where,
+                line_of(self.text, declared.value.start),
+                str(old),
+                str(CURRENT_VERSION),
+                detail=(
+                    "the gateway runs load-time migrations on its first start and "
+                    "rewrites this file (comments are not kept)"
+                ),
+            )
+        )
 
     def _ensure_presets(self, root: Node) -> None:
         """Declare the ``shims.presets`` a rewritten shim now needs."""
@@ -1085,7 +1160,7 @@ def _exit_code(args: argparse.Namespace, report: dict[str, Any]) -> int:
         return 2
     if any(item.action in ("unmapped", "mention") for item in report["items"]):
         return 1
-    pending = any(item.action == "rewrite" for item in report["items"])
+    pending = any(item.action in ("rewrite", "pending") for item in report["items"])
     if args.check and not args.write and pending:
         return 3
     return 0
