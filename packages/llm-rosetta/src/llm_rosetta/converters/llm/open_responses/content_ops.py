@@ -601,8 +601,3 @@ class OpenResponsesContentOps(BaseContentOps):
                 provider_metadata={"openai": {"_raw": dict(provider_citation)}},
             )
         return CitationPart(type="citation")
-
-
-# Backward-compatible alias (deprecated): the OpenAI Responses profile reuses
-# the same content operations as the vendor-neutral Open Responses base.
-OpenAIResponsesContentOps = OpenResponsesContentOps

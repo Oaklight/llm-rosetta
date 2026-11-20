@@ -9,7 +9,7 @@ from llm_rosetta.converters.llm.open_responses.converter import (
     OpenAIResponsesConverter,
 )
 from llm_rosetta.converters.llm.open_responses.tool_ops import (
-    OpenAIResponsesToolOps,
+    OpenResponsesToolOps,
     _flatten_namespace_tool,
 )
 from llm_rosetta.pipeline import ConversionPipeline
@@ -243,7 +243,7 @@ class TestFlattenNamespaceTool:
         ns = _ns_tool("ns", children=[child])
         _flatten_namespace_tool(ns)
         # Original child should not have namespace metadata
-        ir_direct = OpenAIResponsesToolOps.p_tool_definition_to_ir(child)
+        ir_direct = OpenResponsesToolOps.p_tool_definition_to_ir(child)
         assert isinstance(ir_direct, dict)
         assert "namespace" not in (ir_direct.get("metadata") or {})
 
@@ -264,17 +264,17 @@ class TestNamespaceDispatch:
                 _func_tool("b"),
             ],
         )
-        result = OpenAIResponsesToolOps.p_tool_definition_to_ir(ns)
+        result = OpenResponsesToolOps.p_tool_definition_to_ir(ns)
         assert isinstance(result, list)
         assert len(result) == 2
 
     def test_regular_function_returns_single(self):
-        result = OpenAIResponsesToolOps.p_tool_definition_to_ir(_func_tool("regular"))
+        result = OpenResponsesToolOps.p_tool_definition_to_ir(_func_tool("regular"))
         assert isinstance(result, dict)
         assert result["name"] == "regular"
 
     def test_empty_namespace_returns_empty_list(self):
-        result = OpenAIResponsesToolOps.p_tool_definition_to_ir(
+        result = OpenResponsesToolOps.p_tool_definition_to_ir(
             _ns_tool("empty", children=[])
         )
         assert result == []

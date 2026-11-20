@@ -2,26 +2,15 @@
 
 Verifies the spec-correct inversion introduced for issue #493: the
 vendor-neutral Open Responses spec is the base converter, and the OpenAI
-Responses API is a derived profile, with the ``OpenAIResponses*`` names kept
-as backward-compatible aliases.
+Responses API is a derived profile.
 """
 
 from __future__ import annotations
 
 from llm_rosetta.auto_detect import get_converter_for_provider
 from llm_rosetta.converters.llm.open_responses import (
-    OpenAIResponsesConfigOps,
-    OpenAIResponsesContentOps,
     OpenAIResponsesConverter,
-    OpenAIResponsesMessageOps,
-    OpenAIResponsesStreamContext,
-    OpenAIResponsesToolOps,
-    OpenResponsesConfigOps,
-    OpenResponsesContentOps,
     OpenResponsesConverter,
-    OpenResponsesMessageOps,
-    OpenResponsesStreamContext,
-    OpenResponsesToolOps,
 )
 from llm_rosetta.shims import get_shim, resolve_format
 
@@ -61,12 +50,18 @@ class TestHierarchy:
             get_converter_for_provider("open_responses")
         )
 
-    def test_ops_aliases_are_identical_objects(self):
-        assert OpenAIResponsesContentOps is OpenResponsesContentOps
-        assert OpenAIResponsesToolOps is OpenResponsesToolOps
-        assert OpenAIResponsesMessageOps is OpenResponsesMessageOps
-        assert OpenAIResponsesConfigOps is OpenResponsesConfigOps
-        assert OpenAIResponsesStreamContext is OpenResponsesStreamContext
+    def test_openai_ops_aliases_are_removed(self):
+        import llm_rosetta.converters.llm.open_responses as pkg
+
+        for name in (
+            "OpenAIResponsesConfigOps",
+            "OpenAIResponsesContentOps",
+            "OpenAIResponsesMessageOps",
+            "OpenAIResponsesStreamContext",
+            "OpenAIResponsesToolOps",
+        ):
+            assert not hasattr(pkg, name), name
+            assert name not in pkg.__all__, name
 
 
 class TestShim:

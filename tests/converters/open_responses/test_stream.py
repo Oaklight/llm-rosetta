@@ -9,7 +9,7 @@ import pytest
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
 from llm_rosetta.converters.llm.open_responses.stream_context import (
-    OpenAIResponsesStreamContext,
+    OpenResponsesStreamContext,
 )
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.types.ir.stream import (
@@ -517,7 +517,7 @@ class TestStreamResponseToProvider:
 
     def test_tool_call_delta_empty_id_resolved_by_index(self):
         """ToolCallDeltaEvent with empty tool_call_id resolved via context index."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         # Simulate a prior tool_call_start that registered the call
         ctx.register_tool_call("call_abc", "get_weather")
         ctx.register_tool_call_item("call_abc", "call_abc")
@@ -1133,7 +1133,7 @@ class TestStreamResponseFromProviderWithContext:
 
     def test_response_created_emits_stream_start(self):
         """response.created with context emits StreamStartEvent."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = {
             "type": "response.created",
             "response": {
@@ -1160,7 +1160,7 @@ class TestStreamResponseFromProviderWithContext:
 
     def test_response_created_with_argo_extra_fields(self):
         """response.created with argo-style extra fields doesn't crash."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = {
             "type": "response.created",
             "sequence_number": 0,
@@ -1206,7 +1206,7 @@ class TestStreamResponseFromProviderWithContext:
 
     def test_response_completed_emits_stream_end(self):
         """response.completed with context emits StreamEndEvent after other events."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.mark_started()
         event = {
             "type": "response.completed",
@@ -1234,7 +1234,7 @@ class TestStreamResponseFromProviderWithContext:
 
     def test_response_failed_emits_stream_end(self):
         """response.failed with context emits StreamEndEvent after FinishEvent."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.mark_started()
         event = {
             "type": "response.failed",
@@ -1254,7 +1254,7 @@ class TestStreamResponseFromProviderWithContext:
 
     def test_output_item_added_function_call_registers_tool(self):
         """response.output_item.added (function_call) registers tool in context."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = {
             "type": "response.output_item.added",
             "output_index": 1,
@@ -1278,7 +1278,7 @@ class TestStreamResponseFromProviderWithContext:
 
         The actual content block is signaled by response.content_part.added.
         """
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = {
             "type": "response.output_item.added",
             "output_index": 0,
@@ -1310,7 +1310,7 @@ class TestStreamResponseFromProviderWithContext:
 
     def test_content_part_added_emits_content_block_start(self):
         """response.content_part.added with context emits ContentBlockStartEvent."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = {
             "type": "response.content_part.added",
             "part": {"type": "output_text", "text": ""},
@@ -1326,7 +1326,7 @@ class TestStreamResponseFromProviderWithContext:
 
     def test_content_part_added_summary_text(self):
         """response.content_part.added with summary_text maps to thinking block type."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = {
             "type": "response.content_part.added",
             "part": {"type": "summary_text", "text": ""},
@@ -1349,7 +1349,7 @@ class TestStreamResponseFromProviderWithContext:
 
     def test_content_part_done_emits_content_block_end(self):
         """response.content_part.done with context emits ContentBlockEndEvent."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.next_block_index()  # set to 0
         event = {
             "type": "response.content_part.done",
@@ -1377,7 +1377,7 @@ class TestStreamResponseFromProviderWithContext:
 
         The actual content block end is signaled by response.content_part.done.
         """
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.next_block_index()  # set to 0
         event = {
             "type": "response.output_item.done",
@@ -1395,7 +1395,7 @@ class TestStreamResponseFromProviderWithContext:
 
     def test_text_delta_unchanged_with_context(self):
         """Text delta behavior is unchanged when context is provided."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = {
             "type": "response.output_text.delta",
             "delta": "Hello",
@@ -1431,7 +1431,7 @@ class TestStreamResponseToProviderWithContext:
 
     def test_stream_start_event(self):
         """StreamStartEvent → [response.created, response.in_progress]."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = cast(
             StreamStartEvent,
             {
@@ -1473,7 +1473,7 @@ class TestStreamResponseToProviderWithContext:
 
     def test_stream_end_event(self):
         """StreamEndEvent → empty dict."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.mark_started()
         event = cast(StreamEndEvent, {"type": "stream_end"})
         result = cast(
@@ -1532,7 +1532,7 @@ class TestStreamResponseToProviderWithContext:
 
     def test_usage_with_context_no_duplicate_completed(self):
         """UsageEvent with context stores usage, returns empty dict (no duplicate)."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.mark_started()
         event = cast(
             UsageEvent,
@@ -1573,7 +1573,7 @@ class TestStreamResponseToProviderWithContext:
 
     def test_finish_with_context_defers_response_completed(self):
         """FinishEvent with context defers response.completed to StreamEndEvent."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.mark_started()
         ctx.pending_usage = {
             "prompt_tokens": 10,
@@ -1610,7 +1610,7 @@ class TestStreamResponseToProviderWithContext:
 
     def test_finish_with_context_no_pending_usage(self):
         """FinishEvent with context but no pending usage omits usage field."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.mark_started()
         event = cast(
             FinishEvent,
@@ -1651,7 +1651,7 @@ class TestStreamResponseToProviderWithContext:
 
     def test_no_duplicate_response_completed_with_context(self):
         """With context, UsageEvent + FinishEvent + StreamEndEvent produce one response.completed."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.mark_started()
 
         # First: UsageEvent → stored in context, returns empty
@@ -1699,7 +1699,7 @@ class TestStreamResponseToProviderWithContext:
 
     def test_full_stream_sequence_with_context(self):
         """Full stream sequence produces correct events with no duplicates."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
 
         # 1. StreamStartEvent → [response.created, response.in_progress]
         start_results = self.converter.stream_response_to_provider(
@@ -1837,7 +1837,7 @@ class TestStreamResponseToProviderWithContext:
 
     def test_cross_chunk_usage_after_finish(self):
         """UsageEvent arriving after FinishEvent (OpenAI Chat pattern) is merged."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.mark_started()
 
         # 1. FinishEvent arrives first (no pending_usage yet)
@@ -1895,7 +1895,7 @@ class TestCustomToolCallStreaming:
 
     def test_custom_tool_call_output_item_added(self):
         """response.output_item.added with custom_tool_call produces ToolCallStartEvent."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = {
             "type": "response.output_item.added",
             "output_index": 0,
@@ -1924,7 +1924,7 @@ class TestCustomToolCallStreaming:
 
     def test_custom_tool_call_input_delta(self):
         """response.custom_tool_call_input.delta produces ToolCallDeltaEvent."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.register_tool_call("call_custom_1", "my_tool", "custom")
         event = {
             "type": "response.custom_tool_call_input.delta",
@@ -1947,7 +1947,7 @@ class TestCustomToolCallStreaming:
 
         Same pattern as function_call_arguments.done (#800).  See #803.
         """
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.register_tool_call("call_custom_1", "my_tool", "custom")
         ctx.append_tool_call_args("call_custom_1", "hello ")
         event = {
@@ -1966,7 +1966,7 @@ class TestCustomToolCallStreaming:
 
     def test_custom_tool_call_input_done_after_full_deltas_emits_nothing(self):
         """When deltas already delivered the full input, .done stays silent."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.register_tool_call("call_custom_1", "my_tool", "custom")
         ctx.append_tool_call_args("call_custom_1", "hello world")
         event = {
@@ -1988,7 +1988,7 @@ class TestCustomToolCallStreaming:
         Some upstreams (e.g. ARGO cached turns) send .done-only with no
         preceding .delta for custom tool calls.  See #803.
         """
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.register_tool_call("call_custom_1", "my_tool", "custom")
         event = {
             "type": "response.custom_tool_call_input.done",
@@ -2008,7 +2008,7 @@ class TestCustomToolCallStreaming:
 
     def test_custom_tool_call_output_item_done(self):
         """response.output_item.done with custom_tool_call stores input in context."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.register_tool_call("call_custom_1", "my_tool", "custom")
         event = {
             "type": "response.output_item.done",
@@ -2026,7 +2026,7 @@ class TestCustomToolCallStreaming:
 
     def test_tool_call_start_custom_to_p(self):
         """ToolCallStartEvent with tool_type='custom' → custom_tool_call item."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = cast(
             ToolCallStartEvent,
             {
@@ -2056,7 +2056,7 @@ class TestCustomToolCallStreaming:
     )
     def test_tool_call_start_group_reaches_the_wire(self, tool_type, item_type):
         """An IR ``tool_group`` is written back as the Responses ``namespace``."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = cast(
             ToolCallStartEvent,
             {
@@ -2077,7 +2077,7 @@ class TestCustomToolCallStreaming:
 
     def test_tool_call_start_legacy_metadata_group_reaches_the_wire(self):
         """A call carrying only the old metadata spelling still emits it."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = cast(
             ToolCallStartEvent,
             {
@@ -2097,7 +2097,7 @@ class TestCustomToolCallStreaming:
 
     def test_tool_call_delta_custom_to_p(self):
         """ToolCallDeltaEvent for custom tool → custom_tool_call_input.delta."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.register_tool_call("call_custom_1", "my_tool", "custom")
         ctx.register_tool_call_item("call_custom_1", "call_custom_1")
         event = cast(
@@ -2118,7 +2118,7 @@ class TestCustomToolCallStreaming:
 
     def test_tool_call_delta_function_to_p(self):
         """ToolCallDeltaEvent for function tool → function_call_arguments.delta."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.register_tool_call("call_fn_1", "get_weather", "function")
         ctx.register_tool_call_item("call_fn_1", "call_fn_1")
         event = cast(
@@ -2137,7 +2137,7 @@ class TestCustomToolCallStreaming:
 
     def test_finish_with_custom_tool_call(self):
         """FinishEvent emits custom_tool_call done events and output items."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.mark_started()
         ctx.register_tool_call("call_custom_1", "my_tool", "custom")
         ctx.register_tool_call_item("call_custom_1", "ctc_001")
@@ -2180,7 +2180,7 @@ class TestCustomToolCallStreaming:
 
     def test_finish_with_mixed_tool_calls(self):
         """FinishEvent with both function and custom tool calls emits correct types."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.mark_started()
         ctx.register_tool_call("call_fn_1", "get_weather", "function")
         ctx.register_tool_call_item("call_fn_1", "fc_001")
@@ -2226,8 +2226,8 @@ class TestCustomToolCallStreaming:
 
     def test_custom_tool_call_stream_round_trip(self):
         """Custom tool call round-trips through streaming: provider → IR → provider."""
-        ctx_from = OpenAIResponsesStreamContext()
-        ctx_to = OpenAIResponsesStreamContext()
+        ctx_from = OpenResponsesStreamContext()
+        ctx_to = OpenResponsesStreamContext()
 
         # 1. output_item.added
         added_event = {
@@ -2346,7 +2346,7 @@ class TestFunctionCallItemIdPreservation:
 
     def test_to_p_restores_fc_item_id(self):
         """ToolCallStartEvent with provider_metadata restores fc_ item id."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.response_id = "resp_001"
         ctx.model = "gpt-4"
         ctx.mark_started()
@@ -2366,7 +2366,7 @@ class TestFunctionCallItemIdPreservation:
 
     def test_to_p_fallback_without_metadata(self):
         """ToolCallStartEvent without provider_metadata uses call_id as id."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.response_id = "resp_001"
         ctx.model = "gpt-4"
         ctx.mark_started()
@@ -2387,8 +2387,8 @@ class TestFunctionCallItemIdPreservation:
 
     def test_round_trip_preserves_fc_item_id(self):
         """Full streaming round-trip preserves distinct fc_ item id."""
-        ctx_from = OpenAIResponsesStreamContext()
-        ctx_to = OpenAIResponsesStreamContext()
+        ctx_from = OpenResponsesStreamContext()
+        ctx_to = OpenResponsesStreamContext()
         ctx_to.response_id = "resp_001"
         ctx_to.model = "gpt-4"
         ctx_to.mark_started()
@@ -2418,7 +2418,7 @@ class TestFunctionCallItemIdPreservation:
 
     def test_done_and_completed_use_fc_item_id(self):
         """Done and completed events use the fc_ item id from start event."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.response_id = "resp_001"
         ctx.model = "gpt-4"
         ctx.mark_started()
@@ -2835,7 +2835,7 @@ class TestStreamingResponseIdPrefix:
 
     def test_from_provider_strips_prefix_in_stream_start(self):
         """stream_response_from_provider strips resp_ prefix."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = {
             "type": "response.created",
             "response": {
@@ -2853,7 +2853,7 @@ class TestStreamingResponseIdPrefix:
 
     def test_to_provider_adds_prefix_in_response_created(self):
         """stream_response_to_provider adds resp_ prefix."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ir_event: StreamStartEvent = {
             "type": "stream_start",
             "response_id": "abc123",
@@ -2870,7 +2870,7 @@ class TestStreamingResponseIdPrefix:
 
     def test_finish_response_has_prefixed_id(self):
         """response.completed event includes prefixed response ID."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         # Simulate stream start
         start_event: StreamStartEvent = {
             "type": "stream_start",
@@ -2905,7 +2905,7 @@ class TestStreamingResponseIdPrefix:
 
     def test_finish_response_has_completed_at(self):
         """response.completed event includes completed_at timestamp."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         start_event: StreamStartEvent = {
             "type": "stream_start",
             "response_id": "ts_test",
@@ -2943,7 +2943,7 @@ class TestStreamingPrefixFromContext:
 
     def test_from_provider_uses_context_prefix(self):
         """stream_response_from_provider strips prefix from context."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.options["response_id_prefix"] = "custom_"
         event = {
             "type": "response.created",
@@ -2962,7 +2962,7 @@ class TestStreamingPrefixFromContext:
 
     def test_to_provider_uses_context_prefix(self):
         """stream_response_to_provider adds prefix from context."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.options["response_id_prefix"] = "custom_"
         ir_event: StreamStartEvent = {
             "type": "stream_start",
@@ -2976,7 +2976,7 @@ class TestStreamingPrefixFromContext:
 
     def test_finish_uses_context_prefix(self):
         """Finish response uses prefix from context."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.options["response_id_prefix"] = "custom_"
         start_event: StreamStartEvent = {
             "type": "stream_start",
@@ -3024,7 +3024,7 @@ class TestStreamingMessagePhase:
 
     def test_p_to_ir_tags_the_block_with_its_message_item(self):
         """The block that follows a message item carries that item's id/phase."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.mark_started()
         added = {
             "type": "response.output_item.added",
@@ -3057,7 +3057,7 @@ class TestStreamingMessagePhase:
 
     def test_ir_to_p_emits_phase_from_the_block(self):
         """A tagged block opens an item carrying that phase."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.response_id = "resp_test"
         result = self.converter.stream_response_to_provider(
             cast(
@@ -3080,10 +3080,10 @@ class TestStreamingMessagePhase:
 
     def test_streaming_same_format_phase_round_trip(self):
         """Responses streaming → IR → Responses streaming preserves phase."""
-        from_ctx = OpenAIResponsesStreamContext()
+        from_ctx = OpenResponsesStreamContext()
         from_ctx.mark_started()
         from_ctx.response_id = "resp_test"
-        to_ctx = OpenAIResponsesStreamContext()
+        to_ctx = OpenResponsesStreamContext()
         to_ctx.response_id = "resp_test"
 
         upstream = [
@@ -3162,7 +3162,7 @@ class TestStreamingRefusal:
 
     def test_content_part_added_refusal(self):
         """response.content_part.added with refusal type maps to refusal block type."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         event = {
             "type": "response.content_part.added",
             "part": {"type": "refusal", "refusal": ""},
@@ -3201,7 +3201,7 @@ class TestStreamingRefusal:
 
     def test_refusal_delta_with_context_emits_preamble(self):
         """First RefusalDeltaEvent with context emits preamble + delta."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.response_id = "resp_test"
         event = cast(RefusalDeltaEvent, {"type": "refusal_delta", "refusal": "Sorry"})
         result = self.converter.stream_response_to_provider(event, context=ctx)
@@ -3215,7 +3215,7 @@ class TestStreamingRefusal:
 
     def test_refusal_delta_accumulates_on_the_item(self):
         """Refusal deltas accumulate on the message item they belong to."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.response_id = "resp_test"
         for text in ["I ", "cannot ", "help"]:
             event = cast(RefusalDeltaEvent, {"type": "refusal_delta", "refusal": text})
@@ -3226,7 +3226,7 @@ class TestStreamingRefusal:
 
     def test_content_block_end_refusal_with_context(self):
         """ContentBlockEndEvent after refusal emits refusal.done + content_part.done."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.response_id = "resp_test"
         ctx.current_block_type = "refusal"
         item = ctx.start_message_item("msg_resp_test", 0, content_part_type="refusal")
@@ -3380,7 +3380,7 @@ class TestStreamingRefusal:
 
     def test_content_block_end_text_unchanged(self):
         """ContentBlockEndEvent for text blocks still emits output_text.done."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.response_id = "resp_test"
         ctx.current_block_type = "text"
         item = ctx.start_message_item("msg_resp_test", 0)
@@ -3413,7 +3413,7 @@ class TestStreamingRefusal:
 
     def test_content_block_start_refusal_round_trip(self):
         """Refusal content_block_start p→ir→p preserves block type."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         original = {
             "type": "response.content_part.added",
             "part": {"type": "refusal", "refusal": ""},
@@ -3438,7 +3438,7 @@ class TestStreamingRefusal:
         that moves arguments into the IR, so without this the target format
         emits ``arguments: ""`` and clients fail to parse the tool call.
         """
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         added = {
             "type": "response.output_item.added",
             "output_index": 0,
@@ -3468,7 +3468,7 @@ class TestStreamingRefusal:
 
     def test_function_call_args_done_after_deltas_emits_nothing(self):
         """When deltas already delivered the payload, .done stays silent."""
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         added = {
             "type": "response.output_item.added",
             "output_index": 0,

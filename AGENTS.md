@@ -46,8 +46,9 @@ matching transport is `transport/acp.py`, chosen per provider by
 `OpenResponsesConverter` implements the vendor-neutral Open Responses spec (the
 base of both Responses classes); `OpenAIResponsesConverter` derives from it as
 the OpenAI profile (adds the `resp_` id prefix, `store: true`, and OpenAI-only
-echo fields). The `OpenAIResponses*` ops classes are aliases of the
-`OpenResponses*` ones.
+echo fields). The ops classes and the stream context carry the
+`OpenResponses*` names only; the `OpenAIResponses*` ops aliases were removed in
+0.14.0.
 
 Base formats are vendor-neutral: a bare `type: <base>` provider (e.g.
 `type: open_responses`) carries no implied host or credential env var and must

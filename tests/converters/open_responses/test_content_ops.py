@@ -5,7 +5,7 @@ OpenAI Responses ContentOps unit tests.
 import pytest
 
 from llm_rosetta.converters.llm.open_responses.content_ops import (
-    OpenAIResponsesContentOps,
+    OpenResponsesContentOps,
 )
 from typing import cast
 
@@ -19,32 +19,32 @@ from llm_rosetta.types.ir import (
 )
 
 
-class TestOpenAIResponsesContentOps:
-    """Unit tests for OpenAIResponsesContentOps."""
+class TestOpenResponsesContentOps:
+    """Unit tests for OpenResponsesContentOps."""
 
     # ==================== Text ====================
 
     def test_ir_text_to_p_input(self):
         """Test IR TextPart → OpenAI Responses input_text (default context)."""
         ir_text = TextPart(type="text", text="Hello, world!")
-        result = OpenAIResponsesContentOps.ir_text_to_p(ir_text)
+        result = OpenResponsesContentOps.ir_text_to_p(ir_text)
         assert result == {"type": "input_text", "text": "Hello, world!"}
 
     def test_ir_text_to_p_output(self):
         """Test IR TextPart → OpenAI Responses output_text (output context)."""
         ir_text = TextPart(type="text", text="Response text")
-        result = OpenAIResponsesContentOps.ir_text_to_p(ir_text, context="output")
+        result = OpenResponsesContentOps.ir_text_to_p(ir_text, context="output")
         assert result == {"type": "output_text", "text": "Response text"}
 
     def test_p_text_to_ir_from_string(self):
         """Test OpenAI string → IR TextPart."""
-        result = OpenAIResponsesContentOps.p_text_to_ir("Hello!")
+        result = OpenResponsesContentOps.p_text_to_ir("Hello!")
         assert result["type"] == "text"
         assert result["text"] == "Hello!"
 
     def test_p_text_to_ir_from_input_text(self):
         """Test OpenAI input_text dict → IR TextPart."""
-        result = OpenAIResponsesContentOps.p_text_to_ir(
+        result = OpenResponsesContentOps.p_text_to_ir(
             {"type": "input_text", "text": "Hi"}
         )
         assert result["type"] == "text"
@@ -52,7 +52,7 @@ class TestOpenAIResponsesContentOps:
 
     def test_p_text_to_ir_from_output_text(self):
         """Test OpenAI output_text dict → IR TextPart."""
-        result = OpenAIResponsesContentOps.p_text_to_ir(
+        result = OpenResponsesContentOps.p_text_to_ir(
             {"type": "output_text", "text": "Response"}
         )
         assert result["type"] == "text"
@@ -60,29 +60,27 @@ class TestOpenAIResponsesContentOps:
 
     def test_p_text_to_ir_from_text_dict(self):
         """Test OpenAI plain text dict → IR TextPart."""
-        result = OpenAIResponsesContentOps.p_text_to_ir(
-            {"type": "text", "text": "Plain"}
-        )
+        result = OpenResponsesContentOps.p_text_to_ir({"type": "text", "text": "Plain"})
         assert result["type"] == "text"
         assert result["text"] == "Plain"
 
     def test_p_text_to_ir_invalid(self):
         """Test p_text_to_ir raises on invalid input."""
         with pytest.raises(ValueError, match="Cannot convert"):
-            OpenAIResponsesContentOps.p_text_to_ir(42)
+            OpenResponsesContentOps.p_text_to_ir(42)
 
     def test_text_round_trip_input(self):
         """Test text round-trip: IR → Provider (input) → IR."""
         original = TextPart(type="text", text="Round trip test")
-        provider = OpenAIResponsesContentOps.ir_text_to_p(original, context="input")
-        restored = OpenAIResponsesContentOps.p_text_to_ir(provider)
+        provider = OpenResponsesContentOps.ir_text_to_p(original, context="input")
+        restored = OpenResponsesContentOps.p_text_to_ir(provider)
         assert restored["text"] == original["text"]
 
     def test_text_round_trip_output(self):
         """Test text round-trip: IR → Provider (output) → IR."""
         original = TextPart(type="text", text="Output round trip")
-        provider = OpenAIResponsesContentOps.ir_text_to_p(original, context="output")
-        restored = OpenAIResponsesContentOps.p_text_to_ir(provider)
+        provider = OpenResponsesContentOps.ir_text_to_p(original, context="output")
+        restored = OpenResponsesContentOps.p_text_to_ir(provider)
         assert restored["text"] == original["text"]
 
     # ==================== Image ====================
@@ -92,7 +90,7 @@ class TestOpenAIResponsesContentOps:
         ir_image = ImagePart(
             type="image", image_url="https://example.com/img.jpg", detail="high"
         )
-        result = OpenAIResponsesContentOps.ir_image_to_p(ir_image)
+        result = OpenResponsesContentOps.ir_image_to_p(ir_image)
         assert result["type"] == "input_image"
         assert result["image_url"] == "https://example.com/img.jpg"
         assert result["detail"] == "high"
@@ -103,14 +101,14 @@ class TestOpenAIResponsesContentOps:
             type="image",
             image_data={"data": "abc123", "media_type": "image/png"},
         )
-        result = OpenAIResponsesContentOps.ir_image_to_p(ir_image)
+        result = OpenResponsesContentOps.ir_image_to_p(ir_image)
         assert result["type"] == "input_image"
         assert result["image_url"] == "data:image/png;base64,abc123"
 
     def test_ir_image_to_p_no_data(self):
         """Test ir_image_to_p raises when no image data."""
         with pytest.raises(ValueError, match="image_url"):
-            OpenAIResponsesContentOps.ir_image_to_p({"type": "image"})
+            OpenResponsesContentOps.ir_image_to_p({"type": "image"})
 
     def test_p_image_to_ir_with_url(self):
         """Test OpenAI Responses input_image with URL → IR ImagePart."""
@@ -119,7 +117,7 @@ class TestOpenAIResponsesContentOps:
             "image_url": "https://example.com/img.jpg",
             "detail": "low",
         }
-        result = OpenAIResponsesContentOps.p_image_to_ir(provider)
+        result = OpenResponsesContentOps.p_image_to_ir(provider)
         assert result["type"] == "image"
         assert result["image_url"] == "https://example.com/img.jpg"
         assert result["detail"] == "low"
@@ -131,7 +129,7 @@ class TestOpenAIResponsesContentOps:
             "image_url": "data:image/jpeg;base64,xyz789",
             "detail": "high",
         }
-        result = OpenAIResponsesContentOps.p_image_to_ir(provider)
+        result = OpenResponsesContentOps.p_image_to_ir(provider)
         assert result["type"] == "image"
         assert result["image_data"]["data"] == "xyz789"
         assert result["image_data"]["media_type"] == "image/jpeg"
@@ -144,7 +142,7 @@ class TestOpenAIResponsesContentOps:
             "file_id": "file-abc123",
             "detail": "auto",
         }
-        result = OpenAIResponsesContentOps.p_image_to_ir(provider)
+        result = OpenResponsesContentOps.p_image_to_ir(provider)
         assert result["type"] == "image"
         assert result["provider_ref"]["file_id"] == "file-abc123"
 
@@ -153,8 +151,8 @@ class TestOpenAIResponsesContentOps:
         original = ImagePart(
             type="image", image_url="https://example.com/img.jpg", detail="auto"
         )
-        provider = OpenAIResponsesContentOps.ir_image_to_p(original)
-        restored = OpenAIResponsesContentOps.p_image_to_ir(provider)
+        provider = OpenResponsesContentOps.ir_image_to_p(original)
+        restored = OpenResponsesContentOps.p_image_to_ir(provider)
         assert restored["image_url"] == original["image_url"]
 
     def test_image_base64_round_trip(self):
@@ -164,8 +162,8 @@ class TestOpenAIResponsesContentOps:
             image_data={"data": "base64data", "media_type": "image/png"},
             detail="high",
         )
-        provider = OpenAIResponsesContentOps.ir_image_to_p(original)
-        restored = OpenAIResponsesContentOps.p_image_to_ir(provider)
+        provider = OpenResponsesContentOps.ir_image_to_p(original)
+        restored = OpenResponsesContentOps.p_image_to_ir(provider)
         assert restored["image_data"]["data"] == "base64data"
         assert restored["image_data"]["media_type"] == "image/png"
 
@@ -181,7 +179,7 @@ class TestOpenAIResponsesContentOps:
                 "file_data": {"data": "filedata123", "media_type": "application/pdf"},
             },
         )
-        result = OpenAIResponsesContentOps.ir_file_to_p(ir_file)
+        result = OpenResponsesContentOps.ir_file_to_p(ir_file)
         assert result["type"] == "input_file"
         assert result["filename"] == "doc.pdf"
         assert result["file_data"] == "filedata123"
@@ -196,14 +194,14 @@ class TestOpenAIResponsesContentOps:
                 "file_url": "https://example.com/doc.pdf",
             },
         )
-        result = OpenAIResponsesContentOps.ir_file_to_p(ir_file)
+        result = OpenResponsesContentOps.ir_file_to_p(ir_file)
         assert result["type"] == "input_file"
         assert result["file_url"] == "https://example.com/doc.pdf"
 
     def test_ir_file_to_p_no_data(self):
         """Test ir_file_to_p raises when no file data."""
         with pytest.raises(ValueError, match="file_data or file_url"):
-            OpenAIResponsesContentOps.ir_file_to_p({"type": "file"})
+            OpenResponsesContentOps.ir_file_to_p({"type": "file"})
 
     def test_p_file_to_ir_with_data(self):
         """Test OpenAI Responses input_file with data → IR FilePart."""
@@ -212,7 +210,7 @@ class TestOpenAIResponsesContentOps:
             "filename": "test.txt",
             "file_data": "rawdata",
         }
-        result = OpenAIResponsesContentOps.p_file_to_ir(provider)
+        result = OpenResponsesContentOps.p_file_to_ir(provider)
         assert result["type"] == "file"
         assert result["file_name"] == "test.txt"
         assert result["file_data"]["data"] == "rawdata"
@@ -224,7 +222,7 @@ class TestOpenAIResponsesContentOps:
             "filename": "test.txt",
             "file_url": "https://example.com/test.txt",
         }
-        result = OpenAIResponsesContentOps.p_file_to_ir(provider)
+        result = OpenResponsesContentOps.p_file_to_ir(provider)
         assert result["type"] == "file"
         assert result["file_url"] == "https://example.com/test.txt"
 
@@ -235,7 +233,7 @@ class TestOpenAIResponsesContentOps:
             "filename": "test.txt",
             "file_id": "file-xyz",
         }
-        result = OpenAIResponsesContentOps.p_file_to_ir(provider)
+        result = OpenResponsesContentOps.p_file_to_ir(provider)
         assert result["type"] == "file"
         assert result["provider_ref"]["file_id"] == "file-xyz"
 
@@ -244,19 +242,19 @@ class TestOpenAIResponsesContentOps:
     def test_ir_audio_to_p_raises(self):
         """Test ir_audio_to_p raises NotImplementedError."""
         with pytest.raises(NotImplementedError, match="does not support audio"):
-            OpenAIResponsesContentOps.ir_audio_to_p({"type": "audio"})
+            OpenResponsesContentOps.ir_audio_to_p({"type": "audio"})
 
     def test_p_audio_to_ir_raises(self):
         """Test p_audio_to_ir raises NotImplementedError."""
         with pytest.raises(NotImplementedError, match="does not support audio"):
-            OpenAIResponsesContentOps.p_audio_to_ir({})
+            OpenResponsesContentOps.p_audio_to_ir({})
 
     # ==================== Reasoning ====================
 
     def test_ir_reasoning_to_output_item(self):
         """Test IR ReasoningPart → OpenAI Responses reasoning output item."""
         ir_reasoning = ReasoningPart(type="reasoning", reasoning="thinking...")
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(
+        result = OpenResponsesContentOps.ir_reasoning_to_p(
             ir_reasoning, output_item=True
         )
         assert result is not None
@@ -266,7 +264,7 @@ class TestOpenAIResponsesContentOps:
     def test_ir_reasoning_to_output_item_empty(self):
         """Test IR ReasoningPart with no reasoning → empty output summary."""
         ir_reasoning = cast(ReasoningPart, {"type": "reasoning"})
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(
+        result = OpenResponsesContentOps.ir_reasoning_to_p(
             ir_reasoning, output_item=True
         )
         assert result is not None
@@ -280,7 +278,7 @@ class TestOpenAIResponsesContentOps:
             reasoning="thinking...",
             provider_metadata={"responses_reasoning_id": "rs_abc123"},
         )
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
+        result = OpenResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
         assert result is not None
         assert result["type"] == "reasoning"
         assert result["id"] == "rs_abc123"
@@ -299,14 +297,14 @@ class TestOpenAIResponsesContentOps:
                 "responses_reasoning_summary": original_summary,
             },
         )
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
+        result = OpenResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
         assert result is not None
         assert result["summary"] == original_summary
 
     def test_p_reasoning_to_ir_with_content(self):
         """Test OpenAI Responses reasoning with content → IR ReasoningPart."""
         provider = {"type": "reasoning", "content": "I need to think about this..."}
-        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        result = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is not None
         assert result["type"] == "reasoning"
         assert result["reasoning"] == "I need to think about this..."
@@ -318,7 +316,7 @@ class TestOpenAIResponsesContentOps:
             "id": "rs_abc123",
             "summary": [{"type": "summary_text", "text": "thinking..."}],
         }
-        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        result = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is not None
         assert result["reasoning"] == "thinking..."
         assert result["provider_metadata"]["responses_reasoning_id"] == "rs_abc123"
@@ -326,14 +324,14 @@ class TestOpenAIResponsesContentOps:
     def test_p_reasoning_to_ir_with_reasoning_field(self):
         """Test OpenAI Responses reasoning with 'reasoning' field → IR ReasoningPart."""
         provider = {"type": "reasoning", "reasoning": "Deep thought"}
-        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        result = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is not None
         assert result["reasoning"] == "Deep thought"
 
     def test_p_reasoning_to_ir_empty(self):
         """Test OpenAI Responses reasoning with empty content → None."""
         provider = {"type": "reasoning", "content": None}
-        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        result = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is None
 
     def test_p_reasoning_to_ir_with_encrypted_content(self):
@@ -344,7 +342,7 @@ class TestOpenAIResponsesContentOps:
             "encrypted_content": "enc_sig_xyz",
             "summary": [],
         }
-        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        result = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is not None
         assert result["redacted_data"] == "enc_sig_xyz"
         assert "signature" not in result
@@ -359,7 +357,7 @@ class TestOpenAIResponsesContentOps:
             "summary": [],
             "content": raw_content,
         }
-        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        result = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is not None
         assert result["reasoning"] == "raw"
         assert result["provider_metadata"]["responses_reasoning_content"] == raw_content
@@ -379,7 +377,7 @@ class TestOpenAIResponsesContentOps:
             "summary": [],
             "encrypted_content": "c4707159-eb5a-421a-8e2d-2e55d8c7e98d-0",
         }
-        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        result = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is not None
         assert result["reasoning"] == "We need to answer simple. 2+2=4."
         assert result["redacted_data"] == "c4707159-eb5a-421a-8e2d-2e55d8c7e98d-0"
@@ -399,7 +397,7 @@ class TestOpenAIResponsesContentOps:
                 {"type": "reasoning_text", "text": "Second thought."},
             ],
         }
-        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        result = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is not None
         assert result["reasoning"] == "First thought. Second thought."
 
@@ -411,7 +409,7 @@ class TestOpenAIResponsesContentOps:
             "summary": [],
             "content": [{"type": "other", "data": "something"}],
         }
-        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        result = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is not None
         assert result.get("reasoning", "") == ""
 
@@ -425,7 +423,7 @@ class TestOpenAIResponsesContentOps:
             "content": [],
             "encrypted_content": "enc-123",
         }
-        result = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        result = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert result is not None
         assert result["provider_metadata"]["responses_reasoning_status"] == "completed"
 
@@ -437,26 +435,24 @@ class TestOpenAIResponsesContentOps:
             "status": "in_progress",
             "summary": [],
         }
-        ir = OpenAIResponsesContentOps.p_reasoning_to_ir(provider_in)
+        ir = OpenResponsesContentOps.p_reasoning_to_ir(provider_in)
         assert ir is not None
-        restored = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        restored = OpenResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
         assert restored is not None
         assert restored["status"] == "in_progress"
 
     def test_reasoning_status_default_completed(self):
         """Without preserved status, output items default to completed."""
         ir = ReasoningPart(type="reasoning", reasoning="test")
-        restored = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        restored = OpenResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
         assert restored is not None
         assert restored["status"] == "completed"
 
     def test_reasoning_round_trip(self):
         """Test reasoning round-trip: IR → Provider → IR."""
         original = ReasoningPart(type="reasoning", reasoning="Step by step analysis")
-        provider = OpenAIResponsesContentOps.ir_reasoning_to_p(
-            original, output_item=True
-        )
-        restored = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        provider = OpenResponsesContentOps.ir_reasoning_to_p(original, output_item=True)
+        restored = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert restored is not None
         assert restored["reasoning"] == original["reasoning"]
 
@@ -467,9 +463,9 @@ class TestOpenAIResponsesContentOps:
             "id": "rs_abc123",
             "summary": [{"type": "summary_text", "text": "thinking..."}],
         }
-        ir = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        ir = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert ir is not None
-        restored = OpenAIResponsesContentOps.ir_reasoning_to_p(ir)
+        restored = OpenResponsesContentOps.ir_reasoning_to_p(ir)
         assert restored is not None
         assert restored["id"] == "rs_abc123"
         assert restored["summary"] == provider["summary"]
@@ -478,14 +474,14 @@ class TestOpenAIResponsesContentOps:
 
     def test_ir_refusal_to_p(self):
         """Test ir_refusal_to_p produces RefusalContent."""
-        result = OpenAIResponsesContentOps.ir_refusal_to_p(
+        result = OpenResponsesContentOps.ir_refusal_to_p(
             {"type": "refusal", "refusal": "I cannot do that"}
         )
         assert result == {"type": "refusal", "refusal": "I cannot do that"}
 
     def test_p_refusal_to_ir(self):
         """Test p_refusal_to_ir parses RefusalContent."""
-        result = OpenAIResponsesContentOps.p_refusal_to_ir(
+        result = OpenResponsesContentOps.p_refusal_to_ir(
             {"type": "refusal", "refusal": "I cannot do that"}
         )
         assert result["type"] == "refusal"
@@ -494,8 +490,8 @@ class TestOpenAIResponsesContentOps:
     def test_refusal_round_trip(self):
         """Test refusal round-trip: IR → Provider → IR."""
         original = RefusalPart(type="refusal", refusal="Cannot help.")
-        provider = OpenAIResponsesContentOps.ir_refusal_to_p(original)
-        restored = OpenAIResponsesContentOps.p_refusal_to_ir(provider)
+        provider = OpenResponsesContentOps.ir_refusal_to_p(original)
+        restored = OpenResponsesContentOps.p_refusal_to_ir(provider)
         assert restored["refusal"] == original["refusal"]
 
     # ==================== Citation ====================
@@ -511,7 +507,7 @@ class TestOpenAIResponsesContentOps:
                 "url": "https://example.com",
             },
         )
-        result = OpenAIResponsesContentOps.ir_citation_to_p(ir_citation)
+        result = OpenResponsesContentOps.ir_citation_to_p(ir_citation)
         assert result is not None
         assert result["type"] == "url_citation"
         assert result["url"] == "https://example.com"
@@ -521,7 +517,7 @@ class TestOpenAIResponsesContentOps:
 
     def test_ir_citation_to_p_no_url(self):
         """Test ir_citation_to_p returns None when no url_citation."""
-        result = OpenAIResponsesContentOps.ir_citation_to_p({"type": "citation"})
+        result = OpenResponsesContentOps.ir_citation_to_p({"type": "citation"})
         assert result is None
 
     def test_p_citation_to_ir_url(self):
@@ -537,7 +533,7 @@ class TestOpenAIResponsesContentOps:
             "title": "Source",
             "url": "https://example.com/source",
         }
-        result = OpenAIResponsesContentOps.p_citation_to_ir(provider)
+        result = OpenResponsesContentOps.p_citation_to_ir(provider)
         assert result["type"] == "citation"
         assert result["citation_type"] == "url_citation"
         assert result["url"] == "https://example.com/source"
@@ -552,11 +548,11 @@ class TestOpenAIResponsesContentOps:
             "filename": "notes.txt",
             "index": 40,
         }
-        result = OpenAIResponsesContentOps.p_citation_to_ir(provider)
+        result = OpenResponsesContentOps.p_citation_to_ir(provider)
         assert result["citation_type"] == "file_citation"
         assert result["start_index"] == 40
         assert result["provider_metadata"]["openai"]["file_id"] == "file-123"
-        assert OpenAIResponsesContentOps.ir_citation_to_p(result) == provider
+        assert OpenResponsesContentOps.ir_citation_to_p(result) == provider
 
     def test_container_file_citation_round_trips(self):
         """A container citation is a kind only this dialect has."""
@@ -568,21 +564,21 @@ class TestOpenAIResponsesContentOps:
             "start_index": 164,
             "end_index": 192,
         }
-        result = OpenAIResponsesContentOps.p_citation_to_ir(provider)
+        result = OpenResponsesContentOps.p_citation_to_ir(provider)
         assert result["citation_type"] == "container_file_citation"
-        assert OpenAIResponsesContentOps.ir_citation_to_p(result) == provider
+        assert OpenResponsesContentOps.ir_citation_to_p(result) == provider
 
     def test_unknown_annotation_kind_is_kept_verbatim(self):
         """A kind this dialect does not know is preserved for a write back."""
         provider = {"type": "future_citation", "whatever": 1}
-        result = OpenAIResponsesContentOps.p_citation_to_ir(provider)
+        result = OpenResponsesContentOps.p_citation_to_ir(provider)
         assert result["citation_type"] == "future_citation"
-        assert OpenAIResponsesContentOps.ir_citation_to_p(result) == provider
+        assert OpenResponsesContentOps.ir_citation_to_p(result) == provider
 
     def test_citation_a_foreign_dialect_owns_is_not_written(self):
         """A char_location has no Responses form."""
         assert (
-            OpenAIResponsesContentOps.ir_citation_to_p(
+            OpenResponsesContentOps.ir_citation_to_p(
                 {
                     "type": "citation",
                     "citation_type": "char_location",
@@ -602,9 +598,9 @@ class TestOpenAIResponsesContentOps:
             start_index=10,
             end_index=20,
         )
-        provider = OpenAIResponsesContentOps.ir_citation_to_p(original)
+        provider = OpenResponsesContentOps.ir_citation_to_p(original)
         assert provider is not None
-        restored = OpenAIResponsesContentOps.p_citation_to_ir(provider)
+        restored = OpenResponsesContentOps.p_citation_to_ir(provider)
         assert restored["url"] == original["url"]
         assert restored["start_index"] == original["start_index"]
 
@@ -618,7 +614,7 @@ class TestReasoningDirection:
             reasoning="thinking...",
             signature="arbitrary-signature",
         )
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
+        result = OpenResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
         assert result is None
 
     def test_request_preserves_responses_origin_fields_without_status(self):
@@ -632,7 +628,7 @@ class TestReasoningDirection:
             "responses_reasoning_id": "rs_original_123",
             "responses_reasoning_summary": summary,
         }
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
+        result = OpenResponsesContentOps.ir_reasoning_to_p(ir_reasoning)
         assert result is not None
         assert result["id"] == "rs_original_123"
         assert result["summary"] == summary
@@ -641,7 +637,7 @@ class TestReasoningDirection:
 
     def test_output_generates_id_and_status(self):
         ir_reasoning = ReasoningPart(type="reasoning", reasoning="thinking...")
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(
+        result = OpenResponsesContentOps.ir_reasoning_to_p(
             ir_reasoning, output_item=True
         )
         assert result is not None
@@ -654,7 +650,7 @@ class TestReasoningDirection:
             reasoning="thinking...",
             provider_metadata={"responses_reasoning_id": "rs_original_123"},
         )
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(
+        result = OpenResponsesContentOps.ir_reasoning_to_p(
             ir_reasoning, output_item=True
         )
         assert result is not None
@@ -663,10 +659,10 @@ class TestReasoningDirection:
 
     def test_output_id_deterministic_with_response_id(self):
         ir = ReasoningPart(type="reasoning", reasoning="test")
-        r1 = OpenAIResponsesContentOps.ir_reasoning_to_p(
+        r1 = OpenResponsesContentOps.ir_reasoning_to_p(
             ir, output_item=True, response_id="resp_abc", reasoning_index=0
         )
-        r2 = OpenAIResponsesContentOps.ir_reasoning_to_p(
+        r2 = OpenResponsesContentOps.ir_reasoning_to_p(
             ir, output_item=True, response_id="resp_abc", reasoning_index=0
         )
         assert r1 is not None and r2 is not None
@@ -674,10 +670,10 @@ class TestReasoningDirection:
 
     def test_output_index_changes_generated_id(self):
         ir = ReasoningPart(type="reasoning", reasoning="test")
-        r0 = OpenAIResponsesContentOps.ir_reasoning_to_p(
+        r0 = OpenResponsesContentOps.ir_reasoning_to_p(
             ir, output_item=True, response_id="resp_abc", reasoning_index=0
         )
-        r1 = OpenAIResponsesContentOps.ir_reasoning_to_p(
+        r1 = OpenResponsesContentOps.ir_reasoning_to_p(
             ir, output_item=True, response_id="resp_abc", reasoning_index=1
         )
         assert r0 is not None and r1 is not None
@@ -685,8 +681,8 @@ class TestReasoningDirection:
 
     def test_output_uuid_fallback_without_response_id(self):
         ir = ReasoningPart(type="reasoning", reasoning="test")
-        r1 = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
-        r2 = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        r1 = OpenResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        r2 = OpenResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
         assert r1 is not None and r2 is not None
         assert r1["id"].startswith("rs_")
         assert r2["id"].startswith("rs_")

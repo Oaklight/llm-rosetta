@@ -5,24 +5,24 @@ OpenAI Responses MessageOps unit tests.
 from typing import Any, Union, cast
 
 from llm_rosetta.converters.llm.open_responses.content_ops import (
-    OpenAIResponsesContentOps,
+    OpenResponsesContentOps,
 )
 from llm_rosetta.converters.llm.open_responses.message_ops import (
-    OpenAIResponsesMessageOps,
+    OpenResponsesMessageOps,
 )
-from llm_rosetta.converters.llm.open_responses.tool_ops import OpenAIResponsesToolOps
+from llm_rosetta.converters.llm.open_responses.tool_ops import OpenResponsesToolOps
 from llm_rosetta.types.ir import Message, ToolCallPart, ToolResultPart
 from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
 
 
-class TestOpenAIResponsesMessageOps:
-    """Unit tests for OpenAIResponsesMessageOps."""
+class TestOpenResponsesMessageOps:
+    """Unit tests for OpenResponsesMessageOps."""
 
     def setup_method(self):
         """Set up test fixtures."""
-        self.content_ops = OpenAIResponsesContentOps()
-        self.tool_ops = OpenAIResponsesToolOps()
-        self.message_ops = OpenAIResponsesMessageOps(self.content_ops, self.tool_ops)
+        self.content_ops = OpenResponsesContentOps()
+        self.tool_ops = OpenResponsesToolOps()
+        self.message_ops = OpenResponsesMessageOps(self.content_ops, self.tool_ops)
 
     # ==================== IR → Provider ====================
 
@@ -644,8 +644,8 @@ class TestSameTurnMessageItemGrouping:
     """Grouping consecutive Responses message items into IR turns (#997)."""
 
     def setup_method(self):
-        self.message_ops = OpenAIResponsesMessageOps(
-            OpenAIResponsesContentOps(), OpenAIResponsesToolOps()
+        self.message_ops = OpenResponsesMessageOps(
+            OpenResponsesContentOps(), OpenResponsesToolOps()
         )
 
     @staticmethod

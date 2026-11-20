@@ -3,7 +3,7 @@
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.llm.open_responses._constants import ResponsesEventType
 from llm_rosetta.converters.llm.open_responses.stream_context import (
-    OpenAIResponsesStreamContext,
+    OpenResponsesStreamContext,
 )
 from llm_rosetta.converters.llm.open_responses.utils import (
     build_message_preamble_events,
@@ -19,13 +19,13 @@ class TestResolveCallId:
         assert resolve_call_id(chunk, None) == "call_abc"
 
     def test_falls_back_to_item_id_mapping(self):
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.item_id_to_call_id["item_xyz"] = "call_abc"
         chunk = {"item_id": "item_xyz"}
         assert resolve_call_id(chunk, ctx) == "call_abc"
 
     def test_returns_empty_when_no_call_id_and_no_item_id(self):
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         assert resolve_call_id({}, ctx) == ""
 
     def test_returns_empty_when_context_is_none(self):
@@ -38,12 +38,12 @@ class TestResolveCallId:
         assert resolve_call_id(chunk, ctx) == ""
 
     def test_returns_empty_when_item_id_not_in_mapping(self):
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         chunk = {"item_id": "unknown_item"}
         assert resolve_call_id(chunk, ctx) == ""
 
     def test_prefers_call_id_over_item_id(self):
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         ctx.item_id_to_call_id["item_xyz"] = "call_from_map"
         chunk = {"call_id": "call_direct", "item_id": "item_xyz"}
         assert resolve_call_id(chunk, ctx) == "call_direct"
@@ -53,7 +53,7 @@ class TestBuildMessagePreambleEvents:
     """Tests for build_message_preamble_events."""
 
     def setup_method(self):
-        self.ctx = OpenAIResponsesStreamContext()
+        self.ctx = OpenResponsesStreamContext()
         self.ctx.response_id = "resp_123"
 
     def test_returns_two_events(self):

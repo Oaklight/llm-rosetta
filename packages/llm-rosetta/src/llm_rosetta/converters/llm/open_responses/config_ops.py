@@ -401,8 +401,3 @@ class OpenResponsesConfigOps(BaseConfigOps):
             )
 
         return cast(CacheConfig, result)
-
-
-# Backward-compatible alias (deprecated): the OpenAI Responses profile reuses
-# the same config operations as the vendor-neutral Open Responses base.
-OpenAIResponsesConfigOps = OpenResponsesConfigOps

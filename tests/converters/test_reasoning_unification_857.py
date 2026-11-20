@@ -19,7 +19,7 @@ from llm_rosetta.converters.llm.google_generate.content_ops import (
 )
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.open_responses.content_ops import (
-    OpenAIResponsesContentOps,
+    OpenResponsesContentOps,
 )
 from llm_rosetta.types.ir import ReasoningPart
 
@@ -34,7 +34,7 @@ class TestOpenAIResponsesEncryptedContent:
             "encrypted_content": "opaque-blob-abc",
             "summary": [{"type": "summary_text", "text": "visible summary"}],
         }
-        ir = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        ir = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert ir is not None
         assert ir["redacted_data"] == "opaque-blob-abc"
         assert "signature" not in ir
@@ -42,7 +42,7 @@ class TestOpenAIResponsesEncryptedContent:
     def test_ir_to_provider(self):
         ir = ReasoningPart(type="reasoning", reasoning="visible text")
         ir["redacted_data"] = "opaque-blob-xyz"
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        result = OpenResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
         assert result is not None
         assert result["encrypted_content"] == "opaque-blob-xyz"
 
@@ -53,9 +53,9 @@ class TestOpenAIResponsesEncryptedContent:
             "encrypted_content": "round-trip-blob",
             "summary": [],
         }
-        ir = OpenAIResponsesContentOps.p_reasoning_to_ir(provider)
+        ir = OpenResponsesContentOps.p_reasoning_to_ir(provider)
         assert ir is not None
-        restored = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        restored = OpenResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
         assert restored is not None
         assert restored["encrypted_content"] == "round-trip-blob"
 
@@ -64,7 +64,7 @@ class TestOpenAIResponsesEncryptedContent:
         ir = ReasoningPart(type="reasoning", reasoning="visible")
         ir["signature"] = "verification-sig"
         ir["redacted_data"] = "encrypted-blob"
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        result = OpenResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
         assert result is not None
         assert result["encrypted_content"] == "encrypted-blob"
 
@@ -217,7 +217,7 @@ class TestCrossFormatConversion:
             "encrypted_content": "cross-format-blob",
             "summary": [],
         }
-        ir = OpenAIResponsesContentOps.p_reasoning_to_ir(responses_item)
+        ir = OpenResponsesContentOps.p_reasoning_to_ir(responses_item)
         assert ir is not None
         assert ir["redacted_data"] == "cross-format-blob"
 
@@ -229,7 +229,7 @@ class TestCrossFormatConversion:
         ir = ReasoningPart(type="reasoning")
         ir["redacted_data"] = "anthropic-redacted-blob"
 
-        result = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        result = OpenResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
         assert result is not None
         assert result["encrypted_content"] == "anthropic-redacted-blob"
 

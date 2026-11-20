@@ -7,7 +7,7 @@ from typing import Any, cast
 
 from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.open_responses.config_ops import (
-    OpenAIResponsesConfigOps,
+    OpenResponsesConfigOps,
 )
 from llm_rosetta.types.ir import (
     CacheConfig,
@@ -18,8 +18,8 @@ from llm_rosetta.types.ir import (
 )
 
 
-class TestOpenAIResponsesConfigOps:
-    """Unit tests for OpenAIResponsesConfigOps."""
+class TestOpenResponsesConfigOps:
+    """Unit tests for OpenResponsesConfigOps."""
 
     # ==================== Generation Config ====================
 
@@ -33,14 +33,14 @@ class TestOpenAIResponsesConfigOps:
                 "top_logprobs": 5,
             },
         )
-        result = OpenAIResponsesConfigOps.ir_generation_config_to_p(ir_config)
+        result = OpenResponsesConfigOps.ir_generation_config_to_p(ir_config)
         assert result["temperature"] == 0.7
         assert result["top_p"] == 0.9
         assert result["top_logprobs"] == 5
 
     def test_ir_generation_config_max_tokens(self):
         """Test max_tokens → max_output_tokens."""
-        result = OpenAIResponsesConfigOps.ir_generation_config_to_p(
+        result = OpenResponsesConfigOps.ir_generation_config_to_p(
             cast(GenerationConfig, {"max_tokens": 100})
         )
         assert result["max_output_tokens"] == 100
@@ -48,7 +48,7 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_generation_config_truncation(self):
         """Test truncation pass-through."""
-        result = OpenAIResponsesConfigOps.ir_generation_config_to_p(
+        result = OpenResponsesConfigOps.ir_generation_config_to_p(
             cast(GenerationConfig, {"truncation": "auto"})
         )
         assert result["truncation"] == "auto"
@@ -57,21 +57,21 @@ class TestOpenAIResponsesConfigOps:
         """Test top_k produces warning."""
         sink = WarningSink()
         with recording_to(sink):
-            OpenAIResponsesConfigOps.ir_generation_config_to_p(
+            OpenResponsesConfigOps.ir_generation_config_to_p(
                 cast(GenerationConfig, {"top_k": 40})
             )
         assert any("top_k" in warning for warning in sink)
 
     def test_ir_generation_config_frequency_penalty(self):
         """Test frequency_penalty direct mapping."""
-        result = OpenAIResponsesConfigOps.ir_generation_config_to_p(
+        result = OpenResponsesConfigOps.ir_generation_config_to_p(
             cast(GenerationConfig, {"frequency_penalty": 0.5})
         )
         assert result["frequency_penalty"] == 0.5
 
     def test_ir_generation_config_presence_penalty(self):
         """Test presence_penalty direct mapping."""
-        result = OpenAIResponsesConfigOps.ir_generation_config_to_p(
+        result = OpenResponsesConfigOps.ir_generation_config_to_p(
             cast(GenerationConfig, {"presence_penalty": 0.3})
         )
         assert result["presence_penalty"] == 0.3
@@ -80,7 +80,7 @@ class TestOpenAIResponsesConfigOps:
         """Test logit_bias produces warning."""
         sink = WarningSink()
         with recording_to(sink):
-            OpenAIResponsesConfigOps.ir_generation_config_to_p(
+            OpenResponsesConfigOps.ir_generation_config_to_p(
                 cast(Any, {"logit_bias": {100: 10}})
             )
         assert any("logit_bias" in warning for warning in sink)
@@ -89,7 +89,7 @@ class TestOpenAIResponsesConfigOps:
         """Test seed produces warning."""
         sink = WarningSink()
         with recording_to(sink):
-            OpenAIResponsesConfigOps.ir_generation_config_to_p(
+            OpenResponsesConfigOps.ir_generation_config_to_p(
                 cast(GenerationConfig, {"seed": 42})
             )
         assert any("seed" in warning for warning in sink)
@@ -98,7 +98,7 @@ class TestOpenAIResponsesConfigOps:
         """Test n produces warning."""
         sink = WarningSink()
         with recording_to(sink):
-            OpenAIResponsesConfigOps.ir_generation_config_to_p(
+            OpenResponsesConfigOps.ir_generation_config_to_p(
                 cast(GenerationConfig, {"n": 2})
             )
         assert any(" n" in warning for warning in sink)
@@ -107,14 +107,14 @@ class TestOpenAIResponsesConfigOps:
         """Test stop_sequences produces warning."""
         sink = WarningSink()
         with recording_to(sink):
-            OpenAIResponsesConfigOps.ir_generation_config_to_p(
+            OpenResponsesConfigOps.ir_generation_config_to_p(
                 cast(GenerationConfig, {"stop_sequences": ["END"]})
             )
         assert any("stop_sequences" in warning for warning in sink)
 
     def test_ir_generation_config_empty(self):
         """Test empty config returns empty dict."""
-        result = OpenAIResponsesConfigOps.ir_generation_config_to_p(
+        result = OpenResponsesConfigOps.ir_generation_config_to_p(
             cast(GenerationConfig, {})
         )
         assert result == {}
@@ -130,7 +130,7 @@ class TestOpenAIResponsesConfigOps:
             "frequency_penalty": 0.5,
             "presence_penalty": 0.3,
         }
-        result = OpenAIResponsesConfigOps.p_generation_config_to_ir(provider)
+        result = OpenResponsesConfigOps.p_generation_config_to_ir(provider)
         assert result["temperature"] == 0.5
         assert result["max_tokens"] == 200
         assert result["top_p"] == 0.9
@@ -141,12 +141,12 @@ class TestOpenAIResponsesConfigOps:
 
     def test_p_generation_config_to_ir_non_dict(self):
         """Test non-dict input returns empty dict."""
-        result = OpenAIResponsesConfigOps.p_generation_config_to_ir("not a dict")
+        result = OpenResponsesConfigOps.p_generation_config_to_ir("not a dict")
         assert result == {}
 
     def test_p_generation_config_to_ir_empty(self):
         """Test empty dict returns empty dict."""
-        result = OpenAIResponsesConfigOps.p_generation_config_to_ir({})
+        result = OpenResponsesConfigOps.p_generation_config_to_ir({})
         assert result == {}
 
     def test_generation_config_round_trip(self):
@@ -155,8 +155,8 @@ class TestOpenAIResponsesConfigOps:
             GenerationConfig,
             {"temperature": 0.8, "max_tokens": 150, "top_p": 0.95},
         )
-        provider = OpenAIResponsesConfigOps.ir_generation_config_to_p(original)
-        restored = OpenAIResponsesConfigOps.p_generation_config_to_ir(provider)
+        provider = OpenResponsesConfigOps.ir_generation_config_to_p(original)
+        restored = OpenResponsesConfigOps.p_generation_config_to_ir(provider)
         assert restored["temperature"] == 0.8
         assert restored["max_tokens"] == 150
         assert restored["top_p"] == 0.95
@@ -165,14 +165,14 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_response_format_text(self):
         """Test text response format → the nested text.format field."""
-        result = OpenAIResponsesConfigOps.ir_response_format_to_p(
+        result = OpenResponsesConfigOps.ir_response_format_to_p(
             cast(ResponseFormatConfig, {"type": "text"})
         )
         assert result["text"] == {"format": {"type": "text"}}
 
     def test_ir_response_format_json_object(self):
         """Test json_object response format → the nested text.format field."""
-        result = OpenAIResponsesConfigOps.ir_response_format_to_p(
+        result = OpenResponsesConfigOps.ir_response_format_to_p(
             cast(ResponseFormatConfig, {"type": "json_object"})
         )
         assert result["text"] == {"format": {"type": "json_object"}}
@@ -180,7 +180,7 @@ class TestOpenAIResponsesConfigOps:
     def test_ir_response_format_json_schema(self):
         """A JSON schema is written flat, beside ``type`` (issue #1294)."""
         schema = {"name": "test", "schema": {"type": "object"}}
-        result = OpenAIResponsesConfigOps.ir_response_format_to_p(
+        result = OpenResponsesConfigOps.ir_response_format_to_p(
             cast(ResponseFormatConfig, {"type": "json_schema", "json_schema": schema})
         )
         assert result["text"]["format"] == {
@@ -191,22 +191,20 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_response_format_unknown(self):
         """Test unknown format type returns empty dict."""
-        result = OpenAIResponsesConfigOps.ir_response_format_to_p(
+        result = OpenResponsesConfigOps.ir_response_format_to_p(
             cast(Any, {"type": "unknown_type"})
         )
         assert result == {}
 
     def test_p_response_format_to_ir(self):
         """Test OpenAI Responses text format → IR."""
-        result = OpenAIResponsesConfigOps.p_response_format_to_ir(
-            {"type": "json_object"}
-        )
+        result = OpenResponsesConfigOps.p_response_format_to_ir({"type": "json_object"})
         assert result["type"] == "json_object"
 
     def test_p_response_format_to_ir_json_schema(self):
         """Test json_schema text format → IR with schema."""
         schema = {"name": "test", "schema": {"type": "object"}}
-        result = OpenAIResponsesConfigOps.p_response_format_to_ir(
+        result = OpenResponsesConfigOps.p_response_format_to_ir(
             {"type": "json_schema", "json_schema": schema}
         )
         assert result["type"] == "json_schema"
@@ -214,14 +212,14 @@ class TestOpenAIResponsesConfigOps:
 
     def test_p_response_format_to_ir_reads_the_spec_shape(self):
         """``text.format`` is where the spec puts the format (issue #1294)."""
-        result = OpenAIResponsesConfigOps.p_response_format_to_ir(
+        result = OpenResponsesConfigOps.p_response_format_to_ir(
             {"format": {"type": "json_object"}}
         )
         assert result["type"] == "json_object"
 
     def test_p_response_format_to_ir_unflattens_a_schema(self):
         """A flat JSON schema lands in the IR's ``json_schema`` object."""
-        result = OpenAIResponsesConfigOps.p_response_format_to_ir(
+        result = OpenResponsesConfigOps.p_response_format_to_ir(
             {
                 "format": {
                     "type": "json_schema",
@@ -239,14 +237,14 @@ class TestOpenAIResponsesConfigOps:
 
     def test_p_response_format_to_ir_non_dict(self):
         """Test non-dict input returns empty dict."""
-        result = OpenAIResponsesConfigOps.p_response_format_to_ir("not a dict")
+        result = OpenResponsesConfigOps.p_response_format_to_ir("not a dict")
         assert result == {}
 
     def test_response_format_round_trip(self):
         """Test response format round-trip."""
         original = cast(ResponseFormatConfig, {"type": "json_object"})
-        provider = OpenAIResponsesConfigOps.ir_response_format_to_p(original)
-        restored = OpenAIResponsesConfigOps.p_response_format_to_ir(provider["text"])
+        provider = OpenResponsesConfigOps.ir_response_format_to_p(original)
+        restored = OpenResponsesConfigOps.p_response_format_to_ir(provider["text"])
         assert restored["type"] == "json_object"
 
     # ==================== Stream Config ====================
@@ -257,7 +255,7 @@ class TestOpenAIResponsesConfigOps:
         Responses API does NOT support stream_options (Chat-only field).
         Usage is always included in Responses streaming events.
         """
-        result = OpenAIResponsesConfigOps.ir_stream_config_to_p(
+        result = OpenResponsesConfigOps.ir_stream_config_to_p(
             cast(StreamConfig, {"enabled": True, "include_usage": True})
         )
         assert result["stream"] is True
@@ -265,7 +263,7 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_stream_config_disabled(self):
         """Test disabled stream."""
-        result = OpenAIResponsesConfigOps.ir_stream_config_to_p(
+        result = OpenResponsesConfigOps.ir_stream_config_to_p(
             cast(StreamConfig, {"enabled": False})
         )
         assert result["stream"] is False
@@ -273,7 +271,7 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_stream_config_no_usage(self):
         """Test stream enabled without include_usage."""
-        result = OpenAIResponsesConfigOps.ir_stream_config_to_p(
+        result = OpenResponsesConfigOps.ir_stream_config_to_p(
             cast(StreamConfig, {"enabled": True})
         )
         assert result["stream"] is True
@@ -281,7 +279,7 @@ class TestOpenAIResponsesConfigOps:
 
     def test_p_stream_config_to_ir(self):
         """Test OpenAI Responses stream params → IR StreamConfig."""
-        result = OpenAIResponsesConfigOps.p_stream_config_to_ir(
+        result = OpenResponsesConfigOps.p_stream_config_to_ir(
             {"stream": True, "stream_options": {"include_usage": True}}
         )
         assert result["enabled"] is True
@@ -289,7 +287,7 @@ class TestOpenAIResponsesConfigOps:
 
     def test_p_stream_config_to_ir_non_dict(self):
         """Test non-dict input returns empty dict."""
-        result = OpenAIResponsesConfigOps.p_stream_config_to_ir("not a dict")
+        result = OpenResponsesConfigOps.p_stream_config_to_ir("not a dict")
         assert result == {}
 
     def test_stream_config_round_trip(self):
@@ -300,8 +298,8 @@ class TestOpenAIResponsesConfigOps:
         always included automatically in Responses streaming events.
         """
         original = cast(StreamConfig, {"enabled": True, "include_usage": True})
-        provider = OpenAIResponsesConfigOps.ir_stream_config_to_p(original)
-        restored = OpenAIResponsesConfigOps.p_stream_config_to_ir(provider)
+        provider = OpenResponsesConfigOps.ir_stream_config_to_p(original)
+        restored = OpenResponsesConfigOps.p_stream_config_to_ir(provider)
         assert restored["enabled"] is True
         # include_usage is NOT preserved — Responses API always includes usage
         assert "include_usage" not in restored
@@ -310,14 +308,14 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_reasoning_config_to_p(self):
         """Test IR ReasoningConfig → OpenAI Responses reasoning object."""
-        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+        result = OpenResponsesConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"effort": "high"})
         )
         assert result["reasoning"] == {"effort": "high"}
 
     def test_ir_reasoning_config_with_summary(self):
         """Test reasoning config with summary (auto, concise, detailed)."""
-        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+        result = OpenResponsesConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"effort": "high", "summary": "detailed"})
         )
         assert result["reasoning"] == {"effort": "high", "summary": "detailed"}
@@ -325,15 +323,15 @@ class TestOpenAIResponsesConfigOps:
     def test_reasoning_summary_round_trip(self):
         """Test round-trip: summary preserved through IR."""
         original = {"reasoning": {"effort": "high", "summary": "concise"}}
-        ir = OpenAIResponsesConfigOps.p_reasoning_config_to_ir(original)
+        ir = OpenResponsesConfigOps.p_reasoning_config_to_ir(original)
         assert ir["effort"] == "high"
         assert ir["summary"] == "concise"
-        restored = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(ir)
+        restored = OpenResponsesConfigOps.ir_reasoning_config_to_p(ir)
         assert restored["reasoning"] == {"effort": "high", "summary": "concise"}
 
     def test_ir_reasoning_config_with_mode(self):
         """Test reasoning config with mode — type is NOT emitted (OpenAI rejects it)."""
-        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+        result = OpenResponsesConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"mode": "enabled", "effort": "medium"})
         )
         assert "type" not in result.get("reasoning", {})
@@ -341,7 +339,7 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_reasoning_config_auto_mode(self):
         """Test mode: auto — only effort is emitted, no reasoning.type."""
-        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+        result = OpenResponsesConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"mode": "auto", "effort": "high"})
         )
         assert "type" not in result.get("reasoning", {})
@@ -349,7 +347,7 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_reasoning_config_disabled_mode(self):
         """Test mode: disabled → omit (OpenAI Responses shim strategy)."""
-        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+        result = OpenResponsesConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"mode": "disabled"})
         )
         # OpenAI disabled strategy is 'omit' → empty result
@@ -357,21 +355,21 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_reasoning_config_minimal(self):
         """Test 'minimal' effort maps to 'minimal' via shim."""
-        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+        result = OpenResponsesConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"effort": "minimal"})
         )
         assert result["reasoning"]["effort"] == "minimal"
 
     def test_ir_reasoning_config_xhigh(self):
         """Test 'xhigh' IR effort → 'high' via shim effort_map."""
-        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+        result = OpenResponsesConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"effort": "xhigh"})
         )
         assert result["reasoning"]["effort"] == "high"
 
     def test_ir_reasoning_config_max(self):
         """Test 'max' IR effort → 'high' via shim effort_map."""
-        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+        result = OpenResponsesConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {"effort": "max"})
         )
         assert result["reasoning"]["effort"] == "high"
@@ -380,21 +378,21 @@ class TestOpenAIResponsesConfigOps:
         """Test budget_tokens produces warning."""
         sink = WarningSink()
         with recording_to(sink):
-            OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+            OpenResponsesConfigOps.ir_reasoning_config_to_p(
                 cast(ReasoningConfig, {"budget_tokens": 1000})
             )
         assert any("budget_tokens" in warning for warning in sink)
 
     def test_ir_reasoning_config_empty(self):
         """Test empty reasoning config returns empty dict."""
-        result = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(
+        result = OpenResponsesConfigOps.ir_reasoning_config_to_p(
             cast(ReasoningConfig, {})
         )
         assert result == {}
 
     def test_p_reasoning_config_to_ir(self):
         """Test OpenAI Responses reasoning → IR ReasoningConfig."""
-        result = OpenAIResponsesConfigOps.p_reasoning_config_to_ir(
+        result = OpenResponsesConfigOps.p_reasoning_config_to_ir(
             {"reasoning": {"effort": "medium", "type": "enabled"}}
         )
         assert result["effort"] == "medium"
@@ -402,31 +400,31 @@ class TestOpenAIResponsesConfigOps:
 
     def test_p_reasoning_config_to_ir_direct(self):
         """Test direct reasoning object (without nesting)."""
-        result = OpenAIResponsesConfigOps.p_reasoning_config_to_ir({"effort": "low"})
+        result = OpenResponsesConfigOps.p_reasoning_config_to_ir({"effort": "low"})
         assert result["effort"] == "low"
 
     def test_p_reasoning_config_to_ir_ignores_top_level_reasoning_effort(self):
         """Responses API does not support top-level reasoning_effort."""
-        result = OpenAIResponsesConfigOps.p_reasoning_config_to_ir(
+        result = OpenResponsesConfigOps.p_reasoning_config_to_ir(
             {"reasoning_effort": "xhigh"}
         )
         assert result == {}
 
     def test_p_reasoning_config_to_ir_non_dict(self):
         """Test non-dict input returns empty dict."""
-        result = OpenAIResponsesConfigOps.p_reasoning_config_to_ir("not a dict")
+        result = OpenResponsesConfigOps.p_reasoning_config_to_ir("not a dict")
         assert result == {}
 
     def test_p_reasoning_config_to_ir_reads_generate_summary(self):
         """``generate_summary`` is the deprecated spelling of ``summary``."""
-        result = OpenAIResponsesConfigOps.p_reasoning_config_to_ir(
+        result = OpenResponsesConfigOps.p_reasoning_config_to_ir(
             {"reasoning": {"generate_summary": "concise"}}
         )
         assert result["summary"] == "concise"
 
     def test_p_reasoning_config_to_ir_prefers_summary(self):
         """The declared key wins when a body carries both."""
-        result = OpenAIResponsesConfigOps.p_reasoning_config_to_ir(
+        result = OpenResponsesConfigOps.p_reasoning_config_to_ir(
             {"reasoning": {"summary": "auto", "generate_summary": "detailed"}}
         )
         assert result["summary"] == "auto"
@@ -434,15 +432,15 @@ class TestOpenAIResponsesConfigOps:
     def test_reasoning_config_round_trip(self):
         """Test reasoning config round-trip."""
         original = cast(ReasoningConfig, {"effort": "high"})
-        provider = OpenAIResponsesConfigOps.ir_reasoning_config_to_p(original)
-        restored = OpenAIResponsesConfigOps.p_reasoning_config_to_ir(provider)
+        provider = OpenResponsesConfigOps.ir_reasoning_config_to_p(original)
+        restored = OpenResponsesConfigOps.p_reasoning_config_to_ir(provider)
         assert restored["effort"] == "high"
 
     # ==================== Cache Config ====================
 
     def test_ir_cache_config_to_p(self):
         """Test IR CacheConfig → OpenAI Responses cache params."""
-        result = OpenAIResponsesConfigOps.ir_cache_config_to_p(
+        result = OpenResponsesConfigOps.ir_cache_config_to_p(
             cast(CacheConfig, {"key": "test-key", "retention": "24h"})
         )
         assert result["prompt_cache_key"] == "test-key"
@@ -450,7 +448,7 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_cache_config_partial(self):
         """Test partial cache config."""
-        result = OpenAIResponsesConfigOps.ir_cache_config_to_p(
+        result = OpenResponsesConfigOps.ir_cache_config_to_p(
             cast(CacheConfig, {"key": "k1"})
         )
         assert result["prompt_cache_key"] == "k1"
@@ -458,7 +456,7 @@ class TestOpenAIResponsesConfigOps:
 
     def test_p_cache_config_to_ir(self):
         """Test OpenAI Responses cache params → IR CacheConfig."""
-        result = OpenAIResponsesConfigOps.p_cache_config_to_ir(
+        result = OpenResponsesConfigOps.p_cache_config_to_ir(
             {"prompt_cache_key": "k1", "prompt_cache_retention": "in_memory"}
         )
         assert result["key"] == "k1"
@@ -466,20 +464,20 @@ class TestOpenAIResponsesConfigOps:
 
     def test_ir_cache_config_to_p_spells_retention_for_the_wire(self):
         """The IR's ``in-memory`` goes out as the wire's ``in_memory``."""
-        result = OpenAIResponsesConfigOps.ir_cache_config_to_p(
+        result = OpenResponsesConfigOps.ir_cache_config_to_p(
             cast(CacheConfig, {"retention": "in-memory"})
         )
         assert result["prompt_cache_retention"] == "in_memory"
 
     def test_p_cache_config_to_ir_non_dict(self):
         """Test non-dict input returns empty dict."""
-        result = OpenAIResponsesConfigOps.p_cache_config_to_ir("not a dict")
+        result = OpenResponsesConfigOps.p_cache_config_to_ir("not a dict")
         assert result == {}
 
     def test_cache_config_round_trip(self):
         """Test cache config round-trip."""
         original = cast(CacheConfig, {"key": "my-key", "retention": "24h"})
-        provider = OpenAIResponsesConfigOps.ir_cache_config_to_p(original)
-        restored = OpenAIResponsesConfigOps.p_cache_config_to_ir(provider)
+        provider = OpenResponsesConfigOps.ir_cache_config_to_p(original)
+        restored = OpenResponsesConfigOps.p_cache_config_to_ir(provider)
         assert restored["key"] == original["key"]
         assert restored["retention"] == original["retention"]

@@ -287,9 +287,9 @@ def to_openai_chat(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
 
 def to_open_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to OpenAI Responses format."""
-    from .converters.llm.open_responses import OpenAIResponsesToolOps
+    from .converters.llm.open_responses import OpenResponsesToolOps
 
-    return OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
+    return OpenResponsesToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
 def to_openai_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
@@ -344,9 +344,9 @@ def from_open_responses(
     provider_tool: Any, **kwargs: Any
 ) -> ToolDefinition | list[ToolDefinition] | None:
     """Convert OpenAI Responses tool definition to IR format."""
-    from .converters.llm.open_responses import OpenAIResponsesToolOps
+    from .converters.llm.open_responses import OpenResponsesToolOps
 
-    return OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
+    return OpenResponsesToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
 
 def from_openai_responses(
