@@ -378,3 +378,33 @@ def test_select_stable_tag_ignores_prereleases(tags, expected):
 def test_public_module_is_importable(module_name):
     """A typo in PUBLIC_MODULES would otherwise be skipped silently."""
     importlib.import_module(module_name)
+
+
+def _make_packages_tree(root: Path) -> None:
+    (root / "packages/llm-rosetta/src/llm_rosetta").mkdir(parents=True)
+    (root / "packages/llm-rosetta-gateway/src/llm_rosetta_gateway").mkdir(parents=True)
+
+
+def test_src_roots_include_the_gateway_root_of_a_packages_tree(tmp_path):
+    _make_packages_tree(tmp_path)
+    roots = api._src_roots(tmp_path)
+    assert roots == [
+        (tmp_path / "packages/llm-rosetta/src").resolve(),
+        (tmp_path / "packages/llm-rosetta-gateway/src").resolve(),
+    ]
+
+
+def test_src_roots_of_the_real_checkout_include_the_gateway():
+    roots = api._src_roots(REPO_ROOT)
+    assert any((root / "llm_rosetta_gateway").is_dir() for root in roots)
+    assert any((root / "llm_rosetta").is_dir() for root in roots)
+
+
+def test_src_roots_of_an_old_layout_tree_has_only_the_core_root(tmp_path):
+    (tmp_path / "src/llm_rosetta").mkdir(parents=True)
+    assert api._src_roots(tmp_path) == [(tmp_path / "src").resolve()]
+
+
+def test_src_roots_rejects_a_tree_without_sources(tmp_path):
+    with pytest.raises(SystemExit):
+        api._src_roots(tmp_path)
