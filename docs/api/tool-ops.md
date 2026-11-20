@@ -6,7 +6,7 @@ title: Tool Ops
 
 !!! info "Renamed in v0.13"
     `to_google_genai()` / `from_google_genai()` → **`to_google_generate()`** / **`from_google_generate()`**.
-    Old names remain as deprecated aliases.
+    The old names were removed in 0.14.0; see [Migrating to 0.14](../guide/migrating-to-0.14.md#removed-shims).
 
 The `tool_ops` module provides a **lightweight convenience API** for converting
 tool artifacts between the IR (Intermediate Representation) and provider-native
@@ -158,13 +158,15 @@ tool_ops.to_google_generate(ir_tool)
 
 ## Supported providers
 
-| Canonical name | Accepted aliases |
-|---|---|
-| `chat_completions` | `openai-chat` |
-| `open_responses` | `openai-responses`, `open-responses` |
-| `messages` | `anthropic` |
-| `google_generate` | `google`, `google-genai` |
-| `google_interactions` | `google-interactions` |
+| Provider name |
+|---|
+| `chat_completions` |
+| `open_responses` |
+| `messages` |
+| `google_generate` |
+| `google_interactions` |
+
+The hyphenated and pre-rename spellings (`openai-chat`, `openai-responses`, `open-responses`, `anthropic`, `google`, `google-genai`, `google-interactions`) are not accepted. They raise `ValueError`, and the message names the replacement; see [Migrating to 0.14](../guide/migrating-to-0.14.md#retired-names).
 
 ## Batch conversion
 

@@ -15,8 +15,8 @@ ProviderShim ("deepseek--chat_completions")
 ├── name: "deepseek--chat_completions"
 ├── model_type: "llm"                     → the capability category
 ├── format: "chat_completions"            → selects the converter
-├── default_base_url: "https://api.deepseek.com"
-├── default_api_key_env: "DEEPSEEK_API_KEY"
+├── connection.base_url: "https://api.deepseek.com"
+├── connection.api_key_env: "DEEPSEEK_API_KEY"
 ├── logo: "https://cdn.jsdelivr.net/..."
 ├── post_ir_transforms: (strip_fields("n", "logit_bias", "seed"),)
 └── pre_ir_transforms: ()
@@ -25,8 +25,8 @@ ProviderShim ("deepseek--chat_completions")
 - **ProviderShim** — provider identity: name, model type, wire format, default URL, default API key env var, logo URL, and optional transforms.
 - **Transforms** — pure `dict → dict` functions applied around converters. `post_ir_transforms` adapt outgoing requests to the provider's dialect; `pre_ir_transforms` normalize incoming responses.
 
-!!! note "Backward-compatible aliases"
-    The old field names `to_transforms` and `from_transforms` are still accepted as aliases — both in `ProviderShim` constructor kwargs and in `transforms.py` exports.
+!!! note "The 0.13 spellings are removed"
+    `ProviderShim(...)` raises a `TypeError` that names the replacement for `base`, `to_transforms`, `from_transforms` and the flat connection and tool keywords (`default_base_url`, `default_api_key_env`, `models_path`, `default_path`, `model_id_field`, `supports_custom_tools`, `max_tool_description_length`, `tool_search_mode`, `multimodal_tool_result`). A `provider.yaml` that declares `base:` or a flat connection or tool key, and a `transforms.py` that exports `to_transforms` or `from_transforms`, is refused at load with the same kind of message. See [Migrating to 0.14](migrating-to-0.14.md#removed-shim-declarations).
 
 ### Declarative Provider Directory
 
@@ -53,8 +53,8 @@ accepts.
    `llm/`, `embeddings/`, `rerank/`, `decisions/`. The loader compares the
    directory with the shim's `model_type:` and refuses a shim filed under the
    wrong type. The category uses the directory's spelling (`embeddings`);
-   `embedding:` is accepted as a deprecated alias in `model_type:` and in the
-   per-type section name.
+   the retired `embedding` spelling is refused in `model_type:` and as the
+   per-type section name, with the replacement named in the error.
 3. **`<format>/` appears only when that type holds more than one lane.** A chat
    vendor normally serves several dialects, so it keeps the format level; a
    vendor with one lane of a type puts `provider.yaml` directly in the type
@@ -107,8 +107,8 @@ with the scaffold's output and its placeholder list, is in
 
 Each leaf directory contains:
 
-- **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`, and — for a lane whose upstream is not HTTP — `connection.transport` with `connection.acp_argv`), plus optional `logo`, `display_name`, `hint_msg`, and `free_source`.  `base` is the deprecated alias for `format`; the loader validates the `(model_type, format)` pair against the converter registry.  `model_type` is required whenever `format` is used — only a shim that declares `base` and no `format` may omit it.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embeddings_shim` / `rerank_shim` / `decisions_shim` instead of a bare format.
-- **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (the old names `to_transforms` / `from_transforms` also work)
+- **`provider.yaml`** (required) — declares `name`, `model_type`, `format`, connection settings (`connection.base_url`, `connection.api_key_env`, `connection.auth_header`, `connection.keyless`, `connection.models_path`, `connection.default_path`, `connection.token_command`, and — for a lane whose upstream is not HTTP — `connection.transport` with `connection.acp_argv`), plus optional `logo`, `display_name`, `hint_msg`, and `free_source`.  The loader validates the `(model_type, format)` pair against the converter registry; both keys are required, and `base:` is refused.  A non-chat shim declares `connection.default_path` for the endpoint it serves (e.g. `/v1/embeddings`), and a provider can name it through `embeddings_shim` / `rerank_shim` / `decisions_shim` instead of a bare format.
+- **`transforms.py`** (optional) — exports `post_ir_transforms` and/or `pre_ir_transforms` tuples (a module that exports the old names `to_transforms` / `from_transforms` is refused)
 
 #### The vendor manifest (optional)
 
@@ -432,9 +432,11 @@ Example `provider.yaml`:
 name: deepseek
 model_type: llm
 format: chat_completions
-default_base_url: https://api.deepseek.com
-default_api_key_env: DEEPSEEK_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg
+
+connection:
+  base_url: https://api.deepseek.com
+  api_key_env: DEEPSEEK_API_KEY
 ```
 
 Example `transforms.py`:
@@ -509,14 +511,14 @@ For advanced use cases (environment-specific shims, dynamic config), call `regis
 
 ```python
 import os
-from llm_rosetta.shims import register_shim, ProviderShim
+from llm_rosetta.shims import ConnectionConfig, register_shim, ProviderShim
 
 def register_shims():
     if os.getenv("MY_INTERNAL_PROVIDER"):
         register_shim(ProviderShim(
             name="my-internal",
             format="chat_completions",
-            default_base_url="http://internal:8080/v1",
+            connection=ConnectionConfig(base_url="http://internal:8080/v1"),
         ))
 ```
 
@@ -896,10 +898,11 @@ unlisted for a release.
 
 Legacy spellings do **not** resolve to a shim any more: `argo--openai_chat`,
 `argo--anthropic` and `argo--openai_responses` were aliases of the built-in
-shims, and the standalone packages register canonical names only. The aliases
-remain as a spelling map, so an old value canonicalises first and reaches the
-stranded-config error that names the package; change it to the canonical name
-when declaring the preset.
+shims, and the standalone packages register canonical names only. A config
+that still spells one fails at load with the retired-names error, which names
+the canonical shim, the `shims.presets` entry to declare and the
+`llm-rosetta-migrate` command that rewrites the config; see
+[Migrating to 0.14](migrating-to-0.14.md#retired-names).
 
 A CI check (`scripts/check_shim_removals.py`, `make check-shim-removals`) still
 guards future removals: it reads `SHIM_REMOVALS`, fails if a shim disappears
@@ -919,7 +922,7 @@ They are **not built in**. Declare the standalone package first:
 }
 ```
 
-All three shims use `model_id_field: internal_id` — the model identifier is sent as `internal_id` instead of `model`.
+All three shims declare `connection.model_id_field: internal_id` — the model identifier is sent as `internal_id` instead of `model`.
 
 ### `argo--chat_completions`
 
@@ -937,7 +940,7 @@ The Responses-format lane, with per-model temperature stripping for the GPT/o-se
 
 ### Configuration
 
-Override the `default_base_url` in your gateway config:
+Override the shim's `connection.base_url` in your gateway config:
 
 ```jsonc
 {
@@ -974,8 +977,9 @@ Since v0.6.8, provider shims can declare how they handle reasoning effort and di
 name: anthropic--messages
 model_type: llm
 format: messages
-default_base_url: https://api.anthropic.com
-default_api_key_env: ANTHROPIC_API_KEY
+connection:
+  base_url: https://api.anthropic.com
+  api_key_env: ANTHROPIC_API_KEY
 reasoning:
   disabled: thinking_disabled
   effort_field: output_config.effort
@@ -992,8 +996,9 @@ reasoning:
 name: openai--chat_completions
 model_type: llm
 format: chat_completions
-default_base_url: https://api.openai.com/v1
-default_api_key_env: OPENAI_API_KEY
+connection:
+  base_url: https://api.openai.com/v1
+  api_key_env: OPENAI_API_KEY
 reasoning:
   disabled: omit
   effort_field: reasoning_effort
@@ -1049,9 +1054,9 @@ Beyond reasoning, shims can declare provider-level capability flags that control
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `supports_custom_tools` | `bool` | `False` | Whether the provider's API natively accepts `{type: "custom"}` tool definitions. When `False`, custom tools are downgraded to function wrappers with a synthesized JSON schema. |
+| `tools.custom_tools` | `bool` | `False` | Whether the provider's API natively accepts `{type: "custom"}` tool definitions. When `False`, custom tools are downgraded to function wrappers with a synthesized JSON schema. |
 | `hoist_system_messages` | `bool` | `True` | Rewrite mid-conversation system/developer messages as user-role `[System: ...]` envelopes to preserve prompt cache prefix stability. |
-| `multimodal_tool_result` | `bool \| None` | `None` | Whether the provider supports multimodal content (images, files) in tool results natively. `None` defers to the converter's class-level default. `True` forces native pass-through; `False` forces dual-encoding (text fallback + synthetic user message). |
+| `tools.multimodal_result` | `bool \| None` | `None` | Whether the provider supports multimodal content (images, files) in tool results natively. `None` defers to the converter's class-level default. `True` forces native pass-through; `False` forces dual-encoding (text fallback + synthetic user message). |
 
 Example in `provider.yaml`:
 
@@ -1059,9 +1064,10 @@ Example in `provider.yaml`:
 name: my-provider
 model_type: llm
 format: chat_completions
-supports_custom_tools: true
+tools:
+  custom_tools: true
+  multimodal_result: false
 hoist_system_messages: true
-multimodal_tool_result: false
 ```
 
 These flags are injected into `ConversionContext.options` at conversion time, so converters can query them without knowing which shim is active.
@@ -1222,13 +1228,12 @@ resolve_format("unknown")                     # → "unknown" (pass-through)
 
 resolve_model_type("deepseek--chat_completions")  # → "llm"
 resolve_model_type("typesafe--systemone")         # → "decisions"
-resolve_model_type("typesafe")                    # → "decisions" (legacy alias)
-resolve_model_type("embedding")                    # → "embeddings" (deprecated alias)
-resolve_model_type("decision")                     # → "decisions" (deprecated alias)
+resolve_model_type("embeddings")                  # → "embeddings"
 resolve_model_type("openai")                      # → None (ambiguous: vendor and embeddings format)
+resolve_model_type("embedding")                   # raises ValueError (retired spelling; names 'embeddings')
 ```
 
-`resolve_base()` is the deprecated alias for `resolve_format()`.
+`resolve_base()` was removed in 0.14.0; call `resolve_format()`.
 
 ## Registering Custom Shims
 
@@ -1237,14 +1242,16 @@ resolve_model_type("openai")                      # → None (ambiguous: vendor 
 Register a custom provider shim for any OpenAI-compatible service:
 
 ```python
-from llm_rosetta import ProviderShim, register_shim
+from llm_rosetta import ConnectionConfig, ProviderShim, register_shim
 from llm_rosetta.transforms import strip_fields
 
 my_shim = ProviderShim(
     name="my-provider",
     format="chat_completions",
-    default_base_url="https://api.my-provider.com/v1",
-    default_api_key_env="MY_PROVIDER_API_KEY",
+    connection=ConnectionConfig(
+        base_url="https://api.my-provider.com/v1",
+        api_key_env="MY_PROVIDER_API_KEY",
+    ),
     post_ir_transforms=(strip_fields("logprobs", "seed"),),
 )
 register_shim(my_shim)
@@ -1311,7 +1318,7 @@ In a gateway configuration file, use the `"shim"` field to reference a registere
     "my-deepseek": {
       "shim": "deepseek--chat_completions",
       "api_key": "${DEEPSEEK_API_KEY}"
-      // base_url defaults to shim's default_base_url
+      // base_url defaults to the shim's connection.base_url
     }
   },
   "models": {
@@ -1328,6 +1335,6 @@ Resolution order for provider type:
 
 When a shim is found:
 
-- `default_base_url` and `default_api_key_env` serve as fallbacks if not set in config
+- `connection.base_url` and `connection.api_key_env` serve as fallbacks if not set in config
 - `post_ir_transforms` are applied to outgoing requests before sending to the upstream provider
 - `pre_ir_transforms` are applied to incoming responses/stream chunks before conversion

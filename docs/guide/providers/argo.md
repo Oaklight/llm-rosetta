@@ -24,7 +24,7 @@ Argo is Argonne National Laboratory's internal API gateway, providing access to 
 | `argo--messages` | `messages` | `https://apps.inside.anl.gov/argoapi` | `ARGO_API_KEY` |
 
 !!! info "Model ID Field"
-    All three Argo shims use `model_id_field: internal_id`, meaning the model identifier is sent as `internal_id` in the request body rather than the standard `model` field.
+    All three Argo shims declare `connection.model_id_field: internal_id`, meaning the model identifier is sent as `internal_id` in the request body rather than the standard `model` field.
 
 ## Reasoning Support
 

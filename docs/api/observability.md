@@ -672,7 +672,7 @@ from llm_rosetta_gateway.admin.routes.profiling import ProfilerState
 ```
 
 The telemetry modules' old `llm_rosetta.observability.*` paths moved with them
-in #1161 and keep working until 0.16.0 (#919): importing one warns and returns
+in #1161. They are deprecated and will be removed in a later release: importing one warns and returns
 the *same* module object as its gateway counterpart, so a store is never
 opened twice.
 

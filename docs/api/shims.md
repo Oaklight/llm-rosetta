@@ -16,8 +16,6 @@ title: Shims
 
 ::: llm_rosetta.shims.provider_shim.list_shims
 
-::: llm_rosetta.shims.provider_shim.resolve_base
-
 ## Credential Exchange
 
 ::: llm_rosetta.shims.auth_exchange.AuthExchange

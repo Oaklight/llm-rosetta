@@ -14,7 +14,7 @@ Symbols you can rely on across minor versions. These are the recommended imports
 
 | Category | Symbols | Import from |
 |----------|---------|-------------|
-| Converters | `ChatCompletionsConverter`, `MessagesConverter`, `GoogleGenerateConverter`, `GoogleConverter`, `OpenAIResponsesConverter`, `OpenResponsesConverter`, `BaseConverter` | `llm_rosetta` |
+| Converters | `ChatCompletionsConverter`, `MessagesConverter`, `GoogleGenerateConverter`, `OpenAIResponsesConverter`, `OpenResponsesConverter`, `BaseConverter` | `llm_rosetta` |
 | Context | `ConversionContext`, `StreamContext` | `llm_rosetta` |
 | Convenience | `detect_provider`, `get_converter_for_provider`, `convert`, `ProviderType` | `llm_rosetta` |
 | Core IR types | `Message`, `IRRequest`, `IRResponse`, `ContentPart`, `TextPart`, `ToolCallPart`, stream events, etc. | `llm_rosetta.types.ir` |
@@ -58,7 +58,7 @@ Implementation details used within the library. Import at your own risk — thes
 | Ops base classes | `BaseContentOps`, `BaseToolOps`, `BaseMessageOps`, `BaseConfigOps` | `llm_rosetta.converters.base.content`, `llm_rosetta.converters.base.tools`, etc. |
 | Schema utilities | `sanitize_schema` | `llm_rosetta.converters.base.tools.schema` |
 | Content helpers | `convert_content_blocks_to_ir`, `convert_ir_content_blocks_to_p` | `llm_rosetta.converters.base.tools.content` |
-| Orphan fix | `fix_orphaned_tool_calls_ir`, `strip_orphaned_tool_config` | `llm_rosetta.converters.base.tools.orphan_fix` |
+| Orphan fix | `normalize_tool_pairing`, `strip_orphaned_tool_config` | `llm_rosetta.ir.tools.orphan_fix` |
 
 ```python
 # Internal: use deep submodule imports

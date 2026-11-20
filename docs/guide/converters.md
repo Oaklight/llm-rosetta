@@ -6,7 +6,7 @@ title: Using Converters
 
 !!! info "Renamed in v0.13"
     `GoogleGenAIConverter` has been renamed to **`GoogleGenerateConverter`**.
-    The old name remains importable as a deprecated alias.
+    The old name was removed in 0.14.0; see [Migrating to 0.14](migrating-to-0.14.md#removed-class-names).
     This avoids confusion since `google-genai` is the SDK covering both
     the generateContent and Interactions APIs.
 

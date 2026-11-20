@@ -322,19 +322,24 @@ demoted key, a provider block, or a rate-limit disable).
 
 The legacy `embeddings_providers` / `rerank_providers` / `decisions_providers`
 sections still load and are merged with the unified entries.  The pre-rename
-spellings `embedding_providers` and `decision_providers` are read as the same
-sections.  An entry in a legacy section has no `providers:` counterpart to
+spellings `embedding_providers` and `decision_providers` are no longer read: a
+config that holds one fails at load and names the section that replaces it.  An entry in a legacy section has no `providers:` counterpart to
 share a minted credential with, so one that mints stays disabled, with a reason
 naming the section — move the provider to `providers:` to use it.
 
 The model types are spelled `embeddings` and `decisions`, like the endpoints
-they serve.  A config written before those renames — `embedding_format` /
-`embedding_path` / `embedding_shim`, `default_embedding_format`,
+they serve.  The config loader no longer reads the pre-rename spellings:
+`embedding_format` / `embedding_path` / `embedding_shim` /
+`embedding_enabled`, `default_embedding_format`, `embedding_models`,
 `decision_format` / `decision_path` / `decision_shim`,
-`default_decision_format`, or a model tagged `"type": "embedding"` /
-`"type": "decision"` — is rewritten on load and the original is kept beside it
-as `.pre-migration.bak` (the document moves to `config_version` 3).  When the
-file cannot be written back (a read-only mount), the old keys are still read.
+`default_decision_format`, a provider's `embedding:` or `decision:` block, or a
+model tagged `"type": "embedding"` / `"type": "decision"`.  Each fails at load
+with one `llm-rosetta-gateway: error: ...` line that names the file, the key
+and its replacement, and exits 1.  `llm-rosetta-migrate --config <path>
+--write` rewrites them; see [Migrating to 0.14](../guide/migrating-to-0.14.md#llm-rosetta-migrate).
+A document older than the current `config_version` is still upgraded on load
+(the original is kept beside it as `.pre-migration.bak`); only a document
+already at the current version is rejected for an old spelling.
 
 ### Image Count Limits
 
@@ -360,7 +365,7 @@ You can declare equivalent limits in a custom shim registered via `register_shim
     The provider type resolution order is: `shim` → `type` → provider name (fallback).
 
 !!! note "Backward compatibility"
-    If both `shim` and `type` are omitted, the provider name itself is used as the type. Legacy spellings anywhere in `shim` / `type` (e.g. `openai_chat`, `openai_responses`, `anthropic`, `google`, …) are rewritten to canonical names once at startup, idempotently, with a `.pre-migration.bak` backup, so an old config keeps working. A name the migration cannot map is rejected with an error pointing at the docs.
+    If both `shim` and `type` are omitted, the provider name itself is used as the type. A retired spelling in `shim` / `type` (e.g. `openai_chat`, `openai_responses`, `anthropic`, `google`, …) is rejected at startup with an error that names the file, the key and the replacement, and the gateway exits 1; it is no longer rewritten. Run `llm-rosetta-migrate --config <path> --write` to rewrite the config, see [Migrating to 0.14](../guide/migrating-to-0.14.md#retired-names).
 
 ### Enabling / Disabling Providers
 
