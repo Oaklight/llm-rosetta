@@ -35,9 +35,8 @@ from .schema_ops import (
 )
 
 OutputFormat = Literal[
-    "chat_completions",  # canonical name for the OpenAI Chat wire
-    "openai_chat",  # legacy alias
-    "openai_responses",
+    "chat_completions",
+    "open_responses",
     "messages",
     "google_generate",
     "google_interactions",
@@ -50,8 +49,8 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
 
     Args:
         output_format: How to constrain the LLM's output.
-            - "openai_chat": response_format with json_schema (default)
-            - "openai_responses": text.format with json_schema
+            - "chat_completions": response_format with json_schema (default)
+            - "open_responses": text.format with json_schema
             - "messages": output_config.format with json_schema
             - "google_generate": response_mime_type + response_schema
             - "google_interactions": response_format with mime_type + response_schema
@@ -65,7 +64,7 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
     def __init__(
         self,
         *,
-        output_format: OutputFormat = "openai_chat",
+        output_format: OutputFormat = "chat_completions",
         answer_mode: AnswerMode = "probabilities",
         max_retries: int = 0,
     ) -> None:
@@ -103,7 +102,7 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
             ],
         }
 
-        if self.output_format in ("openai_chat", "chat_completions"):
+        if self.output_format == "chat_completions":
             result["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
@@ -112,7 +111,7 @@ class LLMChatDecisionConverter(BaseDecisionConverter):
                     "strict": True,
                 },
             }
-        elif self.output_format == "openai_responses":
+        elif self.output_format == "open_responses":
             result["text"] = {
                 "format": {
                     "type": "json_schema",

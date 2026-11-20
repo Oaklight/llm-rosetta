@@ -6,7 +6,8 @@
   // Providers can declare LLM, embedding, and rerank capabilities via
   // their respective fields (type, embeddings_format, rerank_format).
   "providers": {
-    "openai_chat": {
+    "openai": {
+      "type": "chat_completions",
       "api_key": "${OPENAI_API_KEY}",
       "base_url": "https://api.openai.com/v1",
       // Embedding endpoint on the same provider
@@ -14,14 +15,17 @@
       "embeddings_path": "/v1/embeddings"
     },
     "openai_responses": {
+      "type": "open_responses",
       "api_key": "${OPENAI_API_KEY}",
       "base_url": "https://api.openai.com/v1"
     },
     "anthropic": {
+      "type": "messages",
       "api_key": "${ANTHROPIC_API_KEY}",
       "base_url": "https://api.anthropic.com"
     },
     "google": {
+      "type": "google_generate",
       "api_key": "${GOOGLE_API_KEY}",
       "base_url": "https://generativelanguage.googleapis.com",
       // Send a preflight request (max_tokens=1) before streaming to get
@@ -65,11 +69,11 @@
   // Model → provider routing table.
   // Models use "type" to declare their function: "llm" (default), "embedding", or "rerank".
   "models": {
-    "gpt-4o": "openai_chat",
-    "gpt-4o-mini": "openai_chat",
-    "gpt-4.1": "openai_chat",
-    "gpt-4.1-mini": "openai_chat",
-    "gpt-4.1-nano": "openai_chat",
+    "gpt-4o": "openai",
+    "gpt-4o-mini": "openai",
+    "gpt-4.1": "openai",
+    "gpt-4.1-mini": "openai",
+    "gpt-4.1-nano": "openai",
     "claude-sonnet-4-20250514": "anthropic",
     "claude-3-5-haiku-20241022": "anthropic",
     "gemini-2.0-flash": "google",
@@ -78,7 +82,7 @@
 
     // Multi-provider: same model served by two providers (equal weight)
     // "gpt-4o-multi": {
-    //   "providers": ["openai_chat", "openai_responses"],
+    //   "providers": ["openai", "openai_responses"],
     //   "capabilities": ["text", "vision"]
     // },
 
@@ -91,7 +95,7 @@
     //   "strategy": "weighted_round_robin"
     // },
     // Embedding models
-    "text-embedding-3-small": { "provider": "openai_chat", "type": "embeddings" },
+    "text-embedding-3-small": { "provider": "openai", "type": "embeddings" },
     "jina-embeddings-v3": { "provider": "jina", "type": "embeddings" },
     "embed-v4.0": { "provider": "cohere", "type": "embeddings" },
     "voyage-3-lite": { "provider": "voyage", "type": "embeddings" },

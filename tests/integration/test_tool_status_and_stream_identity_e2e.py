@@ -166,7 +166,7 @@ def test_incomplete_tool_output_reaches_anthropic_as_error() -> None:
     if not _env("ANTHROPIC_API_KEY"):
         pytest.skip("ANTHROPIC_API_KEY not set")
 
-    converted = ConversionPipeline("openai_responses", "messages").convert_request(
+    converted = ConversionPipeline("open_responses", "messages").convert_request(
         _rows("incomplete")
     )
     converted["model"] = _env("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
@@ -199,7 +199,7 @@ def test_same_format_responses_keeps_incomplete_status() -> None:
         pytest.skip("OPENAI_RESPONSES_API_KEY not set")
 
     converted = ConversionPipeline(
-        "openai_responses", "openai_responses"
+        "open_responses", "open_responses"
     ).convert_request(_rows("incomplete"))
     converted["model"] = _env("OPENAI_RESPONSES_MODEL", "gpt-4o-mini")
 

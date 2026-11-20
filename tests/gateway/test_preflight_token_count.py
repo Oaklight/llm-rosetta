@@ -61,7 +61,7 @@ class TestBuildPreflightBody:
                 "responseModalities": ["TEXT"],
             },
         }
-        result = _build_preflight_body(body, "google")
+        result = _build_preflight_body(body, "google_generate")
         assert result["generationConfig"]["maxOutputTokens"] == 1
         assert "responseModalities" not in result["generationConfig"]
         assert "stream" not in result
@@ -111,7 +111,7 @@ class TestExtractPreflightInputTokens:
 
     def test_google(self):
         resp = {"usageMetadata": {"promptTokenCount": 200}}
-        assert _extract_preflight_input_tokens(resp, "google") == 200
+        assert _extract_preflight_input_tokens(resp, "google_generate") == 200
 
     def test_missing_usage(self):
         assert _extract_preflight_input_tokens({}, "chat_completions") is None
@@ -285,7 +285,7 @@ class TestPreflightConfig:
         provider = {
             "api_key": "sk-test",
             "base_url": "https://api.example.com",
-            "type": "openai",
+            "type": "openai--chat_completions",
         }
         provider.update(provider_overrides)
         return {
@@ -296,12 +296,12 @@ class TestPreflightConfig:
 
     def test_default_false(self):
         cfg = GatewayConfig(self._minimal_raw())
-        route, _ = cfg.resolve(cfg.selection_context("gpt-test", "openai_chat"))
+        route, _ = cfg.resolve(cfg.selection_context("gpt-test", "chat_completions"))
         assert route.preflight_token_count is False
 
     def test_enabled_in_config(self):
         cfg = GatewayConfig(self._minimal_raw(preflight_token_count=True))
-        route, _ = cfg.resolve(cfg.selection_context("gpt-test", "openai_chat"))
+        route, _ = cfg.resolve(cfg.selection_context("gpt-test", "chat_completions"))
         assert route.preflight_token_count is True
 
 

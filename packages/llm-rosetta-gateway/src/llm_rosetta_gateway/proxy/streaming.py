@@ -164,7 +164,6 @@ def _terminal_error_sse(
         out = [format_sse(event) for event in events]
         if source_provider in (
             "chat_completions",
-            "openai_responses",
             "open_responses",
         ):
             out.append(format_sse_done())
@@ -211,7 +210,7 @@ def _flush_and_finalize(
 ) -> list[str]:
     """Flush deferred terminal events and append the SSE done sentinel."""
     tail = [format_sse(e) for e in processor.process_chunk(None)]
-    if source_provider in ("chat_completions", "openai_responses", "open_responses"):
+    if source_provider in ("chat_completions", "open_responses"):
         tail.append(format_sse_done())
     return tail
 

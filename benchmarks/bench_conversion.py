@@ -591,10 +591,10 @@ OPENAI_RESPONSES_PAYLOADS = {
 }
 
 ALL_PROVIDERS = {
-    "openai_chat": OPENAI_CHAT_PAYLOADS,
-    "anthropic": ANTHROPIC_PAYLOADS,
-    "google": GOOGLE_GENAI_PAYLOADS,
-    "openai_responses": OPENAI_RESPONSES_PAYLOADS,
+    "chat_completions": OPENAI_CHAT_PAYLOADS,
+    "messages": ANTHROPIC_PAYLOADS,
+    "google_generate": GOOGLE_GENAI_PAYLOADS,
+    "open_responses": OPENAI_RESPONSES_PAYLOADS,
 }
 
 # ---------------------------------------------------------------------------
@@ -753,10 +753,10 @@ def export_latex_table(results):
 
     for provider, benchmarks in results.items():
         provider_label = {
-            "openai_chat": "OpenAI Chat",
-            "anthropic": "Anthropic",
-            "google": "Google GenAI",
-            "openai_responses": "OAI Responses",
+            "chat_completions": "OpenAI Chat",
+            "messages": "Anthropic",
+            "google_generate": "Google GenAI",
+            "open_responses": "OAI Responses",
         }.get(provider, provider)
 
         first = True

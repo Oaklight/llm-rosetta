@@ -169,13 +169,13 @@ class TestOpenAIChatThinkingCapable:
 class TestOpenAIResponsesShim:
     """OpenAI Responses: disabled → omit, effort in reasoning object."""
 
-    cap = DEFAULT_REASONING_CAPS["openai_responses"]
+    cap = DEFAULT_REASONING_CAPS["open_responses"]
 
     def test_disabled_omits_all(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "disabled"}),
             self.cap,
-            converter_type="openai_responses",
+            converter_type="open_responses",
         )
         assert result == {}
 
@@ -183,7 +183,7 @@ class TestOpenAIResponsesShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "medium"}),
             self.cap,
-            converter_type="openai_responses",
+            converter_type="open_responses",
         )
         assert result["reasoning"]["effort"] == "medium"
 
@@ -191,7 +191,7 @@ class TestOpenAIResponsesShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "xhigh"}),
             self.cap,
-            converter_type="openai_responses",
+            converter_type="open_responses",
         )
         assert result["reasoning"]["effort"] == "high"
 
@@ -199,7 +199,7 @@ class TestOpenAIResponsesShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "max"}),
             self.cap,
-            converter_type="openai_responses",
+            converter_type="open_responses",
         )
         assert result["reasoning"]["effort"] == "high"
 
@@ -259,14 +259,14 @@ class TestAnthropicShim:
 class TestGoogleShim:
     """Google: disabled → thinkingBudget=0, effort → thinking_level."""
 
-    cap = DEFAULT_REASONING_CAPS["google"]
+    cap = DEFAULT_REASONING_CAPS["google_generate"]
 
     def test_disabled_emits_budget_zero(self):
         """Google disabled → thinking_budget=0."""
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"mode": "disabled"}),
             self.cap,
-            converter_type="google",
+            converter_type="google_generate",
         )
         assert result["thinking_config"]["thinking_budget"] == 0
 
@@ -274,7 +274,7 @@ class TestGoogleShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "high"}),
             self.cap,
-            converter_type="google",
+            converter_type="google_generate",
         )
         assert result["thinking_config"]["thinking_level"] == "high"
 
@@ -282,7 +282,7 @@ class TestGoogleShim:
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"budget_tokens": 8192}),
             self.cap,
-            converter_type="google",
+            converter_type="google_generate",
         )
         assert result["thinking_config"]["thinking_budget"] == 8192
 
@@ -333,16 +333,16 @@ class TestSummaryIncludeThoughtsCrossFormat:
     def test_summary_forwarded_to_google(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "high", "summary": "auto"}),
-            DEFAULT_REASONING_CAPS["google"],
-            converter_type="google",
+            DEFAULT_REASONING_CAPS["google_generate"],
+            converter_type="google_generate",
         )
         assert result["thinking_config"]["include_thoughts"] is True
 
     def test_summary_forwarded_to_responses(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "high", "summary": "detailed"}),
-            DEFAULT_REASONING_CAPS["openai_responses"],
-            converter_type="openai_responses",
+            DEFAULT_REASONING_CAPS["open_responses"],
+            converter_type="open_responses",
         )
         assert result["reasoning"]["summary"] == "detailed"
 
@@ -397,16 +397,16 @@ class TestSummaryIncludeThoughtsCrossFormat:
     def test_include_thoughts_true_to_responses_fallback(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "high", "include_thoughts": True}),
-            DEFAULT_REASONING_CAPS["openai_responses"],
-            converter_type="openai_responses",
+            DEFAULT_REASONING_CAPS["open_responses"],
+            converter_type="open_responses",
         )
         assert result["reasoning"]["summary"] == "auto"
 
     def test_summary_none_to_google(self):
         result = apply_reasoning_config(
             cast(ReasoningConfig, {"effort": "medium", "summary": "none"}),
-            DEFAULT_REASONING_CAPS["google"],
-            converter_type="google",
+            DEFAULT_REASONING_CAPS["google_generate"],
+            converter_type="google_generate",
         )
         assert result["thinking_config"]["include_thoughts"] is False
 
@@ -632,21 +632,27 @@ class TestCustomShim:
         assert result["thinking"]["budget_tokens"] == 6553
 
 
-class TestLegacyConverterTypeAlias:
-    """The public helper accepts the legacy ``openai_chat`` converter label.
+class TestLegacyConverterTypeLabelsRemoved:
+    """The retired converter labels are no longer keys or structural passes.
 
-    Regression: ``apply_reasoning_config`` keys on the canonical
-    ``chat_completions`` literal; a caller passing the old label used to
-    silently lose the Chat structural pass.
+    ``apply_reasoning_config`` keys on the canonical literals only.  A caller
+    passing ``anthropic`` gets effort placement but no structural pass,
+    and the preset table carries no legacy keys.
     """
 
-    def test_legacy_label_matches_canonical(self):
-        cap = DEFAULT_REASONING_CAPS["chat_completions"]
+    def test_caps_table_has_only_canonical_keys(self):
+        assert set(DEFAULT_REASONING_CAPS) == set(
+            ["chat_completions", "open_responses", "messages", "google_generate"]
+        )
+
+    def test_legacy_label_gets_no_structural_pass(self):
+        cap = DEFAULT_REASONING_CAPS["messages"]
         ir = cast(Any, {"mode": "enabled", "effort": "high", "budget_tokens": 8000})
         canonical = apply_reasoning_config(
-            ir, cap, converter_type="chat_completions", max_tokens=16000
+            ir, cap, converter_type="messages", max_tokens=16000
         )
         legacy = apply_reasoning_config(
-            ir, cap, converter_type="openai_chat", max_tokens=16000
+            ir, cap, converter_type="anthropic", max_tokens=16000
         )
-        assert legacy == canonical
+        assert "thinking" in canonical
+        assert "thinking" not in legacy
