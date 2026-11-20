@@ -1358,7 +1358,7 @@ class TestGroupsToACapableTarget:
         register_shim(
             ProviderShim(
                 name=self.NAME,
-                base="open_responses",
+                format="open_responses",
                 tools=ToolsConfig(tool_groups=True),
             )
         )

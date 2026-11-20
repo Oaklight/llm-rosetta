@@ -45,7 +45,7 @@ def volcengine_shim():
     """Register a volcengine-like shim with post_ir_transforms that strip fields."""
     shim = ProviderShim(
         name="volcengine--chat_completions",
-        base="chat_completions",
+        format="chat_completions",
         post_ir_transforms=(strip_fields("logprobs", "top_logprobs"),),
     )
     register_shim(shim)
@@ -57,7 +57,7 @@ def shim_with_transforms():
     """Register a shim with both pre_ir_transforms and post_ir_transforms."""
     shim = ProviderShim(
         name="custom_provider",
-        base="chat_completions",
+        format="chat_completions",
         pre_ir_transforms=(rename_field("custom_id", "id"),),
         post_ir_transforms=(strip_fields("logprobs"),),
     )

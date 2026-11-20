@@ -24,7 +24,7 @@ from llm_rosetta.shims.provider_shim import ProviderShim, ToolsConfig
 
 def _shim(base, kinds):
     return ProviderShim(
-        name="test", base=base, tools=ToolsConfig(intrinsic_tools=tuple(kinds))
+        name="test", format=base, tools=ToolsConfig(intrinsic_tools=tuple(kinds))
     )
 
 

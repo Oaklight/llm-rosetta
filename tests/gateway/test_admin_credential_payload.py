@@ -9,6 +9,8 @@ living in the panel's JavaScript.
 from __future__ import annotations
 
 import json
+
+import pytest
 from types import SimpleNamespace
 from typing import Any
 
@@ -37,44 +39,53 @@ class TestTheShimDeclaresIt:
 
         assert shim.connection.manage_usage_url == "https://chatgpt.com/settings/usage"
 
-    def test_the_field_travels_through_both_yaml_shapes(self, tmp_path):
-        from llm_rosetta.api import (
-            load_providers_from_dir,
-            restore_registry,
-            snapshot_registry,
-        )
+    def test_the_field_travels_through_the_connection_block(self, tmp_path):
+        loaded = _load_dir(tmp_path, grouped=GROUPED)
 
-        grouped = tmp_path / "grouped"
-        grouped.mkdir()
-        (grouped / "provider.yaml").write_text(
-            "name: g--open_responses\n"
-            "model_type: llm\n"
-            "format: open_responses\n"
-            "connection:\n"
-            "  base_url: https://example.test/v1\n"
-            "  manage_usage_url: https://example.test/usage\n"
-        )
-        legacy = tmp_path / "legacy"
-        legacy.mkdir()
-        (legacy / "provider.yaml").write_text(
-            "name: l--open_responses\n"
-            "model_type: llm\n"
-            "format: open_responses\n"
-            "default_base_url: https://example.test/v1\n"
-            "manage_usage_url: https://example.test/usage2\n"
-        )
+        shim = loaded["g--open_responses"]
+        assert shim.connection.manage_usage_url == "https://example.test/usage"
 
-        snapshot = snapshot_registry()
-        try:
-            loaded = {s.name: s for s in load_providers_from_dir(tmp_path)}
-        finally:
-            restore_registry(snapshot)
-        grouped_shim = loaded.get("g--open_responses")
-        legacy_shim = loaded.get("l--open_responses")
-        assert grouped_shim is not None and legacy_shim is not None
+    def test_the_flat_yaml_shape_is_refused(self, tmp_path):
+        """The flat connection spelling was removed in 0.14.0."""
+        with pytest.raises(ValueError, match="connection.manage_usage_url"):
+            _load_dir(tmp_path, legacy=LEGACY)
 
-        assert grouped_shim.connection.manage_usage_url == "https://example.test/usage"
-        assert legacy_shim.connection.manage_usage_url == "https://example.test/usage2"
+
+GROUPED = (
+    "name: g--open_responses\n"
+    "model_type: llm\n"
+    "format: open_responses\n"
+    "connection:\n"
+    "  base_url: https://example.test/v1\n"
+    "  manage_usage_url: https://example.test/usage\n"
+)
+LEGACY = (
+    "name: l--open_responses\n"
+    "model_type: llm\n"
+    "format: open_responses\n"
+    "default_base_url: https://example.test/v1\n"
+    "manage_usage_url: https://example.test/usage2\n"
+)
+
+
+def _load_dir(tmp_path, grouped=None, legacy=None):
+    """Load shim definitions from a directory through the public loader."""
+    from llm_rosetta.api import (
+        load_providers_from_dir,
+        restore_registry,
+        snapshot_registry,
+    )
+
+    for name, text in (("grouped", grouped), ("legacy", legacy)):
+        if text is not None:
+            leaf = tmp_path / name
+            leaf.mkdir()
+            (leaf / "provider.yaml").write_text(text)
+    snapshot = snapshot_registry()
+    try:
+        return dict((s.name, s) for s in load_providers_from_dir(tmp_path))
+    finally:
+        restore_registry(snapshot)
 
 
 class TestTheConfigPayload:

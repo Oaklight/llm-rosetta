@@ -93,7 +93,7 @@ class TestIRIntrinsicToProvider:
                 "provider_metadata": {"intrinsic_kind": "google_search"},
             },
         )
-        result = GoogleInteractionsToolOps.ir_function_call_to_p(ir_part)
+        result = GoogleInteractionsToolOps.ir_tool_call_to_p(ir_part)
         assert result["type"] == "google_search_call"
         assert result["id"] == "gs_1"
 
@@ -110,7 +110,7 @@ class TestIRIntrinsicToProvider:
                 "intrinsic_kind": "google_search",
             },
         )
-        result = GoogleInteractionsToolOps.ir_function_call_to_p(ir_part)
+        result = GoogleInteractionsToolOps.ir_tool_call_to_p(ir_part)
         assert result["type"] == "google_search_call"
         assert result["id"] == "gs_new"
 
@@ -125,7 +125,7 @@ class TestIRIntrinsicToProvider:
                 "provider_metadata": {"intrinsic_kind": "google_search"},
             },
         )
-        result = GoogleInteractionsToolOps.ir_function_result_to_p(ir_part)
+        result = GoogleInteractionsToolOps.ir_tool_result_to_p(ir_part)
         assert result["type"] == "google_search_result"
         assert result["call_id"] == "gs_1"
 
@@ -140,7 +140,7 @@ class TestIRIntrinsicToProvider:
                 "tool_input": {"city": "Tokyo"},
             },
         )
-        result = GoogleInteractionsToolOps.ir_function_call_to_p(ir_part)
+        result = GoogleInteractionsToolOps.ir_tool_call_to_p(ir_part)
         assert result["type"] == "function_call"
 
 
@@ -155,7 +155,7 @@ class TestServerStepRoundTrip:
             "arguments": {"query": "test"},
         }
         ir = GoogleInteractionsToolOps.p_server_call_to_ir(original)
-        restored = GoogleInteractionsToolOps.ir_function_call_to_p(ir)
+        restored = GoogleInteractionsToolOps.ir_tool_call_to_p(ir)
         assert restored["type"] == "google_search_call"
         assert restored["id"] == original["id"]
 
@@ -166,7 +166,7 @@ class TestServerStepRoundTrip:
             "result": "42",
         }
         ir = GoogleInteractionsToolOps.p_server_result_to_ir(original)
-        restored = GoogleInteractionsToolOps.ir_function_result_to_p(ir)
+        restored = GoogleInteractionsToolOps.ir_tool_result_to_p(ir)
         assert restored["type"] == "code_execution_result"
         assert restored["call_id"] == original["call_id"]
 

@@ -513,8 +513,8 @@ class TestCreateAppWiring:
         leaf.mkdir(parents=True)
         (leaf / "provider.yaml").write_text(
             "name: minimax--messages\n"
-            "base: messages\n"
-            "default_base_url: https://example.invalid/v1\n"
+            "format: messages\nmodel_type: llm\n"
+            "connection:\n  base_url: https://example.invalid/v1\n"
         )
         raw = self._raw()
         raw["shims"] = {"paths": [str(tmp_path / "local-shims")]}

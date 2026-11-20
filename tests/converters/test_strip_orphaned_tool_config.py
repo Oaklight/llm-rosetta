@@ -3,7 +3,7 @@ Tests for strip_orphaned_tool_config — shared function and converter integrati
 
 Covers the third symptom of Codex context compaction breaking request
 structural integrity (see llm-rosetta#87):
-  1. Orphaned tool_calls in messages  → fix_orphaned_tool_calls_ir  (v0.2.4)
+  1. Orphaned tool_calls in messages  → normalize_tool_pairing  (v0.2.4)
   2. Tool messages in wrong position  → _reorder_tool_messages      (v0.2.6)
   3. tool_choice without tools        → strip_orphaned_tool_config   (this)
 """

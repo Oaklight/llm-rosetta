@@ -8,7 +8,7 @@ from llm_rosetta.converters.base import BaseConverter
 from llm_rosetta.converters.base.context import ConversionContext, StreamContext
 from llm_rosetta.pipeline import StreamProcessor
 from llm_rosetta.ir.tools.orphan_fix import (
-    fix_orphaned_tool_calls_ir,
+    normalize_tool_pairing,
 )
 from llm_rosetta.converters.llm.open_responses.converter import OpenAIResponsesConverter
 from llm_rosetta.converters.llm.chat_completions.converter import (
@@ -286,7 +286,7 @@ class TestNonStreamPassthroughHelpers:
             {"role": "user", "content": [{"type": "text", "text": "hi"}]},
             passthrough,
         ]
-        fixed = fix_orphaned_tool_calls_ir(messages)
+        fixed = normalize_tool_pairing(messages)
         assert fixed == messages
         assert fixed[1] is passthrough
 

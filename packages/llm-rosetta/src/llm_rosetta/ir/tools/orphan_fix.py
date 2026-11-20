@@ -525,26 +525,6 @@ def normalize_tool_pairing(
     return filled
 
 
-def fix_orphaned_tool_calls_ir(
-    messages: Sequence[IRInputItem],
-    *,
-    placeholder: str = UNANSWERED_TOOL_CALL,
-) -> list[IRInputItem]:
-    """Deprecated alias of :func:`normalize_tool_pairing`.
-
-    Kept for callers that name the old repair; it now performs the whole
-    occurrence-aware normalisation, not only the set-difference one.
-
-    Args:
-        messages: IR messages (any iterable of Message dicts).
-        placeholder: Content string for injected synthetic tool results.
-
-    Returns:
-        A new messages list with the pairing repaired.
-    """
-    return normalize_tool_pairing(messages, placeholder=placeholder)
-
-
 # ==================== Orphaned Tool Config Fix (IR level) ====================
 
 
