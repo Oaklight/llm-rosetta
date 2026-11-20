@@ -297,3 +297,31 @@ def test_staging_registry_success_swaps_registry():
     with api.staging_registry():
         register_shim(_shim(reasoning=_BASE))
     assert get_shim("t-reasoning") is not None
+
+
+# ------------------------------------------ the last non-surface imports (#1630)
+def test_builtin_providers_dir_is_the_root_load_providers_scans():
+    root = api.builtin_providers_dir()
+    assert root.is_dir()
+    assert (root / "openai").is_dir()
+    from llm_rosetta.shims import providers
+
+    assert root == providers._PROVIDERS_DIR
+
+
+def test_plugin_source_is_none_for_a_directory_shim():
+    assert api.plugin_source("openai--open_responses") is None
+    assert api.plugin_source("no-such-shim") is None
+
+
+def test_the_scaffold_entry_points_are_the_scaffold_module_s():
+    import argparse
+
+    from llm_rosetta.shims import scaffold
+
+    assert api.run_scaffold is scaffold.run
+    assert api.run_scaffold_check is scaffold.run_check
+    assert api.run_scaffold_migrate is scaffold.run_migrate
+    parser = argparse.ArgumentParser()
+    api.add_scaffold_arguments(parser, default_root="providers")
+    assert parser.parse_args(["acme"]).__dict__

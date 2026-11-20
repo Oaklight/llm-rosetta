@@ -89,7 +89,9 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
     # ``typed_response_usage``, ``staging_registry``, ``reasoning_capability``,
     # ``describe_vendor_manifest``) and ``SURFACE_VERSION``.  The manifest-text
     # trio (``leaf_connection``, ``manifest_vocabulary``, ``merge_connection``)
-    # replaces the gateway's last private reaches (#1630).
+    # replaces the gateway's last private reaches (#1630); ``plugin_source``,
+    # ``builtin_providers_dir`` and the four scaffold entry points replace the
+    # gateway's last non-surface imports.
     "llm_rosetta.api": {
         "items": [
             # Chat conversion
@@ -139,17 +141,24 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "resolve_model_type",
             "resolve_shim",
             # Shim registry, write side and loaders
+            "builtin_providers_dir",
             "describe_vendor_manifest",
             "leaf_connection",
             "load_providers",
             "load_providers_from_dir",
             "manifest_vocabulary",
             "merge_connection",
+            "plugin_source",
             "register_shim",
             "restore_registry",
             "snapshot_registry",
             "staging_registry",
             "unregister_shim",
+            # Shim scaffolding
+            "add_scaffold_arguments",
+            "run_scaffold",
+            "run_scaffold_check",
+            "run_scaffold_migrate",
             # Fidelity and profiling
             "DeepProfiler",
             "FidelityChecker",
@@ -163,7 +172,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             # Version
             "__version__",
         ],
-        "max_count": 64,
+        "max_count": 68,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
