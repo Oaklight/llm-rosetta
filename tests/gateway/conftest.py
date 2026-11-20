@@ -312,3 +312,16 @@ def gateway_warnings():
         yield handler.records
     finally:
         logger.removeHandler(handler)
+
+
+@pytest.fixture(autouse=True)
+def _acp_profile_stays_in_tmp(monkeypatch, tmp_path_factory):
+    """Keep an ACP agent profile out of the real ``~/.config``.
+
+    A provider with no data directory falls back to a per-user location; a
+    test must never write there.
+    """
+    from llm_rosetta_gateway.transport import acp_profile
+
+    root = tmp_path_factory.mktemp("acp-profiles")
+    monkeypatch.setattr(acp_profile, "fallback_root", lambda: root)

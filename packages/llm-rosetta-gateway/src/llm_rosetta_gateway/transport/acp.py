@@ -56,6 +56,14 @@ from .acp_ledger import (
     SessionKey,
     block_digests,
 )
+from .acp_profile import (
+    ensure_profile,
+    gemini_dir_of,
+    harden_argv,
+    is_agy,
+    state_dir_for,
+    tool_name_of,
+)
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -79,19 +87,25 @@ DEFAULT_AGENT_ARGV: tuple[str, ...] = (
 )
 
 #: Phase 1 runs the agent as a plain text model: its own tools (file read,
-#: write, shell, web) are OFF.  Two settings enforce this together.  The argv
-#: above makes the agent *ask* before using a tool (agy auto-approves by
-#: default, which would give every gateway client the host's files and shell),
-#: and this switch makes the gateway's ACP client refuse every such ask.  Phase
-#: 2 will add a controlled tool path; flipping this to ``False`` is one half of
-#: re-enabling tools.  An operator-supplied ``acp_argv`` that keeps agy's
-#: default auto-approve bypasses the gateway's refusal entirely, so overriding
-#: ``acp_argv`` can re-enable host tools, at the operator's own risk.
+#: write, shell, web) are OFF.  The agent is an upstream, not the gateway's
+#: client, and must never run a tool on the gateway host for an API request.
+#: Four layers enforce it (see ``acp_profile``): a gateway-owned agent profile
+#: (``--gemini-dir``) with ``toolPermission: strict``, a custom agent with no
+#: tools, a deny-all ``PreToolUse`` hook, and this client, which refuses every
+#: ``session/request_permission`` and stops a turn at the first tool frame.
+#: Phase 2 will add a controlled tool path (MCP bridge tools named
+#: ``mcp_<server>_<tool>``); flipping this to ``False`` is one half of
+#: re-enabling tools.  An operator-supplied ``acp_argv`` is used as written and
+#: gets none of the profile: it can re-enable host tools, at the operator's own
+#: risk; only the client-side refusal and the tool-frame guard remain.
 DENY_AGENT_TOOLS = True
 
-#: The agent mode that asks before *every* tool use, reads included.  agy's
-#: default mode reads files without asking, and the permission flag does not
-#: change that; ``plan`` mode asks, and the client then refuses.
+#: The agent mode that asks before *every* tool use, reads included.  Used only
+#: for an agent the gateway does not give its own profile (an operator's
+#: ``acp_argv``, a non-agy agent): agy's default mode reads files without
+#: asking, and ``plan`` mode asks, and the client then refuses.  The hardened
+#: profile does not use it: ``plan`` made the model write plan files first and
+#: added no protection over ``toolPermission: strict``.
 AGENT_TOOLS_OFF_MODE = "plan"
 
 #: A session that cannot be opened usually means the agent is not signed in.
@@ -294,9 +308,65 @@ class AcpTransport:
 
     # -- agent lifecycle ----------------------------------------------------
 
-    def _argv(self, provider_info: ProviderInfo) -> list[str]:
+    def _declared_argv(self, provider_info: ProviderInfo) -> list[str]:
         argv = getattr(provider_info, "acp_argv", None)
         return list(argv) if argv else list(DEFAULT_AGENT_ARGV)
+
+    def _hardened(self, provider_info: ProviderInfo) -> bool:
+        """Whether the gateway gives this provider's agent its own profile.
+
+        True for an ``agy`` command the operator did not write: a provider
+        entry's own ``acp_argv`` is used as written.
+        """
+        if getattr(provider_info, "acp_argv_custom", False):
+            return False
+        return is_agy(self._declared_argv(provider_info))
+
+    def _argv(self, provider_info: ProviderInfo) -> list[str]:
+        """The command that starts this provider's agent.
+
+        For a hardened provider it carries ``--gemini-dir <profile>`` and the
+        agent flag; the profile itself is written by :meth:`_profile`.
+        """
+        argv = self._declared_argv(provider_info)
+        if not self._hardened(provider_info):
+            return argv
+        return harden_argv(argv, self._state_dir(provider_info))
+
+    @staticmethod
+    def _state_dir(provider_info: ProviderInfo) -> str:
+        explicit = getattr(provider_info, "acp_state_dir", None)
+        if explicit:
+            return str(explicit)
+        return state_dir_for(None, provider_info.config_name)
+
+    def _profile(self, provider_info: ProviderInfo, argv: list[str]) -> None:
+        """Write, or re-assert, the profile the agent will run in.
+
+        Called before the agent starts and before every session: what the
+        agent could change of its own profile is undone each time.
+        """
+        if not self._hardened(provider_info):
+            return
+        gemini_dir = gemini_dir_of(argv)
+        if gemini_dir is None:  # pragma: no cover - harden_argv always sets it
+            return
+        try:
+            drift = ensure_profile(gemini_dir)
+        except OSError as exc:
+            raise AcpTurnError(
+                f"provider {provider_info.config_name!r}: the agent profile "
+                f"{gemini_dir!r} cannot be written, so its tools cannot be "
+                f"gated: {exc}",
+                status_code=502,
+            ) from exc
+        if drift:
+            logger.warning(
+                "ACP provider %r: the agent's profile was changed since the "
+                "gateway wrote it (%s); restored",
+                provider_info.config_name,
+                ", ".join(drift),
+            )
 
     def _processes(self, provider_info: ProviderInfo) -> int:
         """How many agent processes this provider may run."""
@@ -323,6 +393,7 @@ class AcpTransport:
     async def _start(self, provider_info: ProviderInfo, slot: int) -> _Agent:
         """Start one agent process and complete the handshake."""
         argv = self._argv(provider_info)
+        self._profile(provider_info, argv)
         client = ACPClient(argv)
         client.set_request_handler(_agent_request_handler(provider_info.config_name))
         try:
@@ -480,6 +551,10 @@ class AcpTransport:
         # it out first is what makes this request start a fresh one instead of
         # writing into a dead pipe.
         self._prune_gone(provider_info.config_name)
+        # Re-assert the agent's profile before every turn (new, resumed or
+        # reused session alike): the agent can write files, and its own
+        # profile is among them.
+        self._profile(provider_info, self._argv(provider_info))
         key = self._key(provider_info)
         entry = self._ledger.get(key) if key is not None else None
         agent = await self._agent(provider_info, self._slot_for(provider_info, entry))
@@ -692,12 +767,15 @@ class AcpTransport:
     ) -> None:
         """Put the session in the mode in which every tool use is asked for.
 
-        agy's default mode reads files without asking (the permission flag
-        does not cover reads); in ``plan`` mode a read asks too, and the
-        client refuses.  Failing to set the mode fails the turn: a session
-        whose tools cannot be shown to be gated must not run.
+        Only for an agent without the gateway's profile (an operator's
+        ``acp_argv``): agy's default mode reads files without asking (the
+        permission flag does not cover reads); in ``plan`` mode a read asks
+        too, and the client refuses.  Failing to set the mode fails the turn:
+        a session whose tools cannot be shown to be gated must not run.  The
+        hardened profile asks for everything through ``toolPermission:
+        strict`` and needs no mode.
         """
-        if not DENY_AGENT_TOOLS:
+        if not DENY_AGENT_TOOLS or self._hardened(provider_info):
             return
         try:
             await _bounded(
@@ -799,6 +877,7 @@ class AcpTransport:
                 async for update in _prompt_updates(
                     client, session_id, text, images, deadline
                 ):
+                    _guard_tool_frame(update)
                     chunk = _chunk_of(update)
                     if chunk is None:
                         continue
@@ -840,6 +919,11 @@ class AcpTransport:
                 )
                 yield _failure(collect, message)
                 return
+            except _AgentToolUse as exc:
+                yield _failure(
+                    collect, await self._stop_for_tool(turn, provider_info, exc.tool)
+                )
+                return
             except JSONRPCException as exc:
                 # What the agent recorded of a failed turn is unknown, so the
                 # session cannot be reused: the next turn opens a fresh one.
@@ -870,6 +954,37 @@ class AcpTransport:
                 # fails: the locks are the slot, and a slot that is never
                 # given back takes the lane down with it.
                 turn.release()
+
+    async def _stop_for_tool(
+        self, turn: _Turn, provider_info: ProviderInfo, tool: str
+    ) -> str:
+        """End a turn in which the agent started one of its own tools.
+
+        Phase 1 allows none, so the turn stops here: cancelled, the session
+        closed (what the tool did before the cancel is unknown, so the session
+        is not reused).  The client is told, in a status it can act on, that
+        the turn did not complete: an empty 200 would read as "the model said
+        nothing".  The log line names the provider and the tool, never
+        arguments or output.
+
+        Returns:
+            The message of the error the client receives.
+        """
+        turn.finished = True
+        await self._forget(turn.entry)
+        await _cancel_quietly(turn.agent.client, turn.session_id)
+        logger.warning(
+            "ACP provider %r: the agent started its built-in tool %r; "
+            "agent tools are disabled, so the turn was stopped",
+            provider_info.config_name,
+            tool,
+        )
+        return (
+            f"ACP agent for provider {provider_info.config_name!r} tried to "
+            f"use its built-in tool {tool!r}; agent tools are disabled "
+            f"on this lane, so the turn was stopped. Ask for a text answer "
+            f"that needs no tool."
+        )
 
     async def _abandon(self, turn: _Turn) -> None:
         """Give back a session whose turn did not finish."""
@@ -1163,6 +1278,23 @@ class _TurnDeadline(Exception):
     """The agent stopped answering inside the turn's deadline."""
 
 
+def _guard_tool_frame(update: dict[str, Any]) -> None:
+    """Raise when *update* is a tool frame and tools are not allowed."""
+    if not DENY_AGENT_TOOLS:
+        return
+    tool = tool_name_of(update)
+    if tool is not None:
+        raise _AgentToolUse(tool)
+
+
+class _AgentToolUse(Exception):
+    """The agent reported one of its own tools; phase 1 allows none."""
+
+    def __init__(self, tool: str) -> None:
+        super().__init__(tool)
+        self.tool = tool
+
+
 async def _bounded(coro: Any, deadline: float) -> Any:
     """Await one session-setup call within what is left of the turn's budget.
 
@@ -1262,10 +1394,23 @@ def _default_workspace(provider_info: ProviderInfo) -> str:
 
     A scratch directory per provider under the system temp dir: the agent may
     write files, and pointing it at the gateway's own working directory would
-    let a model write into the deployment.
+    let a model write into the deployment.  An ``agy`` the gateway gives its own
+    profile runs in an empty ``workspace`` directory beside that profile
+    instead (mode 0700): a shared temp directory is somewhere another local
+    user could plant ``.agents/`` customizations the agent would load.
     """
     import tempfile
     from pathlib import Path
+
+    argv = list(getattr(provider_info, "acp_argv", None) or DEFAULT_AGENT_ARGV)
+    if not getattr(provider_info, "acp_argv_custom", False) and is_agy(argv):
+        base = Path(
+            getattr(provider_info, "acp_state_dir", None)
+            or state_dir_for(None, provider_info.config_name)
+        )
+        owned = base / "workspace"
+        owned.mkdir(parents=True, exist_ok=True, mode=0o700)
+        return str(owned)
 
     safe = "".join(
         c if c.isalnum() or c in "-_." else "_" for c in provider_info.config_name

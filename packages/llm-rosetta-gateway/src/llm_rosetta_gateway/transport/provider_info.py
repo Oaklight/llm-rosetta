@@ -243,6 +243,8 @@ class ProviderInfo:
         stream_required: bool = False,
         transport: str = "http",
         acp_argv: tuple[str, ...] | None = None,
+        acp_argv_custom: bool = False,
+        acp_state_dir: str | None = None,
         acp_processes: int = 1,
         acp_max_sessions: int | None = None,
         acp_session_ttl: float | None = None,
@@ -330,6 +332,14 @@ class ProviderInfo:
         # The agent command an ``acp`` transport starts, when the shim
         # declares one; ``None`` takes the transport's default.
         self.acp_argv = acp_argv
+        # Whether the operator wrote ``acp_argv`` in the provider entry (as
+        # opposed to the shim declaring it).  A written argv is used as is; a
+        # declared one gets the gateway-owned agent profile.
+        self.acp_argv_custom = acp_argv_custom
+        # Where the gateway keeps this provider's agent profile (its own
+        # ``--gemini-dir`` for ``agy``); ``None`` takes the transport's
+        # per-user default.
+        self.acp_state_dir = acp_state_dir
         # How many agent processes this provider may run, and the two bounds
         # on the sessions they hold.  All three default from the transport;
         # ``None`` means "keep the default", which is why they are not
