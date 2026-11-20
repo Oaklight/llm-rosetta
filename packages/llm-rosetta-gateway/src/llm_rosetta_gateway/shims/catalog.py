@@ -287,9 +287,10 @@ def canonical_shim_for(package: ShimSourcePackage, legacy_name: str) -> str:
         The canonical name, or ``""`` when nothing in the package matches it —
         which a test here treats as a broken catalogue entry.
     """
-    from llm_rosetta.provider_names import canonical_shim_name
+    from llm_rosetta.api import retired_names
 
-    canonical = canonical_shim_name(legacy_name)
+    canonical = retired_names.replacement_for(legacy_name, retired_names.SHIM)
+    canonical = canonical or legacy_name
     if canonical in package.shims:
         return canonical
     head, _, variant = legacy_name.partition("--")

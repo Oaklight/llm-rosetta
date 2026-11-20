@@ -18,8 +18,6 @@ import logging
 from typing import Any
 
 from llm_rosetta.provider_names import (
-    LEGACY_PROVIDER_ALIASES,
-    LEGACY_SHIM_ALIASES,
     canonical_provider_name,
     canonical_shim_name,
 )
@@ -81,33 +79,61 @@ def correct_legacy_names(raw: dict[str, Any]) -> bool:
     return changed
 
 
+def _retired_error(name: str, value: str, kinds: tuple[str, ...]) -> str | None:
+    """The message for *value* when it is retired under one of *kinds*.
+
+    With the aliases on, the message is the historical "use X instead" form;
+    with them off it is the retired-names diagnostic, which also names the
+    standalone package's preset.
+    """
+    from llm_rosetta.api import retired_names
+
+    for kind in kinds:
+        row = retired_names.lookup(value, kind)
+        if row is None:
+            continue
+        noun = "name" if kind == retired_names.PROVIDER_TYPE else "shim name"
+        if retired_names.ALIASES_ENABLED:
+            return (
+                f"provider {name!r} uses legacy {noun} {value!r}; "
+                f"use {row.replacement!r} instead — see {DOCS_URL}"
+            )
+        return (
+            f"provider {name!r}: "
+            f"{retired_names.retired_name_message(value, kind)} — see {DOCS_URL}"
+        )
+    return None
+
+
 def legacy_name_error(providers: dict[str, Any]) -> str | None:
-    """Return an error message if *providers* still holds a legacy name.
+    """Return an error message if *providers* still holds a retired name.
 
     Guards load paths that bypass :func:`correct_legacy_names`: the gateway
     rejects the config rather than silently resolving a legacy name at runtime.
+    The names come from the retired-names table
+    (:mod:`llm_rosetta.retired_names`), so the guard keeps working once the
+    alias tables are gone, and names the replacement (and the preset of a
+    standalone package) when it fires.
     """
+    from llm_rosetta.api import retired_names
+
     from ..providers import BASE_FORMATS
 
     for name, cfg in providers.items():
         if not isinstance(cfg, dict):
             continue
         shim = cfg.get("shim")
-        if isinstance(shim, str) and shim in LEGACY_SHIM_ALIASES:
-            return (
-                f"provider {name!r} uses legacy shim name {shim!r}; "
-                f"use {canonical_shim_name(shim)!r} instead — see {DOCS_URL}"
-            )
+        if isinstance(shim, str):
+            error = _retired_error(name, shim, (retired_names.SHIM,))
+            if error is not None:
+                return error
         typ = cfg.get("type")
         if isinstance(typ, str):
-            if typ in LEGACY_PROVIDER_ALIASES:
-                return (
-                    f"provider {name!r} uses legacy name {typ!r}; "
-                    f"use {canonical_provider_name(typ)!r} instead — see {DOCS_URL}"
-                )
-            if typ in LEGACY_SHIM_ALIASES and typ not in BASE_FORMATS:
-                return (
-                    f"provider {name!r} uses legacy shim name {typ!r}; "
-                    f"use {canonical_shim_name(typ)!r} instead — see {DOCS_URL}"
-                )
+            error = _retired_error(name, typ, (retired_names.PROVIDER_TYPE,))
+            if error is not None:
+                return error
+            if typ not in BASE_FORMATS:
+                error = _retired_error(name, typ, (retired_names.SHIM,))
+                if error is not None:
+                    return error
     return None

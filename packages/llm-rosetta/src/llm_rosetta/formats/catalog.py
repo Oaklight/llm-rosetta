@@ -194,6 +194,11 @@ def canonical_model_type(name: str) -> str:
         The canonical name, unchanged when *name* is already canonical (or is
         not a known type at all).
     """
+    from llm_rosetta import retired_names
+
+    if not retired_names.ALIASES_ENABLED:
+        retired_names.check_not_retired(name, retired_names.MODEL_TYPE)
+        return name
     return LEGACY_MODEL_TYPES.get(name, name)
 
 

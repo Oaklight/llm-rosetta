@@ -16,6 +16,10 @@ The canonical names are the ones understood internally; legacy names are
 still accepted but emit a :class:`DeprecationWarning` pointing at the
 replacement.  They are scheduled for removal in 0.16.0 (#919).
 
+While :data:`llm_rosetta.retired_names.ALIASES_ENABLED` is ``False`` the
+tables below behave as if empty and the public boundaries raise a
+:class:`ValueError` naming the replacement (see :mod:`llm_rosetta.retired_names`).
+
 Adding a new rename is a one-line change to :data:`LEGACY_PROVIDER_ALIASES`
 (and, where relevant, the ``ProviderType`` literal in
 :mod:`llm_rosetta.auto_detect`).
@@ -31,6 +35,8 @@ Example:
 from __future__ import annotations
 
 import warnings
+
+from llm_rosetta import retired_names as _retired
 
 # ---------------------------------------------------------------------------
 # Single alias table — legacy name -> canonical name
@@ -147,6 +153,8 @@ def canonical_shim_name(name: str) -> str:
         The canonical shim name if *name* is a known legacy shim alias,
         otherwise *name* unchanged.
     """
+    if not _retired.ALIASES_ENABLED:
+        return name
     return LEGACY_SHIM_ALIASES.get(name, name)
 
 
@@ -172,6 +180,8 @@ def canonical_provider_name(name: str) -> str:
         >>> canonical_provider_name("openai_chat")
         'chat_completions'
     """
+    if not _retired.ALIASES_ENABLED:
+        return name
     return LEGACY_PROVIDER_ALIASES.get(name, name)
 
 
@@ -200,6 +210,7 @@ def normalize_provider_name(name: str) -> str:
         >>> normalize_provider_name("openai_chat")
         'chat_completions'
     """
+    _retired.check_not_retired(name, _retired.PROVIDER_TYPE)
     canonical = LEGACY_PROVIDER_ALIASES.get(name)
     if canonical is None:
         return name
@@ -233,6 +244,7 @@ def warn_legacy_provider_names(*names: str | None) -> None:
         if name is None or name in seen:
             continue
         seen.add(name)
+        _retired.check_not_retired(name, _retired.PROVIDER_TYPE)
         canonical = LEGACY_PROVIDER_ALIASES.get(name)
         if canonical is not None:
             warnings.warn(
@@ -271,6 +283,7 @@ def warn_legacy_shim_names(*names: str | None) -> None:
         if name is None or name in seen:
             continue
         seen.add(name)
+        _retired.check_not_retired(name, _retired.SHIM)
         canonical = LEGACY_SHIM_ALIASES.get(name)
         if canonical is not None:
             warnings.warn(

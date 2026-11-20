@@ -120,6 +120,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "ProviderType",
             "canonical_provider_name",
             "canonical_shim_name",
+            "retired_names",
             "warn_legacy_provider_names",
             "warn_legacy_shim_names",
             # Shim registry, read side

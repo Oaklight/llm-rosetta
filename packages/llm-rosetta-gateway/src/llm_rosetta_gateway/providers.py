@@ -697,6 +697,9 @@ def build_provider_info(
 
     # Legacy spellings (e.g. ``openai_chat``) migrate to canonical names so the
     # registry lookup below hits.
+    from llm_rosetta.api import retired_names
+
+    retired_names.check_not_retired(provider_type, retired_names.PROVIDER_TYPE)
     provider_type = canonical_provider_name(provider_type)
 
     # Resolve through shim registry for defaults

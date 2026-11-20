@@ -1,0 +1,2044 @@
+{
+ "alcf--metis": {
+  "canonical_model_type": {
+   "ok": "'alcf--metis'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'alcf--metis'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'alcf_metis--chat_completions'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'alcf_metis--chat_completions')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'alcf_metis--chat_completions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "err": "ValueError: Unsupported provider: alcf--metis",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'alcf--metis': ('llm', 'alcf--metis')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'alcf--metis' is deprecated; use 'alcf_metis--chat_completions' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'alcf_metis--chat_completions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'alcf_metis--chat_completions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'alcf--metis'; use 'alcf_metis--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'alcf--metis'; use 'alcf_metis--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'alcf--metis'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'alcf--metis'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'alcf--metis' is deprecated; use 'alcf_metis--chat_completions' instead."
+   ]
+  }
+ },
+ "alcf--minerva": {
+  "canonical_model_type": {
+   "ok": "'alcf--minerva'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'alcf--minerva'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'alcf_minerva--chat_completions'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'alcf_minerva--chat_completions')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'alcf_minerva--chat_completions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "err": "ValueError: Unsupported provider: alcf--minerva",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'alcf--minerva': ('llm', 'alcf--minerva')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'alcf--minerva' is deprecated; use 'alcf_minerva--chat_completions' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'alcf_minerva--chat_completions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'alcf_minerva--chat_completions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'alcf--minerva'; use 'alcf_minerva--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'alcf--minerva'; use 'alcf_minerva--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'alcf--minerva'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'alcf--minerva'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'alcf--minerva' is deprecated; use 'alcf_minerva--chat_completions' instead."
+   ]
+  }
+ },
+ "alcf--sophia": {
+  "canonical_model_type": {
+   "ok": "'alcf--sophia'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'alcf--sophia'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'alcf_sophia--chat_completions'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'alcf_sophia--chat_completions')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'alcf_sophia--chat_completions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "err": "ValueError: Unsupported provider: alcf--sophia",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'alcf--sophia': ('llm', 'alcf--sophia')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'alcf--sophia' is deprecated; use 'alcf_sophia--chat_completions' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'alcf_sophia--chat_completions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'alcf_sophia--chat_completions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'alcf--sophia'; use 'alcf_sophia--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'alcf--sophia'; use 'alcf_sophia--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'alcf--sophia'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'alcf--sophia'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'alcf--sophia' is deprecated; use 'alcf_sophia--chat_completions' instead."
+   ]
+  }
+ },
+ "anthropic": {
+  "canonical_model_type": {
+   "ok": "'anthropic'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'messages'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'anthropic--messages'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'anthropic--messages')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'messages')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'MessagesConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'anthropic': ('llm', 'messages')}",
+   "warnings": [
+    "DeprecationWarning: Provider name 'anthropic' is deprecated; use 'messages' instead.",
+    "DeprecationWarning: Shim name 'anthropic' is deprecated; use 'anthropic--messages' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'messages')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'messages')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'anthropic'; use 'anthropic--messages' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy name 'anthropic'; use 'messages' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'messages'",
+   "warnings": [
+    "DeprecationWarning: Provider name 'anthropic' is deprecated; use 'messages' instead."
+   ]
+  },
+  "resolve_format": {
+   "ok": "'messages'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Provider name 'anthropic' is deprecated; use 'messages' instead."
+   ]
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'anthropic' is deprecated; use 'anthropic--messages' instead."
+   ]
+  }
+ },
+ "argo--anthropic": {
+  "canonical_model_type": {
+   "ok": "'argo--anthropic'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'argo--anthropic'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'argo--messages'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'argo--messages')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'argo--messages')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "err": "ValueError: Unsupported provider: argo--anthropic",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'argo--anthropic': ('llm', 'argo--anthropic')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'argo--anthropic' is deprecated; use 'argo--messages' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'argo--messages')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'argo--messages')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'argo--anthropic'; use 'argo--messages' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'argo--anthropic'; use 'argo--messages' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'argo--anthropic'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'argo--anthropic'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'argo--anthropic' is deprecated; use 'argo--messages' instead."
+   ]
+  }
+ },
+ "argo--openai_chat": {
+  "canonical_model_type": {
+   "ok": "'argo--openai_chat'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'argo--openai_chat'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'argo--chat_completions'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'argo--chat_completions')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'argo--chat_completions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "err": "ValueError: Unsupported provider: argo--openai_chat",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'argo--openai_chat': ('llm', 'argo--openai_chat')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'argo--openai_chat' is deprecated; use 'argo--chat_completions' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'argo--chat_completions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'argo--chat_completions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'argo--openai_chat'; use 'argo--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'argo--openai_chat'; use 'argo--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'argo--openai_chat'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'argo--openai_chat'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'argo--openai_chat' is deprecated; use 'argo--chat_completions' instead."
+   ]
+  }
+ },
+ "argo--openai_responses": {
+  "canonical_model_type": {
+   "ok": "'argo--openai_responses'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'argo--openai_responses'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'argo--open_responses'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'argo--open_responses')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'argo--open_responses')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "err": "ValueError: Unsupported provider: argo--openai_responses",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'argo--openai_responses': ('llm', 'argo--openai_responses')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'argo--openai_responses' is deprecated; use 'argo--open_responses' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'argo--open_responses')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'argo--open_responses')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'argo--openai_responses'; use 'argo--open_responses' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'argo--openai_responses'; use 'argo--open_responses' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'argo--openai_responses'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'argo--openai_responses'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'argo--openai_responses' is deprecated; use 'argo--open_responses' instead."
+   ]
+  }
+ },
+ "asksage--anthropic": {
+  "canonical_model_type": {
+   "ok": "'asksage--anthropic'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'asksage--anthropic'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'asksage--messages'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'asksage--messages')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'asksage--messages')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "err": "ValueError: Unsupported provider: asksage--anthropic",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'asksage--anthropic': ('llm', 'asksage--anthropic')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'asksage--anthropic' is deprecated; use 'asksage--messages' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'asksage--messages')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'asksage--messages')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'asksage--anthropic'; use 'asksage--messages' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'asksage--anthropic'; use 'asksage--messages' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'asksage--anthropic'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'asksage--anthropic'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'asksage--anthropic' is deprecated; use 'asksage--messages' instead."
+   ]
+  }
+ },
+ "asksage--openai_chat": {
+  "canonical_model_type": {
+   "ok": "'asksage--openai_chat'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'asksage--openai_chat'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'asksage--chat_completions'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'asksage--chat_completions')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'asksage--chat_completions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "err": "ValueError: Unsupported provider: asksage--openai_chat",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'asksage--openai_chat': ('llm', 'asksage--openai_chat')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'asksage--openai_chat' is deprecated; use 'asksage--chat_completions' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'asksage--chat_completions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'asksage--chat_completions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'asksage--openai_chat'; use 'asksage--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'asksage--openai_chat'; use 'asksage--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'asksage--openai_chat'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'asksage--openai_chat'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'asksage--openai_chat' is deprecated; use 'asksage--chat_completions' instead."
+   ]
+  }
+ },
+ "asksage--openai_responses": {
+  "canonical_model_type": {
+   "ok": "'asksage--openai_responses'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'asksage--openai_responses'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'asksage--open_responses'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'asksage--open_responses')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'asksage--open_responses')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "err": "ValueError: Unsupported provider: asksage--openai_responses",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'asksage--openai_responses': ('llm', 'asksage--openai_responses')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'asksage--openai_responses' is deprecated; use 'asksage--open_responses' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'asksage--open_responses')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'asksage--open_responses')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'asksage--openai_responses'; use 'asksage--open_responses' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'asksage--openai_responses'; use 'asksage--open_responses' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'asksage--openai_responses'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'asksage--openai_responses'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'asksage--openai_responses' is deprecated; use 'asksage--open_responses' instead."
+   ]
+  }
+ },
+ "decision": {
+  "canonical_model_type": {
+   "ok": "'decisions'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'decision'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'decision'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(False, 'decision')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(False, 'decision')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "err": "ValueError: Unsupported provider: decision",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'decision': ('decisions', 'decision')}",
+   "warnings": []
+  },
+  "identities_shim": {
+   "ok": "{'p': ('decisions', 'decision')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('decisions', 'decision')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "None",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'decision'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'decision'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'decisions'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": []
+  }
+ },
+ "embedding": {
+  "canonical_model_type": {
+   "ok": "'embeddings'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'embedding'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'embedding'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(False, 'embedding')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(False, 'embedding')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "err": "ValueError: Unsupported provider: embedding",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'embedding': ('embeddings', 'embedding')}",
+   "warnings": []
+  },
+  "identities_shim": {
+   "ok": "{'p': ('embeddings', 'embedding')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('embeddings', 'embedding')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "None",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'embedding'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'embedding'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'embeddings'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": []
+  }
+ },
+ "google": {
+  "canonical_model_type": {
+   "ok": "'google'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'google_generate'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'google--google_generate'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'google--google_generate')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'google_generate')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'GoogleGenerateConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'google': ('llm', 'google_generate')}",
+   "warnings": [
+    "DeprecationWarning: Provider name 'google' is deprecated; use 'google_generate' instead.",
+    "DeprecationWarning: Shim name 'google' is deprecated; use 'google--google_generate' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'google_generate')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'google_generate')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'google'; use 'google--google_generate' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy name 'google'; use 'google_generate' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'google_generate'",
+   "warnings": [
+    "DeprecationWarning: Provider name 'google' is deprecated; use 'google_generate' instead."
+   ]
+  },
+  "resolve_format": {
+   "ok": "'google_generate'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Provider name 'google' is deprecated; use 'google_generate' instead."
+   ]
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'google' is deprecated; use 'google--google_generate' instead."
+   ]
+  }
+ },
+ "google-genai": {
+  "canonical_model_type": {
+   "ok": "'google-genai'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'google_generate'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'google-genai'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(False, 'google-genai')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'google_generate')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'GoogleGenerateConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'google-genai': ('llm', 'google_generate')}",
+   "warnings": [
+    "DeprecationWarning: Provider name 'google-genai' is deprecated; use 'google_generate' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'google_generate')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'google_generate')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "None",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy name 'google-genai'; use 'google_generate' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'google_generate'",
+   "warnings": [
+    "DeprecationWarning: Provider name 'google-genai' is deprecated; use 'google_generate' instead."
+   ]
+  },
+  "resolve_format": {
+   "ok": "'google_generate'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Provider name 'google-genai' is deprecated; use 'google_generate' instead."
+   ]
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": []
+  }
+ },
+ "google-interactions": {
+  "canonical_model_type": {
+   "ok": "'google-interactions'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'google_interactions'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'google-interactions'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(False, 'google-interactions')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'google_interactions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'GoogleInteractionsConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'google-interactions': ('llm', 'google_interactions')}",
+   "warnings": [
+    "DeprecationWarning: Provider name 'google-interactions' is deprecated; use 'google_interactions' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'google_interactions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'google_interactions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "None",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy name 'google-interactions'; use 'google_interactions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'google_interactions'",
+   "warnings": [
+    "DeprecationWarning: Provider name 'google-interactions' is deprecated; use 'google_interactions' instead."
+   ]
+  },
+  "resolve_format": {
+   "ok": "'google_interactions'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Provider name 'google-interactions' is deprecated; use 'google_interactions' instead."
+   ]
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": []
+  }
+ },
+ "google_generate": {
+  "canonical_model_type": {
+   "ok": "'google_generate'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'google_generate'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'google--google_generate'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'google--google_generate')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(False, 'google_generate')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'GoogleGenerateConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'google_generate': ('llm', 'google_generate')}",
+   "warnings": []
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'google_generate')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'google_generate')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'google_generate'; use 'google--google_generate' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'google_generate'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'google_generate'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'google_generate' is deprecated; use 'google--google_generate' instead."
+   ]
+  }
+ },
+ "google_interactions": {
+  "canonical_model_type": {
+   "ok": "'google_interactions'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'google_interactions'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'google--google_interactions'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'google--google_interactions')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(False, 'google_interactions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'GoogleInteractionsConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'google_interactions': ('llm', 'google_interactions')}",
+   "warnings": []
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'google_interactions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'google_interactions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'google_interactions'; use 'google--google_interactions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'google_interactions'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'google_interactions'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'google_interactions' is deprecated; use 'google--google_interactions' instead."
+   ]
+  }
+ },
+ "minimax--anthropic": {
+  "canonical_model_type": {
+   "ok": "'minimax--anthropic'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'minimax--anthropic'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'minimax--messages'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'minimax--messages')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'minimax--messages')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'MessagesConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'minimax--anthropic': ('llm', 'messages')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'minimax--anthropic' is deprecated; use 'minimax--messages' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'messages')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'messages')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'minimax--anthropic'; use 'minimax--messages' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'minimax--anthropic'; use 'minimax--messages' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'minimax--anthropic'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'messages'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'minimax--anthropic' is deprecated; use 'minimax--messages' instead."
+   ]
+  }
+ },
+ "minimax--openai_chat": {
+  "canonical_model_type": {
+   "ok": "'minimax--openai_chat'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'minimax--openai_chat'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'minimax--chat_completions'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'minimax--chat_completions')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'minimax--chat_completions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'ChatCompletionsConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'minimax--openai_chat': ('llm', 'chat_completions')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'minimax--openai_chat' is deprecated; use 'minimax--chat_completions' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'chat_completions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'chat_completions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'minimax--openai_chat'; use 'minimax--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'minimax--openai_chat'; use 'minimax--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'minimax--openai_chat'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'chat_completions'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'minimax--openai_chat' is deprecated; use 'minimax--chat_completions' instead."
+   ]
+  }
+ },
+ "open-responses": {
+  "canonical_model_type": {
+   "ok": "'open-responses'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'open_responses'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'open-responses'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(False, 'open-responses')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'open_responses')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'OpenResponsesConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'open-responses': ('llm', 'open_responses')}",
+   "warnings": [
+    "DeprecationWarning: Provider name 'open-responses' is deprecated; use 'open_responses' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'open_responses')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'open_responses')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "None",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy name 'open-responses'; use 'open_responses' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'open_responses'",
+   "warnings": [
+    "DeprecationWarning: Provider name 'open-responses' is deprecated; use 'open_responses' instead."
+   ]
+  },
+  "resolve_format": {
+   "ok": "'open_responses'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Provider name 'open-responses' is deprecated; use 'open_responses' instead."
+   ]
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": []
+  }
+ },
+ "openai": {
+  "canonical_model_type": {
+   "ok": "'openai'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'openai'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'openai--chat_completions'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'openai--chat_completions')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'openai--chat_completions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'ChatCompletionsConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'openai': ('llm', 'chat_completions')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'openai' is deprecated; use 'openai--chat_completions' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'chat_completions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'chat_completions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'openai'; use 'openai--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'openai'; use 'openai--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'openai'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'chat_completions'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'openai' is deprecated; use 'openai--chat_completions' instead."
+   ]
+  }
+ },
+ "openai-chat": {
+  "canonical_model_type": {
+   "ok": "'openai-chat'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'chat_completions'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'openai-chat'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(False, 'openai-chat')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'chat_completions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'ChatCompletionsConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'openai-chat': ('llm', 'chat_completions')}",
+   "warnings": [
+    "DeprecationWarning: Provider name 'openai-chat' is deprecated; use 'chat_completions' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'chat_completions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'chat_completions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "None",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy name 'openai-chat'; use 'chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'chat_completions'",
+   "warnings": [
+    "DeprecationWarning: Provider name 'openai-chat' is deprecated; use 'chat_completions' instead."
+   ]
+  },
+  "resolve_format": {
+   "ok": "'chat_completions'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Provider name 'openai-chat' is deprecated; use 'chat_completions' instead."
+   ]
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": []
+  }
+ },
+ "openai-responses": {
+  "canonical_model_type": {
+   "ok": "'openai-responses'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'openai--open_responses'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'openai-responses'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(False, 'openai-responses')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'openai--open_responses')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'OpenResponsesConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'openai-responses': ('llm', 'open_responses')}",
+   "warnings": [
+    "DeprecationWarning: Provider name 'openai-responses' is deprecated; use 'openai--open_responses' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'open_responses')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'open_responses')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "None",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy name 'openai-responses'; use 'openai--open_responses' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'openai--open_responses'",
+   "warnings": [
+    "DeprecationWarning: Provider name 'openai-responses' is deprecated; use 'openai--open_responses' instead."
+   ]
+  },
+  "resolve_format": {
+   "ok": "'open_responses'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Provider name 'openai-responses' is deprecated; use 'openai--open_responses' instead."
+   ]
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": []
+  }
+ },
+ "openai_chat": {
+  "canonical_model_type": {
+   "ok": "'openai_chat'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'chat_completions'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'openai_chat'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(False, 'openai_chat')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'chat_completions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'ChatCompletionsConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'openai_chat': ('llm', 'chat_completions')}",
+   "warnings": [
+    "DeprecationWarning: Provider name 'openai_chat' is deprecated; use 'chat_completions' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'chat_completions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'chat_completions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "None",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy name 'openai_chat'; use 'chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'chat_completions'",
+   "warnings": [
+    "DeprecationWarning: Provider name 'openai_chat' is deprecated; use 'chat_completions' instead."
+   ]
+  },
+  "resolve_format": {
+   "ok": "'chat_completions'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Provider name 'openai_chat' is deprecated; use 'chat_completions' instead."
+   ]
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": []
+  }
+ },
+ "openai_responses": {
+  "canonical_model_type": {
+   "ok": "'openai_responses'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'openai--open_responses'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'openai_responses'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(False, 'openai_responses')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'openai--open_responses')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'OpenResponsesConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'openai_responses': ('llm', 'open_responses')}",
+   "warnings": [
+    "DeprecationWarning: Provider name 'openai_responses' is deprecated; use 'openai--open_responses' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'open_responses')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'open_responses')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "None",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy name 'openai_responses'; use 'openai--open_responses' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'openai--open_responses'",
+   "warnings": [
+    "DeprecationWarning: Provider name 'openai_responses' is deprecated; use 'openai--open_responses' instead."
+   ]
+  },
+  "resolve_format": {
+   "ok": "'open_responses'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Provider name 'openai_responses' is deprecated; use 'openai--open_responses' instead."
+   ]
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": []
+  }
+ },
+ "openrouter--anthropic": {
+  "canonical_model_type": {
+   "ok": "'openrouter--anthropic'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'openrouter--anthropic'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'openrouter--messages'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'openrouter--messages')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'openrouter--messages')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'MessagesConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'openrouter--anthropic': ('llm', 'messages')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'openrouter--anthropic' is deprecated; use 'openrouter--messages' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'messages')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'messages')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'openrouter--anthropic'; use 'openrouter--messages' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'openrouter--anthropic'; use 'openrouter--messages' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'openrouter--anthropic'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'messages'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'openrouter--anthropic' is deprecated; use 'openrouter--messages' instead."
+   ]
+  }
+ },
+ "openrouter--openai_chat": {
+  "canonical_model_type": {
+   "ok": "'openrouter--openai_chat'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'openrouter--openai_chat'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'openrouter--chat_completions'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'openrouter--chat_completions')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'openrouter--chat_completions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'ChatCompletionsConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'openrouter--openai_chat': ('llm', 'chat_completions')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'openrouter--openai_chat' is deprecated; use 'openrouter--chat_completions' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'chat_completions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'chat_completions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'openrouter--openai_chat'; use 'openrouter--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'openrouter--openai_chat'; use 'openrouter--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'openrouter--openai_chat'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'chat_completions'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'openrouter--openai_chat' is deprecated; use 'openrouter--chat_completions' instead."
+   ]
+  }
+ },
+ "volcengine--openai_chat": {
+  "canonical_model_type": {
+   "ok": "'volcengine--openai_chat'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'volcengine--openai_chat'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'volcengine--chat_completions'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'volcengine--chat_completions')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'volcengine--chat_completions')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'ChatCompletionsConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'volcengine--openai_chat': ('llm', 'chat_completions')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'volcengine--openai_chat' is deprecated; use 'volcengine--chat_completions' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'chat_completions')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'chat_completions')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'volcengine--openai_chat'; use 'volcengine--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'volcengine--openai_chat'; use 'volcengine--chat_completions' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'volcengine--openai_chat'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'chat_completions'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'volcengine--openai_chat' is deprecated; use 'volcengine--chat_completions' instead."
+   ]
+  }
+ },
+ "volcengine--openai_responses": {
+  "canonical_model_type": {
+   "ok": "'volcengine--openai_responses'",
+   "warnings": []
+  },
+  "canonical_provider_name": {
+   "ok": "'volcengine--openai_responses'",
+   "warnings": []
+  },
+  "canonical_shim_name": {
+   "ok": "'volcengine--open_responses'",
+   "warnings": []
+  },
+  "correct_shim": {
+   "ok": "(True, 'volcengine--open_responses')",
+   "warnings": []
+  },
+  "correct_type": {
+   "ok": "(True, 'volcengine--open_responses')",
+   "warnings": []
+  },
+  "get_converter_for_provider": {
+   "ok": "'OpenResponsesConverter'",
+   "warnings": []
+  },
+  "identities_key": {
+   "ok": "{'volcengine--openai_responses': ('llm', 'open_responses')}",
+   "warnings": [
+    "DeprecationWarning: Shim name 'volcengine--openai_responses' is deprecated; use 'volcengine--open_responses' instead."
+   ]
+  },
+  "identities_shim": {
+   "ok": "{'p': ('llm', 'open_responses')}",
+   "warnings": []
+  },
+  "identities_type": {
+   "ok": "{'p': ('llm', 'open_responses')}",
+   "warnings": []
+  },
+  "legacy_error_shim": {
+   "ok": "\"provider 'p' uses legacy shim name 'volcengine--openai_responses'; use 'volcengine--open_responses' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "legacy_error_type": {
+   "ok": "\"provider 'p' uses legacy shim name 'volcengine--openai_responses'; use 'volcengine--open_responses' instead \u2014 see https://llm-rosetta.readthedocs.io/en/latest/guide/providers/\"",
+   "warnings": []
+  },
+  "normalize_provider_name": {
+   "ok": "'volcengine--openai_responses'",
+   "warnings": []
+  },
+  "resolve_format": {
+   "ok": "'open_responses'",
+   "warnings": []
+  },
+  "resolve_model_type": {
+   "ok": "'llm'",
+   "warnings": []
+  },
+  "warn_legacy_provider_names": {
+   "ok": "None",
+   "warnings": []
+  },
+  "warn_legacy_shim_names": {
+   "ok": "None",
+   "warnings": [
+    "DeprecationWarning: Shim name 'volcengine--openai_responses' is deprecated; use 'volcengine--open_responses' instead."
+   ]
+  }
+ }
+}
