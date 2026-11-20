@@ -12,15 +12,13 @@ from __future__ import annotations
 
 from typing import Any
 
-#: Where to send a user whose config still holds a retired name.
-DOCS_URL = "https://llm-rosetta.readthedocs.io/en/latest/guide/providers/"
-
 
 def _retired_error(name: str, value: str, kinds: tuple[str, ...]) -> str | None:
     """The message for *value* when it is retired under one of *kinds*.
 
-    The message is the retired-names diagnostic, which also names the
-    standalone package's preset.
+    The message is the retired-names diagnostic: it names the replacement, the
+    standalone package's preset when there is one, and ends with the
+    ``llm-rosetta-migrate`` command.
     """
     from llm_rosetta.api import retired_names
 
@@ -28,10 +26,7 @@ def _retired_error(name: str, value: str, kinds: tuple[str, ...]) -> str | None:
         row = retired_names.lookup(value, kind)
         if row is None:
             continue
-        return (
-            f"provider {name!r}: "
-            f"{retired_names.retired_name_message(value, kind)} — see {DOCS_URL}"
-        )
+        return f"provider {name!r}: {retired_names.retired_name_message(value, kind)}"
     return None
 
 

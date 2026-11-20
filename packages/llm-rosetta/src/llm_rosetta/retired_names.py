@@ -46,6 +46,13 @@ ALIASES_ENABLED: bool = True
 #: Release that renamed these names, for the message.
 RENAMED_IN = "0.14"
 
+#: The sentence every retired-name error ends with: the command that rewrites a
+#: config or a database, and where the full table of renames is explained.
+MIGRATE_HINT = (
+    "run 'llm-rosetta-migrate --config <path>' (add --write to apply), "
+    "see the migration guide"
+)
+
 PROVIDER_TYPE = "provider_type"
 SHIM = "shim"
 MODEL_TYPE = "model_type"
@@ -241,7 +248,7 @@ def retired_name_message(name: str, kind: str) -> str | None:
         )
     else:
         message += f" (use {row.replacement!r})"
-    return message
+    return f"{message}; {MIGRATE_HINT}"
 
 
 def check_not_retired(name: object, *kinds: str) -> None:
@@ -271,6 +278,7 @@ def check_not_retired(name: object, *kinds: str) -> None:
 __all__ = [
     "ALIASES_ENABLED",
     "KINDS",
+    "MIGRATE_HINT",
     "MODEL_TYPE",
     "PROVIDER_TYPE",
     "RETIRED_NAMES",
