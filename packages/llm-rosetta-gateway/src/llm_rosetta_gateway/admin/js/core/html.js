@@ -54,7 +54,10 @@ export function jsArg(v) {
 // value such as `" onmouseover="window.__pwned=1` adds attributes of its own.
 // tests/js/innerhtml-lint.test.mjs fails on an unquoted position.  `html`
 // protects HTML quoting only: `style="…${v}"` and `<script>` context are not
-// covered (see the lint's scope note).
+// covered (see the lint's scope note).  URL-valued attributes (`href`, `src`,
+// `action`, `formaction`) also need a scheme allow-list, which `html` does not
+// provide: `href="${v}"` still accepts `javascript:` because `esc` only stops
+// the attribute ending early (follow-up #1628).
 
 const SAFE = Symbol('SafeHtml');
 
