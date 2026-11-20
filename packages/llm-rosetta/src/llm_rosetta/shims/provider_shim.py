@@ -68,14 +68,6 @@ ReplayMissing = Literal["as_is", "fill_empty"]
 #: Tool search capability mode.
 ToolSearchMode = Literal["disabled", "native", "bridge"]
 
-# Backward-compat aliases (deprecated — will be removed in a future version)
-EffortLevel = IREffort
-DisabledStrategy = Literal["omit", "thinking_disabled", "thinking_budget_zero"]
-ThinkingType = Literal["enabled", "adaptive"]
-UnsignedReasoningBlocks = UnsignedBlocks
-EffortMap = dict[str, str]
-EffortField = str
-
 
 @dataclass(frozen=True)
 class ReasoningCapability:
@@ -451,19 +443,22 @@ class ToolsConfig:
     """
 
 
-# Legacy flat kwarg names → (grouped field, sub-field)
-_LEGACY_CONNECTION_FIELDS: dict[str, str] = {
-    "default_base_url": "base_url",
-    "default_api_key_env": "api_key_env",
-    "models_path": "models_path",
-    "default_path": "default_path",
-    "model_id_field": "model_id_field",
-}
-_LEGACY_TOOLS_FIELDS: dict[str, str] = {
-    "supports_custom_tools": "custom_tools",
-    "max_tool_description_length": "max_description_length",
-    "tool_search_mode": "search_mode",
-    "multimodal_tool_result": "multimodal_result",
+#: Constructor keywords an earlier release accepted, and what replaced each.
+#: Passing one raises :class:`TypeError` naming the replacement; the unknown-key
+#: check alone would say only that the keyword is unexpected.
+_REMOVED_KWARGS: dict[str, str] = {
+    "base": "format",
+    "from_transforms": "pre_ir_transforms",
+    "to_transforms": "post_ir_transforms",
+    "default_base_url": "connection=ConnectionConfig(base_url=...)",
+    "default_api_key_env": "connection=ConnectionConfig(api_key_env=...)",
+    "models_path": "connection=ConnectionConfig(models_path=...)",
+    "default_path": "connection=ConnectionConfig(default_path=...)",
+    "model_id_field": "connection=ConnectionConfig(model_id_field=...)",
+    "supports_custom_tools": "tools=ToolsConfig(custom_tools=...)",
+    "max_tool_description_length": "tools=ToolsConfig(max_description_length=...)",
+    "tool_search_mode": "tools=ToolsConfig(search_mode=...)",
+    "multimodal_tool_result": "tools=ToolsConfig(multimodal_result=...)",
 }
 
 
@@ -522,25 +517,11 @@ def _normalize_model_type_kwargs(kwargs: dict[str, Any]) -> None:
 
 
 def _normalize_format_kwargs(kwargs: dict[str, Any]) -> None:
-    """Fold the deprecated ``base`` keyword into ``format``.
+    """Reject a retired format spelling.
 
-    ``format`` is the canonical spelling; ``base`` is its deprecated alias.
-    A retired format spelling (``openai_chat``, ``anthropic``) raises a
+    A retired spelling (``openai_chat``, ``anthropic``) raises a
     :class:`ValueError` that names its replacement.
     """
-    if "base" in kwargs:
-        warnings.warn(
-            "ProviderShim(base=...) is deprecated, use format=...",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        legacy_base = kwargs.pop("base")
-        if "format" in kwargs and kwargs["format"] != legacy_base:
-            raise ValueError(
-                f"ProviderShim: base={legacy_base!r} disagrees with "
-                f"format={kwargs['format']!r}"
-            )
-        kwargs["format"] = legacy_base
     if "format" in kwargs:
         # A retired spelling (openai_chat, anthropic, google) is an error that
         # names its replacement, not a name the shim could be stored under.
@@ -559,8 +540,8 @@ class ProviderShim:
             format and an embedding format.
         format: Wire format within :attr:`model_type` (e.g.
             ``"chat_completions"``, ``"messages"``, ``"openai"``,
-            ``"systemone"``).  The deprecated ``base`` keyword and property
-            alias this field.
+            ``"systemone"``).  The read-only ``base`` property aliases this
+            field.
         logo: URL to the provider's logo image (SVG preferred).
         display_name: This shim's own human-readable label (e.g. ``"cluster_a"``
             on ``"acme_cluster_a--chat_completions"``).  The admin UI renders it
@@ -603,10 +584,8 @@ class ProviderShim:
             search mode, multimodal tool results).
         pre_ir_transforms: Body-level transforms applied BEFORE IR
             conversion (normalise provider dialect → standard).
-            Aliased as ``from_transforms`` for backward compatibility.
         post_ir_transforms: Body-level transforms applied AFTER IR
             conversion (standard → provider dialect).
-            Aliased as ``to_transforms`` for backward compatibility.
         reasoning: Reasoning capability config for this provider.
             When ``None``, the converter uses its built-in default.
         model_reasoning: Per-model reasoning overrides keyed by
@@ -727,77 +706,28 @@ class ProviderShim:
     request: RequestConstraints = field(default_factory=RequestConstraints)
 
     def __init__(self, **kwargs: Any) -> None:  # type: ignore[override]
-        """Accept both new and legacy kwarg names.
+        """Build a shim from keyword arguments.
 
-        Legacy ``from_transforms`` maps to ``pre_ir_transforms``;
-        ``to_transforms`` maps to ``post_ir_transforms``.
-        Legacy flat connection/tool kwargs are merged into their
-        respective grouped config objects.
-        New names take precedence if both are provided.
+        Every field is keyword-only.  A keyword an earlier release accepted
+        (``base``, ``from_transforms``, ``to_transforms`` and the flat
+        connection and tool keywords) is rejected with a :class:`TypeError`
+        that names its replacement.
+
+        Raises:
+            TypeError: A removed keyword, an unknown keyword, or a missing
+                ``name`` / ``format``.
         """
+        removed = {k: _REMOVED_KWARGS[k] for k in kwargs if k in _REMOVED_KWARGS}
+        if removed:
+            hints = "; ".join(f"{k}= -> {new}" for k, new in sorted(removed.items()))
+            raise TypeError(
+                f"ProviderShim() no longer accepts {', '.join(sorted(removed))} "
+                f"(removed in 0.14.0): {hints}"
+            )
+
         # ── format / model_type ──────────────────────────────────────
         _normalize_format_kwargs(kwargs)
         _normalize_model_type_kwargs(kwargs)
-
-        # ── Transform renames ────────────────────────────────────────
-        if "from_transforms" in kwargs:
-            warnings.warn(
-                "ProviderShim(from_transforms=...) is deprecated, "
-                "use pre_ir_transforms instead",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            if "pre_ir_transforms" not in kwargs:
-                kwargs["pre_ir_transforms"] = kwargs.pop("from_transforms")
-            else:
-                kwargs.pop("from_transforms")
-        if "to_transforms" in kwargs:
-            warnings.warn(
-                "ProviderShim(to_transforms=...) is deprecated, "
-                "use post_ir_transforms instead",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            if "post_ir_transforms" not in kwargs:
-                kwargs["post_ir_transforms"] = kwargs.pop("to_transforms")
-            else:
-                kwargs.pop("to_transforms")
-
-        # ── Legacy flat connection kwargs → ConnectionConfig ─────────
-        conn_legacy = {
-            new: kwargs.pop(old)
-            for old, new in _LEGACY_CONNECTION_FIELDS.items()
-            if old in kwargs
-        }
-        if conn_legacy:
-            if "connection" not in kwargs:
-                kwargs["connection"] = ConnectionConfig(**conn_legacy)
-            else:
-                warnings.warn(
-                    "ProviderShim: flat connection kwargs "
-                    f"({', '.join(conn_legacy)}) ignored because "
-                    "'connection' was also provided",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
-
-        # ── Legacy flat tool kwargs → ToolsConfig ────────────────────
-        tools_legacy = {
-            new: kwargs.pop(old)
-            for old, new in _LEGACY_TOOLS_FIELDS.items()
-            if old in kwargs
-        }
-        if tools_legacy:
-            if "tools" not in kwargs:
-                kwargs["tools"] = ToolsConfig(**tools_legacy)
-            else:
-                warnings.warn(
-                    "ProviderShim: flat tool kwargs "
-                    f"({', '.join(tools_legacy)}) ignored because "
-                    "'tools' was also provided",
-                    DeprecationWarning,
-                    stacklevel=2,
-                )
 
         # ── Apply defaults ───────────────────────────────────────────
         _FIELD_DEFAULTS: dict[str, Any] = {
@@ -832,7 +762,7 @@ class ProviderShim:
             "request": RequestConstraints(),
             "fields": (),
         }
-        _VALID_FIELDS = {"name", "format", "base"} | _FIELD_DEFAULTS.keys()
+        _VALID_FIELDS = {"name", "format"} | _FIELD_DEFAULTS.keys()
         for k, v in _FIELD_DEFAULTS.items():
             kwargs.setdefault(k, v)
 
@@ -853,7 +783,15 @@ class ProviderShim:
         for k, v in kwargs.items():
             object.__setattr__(self, k, v)
 
-    # ── Backward-compatible aliases (read-only) ─────────────────────
+    # ── Backward-compatible alias (read-only) ───────────────────────
+    #
+    # Three read-only aliases outlive the rest of the legacy surface because
+    # in-repo and standalone-shim-repo code still reads them (#919): ``base``
+    # (the gateway admin payload and the alcf / asksage / opencode-free
+    # tests), ``default_path`` (the gateway's typed-route resolver) and
+    # ``max_tool_description_length`` (the argo test).  Drop each once its last
+    # reader moves to ``format`` / ``connection.default_path`` /
+    # ``tools.max_description_length``.
 
     @property
     def base(self) -> str:
@@ -861,61 +799,14 @@ class ProviderShim:
         return self.format
 
     @property
-    def from_transforms(self) -> tuple[Transform, ...]:
-        """Alias for ``pre_ir_transforms`` (deprecated)."""
-        return self.pre_ir_transforms
-
-    @property
-    def to_transforms(self) -> tuple[Transform, ...]:
-        """Alias for ``post_ir_transforms`` (deprecated)."""
-        return self.post_ir_transforms
-
-    # Legacy flat connection accessors
-    @property
-    def default_base_url(self) -> str | None:
-        """Alias for ``connection.base_url`` (deprecated)."""
-        return self.connection.base_url
-
-    @property
-    def default_api_key_env(self) -> str | None:
-        """Alias for ``connection.api_key_env`` (deprecated)."""
-        return self.connection.api_key_env
-
-    @property
-    def models_path(self) -> str | None:
-        """Alias for ``connection.models_path`` (deprecated)."""
-        return self.connection.models_path
-
-    @property
     def default_path(self) -> str | None:
         """Alias for ``connection.default_path``."""
         return self.connection.default_path
 
     @property
-    def model_id_field(self) -> str | None:
-        """Alias for ``connection.model_id_field`` (deprecated)."""
-        return self.connection.model_id_field
-
-    # Legacy flat tool accessors
-    @property
-    def supports_custom_tools(self) -> bool:
-        """Alias for ``tools.custom_tools`` (deprecated)."""
-        return self.tools.custom_tools
-
-    @property
     def max_tool_description_length(self) -> int | None:
         """Alias for ``tools.max_description_length`` (deprecated)."""
         return self.tools.max_description_length
-
-    @property
-    def tool_search_mode(self) -> ToolSearchMode:
-        """Alias for ``tools.search_mode`` (deprecated)."""
-        return self.tools.search_mode
-
-    @property
-    def multimodal_tool_result(self) -> bool | None:
-        """Alias for ``tools.multimodal_result`` (deprecated)."""
-        return self.tools.multimodal_result
 
 
 # ---------------------------------------------------------------------------
@@ -1120,16 +1011,6 @@ def resolve_model_type(name: str) -> str | None:
     if resolved in _CHAT_FORMATS:
         return "llm"
     return None
-
-
-def resolve_base(name: str) -> str:
-    """Deprecated alias for :func:`resolve_format`."""
-    warnings.warn(
-        "resolve_base() is deprecated, use resolve_format()",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return resolve_format(name)
 
 
 def _clear_registry_caches() -> None:

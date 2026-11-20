@@ -336,7 +336,9 @@ def _gi_history_request(kind: str) -> dict[str, Any]:
 
 def _gg_shim(kinds: tuple[str, ...]) -> ProviderShim:
     return ProviderShim(
-        name="gg-test", base="google_generate", tools=ToolsConfig(intrinsic_tools=kinds)
+        name="gg-test",
+        format="google_generate",
+        tools=ToolsConfig(intrinsic_tools=kinds),
     )
 
 

@@ -8,7 +8,7 @@ Public API:
 
 - **Registration** (startup): ``register_shim``, ``load_providers_from_dir``
 - **Query** (per request): ``get_shim``, ``list_shims``, ``resolve_format``,
-  ``resolve_model_type`` (``resolve_base`` is the deprecated alias)
+  ``resolve_model_type``
 - **Transforms**: ``apply_transforms``, ``strip_fields``, ``rename_field``, ``set_defaults``
 
 External shim sources — directory and archive loaders, the standalone
@@ -24,7 +24,6 @@ from .provider_shim import (
     get_shim,
     list_shims,
     register_shim,
-    resolve_base,
     resolve_format,
     resolve_model_type,
     resolve_shim,
@@ -64,7 +63,6 @@ __all__ = [
     "unregister_shim",
     "get_shim",
     "list_shims",
-    "resolve_base",
     "resolve_format",
     "resolve_model_type",
     "resolve_shim",

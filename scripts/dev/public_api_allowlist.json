@@ -168,6 +168,14 @@
     {
       "key": "llm_rosetta.tool_ops::from_anthropic::removed",
       "reason": "Removed in 0.14.0 (issue 919, P2): the deprecated alias is gone; use llm_rosetta.tool_ops.from_messages."
+    },
+    {
+      "key": "llm_rosetta::resolve_base::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P6): the deprecated alias is gone; use llm_rosetta.resolve_format."
+    },
+    {
+      "key": "llm_rosetta.shims::resolve_base::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P6): the deprecated alias is gone; use llm_rosetta.shims.resolve_format."
     }
   ]
 }

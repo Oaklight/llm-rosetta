@@ -256,9 +256,6 @@ def test_provider_shim_rejects_a_retired_format(
 ) -> None:
     with pytest.raises(ValueError, match=repr(row.replacement)):
         ProviderShim(name="x", format=row.name)
-    with pytest.warns(DeprecationWarning, match="base="):
-        with pytest.raises(ValueError, match=repr(row.replacement)):
-            ProviderShim(name="x", base=row.name)
 
 
 # ---------------------------------------------------------------------------

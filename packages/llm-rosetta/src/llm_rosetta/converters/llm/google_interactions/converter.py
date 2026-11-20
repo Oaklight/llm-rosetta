@@ -1023,7 +1023,7 @@ class GoogleInteractionsConverter(BaseConverter):
     ) -> dict[str, Any]:
         step: dict[str, Any]
         if event.get("tool_type", "function") == "intrinsic":
-            # Mirror ``ir_function_call_to_p``: a server call re-emits the
+            # Mirror ``ir_tool_call_to_p``: a server call re-emits the
             # provider's own step type and carries no ``name`` (the API rejects
             # one).  The kind comes from the event's first-class
             # ``intrinsic_kind`` field, never the name.

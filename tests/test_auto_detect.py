@@ -677,7 +677,7 @@ class TestDualShimPipeline:
 
         shim = ProviderShim(
             name="__test_src__",
-            base="chat_completions",
+            format="chat_completions",
             pre_ir_transforms=(strip_fields("custom_field"),),
         )
         register_shim(shim)
@@ -708,12 +708,12 @@ class TestDualShimPipeline:
 
         src_shim = ProviderShim(
             name="__test_dual_src__",
-            base="chat_completions",
+            format="chat_completions",
             pre_ir_transforms=(strip_fields("src_marker"),),
         )
         tgt_shim = ProviderShim(
             name="__test_dual_tgt__",
-            base="messages",
+            format="messages",
             post_ir_transforms=(set_defaults(tgt_marker=True),),
         )
         register_shim(src_shim)
@@ -746,12 +746,12 @@ class TestDualShimPipeline:
 
         src_shim = ProviderShim(
             name="__test_pass_src__",
-            base="chat_completions",
+            format="chat_completions",
             pre_ir_transforms=(strip_fields("src_quirk"),),
         )
         tgt_shim = ProviderShim(
             name="__test_pass_tgt__",
-            base="chat_completions",
+            format="chat_completions",
             post_ir_transforms=(set_defaults(tgt_added=True),),
         )
         register_shim(src_shim)

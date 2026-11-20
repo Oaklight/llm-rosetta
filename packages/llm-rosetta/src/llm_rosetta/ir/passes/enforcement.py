@@ -535,7 +535,7 @@ def enforce_custom_tools(
     supports = config_override
     if supports is None and shim is not None:
         resolved = resolve_shim(shim) if isinstance(shim, str) else shim
-        supports = resolved.supports_custom_tools if resolved is not None else False
+        supports = resolved.tools.custom_tools if resolved is not None else False
     if supports:
         return ir_request
 

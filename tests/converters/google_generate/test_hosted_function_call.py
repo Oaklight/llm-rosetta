@@ -28,7 +28,7 @@ from llm_rosetta.converters.base import StreamContext
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.ir.tools.orphan_fix import (
     UNANSWERED_TOOL_CALL,
-    fix_orphaned_tool_calls_ir,
+    normalize_tool_pairing,
 )
 from llm_rosetta.pipeline.chat import ConversionPipeline
 
@@ -211,7 +211,7 @@ def test_the_orphan_fixer_leaves_a_hosted_call_alone():
         ir["choices"][0]["message"],
     ]
 
-    fixed = fix_orphaned_tool_calls_ir(cast(Any, history))
+    fixed = normalize_tool_pairing(cast(Any, history))
 
     assert fixed == history
     assert UNANSWERED_TOOL_CALL not in json.dumps(fixed)

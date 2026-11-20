@@ -16,6 +16,8 @@ from ..provider_shim import (
     ReasoningCapability,
 )
 from ._constants import (
+    _CONNECTION_KEYS,
+    _REMOVED_LEAF_KEYS,
     logger,
 )
 
@@ -55,18 +57,43 @@ def _parse_reasoning_cap(
     )
 
 
+def _reject_removed_keys(cfg: dict[str, Any], yaml_path: Path) -> None:
+    """Refuse the top-level keys an earlier release read from a shim.
+
+    The flat connection and tool spellings were removed in 0.14.0.  The schema
+    already refuses an unknown key, but the loader reads only the keys it
+    knows, so a flat ``default_base_url:`` would otherwise be dropped without a
+    word and the shim would load without its upstream.
+
+    Raises:
+        ValueError: Naming the file, each removed key and the nested key that
+            replaces it.
+    """
+    replaced = {
+        key: _REMOVED_LEAF_KEYS[key] for key in cfg if key in _REMOVED_LEAF_KEYS
+    }
+    replaced.update(
+        {key: f"connection.{key}" for key in _CONNECTION_KEYS if key in cfg}
+    )
+    if replaced:
+        hints = ", ".join(f"{key} -> {new}" for key, new in sorted(replaced.items()))
+        raise ValueError(
+            f"{yaml_path}: flat key(s) removed in 0.14.0; nest them under "
+            f"'connection:' or 'tools:' ({hints})"
+        )
+
+
 def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
     """Return the canonical ``(format, model_type)`` a shim declares.
 
-    ``format`` is the preferred key; ``base`` is its deprecated alias.  When
-    ``base`` names a model category (the old decision shims declared
-    ``base: decision``), the category is taken from it and a ``format`` is
-    still required.  The pair is validated against the converter registry so
-    a shim cannot claim a format another category owns.
+    A shim declares both ``model_type`` and ``format``.  The pair is validated
+    against the converter registry so a shim cannot claim a format another
+    category owns.
 
     Raises:
         ValueError: With a message naming the shim file and the expected
-            formats.
+            formats.  A ``base:`` key (removed in 0.14.0) is refused with the
+            ``format:`` / ``model_type:`` pair that replaces it.
     """
     # Imported lazily: the converter package imports shims.provider_shim at
     # module scope (for ReasoningCapability), so a module-level import here
@@ -74,6 +101,13 @@ def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
     # vocabulary module is data-only and safe to import at any time.
     from llm_rosetta.formats import canonical_model_type
     from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE, MODEL_TYPES
+
+    if "base" in cfg:
+        raise ValueError(
+            f"{yaml_path}: 'base:' was removed in 0.14.0; declare "
+            f"'format: <format>' and 'model_type: <type>' instead "
+            f"(model_type is one of {', '.join(MODEL_TYPES)})"
+        )
 
     declared_type = cfg.get("model_type")
     if isinstance(declared_type, str):
@@ -86,72 +120,36 @@ def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
                 stacklevel=2,
             )
             declared_type = canonical
-    legacy_base = cfg.get("base")
-    if isinstance(legacy_base, str):
-        canonical = canonical_model_type(legacy_base)
-        if canonical != legacy_base and canonical in MODEL_TYPES:
-            warnings.warn(
-                f"{yaml_path}: base {legacy_base!r} names a deprecated model "
-                f"type; use {canonical!r}",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            legacy_base = canonical
-    else:
-        legacy_base = None
 
-    # ``format`` is the new spelling and the schema requires the category with
-    # it: without ``model_type`` the pair would silently default to ``llm``, so
-    # a future embedding shim that forgot the field would load as a chat shim.
-    # A shim that carries ``base`` as well is mid-migration, not a legacy
-    # shim: only a declaration with ``base`` and no ``format`` may omit the
-    # category (the base name then infers it, else defaults to ``llm``).
-    if declared_type is None and cfg.get("format") is not None:
+    # The schema requires the category with the format: without
+    # ``model_type`` the pair would silently default to ``llm``, so a future
+    # embedding shim that forgot the field would load as a chat shim.
+    if declared_type is None:
         raise ValueError(
-            f"{yaml_path}: model_type is required when 'format' is declared "
-            f"(one of {', '.join(MODEL_TYPES)}); a legacy shim may use "
-            f"'base' instead"
+            f"{yaml_path}: model_type is required (one of {', '.join(MODEL_TYPES)})"
         )
-
-    model_type = declared_type or "llm"
-    if declared_type is None and legacy_base in MODEL_TYPES:
-        # Old-style paradigm shim: ``base`` named the category.
-        model_type = legacy_base
 
     raw_format = cfg.get("format")
-    if raw_format is None:
-        if legacy_base in MODEL_TYPES:
-            raise ValueError(
-                f"{yaml_path}: base={legacy_base!r} names a model type; "
-                f"add a 'format' (available: "
-                f"{', '.join(FORMATS_BY_TYPE[legacy_base])})"
-            )
-        raw_format = legacy_base
     if not isinstance(raw_format, str):
-        raise ValueError(f"{yaml_path}: a shim needs 'format' (or the legacy 'base')")
-    if legacy_base in MODEL_TYPES and declared_type not in (None, legacy_base):
-        raise ValueError(
-            f"{yaml_path}: base={legacy_base!r} names a model type but "
-            f"model_type={declared_type!r} disagrees"
-        )
+        raise ValueError(f"{yaml_path}: a shim needs 'format'")
 
     fmt = raw_format
-    if model_type not in MODEL_TYPES:
+    if declared_type not in MODEL_TYPES:
         raise ValueError(
-            f"{yaml_path}: unknown model_type {model_type!r}; "
+            f"{yaml_path}: unknown model_type {declared_type!r}; "
             f"expected one of {', '.join(MODEL_TYPES)}"
         )
-    if fmt not in FORMATS_BY_TYPE[model_type]:
+    if fmt not in FORMATS_BY_TYPE[declared_type]:
         from llm_rosetta import retired_names
 
         message = retired_names.retired_name_message(fmt, retired_names.PROVIDER_TYPE)
         if message is not None:
             raise ValueError(f"{yaml_path}: {message}")
         raise ValueError(
-            f"{yaml_path}: format {fmt!r} is not a {model_type} format; "
-            f"available: {', '.join(FORMATS_BY_TYPE[model_type])}"
+            f"{yaml_path}: format {fmt!r} is not a {declared_type} format; "
+            f"available: {', '.join(FORMATS_BY_TYPE[declared_type])}"
         )
-    return fmt, model_type
+    return fmt, declared_type
 
 
 def _parse_connection_argv(raw: Any, shim_name: str) -> tuple[str, ...] | None:

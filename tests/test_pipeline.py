@@ -51,7 +51,7 @@ _MODEL_REASONING_CAP = ReasoningCapability(
 
 def _make_shim(**kwargs: Any) -> ProviderShim:
     """Create a ProviderShim with sensible defaults, overridable via kwargs."""
-    defaults: dict[str, Any] = dict(name="test-shim", base="chat_completions")
+    defaults: dict[str, Any] = dict(name="test-shim", format="chat_completions")
     defaults.update(kwargs)
     return ProviderShim(**defaults)
 

@@ -42,7 +42,6 @@ from llm_rosetta.ir.primitives.system_message_hoist import hoist_late_system_mes
 
 _MOVED_TO_TOOLS: set[str] = {
     "extract_part_ids",
-    "fix_orphaned_tool_calls_ir",
     "log_orphan_warnings",
     "strip_orphaned_tool_config",
     "convert_nullable_to_type_array",
