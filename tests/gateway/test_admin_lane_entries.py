@@ -23,7 +23,7 @@ from llm_rosetta_gateway.admin.routes.config.models import put_model
 from llm_rosetta_gateway.admin.routes.config.payload import _normalize_model_entry
 from llm_rosetta_gateway.config import GatewayConfig, JsoncConfigIO
 
-PROVIDER = {"type": "openai", "base_url": "https://p.test"}
+PROVIDER = {"type": "openai--chat_completions", "base_url": "https://p.test"}
 MODEL = "deepseek-v4.1-flash"
 
 
@@ -571,7 +571,9 @@ class TestATopLevelUpstreamIsTheLaneFallback:
         # The strategy is deterministic (weighted round-robin alternates), so
         # two calls already see both lanes; the loop is margin, not sampling.
         for _ in range(32):
-            route, _ = config.resolve(config.selection_context(MODEL, "openai_chat"))
+            route, _ = config.resolve(
+                config.selection_context(MODEL, "chat_completions")
+            )
             picked.add(route.upstream_model)
 
         assert picked == {"fast", "legacy-top-level"}
@@ -699,7 +701,10 @@ class TestTheEditorAddsASecondLane:
 def _two_providers(*, lanes: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     """The multi-lane model with a second provider the editor may add."""
     raw = _raw(lanes=lanes)
-    raw["providers"]["q"] = {"type": "openai", "base_url": "https://q.test"}
+    raw["providers"]["q"] = {
+        "type": "openai--chat_completions",
+        "base_url": "https://q.test",
+    }
     return raw
 
 
@@ -755,7 +760,10 @@ class TestTheAddLaneButton:
     ):
         """The shorthand entry becomes ``providers[]``; its upstream survives."""
         raw = _single("fast")
-        raw["providers"]["q"] = {"type": "openai", "base_url": "https://q.test"}
+        raw["providers"]["q"] = {
+            "type": "openai--chat_completions",
+            "base_url": "https://q.test",
+        }
         request = _request(
             tmp_path,
             raw,

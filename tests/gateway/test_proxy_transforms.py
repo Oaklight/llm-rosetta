@@ -45,7 +45,7 @@ def volcengine_shim():
     """Register a volcengine-like shim with post_ir_transforms that strip fields."""
     shim = ProviderShim(
         name="volcengine--chat_completions",
-        base="openai_chat",
+        base="chat_completions",
         post_ir_transforms=(strip_fields("logprobs", "top_logprobs"),),
     )
     register_shim(shim)
@@ -57,7 +57,7 @@ def shim_with_transforms():
     """Register a shim with both pre_ir_transforms and post_ir_transforms."""
     shim = ProviderShim(
         name="custom_provider",
-        base="openai_chat",
+        base="chat_completions",
         pre_ir_transforms=(rename_field("custom_id", "id"),),
         post_ir_transforms=(strip_fields("logprobs"),),
     )
@@ -82,24 +82,28 @@ def _sel_ctx(source_format: str = "chat_completions") -> SelectionContext:
 
 class TestPipelineTransformResolution:
     def test_none_shim(self):
-        p = ConversionPipeline("openai_chat", "openai_chat", None)
+        p = ConversionPipeline("chat_completions", "chat_completions", None)
         assert p._target_pre_ir_transforms == ()
         assert p._target_post_ir_transforms == ()
 
     def test_unknown_shim(self):
-        p = ConversionPipeline("openai_chat", "openai_chat", "nonexistent-provider")
+        p = ConversionPipeline(
+            "chat_completions", "chat_completions", "nonexistent-provider"
+        )
         assert p._target_pre_ir_transforms == ()
         assert p._target_post_ir_transforms == ()
 
     def test_volcengine_shim(self, volcengine_shim):
         p = ConversionPipeline(
-            "openai_chat", "openai_chat", "volcengine--chat_completions"
+            "chat_completions", "chat_completions", "volcengine--chat_completions"
         )
         assert p._target_post_ir_transforms == volcengine_shim.post_ir_transforms
         assert p._target_pre_ir_transforms == ()
 
     def test_shim_with_both_transforms(self, shim_with_transforms):
-        p = ConversionPipeline("openai_chat", "openai_chat", "custom_provider")
+        p = ConversionPipeline(
+            "chat_completions", "chat_completions", "custom_provider"
+        )
         assert p._target_pre_ir_transforms == shim_with_transforms.pre_ir_transforms
         assert p._target_post_ir_transforms == shim_with_transforms.post_ir_transforms
 
@@ -143,8 +147,8 @@ def _make_provider_info() -> MagicMock:
 def _make_route(
     model: str = "test-model",
     shim_name: str | None = None,
-    source: ProviderType = "openai_chat",
-    target: ProviderType = "openai_chat",
+    source: ProviderType = "chat_completions",
+    target: ProviderType = "chat_completions",
     soft_error_patterns: tuple = (),
 ) -> ResolvedRoute:
     """Create a ResolvedRoute for tests."""
@@ -399,7 +403,7 @@ class TestToolSchemaAttribution:
 
         async def run():
             response, _ = await handle_non_streaming(
-                _make_route(source=source, target="openai_chat"),
+                _make_route(source=source, target="chat_completions"),
                 _make_provider_info(),
                 body,
                 selection=_sel_ctx(source),

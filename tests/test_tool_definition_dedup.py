@@ -203,14 +203,14 @@ class TestDedupeInPipeline:
 
         dup = self._tool("dup", "x")
         other = self._tool("other", "y")
-        pipe = ConversionPipeline("messages", "openai_chat")
+        pipe = ConversionPipeline("messages", "chat_completions")
         body = pipe.convert_request(self._anthropic_req([dup, dict(dup), other]))
         assert [t["function"]["name"] for t in body["tools"]] == ["dup", "other"]
 
     def test_conflicting_definitions_kept(self):
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipe = ConversionPipeline("messages", "openai_chat")
+        pipe = ConversionPipeline("messages", "chat_completions")
         body = pipe.convert_request(
             self._anthropic_req([self._tool("dup", "one"), self._tool("dup", "two")])
         )
@@ -219,7 +219,7 @@ class TestDedupeInPipeline:
     def test_pipeline_exposes_tool_name_collisions(self):
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipe = ConversionPipeline("messages", "openai_chat")
+        pipe = ConversionPipeline("messages", "chat_completions")
         pipe.convert_request(
             self._anthropic_req([self._tool("dup", "one"), self._tool("dup", "two")])
         )
@@ -229,12 +229,12 @@ class TestDedupeInPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
 
         dup = self._tool("dup", "x")
-        pipe = ConversionPipeline("messages", "openai_chat")
+        pipe = ConversionPipeline("messages", "chat_completions")
         pipe.convert_request(self._anthropic_req([dup, dict(dup)]))
         assert pipe.tool_name_collisions == {}
 
     def test_pipeline_collisions_empty_before_convert(self):
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipe = ConversionPipeline("messages", "openai_chat")
+        pipe = ConversionPipeline("messages", "chat_completions")
         assert pipe.tool_name_collisions == {}

@@ -43,10 +43,10 @@ class TestHierarchy:
         assert type(get_converter_for_provider("open_responses")) is (
             OpenResponsesConverter
         )
-        assert type(get_converter_for_provider("openai_responses")) is (
+        assert type(get_converter_for_provider("openai--open_responses")) is (
             OpenResponsesConverter
         )
-        assert get_converter_for_provider("openai_responses") is (
+        assert get_converter_for_provider("openai--open_responses") is (
             get_converter_for_provider("open_responses")
         )
 

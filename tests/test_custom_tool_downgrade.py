@@ -49,7 +49,7 @@ FUNCTION_TOOL_IR = {
 def _make_shim(supports: bool, name: str = "__test_custom_tool__") -> ProviderShim:
     return ProviderShim(
         name=name,
-        base="openai_chat",
+        base="chat_completions",
         supports_custom_tools=supports,
     )
 
@@ -554,7 +554,7 @@ class TestPipelineNonStreamingRoundtrip:
 
     def test_custom_tool_call_roundtrip(self):
         pipe = ConversionPipeline(
-            "openai_responses", "openai_chat", shim="__test_ns_custom__"
+            "openai--open_responses", "chat_completions", shim="__test_ns_custom__"
         )
         pipe.convert_request(self._request())
         out = pipe.convert_response(self._chat_completion())
@@ -641,7 +641,7 @@ class TestPipelineStreamingRoundtrip:
 
     def test_streaming_emits_custom_tool_call(self):
         pipe = ConversionPipeline(
-            "openai_responses", "openai_chat", shim="__test_stream_custom__"
+            "openai--open_responses", "chat_completions", shim="__test_stream_custom__"
         )
         pipe.convert_request(self._request())
         proc = pipe.create_stream_processor()
@@ -671,15 +671,17 @@ class TestPipelineStreamingRoundtrip:
 
 class TestProviderShimCustomToolField:
     def test_default_false(self):
-        shim = ProviderShim(name="test", base="openai_chat")
+        shim = ProviderShim(name="test", base="chat_completions")
         assert shim.supports_custom_tools is False
 
     def test_explicit_true(self):
-        shim = ProviderShim(name="test", base="openai_chat", supports_custom_tools=True)
+        shim = ProviderShim(
+            name="test", base="chat_completions", supports_custom_tools=True
+        )
         assert shim.supports_custom_tools is True
 
     def test_explicit_false(self):
         shim = ProviderShim(
-            name="test", base="openai_chat", supports_custom_tools=False
+            name="test", base="chat_completions", supports_custom_tools=False
         )
         assert shim.supports_custom_tools is False

@@ -13,7 +13,9 @@ from llm_rosetta.pipeline import ConversionPipeline
 
 class TestPassthroughMode:
     def test_same_format_baseline_returns_body_identity(self) -> None:
-        pipeline = ConversionPipeline("openai_chat", "openai_chat", baseline=True)
+        pipeline = ConversionPipeline(
+            "chat_completions", "chat_completions", baseline=True
+        )
         body = {
             "model": "gpt-4o",
             "messages": [{"role": "user", "content": "hi"}],
@@ -40,7 +42,9 @@ class TestPassthroughMode:
         assert result is response
 
     def test_baseline_false_does_roundtrip(self) -> None:
-        pipeline = ConversionPipeline("openai_chat", "openai_chat", baseline=False)
+        pipeline = ConversionPipeline(
+            "chat_completions", "chat_completions", baseline=False
+        )
         body = {
             "model": "gpt-4o",
             "messages": [{"role": "user", "content": "hi"}],
@@ -51,7 +55,7 @@ class TestPassthroughMode:
         assert result["model"] == "gpt-4o"
 
     def test_different_format_always_converts(self) -> None:
-        pipeline = ConversionPipeline("openai_chat", "messages", baseline=True)
+        pipeline = ConversionPipeline("chat_completions", "messages", baseline=True)
         body = {
             "model": "claude-sonnet-4",
             "messages": [{"role": "user", "content": "hi"}],
@@ -62,7 +66,9 @@ class TestPassthroughMode:
         assert result is not body
 
     def test_baseline_stream_processor(self) -> None:
-        pipeline = ConversionPipeline("openai_chat", "openai_chat", baseline=True)
+        pipeline = ConversionPipeline(
+            "chat_completions", "chat_completions", baseline=True
+        )
         pipeline.convert_request(
             {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -72,14 +78,18 @@ class TestPassthroughMode:
         assert result == [chunk]
 
     def test_baseline_profile(self) -> None:
-        pipeline = ConversionPipeline("openai_chat", "openai_chat", baseline=True)
+        pipeline = ConversionPipeline(
+            "chat_completions", "chat_completions", baseline=True
+        )
         pipeline.convert_request(
             {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]}
         )
         assert "request_conversion_ms" in pipeline.profile
 
     def test_baseline_ir_request_empty(self) -> None:
-        pipeline = ConversionPipeline("openai_chat", "openai_chat", baseline=True)
+        pipeline = ConversionPipeline(
+            "chat_completions", "chat_completions", baseline=True
+        )
         pipeline.convert_request(
             {"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -91,29 +101,40 @@ class TestPassthroughMode:
         It gates baseline and the intrinsic shortcut; asserting it directly pins
         the notion rather than only its downstream effects.
         """
-        assert ConversionPipeline("openai_chat", "openai_chat")._same_format is True
-        assert ConversionPipeline("openai_chat", "messages")._same_format is False
+        assert (
+            ConversionPipeline("chat_completions", "chat_completions")._same_format
+            is True
+        )
+        assert ConversionPipeline("chat_completions", "messages")._same_format is False
         # A legacy spelling canonicalizes onto the canonical name.
         assert (
-            ConversionPipeline("openai_chat", "chat_completions")._same_format is True
+            ConversionPipeline("chat_completions", "chat_completions")._same_format
+            is True
         )
         # A shim target is a distinct spec even when its base matches, so the
         # target shim's IR-level traits still apply (see
         # test_convert_uses_target_shim_reasoning_config).
         assert (
-            ConversionPipeline("openai_chat", "deepseek--chat_completions")._same_format
+            ConversionPipeline(
+                "chat_completions", "deepseek--chat_completions"
+            )._same_format
             is False
         )
 
     def test_baseline_needs_both_the_flag_and_the_same_format(self) -> None:
-        assert ConversionPipeline("openai_chat", "openai_chat")._baseline is False
         assert (
-            ConversionPipeline("openai_chat", "openai_chat", baseline=True)._baseline
+            ConversionPipeline("chat_completions", "chat_completions")._baseline
+            is False
+        )
+        assert (
+            ConversionPipeline(
+                "chat_completions", "chat_completions", baseline=True
+            )._baseline
             is True
         )
         # Cross-format never short-circuits, whatever the flag says.
         assert (
-            ConversionPipeline("openai_chat", "messages", baseline=True)._baseline
+            ConversionPipeline("chat_completions", "messages", baseline=True)._baseline
             is False
         )
 
@@ -127,8 +148,8 @@ class TestConverterCaching:
     def test_same_provider_returns_same_instance(self) -> None:
         from llm_rosetta.auto_detect import get_converter_for_provider
 
-        c1 = get_converter_for_provider("openai_chat")
-        c2 = get_converter_for_provider("openai_chat")
+        c1 = get_converter_for_provider("chat_completions")
+        c2 = get_converter_for_provider("chat_completions")
         assert c1 is c2
 
     def test_shim_and_base_share_instance(self) -> None:
@@ -272,8 +293,8 @@ class TestFidelityCheckerFull:
 class TestFidelityIntegration:
     def test_fidelity_check_runs_in_baseline(self) -> None:
         pipeline = ConversionPipeline(
-            "openai_chat",
-            "openai_chat",
+            "chat_completions",
+            "chat_completions",
             baseline=True,
             fidelity_mode="critical",
         )
@@ -287,8 +308,8 @@ class TestFidelityIntegration:
 
     def test_fidelity_mode_none_skips_check(self) -> None:
         pipeline = ConversionPipeline(
-            "openai_chat",
-            "openai_chat",
+            "chat_completions",
+            "chat_completions",
             baseline=True,
             fidelity_mode=None,
         )
@@ -296,7 +317,7 @@ class TestFidelityIntegration:
 
     def test_fidelity_mode_only_on_baseline(self) -> None:
         pipeline = ConversionPipeline(
-            "openai_chat",
+            "chat_completions",
             "messages",
             baseline=True,
             fidelity_mode="critical",
@@ -306,8 +327,8 @@ class TestFidelityIntegration:
 
     def test_fidelity_full_mode_in_baseline(self) -> None:
         pipeline = ConversionPipeline(
-            "openai_chat",
-            "openai_chat",
+            "chat_completions",
+            "chat_completions",
             baseline=True,
             fidelity_mode="full",
         )

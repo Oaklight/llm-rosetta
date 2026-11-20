@@ -359,9 +359,11 @@ class TestRouteSpec:
         assert spec.source_format is None
 
     def test_custom_methods(self) -> None:
-        spec = RouteSpec("/test", methods=["GET", "POST"], source_format="openai_chat")
+        spec = RouteSpec(
+            "/test", methods=["GET", "POST"], source_format="chat_completions"
+        )
         assert spec.methods == ["GET", "POST"]
-        assert spec.source_format == "openai_chat"
+        assert spec.source_format == "chat_completions"
 
 
 # ---------------------------------------------------------------------------
@@ -414,7 +416,7 @@ class TestDistributeTypedModels:
                 "jina": {
                     "api_key": "test",
                     "base_url": "https://api.jina.ai",
-                    "type": "openai_chat",
+                    "type": "chat_completions",
                     "embeddings_format": "jina",
                 },
             },
@@ -444,7 +446,7 @@ class TestDistributeTypedModels:
                 "jina": {
                     "api_key": "test",
                     "base_url": "https://api.jina.ai",
-                    "type": "openai_chat",
+                    "type": "chat_completions",
                     "rerank_format": "jina",
                 },
             },
@@ -473,7 +475,7 @@ class TestDistributeTypedModels:
                 "sf": {
                     "api_key": "test",
                     "base_url": "https://api.siliconflow.cn",
-                    "type": "openai_chat",
+                    "type": "chat_completions",
                     "embeddings_format": "openai",
                 },
             },
@@ -494,7 +496,7 @@ class TestDistributeTypedModels:
                 "oa": {
                     "api_key": "test",
                     "base_url": "https://api.openai.com",
-                    "type": "openai_chat",
+                    "type": "chat_completions",
                     "decisions_format": "openai_decisions",
                 },
             },
@@ -515,7 +517,7 @@ class TestDistributeTypedModels:
                 "sf": {
                     "api_key": "test",
                     "base_url": "https://api.siliconflow.cn",
-                    "type": "openai_chat",
+                    "type": "chat_completions",
                     "embeddings_format": "openai",
                 },
             },
@@ -536,12 +538,12 @@ class TestDistributeTypedModels:
                 "chat-only": {
                     "api_key": "test",
                     "base_url": "https://api.example.com",
-                    "type": "openai_chat",
+                    "type": "chat_completions",
                 },
                 "jina": {
                     "api_key": "test",
                     "base_url": "https://api.jina.ai",
-                    "type": "openai_chat",
+                    "type": "chat_completions",
                     "embeddings_format": "jina",
                 },
             },
@@ -565,7 +567,7 @@ class TestDistributeTypedModels:
                 "chat-only": {
                     "api_key": "test",
                     "base_url": "https://api.example.com",
-                    "type": "openai_chat",
+                    "type": "chat_completions",
                 },
             },
             "models": {

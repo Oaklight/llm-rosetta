@@ -399,7 +399,7 @@ class TestBuildProviderInfoTokenCommand:
             "base_url": "https://example.com/v1",
             "token_command": ["echo", "seeded-key"],
         }
-        pinfo = build_provider_info("openai_chat", cfg)
+        pinfo = build_provider_info("chat_completions", cfg)
         assert pinfo.ready is False
         assert pinfo.key_ring.next() == TOKEN_PENDING_SENTINEL
         assert pinfo.token_command == ["echo", "seeded-key"]
@@ -413,7 +413,7 @@ class TestBuildProviderInfoTokenCommand:
             "token_command": ["echo", "key"],
             "token_refresh_interval": 7200,
         }
-        pinfo = build_provider_info("openai_chat", cfg)
+        pinfo = build_provider_info("chat_completions", cfg)
         assert pinfo.token_refresh_interval == 7200
 
     def test_mutual_exclusivity_with_api_key(self):
@@ -425,7 +425,7 @@ class TestBuildProviderInfoTokenCommand:
             "token_command": ["echo", "key"],
         }
         with pytest.raises(ValueError, match="mutually exclusive"):
-            build_provider_info("openai_chat", cfg)
+            build_provider_info("chat_completions", cfg)
 
     def test_string_token_command_rejected(self):
         from llm_rosetta_gateway.providers import build_provider_info
@@ -435,7 +435,7 @@ class TestBuildProviderInfoTokenCommand:
             "token_command": "echo key",
         }
         with pytest.raises(ValueError, match="must be an array"):
-            build_provider_info("openai_chat", cfg)
+            build_provider_info("chat_completions", cfg)
 
     def test_empty_token_command_rejected(self):
         from llm_rosetta_gateway.providers import build_provider_info
@@ -445,7 +445,7 @@ class TestBuildProviderInfoTokenCommand:
             "token_command": [],
         }
         with pytest.raises(ValueError, match="non-empty array"):
-            build_provider_info("openai_chat", cfg)
+            build_provider_info("chat_completions", cfg)
 
     def test_low_refresh_interval_rejected(self):
         from llm_rosetta_gateway.providers import build_provider_info
@@ -456,7 +456,7 @@ class TestBuildProviderInfoTokenCommand:
             "token_refresh_interval": 10,
         }
         with pytest.raises(ValueError, match=">= 60"):
-            build_provider_info("openai_chat", cfg)
+            build_provider_info("chat_completions", cfg)
 
     def test_missing_binary_warns_but_builds(self):
         from llm_rosetta_gateway.providers import build_provider_info
@@ -465,7 +465,7 @@ class TestBuildProviderInfoTokenCommand:
             "base_url": "https://example.com/v1",
             "token_command": ["/nonexistent/binary-xyz"],
         }
-        pinfo = build_provider_info("openai_chat", cfg)
+        pinfo = build_provider_info("chat_completions", cfg)
         assert pinfo.ready is False
         assert pinfo.token_command == ["/nonexistent/binary-xyz"]
 
@@ -476,7 +476,7 @@ class TestBuildProviderInfoTokenCommand:
             "base_url": "https://example.com/v1",
             "api_key": "static-key",
         }
-        pinfo = build_provider_info("openai_chat", cfg)
+        pinfo = build_provider_info("chat_completions", cfg)
         assert pinfo.auth_headers() == {"Authorization": "Bearer static-key"}
         assert pinfo.token_command is None
 

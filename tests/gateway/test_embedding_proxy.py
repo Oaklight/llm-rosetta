@@ -114,12 +114,12 @@ class TestEmbeddingConfig:
 
         raw = {
             "providers": {
-                "openai_chat": {
+                "chat_completions": {
                     "api_key": "sk-test",
                     "base_url": "https://api.openai.com/v1",
                 }
             },
-            "models": {"gpt-4o": "openai_chat"},
+            "models": {"gpt-4o": "chat_completions"},
             "embeddings_providers": {
                 "openai": {
                     "api_key": "sk-test",
@@ -152,12 +152,12 @@ class TestEmbeddingConfig:
 
         raw = {
             "providers": {
-                "openai_chat": {
+                "chat_completions": {
                     "api_key": "sk-test",
                     "base_url": "https://api.openai.com/v1",
                 }
             },
-            "models": {"gpt-4o": "openai_chat"},
+            "models": {"gpt-4o": "chat_completions"},
             "embeddings_providers": {
                 "jina": {
                     "api_key": "jina-key",
@@ -200,12 +200,12 @@ class TestEmbeddingConfig:
 
         raw = {
             "providers": {
-                "openai_chat": {
+                "chat_completions": {
                     "api_key": "sk-test",
                     "base_url": "https://api.openai.com/v1",
                 }
             },
-            "models": {"gpt-4o": "openai_chat"},
+            "models": {"gpt-4o": "chat_completions"},
         }
         config = GatewayConfig(raw)
         assert config.embeddings_providers == {}
@@ -217,12 +217,12 @@ class TestEmbeddingConfig:
 
         raw = {
             "providers": {
-                "openai_chat": {
+                "chat_completions": {
                     "api_key": "sk-test",
                     "base_url": "https://api.openai.com/v1",
                 }
             },
-            "models": {"gpt-4o": "openai_chat"},
+            "models": {"gpt-4o": "chat_completions"},
         }
         config = GatewayConfig(raw)
         with pytest.raises(KeyError):

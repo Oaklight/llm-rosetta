@@ -1547,7 +1547,7 @@ class TestGooglePromptBlockHandling:
         """Pipeline Google→Google preserves thinkingConfig from REST format (regression for #584)."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("google", "google")
+        pipeline = ConversionPipeline("google_generate", "google_generate")
         rest_request = {
             "contents": [{"role": "user", "parts": [{"text": "test"}]}],
             "generationConfig": {

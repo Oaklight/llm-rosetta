@@ -249,14 +249,14 @@ class TestGetConverterForProvider:
         """测试获取 OpenAI Chat 转换器"""
         from llm_rosetta.converters import ChatCompletionsConverter
 
-        converter = get_converter_for_provider("openai_chat")
+        converter = get_converter_for_provider("chat_completions")
         assert isinstance(converter, ChatCompletionsConverter)
 
     def test_get_openai_responses_converter(self):
         """测试获取 Responses 转换器（openai_responses 别名到 open_responses 基类）"""
         from llm_rosetta.converters import OpenResponsesConverter
 
-        converter = get_converter_for_provider("openai_responses")
+        converter = get_converter_for_provider("openai--open_responses")
         assert isinstance(converter, OpenResponsesConverter)
 
     def test_get_anthropic_converter(self):
@@ -270,7 +270,7 @@ class TestGetConverterForProvider:
         """测试获取 Google 转换器"""
         from llm_rosetta.converters import GoogleGenerateConverter
 
-        converter = get_converter_for_provider("google")
+        converter = get_converter_for_provider("google_generate")
         assert isinstance(converter, GoogleGenerateConverter)
 
     def test_get_invalid_provider(self):
@@ -296,7 +296,7 @@ class TestConvert:
             ]
         }
 
-        google_body = convert(openai_body, "google")
+        google_body = convert(openai_body, "google_generate")
 
         assert "contents" in google_body
         assert len(google_body["contents"]) == 2
@@ -314,7 +314,7 @@ class TestConvert:
             ],
         }
 
-        openai_body = convert(anthropic_body, "openai_chat")
+        openai_body = convert(anthropic_body, "chat_completions")
 
         assert "messages" in openai_body
         assert len(openai_body["messages"]) >= 2
@@ -331,7 +331,9 @@ class TestConvert:
             "config": {},
         }
 
-        anthropic_body = convert(google_body, "messages", source_provider="google")
+        anthropic_body = convert(
+            google_body, "messages", source_provider="google_generate"
+        )
 
         assert "messages" in anthropic_body
         assert len(anthropic_body["messages"]) == 1
@@ -343,14 +345,14 @@ class TestConvert:
         body = {"messages": [{"role": "user", "content": "Hello"}]}
 
         # 显式指定为 OpenAI
-        result = convert(body, "google", source_provider="openai_chat")
+        result = convert(body, "google_generate", source_provider="chat_completions")
         assert "contents" in result
 
     def test_convert_same_provider(self):
         """测试源和目标相同时直接返回"""
         openai_body = {"messages": [{"role": "user", "content": "Hello"}]}
 
-        result = convert(openai_body, "openai_chat")
+        result = convert(openai_body, "chat_completions")
         assert result == openai_body
 
     def test_convert_same_provider_baseline_off(self):
@@ -361,7 +363,7 @@ class TestConvert:
             "max_tokens": 256,
         }
 
-        result = convert(openai_body, "openai_chat", baseline=False)
+        result = convert(openai_body, "chat_completions", baseline=False)
 
         # max_tokens should be normalised to max_completion_tokens
         assert "max_completion_tokens" in result
@@ -378,7 +380,9 @@ class TestConvert:
         }
 
         result = convert(
-            openai_body, "deepseek--chat_completions", source_provider="openai_chat"
+            openai_body,
+            "deepseek--chat_completions",
+            source_provider="chat_completions",
         )
 
         assert result["thinking"] == {"type": "disabled"}
@@ -393,8 +397,8 @@ class TestConvert:
 
         result = convert(
             responses_body,
-            "openai_responses",
-            source_provider="openai_responses",
+            "openai--open_responses",
+            source_provider="openai--open_responses",
             baseline=False,
         )
 
@@ -420,7 +424,7 @@ class TestConvert:
             ],
         }
 
-        google_body = convert(openai_body, "google")
+        google_body = convert(openai_body, "google_generate")
 
         # Google puts tools inside config
         assert "config" in google_body
@@ -432,7 +436,7 @@ class TestConvert:
         invalid_body = {"unknown": "format"}
 
         with pytest.raises(ValueError, match="Unable to detect source provider"):
-            convert(invalid_body, "google")
+            convert(invalid_body, "google_generate")
 
     def test_convert_openai_responses_to_chat(self):
         """测试从 OpenAI Responses 转换到 Chat"""
@@ -446,7 +450,7 @@ class TestConvert:
             ]
         }
 
-        chat_body = convert(responses_body, "openai_chat")
+        chat_body = convert(responses_body, "chat_completions")
 
         assert "messages" in chat_body
         assert chat_body["messages"][0]["content"] == "Hello"
@@ -490,7 +494,7 @@ class TestConvert:
         # OpenAI -> Anthropic -> OpenAI (更简单的往返路径)
         anthropic_body = convert(original, "messages")
         back_to_openai = convert(
-            anthropic_body, "openai_chat", source_provider="messages"
+            anthropic_body, "chat_completions", source_provider="messages"
         )
 
         assert "messages" in back_to_openai
@@ -514,7 +518,7 @@ class TestEdgeCases:
     def test_convert_empty_messages(self):
         """测试空消息列表的转换"""
         body = {"messages": []}
-        result = convert(body, "google")
+        result = convert(body, "google_generate")
         assert "contents" in result
         assert result["contents"] == []
 
@@ -574,7 +578,7 @@ class TestConvertResponse:
 
         # Convert request to Anthropic format
         anthropic_request = convert(
-            request_body, "messages", source_provider="openai_chat"
+            request_body, "messages", source_provider="chat_completions"
         )
         assert "messages" in anthropic_request
 
@@ -593,7 +597,7 @@ class TestConvertResponse:
         openai_response = convert_response(
             anthropic_response,
             request_body,
-            source_provider="openai_chat",
+            source_provider="chat_completions",
             target_provider="messages",
         )
 
@@ -618,8 +622,8 @@ class TestConvertResponse:
         result = convert_response(
             response,
             request,
-            source_provider="openai_chat",
-            target_provider="openai_chat",
+            source_provider="chat_completions",
+            target_provider="chat_completions",
         )
         assert result == response
 
@@ -648,8 +652,8 @@ class TestConvertResponse:
         result = convert_response(
             response,
             request,
-            source_provider="openai_chat",
-            target_provider="openai_chat",
+            source_provider="chat_completions",
+            target_provider="chat_completions",
             baseline=False,
         )
         assert "choices" in result
@@ -673,13 +677,13 @@ class TestDualShimPipeline:
 
         shim = ProviderShim(
             name="__test_src__",
-            base="openai_chat",
+            base="chat_completions",
             pre_ir_transforms=(strip_fields("custom_field"),),
         )
         register_shim(shim)
         try:
             pipeline = ConversionPipeline(
-                "openai_chat",
+                "chat_completions",
                 "messages",
                 source_shim="__test_src__",
             )
@@ -704,7 +708,7 @@ class TestDualShimPipeline:
 
         src_shim = ProviderShim(
             name="__test_dual_src__",
-            base="openai_chat",
+            base="chat_completions",
             pre_ir_transforms=(strip_fields("src_marker"),),
         )
         tgt_shim = ProviderShim(
@@ -716,7 +720,7 @@ class TestDualShimPipeline:
         register_shim(tgt_shim)
         try:
             pipeline = ConversionPipeline(
-                "openai_chat",
+                "chat_completions",
                 "messages",
                 source_shim="__test_dual_src__",
                 target_shim="__test_dual_tgt__",
@@ -742,20 +746,20 @@ class TestDualShimPipeline:
 
         src_shim = ProviderShim(
             name="__test_pass_src__",
-            base="openai_chat",
+            base="chat_completions",
             pre_ir_transforms=(strip_fields("src_quirk"),),
         )
         tgt_shim = ProviderShim(
             name="__test_pass_tgt__",
-            base="openai_chat",
+            base="chat_completions",
             post_ir_transforms=(set_defaults(tgt_added=True),),
         )
         register_shim(src_shim)
         register_shim(tgt_shim)
         try:
             pipeline = ConversionPipeline(
-                "openai_chat",
-                "openai_chat",
+                "chat_completions",
+                "chat_completions",
                 source_shim="__test_pass_src__",
                 target_shim="__test_pass_tgt__",
                 baseline=True,
@@ -798,7 +802,7 @@ class TestDualShimPipeline:
 
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            ConversionPipeline("openai_chat", "messages", shim="nonexistent")
+            ConversionPipeline("chat_completions", "messages", shim="nonexistent")
             assert any(issubclass(x.category, DeprecationWarning) for x in w)
 
     def test_shim_and_target_shim_raises(self):
@@ -809,7 +813,7 @@ class TestDualShimPipeline:
 
         with pytest.raises(ValueError, match="Cannot pass both"):
             ConversionPipeline(
-                "openai_chat",
+                "chat_completions",
                 "messages",
                 target_shim="some-shim",
                 shim="other-shim",
@@ -819,7 +823,7 @@ class TestDualShimPipeline:
         """source_shim=None means no source-side transforms."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "messages", source_shim=None)
+        pipeline = ConversionPipeline("chat_completions", "messages", source_shim=None)
         assert pipeline._source_pre_ir_transforms == ()
         assert pipeline._source_post_ir_transforms == ()
 

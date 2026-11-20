@@ -39,13 +39,13 @@ def _raw(*, model: dict | None = None) -> dict:
             "jina-a": {
                 "api_key": "key-a",
                 "base_url": "https://a.example.test",
-                "type": "openai_chat",
+                "type": "chat_completions",
                 "embeddings_format": "jina",
             },
             "jina-b": {
                 "api_key": "key-b",
                 "base_url": "https://b.example.test",
-                "type": "openai_chat",
+                "type": "chat_completions",
                 "embeddings_format": "jina",
             },
         },
@@ -139,7 +139,7 @@ class TestTheCandidatePool:
         raw["providers"]["chat-only"] = {
             "api_key": "key-c",
             "base_url": "https://c.example.test",
-            "type": "openai_chat",
+            "type": "chat_completions",
         }
 
         entries = GatewayConfig(raw).typed_model_candidates["embeddings"]["emb"]
@@ -225,7 +225,7 @@ class TestTheCandidatePool:
         raw["providers"]["chat-only"] = {
             "api_key": "key-c",
             "base_url": "https://c.example.test",
-            "type": "openai_chat",
+            "type": "chat_completions",
         }
 
         GatewayConfig(raw)

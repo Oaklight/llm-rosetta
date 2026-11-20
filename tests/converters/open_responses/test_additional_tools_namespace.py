@@ -194,9 +194,9 @@ class TestAdditionalToolsCrossFormat:
     def test_roundtrip_to_openai_chat(self):
         from llm_rosetta.pipeline import ConversionPipeline
 
-        out = ConversionPipeline("openai_responses", "openai_chat").convert_request(
-            _codex_request()
-        )
+        out = ConversionPipeline(
+            "openai--open_responses", "chat_completions"
+        ).convert_request(_codex_request())
         names = [t["function"]["name"] for t in out["tools"]]
         assert names == ["exec", "wait", "spawn_agent"]
         assert out["tool_choice"] == "auto"
@@ -212,7 +212,7 @@ class TestAdditionalToolsCrossFormat:
     def test_roundtrip_to_anthropic(self):
         from llm_rosetta.pipeline import ConversionPipeline
 
-        out = ConversionPipeline("openai_responses", "messages").convert_request(
+        out = ConversionPipeline("openai--open_responses", "messages").convert_request(
             _codex_request()
         )
         assert [t["name"] for t in out["tools"]] == ["exec", "wait", "spawn_agent"]
@@ -224,7 +224,9 @@ class TestAdditionalToolsCollision:
     def test_no_duplicate_names_reach_upstream(self):
         from llm_rosetta.pipeline import ConversionPipeline
 
-        out = ConversionPipeline("openai_responses", "openai_chat").convert_request(
+        out = ConversionPipeline(
+            "openai--open_responses", "chat_completions"
+        ).convert_request(
             {
                 "model": "gpt-5.6-sol",
                 "tools": [
@@ -278,7 +280,9 @@ class TestAdditionalToolsDegenerate:
     def test_degenerate_item_produces_no_empty_assistant(self):
         from llm_rosetta.pipeline import ConversionPipeline
 
-        out = ConversionPipeline("openai_responses", "openai_chat").convert_request(
+        out = ConversionPipeline(
+            "openai--open_responses", "chat_completions"
+        ).convert_request(
             {
                 "model": "gpt-5.6-sol",
                 "input": [
@@ -307,9 +311,9 @@ class TestNamespaceMetadataPreserved:
     def test_namespace_in_metadata_not_in_output(self):
         from llm_rosetta.pipeline import ConversionPipeline
 
-        out = ConversionPipeline("openai_responses", "openai_chat").convert_request(
-            _codex_request()
-        )
+        out = ConversionPipeline(
+            "openai--open_responses", "chat_completions"
+        ).convert_request(_codex_request())
         # _namespace marker key should never appear in output
         import json
 

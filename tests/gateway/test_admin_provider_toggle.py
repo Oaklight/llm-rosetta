@@ -42,7 +42,12 @@ def _on_disk(request) -> dict:
 @pytest.mark.asyncio
 async def test_toggle_off_then_on_returns_the_effective_state(tmp_path):
     raw = {
-        "providers": {"p": {"type": "openai", "base_url": "https://a.example/v1"}},
+        "providers": {
+            "p": {
+                "type": "openai--chat_completions",
+                "base_url": "https://a.example/v1",
+            }
+        },
         "models": {"m": {"providers": [{"name": "p"}]}},
     }
     request = _request(tmp_path, raw)

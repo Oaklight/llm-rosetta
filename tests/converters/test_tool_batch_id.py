@@ -235,7 +235,9 @@ class TestCrossFormatGrouping:
 
     def test_chat_to_anthropic_groups_tool_results(self):
         body = self._chat_request_with_parallel_tools(3)
-        result = ConversionPipeline("openai_chat", "messages").convert_request(body)
+        result = ConversionPipeline("chat_completions", "messages").convert_request(
+            body
+        )
         messages = result["messages"]
         roles = [m["role"] for m in messages]
         assert roles == ["user", "assistant", "user"]
@@ -246,9 +248,9 @@ class TestCrossFormatGrouping:
 
     def test_chat_to_google_generate_groups_tool_results(self):
         body = self._chat_request_with_parallel_tools(2)
-        result = ConversionPipeline("openai_chat", "google_generate").convert_request(
-            body
-        )
+        result = ConversionPipeline(
+            "chat_completions", "google_generate"
+        ).convert_request(body)
         contents = result["contents"]
         fn_response_contents = [
             c
@@ -293,7 +295,9 @@ class TestCrossFormatGrouping:
                 {"role": "tool", "tool_call_id": "call_b", "content": "result_b"},
             ],
         }
-        result = ConversionPipeline("openai_chat", "messages").convert_request(body)
+        result = ConversionPipeline("chat_completions", "messages").convert_request(
+            body
+        )
         messages = result["messages"]
         roles = [m["role"] for m in messages]
         assert roles == ["user", "assistant", "user", "assistant", "user"]
@@ -331,7 +335,9 @@ class TestCrossFormatGrouping:
     @pytest.mark.parametrize("n_calls", [1, 2, 3, 5])
     def test_chat_to_anthropic_various_counts(self, n_calls):
         body = self._chat_request_with_parallel_tools(n_calls)
-        result = ConversionPipeline("openai_chat", "messages").convert_request(body)
+        result = ConversionPipeline("chat_completions", "messages").convert_request(
+            body
+        )
         messages = result["messages"]
         roles = [m["role"] for m in messages]
         assert roles == ["user", "assistant", "user"]

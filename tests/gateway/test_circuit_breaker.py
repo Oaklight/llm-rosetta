@@ -513,7 +513,11 @@ class TestConfigIntegration:
 
         raw = {
             "providers": {
-                "test": {"type": "openai_chat", "api_key": "k", "base_url": "http://x"}
+                "test": {
+                    "type": "chat_completions",
+                    "api_key": "k",
+                    "base_url": "http://x",
+                }
             },
             "models": {"m": "test"},
         }
@@ -526,7 +530,11 @@ class TestConfigIntegration:
 
         raw = {
             "providers": {
-                "test": {"type": "openai_chat", "api_key": "k", "base_url": "http://x"}
+                "test": {
+                    "type": "chat_completions",
+                    "api_key": "k",
+                    "base_url": "http://x",
+                }
             },
             "models": {"m": "test"},
             "server": {
@@ -547,7 +555,7 @@ class TestConfigIntegration:
         raw = {
             "providers": {
                 "test": {
-                    "type": "openai_chat",
+                    "type": "chat_completions",
                     "api_key": "k",
                     "base_url": "http://x",
                     "circuit_breaker": {

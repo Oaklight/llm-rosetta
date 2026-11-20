@@ -123,7 +123,7 @@ async def holding_keys(tmp_path) -> AsyncIterator[Served]:
     """A gateway that holds two upstream keys of no vendor's shape."""
     providers = {
         "up": {
-            "type": "openai",
+            "type": "openai--chat_completions",
             "base_url": "https://api.example.com",
             "api_key": "canary-one-7f3a,canary-two-91bc",
         }

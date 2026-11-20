@@ -141,7 +141,7 @@ INTERACTIONS_RESPONSE_TOOL_CALL = {
     ],
 }
 
-VIA_PROVIDERS = ["openai_chat", "messages", "google_generate"]
+VIA_PROVIDERS = ["chat_completions", "messages", "google_generate"]
 
 
 # ── Request round-trip tests ───────────────────────────────────────
@@ -251,7 +251,7 @@ OPENAI_CHAT_RESPONSE = {
 class TestReverseRoundtrip:
     def test_openai_chat_via_interactions_request(self):
         result = roundtrip_request(
-            OPENAI_CHAT_REQUEST, "openai_chat", "google_interactions"
+            OPENAI_CHAT_REQUEST, "chat_completions", "google_interactions"
         )
         assert "messages" in result
         user_msgs = [m for m in result["messages"] if m.get("role") == "user"]
@@ -259,7 +259,7 @@ class TestReverseRoundtrip:
 
     def test_openai_chat_via_interactions_response(self):
         result = roundtrip_response(
-            OPENAI_CHAT_RESPONSE, "openai_chat", "google_interactions"
+            OPENAI_CHAT_RESPONSE, "chat_completions", "google_interactions"
         )
         assert "choices" in result
         assert result["choices"][0]["message"]["content"] == "Hi there!"

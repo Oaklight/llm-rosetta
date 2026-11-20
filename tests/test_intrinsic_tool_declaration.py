@@ -154,7 +154,9 @@ class TestTargetEmission:
 class TestResolve:
     def test_drops_unsupported_kind(self):
         ir = {"tools": [make_intrinsic_tool_definition("web_search")]}
-        out = resolve_intrinsic_tools(ir, shim=_shim("google", ["code_execution"]))
+        out = resolve_intrinsic_tools(
+            ir, shim=_shim("google_generate", ["code_execution"])
+        )
         assert out["tools"] == []
 
     def test_keeps_supported_kind(self):
@@ -229,8 +231,8 @@ class TestPipeline:
         """Anthropic web_search → google: google has no web_search kind."""
         pipe = ConversionPipeline(
             "messages",
-            "google",
-            target_shim=_shim("google", ["code_execution", "google_search"]),
+            "google_generate",
+            target_shim=_shim("google_generate", ["code_execution", "google_search"]),
         )
         body = pipe.convert_request(
             {
@@ -247,8 +249,8 @@ class TestPipeline:
         """Anthropic code_execution → google emits google's code_execution."""
         pipe = ConversionPipeline(
             "messages",
-            "google",
-            target_shim=_shim("google", ["code_execution", "google_search"]),
+            "google_generate",
+            target_shim=_shim("google_generate", ["code_execution", "google_search"]),
         )
         body = pipe.convert_request(
             {
@@ -265,7 +267,9 @@ class TestPipeline:
 
     def test_chat_bare_name_promoted_via_target_shim(self):
         pipe = ConversionPipeline(
-            "openai_chat", "messages", target_shim=_shim("messages", ["web_search"])
+            "chat_completions",
+            "messages",
+            target_shim=_shim("messages", ["web_search"]),
         )
         body = pipe.convert_request(
             {
@@ -284,7 +288,7 @@ class TestPipeline:
 
     def test_no_shim_no_intrinsic(self):
         """Without a shim the provider supports nothing intrinsic."""
-        pipe = ConversionPipeline("openai_chat", "messages")
+        pipe = ConversionPipeline("chat_completions", "messages")
         body = pipe.convert_request(
             {
                 "model": "m",
@@ -405,7 +409,9 @@ class TestPipeline:
             ChatCompletionsConverter, "_SUPPORTS_NATIVE_SERVER_TOOLS", True
         )
         pipe = ConversionPipeline(
-            "openai_chat", "messages", target_shim=_shim("messages", ["web_search"])
+            "chat_completions",
+            "messages",
+            target_shim=_shim("messages", ["web_search"]),
         )
         body = pipe.convert_request(
             {

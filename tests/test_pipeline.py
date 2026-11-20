@@ -51,7 +51,7 @@ _MODEL_REASONING_CAP = ReasoningCapability(
 
 def _make_shim(**kwargs: Any) -> ProviderShim:
     """Create a ProviderShim with sensible defaults, overridable via kwargs."""
-    defaults: dict[str, Any] = dict(name="test-shim", base="openai_chat")
+    defaults: dict[str, Any] = dict(name="test-shim", base="chat_completions")
     defaults.update(kwargs)
     return ProviderShim(**defaults)
 
@@ -564,7 +564,7 @@ class TestConversionPipeline:
         """Same-format round-trip produces valid target body."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         body = {
             "model": "gpt-4",
             "messages": [{"role": "user", "content": "hello"}],
@@ -630,13 +630,13 @@ class TestConversionPipeline:
         assert out["messages"][3]["tool_calls"][0]["function"]["name"] == "fn_b"
         assert out["messages"][4]["role"] == "tool"
 
-    @pytest.mark.parametrize("target_provider", ["google", "google_generate"])
+    @pytest.mark.parametrize("target_provider", ["google_generate"])
     def test_google_target_emits_rest_body(self, target_provider):
-        """Every google provider name selects the REST body shape (#882).
+        """The google_generate provider name selects the REST body shape (#882).
 
         SDK-shaped output (``config``) is rejected by the Generative
         Language REST endpoint, so the canonical ``google_generate``
-        name must apply the same REST transform as ``google``.
+        name must apply the REST transform.
         """
         from llm_rosetta.pipeline import ConversionPipeline
 
@@ -734,7 +734,7 @@ class TestConversionPipeline:
         """Chat reasoning is not portable as a native Responses input item."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_responses")
+        pipeline = ConversionPipeline("chat_completions", "openai--open_responses")
         target = pipeline.convert_request(
             {
                 "model": "gpt-5",
@@ -777,7 +777,7 @@ class TestConversionPipeline:
         """Reasoning status handling does not alter function-call request items."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_responses")
+        pipeline = ConversionPipeline("chat_completions", "openai--open_responses")
         target = pipeline.convert_request(
             {
                 "model": "gpt-5",
@@ -811,7 +811,9 @@ class TestConversionPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
 
         summary = [{"type": "summary_text", "text": "Thinking"}]
-        pipeline = ConversionPipeline("openai_responses", "openai_responses")
+        pipeline = ConversionPipeline(
+            "openai--open_responses", "openai--open_responses"
+        )
         target = pipeline.convert_request(
             {
                 "model": "gpt-5",
@@ -838,7 +840,9 @@ class TestConversionPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
 
         raw_content = [{"type": "reasoning_text", "text": "Raw reasoning"}]
-        pipeline = ConversionPipeline("openai_responses", "openai_responses")
+        pipeline = ConversionPipeline(
+            "openai--open_responses", "openai--open_responses"
+        )
         target = pipeline.convert_request(
             {
                 "model": "gpt-5",
@@ -868,7 +872,7 @@ class TestConversionPipeline:
         """Anthropic thinking is not portable as a native Responses input item."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("messages", "openai_responses")
+        pipeline = ConversionPipeline("messages", "openai--open_responses")
         target = pipeline.convert_request(
             {
                 "model": "claude-sonnet-4-20250514",
@@ -905,7 +909,7 @@ class TestConversionPipeline:
         """Google thought part is not portable as a native Responses input item."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("google", "openai_responses")
+        pipeline = ConversionPipeline("google_generate", "openai--open_responses")
         target = pipeline.convert_request(
             {
                 "model": "gemini-2.5-flash",
@@ -944,7 +948,7 @@ class TestConversionPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
 
         data_url = "data:image/png;base64,aW1hZ2U="
-        pipeline = ConversionPipeline("openai_chat", "openai_responses")
+        pipeline = ConversionPipeline("chat_completions", "openai--open_responses")
         target = pipeline.convert_request(
             {
                 "model": "gpt-5",
@@ -990,7 +994,7 @@ class TestConversionPipeline:
         """Response round-trip produces valid source response."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         pipeline.convert_request(
             {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -1006,7 +1010,7 @@ class TestConversionPipeline:
         """Completely invalid body should raise ConversionError with phase info."""
         from llm_rosetta.pipeline import ConversionError, ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         with pytest.raises(ConversionError) as exc_info:
             # messages must be iterable — passing an int triggers a parse error
             pipeline.convert_request({"model": "gpt-4", "messages": 123})
@@ -1016,7 +1020,7 @@ class TestConversionPipeline:
         """Calling convert_request twice raises RuntimeError (one-shot)."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         pipeline.convert_request(
             {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -1029,7 +1033,7 @@ class TestConversionPipeline:
         """Calling convert_response before convert_request raises RuntimeError."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         with pytest.raises(RuntimeError):
             pipeline.convert_response({"choices": []})
 
@@ -1038,7 +1042,7 @@ class TestConversionPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
 
         captured: list[dict[str, Any]] = []
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         pipeline.convert_request(
             {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]},
             on_ir_ready=lambda ir: captured.append(ir),
@@ -1051,7 +1055,7 @@ class TestConversionPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
 
         captured: list[dict[str, Any]] = []
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         pipeline.convert_request(
             {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -1068,7 +1072,7 @@ class TestConversionPipeline:
         """Pipeline context should be accessible after convert_request."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         with pytest.raises(RuntimeError):
             _ = pipeline.context
         pipeline.convert_request(
@@ -1081,7 +1085,7 @@ class TestConversionPipeline:
         """Pipeline ir_request should be accessible after convert_request."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         with pytest.raises(RuntimeError):
             _ = pipeline.ir_request
         pipeline.convert_request(
@@ -1094,7 +1098,7 @@ class TestConversionPipeline:
         """Pipeline without shim still works — no transforms applied."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_chat", None)
+        pipeline = ConversionPipeline("chat_completions", "chat_completions", None)
         target = pipeline.convert_request(
             {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -1104,7 +1108,7 @@ class TestConversionPipeline:
         """Cross-format conversion produces valid target body."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "messages")
+        pipeline = ConversionPipeline("chat_completions", "messages")
         target = pipeline.convert_request(
             {"model": "claude-3", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -1115,7 +1119,7 @@ class TestConversionPipeline:
         """StreamProcessor should be creatable after convert_request."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         pipeline.convert_request(
             {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -1126,7 +1130,7 @@ class TestConversionPipeline:
         """create_stream_processor before convert_request raises RuntimeError."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         with pytest.raises(RuntimeError):
             pipeline.create_stream_processor()
 
@@ -1135,7 +1139,7 @@ class TestConversionPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
 
         captured: list[dict[str, Any]] = []
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         pipeline.convert_request(
             {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
         )
@@ -1161,7 +1165,7 @@ class TestConversionPipeline:
         # #909: the ``resp_`` prefix is a shim trait, so the OpenAI-profile
         # shim must be named explicitly (the neutral base has no prefix).
         pipeline = ConversionPipeline(
-            "openai_chat", "open_responses", target_shim="openai_responses"
+            "chat_completions", "open_responses", target_shim="openai--open_responses"
         )
         pipeline.convert_request(
             {"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}
@@ -1174,7 +1178,9 @@ class TestConversionPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
 
         # openai_responses → openai_responses round-trip through pipeline
-        pipeline = ConversionPipeline("openai_responses", "openai_responses")
+        pipeline = ConversionPipeline(
+            "openai--open_responses", "openai--open_responses"
+        )
         body = {
             "model": "gpt-4o",
             "input": [{"role": "user", "content": "hi"}],
@@ -1203,7 +1209,7 @@ class TestConversionPipeline:
         from llm_rosetta.pipeline import ConversionPipeline
 
         data_url = "data:image/png;base64,aW1hZ2U="
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         target = pipeline.convert_request(
             {
                 "model": "gpt-4o",
@@ -1369,7 +1375,7 @@ class TestConversionPipeline:
 class TestStreamProcessorIterEvents:
     """Tests for StreamProcessor.iter_events (#872)."""
 
-    def _make_processor(self, source="openai_chat", target="messages"):
+    def _make_processor(self, source="chat_completions", target="messages"):
         from llm_rosetta.pipeline import ConversionPipeline
 
         pipeline = ConversionPipeline(source, target)
@@ -1380,7 +1386,7 @@ class TestStreamProcessorIterEvents:
 
     def test_iter_events_yields_all_events(self):
         """iter_events yields source-format events for all chunks."""
-        processor = self._make_processor("openai_chat", "openai_chat")
+        processor = self._make_processor("chat_completions", "chat_completions")
         chunks = [
             {
                 "id": "chatcmpl-abc",
@@ -1406,7 +1412,7 @@ class TestStreamProcessorIterEvents:
 
     def test_iter_events_flushes_deferred_stream_end(self):
         """iter_events auto-flushes deferred StreamEndEvent for Anthropic output."""
-        processor = self._make_processor("messages", "openai_chat")
+        processor = self._make_processor("messages", "chat_completions")
         chunks = [
             {
                 "id": "chatcmpl-abc",
@@ -1428,7 +1434,7 @@ class TestStreamProcessorIterEvents:
 
     def test_iter_events_empty_input(self):
         """iter_events with empty iterable returns no events."""
-        processor = self._make_processor("openai_chat", "openai_chat")
+        processor = self._make_processor("chat_completions", "chat_completions")
         events = list(processor.iter_events([]))
         assert events == []
 
