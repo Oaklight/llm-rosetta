@@ -217,6 +217,54 @@ def test_describe_manifest_missing_file(tmp_path):
         api.describe_vendor_manifest(tmp_path)
 
 
+# --------------------------------------------- manifest text, no file on disk
+def test_manifest_vocabulary_matches_the_loader_and_a_described_manifest(tmp_path):
+    from llm_rosetta.shims.providers import _CONNECTION_KEYS, _IDENTITY_KEYS
+
+    vocab = api.manifest_vocabulary()
+    assert vocab.connection_keys == _CONNECTION_KEYS
+    assert vocab.identity_keys == _IDENTITY_KEYS
+    assert set(vocab.schema) == {"manifest", "connection"}
+    assert set(vocab.schema["connection"]["properties"]) == set(_CONNECTION_KEYS)
+    d = api.describe_vendor_manifest(_vendor(tmp_path))
+    assert d.schema == vocab.schema
+    assert d.connection_keys == vocab.connection_keys
+    assert d.identity_keys == vocab.identity_keys
+
+
+def test_leaf_connection_reads_block_flat_and_legacy_spellings():
+    assert api.leaf_connection({"connection": {"base_url": "u"}}) == {"base_url": "u"}
+    assert api.leaf_connection(
+        {"name": "x", "base_url": "u", "default_api_key_env": "K"}
+    ) == {"base_url": "u", "api_key_env": "K"}
+    assert api.leaf_connection({"base_url": "f", "connection": {}}) == {}
+
+
+@pytest.mark.parametrize("cfg", [None, [], "text", 3])
+def test_leaf_connection_of_a_non_mapping_is_empty(cfg):
+    assert api.leaf_connection(cfg) == {}
+
+
+def test_merge_connection_leaf_wins_and_headers_merge_per_key():
+    manifest = {"base_url": "m", "api_key_env": "MK", "headers": {"a": "1", "b": "2"}}
+    leaf = {"api_key_env": "LK", "headers": {"b": "9"}}
+    merged = api.merge_connection(manifest, leaf)
+    assert merged == {
+        "base_url": "m",
+        "api_key_env": "LK",
+        "headers": {"a": "1", "b": "9"},
+    }
+    # Neither argument is modified.
+    assert manifest["headers"] == {"a": "1", "b": "2"}
+    assert leaf == {"api_key_env": "LK", "headers": {"b": "9"}}
+
+
+def test_merge_connection_agrees_with_describe_vendor_manifest(tmp_path):
+    d = api.describe_vendor_manifest(_vendor(tmp_path))
+    for leaf in d.leaves:
+        assert api.merge_connection(d.connection, leaf.own) == leaf.effective
+
+
 # ----------------------------------------------------------- staging_registry
 def test_staging_registry_drops_derived_caches_on_entry():
     from llm_rosetta.auto_detect import _converter_cache

@@ -23,10 +23,9 @@ ceiling nor leave the frozen copy ``_LEGACY_FROZEN`` (so an offender cannot
 enter by replacing another).  When you delete entries, lower the ceiling and
 delete them from the frozen copy too.
 
-A private name (leading underscore, or a private module) has its own small
-allowlist, ``_PRIVATE_ALLOWLIST``.  PR 9 of the #1630 plan replaces those
-reaches and deletes the list; the four left are the manifest helpers of
-``admin/routes/config/shim_manifests.py`` (see the PR for what blocks them).
+A private name (leading underscore, or a private module) has its own
+allowlist, ``_PRIVATE_ALLOWLIST``.  It is empty: the gateway reaches no private
+core name, and an entry would have to be argued for in a PR.
 
 Regenerate both lists with ``python tests/gateway/test_core_surface_boundary.py``.
 ``--report-tests`` prints the same counts for ``tests/gateway/**``, which this
@@ -81,11 +80,10 @@ _PACKAGE_ONLY = frozenset({"llm_rosetta.observability.usage"})
 # had; #1639 removed `shims/catalog.py` -> `llm_rosetta.provider_names`; #1637
 # removed the three `llm_rosetta._vendor.yaml` imports (the gateway vendors its
 # own yaml).
-_LEGACY_CEILING = 5
+_LEGACY_CEILING = 4
 _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
         ("admin/routes/config/shim_files.py", "llm_rosetta.shims.providers"),
-        ("admin/routes/config/shim_manifests.py", "llm_rosetta.shims.providers"),
         ("cli.py", "llm_rosetta.shims.scaffold"),
         ("shims/sources.py", "llm_rosetta.shims.provider_shim"),
         ("shims/sources.py", "llm_rosetta.shims.providers"),
@@ -94,39 +92,15 @@ _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
 _LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset(
     {
         ("admin/routes/config/shim_files.py", "llm_rosetta.shims.providers"),
-        ("admin/routes/config/shim_manifests.py", "llm_rosetta.shims.providers"),
         ("cli.py", "llm_rosetta.shims.scaffold"),
         ("shims/sources.py", "llm_rosetta.shims.provider_shim"),
         ("shims/sources.py", "llm_rosetta.shims.providers"),
     }
 )
 
-# --- Private allowlist: (file, module, name).  PR 9 of #1630 deletes it. ---
-_PRIVATE_CEILING = 4
-_PRIVATE_ALLOWLIST: frozenset[tuple[str, str, str]] = frozenset(
-    {
-        (
-            "admin/routes/config/shim_manifests.py",
-            "llm_rosetta.shims.providers",
-            "_CONNECTION_KEYS",
-        ),
-        (
-            "admin/routes/config/shim_manifests.py",
-            "llm_rosetta.shims.providers",
-            "_IDENTITY_KEYS",
-        ),
-        (
-            "admin/routes/config/shim_manifests.py",
-            "llm_rosetta.shims.providers",
-            "_leaf_connection",
-        ),
-        (
-            "admin/routes/config/shim_manifests.py",
-            "llm_rosetta.shims.providers",
-            "_merged_connection",
-        ),
-    }
-)
+# --- Private allowlist: (file, module, name).  Empty since #1630; keep it empty. ---
+_PRIVATE_CEILING = 0
+_PRIVATE_ALLOWLIST: frozenset[tuple[str, str, str]] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -377,16 +351,9 @@ def test_an_undeclared_name_on_the_surface_is_reported():
 # D5 of #1630: a gateway test may import non-private core modules, but not a
 # private name or a private module.  Shrink only; never add an entry.  Lower
 # _TESTS_PRIVATE_CEILING with every deletion.
-_TESTS_PRIVATE_CEILING = 2
+_TESTS_PRIVATE_CEILING = 1
 _TESTS_PRIVATE_ALLOWLIST: frozenset[tuple[str, str, str]] = frozenset(
     {
-        # Waits on PR 9b (the manifest core change): the test pins the gateway's
-        # own copy of the key list to core's.
-        (
-            "test_admin_shim_manifests.py",
-            "llm_rosetta.shims.providers",
-            "_CONNECTION_KEYS",
-        ),
         # Tests a core internal: the fold's echo list must equal the catalog's.
         ("test_stream_bridge.py", "llm_rosetta.ir.primitives.fold", "_ECHO_FIELDS"),
     }
