@@ -87,6 +87,76 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
         ],
         "max_count": 60,
     },
+    # The host-facing surface (#1630).  Re-exports only; a name enters it with a
+    # gateway call site or an external-shim use.  The ceiling leaves room for
+    # the six functions the follow-up PR adds (``spec_for``, ``legacy_names``,
+    # ``typed_response_usage``, ``staging_registry``, ``reasoning_capability``,
+    # ``describe_vendor_manifest``) and ``SURFACE_VERSION``.
+    "llm_rosetta.api": {
+        "items": [
+            # Chat conversion
+            "ConversionError",
+            "ConversionPipeline",
+            "UnrepresentableFinishReason",
+            "flatten_system_content",
+            "get_converter_class",
+            "get_converter_for_provider",
+            # Typed pipelines
+            "DecisionConversionPipeline",
+            "EmbeddingConversionPipeline",
+            "RerankConversionPipeline",
+            "get_decision_converter",
+            "get_embedding_converter",
+            "get_rerank_converter",
+            # Format catalog and model-type vocabulary
+            "FORMATS_BY_TYPE",
+            "FORMAT_SPECS",
+            "MODEL_TYPES",
+            "FormatSpec",
+            "canonical_model_type",
+            "default_path",
+            "legacy_model_type",
+            # Provider and shim names
+            "ProviderType",
+            "canonical_provider_name",
+            "canonical_shim_name",
+            "warn_legacy_provider_names",
+            "warn_legacy_shim_names",
+            # Shim registry, read side
+            "ConnectionConfig",
+            "ProviderShim",
+            "ReasoningCapability",
+            "SoftErrorPattern",
+            "VendorManifest",
+            "get_model_list_transform",
+            "get_shim",
+            "list_shims",
+            "match_model_reasoning",
+            "resolve_format",
+            "resolve_model_type",
+            "resolve_shim",
+            # Shim registry, write side and loaders
+            "load_providers",
+            "load_providers_from_dir",
+            "register_shim",
+            "restore_registry",
+            "snapshot_registry",
+            "unregister_shim",
+            # Fidelity and profiling
+            "DeepProfiler",
+            "FidelityChecker",
+            # IR the host inspects
+            "ToolDeclaration",
+            "ToolNameMap",
+            "is_image_part",
+            "is_tool_result_part",
+            "read_tool_declarations",
+            "strip_internal_metadata",
+            # Version
+            "__version__",
+        ],
+        "max_count": 60,
+    },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
         # 99 with the batch job envelope (epic #1509): five record types, the

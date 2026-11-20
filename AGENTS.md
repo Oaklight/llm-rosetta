@@ -158,6 +158,10 @@ supported format and forwards them to any configured upstream provider.
 | `observability/` | Telemetry: metrics, request log, SQLite persistence, ops log, error dumps, capture, retention, sanitizing, profiler state; `observability/usage/cli.py` is the `llm-rosetta-usage` console script |
 | `_vendor/` | Vendored modules (DO NOT EDIT) |
 
+### Host surface
+
+`llm_rosetta.api` is the small public surface that the gateway and shim authors import (#1630): re-exports only, a literal `__all__` grouped by capability. The four contract modules `llm_rosetta.shims.auth_exchange`, `llm_rosetta.shims.quota_probe`, `llm_rosetta.routing` and `llm_rosetta.observability.usage` stay where they are and are not re-exported. Within one minor it only gains names; a rename or removal keeps a deprecated alias for one minor. Core must never import `llm_rosetta.api` (`tests/test_core_import_boundary.py`).
+
 ### IR type system
 
 Typed dataclasses for the intermediate representation live in `types/ir/`.
