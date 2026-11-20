@@ -11,7 +11,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from llm_rosetta.formats import FORMAT_SPECS
+from llm_rosetta.api import FORMAT_SPECS
 
 from .error_class import classify_status
 
