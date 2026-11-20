@@ -533,9 +533,9 @@ def _cmd_shims_new(args: argparse.Namespace) -> None:
     package, which a gateway reads through ``shims.paths`` or a remote.  The
     exit code is the scaffolder's, so a failed load check reaches the shell.
     """
-    from llm_rosetta.shims.scaffold import run
+    from llm_rosetta.api import run_scaffold
 
-    raise SystemExit(run(args))
+    raise SystemExit(run_scaffold(args))
 
 
 def _cmd_shims_check(args: argparse.Namespace) -> None:
@@ -546,9 +546,9 @@ def _cmd_shims_check(args: argparse.Namespace) -> None:
     """
     from pathlib import Path
 
-    from llm_rosetta.shims.scaffold import run_check
+    from llm_rosetta.api import run_scaffold_check
 
-    raise SystemExit(run_check(Path(args.root).expanduser().resolve()))
+    raise SystemExit(run_scaffold_check(Path(args.root).expanduser().resolve()))
 
 
 def _cmd_shims_migrate(args: argparse.Namespace) -> None:
@@ -560,10 +560,10 @@ def _cmd_shims_migrate(args: argparse.Namespace) -> None:
     """
     from pathlib import Path
 
-    from llm_rosetta.shims.scaffold import run_migrate
+    from llm_rosetta.api import run_scaffold_migrate
 
     raise SystemExit(
-        run_migrate(Path(args.root).expanduser().resolve(), write=args.write)
+        run_scaffold_migrate(Path(args.root).expanduser().resolve(), write=args.write)
     )
 
 
@@ -952,7 +952,7 @@ def main() -> None:  # noqa: C901
 
     # ``shims new`` — the same flags the repository's scripts/dev/new_shim.py
     # offers; the module owns them, so the two entry points cannot drift.
-    from llm_rosetta.shims.scaffold import add_arguments as _add_scaffold_args
+    from llm_rosetta.api import add_scaffold_arguments as _add_scaffold_args
 
     new_parser = shim_sub.add_parser(
         "new", help="Create the files for a new provider shim"

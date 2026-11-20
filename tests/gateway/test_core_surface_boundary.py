@@ -80,23 +80,9 @@ _PACKAGE_ONLY = frozenset({"llm_rosetta.observability.usage"})
 # had; #1639 removed `shims/catalog.py` -> `llm_rosetta.provider_names`; #1637
 # removed the three `llm_rosetta._vendor.yaml` imports (the gateway vendors its
 # own yaml).
-_LEGACY_CEILING = 4
-_LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("admin/routes/config/shim_files.py", "llm_rosetta.shims.providers"),
-        ("cli.py", "llm_rosetta.shims.scaffold"),
-        ("shims/sources.py", "llm_rosetta.shims.provider_shim"),
-        ("shims/sources.py", "llm_rosetta.shims.providers"),
-    }
-)
-_LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("admin/routes/config/shim_files.py", "llm_rosetta.shims.providers"),
-        ("cli.py", "llm_rosetta.shims.scaffold"),
-        ("shims/sources.py", "llm_rosetta.shims.provider_shim"),
-        ("shims/sources.py", "llm_rosetta.shims.providers"),
-    }
-)
+_LEGACY_CEILING = 0
+_LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset()
+_LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset()
 
 # --- Private allowlist: (file, module, name).  Empty since #1630; keep it empty. ---
 _PRIVATE_CEILING = 0
