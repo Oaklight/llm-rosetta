@@ -19,8 +19,7 @@ import logging
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta.formats.catalog import FORMAT_SPECS, MODEL_TYPES
-from llm_rosetta.formats.spec import FormatSpec
+from llm_rosetta.api import FORMAT_SPECS, MODEL_TYPES, FormatSpec
 
 from ._shared import _qp
 
@@ -95,18 +94,18 @@ _IR_BUILDERS = {
 def _converter(spec: FormatSpec) -> Any:
     """Return the converter that writes ``spec``'s wire format."""
     if spec.model_type == "llm":
-        from llm_rosetta import get_converter_for_provider
+        from llm_rosetta.api import get_converter_for_provider
 
         return get_converter_for_provider(spec.format)
     if spec.model_type == "embeddings":
-        from llm_rosetta.converters.embeddings import get_embedding_converter
+        from llm_rosetta.api import get_embedding_converter
 
         return get_embedding_converter(spec.format)
     if spec.model_type == "rerank":
-        from llm_rosetta.converters.rerank import get_rerank_converter
+        from llm_rosetta.api import get_rerank_converter
 
         return get_rerank_converter(spec.format)
-    from llm_rosetta.converters.decisions import get_decision_converter
+    from llm_rosetta.api import get_decision_converter
 
     return get_decision_converter(spec.format)
 

@@ -7,7 +7,7 @@ from typing import Any
 
 from llm_rosetta_gateway._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta.shims import get_shim
+from llm_rosetta.api import get_model_list_transform, get_shim
 
 from ....providers import default_models_path
 from .._shared import (
@@ -75,8 +75,6 @@ def _extract_model_ids(
     derive human-readable slugs and the mapping back to internal upstream
     IDs.
     """
-    from llm_rosetta.shims.providers import get_model_list_transform
-
     mlt = get_model_list_transform(shim_name) if shim_name else None
 
     upstream_map: dict[str, str] = {}

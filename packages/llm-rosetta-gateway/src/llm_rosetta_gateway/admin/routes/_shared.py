@@ -847,7 +847,7 @@ def _resolve_models_path(provider_cfg: dict, config: Any, name: str) -> str | No
     """Return explicit models_path from provider config or shim, if any."""
     path = provider_cfg.get("models_path")
     if not path:
-        from llm_rosetta.shims import get_shim
+        from llm_rosetta.api import get_shim
 
         shim_name = (
             config.provider_shim_names.get(name)
