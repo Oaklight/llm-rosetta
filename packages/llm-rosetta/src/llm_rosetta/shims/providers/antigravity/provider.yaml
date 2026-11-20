@@ -3,7 +3,9 @@
 # The lane does not call Google's Code Assist API.  It runs the local
 # ``agy`` CLI (``agy acp``) and speaks the Agent Client Protocol to it, so
 # the Google sign-in, the access token and the project stay with agy, exactly
-# as they do when agy is used on its own.
+# as they do when agy is used on its own.  The credential the gateway keeps
+# is therefore not a key: ``auth.py`` asks agy whether it is signed in, and the
+# admin panel starts agy's own sign-in on the gateway host.
 #
 # Why not call Code Assist directly: Google suspends accounts it sees calling
 # Code Assist outside Antigravity's own client.  Driving the vendor's CLI
@@ -27,7 +29,7 @@ group_label: Google (Antigravity)
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/antigravity.svg
 
 connection:
-  # This lane sends no credential: agy authenticates itself and the gateway
-  # never sees the token.  Declared here because a credential fact belongs to
-  # the vendor manifest, not to a leaf.
-  keyless: true
+  # How often the gateway asks agy again whether it is still signed in.  Each
+  # check starts one agy process, so this is minutes, not seconds.  A credential
+  # fact, so it lives here and not in a leaf.
+  token_refresh_interval: 900

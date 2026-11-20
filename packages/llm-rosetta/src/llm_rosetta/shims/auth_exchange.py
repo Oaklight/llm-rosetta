@@ -310,6 +310,32 @@ class AuthExchange(Protocol):
         """Finish a browser sign-in from the pasted callback URL."""
         ...
 
+    # -- Optional: a sign-in the *vendor's own program* performs --------------
+    #
+    # Not protocol members, for the reason ``credential_for`` is not one: a
+    # member would fail ``isinstance`` for every shim that predates it.  An
+    # exchange whose credential is not a string the gateway attaches to
+    # requests -- the lane runs a local vendor CLI that owns the sign-in, and
+    # ``credential()`` only reports whether that CLI is signed in -- implements
+    # these and answers ``True`` from ``can_host_login()``:
+    #
+    # * ``begin_login(ctx)`` starts the vendor program *on the gateway host*
+    #   and returns at once (it does not wait for the human).  The result is
+    #   the first status snapshot, as ``login_status`` would return it.
+    # * ``login_status(ctx) -> Mapping`` is a token-free snapshot of that run:
+    #   ``state`` (``idle`` | ``running`` | ``verifying`` | ``succeeded`` |
+    #   ``failed`` | ``cancelled``), ``url`` (an ``https`` URL the program
+    #   printed, or ``None``), ``lines`` (recent output, already clipped) and
+    #   ``message``.  The gateway scrubs it again before a browser sees it.
+    # * ``cancel_login(ctx) -> bool`` stops a running sign-in; ``True`` when
+    #   there was one.
+    # * ``agent_args(ctx) -> Sequence[str]`` is extra argv that a transport
+    #   launching the vendor program appends, so one provider entry can run
+    #   against its own profile.  Empty means "the program's default".
+    #
+    # ``complete_login`` is not used on this path: nothing is pasted back, the
+    # program finishes by itself.
+
 
 class BaseAuthExchange:
     """Defaults for the optional half of :class:`AuthExchange`.
@@ -361,6 +387,23 @@ class BaseAuthExchange:
     def revoke(self, ctx: AuthContext) -> bool:  # pragma: no cover
         """Refuse: this exchange keeps no record to revoke."""
         raise NotImplementedError
+
+    def login_status(self, ctx: AuthContext) -> Mapping[str, Any]:  # pragma: no cover
+        """Refuse: this exchange runs no sign-in on the gateway host."""
+        raise NotImplementedError
+
+    def cancel_login(self, ctx: AuthContext) -> bool:  # pragma: no cover
+        """Refuse: this exchange runs no sign-in on the gateway host."""
+        raise NotImplementedError
+
+    def can_host_login(self) -> bool:
+        """Whether the vendor's own program signs in on the gateway host.
+
+        ``True`` when :meth:`login_status` was overridden: the panel then
+        offers a sign-in that starts the program and shows its progress,
+        instead of an authorization URL and a paste box.
+        """
+        return type(self).login_status is not BaseAuthExchange.login_status
 
     def can_install(self) -> bool:
         """Whether :meth:`install` was overridden.

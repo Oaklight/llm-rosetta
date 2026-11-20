@@ -108,6 +108,8 @@ from .profiling import (
 )
 from .connectivity import test_provider_connectivity
 from .credential import (
+    cancel_provider_login,
+    get_provider_login_status,
     begin_provider_login,
     complete_provider_login,
     delete_provider_credential,
@@ -293,6 +295,12 @@ def register_admin_routes(app: Any) -> None:
     app.route("/admin/api/config/providers/<name>/credential/login", methods=["POST"])(
         begin_provider_login
     )
+    app.route("/admin/api/config/providers/<name>/credential/login", methods=["GET"])(
+        get_provider_login_status
+    )
+    app.route(
+        "/admin/api/config/providers/<name>/credential/login", methods=["DELETE"]
+    )(cancel_provider_login)
     app.route(
         "/admin/api/config/providers/<name>/credential/login/callback",
         methods=["POST"],

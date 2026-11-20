@@ -79,12 +79,10 @@ CHUNK_ERROR = "error"
 
 #: Default agent argv.  A provider may override it with ``connection.acp_argv``
 #: (a shim declares the command its vendor ships); ``agy acp`` is the
-#: Antigravity one.
-DEFAULT_AGENT_ARGV: tuple[str, ...] = (
-    "agy",
-    "acp",
-    "--dangerously-skip-permissions=false",
-)
+#: Antigravity one.  It carries no permission flag: ``harden_argv`` adds
+#: ``acp_profile.PERMISSION_FLAG`` to every ``agy`` command the gateway
+#: hardens, so that flag has one source.
+DEFAULT_AGENT_ARGV: tuple[str, ...] = ("agy", "acp")
 
 #: Phase 1 runs the agent as a plain text model: its own tools (file read,
 #: write, shell, web) are OFF.  The agent is an upstream, not the gateway's
@@ -309,8 +307,25 @@ class AcpTransport:
     # -- agent lifecycle ----------------------------------------------------
 
     def _declared_argv(self, provider_info: ProviderInfo) -> list[str]:
+        """The agent command as declared, plus the entry's identity arguments.
+
+        The shim's exchange may append arguments that give this entry its own
+        identity (``agent_args``): the pool is keyed by provider name, so two
+        entries already get two processes, and this is what makes the two
+        processes two accounts.  An exchange with no such member leaves the
+        argv as declared.  Hardening runs on this result, so a
+        ``--gemini-dir`` the exchange names is the directory that holds the
+        strict profile as well.
+        """
         argv = getattr(provider_info, "acp_argv", None)
-        return list(argv) if argv else list(DEFAULT_AGENT_ARGV)
+        out = list(argv) if argv else list(DEFAULT_AGENT_ARGV)
+        extra = getattr(
+            getattr(provider_info, "auth_exchange", None), "agent_args", None
+        )
+        ctx = getattr(provider_info, "auth_context", None)
+        if callable(extra) and ctx is not None:
+            out.extend(str(a) for a in extra(ctx))
+        return out
 
     def _hardened(self, provider_info: ProviderInfo) -> bool:
         """Whether the gateway gives this provider's agent its own profile.
@@ -478,10 +493,9 @@ class AcpTransport:
 
         The counterpart of re-pointing a provider at another account: the
         processes were started with the old ``acp_argv`` and hold sessions of
-        the old sign-in, so both go.  Nothing calls it yet — a config reload
-        rebuilds the whole app today — and it stays because the reload slice
-        needs a way to drop one lane without dropping the process that serves
-        the others.
+        the old sign-in, so both go.  The admin credential routes call it after
+        a sign-in or sign-out, so the next request starts the agent against the
+        account that is signed in *now*.
         """
         pool = self._agents.pop(provider_name, [])
         # ``<provider>#<slot>`` — split rather than prefix-match, so a provider

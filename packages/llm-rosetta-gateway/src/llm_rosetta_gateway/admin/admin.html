@@ -1589,6 +1589,16 @@
               <button type="button" class="btn btn-sm" data-i18n="btn.cancel" onclick="resetProviderBrowserLogin()">Cancel</button>
             </div>
           </div>
+          <div id="provHostLoginBox" hidden style="margin-top:6px">
+            <div class="prov-field-hint" id="provHostLoginStatus" role="status" aria-live="polite"></div>
+            <div class="prov-field-hint" data-i18n="prov.hostLoginWhere">The browser step happens on the machine that runs the gateway. If you are working from another machine, open the address below there or in your own browser.</div>
+            <a id="provHostLoginLink" target="_blank" rel="noopener noreferrer" class="prov-field-hint" hidden></a>
+            <code id="provHostLoginUrl" style="display:block;word-break:break-all;margin-top:4px;font-size:0.78em"></code>
+            <pre id="provHostLoginOutput" hidden style="margin:6px 0 0;max-height:10em;overflow:auto;font-size:0.78em;white-space:pre-wrap;word-break:break-word"></pre>
+            <div style="display:flex;gap:6px;margin-top:4px">
+              <button type="button" class="btn btn-sm" id="provHostLoginCancel" hidden data-i18n="prov.hostLoginCancel" onclick="cancelProviderHostLogin()">Cancel sign-in</button>
+            </div>
+          </div>
           <div id="provCredentialBox" style="display:none;margin-top:6px">
             <textarea id="provCredentialRecord" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder='{"access_token": "...", "refresh_token": "...", "id_token": "..."}' style="width:100%;min-height:96px;font-family:var(--mono,monospace)"></textarea>
             <div style="display:flex;gap:6px;margin-top:4px">

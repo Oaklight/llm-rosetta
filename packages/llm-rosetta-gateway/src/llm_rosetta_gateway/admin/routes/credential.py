@@ -16,8 +16,10 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Any
+from urllib.parse import parse_qsl, urlsplit
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway.observability.sanitize import scrub_credential_patterns
 from llm_rosetta_gateway.providers import _account_token_for
 from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
 from llm_rosetta_gateway.transport.token_refresh import (
@@ -25,7 +27,12 @@ from llm_rosetta_gateway.transport.token_refresh import (
     public_token_status,
 )
 
-from ._shared import exchange_field_text, exchange_fields, parse_json_body
+from ._shared import (
+    exchange_can_host_login,
+    exchange_field_text,
+    exchange_fields,
+    parse_json_body,
+)
 from .config.payload import _get_gateway_config
 
 
@@ -113,6 +120,88 @@ def exchange_can_revoke(exchange: Any) -> bool:
     revoke = getattr(exchange, "revoke", None)
     can_revoke = getattr(exchange, "can_revoke", None)
     return revoke is not None and (can_revoke() if callable(can_revoke) else True)
+
+
+#: What a sign-in snapshot may carry to a browser, and how much of it.
+_LOGIN_STATES = frozenset(
+    {"idle", "running", "verifying", "succeeded", "failed", "cancelled"}
+)
+_LOGIN_LINES = 40
+_LOGIN_TEXT = 400
+
+
+#: Query parameters a URL shown to an operator must not carry: an
+#: authorization *request* has none of them, a redirect that holds one is the
+#: sign-in's own secret.
+_SECRET_PARAMS = frozenset(
+    {"code", "token", "access_token", "refresh_token", "id_token", "client_secret"}
+)
+
+
+def _safe_login_url(url: Any) -> bool:
+    """Whether *url* may be rendered as a link: ``https``, bounded, no secret."""
+    if not isinstance(url, str) or len(url) > 2000:
+        return False
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return False
+    if parts.scheme != "https" or not parts.netloc:
+        return False
+    if any(
+        name.lower() in _SECRET_PARAMS
+        for name, _ in parse_qsl(parts.query, keep_blank_values=True)
+    ):
+        return False
+    return scrub_credential_patterns(url) == url
+
+
+def public_login_status(raw: Any) -> dict[str, Any]:
+    """The sign-in snapshot an operator's browser may receive.
+
+    The exchange has already clipped and scrubbed what it prints; this is the
+    second line of defence, because a vendor program's output is not under our
+    control and an operator may be on the far side of a network.  An allow-list
+    of keys, a scrub over every string, a bound on the number and length of
+    lines, and a URL only when scrubbing leaves it untouched.
+    """
+    data = raw if isinstance(raw, dict) else {}
+    state = data.get("state")
+    url = data.get("url")
+    if not _safe_login_url(url):
+        url = None
+    lines = [
+        scrub_credential_patterns(str(line))[:_LOGIN_TEXT]
+        for line in (data.get("lines") or [])
+        if isinstance(line, str)
+    ][-_LOGIN_LINES:]
+    out: dict[str, Any] = {
+        "state": state if state in _LOGIN_STATES else "idle",
+        "url": url,
+        "lines": lines,
+        "message": scrub_credential_patterns(str(data.get("message") or ""))[
+            :_LOGIN_TEXT
+        ],
+    }
+    for key in ("started_at", "timeout"):
+        value = data.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            out[key] = value
+    return out
+
+
+async def _restart_lane(request: Any, pinfo: Any) -> None:
+    """Drop a local-agent provider's processes so the next turn re-reads who is signed in.
+
+    An ACP agent keeps its sign-in for the life of the process; after a
+    sign-in or sign-out the running one answers for the *previous* account.
+    """
+    if getattr(pinfo, "transport", None) != "acp":
+        return
+    transport = (getattr(request.app, "transports", None) or {}).get("acp")
+    close = getattr(transport, "aclose_provider", None)
+    if close is not None:
+        await close(pinfo.config_name)
 
 
 async def _off_loop(func: Any, *args: Any) -> Any:
@@ -257,6 +346,14 @@ async def get_provider_credential(request: Any, name: str) -> Response:
             "can_revoke": exchange_can_revoke(exchange),
             "can_begin_login": exchange_can_begin_login(exchange),
             "can_complete_login": exchange_can_complete_login(exchange),
+            # A sign-in the vendor's own program performs on this host: the
+            # panel starts it and polls ``login``'s snapshot.
+            "can_host_login": exchange_can_host_login(exchange),
+            "login": (
+                await _login_snapshot(pinfo, exchange)
+                if exchange_can_host_login(exchange)
+                else None
+            ),
             # The inputs install() takes.  Non-empty means the panel renders a
             # form; empty keeps the record-textarea path.
             "fields": exchange_fields(exchange),
@@ -278,7 +375,20 @@ async def begin_provider_login(request: Any, name: str) -> Response:
     try:
         result = await _off_loop(exchange.begin_login, pinfo.auth_context)
     except Exception as exc:  # noqa: BLE001 - vendor errors are operator-facing
-        return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(
+            {"error": scrub_credential_patterns(str(exc))}, status_code=400
+        )
+    if exchange_can_host_login(exchange):
+        # The program was started on this host; what comes back is its first
+        # snapshot, not a URL to open.  Progress is read from the status route.
+        return JSONResponse(
+            {
+                "provider": name,
+                "pending": True,
+                "host": True,
+                "login": public_login_status(result),
+            }
+        )
     if not isinstance(result, dict) or not isinstance(
         result.get("authorization_url"), str
     ):
@@ -304,6 +414,71 @@ async def begin_provider_login(request: Any, name: str) -> Response:
         if text is not None:
             payload[key] = text
     return JSONResponse(payload)
+
+
+async def _login_snapshot(pinfo: Any, exchange: Any) -> dict[str, Any] | None:
+    """The scrubbed snapshot of the exchange's sign-in run, or ``None``."""
+    try:
+        return public_login_status(
+            await _off_loop(exchange.login_status, pinfo.auth_context)
+        )
+    except Exception:  # noqa: BLE001 - a status read must not become a 500
+        return None
+
+
+async def get_provider_login_status(request: Any, name: str) -> Response:
+    """Report a host sign-in's progress.
+
+    When the run has just succeeded, this is also where the gateway adopts it:
+    the key ring is re-seeded, the lane's agent processes are replaced so they
+    answer for the account that is signed in now, and the provider is made
+    ready.  Once per run — polling must not start a process each time.
+    """
+    try:
+        pinfo, exchange = _provider_and_exchange(request, name)
+    except _NotSupported as exc:
+        return _error(exc)
+    if not exchange_can_host_login(exchange):
+        return JSONResponse(
+            {"error": f"Provider '{name}' signs in through no program on this host"},
+            status_code=501,
+        )
+    raw = await _off_loop(exchange.login_status, pinfo.auth_context)
+    login = public_login_status(raw)
+    payload: dict[str, Any] = {"provider": name, "login": login}
+    started = login.get("started_at")
+    applied = getattr(pinfo, "login_applied_at", None)
+    if login["state"] == "succeeded" and started is not None and started != applied:
+        pinfo.login_applied_at = started
+        error = await _reseed(pinfo)
+        await _restart_lane(request, pinfo)
+        await _activate_after_reseed(request, name, pinfo, error)
+        payload["connected"] = error is None
+        if error is not None:
+            payload["error"] = f"the sign-in finished but is not in use: {error}"
+    return JSONResponse(payload)
+
+
+async def cancel_provider_login(request: Any, name: str) -> Response:
+    """Stop a host sign-in that is still running."""
+    try:
+        pinfo, exchange = _provider_and_exchange(request, name)
+    except _NotSupported as exc:
+        return _error(exc)
+    cancel = getattr(exchange, "cancel_login", None)
+    if not exchange_can_host_login(exchange) or cancel is None:
+        return JSONResponse(
+            {"error": f"Provider '{name}' signs in through no program on this host"},
+            status_code=501,
+        )
+    cancelled = bool(await _off_loop(cancel, pinfo.auth_context))
+    return JSONResponse(
+        {
+            "provider": name,
+            "cancelled": cancelled,
+            "login": await _login_snapshot(pinfo, exchange),
+        }
+    )
 
 
 async def complete_provider_login(request: Any, name: str) -> Response:
@@ -531,6 +706,7 @@ async def delete_provider_credential(request: Any, name: str) -> Response:
     # that still sends the revoked token until it expires is the one thing this
     # endpoint must not do.
     await _reseed(pinfo)
+    await _restart_lane(request, pinfo)
     removed = bool(exchange.needs_interactive_setup(pinfo.auth_context))
     if removed:
         deferred = getattr(request.app, "deferred_startup", None)
