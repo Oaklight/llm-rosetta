@@ -144,6 +144,30 @@
     {
       "key": "llm_rosetta.converters::OpenAIChatConverter::removed",
       "reason": "Removed in 0.14.0 (issue 919, P1): the 0.13.0 class alias is gone; use llm_rosetta.converters.ChatCompletionsConverter."
+    },
+    {
+      "key": "llm_rosetta.tool_ops::to_openai_chat::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P2): the deprecated alias is gone; use llm_rosetta.tool_ops.to_chat_completions."
+    },
+    {
+      "key": "llm_rosetta.tool_ops::from_openai_chat::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P2): the deprecated alias is gone; use llm_rosetta.tool_ops.from_chat_completions."
+    },
+    {
+      "key": "llm_rosetta.tool_ops::to_openai_responses::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P2): the deprecated alias is gone; use llm_rosetta.tool_ops.to_open_responses."
+    },
+    {
+      "key": "llm_rosetta.tool_ops::from_openai_responses::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P2): the deprecated alias is gone; use llm_rosetta.tool_ops.from_open_responses."
+    },
+    {
+      "key": "llm_rosetta.tool_ops::to_anthropic::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P2): the deprecated alias is gone; use llm_rosetta.tool_ops.to_messages."
+    },
+    {
+      "key": "llm_rosetta.tool_ops::from_anthropic::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P2): the deprecated alias is gone; use llm_rosetta.tool_ops.from_messages."
     }
   ]
 }

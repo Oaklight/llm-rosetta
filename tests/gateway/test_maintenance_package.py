@@ -73,13 +73,15 @@ def test_importing_keystore_does_not_load_startup_or_dumps():
     assert out == "0 0"
 
 
-def test_deprecated_gateway_migrations_path_warns_and_reexports():
-    """The v0.13.0 dotted path keeps resolving until 0.16.0 (#919)."""
-    from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION, migrate
-
+def test_0130_gateway_migrations_path_is_gone():
+    """``llm_rosetta_gateway.migrations`` left in 0.14.0 (#919)."""
     sys.modules.pop("llm_rosetta_gateway.migrations", None)
-    with pytest.warns(DeprecationWarning, match="gateway.maintenance.migrations"):
-        legacy = importlib.import_module("llm_rosetta_gateway.migrations")
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("llm_rosetta_gateway.migrations")
 
-    assert legacy.CURRENT_VERSION == CURRENT_VERSION
-    assert legacy.migrate is migrate
+
+@pytest.mark.parametrize("name", ["auth", "headers", "embeddings"])
+def test_0130_gateway_forwarding_stubs_are_gone(name):
+    """The 0.13.0 top-level stubs left in 0.14.0 (#919)."""
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module(f"llm_rosetta_gateway.{name}")
