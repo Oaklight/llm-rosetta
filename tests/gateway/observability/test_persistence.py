@@ -529,13 +529,14 @@ class TestBackfillTotalTokens:
         assert entries[0]["total_tokens"] == 65
 
     @pytest.mark.asyncio
-    async def test_the_legacy_anthropic_spelling_is_corrected_too(self, pm):
+    async def test_the_retired_anthropic_spelling_is_not_repaired(self, pm):
+        """Only ``llm-rosetta-migrate --db`` rewrites the tag, then the repair runs."""
         await pm.insert_log_entries(
             [
                 self._row("legacy", target="anthropic", total=45, cache_read_tokens=20),
             ]
         )
-        assert await pm.backfill_total_tokens() == 1
+        assert await pm.backfill_total_tokens() == 0
 
     @pytest.mark.asyncio
     async def test_a_missing_total_is_filled(self, pm):

@@ -151,9 +151,10 @@ _SHAPES_BY_KEY: Mapping[str, UsageShape] = MappingProxyType(
 )
 
 #: API standard -> the shape its usage payload takes, derived from the format
-#: catalog.  The legacy spellings below are rows written by older versions;
-#: the repair that reads this table works on rows written years apart, so they
-#: stay until #919 removes them.
+#: catalog.  A row written under a retired spelling (``openai_chat``,
+#: ``anthropic``, ...) names no standard here: ``llm-rosetta-migrate --db``
+#: rewrites such a row to the current name, and until it has run the row is
+#: unknown to this table (:func:`shape_for` answers ``None``).
 STANDARD_SHAPES: Mapping[str, UsageShape] = MappingProxyType(
     {
         **{
@@ -161,10 +162,6 @@ STANDARD_SHAPES: Mapping[str, UsageShape] = MappingProxyType(
             for spec in FORMAT_SPECS
             if spec.model_type == "llm" and spec.usage_shape is not None
         },
-        "openai_chat": OPENAI_DETAILS,
-        "openai_responses": OPENAI_DETAILS,
-        "anthropic": MESSAGES_FIELDS,
-        "google": GOOGLE_METADATA,
     }
 )
 
