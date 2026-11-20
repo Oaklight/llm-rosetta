@@ -276,7 +276,7 @@ def test_a_config_the_loader_rejects_is_named_before_it_is_written():
         {
             "providers": {
                 "alcf": {
-                    "type": "openai",
+                    "type": "openai--chat_completions",
                     "base_url": "https://api.example/v1",
                     "api_key": "sk-x",
                     "token_command": COMMAND,
@@ -329,7 +329,7 @@ def test_preflight_keeps_the_provider_startup_notices_quiet():
             {
                 "providers": {
                     "p": {
-                        "type": "openai",
+                        "type": "openai--chat_completions",
                         "base_url": "https://api.example/v1",
                         "token_command": ["/nonexistent/binary-xyz"],
                     }
@@ -372,7 +372,7 @@ def test_a_config_the_loader_accepts_passes_preflight():
             {
                 "providers": {
                     "alcf": {
-                        "type": "openai",
+                        "type": "openai--chat_completions",
                         "base_url": "https://api.example/v1",
                         "token_command": COMMAND,
                     }
@@ -395,7 +395,7 @@ def test_a_switched_off_provider_does_not_block_another_save():
         "providers": {
             "off": {"type": "open_responses", "enabled": False},
             "on": {
-                "type": "openai",
+                "type": "openai--chat_completions",
                 "base_url": "https://api.example/v1",
                 "token_command": COMMAND,
             },
@@ -451,7 +451,7 @@ async def test_a_rejected_save_returns_400_and_writes_nothing(tmp_path):
         tmp_path,
         raw,
         {
-            "type": "openai",
+            "type": "openai--chat_completions",
             "base_url": "https://api.example/v1",
             "api_key": "sk-x",
             "token_command": COMMAND,
@@ -477,7 +477,7 @@ async def test_clearing_the_only_credential_names_what_is_missing(tmp_path):
     raw = {
         "providers": {
             "p": {
-                "type": "openai",
+                "type": "openai--chat_completions",
                 "base_url": "https://api.example/v1",
                 "token_command": COMMAND,
             }
@@ -487,7 +487,11 @@ async def test_clearing_the_only_credential_names_what_is_missing(tmp_path):
     request = _save_request(
         tmp_path,
         raw,
-        {"type": "openai", "base_url": "https://api.example/v1", "token_command": []},
+        {
+            "type": "openai--chat_completions",
+            "base_url": "https://api.example/v1",
+            "token_command": [],
+        },
     )
 
     response = await put_provider(request)
@@ -548,7 +552,7 @@ async def test_clearing_the_command_still_names_other_missing_fields(tmp_path):
     raw = {
         "providers": {
             "p": {
-                "type": "openai",
+                "type": "openai--chat_completions",
                 "base_url": "https://api.example/v1",
                 "token_command": COMMAND,
             }
@@ -580,7 +584,7 @@ def test_preflight_resolves_env_placeholders_without_touching_the_document(
     data = {
         "providers": {
             "p": {
-                "type": "openai",
+                "type": "openai--chat_completions",
                 "base_url": "https://api.example/v1",
                 "timeout": "${UPSTREAM_TIMEOUT}",
             }
@@ -718,7 +722,7 @@ async def test_a_setup_input_the_entry_cannot_hold_is_a_400(tmp_path):
         tmp_path,
         raw,
         {
-            "type": "openai",
+            "type": "openai--chat_completions",
             "base_url": "https://api.example/v1",
             "api_key": "sk-x",
             "auth_fields": {"email": "x" * 201},

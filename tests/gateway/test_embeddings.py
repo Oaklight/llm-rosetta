@@ -82,7 +82,7 @@ def _make_config(base_url: str, upstream_model: str | None = None) -> GatewayCon
             "test-provider": {
                 "api_key": "test-key",
                 "base_url": base_url,
-                "type": "openai",
+                "type": "openai--chat_completions",
                 "embeddings_format": "openai",
             }
         },
@@ -444,12 +444,12 @@ class TestDetectEmbeddingSource:
         return GatewayConfig(
             {
                 "providers": {
-                    "openai_chat": {
+                    "chat_completions": {
                         "api_key": "sk-test",
                         "base_url": "https://api.openai.com/v1",
                     }
                 },
-                "models": {"gpt-4o": "openai_chat"},
+                "models": {"gpt-4o": "chat_completions"},
             }
         )
 

@@ -813,7 +813,7 @@ class TestForcedResponsesStreamPipeline:
     @staticmethod
     def _run(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         pipeline = ConversionPipeline(
-            "openai_responses", "openai_responses", baseline=False
+            "openai--open_responses", "openai--open_responses", baseline=False
         )
         pipeline.convert_request(
             {"model": "gpt-test", "input": "hello", "stream": True}
@@ -3583,7 +3583,7 @@ class TestStreamingMultipleMessageItems:
     @classmethod
     def _run(cls, *chunks: dict[str, Any]) -> list[dict[str, Any]]:
         pipeline = ConversionPipeline(
-            "openai_responses", "openai_responses", baseline=False
+            "openai--open_responses", "openai--open_responses", baseline=False
         )
         pipeline.convert_request({"model": "gpt-test", "input": "hi", "stream": True})
         processor = pipeline.create_stream_processor()

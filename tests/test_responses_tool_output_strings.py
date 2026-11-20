@@ -44,17 +44,21 @@ def _request(output):
         "ordinary text",
     ],
 )
-@pytest.mark.parametrize("target", ["openai_chat", "messages", "google"])
+@pytest.mark.parametrize("target", ["chat_completions", "messages", "google_generate"])
 def test_string_output_keeps_its_type_and_exact_contents(output, target):
     request = _request(output)
     original = copy.deepcopy(request)
-    converted = ConversionPipeline("openai_responses", target).convert_request(request)
+    converted = ConversionPipeline("openai--open_responses", target).convert_request(
+        request
+    )
     assert request == original
-    if target == "openai_chat":
+    if target == "chat_completions":
         tool = next(m for m in converted["messages"] if m["role"] == "tool")
         assert isinstance(tool["content"], str)
         assert tool["content"] == output
-    restored = ConversionPipeline(target, "openai_responses").convert_request(converted)
+    restored = ConversionPipeline(target, "openai--open_responses").convert_request(
+        converted
+    )
     tool_output = next(
         item for item in restored["input"] if item["type"] == "function_call_output"
     )
@@ -70,9 +74,9 @@ def test_actual_multimodal_array_still_preserves_image_blocks():
         ]
     )
     original = copy.deepcopy(request)
-    converted = ConversionPipeline("openai_responses", "openai_chat").convert_request(
-        request
-    )
+    converted = ConversionPipeline(
+        "openai--open_responses", "chat_completions"
+    ).convert_request(request)
     assert request == original
     # Chat's existing multimodal fallback hoists the image into a tagged user
     # message. Preserve that behavior; do not serialize actual blocks as text.
@@ -129,9 +133,9 @@ def test_incomplete_tool_output_becomes_anthropic_error():
         "max_output_tokens": 128,
     }
 
-    converted = ConversionPipeline("openai_responses", "anthropic").convert_request(
-        request
-    )
+    converted = ConversionPipeline(
+        "openai--open_responses", "messages"
+    ).convert_request(request)
 
     assert converted["messages"][2]["content"][0] == {
         "type": "tool_result",
@@ -176,7 +180,7 @@ def test_incomplete_tool_output_roundtrips_as_incomplete():
     }
 
     converted = ConversionPipeline(
-        "openai_responses", "openai_responses"
+        "openai--open_responses", "openai--open_responses"
     ).convert_request(request)
 
     tool_output = next(
@@ -194,7 +198,7 @@ def test_responses_same_format_ir_roundtrip_keeps_json_text():
     output = '[{"type":"input_image","image_url":"ordinary tool data"}]'
     request = _request(output)
     converted = ConversionPipeline(
-        "openai_responses", "openai_responses", baseline=False
+        "openai--open_responses", "openai--open_responses", baseline=False
     ).convert_request(request)
     tool_output = next(
         item for item in converted["input"] if item["type"] == "function_call_output"

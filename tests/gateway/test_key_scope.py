@@ -21,7 +21,11 @@ from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.keystore import KeyStore
 
 PROVIDERS = {
-    "up": {"type": "openai", "base_url": "https://api.example.com", "api_key": "k"}
+    "up": {
+        "type": "openai--chat_completions",
+        "base_url": "https://api.example.com",
+        "api_key": "k",
+    }
 }
 MODELS = {
     "m-a": {"providers": [{"name": "up", "model": "m-a"}]},

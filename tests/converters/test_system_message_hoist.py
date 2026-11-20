@@ -366,7 +366,9 @@ class TestDeveloperRole:
             ],
         }
         pipeline = ConversionPipeline(
-            "openai_chat", "openai_chat", target_shim="openai"
+            "chat_completions",
+            "chat_completions",
+            target_shim="openai--chat_completions",
         )
         result = pipeline.convert_request(body)
         roles = [m["role"] for m in result["messages"]]
@@ -425,7 +427,9 @@ class TestDeveloperRole:
             "stream": True,
         }
         pipeline = ConversionPipeline(
-            "openai_responses", "openai_chat", target_shim="openai"
+            "openai--open_responses",
+            "chat_completions",
+            target_shim="openai--chat_completions",
         )
         result = pipeline.convert_request(body)
         roles = [m["role"] for m in result["messages"]]

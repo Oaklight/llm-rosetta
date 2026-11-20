@@ -56,7 +56,7 @@ def collect_tools(events):
 def test_chat_parallel_tool_stream_keeps_ids_arguments_and_block_lifecycles(
     prefix, suffix, count
 ):
-    pipeline = ConversionPipeline("messages", "openai_chat")
+    pipeline = ConversionPipeline("messages", "chat_completions")
     pipeline.convert_request(
         {
             "model": "demo",
@@ -190,7 +190,7 @@ def test_synthetic_tool_block_does_not_reuse_a_completed_explicit_index():
 
 def test_dropped_unresolved_tool_delta_does_not_report_tool_use_finish():
     """The pipeline's terminal reason reflects identified tool starts only."""
-    pipeline = ConversionPipeline("messages", "openai_chat")
+    pipeline = ConversionPipeline("messages", "chat_completions")
     pipeline.convert_request(
         {
             "model": "demo",

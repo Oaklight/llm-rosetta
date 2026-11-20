@@ -10,9 +10,9 @@ from llm_rosetta.pipeline import ConversionPipeline
 def convert_history(items):
     body = {"model": "example-model", "input": items, "reasoning": {"effort": "high"}}
     original = copy.deepcopy(body)
-    converted = ConversionPipeline("openai_responses", "openai_chat").convert_request(
-        body
-    )
+    converted = ConversionPipeline(
+        "openai--open_responses", "chat_completions"
+    ).convert_request(body)
     assert body == original
     return converted
 

@@ -49,7 +49,7 @@ def _make_config(
             "default": {
                 "api_key": "sk-test",
                 "base_url": "https://api.example.com",
-                "type": "openai_chat",
+                "type": "chat_completions",
             },
         },
         "models": models or {"gpt-test": "default"},
@@ -118,7 +118,7 @@ class TestPerProviderUrlTemplate:
             "base_url": "https://host.example.com",
             "url_template": "{base_url}/v1/endpoints/chat/completions",
         }
-        pi = build_provider_info("openai_chat", cfg)
+        pi = build_provider_info("chat_completions", cfg)
         assert (
             pi.upstream_url("gpt-5")
             == "https://host.example.com/v1/endpoints/chat/completions"
@@ -130,7 +130,7 @@ class TestPerProviderUrlTemplate:
             "base_url": "https://host.example.com/v1",
             "stream_url_template": "{base_url}/endpoints/stream/{model}",
         }
-        pi = build_provider_info("openai_chat", cfg)
+        pi = build_provider_info("chat_completions", cfg)
         # Non-stream uses registry default
         assert (
             pi.upstream_url("gpt-5", stream=False)
@@ -149,7 +149,7 @@ class TestPerProviderUrlTemplate:
             "url_template": "{base_url}/custom/generate",
             "stream_url_template": "{base_url}/custom/stream",
         }
-        pi = build_provider_info("openai_chat", cfg)
+        pi = build_provider_info("chat_completions", cfg)
         assert pi.upstream_url("m") == "https://host.example.com/custom/generate"
         assert (
             pi.upstream_url("m", stream=True)
@@ -161,7 +161,7 @@ class TestPerProviderUrlTemplate:
             "api_key": "sk-test",
             "base_url": "https://host.example.com/v1",
         }
-        pi = build_provider_info("openai_chat", cfg)
+        pi = build_provider_info("chat_completions", cfg)
         assert (
             pi.upstream_url("gpt-5") == "https://host.example.com/v1/chat/completions"
         )
@@ -172,7 +172,7 @@ class TestPerProviderUrlTemplate:
             "base_url": "https://host.example.com",
             "url_template": "{base_url}/models/{model}/generate",
         }
-        pi = build_provider_info("openai_chat", cfg)
+        pi = build_provider_info("chat_completions", cfg)
         assert (
             pi.upstream_url("my-model")
             == "https://host.example.com/models/my-model/generate"
@@ -194,7 +194,9 @@ class TestPerModelUrlTemplate:
                 },
             },
         )
-        route, pinfo = cfg.resolve(cfg.selection_context("custom-model", "openai_chat"))
+        route, pinfo = cfg.resolve(
+            cfg.selection_context("custom-model", "chat_completions")
+        )
         assert (
             pinfo.upstream_url("custom-model")
             == "https://api.example.com/v2/custom/completions"
@@ -209,7 +211,9 @@ class TestPerModelUrlTemplate:
                 },
             },
         )
-        route, pinfo = cfg.resolve(cfg.selection_context("custom-model", "openai_chat"))
+        route, pinfo = cfg.resolve(
+            cfg.selection_context("custom-model", "chat_completions")
+        )
         # Non-stream: uses provider default
         assert (
             pinfo.upstream_url("custom-model", stream=False)
@@ -232,10 +236,10 @@ class TestPerModelUrlTemplate:
             },
         )
         _, pinfo_normal = cfg.resolve(
-            cfg.selection_context("normal-model", "openai_chat")
+            cfg.selection_context("normal-model", "chat_completions")
         )
         _, pinfo_custom = cfg.resolve(
-            cfg.selection_context("custom-model", "openai_chat")
+            cfg.selection_context("custom-model", "chat_completions")
         )
 
         assert (
@@ -259,9 +263,9 @@ class TestPerModelUrlTemplate:
             },
         )
         # Resolve model-b first (with override)
-        _, pinfo_b = cfg.resolve(cfg.selection_context("model-b", "openai_chat"))
+        _, pinfo_b = cfg.resolve(cfg.selection_context("model-b", "chat_completions"))
         # Then model-a (no override) — should use provider default
-        _, pinfo_a = cfg.resolve(cfg.selection_context("model-a", "openai_chat"))
+        _, pinfo_a = cfg.resolve(cfg.selection_context("model-a", "chat_completions"))
 
         assert pinfo_b.upstream_url("model-b") == "https://api.example.com/custom"
         assert (
@@ -276,7 +280,7 @@ class TestPerModelUrlTemplate:
                 "custom-provider": {
                     "api_key": "sk-test",
                     "base_url": "https://api.example.com",
-                    "type": "openai_chat",
+                    "type": "chat_completions",
                     "url_template": "{base_url}/provider-level",
                 },
             },
@@ -289,10 +293,10 @@ class TestPerModelUrlTemplate:
             },
         )
         _, pinfo_default = cfg.resolve(
-            cfg.selection_context("model-default", "openai_chat")
+            cfg.selection_context("model-default", "chat_completions")
         )
         _, pinfo_override = cfg.resolve(
-            cfg.selection_context("model-override", "openai_chat")
+            cfg.selection_context("model-override", "chat_completions")
         )
 
         assert (

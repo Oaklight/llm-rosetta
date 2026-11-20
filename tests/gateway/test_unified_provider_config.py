@@ -12,7 +12,7 @@ def _base_config(**overrides):
             "openai": {
                 "api_key": "sk-test",
                 "base_url": "https://api.openai.com",
-                "type": "openai",
+                "type": "openai--chat_completions",
             },
         },
         "models": {"gpt-4o": "openai"},
@@ -63,7 +63,7 @@ class TestUnifiedProviderEmbeddingRerank:
         raw["providers"]["jina"] = {
             "api_key": "jina-test",
             "base_url": "https://api.jina.ai",
-            "type": "openai",
+            "type": "openai--chat_completions",
             "rerank_format": "jina",
             "rerank_path": "/v1/rerank",
         }
@@ -92,7 +92,7 @@ class TestUnifiedProviderEmbeddingRerank:
         raw["providers"]["jina"] = {
             "api_key": "jina-test",
             "base_url": "https://api.jina.ai",
-            "type": "openai",
+            "type": "openai--chat_completions",
             "rerank_format": "jina",
         }
         cfg = GatewayConfig(raw)
@@ -236,7 +236,7 @@ class TestLegacyBackwardCompat:
         raw["providers"]["cohere"] = {
             "api_key": "new-key",
             "base_url": "https://api.cohere.com",
-            "type": "openai",
+            "type": "openai--chat_completions",
             "rerank_format": "cohere",
             "rerank_path": "/v2/rerank",
         }
@@ -278,7 +278,7 @@ class TestModelTypeField:
         raw["providers"]["jina"] = {
             "api_key": "jina-test",
             "base_url": "https://api.jina.ai",
-            "type": "openai",
+            "type": "openai--chat_completions",
             "rerank_format": "jina",
         }
         raw["models"]["jina-reranker"] = {
@@ -325,7 +325,7 @@ class TestModelTypeField:
         raw["providers"]["jina"] = {
             "api_key": "jina-test",
             "base_url": "https://api.jina.ai",
-            "type": "openai",
+            "type": "openai--chat_completions",
             "rerank_format": "jina",
             "rerank_path": "/v1/rerank",
         }
@@ -360,7 +360,7 @@ class TestMultiCapProvider:
         raw["providers"]["cohere"] = {
             "api_key": "co-test",
             "base_url": "https://api.cohere.com",
-            "type": "openai",
+            "type": "openai--chat_completions",
             "embeddings_format": "cohere",
             "embeddings_path": "/v2/embed",
             "rerank_format": "cohere",

@@ -838,24 +838,24 @@ GOOGLE_COMPOUND_TEXT_FINISH: list[dict[str, Any]] = [
 ROUNDTRIP_CASES = [
     # Basic cases
     ("messages", "basic", ANTHROPIC_BASIC),
-    ("openai_chat", "basic", OPENAI_CHAT_BASIC),
-    ("openai_responses", "basic", OPENAI_RESPONSES_BASIC),
-    ("google", "basic", GOOGLE_BASIC),
+    ("chat_completions", "basic", OPENAI_CHAT_BASIC),
+    ("openai--open_responses", "basic", OPENAI_RESPONSES_BASIC),
+    ("google_generate", "basic", GOOGLE_BASIC),
     # Anthropic edge cases
     ("messages", "thinking+tool", ANTHROPIC_THINKING_TOOL),
     ("messages", "no-initial-usage", ANTHROPIC_NO_INITIAL_USAGE),
     ("messages", "finish-no-usage", ANTHROPIC_FINISH_NO_USAGE),
     # OpenAI Chat edge cases
-    ("openai_chat", "tool-calls", OPENAI_CHAT_TOOL_CALLS),
-    ("openai_chat", "reasoning", OPENAI_CHAT_REASONING),
-    ("openai_chat", "role-empty-content", OPENAI_CHAT_ROLE_EMPTY_CONTENT),
+    ("chat_completions", "tool-calls", OPENAI_CHAT_TOOL_CALLS),
+    ("chat_completions", "reasoning", OPENAI_CHAT_REASONING),
+    ("chat_completions", "role-empty-content", OPENAI_CHAT_ROLE_EMPTY_CONTENT),
     # Google edge cases
-    ("google", "tool-call", GOOGLE_TOOL_CALL),
-    ("google", "thinking", GOOGLE_THINKING),
-    ("google", "no-empty-text", GOOGLE_NO_EMPTY_TEXT),
-    ("google", "compound-text-finish", GOOGLE_COMPOUND_TEXT_FINISH),
+    ("google_generate", "tool-call", GOOGLE_TOOL_CALL),
+    ("google_generate", "thinking", GOOGLE_THINKING),
+    ("google_generate", "no-empty-text", GOOGLE_NO_EMPTY_TEXT),
+    ("google_generate", "compound-text-finish", GOOGLE_COMPOUND_TEXT_FINISH),
     # OpenAI Responses edge cases
-    ("openai_responses", "tool-call", OPENAI_RESPONSES_TOOL_CALL),
+    ("openai--open_responses", "tool-call", OPENAI_RESPONSES_TOOL_CALL),
 ]
 
 

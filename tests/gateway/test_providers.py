@@ -104,7 +104,7 @@ class TestKeylessProvider:
 
     def test_free_shim_sends_no_auth(self, keyless_shim):
         load_providers()
-        info = build_provider_info("openai_chat", {}, shim_name=keyless_shim)
+        info = build_provider_info("chat_completions", {}, shim_name=keyless_shim)
 
         assert info.auth_headers() == {}
         assert info.ready is True
@@ -114,7 +114,7 @@ class TestKeylessProvider:
     def test_free_shim_with_key_sends_bearer(self, keyless_shim):
         load_providers()
         info = build_provider_info(
-            "openai_chat", {"api_key": "sk-x"}, shim_name=keyless_shim
+            "chat_completions", {"api_key": "sk-x"}, shim_name=keyless_shim
         )
 
         assert info.auth_headers() == {"Authorization": "Bearer sk-x"}
@@ -123,7 +123,7 @@ class TestKeylessProvider:
     def test_non_keyless_provider_without_key_still_raises(self):
         load_providers()
         info = build_provider_info(
-            "openai_chat", {"api_key": "", "base_url": "https://x/v1"}
+            "chat_completions", {"api_key": "", "base_url": "https://x/v1"}
         )
 
         with pytest.raises(ValueError, match="No API keys configured"):
@@ -134,7 +134,7 @@ class TestKeylessProvider:
         the command (and its dynamic credential) must not be dropped."""
         load_providers()
         info = build_provider_info(
-            "openai_chat",
+            "chat_completions",
             {"token_command": ["echo", "tok"]},
             shim_name=keyless_shim,
         )
@@ -196,7 +196,7 @@ class TestKeylessProvider:
         """An empty base_url string must not shadow the shim's default."""
         load_providers()
         info = build_provider_info(
-            "openai_chat",
+            "chat_completions",
             {"api_key": "sk-x", "base_url": ""},
             shim_name=keyless_shim,
         )
@@ -211,7 +211,7 @@ class TestKeylessProvider:
         load_providers()
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
 
-        info = build_provider_info("openai_chat", {}, shim_name=keyless_shim)
+        info = build_provider_info("chat_completions", {}, shim_name=keyless_shim)
 
         assert info.keyless is True
         assert info.auth_headers() == {}
@@ -222,7 +222,7 @@ class TestKeylessProvider:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
 
         info = build_provider_info(
-            "openai_chat", {"api_key": "", "base_url": "https://x/v1"}
+            "chat_completions", {"api_key": "", "base_url": "https://x/v1"}
         )
 
         assert info.keyless is False
@@ -238,7 +238,7 @@ class TestKeylessProvider:
         load_providers()
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
 
-        info = build_provider_info("openai_chat", {"base_url": "https://x/v1"})
+        info = build_provider_info("chat_completions", {"base_url": "https://x/v1"})
 
         with pytest.raises(ValueError, match="No API keys configured"):
             info.auth_headers()
@@ -323,7 +323,7 @@ class TestShimDeclaredTokenCommand:
 
     def test_the_declared_command_is_the_default(self, vendor_shim):
         """A provider needs no token_command of its own to use the shim's."""
-        info = build_provider_info("openai_chat", {}, shim_name=vendor_shim)
+        info = build_provider_info("chat_completions", {}, shim_name=vendor_shim)
 
         assert info.token_command == ["python3", "-c", "print('minted')"]
         assert info.token_refresh_interval == 7200
@@ -332,7 +332,7 @@ class TestShimDeclaredTokenCommand:
 
     def test_the_providers_own_command_wins(self, vendor_shim):
         info = build_provider_info(
-            "openai_chat",
+            "chat_completions",
             {"token_command": ["acme-token", "--json"]},
             shim_name=vendor_shim,
         )
@@ -344,7 +344,7 @@ class TestShimDeclaredTokenCommand:
 
     def test_the_interval_can_be_overridden(self, vendor_shim):
         info = build_provider_info(
-            "openai_chat", {"token_refresh_interval": 120}, shim_name=vendor_shim
+            "chat_completions", {"token_refresh_interval": 120}, shim_name=vendor_shim
         )
 
         assert info.token_refresh_interval == 120
@@ -353,7 +353,7 @@ class TestShimDeclaredTokenCommand:
         """The command owns the credential, so the env default must stay out."""
         monkeypatch.setenv("VENDOR_API_KEY", "sk-from-the-environment")
 
-        info = build_provider_info("openai_chat", {}, shim_name=vendor_shim)
+        info = build_provider_info("chat_completions", {}, shim_name=vendor_shim)
 
         assert info.token_command == ["python3", "-c", "print('minted')"]
         assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)

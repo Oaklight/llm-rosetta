@@ -218,7 +218,7 @@ class TestMigrationV0ToV1:
                 "openai": {
                     "api_key": "sk-test",
                     "base_url": "https://api.openai.com",
-                    "type": "openai",
+                    "type": "openai--chat_completions",
                 }
             },
             "models": {"gpt-4o": "openai"},
@@ -451,7 +451,7 @@ class TestMigrationV3ToV4:
             "config_version": 3,
             "providers": {
                 "sf": {
-                    "type": "openai",
+                    "type": "openai--chat_completions",
                     "api_key": "sk-sf",
                     "base_url": "https://sf.test",
                     "embeddings_format": "openai",
@@ -468,7 +468,7 @@ class TestMigrationV3ToV4:
             "config_version": 3,
             "providers": {
                 "oa": {
-                    "type": "openai",
+                    "type": "openai--chat_completions",
                     "api_key": "sk-oa",
                     "base_url": "https://oa.test",
                     "decisions_format": "openai_decisions",
@@ -576,7 +576,7 @@ class TestConfigIOIntegration:
             "config_version": 3,
             "providers": {
                 "sf": {
-                    "type": "openai",
+                    "type": "openai--chat_completions",
                     "api_key": "sk-sf",
                     "base_url": "https://sf.test",
                     "embeddings_format": "openai",

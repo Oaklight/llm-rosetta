@@ -73,7 +73,7 @@ class TestAllowedToolsToolChoice:
     def test_lossless_to_openai_profile(self):
         out = convert(
             self._body(),
-            "openai_responses",
+            "openai--open_responses",
             source_provider="open_responses",
             baseline=False,
         )
@@ -112,7 +112,7 @@ class TestAllowedToolsToolChoice:
         assert "provider_extensions" not in ir
 
     def test_cross_format_drop_warns_the_restriction_is_lost(self):
-        pipe = ConversionPipeline("open_responses", "openai_chat", baseline=False)
+        pipe = ConversionPipeline("open_responses", "chat_completions", baseline=False)
         pipe.convert_request(self._body())
         assert any(
             "allowed_tools" in w and "any declared tool" in w for w in pipe.warnings
@@ -121,7 +121,7 @@ class TestAllowedToolsToolChoice:
     def test_no_leak_onto_openai_chat(self):
         out = convert(
             self._body(),
-            "openai_chat",
+            "chat_completions",
             source_provider="open_responses",
             baseline=False,
         )
@@ -234,7 +234,7 @@ class TestCompaction:
         # the provider-bound blob is replayed.
         out = convert(
             self._body(),
-            "openai_responses",
+            "openai--open_responses",
             source_provider="open_responses",
             baseline=False,
         )

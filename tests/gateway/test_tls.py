@@ -23,7 +23,7 @@ def _minimal_raw(**server_overrides) -> dict:
             "test": {
                 "api_key": "sk-test",
                 "base_url": "https://api.example.com",
-                "type": "openai",
+                "type": "openai--chat_completions",
             }
         },
         "models": {"gpt-test": "test"},

@@ -46,8 +46,8 @@ def _make_provider(
 
 
 def _make_route(
-    source: ProviderType = "openai_chat",
-    target: ProviderType = "openai_chat",
+    source: ProviderType = "chat_completions",
+    target: ProviderType = "chat_completions",
 ) -> ResolvedRoute:
     return ResolvedRoute(
         source_provider=source,

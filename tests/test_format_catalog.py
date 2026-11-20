@@ -44,7 +44,7 @@ def test_llm_specs_carry_a_route_and_an_sse_key():
         if spec.model_type != "llm" or spec.upstream_only:
             continue
         assert spec.route_path, spec.format
-        assert spec.sse in SSE_FORMATTERS, spec.format
+        assert spec.format in SSE_FORMATTERS, spec.format
 
 
 def test_an_upstream_only_format_carries_no_source_surface():

@@ -47,11 +47,11 @@ class TestPipelineProfile:
         }
 
     def test_profile_empty_before_conversion(self):
-        pipeline = ConversionPipeline("openai_chat", "messages")
+        pipeline = ConversionPipeline("chat_completions", "messages")
         assert pipeline.profile == {}
 
     def test_profile_populated_after_convert_request(self):
-        pipeline = ConversionPipeline("openai_chat", "messages")
+        pipeline = ConversionPipeline("chat_completions", "messages")
         pipeline.convert_request(self._make_simple_request())
 
         p = pipeline.profile
@@ -76,7 +76,7 @@ class TestPipelineProfile:
         )
 
     def test_profile_populated_after_convert_response(self):
-        pipeline = ConversionPipeline("openai_chat", "messages")
+        pipeline = ConversionPipeline("chat_completions", "messages")
         pipeline.convert_request(self._make_simple_request())
         pipeline.convert_response(self._make_simple_response())
 
@@ -93,7 +93,7 @@ class TestPipelineProfile:
         )
 
     def test_profile_has_all_keys_after_full_roundtrip(self):
-        pipeline = ConversionPipeline("openai_chat", "messages")
+        pipeline = ConversionPipeline("chat_completions", "messages")
         pipeline.convert_request(self._make_simple_request())
         pipeline.convert_response(self._make_simple_response())
 
@@ -111,7 +111,7 @@ class TestPipelineProfile:
 
     def test_same_format_conversion(self):
         """Profile is populated even for same-format conversion."""
-        pipeline = ConversionPipeline("openai_chat", "openai_chat")
+        pipeline = ConversionPipeline("chat_completions", "chat_completions")
         pipeline.convert_request(self._make_simple_request())
 
         p = pipeline.profile

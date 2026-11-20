@@ -50,22 +50,22 @@ def keyless_shim():
 
 PROVIDERS = {
     "chat_a": {
-        "type": "openai_chat",
+        "type": "chat_completions",
         "api_key": "sk-a",
         "base_url": "https://a.example.com",
     },
     "chat_b": {
-        "type": "openai_chat",
+        "type": "chat_completions",
         "api_key": "sk-b",
         "base_url": "https://b.example.com",
     },
     "resp_a": {
-        "type": "openai_responses",
+        "type": "openai--open_responses",
         "api_key": "sk-c",
         "base_url": "https://c.example.com",
     },
     "resp_b": {
-        "type": "openai_responses",
+        "type": "openai--open_responses",
         "api_key": "sk-d",
         "base_url": "https://d.example.com",
     },
@@ -179,7 +179,7 @@ class TestFormatAffinity:
             == "resp_a"
         )
         assert (
-            config.resolve(config.selection_context("m", "openai_chat"))[
+            config.resolve(config.selection_context("m", "chat_completions"))[
                 0
             ].provider_name
             == "chat_a"
@@ -202,7 +202,7 @@ class TestFormatAffinity:
             {"m": {"providers": ["chat_a", "chat_b"]}}, prefer_same_format=True
         )
         picked = [
-            config.resolve(config.selection_context("m", "openai_chat"))[
+            config.resolve(config.selection_context("m", "chat_completions"))[
                 0
             ].provider_name
             for _ in range(10)
@@ -232,7 +232,7 @@ class TestFormatAffinity:
             {"m": {"providers": ["chat_a", "chat_b"]}}, prefer_same_format=True
         )
         for _ in range(3):
-            homogeneous.resolve(homogeneous.selection_context("m", "openai_chat"))
+            homogeneous.resolve(homogeneous.selection_context("m", "chat_completions"))
         assert scans == []
 
         mixed = _make_config(

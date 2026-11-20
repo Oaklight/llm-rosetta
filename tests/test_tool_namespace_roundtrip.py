@@ -720,7 +720,7 @@ class TestRestoreAgainstAGroupedTarget:
 
 class TestNamespaceRoundTrip:
     def test_tools_reach_upstream_flattened(self):
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         upstream = pipe.convert_request(
             _request(_namespace_container("agents", "spawn_agent"))
         )
@@ -728,7 +728,7 @@ class TestNamespaceRoundTrip:
         assert names == ["spawn_agent"]
 
     def test_non_streaming_restores_namespace(self):
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         pipe.convert_request(_request(_namespace_container("agents", "spawn_agent")))
         out = pipe.convert_response(_chat_completion("spawn_agent"))
 
@@ -738,7 +738,7 @@ class TestNamespaceRoundTrip:
         assert calls[0]["namespace"] == "agents"
 
     def test_streaming_restores_namespace_at_every_item(self):
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         pipe.convert_request(
             _request(_namespace_container("agents", "spawn_agent"), stream=True)
         )
@@ -760,7 +760,7 @@ class TestNamespaceRoundTrip:
 
     def test_collision_rename_is_reversed(self):
         """A name colliding across namespaces is qualified upstream, bare back."""
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         upstream = pipe.convert_request(
             _request(
                 _namespace_container("functions", "wait"),
@@ -787,7 +787,7 @@ class TestNamespaceRoundTrip:
         history item is qualified to match, the assistant message names a
         function that is not in the request's tool list.
         """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         request = _request(
             _namespace_container("functions", "wait"),
             _namespace_container("agents", "wait"),
@@ -833,7 +833,7 @@ class TestNamespaceRoundTrip:
         back out, so a ``custom_tool_call`` reached the client bare and
         unattributable.
         """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         pipe.convert_request(
             _request(
                 _custom_namespace_container("a", "edit"),
@@ -849,7 +849,7 @@ class TestNamespaceRoundTrip:
 
     def test_custom_tool_call_namespace_survives_a_second_turn(self):
         """The namespace the client echoes back must re-qualify the history."""
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         request = _request(
             _custom_namespace_container("a", "edit"),
             _custom_namespace_container("b", "edit"),
@@ -881,7 +881,7 @@ class TestNamespaceRoundTrip:
         assert called == ["b_edit"]
 
     def test_streaming_custom_tool_call_restores_namespace(self):
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         pipe.convert_request(
             _request(
                 _custom_namespace_container("a", "edit"),
@@ -906,7 +906,7 @@ class TestNamespaceRoundTrip:
             assert item.get("namespace") == "b", event_type
 
     def test_ambiguous_tool_choice_warns_instead_of_guessing(self):
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         request = _request(
             _namespace_container("functions", "wait"),
             _namespace_container("agents", "wait"),
@@ -929,7 +929,7 @@ class TestNamespaceRoundTrip:
         :class:`ConversionPipeline` rather than calling the helper directly —
         a unit test cannot see a caller that skips the call.
         """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         request: dict[str, Any] = {
             "model": "test-model",
             "input": [
@@ -949,7 +949,7 @@ class TestNamespaceRoundTrip:
         )
 
     def test_valid_tool_choice_stays_quiet_with_no_namespaces_in_play(self):
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         request: dict[str, Any] = {
             "model": "test-model",
             "input": [
@@ -967,7 +967,7 @@ class TestNamespaceRoundTrip:
         assert pipe.warnings == [], pipe.warnings
 
     def test_ambiguous_allowed_tools_warns_through_the_pipeline(self):
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         request = _request(
             _namespace_container("functions", "wait"),
             _namespace_container("agents", "wait"),
@@ -1009,7 +1009,7 @@ class TestNamespaceRoundTrip:
 
     def test_history_call_dropping_its_namespace_warns(self):
         """A client that ignores the namespace field we added still gets told."""
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         pipe.convert_request(self._with_history(("wait", None)))
 
         assert any("A history tool call names 'wait'" in w for w in pipe.warnings), (
@@ -1017,13 +1017,13 @@ class TestNamespaceRoundTrip:
         )
 
     def test_repeated_history_calls_warn_once(self):
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         pipe.convert_request(self._with_history(*[("wait", None)] * 3))
 
         assert sum("A history tool call" in w for w in pipe.warnings) == 1
 
     def test_history_call_keeping_its_namespace_is_silent(self):
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         pipe.convert_request(self._with_history(("wait", "agents")))
 
         assert not [w for w in pipe.warnings if "A history tool call" in w]
@@ -1036,7 +1036,7 @@ class TestNamespaceRoundTrip:
         top-level tool's own upstream name.  Warning here would fire on the
         commonest way the two kinds of tool coexist.
         """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         request = _request(_namespace_container("agents", "wait"))
         request["tools"] = [{"type": "function", "name": "wait", "parameters": {}}]
         request["input"] += [
@@ -1076,7 +1076,7 @@ class TestNamespaceRoundTrip:
         meant it would have named that container.  Only asking whether a
         *top-level* tool claims the name tells that apart.
         """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         request = _request(
             _namespace_container("", "a"),
             _namespace_container("other", "a"),
@@ -1119,7 +1119,7 @@ class TestNamespaceRoundTrip:
             ("no name key", {"type": "namespace", "tools": []}),
         ):
             container = {**container, "tools": _namespace_container("z", "a")["tools"]}
-            pipe = ConversionPipeline("openai_responses", "openai_chat")
+            pipe = ConversionPipeline("openai--open_responses", "chat_completions")
             request = _request(container, _namespace_container("x", "a"))
             request["input"] += [
                 {
@@ -1156,7 +1156,7 @@ class TestNamespaceRoundTrip:
         so there is nothing for it to echo and the call simply cannot be
         attributed.  Saying so is the honest answer.
         """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         other = _nameless_container("a")
         other["tools"][0]["description"] = "The other a tool."
         request = _request(_nameless_container("a"), other)
@@ -1174,7 +1174,7 @@ class TestNamespaceRoundTrip:
 
     def test_history_call_for_an_undeclared_tool_is_silent(self):
         """The client's own stale history is not ours to complain about."""
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         pipe.convert_request(self._with_history(("some_retired_tool", None)))
 
         assert not [w for w in pipe.warnings if "A history tool call" in w]
@@ -1195,7 +1195,7 @@ class TestNamespaceRoundTrip:
         ):
             container = dict(container)
             container["tools"] = _namespace_container("x", "wait")["tools"]
-            pipe = ConversionPipeline("openai_responses", "openai_chat")
+            pipe = ConversionPipeline("openai--open_responses", "chat_completions")
             request = _request(container)
             request["tools"] = [{"type": "function", "name": "wait", "parameters": {}}]
 
@@ -1233,7 +1233,7 @@ class TestNamespaceRoundTrip:
         The malformed container is still reported, and the response leg has
         nothing left to be contested about: one tool answers to ``wait``.
         """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         request = _request(_nameless_container("wait"), _nameless_container("wait"))
 
         upstream = pipe.convert_request(request)
@@ -1264,7 +1264,7 @@ class TestNamespaceRoundTrip:
         two spellings name the same thing and their identical children are one
         duplicate.
         """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         request = _request(
             _namespace_container(" ", "wait"), _namespace_container("", "wait")
         )
@@ -1283,7 +1283,7 @@ class TestNamespaceRoundTrip:
         on the fallback itself would fire on every ordinary call, which is why
         the contested names are recorded at build time instead.
         """
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         # A namespaced tool as well, so the map is non-empty and the restore
         # actually runs — with only plain tools it short-circuits and the
         # check below would pass without proving anything.
@@ -1300,7 +1300,7 @@ class TestNamespaceRoundTrip:
 
     def test_name_map_is_built_once_and_reused(self):
         """Response and streaming legs must use the request leg's own map."""
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         pipe.convert_request(_request(_namespace_container("agents", "wait")))
         built = pipe._name_map
 
@@ -1309,7 +1309,7 @@ class TestNamespaceRoundTrip:
         assert pipe._name_map is built
 
     def test_non_namespaced_tools_get_no_namespace(self):
-        pipe = ConversionPipeline("openai_responses", "openai_chat")
+        pipe = ConversionPipeline("openai--open_responses", "chat_completions")
         pipe.convert_request(
             {
                 "model": "test-model",

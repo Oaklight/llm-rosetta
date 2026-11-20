@@ -52,7 +52,10 @@ def _bare_config(providers: list[str]) -> GatewayConfig:
     return GatewayConfig(
         {
             "providers": {
-                name: {"type": "openai", "base_url": f"https://{name}.test"}
+                name: {
+                    "type": "openai--chat_completions",
+                    "base_url": f"https://{name}.test",
+                }
                 for name in providers
             },
             "models": {"m": {"providers": providers}},
@@ -82,8 +85,14 @@ class TestTheParsedEntry:
         config = GatewayConfig(
             {
                 "providers": {
-                    "a": {"type": "openai", "base_url": "https://a.test"},
-                    "b": {"type": "openai", "base_url": "https://b.test"},
+                    "a": {
+                        "type": "openai--chat_completions",
+                        "base_url": "https://a.test",
+                    },
+                    "b": {
+                        "type": "openai--chat_completions",
+                        "base_url": "https://b.test",
+                    },
                 },
                 "models": {
                     "m": {
@@ -104,7 +113,12 @@ class TestTheParsedEntry:
     def test_an_entry_without_the_field_declares_nothing(self):
         config = GatewayConfig(
             {
-                "providers": {"a": {"type": "openai", "base_url": "https://a.test"}},
+                "providers": {
+                    "a": {
+                        "type": "openai--chat_completions",
+                        "base_url": "https://a.test",
+                    }
+                },
                 "models": {"m": {"providers": ["a"]}},
             }
         )
@@ -116,7 +130,10 @@ class TestTheParsedEntry:
             GatewayConfig(
                 {
                     "providers": {
-                        "a": {"type": "openai", "base_url": "https://a.test"}
+                        "a": {
+                            "type": "openai--chat_completions",
+                            "base_url": "https://a.test",
+                        }
                     },
                     "models": {
                         "m": {"providers": [{"name": "a", "capabilities": "vision"}]}
@@ -303,7 +320,12 @@ class TestTheEdge:
 
         config = GatewayConfig(
             {
-                "providers": {"a": {"type": "openai", "base_url": "https://a.test"}},
+                "providers": {
+                    "a": {
+                        "type": "openai--chat_completions",
+                        "base_url": "https://a.test",
+                    }
+                },
                 "models": {"m": {"providers": ["a"]}},
             }
         )

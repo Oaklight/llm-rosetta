@@ -83,7 +83,7 @@ def test_proxy_handler_forwards_user_agent_to_non_streaming_proxy(monkeypatch):
             return (
                 ResolvedRoute(
                     source_provider=ctx.source_format,
-                    target_provider="openai_chat",
+                    target_provider="chat_completions",
                     provider_name="test-provider",
                 ),
                 MagicMock(),
@@ -111,7 +111,7 @@ def test_proxy_handler_forwards_user_agent_to_non_streaming_proxy(monkeypatch):
     request.app.persistence = None
     request.app.profiler_state = None
 
-    response = asyncio.run(app_module._proxy_handler(request, "openai_chat"))
+    response = asyncio.run(app_module._proxy_handler(request, "chat_completions"))
 
     assert response.status_code == 200
     assert captured_headers["User-Agent"] == "codex-cli/1.2.3"

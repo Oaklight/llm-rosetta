@@ -176,12 +176,12 @@ class TestRerankConfig:
 
         raw = {
             "providers": {
-                "openai_chat": {
+                "chat_completions": {
                     "api_key": "sk-test",
                     "base_url": "https://api.openai.com/v1",
                 }
             },
-            "models": {"gpt-4o": "openai_chat"},
+            "models": {"gpt-4o": "chat_completions"},
             "rerank_providers": {
                 "jina": {
                     "api_key": "jina-key",
@@ -233,12 +233,12 @@ class TestRerankConfig:
 
         raw = {
             "providers": {
-                "openai_chat": {
+                "chat_completions": {
                     "api_key": "sk-test",
                     "base_url": "https://api.openai.com/v1",
                 }
             },
-            "models": {"gpt-4o": "openai_chat"},
+            "models": {"gpt-4o": "chat_completions"},
             "rerank_providers": {
                 "jina": {
                     "api_key": "jina-key",
@@ -262,12 +262,12 @@ class TestRerankConfig:
 
         raw = {
             "providers": {
-                "openai_chat": {
+                "chat_completions": {
                     "api_key": "sk-test",
                     "base_url": "https://api.openai.com/v1",
                 }
             },
-            "models": {"gpt-4o": "openai_chat"},
+            "models": {"gpt-4o": "chat_completions"},
             "rerank_providers": {},
             "rerank_models": {},
         }
@@ -280,12 +280,12 @@ class TestRerankConfig:
 
         raw = {
             "providers": {
-                "openai_chat": {
+                "chat_completions": {
                     "api_key": "sk-test",
                     "base_url": "https://api.openai.com/v1",
                 }
             },
-            "models": {"gpt-4o": "openai_chat"},
+            "models": {"gpt-4o": "chat_completions"},
         }
         config = GatewayConfig(raw)
         assert config.rerank_providers == {}
@@ -297,12 +297,12 @@ class TestRerankConfig:
 
         raw = {
             "providers": {
-                "openai_chat": {
+                "chat_completions": {
                     "api_key": "sk-test",
                     "base_url": "https://api.openai.com/v1",
                 }
             },
-            "models": {"gpt-4o": "openai_chat"},
+            "models": {"gpt-4o": "chat_completions"},
             "rerank_providers": {
                 "jina": {
                     "api_key": "key",
@@ -338,12 +338,12 @@ class TestDetectSourceFormat:
         return GatewayConfig(
             {
                 "providers": {
-                    "openai_chat": {
+                    "chat_completions": {
                         "api_key": "sk-test",
                         "base_url": "https://api.openai.com/v1",
                     }
                 },
-                "models": {"gpt-4o": "openai_chat"},
+                "models": {"gpt-4o": "chat_completions"},
             }
         )
 

@@ -36,7 +36,7 @@ def _minimal_raw(**debug_overrides) -> dict:
             "test": {
                 "api_key": "***",
                 "base_url": "https://api.example.com",
-                "type": "openai",
+                "type": "openai--chat_completions",
             }
         },
         "models": {"gpt-test": "test"},

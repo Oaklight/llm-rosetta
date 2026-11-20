@@ -57,7 +57,7 @@ class TestChatCompletions:
 
     def test_legacy_format_names_read_the_same_body(self):
         body = {"tools": [{"type": "function", "function": {"name": "exec"}}]}
-        assert _names(read_tool_declarations("openai_chat", body)) == ["exec"]
+        assert _names(read_tool_declarations("chat_completions", body)) == ["exec"]
 
 
 class TestMessages:
@@ -136,7 +136,7 @@ class TestGoogleGenerate:
 
     def test_the_legacy_google_spelling_reads_the_same_body(self):
         body = {"tools": [{"functionDeclarations": [{"name": "one"}]}]}
-        assert _names(read_tool_declarations("google", body)) == ["one"]
+        assert _names(read_tool_declarations("google_generate", body)) == ["one"]
 
 
 class TestGoogleInteractions:

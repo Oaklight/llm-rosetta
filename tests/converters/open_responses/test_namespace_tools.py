@@ -371,7 +371,7 @@ class TestNamespaceRequestConversion:
                 }
             ],
         }
-        pipe = ConversionPipeline("openai_responses", "openai_responses")
+        pipe = ConversionPipeline("openai--open_responses", "openai--open_responses")
         upstream = pipe.convert_request(request)
 
         assert "name" not in upstream["tools"][0], upstream["tools"][0]
@@ -509,7 +509,7 @@ class TestNamespaceRequestConversion:
         """Namespace tools survive Responses → Chat Completions conversion."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_responses", "openai_chat")
+        pipeline = ConversionPipeline("openai--open_responses", "chat_completions")
         request = {
             "model": "gpt-5",
             "tools": [
@@ -546,7 +546,7 @@ class TestNamespaceRequestConversion:
         """Namespace tools survive Responses → Anthropic conversion."""
         from llm_rosetta.pipeline import ConversionPipeline
 
-        pipeline = ConversionPipeline("openai_responses", "messages")
+        pipeline = ConversionPipeline("openai--open_responses", "messages")
         request = {
             "model": "gpt-5",
             "tools": [

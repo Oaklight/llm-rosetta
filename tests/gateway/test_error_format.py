@@ -59,19 +59,19 @@ class TestDetectApiFormat:
 
 class TestDetectApiFormatFromProvider:
     def test_openai_chat(self):
-        assert detect_api_format_from_provider("openai_chat") == "openai"
+        assert detect_api_format_from_provider("chat_completions") == "openai"
 
     def test_openai_responses(self):
-        assert detect_api_format_from_provider("openai_responses") == "openai"
+        assert detect_api_format_from_provider("open_responses") == "openai"
 
     def test_open_responses(self):
         assert detect_api_format_from_provider("open_responses") == "openai"
 
     def test_anthropic(self):
-        assert detect_api_format_from_provider("anthropic") == "anthropic"
+        assert detect_api_format_from_provider("messages") == "anthropic"
 
     def test_google(self):
-        assert detect_api_format_from_provider("google") == "google"
+        assert detect_api_format_from_provider("google_generate") == "google"
 
     def test_google_generate(self):
         assert detect_api_format_from_provider("google_generate") == "google"
@@ -318,7 +318,7 @@ class TestProxyParity:
 
     def test_openai_chat(self):
         resp = format_error_response(
-            detect_api_format_from_provider("openai_chat"), 400, "test"
+            detect_api_format_from_provider("chat_completions"), 400, "test"
         )
         body = json.loads(resp.body)
         assert body["error"]["type"] == "invalid_request_error"
@@ -326,7 +326,7 @@ class TestProxyParity:
 
     def test_openai_responses(self):
         resp = format_error_response(
-            detect_api_format_from_provider("openai_responses"), 400, "test"
+            detect_api_format_from_provider("open_responses"), 400, "test"
         )
         body = json.loads(resp.body)
         assert body["error"]["type"] == "invalid_request_error"
@@ -334,7 +334,7 @@ class TestProxyParity:
 
     def test_anthropic(self):
         resp = format_error_response(
-            detect_api_format_from_provider("anthropic"), 400, "test"
+            detect_api_format_from_provider("messages"), 400, "test"
         )
         body = json.loads(resp.body)
         assert body["type"] == "error"
@@ -342,7 +342,7 @@ class TestProxyParity:
 
     def test_google(self):
         resp = format_error_response(
-            detect_api_format_from_provider("google"), 502, "upstream error"
+            detect_api_format_from_provider("google_generate"), 502, "upstream error"
         )
         body = json.loads(resp.body)
         assert body["error"]["code"] == 502
