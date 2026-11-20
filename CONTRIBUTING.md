@@ -125,8 +125,10 @@ as the report prints it in `(allow entry: ...)`, for example
 `decorator-census:property` (`decorator-census:@property` is accepted too); the
 census counts across all files, so that entry is not tied to a path. A bare `qualified.name` is
 rejected, because it would excuse the name in every file. The `Pure move` workflow runs the same
-check on pull requests titled `refactor(...)` or labelled `pure-move`, including
-when the label is added or the title edited after the PR was opened. It reads
+check on pull requests labelled `pure-move` (not on `refactor(` titles: a refactor
+is often not a pure move), including
+when the label is added or removed after the PR was opened. The label is created
+once with `gh label create pure-move --color 57606A --description "PR only moves code; runs the pure-move CI check"`. It reads
 `.github/pure-move-allow.txt` from the **base branch**, so a PR cannot exempt
 itself: land the allow-file entry first, in its own reviewed change.
 
