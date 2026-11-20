@@ -166,13 +166,16 @@ supported format and forwards them to any configured upstream provider.
 
 ### Host surface
 
-`llm_rosetta.api` is the small public surface that the gateway and shim authors import (#1630): re-exports only, a literal `__all__` grouped by capability. The four contract modules `llm_rosetta.shims.auth_exchange`, `llm_rosetta.shims.quota_probe`, `llm_rosetta.routing` and `llm_rosetta.observability.usage` stay where they are and are not re-exported. Within one minor it only gains names; a rename or removal keeps a deprecated alias for one minor. Core must never import `llm_rosetta.api` (`tests/test_core_import_boundary.py`).
+`llm_rosetta.api` is the small public surface that the gateway and shim authors import (#1630): re-exports only, a literal `__all__` grouped by capability. The four contract modules `llm_rosetta.shims.auth_exchange`, `llm_rosetta.shims.quota_probe`, `llm_rosetta.routing` and `llm_rosetta.observability.usage` stay where they are and are not re-exported. Within one minor it only gains names; a rename or removal keeps a deprecated alias for one minor. `SURFACE_VERSION` (an int) rises on a removal or a changed meaning, never on an addition; the gateway asserts a minimum of it at startup (`llm_rosetta_gateway/surface.py`). 0.14.0 is the release of the surface: the gateway pin stays `llm-rosetta>=X.Y.0.dev0,<X.(Y+1)` and no bigger version bump is needed. Core must never import `llm_rosetta.api` (`tests/test_core_import_boundary.py`).
 
 The gateway reaches core only through a named surface: `llm_rosetta.api`, `llm_rosetta.shims.auth_exchange`, `llm_rosetta.shims.quota_probe`,
 `llm_rosetta.routing`, and the `llm_rosetta.observability.usage` package (never
 its submodules).  `tests/gateway/test_core_surface_boundary.py` enforces this
-over every gateway file, `admin/` included.  Imports outside the surface sit on
-a shrinking legacy allowlist; do not add to it, use the surface.  See #1630.
+over every gateway file, `admin/` included.  The rule is strict: there is
+no allowlist for the gateway source, and a private core name is never allowed.
+A missing capability becomes an additive name on `llm_rosetta.api` with a test.
+Gateway tests may import non-private internal modules but not private names;
+`_TESTS_PRIVATE_ALLOWLIST` in the same file can only shrink.  See #1630.
 
 ### Admin boundary
 
