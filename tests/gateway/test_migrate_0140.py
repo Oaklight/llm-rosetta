@@ -488,6 +488,24 @@ def test_db_write_refuses_while_a_process_holds_the_file(tmp_path, monkeypatch) 
     assert [p.name for p in tmp_path.iterdir()] == ["gateway.db"]
 
 
+def test_db_write_with_force_against_a_lock_exits_2_with_one_line(
+    tmp_path, capsys
+) -> None:
+    db = tmp_path / "gateway.db"
+    _make_db(db)
+    holder = sqlite3.connect(db, isolation_level=None)
+    holder.execute("BEGIN IMMEDIATE")
+    try:
+        code = mig.main(["--db", str(db), "--write", "--force"])
+    finally:
+        holder.execute("ROLLBACK")
+        holder.close()
+    assert code == 2
+    lines = [x for x in capsys.readouterr().err.splitlines() if x]
+    assert len(lines) == 1
+    assert "locked by another writer" in lines[0] and "--force" in lines[0]
+
+
 def test_db_write_refuses_while_another_connection_writes(tmp_path) -> None:
     db = tmp_path / "gateway.db"
     _make_db(db)
