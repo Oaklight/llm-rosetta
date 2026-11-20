@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from llm_rosetta.converters.base.helpers.tool_group import (
+from llm_rosetta.ir.primitives.tool_group import (
     GENERATED_GROUP_ID_LENGTH,
     ToolGroup,
     generated_group_id,

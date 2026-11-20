@@ -15,7 +15,7 @@ kind with no output item is dropped silently.
 
 from typing import Any, cast
 
-from llm_rosetta.converters.base.tools.intrinsic import get_intrinsic_kind
+from llm_rosetta.ir.tools.intrinsic import get_intrinsic_kind
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter

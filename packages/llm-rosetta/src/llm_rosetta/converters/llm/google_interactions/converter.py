@@ -54,7 +54,7 @@ from ...base.helpers.opaque import (
 )
 from llm_rosetta.ir.primitives.system_message_hoist import hoist_system_in_converter
 from ...base.tools import is_intrinsic_part
-from ...base.tools.intrinsic import intrinsic_kind_of
+from llm_rosetta.ir.tools.intrinsic import intrinsic_kind_of
 from ....transforms.ir import hoist_late_system_messages
 from ...base.context import ConversionContext, StreamContext
 from .config_ops import GoogleInteractionsConfigOps

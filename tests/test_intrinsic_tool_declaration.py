@@ -13,7 +13,7 @@ from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
-from llm_rosetta.converters.base.tools.intrinsic import (
+from llm_rosetta.ir.tools.intrinsic import (
     get_definition_kind,
     make_intrinsic_tool_definition,
 )

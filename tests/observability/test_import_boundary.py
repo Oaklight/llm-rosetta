@@ -146,13 +146,9 @@ def test_importing_the_core_half_does_not_load_the_gateway():
     assert out == "0"
 
 
-def test_scrub_is_identical_through_both_paths():
-    from llm_rosetta_gateway.middleware.sanitize import (
-        scrub_credential_patterns as legacy,
-    )
+def test_scrub_redacts_through_the_canonical_path():
     from llm_rosetta_gateway.observability.sanitize import (
         scrub_credential_patterns as canonical,
     )
 
-    assert legacy is canonical
     assert canonical("Bearer abcdef") == "[REDACTED]"

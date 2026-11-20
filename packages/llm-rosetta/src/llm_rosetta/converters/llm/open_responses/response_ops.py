@@ -13,7 +13,7 @@ from ....types.ir.response import IRResponse, UsageInfo
 from ...base.context import ConversionContext
 from ...base.helpers.citations import report_dropped_citation
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
-from ...base.helpers.tool_group import (
+from llm_rosetta.ir.primitives.tool_group import (
     GENERATED_GROUP_MARKER,
 )
 from ._mixin_host import OpenResponsesMixinHost

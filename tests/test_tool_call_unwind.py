@@ -3,7 +3,7 @@
 from typing import Any
 
 from llm_rosetta.conversion_warnings import DOWNGRADED, WarningSink, recording_to
-from llm_rosetta.converters.base.tools.call_unwind import (
+from llm_rosetta.ir.primitives.call_unwind import (
     unwind_parallel_tool_calls_ir,
 )
 

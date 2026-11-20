@@ -37,8 +37,8 @@ from ...base import BaseMessageOps
 from ...base.helpers.citations import report_dropped_citation
 from llm_rosetta.conversion_warnings import DOWNGRADED, DROPPED, report_loss
 from ...base.tools import sanitize_tool_call_id
-from ...base.tools.batch import assign_tool_batch_ids
-from ...base.tools.intrinsic import history_native_calls
+from llm_rosetta.ir.tools.batch import assign_tool_batch_ids
+from llm_rosetta.ir.tools.intrinsic import history_native_calls
 from .content_ops import OpenResponsesContentOps
 from .tool_ops import OpenResponsesToolOps
 

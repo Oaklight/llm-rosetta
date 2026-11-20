@@ -30,7 +30,7 @@ from ....types.ir.tools import ToolCallConfig
 from ...base import BaseToolOps
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.helpers.opaque import CARRIER_KEY
-from ...base.helpers.tool_group import (
+from llm_rosetta.ir.primitives.tool_group import (
     tool_call_group,
 )
 from ...base.tools import (
@@ -630,7 +630,7 @@ class OpenResponsesToolOps(IntrinsicToolOpsMixin, BaseToolOps):
 
         The Responses API has no tool error field, so an ``is_error`` flag is
         re-encoded as a trailing ``input_text`` block (see
-        ``base.tools.error_marker``).
+        ``ir.tools.error_marker``).
 
         An intrinsic result reaches this path only when its call was written as
         a client ``function_call``; the hook pair below decides that.

@@ -33,7 +33,7 @@ from ...base.tools import (
     sanitize_tool_call_id,
     sanitize_tool_parameters,
 )
-from ...base.tools.intrinsic import (
+from llm_rosetta.ir.tools.intrinsic import (
     get_native_definition,
     intrinsic_kind_of,
     is_intrinsic_part,

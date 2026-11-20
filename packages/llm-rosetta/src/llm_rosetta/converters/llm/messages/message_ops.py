@@ -38,7 +38,7 @@ from ...base import BaseMessageOps
 from ...base.helpers.citations import report_dropped_citation
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.tools import intrinsic_kind_of, is_intrinsic_part
-from ...base.tools.batch import assign_tool_batch_ids, merge_tool_messages
+from llm_rosetta.ir.tools.batch import assign_tool_batch_ids, merge_tool_messages
 from .content_ops import MessagesContentOps
 from .tool_ops import MessagesToolOps
 

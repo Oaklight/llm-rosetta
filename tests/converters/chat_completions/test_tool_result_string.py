@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta import ConversionPipeline
-from llm_rosetta.converters.base.tools.error_marker import TOOL_ERROR_MARKER
+from llm_rosetta.ir.tools.error_marker import TOOL_ERROR_MARKER
 
 
 def _convert(result_content: Any, *, is_error: bool = False) -> dict[str, Any]:

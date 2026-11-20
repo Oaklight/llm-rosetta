@@ -25,7 +25,7 @@ from ....ir.primitives import expand_response
 from ....ir.passes.tool_names import STRICT_TOOL_NAME_PATTERN
 from ...base.helpers.extensions import extension_loss_warning, wire_extensions
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
-from ...base.helpers.tool_group import (
+from llm_rosetta.ir.primitives.tool_group import (
     ToolGroup,
     group_tools,
 )

@@ -11,7 +11,7 @@ from ...base.context import (
     ConversionContext,
     StreamContext,
 )
-from ...base.tools.intrinsic import (
+from llm_rosetta.ir.tools.intrinsic import (
     intrinsic_kind_of,
 )
 from ...base.helpers.opaque import (

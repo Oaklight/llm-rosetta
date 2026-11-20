@@ -34,8 +34,8 @@ from ....types.ir import (
 from ...base import BaseMessageOps
 from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.opaque import inject_google_function_call_signature
-from ...base.tools.batch import assign_tool_batch_ids, merge_tool_messages
-from ...base.tools.intrinsic import intrinsic_kind_of, is_intrinsic_part
+from llm_rosetta.ir.tools.batch import assign_tool_batch_ids, merge_tool_messages
+from llm_rosetta.ir.tools.intrinsic import intrinsic_kind_of, is_intrinsic_part
 from .content_ops import GoogleGenerateContentOps
 from .tool_ops import GoogleGenerateToolOps
 

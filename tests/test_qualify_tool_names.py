@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 
 from llm_rosetta.capabilities import qualify_tool_names
-from llm_rosetta.converters.base.helpers.tool_group import GENERATED_GROUP_MARKER
+from llm_rosetta.ir.primitives.tool_group import GENERATED_GROUP_MARKER
 
 
 def _qualify(tools: list[Any], warnings: list[str]) -> list[Any]:

@@ -19,7 +19,7 @@ from ....types.ir import (
 )
 from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.opaque import CARRIER_KEY
-from ...base.helpers.tool_group import (
+from llm_rosetta.ir.primitives.tool_group import (
     GENERATED_GROUP_MARKER,
     generated_group_id,
     tool_call_group,
@@ -231,7 +231,7 @@ def _flatten_namespace_tool(
     than the empty string: ``""`` qualifies nothing, so its children would
     keep one bare upstream name and could not be told apart — by the upstream,
     or by the client that would have to address them.  See
-    :func:`~llm_rosetta.converters.base.helpers.tool_group.generated_group_id`.
+    :func:`~llm_rosetta.ir.primitives.tool_group.generated_group_id`.
     """
     declared = provider_tool.get("name", "")
     # Blank reads as no name.  The qualification ladder joins the two with an

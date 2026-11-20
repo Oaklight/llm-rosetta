@@ -34,7 +34,7 @@ from ...base.context import (
     ConversionContext,
     StreamContext,
 )
-from ...base.tools.intrinsic import (
+from llm_rosetta.ir.tools.intrinsic import (
     is_intrinsic_part,
 )
 from ...base.helpers.extensions import wire_extensions

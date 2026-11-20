@@ -18,7 +18,7 @@ from llm_rosetta.capabilities import (
     restore_client_tool_name_events,
     restore_client_tool_names,
 )
-from llm_rosetta.converters.base.helpers.tool_group import generated_group_id
+from llm_rosetta.ir.primitives.tool_group import generated_group_id
 from llm_rosetta.ir.passes import tool_names
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.types.ir.request import IRRequest
