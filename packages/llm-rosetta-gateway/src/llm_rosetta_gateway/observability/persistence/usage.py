@@ -104,10 +104,50 @@ class _UsageMixin(_StoreState):
         )
         updated += cursor.rowcount or 0
 
+        await self._warn_about_retired_tags()
         if updated:
             await self._conn.commit()
             logger.info("Backfilled total_tokens for %d rows", updated)
         return updated
+
+    async def _warn_about_retired_tags(self) -> int:
+        """Warn when rows still carry a retired provider tag the repair cannot read.
+
+        The repair above recognises a Messages upstream by its current tag
+        (``messages``).  A row written under a retired spelling (``anthropic``)
+        is unknown to the usage table, so its total is left as the old writer
+        stored it, and reports group it apart from the current tag.  The
+        gateway still serves; the warning names the command that rewrites the
+        rows.
+
+        Returns:
+            The number of rows carrying a retired tag.
+        """
+        from llm_rosetta.api import retired_names
+
+        retired = tuple(
+            row.name
+            for row in retired_names.RETIRED_NAMES
+            if row.kind == retired_names.PROVIDER_TYPE
+        )
+        marks = ", ".join("?" * len(retired))
+        cursor = await self._conn.execute(
+            "SELECT COUNT(*) FROM request_log "
+            f"WHERE target_provider IN ({marks}) OR source_provider IN ({marks})",
+            retired + retired,
+        )
+        row = await cursor.fetchone()
+        count = int(row[0]) if row else 0
+        if count:
+            logger.warning(
+                "%d request_log rows carry a retired provider tag (%s); their "
+                "usage totals are not repaired and reports list them under the "
+                "old name; run 'llm-rosetta-migrate --db <data dir>' (add "
+                "--write to apply), see the migration guide",
+                count,
+                ", ".join(retired),
+            )
+        return count
 
     async def query_token_usage_by_day(
         self,

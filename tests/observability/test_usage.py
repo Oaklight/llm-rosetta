@@ -280,7 +280,8 @@ class TestSemantics:
     def test_additivity_is_derived_not_restated(self):
         derived = {s for s, shape in STANDARD_SHAPES.items() if shape.cache_additive}
         assert ADDITIVE_CACHE_STANDARDS == derived
-        assert {"messages", "anthropic"} <= derived
+        assert "messages" in derived
+        assert not derived & {"anthropic", "openai_chat", "openai_responses", "google"}
 
     def test_an_unknown_standard_claims_nothing(self):
         assert cache_is_additive("google_interactions") is False
