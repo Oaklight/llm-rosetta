@@ -81,7 +81,7 @@ _PACKAGE_ONLY = frozenset({"llm_rosetta.observability.usage"})
 # had; #1639 removed `shims/catalog.py` -> `llm_rosetta.provider_names`; #1637
 # removed the three `llm_rosetta._vendor.yaml` imports (the gateway vendors its
 # own yaml).
-_LEGACY_CEILING = 64
+_LEGACY_CEILING = 60
 _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
         ("admin/routes/_shared.py", "llm_rosetta.shims"),
@@ -136,9 +136,6 @@ _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("observability/profiling.py", "llm_rosetta.profiling"),
         ("observability/usage/cli.py", "llm_rosetta"),
         ("ops/provider_validation.py", "llm_rosetta.shims"),
-        ("providers.py", "llm_rosetta.formats"),
-        ("providers.py", "llm_rosetta.provider_names"),
-        ("providers.py", "llm_rosetta.shims"),
         ("quota/service.py", "llm_rosetta.shims"),
         ("shims/_scan.py", "llm_rosetta.shims.providers"),
         ("shims/manifest.py", "llm_rosetta"),
@@ -146,7 +143,6 @@ _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("shims/sources.py", "llm_rosetta.shims.provider_shim"),
         ("shims/sources.py", "llm_rosetta.shims.providers"),
         ("source_formats.py", "llm_rosetta.provider_names"),
-        ("transport/sse_format.py", "llm_rosetta.formats"),
         ("updates.py", "llm_rosetta"),
     }
 )
@@ -204,9 +200,6 @@ _LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset(
         ("observability/profiling.py", "llm_rosetta.profiling"),
         ("observability/usage/cli.py", "llm_rosetta"),
         ("ops/provider_validation.py", "llm_rosetta.shims"),
-        ("providers.py", "llm_rosetta.formats"),
-        ("providers.py", "llm_rosetta.provider_names"),
-        ("providers.py", "llm_rosetta.shims"),
         ("quota/service.py", "llm_rosetta.shims"),
         ("shims/_scan.py", "llm_rosetta.shims.providers"),
         ("shims/manifest.py", "llm_rosetta"),
@@ -214,7 +207,6 @@ _LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset(
         ("shims/sources.py", "llm_rosetta.shims.provider_shim"),
         ("shims/sources.py", "llm_rosetta.shims.providers"),
         ("source_formats.py", "llm_rosetta.provider_names"),
-        ("transport/sse_format.py", "llm_rosetta.formats"),
         ("updates.py", "llm_rosetta"),
     }
 )

@@ -22,8 +22,7 @@ from .transport.provider_info import (
     openai_auth,
 )
 
-from llm_rosetta.formats import FORMAT_SPECS
-from llm_rosetta.provider_names import canonical_provider_name
+from llm_rosetta.api import FORMAT_SPECS, canonical_provider_name, spec_for
 
 # Re-export ProviderInfo so existing ``from .providers import ProviderInfo``
 # continues to work without changes across the codebase.
@@ -109,11 +108,9 @@ def default_models_path(provider_type: str) -> str:
     Derived from the format catalog's ``models_path``; the generic
     ``/models`` is the fallback for a provider type the catalog does not know.
     """
-    from llm_rosetta.formats import BY_PAIR
-
     fmt = canonical_provider_name(provider_type)
     for model_type in ("llm", "embeddings"):
-        spec = BY_PAIR.get((model_type, fmt))
+        spec = spec_for(model_type, fmt)
         if spec is not None and spec.models_path:
             return spec.models_path
     return "/models"
@@ -687,7 +684,7 @@ def build_provider_info(
     registry.  Unknown types fall back to Bearer-token auth and a simple
     ``{base_url}/`` URL template.
     """
-    from llm_rosetta.shims import get_shim
+    from llm_rosetta.api import get_shim
 
     from .shims import (
         find_source_package,
