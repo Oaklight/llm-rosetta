@@ -244,11 +244,11 @@ class TestTheTwoOlderRoutes:
 class TestTheLoadTimeSteps:
     """They are listed, and they are not re-runnable: their document is stale."""
 
-    #: A document with both kinds of work in it, old names and all.
+    #: A document with structural work in it (an older ``config_version``).
     _DOCUMENT = {
         "config_version": 1,
         "providers": {
-            "alcf": {"type": "openai_chat", "shim": "volcengine--openai_chat"}
+            "alcf": {"type": "chat_completions", "shim": "volcengine--chat_completions"}
         },
     }
 
@@ -283,7 +283,7 @@ class TestTheLoadTimeSteps:
         assert names == ["deferred", "api_keys", "config"]
         config = body["registries"][-1]
         assert config["policy"] == "load_time"
-        assert [step["store"] for step in config["steps"]] == ["config", "config"]
+        assert [step["store"] for step in config["steps"]] == ["config"]
 
     async def test_the_config_entry_reports_the_load_a_reader_ran(self, tmp_path):
         """End to end, without a substitute: the results are that load's own."""
@@ -295,18 +295,18 @@ class TestTheLoadTimeSteps:
         assert config["name"] == "config"
         assert config["policy"] == "load_time"
         steps = {step["name"]: step for step in config["steps"]}
-        names_step = steps["config.correct_legacy_names"]
-        assert names_step.pop("seconds") >= 0
-        assert names_step == {
-            "name": "config.correct_legacy_names",
-            "description": "rewrite provider and shim names that have been renamed",
+        structure_step = steps["config.migrate_structure"]
+        assert structure_step.pop("seconds") >= 0
+        assert structure_step == {
+            "name": "config.migrate_structure",
+            "description": "bring an older config document up to the current structure",
             "store": "config",
             "ran": True,
             "ok": True,
             "changed": 1,
             "error": None,
         }, "the surface reports what that load did to the document it read"
-        assert steps["config.migrate_structure"]["ran"] is True
+        assert "config.correct_legacy_names" not in steps
 
     async def test_all_four_registries_are_listed(self, tmp_path):
         """One surface for every store and the load, each with its own policy."""
@@ -353,7 +353,7 @@ class TestTheLoadTimeSteps:
         app = self._app_with_a_loaded_config()
 
         response = await routes.post_maintenance_run(
-            _Request(app, name="config.correct_legacy_names")
+            _Request(app, name="config.migrate_structure")
         )
 
         assert response.status_code == 409

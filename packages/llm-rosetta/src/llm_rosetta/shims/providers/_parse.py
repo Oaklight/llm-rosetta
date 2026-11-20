@@ -74,7 +74,6 @@ def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
     # vocabulary module is data-only and safe to import at any time.
     from llm_rosetta.formats import canonical_model_type
     from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE, MODEL_TYPES
-    from llm_rosetta.provider_names import canonical_provider_name
 
     declared_type = cfg.get("model_type")
     if isinstance(declared_type, str):
@@ -136,13 +135,18 @@ def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
             f"model_type={declared_type!r} disagrees"
         )
 
-    fmt = canonical_provider_name(raw_format)
+    fmt = raw_format
     if model_type not in MODEL_TYPES:
         raise ValueError(
             f"{yaml_path}: unknown model_type {model_type!r}; "
             f"expected one of {', '.join(MODEL_TYPES)}"
         )
     if fmt not in FORMATS_BY_TYPE[model_type]:
+        from llm_rosetta import retired_names
+
+        message = retired_names.retired_name_message(fmt, retired_names.PROVIDER_TYPE)
+        if message is not None:
+            raise ValueError(f"{yaml_path}: {message}")
         raise ValueError(
             f"{yaml_path}: format {fmt!r} is not a {model_type} format; "
             f"available: {', '.join(FORMATS_BY_TYPE[model_type])}"

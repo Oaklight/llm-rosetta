@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from llm_rosetta.provider_names import canonical_provider_name
+from llm_rosetta import retired_names
 
 # Import converter submodules directly (not through __init__) to avoid
 # circular imports — __init__.py re-exports from this module.
@@ -43,23 +43,17 @@ _EMBEDDING_CONVERTERS: dict[str, type[BaseEmbeddingConverter]] = {
 EMBEDDING_FORMATS = frozenset(_EMBEDDING_CONVERTERS.keys())
 
 
-def canonical_embedding_format(format_name: str) -> str:
-    """Resolve a legacy format spelling to its canonical registry key.
-
-    ``google`` and ``google-genai`` both name the ``google_generate``
-    embedding family; every other embedding format passes through unchanged.
-    """
-    return canonical_provider_name(format_name)
-
-
 def get_embedding_converter(format_name: str) -> BaseEmbeddingConverter:
     """Return a converter instance for *format_name*.
 
     Raises:
-        ValueError: If *format_name* is not a known embedding format.
+        ValueError: If *format_name* is not a known embedding format.  A
+            retired spelling (``google``) gets the retired-names message,
+            which names its replacement.
     """
-    cls = _EMBEDDING_CONVERTERS.get(canonical_embedding_format(format_name))
+    cls = _EMBEDDING_CONVERTERS.get(format_name)
     if cls is None:
+        retired_names.check_not_retired(format_name, retired_names.PROVIDER_TYPE)
         raise ValueError(
             f"Unknown embedding format: '{format_name}'. "
             f"Available: {', '.join(sorted(EMBEDDING_FORMATS))}"
@@ -98,8 +92,7 @@ class EmbeddingConversionPipeline:
     target are the same format — the rule the chat pipeline follows (#577).
     The round-trip canonicalises the body (an OpenAI ``input`` string becomes
     a list, unknown fields are dropped) and keeps one conversion path in
-    production and in tests.  Both spellings are canonicalised first, so
-    ``google`` and ``google_generate`` are the same format.
+    production and in tests.
 
     The pipeline keeps no per-request state beyond the shared warning
     context: request and response conversion are independent, pure
@@ -108,8 +101,8 @@ class EmbeddingConversionPipeline:
     """
 
     def __init__(self, source_format: str, target_format: str) -> None:
-        self.source_format = canonical_embedding_format(source_format)
-        self.target_format = canonical_embedding_format(target_format)
+        self.source_format = source_format
+        self.target_format = target_format
         self._source_converter = get_embedding_converter(self.source_format)
         self._target_converter = get_embedding_converter(self.target_format)
         self._ctx = ConversionContext()

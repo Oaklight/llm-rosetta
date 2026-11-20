@@ -29,11 +29,8 @@ from llm_rosetta.capabilities import (
 )
 from llm_rosetta.converters.base.context import ConversionContext, ImageFetcher
 from llm_rosetta.conversion_warnings import WarningSink, recording_to
-from llm_rosetta.provider_names import (
-    canonical_provider_name,
-    warn_legacy_provider_names,
-    warn_legacy_shim_names,
-)
+from llm_rosetta import retired_names
+from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
 from llm_rosetta.shims.provider_shim import ProviderShim, resolve_format, resolve_shim
 from llm_rosetta.transforms.body import Transform, apply_transforms
 from .errors import ConversionError
@@ -51,12 +48,11 @@ _EMPTY_TRANSFORMS: tuple[Transform, ...] = ()
 
 # Base types that resolve to the ``google_generate`` converter and
 # therefore use the Generative Language REST body shape by default.
-# ``"google"`` is both a base type and a shim name; ``"google_generate"``
-# is the canonical converter name.  Shim names (e.g.
+# ``"google_generate"`` is the converter name.  Shim names (e.g.
 # ``asksage--google_generate``) are normalised through ``resolve_format``
 # before the membership test so they select REST too.  The SDK body
 # shape (``config``) is rejected by the REST endpoint with HTTP 400.
-_GOOGLE_GENERATE_PROVIDERS: frozenset[str] = frozenset({"google", "google_generate"})
+_GOOGLE_GENERATE_PROVIDERS: frozenset[str] = frozenset(["google_generate"])
 
 
 class ConversionPipeline(PipelineIntrospection):
@@ -132,13 +128,6 @@ class ConversionPipeline(PipelineIntrospection):
     ) -> None:
         from llm_rosetta import get_converter_for_provider
 
-        # Public boundary: warn once per distinct user-supplied legacy name,
-        # attributed to the caller of ``ConversionPipeline(...)``.  Every
-        # internal comparison below uses the canonical form.
-        warn_legacy_provider_names(source_provider, target_provider)
-        source_provider = canonical_provider_name(source_provider)
-        target_provider = canonical_provider_name(target_provider)
-
         # Backward compat: accept legacy ``shim=`` as alias for target_shim
         if shim is not None:
             if target_shim is not None:
@@ -153,13 +142,14 @@ class ConversionPipeline(PipelineIntrospection):
             )
             target_shim = shim
 
-        # Public boundary: warn once per distinct legacy *shim* name supplied
-        # as a string, attributed to the caller of ``ConversionPipeline(...)``.
-        # Shim-registry resolution below stays silent.
-        warn_legacy_shim_names(
-            source_shim if isinstance(source_shim, str) else None,
-            target_shim if isinstance(target_shim, str) else None,
-        )
+        # A retired *shim* name supplied as a string would resolve to no shim
+        # and be dropped silently, so reject it here with its replacement.  A
+        # retired provider name is rejected by ``get_converter_for_provider``
+        # below.  A bare chat format is not a shim name, whatever it is called
+        # in the retired-names table.
+        for shim_name in (source_shim, target_shim):
+            if isinstance(shim_name, str) and shim_name not in FORMATS_BY_TYPE["llm"]:
+                retired_names.check_not_retired(shim_name, retired_names.SHIM)
 
         # ``google_output_format`` is read only when the target is a Google
         # Generate provider (see ``convert_request``), so validate it under the

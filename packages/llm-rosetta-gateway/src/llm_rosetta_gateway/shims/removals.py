@@ -26,8 +26,6 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from llm_rosetta.api import canonical_provider_name, canonical_shim_name
-
 
 @dataclass(frozen=True)
 class ShimRemoval:
@@ -101,18 +99,26 @@ class ShimRemovalAdvisory:
 def _named_shim(cfg: Mapping[str, Any], key: str) -> tuple[str, str]:
     """Return the ``(slot, shim name)`` a provider entry points at.
 
-    Mirrors :func:`llm_rosetta_gateway.maintenance.names._corrected_value` and
-    ``GatewayConfig._resolve_provider_types``: an explicit ``shim`` wins, then
-    ``type``, then the provider key itself.
+    Mirrors ``GatewayConfig._resolve_provider_types``: an explicit ``shim``
+    wins, then ``type``, then the provider key itself.  A retired spelling is
+    read as the name it became (the retired-names table), so a stale config is
+    still reported against the shim it meant.
     """
+    from llm_rosetta.api import retired_names
+
+    def became(name: str, kind: str) -> str:
+        return retired_names.replacement_for(name, kind) or name
+
     value = cfg.get("shim")
     if isinstance(value, str) and value:
-        return "shim", canonical_shim_name(value)
+        return "shim", became(value, retired_names.SHIM)
     value = cfg.get("type")
     if isinstance(value, str) and value:
-        canonical = canonical_provider_name(value)
-        return "type", canonical if canonical != value else canonical_shim_name(value)
-    return "name", canonical_shim_name(key)
+        canonical = became(value, retired_names.PROVIDER_TYPE)
+        if canonical != value:
+            return "type", canonical
+        return "type", became(value, retired_names.SHIM)
+    return "name", became(key, retired_names.SHIM)
 
 
 def detect_shim_removals(

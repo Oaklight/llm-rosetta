@@ -19,7 +19,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from llm_rosetta.provider_names import canonical_provider_name
 
 FidelityMode = Literal["critical", "full"]
 
@@ -247,8 +246,6 @@ def _get_critical_paths(
     by_format: dict[str, list[str]],
 ) -> list[str]:
     """Return critical paths for a specific format, or all if format is None."""
-    if format_name == "google":
-        format_name = "google_generate"  # legacy alias
     if format_name is not None and format_name in by_format:
         return common + by_format[format_name]
     # Unknown format or None: check all paths (union)
@@ -526,11 +523,7 @@ class FidelityChecker:
         from llm_rosetta.formats import canonical_model_type
 
         self.model_type = canonical_model_type(model_type)
-        # Accept legacy base/format spellings (e.g. ``openai_chat``) in the
-        # internal format name without emitting a duplicate warning.
-        self.format_name = (
-            canonical_provider_name(format_name) if format_name is not None else None
-        )
+        self.format_name = format_name
 
     def _request_paths(self) -> list[str]:
         by_type = _CRITICAL_REQUEST_BY_TYPE.get(self.model_type)

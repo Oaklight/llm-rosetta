@@ -12,8 +12,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_rosetta.api import canonical_provider_name
-
 
 def detect_embedding_source(request: Any, body: dict[str, Any], config: Any) -> str:
     """Infer the source embedding format from the request body.
@@ -44,7 +42,7 @@ def detect_embedding_source(request: Any, body: dict[str, Any], config: Any) -> 
         return "voyage"
     if "input" not in body and ("requests" in body or "content" in body):
         return "google_generate"
-    return canonical_provider_name(config.default_embeddings_format)
+    return config.default_embeddings_format
 
 
 def detect_rerank_source(request: Any, body: dict[str, Any], config: Any) -> str:
@@ -60,7 +58,7 @@ def detect_rerank_source(request: Any, body: dict[str, Any], config: Any) -> str
         return "cohere"
     if "top_k" in body and "top_n" not in body:
         return "voyage"
-    return canonical_provider_name(config.default_rerank_format)
+    return config.default_rerank_format
 
 
 def detect_decision_source(request: Any, body: dict[str, Any], config: Any) -> str:
@@ -86,4 +84,4 @@ def detect_decision_source(request: Any, body: dict[str, Any], config: Any) -> s
         return "openai_decisions"
     if "state" in body and isinstance(questions, dict):
         return "systemone"
-    return canonical_provider_name(config.default_decisions_format)
+    return config.default_decisions_format

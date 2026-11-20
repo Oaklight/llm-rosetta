@@ -1,7 +1,7 @@
 # Name is ``openai--open_responses`` (provider--base) so the OpenAI profile is
-# distinguishable from the vendor-neutral ``open_responses`` base.  The legacy
-# spellings ``openai_responses`` / ``openai-responses`` are aliased to this name
-# in ``provider_names.LEGACY_PROVIDER_ALIASES``.
+# distinguishable from the vendor-neutral ``open_responses`` base.  The retired
+# spellings ``openai_responses`` / ``openai-responses`` are rejected with a
+# message that names this shim (``llm_rosetta.retired_names``).
 name: openai--open_responses
 # OpenAI Responses is a profile of the vendor-neutral Open Responses base;
 # the profile traits are opt-in settings below.

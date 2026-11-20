@@ -22,7 +22,7 @@ from .transport.provider_info import (
     openai_auth,
 )
 
-from llm_rosetta.api import FORMAT_SPECS, canonical_provider_name, spec_for
+from llm_rosetta.api import FORMAT_SPECS, spec_for
 
 # Re-export ProviderInfo so existing ``from .providers import ProviderInfo``
 # continues to work without changes across the codebase.
@@ -42,9 +42,7 @@ _AUTH_BUILDERS = {
 }
 
 # Derived from the format catalog (``llm_rosetta.formats``).  The registry key
-# is the format; the legacy ``google`` spelling stays here because provider
-# validation historically accepts it as a registry key as well as through
-# ``canonical_provider_name``.
+# is the format.
 _PROVIDER_REGISTRY: dict[str, dict[str, Any]] = {}
 for _spec in FORMAT_SPECS:
     if _spec.model_type != "llm" or _spec.url_template is None:
@@ -56,8 +54,6 @@ for _spec in FORMAT_SPECS:
     if _spec.stream_url_template:
         _entry["stream_url_template"] = _spec.stream_url_template
     _PROVIDER_REGISTRY[_spec.format] = _entry
-
-_PROVIDER_REGISTRY["google"] = _PROVIDER_REGISTRY["google_generate"]
 
 # Vendor hints for bare base formats, surfaced by the admin provider picker as
 # input *placeholders* only.  They are never runtime fallbacks: a bare base
@@ -71,7 +67,6 @@ _BASE_TYPE_HINTS: dict[str, dict[str, str]] = {
     for spec in FORMAT_SPECS
     if spec.model_type == "llm" and spec.base_url_hint and spec.api_key_env_hint
 }
-_BASE_TYPE_HINTS["google"] = _BASE_TYPE_HINTS["google_generate"]
 
 
 def get_base_type_hints(provider_type: str) -> dict[str, str]:
@@ -80,7 +75,7 @@ def get_base_type_hints(provider_type: str) -> dict[str, str]:
     These suggest a common vendor for a bare base format but are **not**
     runtime defaults — see :data:`_BASE_TYPE_HINTS`.  Empty for unknown types.
     """
-    return dict(_BASE_TYPE_HINTS.get(canonical_provider_name(provider_type), {}))
+    return dict(_BASE_TYPE_HINTS.get(provider_type, {}))
 
 
 def get_default_base_url(provider_type: str) -> str:
@@ -108,9 +103,8 @@ def default_models_path(provider_type: str) -> str:
     Derived from the format catalog's ``models_path``; the generic
     ``/models`` is the fallback for a provider type the catalog does not know.
     """
-    fmt = canonical_provider_name(provider_type)
     for model_type in ("llm", "embeddings"):
-        spec = spec_for(model_type, fmt)
+        spec = spec_for(model_type, provider_type)
         if spec is not None and spec.models_path:
             return spec.models_path
     return "/models"
@@ -132,19 +126,16 @@ _CUSTOM_TOOLS_BY_TYPE: dict[str, bool] = {
     for spec in FORMAT_SPECS
     if spec.model_type == "llm"
 }
-_CUSTOM_TOOLS_BY_TYPE["google"] = _CUSTOM_TOOLS_BY_TYPE["google_generate"]
 
 
 def get_default_supports_custom_tools(provider_type: str) -> bool:
     """Default custom-tools support for a base format (``False`` if unknown)."""
-    return _CUSTOM_TOOLS_BY_TYPE.get(canonical_provider_name(provider_type), False)
+    return _CUSTOM_TOOLS_BY_TYPE.get(provider_type, False)
 
 
 # Base formats offered as bare formats in the admin provider picker, in display
 # order — the chat API standards.  A vendor-named shim may also exist for the
-# same standard (see ``registered_shims``).  ``google`` is a plain alias of
-# ``google_generate`` and stays reachable through the ``google`` shim, so it is
-# not listed separately here.
+# same standard (see ``registered_shims``).
 BASE_FORMATS: tuple[str, ...] = tuple(
     spec.format
     for spec in sorted(
@@ -692,12 +683,11 @@ def build_provider_info(
         source_package_advice,
     )
 
-    # Legacy spellings (e.g. ``openai_chat``) migrate to canonical names so the
-    # registry lookup below hits.
+    # A retired spelling (e.g. ``openai_chat``) is an error that names its
+    # replacement, not a name the registry lookup below could resolve.
     from llm_rosetta.api import retired_names
 
     retired_names.check_not_retired(provider_type, retired_names.PROVIDER_TYPE)
-    provider_type = canonical_provider_name(provider_type)
 
     # Resolve through shim registry for defaults
     shim = get_shim(shim_name or provider_type)

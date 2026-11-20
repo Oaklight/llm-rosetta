@@ -17,7 +17,7 @@ import os
 import pytest
 
 import llm_rosetta
-from llm_rosetta.provider_names import LEGACY_SHIM_ALIASES, canonical_shim_name
+from llm_rosetta import retired_names
 from llm_rosetta.shims import get_shim
 from llm_rosetta_gateway.shims import (
     SHIM_REMOVALS,
@@ -120,14 +120,15 @@ class TestManifest:
         unregistered = [e.shim for e in SAMPLES if get_shim(e.shim) is None]
         assert unregistered == []
 
-    def test_every_legacy_name_still_resolves_to_its_shim(self):
-        """The old spellings are the migration path, so they have to work."""
+    def test_every_legacy_name_is_retired_in_favour_of_its_shim(self):
+        """An old spelling no longer resolves; the table names its shim."""
         load_providers()
         for entry in SAMPLES:
             for legacy in entry.legacy_names:
-                assert canonical_shim_name(legacy) == entry.shim, legacy
-                assert legacy in LEGACY_SHIM_ALIASES, legacy
-                assert get_shim(legacy) is get_shim(entry.shim), legacy
+                row = retired_names.lookup(legacy, retired_names.SHIM)
+                assert row is not None, legacy
+                assert row.replacement == entry.shim, legacy
+                assert get_shim(legacy) is None, legacy
 
     def test_every_remote_round_trips_through_the_source_resolver(self):
         """A preset is only useful if the gateway would accept it."""

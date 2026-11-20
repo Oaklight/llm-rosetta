@@ -81,7 +81,7 @@ def _inject_stream_flags(
     if target_provider == "chat_completions":
         body["stream"] = True
         body["stream_options"] = {"include_usage": True}
-    elif target_provider in ("openai_responses", "open_responses", "messages"):
+    elif target_provider in ("open_responses", "messages"):
         body["stream"] = True
     elif target_provider == "google_interactions":
         body["stream"] = True
@@ -93,7 +93,6 @@ def detect_stream_request(source_provider: ProviderType, body: dict[str, Any]) -
     """Detect if the incoming request asks for streaming."""
     if source_provider in (
         "chat_completions",
-        "openai_responses",
         "open_responses",
         "messages",
         "google_interactions",
@@ -458,10 +457,9 @@ def _stream_envelope(route: ResolvedRoute) -> dict[str, Any]:
     Responses stream declares none and the envelope stays empty.  Only chat
     routes reach the stream-required bridge, so the model type is ``llm``.
     """
-    from llm_rosetta.api import canonical_provider_name, spec_for
+    from llm_rosetta.api import spec_for
 
-    source = canonical_provider_name(route.source_provider)
-    spec = spec_for("llm", source)
+    spec = spec_for("llm", route.source_provider)
     fields = spec.stream_echo_fields if spec is not None else ()
     return dict.fromkeys(fields)
 

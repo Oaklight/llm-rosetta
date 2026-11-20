@@ -1,10 +1,10 @@
-"""The load-time steps: structure, then names, once each, reporting what moved.
+"""The load-time step: structure, once, reporting what moved.
 
-Slice 3 of #1027.  These two mechanisms already had tests of their own
-(``test_migrations.py``, ``test_name_migration.py``), and those still pass
-unchanged — what is new here is the order they now run in, that each reports
-whether it changed anything, and that the loader keeps the registry so the admin
-surface can list it beside the repairs the databases needed.
+Slice 3 of #1027.  The versioned migrations already had tests of their own
+(``test_migrations.py``) — what is new here is that the step reports whether it
+changed anything, and that the loader keeps the registry so the admin surface
+can list it beside the repairs the databases needed.  The name correction that
+used to run second is gone (#919): a retired name is rejected, not rewritten.
 """
 
 from __future__ import annotations
@@ -17,18 +17,13 @@ from llm_rosetta_gateway.maintenance.config import STEPS, apply, build_registry
 from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION
 from llm_rosetta_gateway.observability.maintenance import Policy, StepContext
 
-#: A document as an older release wrote it: version 0, and both spellings that
-#: have since been renamed.
+#: A document as an older release wrote it: version 0.
 _OLD = {
-    "providers": {"alcf": {"type": "openai_chat", "shim": "volcengine--openai_chat"}},
+    "providers": {
+        "alcf": {"type": "chat_completions", "shim": "volcengine--chat_completions"}
+    },
     "rerank_providers": {"jina": {"api_key": "k", "base_url": "https://x"}},
     "rerank_models": {"rerank-v1": "jina"},
-}
-
-#: The same document, current in structure but keeping the old names.
-_NAMES_ONLY = {
-    "config_version": CURRENT_VERSION,
-    "providers": {"x": {"type": "openai_chat"}},
 }
 
 
@@ -42,10 +37,10 @@ def test_the_registry_is_load_time_and_ordered():
         "a failure here fails the load: there is no config to serve without it"
     )
     assert [step.name for step in registry.steps] == STEPS
-    assert [step.store for step in registry.steps] == ["config", "config"]
+    assert [step.store for step in registry.steps] == ["config"]
 
 
-def test_a_document_with_work_to_do_reports_both_steps():
+def test_a_document_with_work_to_do_reports_the_step():
     raw = json.loads(json.dumps(_OLD))
     document, changed, registry = apply(raw)
 
@@ -56,21 +51,20 @@ def test_a_document_with_work_to_do_reports_both_steps():
     )
     assert raw["providers"]["alcf"]["type"] == "chat_completions"
     assert raw["providers"]["alcf"]["shim"] == "volcengine--chat_completions"
-    assert _by_name(registry) == {
-        "config.migrate_structure": 1,
-        "config.correct_legacy_names": 1,
+    assert _by_name(registry) == {"config.migrate_structure": 1}
+
+
+def test_a_retired_name_is_not_rewritten_by_the_load_steps():
+    """The steps leave names alone; resolution rejects them instead."""
+    raw = {
+        "config_version": CURRENT_VERSION,
+        "providers": {"x": {"type": "openai_chat"}},
     }
-
-
-def test_a_current_document_with_old_names_reports_only_the_names():
-    raw = json.loads(json.dumps(_NAMES_ONLY))
     _document, changed, registry = apply(raw)
 
-    assert changed is True
-    assert _by_name(registry) == {
-        "config.migrate_structure": 0,
-        "config.correct_legacy_names": 1,
-    }
+    assert changed is False
+    assert raw["providers"]["x"]["type"] == "openai_chat"
+    assert _by_name(registry) == {"config.migrate_structure": 0}
 
 
 def test_a_current_document_reports_nothing():
@@ -82,13 +76,10 @@ def test_a_current_document_reports_nothing():
     assert set(_by_name(registry).values()) == {0}
 
 
-def test_the_name_correction_runs_on_a_document_the_structure_step_migrated():
-    """The order is load-bearing: v0's legacy spellings only reach the current shape first."""
+def test_the_structure_step_migrates_a_v0_document():
     raw = json.loads(json.dumps(_OLD))
     apply(raw)
-    # v1 is what gives the rerank provider its format; the name correction then
-    # sees a document that already has one, rather than correcting a shape that
-    # is about to be rewritten.
+    # v1 is what gives the rerank provider its format.
     assert "rerank_providers" not in raw
     assert raw["models"]["rerank-v1"]["type"] == "rerank"
 
@@ -123,10 +114,9 @@ def test_the_config_built_from_the_loaded_document_reports_it(tmp_path):
 
     assert config.maintenance is not None
     assert config.maintenance.name == "config"
-    assert _by_name(config.maintenance) == {
-        "config.migrate_structure": 1,
-        "config.correct_legacy_names": 1,
-    }, "the config carries that load's per-step results, not a fresh registry"
+    assert _by_name(config.maintenance) == {"config.migrate_structure": 1}, (
+        "the config carries that load's per-step results, not a fresh registry"
+    )
 
 
 def test_a_config_built_from_a_literal_reports_nothing(tmp_path):

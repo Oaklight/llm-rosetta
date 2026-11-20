@@ -87,8 +87,6 @@ def endpoint_identity(
     with the provider *name* as its format and an ``llm`` identity, which
     hid it from the admin picker and from the LLM-model validator.
     """
-    from llm_rosetta.api import canonical_provider_name
-
     from .typed import face_value
 
     for type_name, shim_key, format_key in endpoint_types:
@@ -101,7 +99,7 @@ def endpoint_identity(
         if shim is None and not declared_format:
             continue
         if declared_format:
-            wire_format = canonical_provider_name(declared_format)
+            wire_format = declared_format
         else:
             assert shim is not None
             wire_format = shim.format
@@ -138,33 +136,24 @@ def resolve_provider_identities(
     shim stays an LLM provider and serves embeddings through the endpoint
     config.
 
-    Legacy provider/format names are resolved to canonical spellings
-    (see :func:`llm_rosetta.provider_names.canonical_provider_name`), and
-    legacy shim names to their canonical ``<provider>--<base>`` spelling.
-    A config declaring e.g. ``type: google`` is migrated to
-    ``google_generate``; a ``shim:`` / ``type:`` naming a legacy shim (e.g.
-    ``volcengine--openai_chat``) is migrated to ``volcengine--chat_completions``.
-    Each emits one ``DeprecationWarning`` per distinct legacy name so
-    operators migrate before 0.16.0 (#919).
+    A retired provider type or shim name (``type: google``, ``shim:
+    volcengine--openai_chat``, or a bare provider key spelled that way) is not
+    resolved: it raises a :class:`ValueError` that names its replacement (see
+    :mod:`llm_rosetta.retired_names`).
 
     Returns:
         Tuple of (provider_identities, provider_shim_names).
+
+    Raises:
+        ValueError: If a provider names a retired type or shim.
     """
-    from llm_rosetta.api import (
-        canonical_provider_name,
-        warn_legacy_provider_names,
-        warn_legacy_shim_names,
-    )
-    from llm_rosetta.api import resolve_format, resolve_model_type
+    from llm_rosetta.api import resolve_format, resolve_model_type, retired_names
 
     from ..model_types import all_model_types
-    from ..maintenance.names import correct_legacy_names, legacy_name_error
+    from ..maintenance.names import legacy_name_error
 
-    # Migrate legacy names in place.  File-backed configs are also
-    # corrected and written back by ``JsoncConfigIO``; this covers
-    # programmatic configs.  A name that survives was one we could not map,
-    # so reject it rather than resolving a legacy alias at runtime.
-    correct_legacy_names({"providers": raw_providers})
+    # A retired name is an error that names its replacement; the gateway does
+    # not rewrite the config or resolve the old spelling at runtime.
     error = legacy_name_error(raw_providers)
     if error is not None:
         raise ValueError(error)
@@ -178,11 +167,9 @@ def resolve_provider_identities(
     identities: dict[str, ProviderIdentity] = {}
     provider_shim_names: dict[str, str | None] = {}
     for name, cfg in raw_providers.items():
-        # ``shim:`` / ``type:`` values were already canonicalised above, so
-        # no deprecation warning fires for them — the gateway *corrects*
-        # the config (and a file-backed one is rewritten on disk), logging
-        # each rewrite at INFO.  Only a legacy provider *key* still warns:
-        # keys are user identifiers and are not rewritten.
+        # ``shim:`` / ``type:`` values were checked above; a provider *key*
+        # read as a name is checked here, since keys are user identifiers and
+        # are not covered by the guard.
         if "shim" in cfg:
             source = cfg["shim"]
             provider_shim_names[name] = source
@@ -190,18 +177,18 @@ def resolve_provider_identities(
             source = cfg["type"]
             provider_shim_names[name] = source
         else:
-            warn_legacy_provider_names(name)
+            kinds = (retired_names.PROVIDER_TYPE,)
             if name not in BASE_FORMATS:
-                warn_legacy_shim_names(name)
+                kinds += (retired_names.SHIM,)
+            retired_names.check_not_retired(name, *kinds)
             # Resolve through the shim registry too: a provider named after
-            # a shim (e.g. ``openai--open_responses``, or the legacy
-            # ``openai_responses`` alias of it) uses that shim's base and
-            # keeps its identity, rather than being read as a bare format
+            # a shim (e.g. ``openai--open_responses``) uses that shim's base
+            # and keeps its identity, rather than being read as a bare format
             # name.
             source = name
             provider_shim_names[name] = name
 
-        wire_format = canonical_provider_name(resolve_format(source))
+        wire_format = resolve_format(source)
         model_type = resolve_model_type(source)
 
         # A provider with no chat identity may be defined by a non-LLM
@@ -239,8 +226,7 @@ def selection_context(
 
     Args:
         model: Model name as specified by the client.
-        source_format: API standard the request arrived in.  Legacy
-            spellings normalise here.
+        source_format: API standard the request arrived in.
         pinned_provider: Serve the request from this provider only.  The
             admin test path sets it to reach one provider of a
             multi-provider model; ordinary requests leave it unset.
