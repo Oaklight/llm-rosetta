@@ -17,9 +17,10 @@ none.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
+
+from llm_rosetta.api import leaf_connection, manifest_vocabulary, merge_connection
 
 from llm_rosetta_gateway._vendor.yaml import load as yaml_load
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
@@ -40,9 +41,7 @@ _UNKNOWN_KEY_REASON = (
 
 def _connection_keys() -> tuple[str, ...]:
     """The ``connection:`` keys a manifest may declare, from the core."""
-    from llm_rosetta.shims.providers import _CONNECTION_KEYS
-
-    return _CONNECTION_KEYS
+    return manifest_vocabulary().connection_keys
 
 
 def _identity_keys() -> tuple[str, ...]:
@@ -52,45 +51,27 @@ def _identity_keys() -> tuple[str, ...]:
     there, so the panel cannot offer an editor for something the loader reads
     as a shim.
     """
-    from llm_rosetta.shims.providers import _IDENTITY_KEYS
-
-    return _IDENTITY_KEYS
+    return manifest_vocabulary().identity_keys
 
 
 def _leaf_connection(cfg: Any) -> dict[str, Any]:
     """A leaf's own connection values, in the loader's canonical spelling."""
-    from llm_rosetta.shims.providers import _leaf_connection as reader
-
-    return reader(cfg) if isinstance(cfg, dict) else {}
+    return leaf_connection(cfg)
 
 
 def _merged_connection(
     connection: dict[str, Any], leaf: dict[str, Any], manifest_path: Path
 ) -> dict[str, Any]:
-    """The effective connection of a leaf: its own values over the manifest's."""
-    from llm_rosetta.shims.provider_shim import VendorManifest
-    from llm_rosetta.shims.providers import _merged_connection as merge
+    """The effective connection of a leaf: its own values over the manifest's.
 
-    manifest = VendorManifest(
-        vendor=manifest_path.parent.name,
-        path=manifest_path,
-        connection=connection,
-    )
-    merged, _resolve = merge(leaf, manifest)
-    return merged
+    *manifest_path* is unused: the merge needs the manifest's values only.
+    """
+    return merge_connection(connection, leaf)
 
 
 def _manifest_schema() -> dict[str, Any]:
     """The manifest shape of ``provider.schema.json`` and its ``connection``."""
-    from llm_rosetta.shims import providers as _providers
-
-    path = Path(_providers.__file__).parent / "provider.schema.json"
-    schema = json.loads(path.read_text(encoding="utf-8"))
-    definitions = schema.get("definitions") or {}
-    return {
-        "manifest": definitions.get("vendorManifest") or {},
-        "connection": definitions.get("connection") or {},
-    }
+    return manifest_vocabulary().schema
 
 
 def _list_problem(value: Any, spec: dict[str, Any], key: str) -> str | None:

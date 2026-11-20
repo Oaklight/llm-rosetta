@@ -23,10 +23,9 @@ ceiling nor leave the frozen copy ``_LEGACY_FROZEN`` (so an offender cannot
 enter by replacing another).  When you delete entries, lower the ceiling and
 delete them from the frozen copy too.
 
-A private name (leading underscore, or a private module) has its own small
-allowlist, ``_PRIVATE_ALLOWLIST``.  PR 9 of the #1630 plan replaces those
-reaches and deletes the list; the four left are the manifest helpers of
-``admin/routes/config/shim_manifests.py`` (see the PR for what blocks them).
+A private name (leading underscore, or a private module) has its own
+allowlist, ``_PRIVATE_ALLOWLIST``.  It is empty: the gateway reaches no private
+core name, and an entry would have to be argued for in a PR.
 
 Regenerate both lists with ``python tests/gateway/test_core_surface_boundary.py``.
 ``--report-tests`` prints the same counts for ``tests/gateway/**``, which this
@@ -81,7 +80,7 @@ _PACKAGE_ONLY = frozenset({"llm_rosetta.observability.usage"})
 # had; #1639 removed `shims/catalog.py` -> `llm_rosetta.provider_names`; #1637
 # removed the three `llm_rosetta._vendor.yaml` imports (the gateway vendors its
 # own yaml).
-_LEGACY_CEILING = 64
+_LEGACY_CEILING = 62
 _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
         ("admin/routes/_shared.py", "llm_rosetta.shims"),
@@ -94,8 +93,6 @@ _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("admin/routes/config/providers.py", "llm_rosetta.shims"),
         ("admin/routes/config/shim_files.py", "llm_rosetta.shims"),
         ("admin/routes/config/shim_files.py", "llm_rosetta.shims.providers"),
-        ("admin/routes/config/shim_manifests.py", "llm_rosetta.shims.provider_shim"),
-        ("admin/routes/config/shim_manifests.py", "llm_rosetta.shims.providers"),
         ("admin/routes/config/upstream.py", "llm_rosetta.shims"),
         ("admin/routes/config/upstream.py", "llm_rosetta.shims.providers"),
         ("admin/routes/examples.py", "llm_rosetta"),
@@ -162,8 +159,6 @@ _LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset(
         ("admin/routes/config/providers.py", "llm_rosetta.shims"),
         ("admin/routes/config/shim_files.py", "llm_rosetta.shims"),
         ("admin/routes/config/shim_files.py", "llm_rosetta.shims.providers"),
-        ("admin/routes/config/shim_manifests.py", "llm_rosetta.shims.provider_shim"),
-        ("admin/routes/config/shim_manifests.py", "llm_rosetta.shims.providers"),
         ("admin/routes/config/upstream.py", "llm_rosetta.shims"),
         ("admin/routes/config/upstream.py", "llm_rosetta.shims.providers"),
         ("admin/routes/examples.py", "llm_rosetta"),
@@ -219,32 +214,9 @@ _LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset(
     }
 )
 
-# --- Private allowlist: (file, module, name).  PR 9 of #1630 deletes it. ---
-_PRIVATE_CEILING = 4
-_PRIVATE_ALLOWLIST: frozenset[tuple[str, str, str]] = frozenset(
-    {
-        (
-            "admin/routes/config/shim_manifests.py",
-            "llm_rosetta.shims.providers",
-            "_CONNECTION_KEYS",
-        ),
-        (
-            "admin/routes/config/shim_manifests.py",
-            "llm_rosetta.shims.providers",
-            "_IDENTITY_KEYS",
-        ),
-        (
-            "admin/routes/config/shim_manifests.py",
-            "llm_rosetta.shims.providers",
-            "_leaf_connection",
-        ),
-        (
-            "admin/routes/config/shim_manifests.py",
-            "llm_rosetta.shims.providers",
-            "_merged_connection",
-        ),
-    }
-)
+# --- Private allowlist: (file, module, name).  Empty since #1630; keep it empty. ---
+_PRIVATE_CEILING = 0
+_PRIVATE_ALLOWLIST: frozenset[tuple[str, str, str]] = frozenset()
 
 
 @dataclass(frozen=True)

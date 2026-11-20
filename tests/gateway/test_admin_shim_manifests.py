@@ -174,10 +174,11 @@ class TestManifestProblem:
 
     def test_the_schema_and_the_loader_agree_on_the_connection_keys(self):
         """One list of keys: the schema's properties are the config's fields."""
-        from llm_rosetta.shims.providers import _CONNECTION_KEYS
+        from llm_rosetta.api import manifest_vocabulary
 
         schema = shim_manifests._manifest_schema()
-        assert set(schema["connection"]["properties"]) == set(_CONNECTION_KEYS)
+        keys = manifest_vocabulary().connection_keys
+        assert set(schema["connection"]["properties"]) == set(keys)
 
 
 @pytest.mark.asyncio
@@ -632,3 +633,144 @@ async def test_shim_files_still_lists_only_shims(tmp_path, source):
     # The manifest's own file never appears among the shim rows.
     manifest_paths = {row["path"] for row in payload["manifests"]}
     assert not manifest_paths & {row["path"] for row in payload["shims"]}
+
+
+# --- Characterization of the loader vocabulary the panel reads (#1630). -----
+#
+# These pin what the panel's helpers return, so the source of the vocabulary
+# (core private names, then the public ``llm_rosetta.api``) can change without
+# the panel's answers changing.
+class TestLoaderVocabulary:
+    def test_the_connection_keys_are_the_connection_config_fields(self):
+        keys = shim_manifests._connection_keys()
+        assert isinstance(keys, tuple)
+        assert keys[:2] == ("base_url", "api_key_env")
+        assert {"headers", "token_command", "keyless", "transport"} <= set(keys)
+        assert len(keys) == len(set(keys)) == 19
+
+    def test_the_identity_keys(self):
+        assert shim_manifests._identity_keys() == ("name", "format", "base")
+
+    def test_the_unknown_connection_key_message_lists_the_keys(self):
+        problem = manifest_problem("connection:\n  base_uri: https://x\n")
+        keys = ", ".join(shim_manifests._connection_keys())
+        assert problem == (
+            f"unknown connection key(s) base_uri; a vendor manifest may declare {keys}"
+        )
+
+    def test_the_identity_message_names_every_identity_key_present(self):
+        assert manifest_problem("name: d\nformat: x\nbase: y\n") == (
+            "A vendor manifest declares no identity ('name', 'format', 'base'): "
+            "a file with 'name' or 'format' is a shim, and identity belongs in "
+            "the leaf's provider.yaml"
+        )
+
+    def test_the_schema_has_the_two_definitions(self):
+        schema = shim_manifests._manifest_schema()
+        assert set(schema) == {"manifest", "connection"}
+        assert "connection" in schema["manifest"]["properties"]
+        assert set(schema["connection"]["properties"]) == set(
+            shim_manifests._connection_keys()
+        )
+
+
+class TestLeafAndMergedConnection:
+    def test_a_leaf_reads_its_connection_block(self):
+        cfg = {"name": "x", "connection": {"base_url": "u", "headers": {"a": "1"}}}
+        assert shim_manifests._leaf_connection(cfg) == {
+            "base_url": "u",
+            "headers": {"a": "1"},
+        }
+
+    def test_a_leaf_reads_the_flat_spelling_and_the_legacy_aliases(self):
+        cfg = {
+            "name": "x",
+            "base_url": "u",
+            "keyless": True,
+            "default_api_key_env": "K",
+            "display_name": "ignored",
+        }
+        assert shim_manifests._leaf_connection(cfg) == {
+            "base_url": "u",
+            "keyless": True,
+            "api_key_env": "K",
+        }
+
+    def test_a_connection_block_wins_over_flat_keys(self):
+        cfg = {"base_url": "flat", "connection": {"api_key_env": "K"}}
+        assert shim_manifests._leaf_connection(cfg) == {"api_key_env": "K"}
+
+    @pytest.mark.parametrize("cfg", [None, [], "text", 3])
+    def test_a_non_mapping_leaf_has_no_connection(self, cfg):
+        assert shim_manifests._leaf_connection(cfg) == {}
+
+    def test_the_leaf_wins_per_field(self):
+        merged = shim_manifests._merged_connection(
+            {"base_url": "m", "api_key_env": "MK"},
+            {"base_url": "l"},
+            Path("/v/demo/provider.yaml"),
+        )
+        assert merged == {"base_url": "l", "api_key_env": "MK"}
+
+    def test_headers_merge_per_key(self):
+        merged = shim_manifests._merged_connection(
+            {"headers": {"a": "1", "b": "2"}},
+            {"headers": {"b": "9", "c": "3"}},
+            Path("/v/demo/provider.yaml"),
+        )
+        assert merged == {"headers": {"a": "1", "b": "9", "c": "3"}}
+
+    def test_headers_from_one_side_only(self):
+        path = Path("/v/demo/provider.yaml")
+        one = {"headers": {"a": "1"}}
+        assert shim_manifests._merged_connection(one, {}, path) == one
+        assert shim_manifests._merged_connection({}, one, path) == one
+
+    def test_a_non_mapping_manifest_headers_value_raises(self):
+        """Pinned as is: ``manifest_problem`` refuses it before a merge runs."""
+        with pytest.raises(TypeError):
+            shim_manifests._merged_connection(
+                {"headers": "bad"}, {"headers": {"a": "1"}}, Path("/v/d/provider.yaml")
+            )
+
+    def test_a_non_mapping_headers_value_on_one_side_only(self):
+        path = Path("/v/d/provider.yaml")
+        merged = shim_manifests._merged_connection({"headers": "bad"}, {}, path)
+        assert merged == {"headers": "bad"}
+
+    def test_neither_input_is_mutated(self):
+        manifest = {"headers": {"a": "1"}}
+        leaf = {"headers": {"b": "2"}}
+        shim_manifests._merged_connection(manifest, leaf, Path("/v/d/provider.yaml"))
+        assert manifest == {"headers": {"a": "1"}}
+        assert leaf == {"headers": {"b": "2"}}
+
+
+async def test_a_leaf_with_a_legacy_spelling_override_is_not_changed(tmp_path):
+    """A flat ``default_base_url`` leaf overrides the manifest's ``base_url``."""
+    root = tmp_path / "shims"
+    vendor = root / "demo"
+    (vendor / "legacy").mkdir(parents=True)
+    (vendor / "plain").mkdir()
+    (vendor / "provider.yaml").write_text(
+        _manifest("  base_url: https://m.example/v1\n"), encoding="utf-8"
+    )
+    (vendor / "legacy" / "provider.yaml").write_text(
+        "name: demo--legacy\nformat: chat_completions\n"
+        "default_base_url: https://leaf.example/v1\n",
+        encoding="utf-8",
+    )
+    (vendor / "plain" / "provider.yaml").write_text(
+        _leaf("demo--plain", "  keyless: true\n"), encoding="utf-8"
+    )
+    request = _request(
+        tmp_path,
+        root,
+        body={
+            "path": str(vendor / "provider.yaml"),
+            "yaml": _manifest("  base_url: https://new.example/v1\n"),
+        },
+    )
+    preview = _body(await post_preview_shim_manifest(request))
+    assert preview["changed_leaves"] == ["demo--plain"]
+    assert preview["unchanged_leaves"] == ["demo--legacy"]

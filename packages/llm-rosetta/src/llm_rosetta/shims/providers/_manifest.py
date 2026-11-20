@@ -350,3 +350,77 @@ def describe_vendor_manifest(
         leaves=tuple(leaves),
         schema=_manifest_schema(),
     )
+
+
+@dataclass(frozen=True)
+class ManifestVocabulary:
+    """What a vendor manifest may say, without reference to any file.
+
+    A host that edits manifest text, or describes a shim that has no file on
+    disk, needs the vocabulary and the merge rule but no path.
+
+    Attributes:
+        connection_keys: The ``connection:`` keys a manifest may declare.
+        identity_keys: The keys that make a ``provider.yaml`` a shim rather
+            than a manifest.
+        schema: The ``vendorManifest`` and ``connection`` definitions of
+            ``provider.schema.json``, as ``{"manifest": ..., "connection": ...}``.
+    """
+
+    connection_keys: tuple[str, ...]
+    identity_keys: tuple[str, ...]
+    schema: dict[str, dict[str, Any]]
+
+
+def manifest_vocabulary() -> ManifestVocabulary:
+    """Return the keys and schema a vendor manifest is read against.
+
+    The values are the loader's own, so a host that validates manifest text
+    with them agrees with what the loader accepts.  It reads the schema file
+    and registers nothing.
+    """
+    return ManifestVocabulary(
+        connection_keys=_CONNECTION_KEYS,
+        identity_keys=_IDENTITY_KEYS,
+        schema=_manifest_schema(),
+    )
+
+
+def leaf_connection(cfg: Any) -> dict[str, Any]:
+    """Return the connection values one shim declares itself.
+
+    The values come under their ``connection:`` names, from the ``connection:``
+    block or, in the pre-rename spelling, from the top level of the shim.
+
+    Args:
+        cfg: A shim's parsed ``provider.yaml``.
+
+    Returns:
+        The declared values, or an empty mapping when *cfg* is not a mapping.
+    """
+    return _leaf_connection(cfg) if isinstance(cfg, dict) else {}
+
+
+def merge_connection(
+    manifest_connection: Mapping[str, Any], leaf: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Return the connection a shim ends up with under a vendor manifest.
+
+    This is the loader's merge: the leaf wins per field, and ``headers``
+    merges per key.  Neither argument is modified.
+
+    Args:
+        manifest_connection: The ``connection:`` values the manifest declares.
+        leaf: The values the shim declares itself, as :func:`leaf_connection`
+            returns them.
+
+    Returns:
+        The merged mapping.
+    """
+    manifest = VendorManifest(
+        vendor="",
+        path=Path("provider.yaml"),
+        connection=dict(manifest_connection),
+    )
+    merged, _resolve = _merged_connection(dict(leaf), manifest)
+    return merged
