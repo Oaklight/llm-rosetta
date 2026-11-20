@@ -784,17 +784,29 @@ class ProviderShim:
 
     @property
     def base(self) -> str:
-        """Deprecated alias for :attr:`format`."""
+        """Read-only alias for :attr:`format`.
+
+        Kept for existing readers; it warns of nothing. New code reads
+        :attr:`format`.
+        """
         return self.format
 
     @property
     def default_path(self) -> str | None:
-        """Alias for ``connection.default_path``."""
+        """Read-only alias for ``connection.default_path``.
+
+        Kept for existing readers; it warns of nothing. New code reads
+        ``connection.default_path``.
+        """
         return self.connection.default_path
 
     @property
     def max_tool_description_length(self) -> int | None:
-        """Alias for ``tools.max_description_length`` (deprecated)."""
+        """Read-only alias for ``tools.max_description_length``.
+
+        Kept for existing readers; it warns of nothing. New code reads
+        ``tools.max_description_length``.
+        """
         return self.tools.max_description_length
 
 
