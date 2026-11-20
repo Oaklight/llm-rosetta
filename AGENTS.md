@@ -162,6 +162,12 @@ supported format and forwards them to any configured upstream provider.
 
 `llm_rosetta.api` is the small public surface that the gateway and shim authors import (#1630): re-exports only, a literal `__all__` grouped by capability. The four contract modules `llm_rosetta.shims.auth_exchange`, `llm_rosetta.shims.quota_probe`, `llm_rosetta.routing` and `llm_rosetta.observability.usage` stay where they are and are not re-exported. Within one minor it only gains names; a rename or removal keeps a deprecated alias for one minor. Core must never import `llm_rosetta.api` (`tests/test_core_import_boundary.py`).
 
+The gateway reaches core only through a named surface: `llm_rosetta.api`, `llm_rosetta.shims.auth_exchange`, `llm_rosetta.shims.quota_probe`,
+`llm_rosetta.routing`, and the `llm_rosetta.observability.usage` package (never
+its submodules).  `tests/gateway/test_core_surface_boundary.py` enforces this
+over every gateway file, `admin/` included.  Imports outside the surface sit on
+a shrinking legacy allowlist; do not add to it, use the surface.  See #1630.
+
 ### IR type system
 
 Typed dataclasses for the intermediate representation live in `types/ir/`.
