@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from llm_rosetta._compat import maybe_sync
+from llm_rosetta_gateway._compat import maybe_sync
 
 
 # ---------------------------------------------------------------------------

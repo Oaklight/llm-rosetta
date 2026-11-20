@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from llm_rosetta._compat import sync_compat as _sync_compat
+from llm_rosetta_gateway._compat import sync_compat as _sync_compat
 
 if TYPE_CHECKING:
     pass

@@ -6,7 +6,7 @@ import logging
 import os
 import re
 from typing import TYPE_CHECKING, Any
-from llm_rosetta._compat import sync_compat
+from llm_rosetta_gateway._compat import sync_compat
 
 from llm_rosetta_gateway.observability import (
     DEFAULT_SUCCESS_MAX,

@@ -18,7 +18,7 @@ import re
 import uuid
 import zlib
 from copy import deepcopy
-from llm_rosetta._compat import sync_compat
+from llm_rosetta_gateway._compat import sync_compat
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
