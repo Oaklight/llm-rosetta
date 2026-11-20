@@ -95,13 +95,19 @@ from llm_rosetta.shims.provider_shim import (
     staging_registry,
 )
 from llm_rosetta.shims.providers import (
+    builtin_providers_dir,
     describe_vendor_manifest,
     get_model_list_transform,
     leaf_connection,
     load_providers,
     manifest_vocabulary,
     merge_connection,
+    plugin_source,
 )
+from llm_rosetta.shims.scaffold import add_arguments as add_scaffold_arguments
+from llm_rosetta.shims.scaffold import run as run_scaffold
+from llm_rosetta.shims.scaffold import run_check as run_scaffold_check
+from llm_rosetta.shims.scaffold import run_migrate as run_scaffold_migrate
 from llm_rosetta.transforms import flatten_system_content
 from llm_rosetta.types.ir import is_image_part, is_tool_result_part
 
@@ -153,17 +159,24 @@ __all__ = [
     "resolve_model_type",
     "resolve_shim",
     # Shim registry, write side and loaders
+    "builtin_providers_dir",
     "describe_vendor_manifest",
     "leaf_connection",
     "load_providers",
     "load_providers_from_dir",
     "manifest_vocabulary",
     "merge_connection",
+    "plugin_source",
     "register_shim",
     "restore_registry",
     "snapshot_registry",
     "staging_registry",
     "unregister_shim",
+    # Shim scaffolding (the ``shims new`` / ``check`` / ``migrate`` commands)
+    "add_scaffold_arguments",
+    "run_scaffold",
+    "run_scaffold_check",
+    "run_scaffold_migrate",
     # Fidelity and profiling
     "DeepProfiler",
     "FidelityChecker",

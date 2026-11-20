@@ -333,6 +333,15 @@ def load_providers() -> list[ProviderShim]:
 _PLUGIN_SOURCES: dict[str, str] = {}
 
 
+def builtin_providers_dir() -> Path:
+    """Return the directory the bundled shims are loaded from.
+
+    Returns:
+        The built-in ``providers/`` root, the one :func:`load_providers` scans.
+    """
+    return _PROVIDERS_DIR
+
+
 def plugin_source(name: str) -> str | None:
     """Return the distribution that registered plugin shim *name*, if any.
 
