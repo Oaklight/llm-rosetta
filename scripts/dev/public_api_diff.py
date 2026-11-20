@@ -146,7 +146,15 @@ def _src_roots(root: Path) -> list[Path]:
         root / "packages/llm-rosetta-gateway/src",
         root / "src",
     )
-    found = [path.resolve() for path in candidates if (path / "llm_rosetta").is_dir()]
+    # A root is any source directory that holds one of the two import roots.
+    # The gateway root holds ``llm_rosetta_gateway`` and no ``llm_rosetta``, so
+    # testing for ``llm_rosetta`` alone drops it and the gateway modules are
+    # then imported from whatever copy happens to be installed.
+    found = [
+        path.resolve()
+        for path in candidates
+        if (path / "llm_rosetta").is_dir() or (path / "llm_rosetta_gateway").is_dir()
+    ]
     if not found:
         raise SystemExit(f"{root} does not look like an llm-rosetta source tree")
     return found
@@ -162,6 +170,20 @@ def dump_surface(root: Path) -> dict:
     origin = Path(llm_rosetta.__file__).resolve()
     if not origin.is_relative_to(src / "llm_rosetta"):
         raise SystemExit(f"imported llm_rosetta from {origin}, expected under {src}")
+
+    gateway_src = next(
+        (path for path in _src_roots(root) if (path / "llm_rosetta_gateway").is_dir()),
+        None,
+    )
+    if gateway_src is not None:
+        import llm_rosetta_gateway  # noqa: PLC0415
+
+        gateway_origin = Path(llm_rosetta_gateway.__file__).resolve()
+        if not gateway_origin.is_relative_to(gateway_src / "llm_rosetta_gateway"):
+            raise SystemExit(
+                f"imported llm_rosetta_gateway from {gateway_origin},"
+                f" expected under {gateway_src}"
+            )
 
     result: dict[str, dict] = {}
     # A tree that predates the split has no ``llm_rosetta_gateway``; importing
