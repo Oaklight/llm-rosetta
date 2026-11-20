@@ -18,6 +18,7 @@ from llm_rosetta.formats.catalog import (
     MODEL_TYPES,
     canonical_model_type,
     legacy_model_type,
+    spec_for,
 )
 from llm_rosetta.formats.detect import DETECTORS, Detector, detect_format
 from llm_rosetta.formats.spec import FormatSpec
@@ -42,4 +43,5 @@ __all__ = [
     "canonical_model_type",
     "detect_format",
     "legacy_model_type",
+    "spec_for",
 ]

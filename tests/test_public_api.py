@@ -85,7 +85,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
     },
     # The host-facing surface (#1630).  Re-exports only; a name enters it with a
     # gateway call site or an external-shim use.  The ceiling leaves room for
-    # the six functions the follow-up PR adds (``spec_for``, ``legacy_names``,
+    # the six functions added in PR 6 (``spec_for``, ``legacy_names``,
     # ``typed_response_usage``, ``staging_registry``, ``reasoning_capability``,
     # ``describe_vendor_manifest``) and ``SURFACE_VERSION``.
     "llm_rosetta.api": {
@@ -104,6 +104,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "get_decision_converter",
             "get_embedding_converter",
             "get_rerank_converter",
+            "typed_response_usage",
             # Format catalog and model-type vocabulary
             "FORMATS_BY_TYPE",
             "FORMAT_SPECS",
@@ -112,10 +113,12 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "canonical_model_type",
             "default_path",
             "legacy_model_type",
+            "spec_for",
             # Provider and shim names
             "ProviderType",
             "canonical_provider_name",
             "canonical_shim_name",
+            "legacy_names",
             "retired_names",
             "warn_legacy_provider_names",
             "warn_legacy_shim_names",
@@ -129,15 +132,18 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "get_shim",
             "list_shims",
             "match_model_reasoning",
+            "reasoning_capability",
             "resolve_format",
             "resolve_model_type",
             "resolve_shim",
             # Shim registry, write side and loaders
+            "describe_vendor_manifest",
             "load_providers",
             "load_providers_from_dir",
             "register_shim",
             "restore_registry",
             "snapshot_registry",
+            "staging_registry",
             "unregister_shim",
             # Fidelity and profiling
             "DeepProfiler",
