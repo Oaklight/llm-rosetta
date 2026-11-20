@@ -81,31 +81,11 @@ _PACKAGE_ONLY = frozenset({"llm_rosetta.observability.usage"})
 # had; #1639 removed `shims/catalog.py` -> `llm_rosetta.provider_names`; #1637
 # removed the three `llm_rosetta._vendor.yaml` imports (the gateway vendors its
 # own yaml).
-_LEGACY_CEILING = 64
+_LEGACY_CEILING = 44
 _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
-        ("admin/routes/_shared.py", "llm_rosetta.shims"),
-        ("admin/routes/config/bulk.py", "llm_rosetta.formats"),
-        ("admin/routes/config/models.py", "llm_rosetta.formats"),
-        ("admin/routes/config/payload.py", "llm_rosetta"),
-        ("admin/routes/config/payload.py", "llm_rosetta.formats"),
-        ("admin/routes/config/payload.py", "llm_rosetta.shims"),
-        ("admin/routes/config/payload.py", "llm_rosetta.shims.provider_shim"),
-        ("admin/routes/config/providers.py", "llm_rosetta.shims"),
-        ("admin/routes/config/shim_files.py", "llm_rosetta.shims"),
         ("admin/routes/config/shim_files.py", "llm_rosetta.shims.providers"),
-        ("admin/routes/config/shim_manifests.py", "llm_rosetta.shims.provider_shim"),
         ("admin/routes/config/shim_manifests.py", "llm_rosetta.shims.providers"),
-        ("admin/routes/config/upstream.py", "llm_rosetta.shims"),
-        ("admin/routes/config/upstream.py", "llm_rosetta.shims.providers"),
-        ("admin/routes/examples.py", "llm_rosetta"),
-        ("admin/routes/examples.py", "llm_rosetta.converters.decisions"),
-        ("admin/routes/examples.py", "llm_rosetta.converters.embeddings"),
-        ("admin/routes/examples.py", "llm_rosetta.converters.rerank"),
-        ("admin/routes/examples.py", "llm_rosetta.formats.catalog"),
-        ("admin/routes/examples.py", "llm_rosetta.formats.spec"),
-        ("admin/routes/observability.py", "llm_rosetta.provider_names"),
-        ("admin/routes/observability.py", "llm_rosetta.shims"),
         ("app/routes_health.py", "llm_rosetta"),
         ("app/routes_llm.py", "llm_rosetta.auto_detect"),
         ("app/routes_llm.py", "llm_rosetta.converters.registry"),
@@ -152,28 +132,8 @@ _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
 )
 _LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset(
     {
-        ("admin/routes/_shared.py", "llm_rosetta.shims"),
-        ("admin/routes/config/bulk.py", "llm_rosetta.formats"),
-        ("admin/routes/config/models.py", "llm_rosetta.formats"),
-        ("admin/routes/config/payload.py", "llm_rosetta"),
-        ("admin/routes/config/payload.py", "llm_rosetta.formats"),
-        ("admin/routes/config/payload.py", "llm_rosetta.shims"),
-        ("admin/routes/config/payload.py", "llm_rosetta.shims.provider_shim"),
-        ("admin/routes/config/providers.py", "llm_rosetta.shims"),
-        ("admin/routes/config/shim_files.py", "llm_rosetta.shims"),
         ("admin/routes/config/shim_files.py", "llm_rosetta.shims.providers"),
-        ("admin/routes/config/shim_manifests.py", "llm_rosetta.shims.provider_shim"),
         ("admin/routes/config/shim_manifests.py", "llm_rosetta.shims.providers"),
-        ("admin/routes/config/upstream.py", "llm_rosetta.shims"),
-        ("admin/routes/config/upstream.py", "llm_rosetta.shims.providers"),
-        ("admin/routes/examples.py", "llm_rosetta"),
-        ("admin/routes/examples.py", "llm_rosetta.converters.decisions"),
-        ("admin/routes/examples.py", "llm_rosetta.converters.embeddings"),
-        ("admin/routes/examples.py", "llm_rosetta.converters.rerank"),
-        ("admin/routes/examples.py", "llm_rosetta.formats.catalog"),
-        ("admin/routes/examples.py", "llm_rosetta.formats.spec"),
-        ("admin/routes/observability.py", "llm_rosetta.provider_names"),
-        ("admin/routes/observability.py", "llm_rosetta.shims"),
         ("app/routes_health.py", "llm_rosetta"),
         ("app/routes_llm.py", "llm_rosetta.auto_detect"),
         ("app/routes_llm.py", "llm_rosetta.converters.registry"),

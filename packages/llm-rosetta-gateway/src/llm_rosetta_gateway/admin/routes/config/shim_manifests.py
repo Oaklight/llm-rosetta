@@ -68,7 +68,7 @@ def _merged_connection(
     connection: dict[str, Any], leaf: dict[str, Any], manifest_path: Path
 ) -> dict[str, Any]:
     """The effective connection of a leaf: its own values over the manifest's."""
-    from llm_rosetta.shims.provider_shim import VendorManifest
+    from llm_rosetta.api import VendorManifest
     from llm_rosetta.shims.providers import _merged_connection as merge
 
     manifest = VendorManifest(

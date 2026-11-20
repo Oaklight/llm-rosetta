@@ -7,9 +7,12 @@ import os
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta.shims import get_shim, list_shims
-from llm_rosetta.shims.provider_shim import match_model_reasoning
-from llm_rosetta.api import reasoning_capability
+from llm_rosetta.api import (
+    get_shim,
+    list_shims,
+    match_model_reasoning,
+    reasoning_capability,
+)
 
 from ....admin_api import admin_context
 from ....config import GatewayConfig
@@ -125,7 +128,7 @@ def _get_version() -> str:
 def _get_core_version() -> str:
     """Return the conversion core's version, which the gateway depends on."""
     try:
-        from llm_rosetta import __version__
+        from llm_rosetta.api import __version__
 
         return __version__
     except Exception:
@@ -254,7 +257,7 @@ def _normalize_model_entry(value: Any) -> dict[str, Any]:
 
 def _merge_typed_models(raw: dict[str, Any], models: dict[str, Any]) -> None:
     """Merge embeddings/rerank/decision models into the main models dict."""
-    from llm_rosetta.formats import legacy_model_type
+    from llm_rosetta.api import legacy_model_type
 
     for model_type in ("embeddings", "rerank", "decisions"):
         old = legacy_model_type(model_type)
