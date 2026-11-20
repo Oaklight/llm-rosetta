@@ -867,13 +867,30 @@ _SCAN_SKIP_FILES = ("package.json", "package-lock.json")
 def _scan_vocabulary() -> dict[str, list[str]]:
     """Retired spelling -> replacement notes, for names worth finding in code.
 
-    The bare model-type words (``embedding``, ``decision``) are left out of
-    the scan: they are ordinary dictionary keys all over an API client.  Their
-    compound config-key spellings (``embedding_providers``) are in.
+    The scan has no slot to read, so it keeps only strings that are retired
+    wherever they appear:
+
+    * a name that is a current format (``google_generate``,
+      ``google_interactions``) is left out, although the table lists it as a
+      retired *shim* name: in code it is the format;
+    * a bare retired shim name (``openai``, ``google``, ``anthropic``) is left
+      out: it is a vendor word in ordinary code.  ``google`` and ``anthropic``
+      are still found as retired provider types;
+    * the bare model-type words (``embedding``, ``decision``) are left out too:
+      they are dictionary keys all over an API client.  Their compound
+      config-key spellings (``embedding_providers``) are in.
+
+    ``--config`` has the slots and uses them, so it needs none of this.
     """
+    current = _current_formats()
     vocab: dict[str, list[str]] = {}
     for row in retired_names.RETIRED_NAMES:
         if row.kind != retired_names.MODEL_TYPE:
+            if row.name in current:
+                continue
+            bare = not any(mark in row.name for mark in "-_")
+            if row.kind == retired_names.SHIM and bare:
+                continue
             vocab.setdefault(row.name, []).append(f"{row.replacement} ({row.kind})")
             continue
         for suffix in (*_SECTION_SUFFIXES, *_ENDPOINT_SUFFIXES):

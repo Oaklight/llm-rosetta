@@ -569,6 +569,43 @@ def test_scan_reports_retired_names_and_edits_nothing(tmp_path, capsys) -> None:
     assert "chat_completions" in capsys.readouterr().out
 
 
+def test_scan_ignores_names_that_are_already_current(tmp_path, capsys) -> None:
+    """No finding for a current format, a current shim or a vendor word."""
+    (tmp_path / "ok.py").write_text(
+        'a = "google_generate"\n'
+        'b = "google_interactions"\n'
+        'c = "google--google_generate"\n'
+        'd = "openai"\n'
+        'e = "openai--chat_completions"\n'
+        'f = convert(body, "messages", source_provider="chat_completions")\n'
+        'g = dict(embeddings_providers=1, default_embeddings_format="openai")\n'
+    )
+    (tmp_path / "ok.yaml").write_text(
+        "providers:\n  a:\n    type: google_generate\n    shim: openai--open_responses\n"
+    )
+
+    assert mig.scan_path(tmp_path) == []
+    assert mig.main(["--scan", str(tmp_path)]) == 0
+
+
+def test_scan_reports_old_names_beside_current_ones(tmp_path) -> None:
+    (tmp_path / "mixed.py").write_text(
+        'ok = "google_generate"\n'
+        'old = "openai_chat"\n'
+        'older = "volcengine--openai_chat"\n'
+        'vendor = "openai"\n'
+        'kind = "google"\n'
+    )
+
+    found = sorted((i.line, i.old, i.new) for i in mig.scan_path(tmp_path))
+
+    assert found == [
+        (2, "openai_chat", "chat_completions (provider_type)"),
+        (3, "volcengine--openai_chat", "volcengine--chat_completions (shim)"),
+        (5, "google", "google_generate (provider_type)"),
+    ]
+
+
 def test_scan_of_a_clean_tree_exits_0(tmp_path) -> None:
     (tmp_path / "ok.py").write_text('fmt = "chat_completions"\n')
     assert mig.main(["--scan", str(tmp_path)]) == 0
@@ -576,9 +613,19 @@ def test_scan_of_a_clean_tree_exits_0(tmp_path) -> None:
 
 def test_the_scan_vocabulary_is_the_table_plus_derived_keys() -> None:
     vocab = mig._scan_vocabulary()
+    bare_shims = set(["openai", "google", "anthropic"])
+    current = set(["google_generate", "google_interactions"])
     for row in ROWS:
-        if row.kind != retired_names.MODEL_TYPE:
-            assert row.name in vocab
+        if row.kind == retired_names.MODEL_TYPE:
+            continue
+        left_out = row.name in current or (
+            row.kind == retired_names.SHIM and row.name in bare_shims
+        )
+        notes = vocab.get(row.name, [])
+        listed = any(note.endswith(f"({row.kind})") for note in notes)
+        assert listed is not left_out, row
     assert "embedding" not in vocab and "decision" not in vocab
     assert vocab["default_decision_format"] == ["default_decisions_format"]
-    assert len(vocab["google"]) == 2
+    assert vocab["google"] == ["google_generate (provider_type)"]
+    assert "google_generate" not in vocab and "google_interactions" not in vocab
+    assert "openai" not in vocab
