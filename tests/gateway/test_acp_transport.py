@@ -76,6 +76,7 @@ FAKE_AGENT = textwrap.dedent(
         req_id = msg.get("id")
 
         if method == "initialize":
+            note("initialize", params=msg.get("params"))
             send({"jsonrpc": "2.0", "id": req_id, "result": {
                 "protocolVersion": 1,
                 "agentInfo": {"name": "fake-acp", "version": "0.1"},
@@ -109,6 +110,15 @@ FAKE_AGENT = textwrap.dedent(
                 update(sid, {"sessionUpdate": "agent_message_chunk",
                              "content": {"type": "text", "text": "replayed"}})
             send({"jsonrpc": "2.0", "id": req_id, "result": {}})
+        elif method == "session/set_mode":
+            if MODE == "mode-refused":
+                send({"jsonrpc": "2.0", "id": req_id, "error": {
+                    "code": -32602, "message": "unknown mode",
+                }})
+                continue
+            note("mode", session=msg["params"]["sessionId"],
+                 mode=msg["params"].get("modeId"))
+            send({"jsonrpc": "2.0", "id": req_id, "result": {}})
         elif method == "session/set_config_option":
             note(
                 "config",
@@ -133,6 +143,26 @@ FAKE_AGENT = textwrap.dedent(
                     "code": -32603, "message": "model call failed",
                 }})
                 continue
+            if MODE in ("asks", "asks-allow-only", "asks-fs"):
+                if MODE == "asks-fs":
+                    send({"jsonrpc": "2.0", "id": 900,
+                          "method": "fs/read_text_file",
+                          "params": {"sessionId": sid, "path": "/etc/hostname"}})
+                else:
+                    options = [
+                        {"optionId": "a1", "name": "Allow", "kind": "allow_once"},
+                        {"optionId": "r1", "name": "Reject", "kind": "reject_once"},
+                    ]
+                    if MODE == "asks-allow-only":
+                        options = options[:1]
+                    send({"jsonrpc": "2.0", "id": 900,
+                          "method": "session/request_permission",
+                          "params": {"sessionId": sid,
+                                     "toolCall": {"toolCallId": "t1",
+                                                  "title": "Read /secret"},
+                                     "options": options}})
+                reply = json.loads(sys.stdin.readline())
+                note("permission_reply", reply=reply)
             update(sid, {"sessionUpdate": "agent_thought_chunk",
                          "content": {"type": "text", "text": "thinking"}})
             update(sid, {"sessionUpdate": "agent_message_chunk",
@@ -955,3 +985,119 @@ async def _await_prompt(tmp_path: Any, timeout: float = 5.0) -> None:
             return
         await asyncio.sleep(0.02)
     raise AssertionError("the fake agent never received the prompt")
+
+
+class TestAgentToolsAreOff:
+    """Phase 1: the agent answers in text; every tool request is refused."""
+
+    async def _turn_chunks(self, monkeypatch, tmp_path, mode):
+        transport = AcpTransport(timeout=5)
+        try:
+            stream = await transport.send_streaming(
+                _provider(monkeypatch, tmp_path, mode), "", TURN
+            )
+            return [chunk async for chunk in stream]
+        finally:
+            await transport.close()
+
+    def _reply(self, tmp_path):
+        return next(e for e in _log(tmp_path) if e["kind"] == "permission_reply")[
+            "reply"
+        ]
+
+    async def test_a_permission_request_gets_the_reject_option_and_the_turn_ends(
+        self, monkeypatch, tmp_path
+    ):
+        import logging
+
+        records: list[logging.LogRecord] = []
+
+        class _Keep(logging.Handler):
+            def emit(self, record):
+                records.append(record)
+
+        gateway_log = logging.getLogger("llm-rosetta-gateway")
+        handler = _Keep(level=logging.WARNING)
+        gateway_log.addHandler(handler)
+        try:
+            chunks = await self._turn_chunks(monkeypatch, tmp_path, "asks")
+        finally:
+            gateway_log.removeHandler(handler)
+        assert chunks[-1]["type"] == "stop"
+        assert "text" in [c["type"] for c in chunks]
+        assert self._reply(tmp_path)["result"] == {
+            "outcome": {"outcome": "selected", "optionId": "r1"}
+        }
+        lines = [r.getMessage() for r in records if "refused" in r.getMessage()]
+        assert lines == [
+            "ACP provider 'antigravity': agent tool request refused "
+            "(tool: Read /secret); agent tools are disabled"
+        ]
+
+    async def test_without_a_reject_option_the_outcome_is_cancelled(
+        self, monkeypatch, tmp_path
+    ):
+        chunks = await self._turn_chunks(monkeypatch, tmp_path, "asks-allow-only")
+        assert chunks[-1]["type"] == "stop"
+        assert self._reply(tmp_path)["result"] == {"outcome": {"outcome": "cancelled"}}
+
+    async def test_a_client_fs_request_is_an_error_not_a_file(
+        self, monkeypatch, tmp_path
+    ):
+        chunks = await self._turn_chunks(monkeypatch, tmp_path, "asks-fs")
+        assert chunks[-1]["type"] == "stop"
+        reply = self._reply(tmp_path)
+        assert "result" not in reply and "error" in reply
+
+    async def test_initialize_advertises_no_fs_and_no_terminal(
+        self, monkeypatch, tmp_path
+    ):
+        await self._turn_chunks(monkeypatch, tmp_path, "ok")
+        params = next(e for e in _log(tmp_path) if e["kind"] == "initialize")["params"]
+        # The wire form drops false flags, so an empty or absent block is
+        # "nothing advertised".
+        caps = params.get("clientCapabilities") or {}
+        assert not caps.get("terminal")
+        assert not any((caps.get("fs") or {}).values())
+
+    async def test_every_new_session_is_put_in_the_asking_mode(
+        self, monkeypatch, tmp_path
+    ):
+        await self._turn_chunks(monkeypatch, tmp_path, "ok")
+        modes = [e for e in _log(tmp_path) if e["kind"] == "mode"]
+        assert [m["mode"] for m in modes] == ["plan"]
+        kinds = _kinds(tmp_path)
+        assert kinds.index("new") < kinds.index("mode") < kinds.index("prompt")
+
+    async def test_a_session_whose_mode_cannot_be_set_does_not_run(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport(timeout=5)
+        try:
+            response = await transport.send(
+                _provider(monkeypatch, tmp_path, "mode-refused"), "", TURN
+            )
+        finally:
+            await transport.close()
+        assert response.status_code == 502
+        assert b"cannot be gated" in response.raw_content
+        assert "prompt" not in _kinds(tmp_path)
+
+    def test_the_default_argv_turns_the_agent_auto_approve_off(self):
+        from llm_rosetta_gateway.transport.acp import DEFAULT_AGENT_ARGV
+
+        assert "--dangerously-skip-permissions=false" in DEFAULT_AGENT_ARGV
+
+    def test_an_argv_override_is_kept(self):
+        provider = ProviderInfo(
+            "acp",
+            config_name="x",
+            api_key="",
+            base_url="http://agy.local",
+            auth_header_fn=openai_auth,
+            url_template="{base_url}/acp-turn",
+            keyless=True,
+            transport="acp",
+            acp_argv=("agy", "acp"),
+        )
+        assert AcpTransport()._argv(provider) == ["agy", "acp"]

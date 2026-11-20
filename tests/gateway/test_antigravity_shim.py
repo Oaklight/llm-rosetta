@@ -40,7 +40,11 @@ class TestWhatTheShimDeclares:
         connection = shim().connection
 
         assert connection.transport == "acp"
-        assert connection.acp_argv == ("agy", "acp")
+        assert connection.acp_argv == (
+            "agy",
+            "acp",
+            "--dangerously-skip-permissions=false",
+        )
 
     def test_it_declares_no_credential_of_its_own(self):
         """``agy`` owns the Google token; the gateway must not hold one."""
@@ -61,7 +65,7 @@ class TestHowTheGatewayReadsIt:
         info = build_provider_info("acp", {}, shim_name=SHIM)
 
         assert info.transport == "acp"
-        assert info.acp_argv == ("agy", "acp")
+        assert info.acp_argv == ("agy", "acp", "--dangerously-skip-permissions=false")
         assert info.keyless is True
 
     def test_a_config_override_wins_over_the_shim(self):
