@@ -15,21 +15,19 @@ through them:
 
 Where an allowed module defines ``__all__``, an imported name must be in it.
 
-Every import outside the surface is a *legacy offender*, held on
-``_LEGACY_ALLOWLIST`` keyed on ``(file, module)`` (no line numbers, so a rebase
-does not invalidate it).  The list can only shrink, and three guards enforce
-that: a new offender fails, a stale entry fails, and the size may not exceed a
-ceiling nor leave the frozen copy ``_LEGACY_FROZEN`` (so an offender cannot
-enter by replacing another).  When you delete entries, lower the ceiling and
-delete them from the frozen copy too.
+The rule is strict: any import of core from the gateway outside the five
+paths fails, and so does any private name (leading underscore, or a private
+module), wherever it is imported from.  There is no allowlist for the gateway
+source; a missing capability becomes a name on ``llm_rosetta.api`` (additive,
+with a test), never an exception here.  The gateway asserts the core's
+``api.SURFACE_VERSION`` at startup (``llm_rosetta_gateway.surface``).
 
-A private name (leading underscore, or a private module) has its own
-allowlist, ``_PRIVATE_ALLOWLIST``.  It is empty: the gateway reaches no private
-core name, and an entry would have to be argued for in a PR.
+``tests/gateway/**`` follows D5 of #1630: a non-private internal module is
+tolerated, a private name is not, except the entries on
+``_TESTS_PRIVATE_ALLOWLIST``, which can only shrink.
 
-Regenerate both lists with ``python tests/gateway/test_core_surface_boundary.py``.
-``--report-tests`` prints the same counts for ``tests/gateway/**``, which this
-test does not scan yet.
+Print the counts with ``python tests/gateway/test_core_surface_boundary.py``;
+``--report-tests`` does the same for ``tests/gateway/**``.
 """
 
 from __future__ import annotations
@@ -72,21 +70,6 @@ _SURFACE = (
 )
 #: Surface paths whose submodules are not part of the surface.
 _PACKAGE_ONLY = frozenset({"llm_rosetta.observability.usage"})
-
-# --- Legacy allowlist: (file relative to the gateway package, core module). ---
-# Shrink only.  Lower _LEGACY_CEILING and edit _LEGACY_FROZEN with it.
-# The shims split (#1633) added one pair, `shims/_scan.py` ->
-# `llm_rosetta.shims.providers`, on a dependency `shims/sources.py` already
-# had; #1639 removed `shims/catalog.py` -> `llm_rosetta.provider_names`; #1637
-# removed the three `llm_rosetta._vendor.yaml` imports (the gateway vendors its
-# own yaml).
-_LEGACY_CEILING = 0
-_LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset()
-_LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset()
-
-# --- Private allowlist: (file, module, name).  Empty since #1630; keep it empty. ---
-_PRIVATE_CEILING = 0
-_PRIVATE_ALLOWLIST: frozenset[tuple[str, str, str]] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -200,7 +183,7 @@ def declared_all(module: str) -> frozenset[str] | None:
     return None if declared is None else frozenset(declared)
 
 
-def legacy_offenders(edges: Iterable[Edge]) -> set[tuple[str, str]]:
+def outside_surface(edges: Iterable[Edge]) -> set[tuple[str, str]]:
     """Return the ``(file, module)`` pairs outside the surface."""
     return {
         (e.file, e.module) for e in edges if not e.private and not _is_allowed(e.module)
@@ -224,30 +207,16 @@ def undeclared_names(edges: Iterable[Edge]) -> list[str]:
     return found
 
 
-def test_a_core_import_is_on_the_surface_or_on_the_legacy_list():
-    offenders = legacy_offenders(gateway_edges())
-    new = sorted(offenders - _LEGACY_ALLOWLIST)
-    assert new == [], (
+def test_a_core_import_is_on_the_surface():
+    assert sorted(outside_surface(gateway_edges())) == [], (
         "the gateway imports core outside the named surface "
-        f"({', '.join(_SURFACE)}); use the surface, do not add to the list"
+        f"({', '.join(_SURFACE)}); add an additive name to llm_rosetta.api "
+        "instead"
     )
 
 
-def test_every_legacy_entry_is_still_an_offender():
-    stale = sorted(_LEGACY_ALLOWLIST - legacy_offenders(gateway_edges()))
-    assert stale == [], "delete these entries from _LEGACY_ALLOWLIST (and _FROZEN)"
-
-
-def test_the_legacy_allowlist_cannot_grow_or_swap():
-    assert len(_LEGACY_ALLOWLIST) <= _LEGACY_CEILING
-    assert _LEGACY_ALLOWLIST <= _LEGACY_FROZEN, "an entry was added or replaced"
-
-
-def test_private_core_names_are_only_the_known_reaches():
-    reaches = private_offenders(gateway_edges())
-    assert sorted(reaches - _PRIVATE_ALLOWLIST) == []
-    assert sorted(_PRIVATE_ALLOWLIST - reaches) == [], "stale: delete the entry"
-    assert len(_PRIVATE_ALLOWLIST) <= _PRIVATE_CEILING
+def test_the_gateway_reaches_no_private_core_name():
+    assert sorted(private_offenders(gateway_edges())) == []
 
 
 def test_surface_imports_use_declared_names():
@@ -293,7 +262,22 @@ def test_a_non_literal_dynamic_import_is_an_offender():
     edges = core_edges(
         "app/x.py", "import importlib\nimportlib.import_module(name)", ()
     )
-    assert legacy_offenders(edges) == {("app/x.py", _NON_LITERAL)}
+    assert outside_surface(edges) == {("app/x.py", _NON_LITERAL)}
+
+
+def test_the_rule_is_strict_for_the_gateway_source():
+    def edges(source: str) -> list[Edge]:
+        return core_edges("x.py", source, ("llm_rosetta_gateway",))
+
+    # A public internal module is outside the surface, with no list to hide on.
+    assert outside_surface(edges("from llm_rosetta.shims import get_shim")) == {
+        ("x.py", "llm_rosetta.shims")
+    }
+    assert outside_surface(edges("from llm_rosetta.api import get_shim")) == set()
+    # A private name is a violation even on a surface module.
+    assert private_offenders(edges("from llm_rosetta.api import _x")) == {
+        ("x.py", "llm_rosetta.api", "_x")
+    }
 
 
 def test_the_surface_rule():
@@ -361,13 +345,6 @@ def test_gateway_tests_reach_no_private_core_name_off_the_list():
     assert len(_TESTS_PRIVATE_ALLOWLIST) <= _TESTS_PRIVATE_CEILING
 
 
-def _render(name: str, annotation: str, items: Iterable[tuple[str, ...]]) -> str:
-    lines = [f"{name}: {annotation} = frozenset(", "    {"]
-    lines += [f"        {item!r}," for item in sorted(items)]
-    lines += ["    }", ")"]
-    return "\n".join(lines)
-
-
 def _report(edges: list[Edge], label: str) -> str:
     files = {e.file for e in edges}
     pairs = {(e.file, e.module) for e in edges}
@@ -390,7 +367,6 @@ def _report(edges: list[Edge], label: str) -> str:
         "(file, module) pairs outside the surface": len(
             {(e.file, e.module) for e in off}
         ),
-        "  of which legacy-list entries": len(legacy_offenders(edges)),
     }
     out = [f"# {label}"] + [f"# {value:>5}  {key}" for key, value in rows.items()]
     by_module = Counter(e.module for e in off)
@@ -400,20 +376,12 @@ def _report(edges: list[Edge], label: str) -> str:
 
 
 def main(argv: list[str]) -> None:
-    """Print the allowlists, or with ``--report-tests`` the test-tree counts."""
+    """Print the gateway counts, or with ``--report-tests`` the test-tree counts."""
     if "--report-tests" in argv:
         print(_report(_scan_tree(_TESTS, "tests"), "tests/gateway/** (report only)"))
         return
     edges = gateway_edges()
     print(_report(edges, "gateway src (_vendor excluded)"))
-    legacy = legacy_offenders(edges)
-    private = private_offenders(edges)
-    print(f"\n_LEGACY_CEILING = {len(legacy)}")
-    print(_render("_LEGACY_ALLOWLIST", "frozenset[tuple[str, str]]", legacy))
-    print("\n# The frozen copy is the same literal; edit both when deleting entries.")
-    print(_render("_LEGACY_FROZEN", "frozenset[tuple[str, str]]", legacy))
-    print(f"\n_PRIVATE_CEILING = {len(private)}")
-    print(_render("_PRIVATE_ALLOWLIST", "frozenset[tuple[str, str, str]]", private))
     bad = undeclared_names(edges)
     if bad:
         print("\n# names missing from the surface module's __all__:")
