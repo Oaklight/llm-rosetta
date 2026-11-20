@@ -44,7 +44,6 @@ from pathlib import Path
 from typing import Any
 
 from llm_rosetta.shims.provider_shim import (
-    _clear_registry_caches,
     list_shims,
     register_shim,
     staging_registry,
@@ -231,9 +230,8 @@ def rebuild_shims(
         # other thread — notably the gateway's event loop, which resolves each
         # request's shim by name against this registry — always sees either the
         # old registry or the complete new one, never a partially-built one.
-        # The caches derived from it are dropped first, outside the staging
-        # block, so the new registry starts from a clean slate.
-        _clear_registry_caches()
+        # ``staging_registry`` drops the caches derived from it on entry, so the
+        # new registry starts from a clean slate.
         out_of_band = {s.name: s for s in list_shims() if s.name not in _source_shims}
 
         with staging_registry():

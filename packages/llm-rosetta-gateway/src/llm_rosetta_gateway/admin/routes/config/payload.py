@@ -7,9 +7,9 @@ import os
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta.ir.passes.enforcement import _apply_config_reasoning_override
 from llm_rosetta.shims import get_shim, list_shims
 from llm_rosetta.shims.provider_shim import match_model_reasoning
+from llm_rosetta.api import reasoning_capability
 
 from ....admin_api import admin_context
 from ....config import GatewayConfig
@@ -174,7 +174,7 @@ def _resolve_model_reasoning(
         # Report what the request will use, not the shim's default: the override
         # is merged at request time, so an unmerged display would show a value
         # the gateway is not going to use.
-        cap = _apply_config_reasoning_override(cap, config_override)
+        cap = reasoning_capability(shim, upstream, config_override) or cap
 
     return {
         "source": source,
