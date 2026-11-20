@@ -6,7 +6,7 @@ title: Tool Ops
 
 !!! info "v0.13 重命名"
     `to_google_genai()` / `from_google_genai()` → **`to_google_generate()`** / **`from_google_generate()`**。
-    旧名称仍可作为弃用别名使用。
+    旧名称已在 0.14.0 移除；参见 [迁移到 0.14](../guide/migrating-to-0.14.md#removed-shims)。
 
 `tool_ops` 模块提供了一个**轻量级便利 API**，用于在 IR（中间表示）和各提供方原生格式之间转换工具相关数据——无需实例化完整的转换器管道。
 
@@ -152,13 +152,15 @@ tool_ops.to_google_generate(ir_tool)
 
 ## 支持的提供方
 
-| 规范名称 | 可接受的别名 |
-|---|---|
-| `chat_completions` | `openai-chat` |
-| `open_responses` | `openai-responses`, `open-responses` |
-| `messages` | `anthropic` |
-| `google_generate` | `google`, `google-genai` |
-| `google_interactions` | `google-interactions` |
+| 提供方名称 |
+|---|
+| `chat_completions` |
+| `open_responses` |
+| `messages` |
+| `google_generate` |
+| `google_interactions` |
+
+带连字符的写法与改名前的写法（`openai-chat`、`openai-responses`、`open-responses`、`anthropic`、`google`、`google-genai`、`google-interactions`）不再被接受，会抛出 `ValueError`，错误信息写出替代名称；参见 [迁移到 0.14](../guide/migrating-to-0.14.md#retired-names)。
 
 ## 批量转换
 

@@ -7,7 +7,7 @@ title: Converters
 !!! info "v0.13 重命名"
     `GoogleGenAIConverter` → **`GoogleGenerateConverter`**。
     `to_google_genai()` / `from_google_genai()` → `to_google_generate()` / `from_google_generate()`。
-    旧名称仍可作为弃用别名使用。
+    旧名称已在 0.14.0 移除；参见 [迁移到 0.14](../guide/migrating-to-0.14.md)。
 
 ## Convenience Functions
 

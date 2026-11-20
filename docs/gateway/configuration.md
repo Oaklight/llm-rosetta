@@ -235,9 +235,9 @@ stale。不掩盖的只有两类 —— `sha256` 不符，以及 body 不是可�
 
 共享止于「测量」这一层：端点不轮询额度，因此不参与余量加权，也不参与「所有凭据都已用尽」的排除判定 —— 它只被凭据自身报告的状态排除（key 被降级、提供方被阻塞、或限流停用）。
 
-旧的 `embeddings_providers` / `rerank_providers` / `decisions_providers` 段仍然可用，并与统一条目合并；改名前写作 `embedding_providers`、`decision_providers` 的段按同一段读取。旧段中的条目在 `providers:` 里没有可共享铸造凭据的对应条目，因此其中自行铸造凭据的条目仍会被停用，理由会指明该段 —— 把它移到 `providers:` 即可使用。
+旧的 `embeddings_providers` / `rerank_providers` / `decisions_providers` 段仍然可用，并与统一条目合并；改名前写作 `embedding_providers`、`decision_providers` 的段不再被读取：含有它们的配置会在加载时失败，并写出替代的段名。旧段中的条目在 `providers:` 里没有可共享铸造凭据的对应条目，因此其中自行铸造凭据的条目仍会被停用，理由会指明该段 —— 把它移到 `providers:` 即可使用。
 
-模型类型与它服务的端点拼写一致：`embeddings` 与 `decisions`。改名前写下的配置 —— `embedding_format` / `embedding_path` / `embedding_shim`、`default_embedding_format`、`decision_format` / `decision_path` / `decision_shim`、`default_decision_format`，或标记为 `"type": "embedding"` / `"type": "decision"` 的模型 —— 会在加载时改写，原文件另存为 `.pre-migration.bak`（文档版本升到 `config_version` 3）。若文件无法写回（只读挂载），旧键仍会被读取。
+模型类型与它服务的端点拼写一致：`embeddings` 与 `decisions`。配置加载器不再读取改名前的写法：`embedding_format` / `embedding_path` / `embedding_shim` / `embedding_enabled`、`default_embedding_format`、`embedding_models`、`decision_format` / `decision_path` / `decision_shim`、`default_decision_format`、提供方的 `embedding:` 或 `decision:` 块，以及标记为 `"type": "embedding"` / `"type": "decision"` 的模型。每一项都会在加载时失败，输出一行 `llm-rosetta-gateway: error: ...`，写出文件、键名与替代写法，并以退出码 1 结束。`llm-rosetta-migrate --config <path> --write` 可改写它们；参见 [迁移到 0.14](../guide/migrating-to-0.14.md#llm-rosetta-migrate)。比当前 `config_version` 更旧的文档在加载时仍会被升级（原文件另存为 `.pre-migration.bak`）；只有已经处于当前版本的文档才会因旧写法被拒绝。
 
 ### 图片数量限制
 
@@ -263,7 +263,7 @@ Argo OpenAI shim 声明了 `max_images: 50`，`max_images_pattern: "^(gpt|o\d)"`
     提供方类型解析顺序为：`shim` → `type` → 提供方名称（兜底）。
 
 !!! note "向后兼容"
-    如果 `shim` 和 `type` 都省略，提供方名称本身将用作类型。配置中 `shim` / `type` 里的旧写法（如 `openai_chat`、`openai_responses`、`anthropic`、`google` 等）会在启动时一次性改写为规范名（幂等，并保存 `.pre-migration.bak`），因此旧配置仍可继续使用；无法映射的名称会以指向文档的错误拒绝。
+    如果 `shim` 和 `type` 都省略，提供方名称本身将用作类型。`shim` / `type` 里的已退役写法（如 `openai_chat`、`openai_responses`、`anthropic`、`google` 等）会在启动时被拒绝，错误信息写出文件、键名与替代名称，网关以退出码 1 结束；不再被改写。运行 `llm-rosetta-migrate --config <path> --write` 改写配置，参见 [迁移到 0.14](../guide/migrating-to-0.14.md#retired-names)。
 
 ### 启用 / 禁用提供方
 

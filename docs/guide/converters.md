@@ -6,7 +6,7 @@ title: 使用转换器
 
 !!! info "v0.13 重命名"
     `GoogleGenAIConverter` 已重命名为 **`GoogleGenerateConverter`**。
-    旧名称仍可导入，但会触发弃用警告。
+    旧名称已在 0.14.0 移除；参见 [迁移到 0.14](migrating-to-0.14.md#removed-class-names)。
     此变更是因为 `google-genai` 是同时覆盖 generateContent 和 Interactions 两套 API 的 SDK 名称，用它命名单个 converter 容易造成混淆。
 
 ## 创建转换器

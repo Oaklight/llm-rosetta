@@ -23,7 +23,7 @@ Argo 是美国阿贡国家实验室的内部 API 网关，通过统一端点提�
 | `argo--messages` | `messages` | `https://apps.inside.anl.gov/argoapi` | `ARGO_API_KEY` |
 
 !!! info "模型 ID 字段"
-    三个 Argo shim 均使用 `model_id_field: internal_id`，即模型标识符在请求体中以 `internal_id` 字段发送，而非标准的 `model` 字段。
+    三个 Argo shim 均声明 `connection.model_id_field: internal_id`，即模型标识符在请求体中以 `internal_id` 字段发送，而非标准的 `model` 字段。
 
 ## 推理支持
 

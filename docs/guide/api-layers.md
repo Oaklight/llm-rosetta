@@ -14,7 +14,7 @@ LLM-Rosetta 的公共 API 分三个稳定性层级。看完这页你会知道该
 
 | 类别 | 符号 | 导入路径 |
 |------|------|----------|
-| 转换器 | `ChatCompletionsConverter`、`MessagesConverter`、`GoogleGenerateConverter`、`GoogleConverter`、`OpenAIResponsesConverter`、`OpenResponsesConverter`、`BaseConverter` | `llm_rosetta` |
+| 转换器 | `ChatCompletionsConverter`、`MessagesConverter`、`GoogleGenerateConverter`、`OpenAIResponsesConverter`、`OpenResponsesConverter`、`BaseConverter` | `llm_rosetta` |
 | 上下文 | `ConversionContext`、`StreamContext` | `llm_rosetta` |
 | 便捷接口 | `detect_provider`、`get_converter_for_provider`、`convert`、`ProviderType` | `llm_rosetta` |
 | 核心 IR 类型 | `Message`、`IRRequest`、`IRResponse`、`ContentPart`、`TextPart`、`ToolCallPart`、流式事件等 | `llm_rosetta.types.ir` |
@@ -58,7 +58,7 @@ from llm_rosetta.types.ir.helpers import extract_text_content
 | Ops 基类 | `BaseContentOps`、`BaseToolOps`、`BaseMessageOps`、`BaseConfigOps` | `llm_rosetta.converters.base.content` 等 |
 | Schema 工具 | `sanitize_schema` | `llm_rosetta.converters.base.tools.schema` |
 | 内容转换辅助 | `convert_content_blocks_to_ir`、`convert_ir_content_blocks_to_p` | `llm_rosetta.converters.base.tools.content` |
-| 孤儿修复 | `fix_orphaned_tool_calls_ir`、`strip_orphaned_tool_config` | `llm_rosetta.converters.base.tools.orphan_fix` |
+| 孤儿修复 | `normalize_tool_pairing`、`strip_orphaned_tool_config` | `llm_rosetta.ir.tools.orphan_fix` |
 
 ```python
 # 内部：使用深层子模块导入

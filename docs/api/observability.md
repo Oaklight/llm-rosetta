@@ -627,8 +627,7 @@ from llm_rosetta_gateway.admin.persistence import PersistenceManager
 from llm_rosetta_gateway.admin.routes.profiling import ProfilerState
 ```
 
-遥测模块旧的 `llm_rosetta.observability.*` 路径随 #1161 一并迁移，并保留到
-0.16.0 的移除窗口（#919）：导入时会发出警告，并返回与网关侧**同一个**模块
+遥测模块旧的 `llm_rosetta.observability.*` 路径随 #1161 一并迁移。它们已弃用，将在后续版本中移除：导入时会发出警告，并返回与网关侧**同一个**模块
 对象，因此同一个存储不会被打开两次。
 
 ```python

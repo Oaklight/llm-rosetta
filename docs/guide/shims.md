@@ -15,8 +15,8 @@ ProviderShim ("deepseek--chat_completions")
 ├── name: "deepseek--chat_completions"
 ├── model_type: "llm"                     → 能力类别
 ├── format: "chat_completions"            → 选择转换器
-├── default_base_url: "https://api.deepseek.com"
-├── default_api_key_env: "DEEPSEEK_API_KEY"
+├── connection.base_url: "https://api.deepseek.com"
+├── connection.api_key_env: "DEEPSEEK_API_KEY"
 ├── logo: "https://cdn.jsdelivr.net/..."
 ├── post_ir_transforms: (strip_fields("n", "logit_bias", "seed"),)
 └── pre_ir_transforms: ()
@@ -25,8 +25,8 @@ ProviderShim ("deepseek--chat_completions")
 - **ProviderShim** — 提供方身份信息：名称、模型类型、wire format、默认 URL、API 密钥环境变量、Logo，以及转换规则。
 - **Transforms** — 纯 `dict → dict` 函数，在转换器前后执行。`post_ir_transforms` 把输出请求调整成提供方的方言；`pre_ir_transforms` 把输入响应归一化回标准格式。
 
-!!! note "向后兼容别名"
-    旧字段名 `to_transforms` 和 `from_transforms` 仍作为别名被接受 —— 在 `ProviderShim` 构造函数参数和 `transforms.py` 导出中均可使用。
+!!! note "0.13 的旧写法已移除"
+    对于 `base`、`to_transforms`、`from_transforms` 以及扁平的连接与工具关键字（`default_base_url`、`default_api_key_env`、`models_path`、`default_path`、`model_id_field`、`supports_custom_tools`、`max_tool_description_length`、`tool_search_mode`、`multimodal_tool_result`），`ProviderShim(...)` 会抛出 `TypeError` 并写出替代写法。声明了 `base:` 或扁平连接/工具键的 `provider.yaml`，以及导出 `to_transforms` 或 `from_transforms` 的 `transforms.py`，在加载时同样被拒绝。参见 [迁移到 0.14](migrating-to-0.14.md#removed-shim-declarations)。
 
 ### 声明式提供方目录
 
@@ -49,8 +49,8 @@ ProviderShim ("deepseek--chat_completions")
    仍然跳过以 `_` 或 `.` 开头的名字。
 2. **`<type>/` 永远存在**，按端点的拼写命名：`llm/`、`embeddings/`、`rerank/`、
    `decisions/`。loader 会把目录名与 shim 的 `model_type:` 对照，放错类型的 shim 会被
-   拒绝。类别名与目录拼写一致（`embeddings`）；`embedding:` 作为弃用别名，在
-   `model_type:` 与按类型段名中仍然接受。
+   拒绝。类别名与目录拼写一致（`embeddings`）；已退役的 `embedding` 拼写在
+   `model_type:` 与按类型段名中会被拒绝，错误信息会写出替代名称。
 3. **`<format>/` 仅当该类型下有多条 lane 时才出现。** chat 厂商通常会提供多种方言，
    因此保留格式层；某类型只有一条 lane 的厂商把 `provider.yaml` 直接放在类型目录里 ——
    `anthropic/llm/provider.yaml`。加第二条 lane 时，第一条会下沉到它自己的格式目录，
@@ -95,8 +95,8 @@ loader 会读错的树 —— 叶子不在规范路径上、把厂商目录当�
 
 每个叶子目录包含：
 
-- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`，以及上游不是 HTTP 的通道所需的 `connection.transport` 与 `connection.acp_argv`），以及可选的 `logo`、`display_name`、`hint_msg`、`free_source`。`base` 是 `format` 的弃用别名；loader 会校验 `(model_type, format)` 对。使用 `format` 时必须同时声明 `model_type` —— 只有声明 `base` 且不写 `format` 的 shim 可以省略。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embeddings_shim` / `rerank_shim` / `decisions_shim` 指向它，而不必写裸格式。
-- **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（旧名 `to_transforms` / `from_transforms` 也可用）
+- **`provider.yaml`**（必需）—— 声明 `name`、`model_type`、`format`、连接设置（`connection.base_url`、`connection.api_key_env`、`connection.auth_header`、`connection.keyless`、`connection.models_path`、`connection.default_path`、`connection.token_command`，以及上游不是 HTTP 的通道所需的 `connection.transport` 与 `connection.acp_argv`），以及可选的 `logo`、`display_name`、`hint_msg`、`free_source`。loader 会校验 `(model_type, format)` 对；两个键都必须声明，`base:` 会被拒绝。非 chat shim 用 `connection.default_path` 声明它服务的端点（例如 `/v1/embeddings`），提供方可以通过 `embeddings_shim` / `rerank_shim` / `decisions_shim` 指向它，而不必写裸格式。
+- **`transforms.py`**（可选）—— 导出 `post_ir_transforms` 和/或 `pre_ir_transforms` 元组（导出旧名 `to_transforms` / `from_transforms` 的模块会被拒绝）
 
 #### 厂商清单（可选）
 
@@ -363,9 +363,11 @@ group 键的厂商，需要声明 `group_label`。
 name: deepseek
 model_type: llm
 format: chat_completions
-default_base_url: https://api.deepseek.com
-default_api_key_env: DEEPSEEK_API_KEY
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/deepseek.svg
+
+connection:
+  base_url: https://api.deepseek.com
+  api_key_env: DEEPSEEK_API_KEY
 ```
 
 `transforms.py` 示例：
@@ -440,14 +442,14 @@ def register_shims():
 
 ```python
 import os
-from llm_rosetta.shims import register_shim, ProviderShim
+from llm_rosetta.shims import ConnectionConfig, register_shim, ProviderShim
 
 def register_shims():
     if os.getenv("MY_INTERNAL_PROVIDER"):
         register_shim(ProviderShim(
             name="my-internal",
             format="chat_completions",
-            default_base_url="http://internal:8080/v1",
+            connection=ConnectionConfig(base_url="http://internal:8080/v1"),
         ))
 ```
 
@@ -739,9 +741,9 @@ remote 会合并到预设上 —— 对不允许移动的部署来说，这才�
 不会在整个发布周期里无人登记。
 
 旧拼写**不再**解析到 shim：`argo--openai_chat`、`argo--anthropic` 和
-`argo--openai_responses` 是内置 shim 的别名，独立包只注册规范名称。别名仍作为拼写映射保留，
-因此旧值会先规范化，再进入那条指明包名的“配置滞留”错误；声明预设时请改成规范名称。
-声明预设时请把旧值改为规范名称。
+`argo--openai_responses` 是内置 shim 的别名，独立包只注册规范名称。仍写旧值的配置会在加载时
+以 retired-names 错误失败，错误信息写出规范 shim 名称、需要声明的 `shims.presets` 项，以及
+改写配置的 `llm-rosetta-migrate` 命令；参见 [迁移到 0.14](migrating-to-0.14.md#retired-names)。
 
 CI 检查（`scripts/check_shim_removals.py`、`make check-shim-removals`）仍会约束未来的移除：
 它读取 `SHIM_REMOVALS`，若某个 shim 在其 `removed_in` 版本之前消失则失败；而当版本到达该
@@ -846,7 +848,7 @@ reasoning:
 }
 ```
 
-三个 shim 都使用 `model_id_field: internal_id` —— 模型标识符通过 `internal_id` 而非 `model` 字段传递。
+三个 shim 都声明 `connection.model_id_field: internal_id` —— 模型标识符通过 `internal_id` 而非 `model` 字段传递。
 
 ### `argo--chat_completions`
 
@@ -864,7 +866,7 @@ Responses 格式通道，为拒绝 temperature 的 GPT/o 系列模型按模型�
 
 ### 配置
 
-在网关配置中覆盖 `default_base_url`：
+在网关配置中覆盖 shim 的 `connection.base_url`：
 
 ```jsonc
 {
@@ -887,9 +889,9 @@ Responses 格式通道，为拒绝 temperature 的 GPT/o 系列模型按模型�
 
 | 字段 | 类型 | 默认值 | 描述 |
 |------|------|--------|------|
-| `supports_custom_tools` | `bool` | `False` | 提供方 API 是否原生支持 `{type: "custom"}` 工具定义。`False` 时，自定义工具降级为函数包装并合成 JSON schema。 |
+| `tools.custom_tools` | `bool` | `False` | 提供方 API 是否原生支持 `{type: "custom"}` 工具定义。`False` 时，自定义工具降级为函数包装并合成 JSON schema。 |
 | `hoist_system_messages` | `bool` | `True` | 将对话中间的 system/developer 消息改写为 user 角色 `[System: ...]` 信封，保持 prompt cache 前缀稳定。 |
-| `multimodal_tool_result` | `bool \| None` | `None` | 提供方是否原生支持工具结果中的多模态内容（图片、文件）。`None` 使用转换器的类级默认值。`True` 强制原生透传；`False` 强制双重编码（文本回退 + 合成 user 消息）。 |
+| `tools.multimodal_result` | `bool \| None` | `None` | 提供方是否原生支持工具结果中的多模态内容（图片、文件）。`None` 使用转换器的类级默认值。`True` 强制原生透传；`False` 强制双重编码（文本回退 + 合成 user 消息）。 |
 
 `provider.yaml` 示例：
 
@@ -897,9 +899,10 @@ Responses 格式通道，为拒绝 temperature 的 GPT/o 系列模型按模型�
 name: my-provider
 model_type: llm
 format: chat_completions
-supports_custom_tools: true
+tools:
+  custom_tools: true
+  multimodal_result: false
 hoist_system_messages: true
-multimodal_tool_result: false
 ```
 
 这些标志在转换时注入 `ConversionContext.options`，转换器无需知道当前使用的是哪个 shim 即可查询。
@@ -1050,13 +1053,12 @@ resolve_format("unknown")                     # → "unknown"（直接透传）
 
 resolve_model_type("deepseek--chat_completions")  # → "llm"
 resolve_model_type("typesafe--systemone")         # → "decisions"
-resolve_model_type("typesafe")                    # → "decisions"（旧别名）
-resolve_model_type("embedding")                    # → "embeddings"（弃用别名）
-resolve_model_type("decision")                     # → "decisions"（弃用别名）
+resolve_model_type("embeddings")                  # → "embeddings"
 resolve_model_type("openai")                      # → None（歧义：既是厂商名也是 embeddings format）
+resolve_model_type("embedding")                   # 抛出 ValueError（已退役拼写，错误信息指向 'embeddings'）
 ```
 
-`resolve_base()` 是 `resolve_format()` 的弃用别名。
+`resolve_base()` 已在 0.14.0 移除，请调用 `resolve_format()`。
 
 ## 注册自定义 Shim
 
@@ -1065,14 +1067,16 @@ resolve_model_type("openai")                      # → None（歧义：既是�
 为任何 OpenAI 兼容服务注册自定义提供方 shim：
 
 ```python
-from llm_rosetta import ProviderShim, register_shim
+from llm_rosetta import ConnectionConfig, ProviderShim, register_shim
 from llm_rosetta.transforms import strip_fields
 
 my_shim = ProviderShim(
     name="my-provider",
     format="chat_completions",
-    default_base_url="https://api.my-provider.com/v1",
-    default_api_key_env="MY_PROVIDER_API_KEY",
+    connection=ConnectionConfig(
+        base_url="https://api.my-provider.com/v1",
+        api_key_env="MY_PROVIDER_API_KEY",
+    ),
     post_ir_transforms=(strip_fields("logprobs", "seed"),),
 )
 register_shim(my_shim)
@@ -1139,7 +1143,7 @@ unregister_shim("my-provider")
     "my-deepseek": {
       "shim": "deepseek--chat_completions",
       "api_key": "${DEEPSEEK_API_KEY}"
-      // base_url 默认使用 shim 的 default_base_url
+      // base_url 默认使用 shim 的 connection.base_url
     }
   },
   "models": {
@@ -1156,6 +1160,6 @@ unregister_shim("my-provider")
 
 当找到 shim 时：
 
-- `default_base_url` 和 `default_api_key_env` 在配置未明确指定时作为后备值使用
+- `connection.base_url` 和 `connection.api_key_env` 在配置未明确指定时作为后备值使用
 - `post_ir_transforms` 应用于发送给上游提供方的请求
 - `pre_ir_transforms` 应用于接收到的响应/流式 chunk，在转换之前执行
