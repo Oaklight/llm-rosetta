@@ -9,6 +9,8 @@ living in the panel's JavaScript.
 from __future__ import annotations
 
 import json
+
+import pytest
 from types import SimpleNamespace
 from typing import Any
 
@@ -37,7 +39,7 @@ class TestTheShimDeclaresIt:
 
         assert shim.connection.manage_usage_url == "https://chatgpt.com/settings/usage"
 
-    def test_the_field_travels_through_both_yaml_shapes(self, tmp_path):
+    def test_the_field_travels_through_the_connection_block(self, tmp_path):
         from llm_rosetta.shims.providers import _load_single_provider
 
         grouped = tmp_path / "grouped"
@@ -50,6 +52,16 @@ class TestTheShimDeclaresIt:
             "  base_url: https://example.test/v1\n"
             "  manage_usage_url: https://example.test/usage\n"
         )
+
+        shim = _load_single_provider(grouped)
+
+        assert shim is not None
+        assert shim.connection.manage_usage_url == "https://example.test/usage"
+
+    def test_the_flat_yaml_shape_is_refused(self, tmp_path):
+        """The flat connection spelling was removed in 0.14.0."""
+        from llm_rosetta.shims.providers import _load_single_provider
+
         legacy = tmp_path / "legacy"
         legacy.mkdir()
         (legacy / "provider.yaml").write_text(
@@ -60,12 +72,8 @@ class TestTheShimDeclaresIt:
             "manage_usage_url: https://example.test/usage2\n"
         )
 
-        grouped_shim = _load_single_provider(grouped)
-        legacy_shim = _load_single_provider(legacy)
-        assert grouped_shim is not None and legacy_shim is not None
-
-        assert grouped_shim.connection.manage_usage_url == "https://example.test/usage"
-        assert legacy_shim.connection.manage_usage_url == "https://example.test/usage2"
+        with pytest.raises(ValueError, match="connection.manage_usage_url"):
+            _load_single_provider(legacy)
 
 
 class TestTheConfigPayload:

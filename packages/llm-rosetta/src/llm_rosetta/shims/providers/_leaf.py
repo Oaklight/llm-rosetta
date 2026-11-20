@@ -29,6 +29,7 @@ from ._parse import (
     _parse_reasoning_cap,
     _parse_request_constraints,
     _parse_type_params,
+    _reject_removed_keys,
     _resolve_shim_pair,
 )
 from ._sidecars import _load_quota_probes, _load_transforms
@@ -68,13 +69,16 @@ def _load_single_provider(
     yaml_path = provider_dir / "provider.yaml"
     with open(yaml_path, encoding="utf-8") as f:
         cfg = yaml_load(f.read())
+    # A leaf that still declares ``base`` passes this gate on purpose:
+    # ``_resolve_shim_pair`` refuses it with the message that names ``format``,
+    # where skipping it here would only log a warning.
     if (
         not isinstance(cfg, dict)
         or "name" not in cfg
         or ("format" not in cfg and "base" not in cfg)
     ):
         logger.warning(
-            "Skipping %s: missing 'name' or 'format' (legacy 'base'). A "
+            "Skipping %s: missing 'name' or 'format'. A "
             "vendor manifest belongs at the vendor root, not in a leaf "
             "directory",
             yaml_path,
@@ -87,6 +91,7 @@ def _load_single_provider(
     if keep_names is not None and not keep_names(str(cfg["name"])):
         return None
 
+    _reject_removed_keys(cfg, yaml_path)
     fmt, model_type = _resolve_shim_pair(cfg, yaml_path)
     if expected_type is not None and model_type != expected_type:
         raise ValueError(
@@ -188,7 +193,7 @@ def _load_single_provider(
             in_band=bool(quota_raw.get("in_band", False)),
         )
 
-    # Parse tools config (grouped or flat fallback).
+    # Parse tools config.
     tools_raw = cfg.get("tools")
     if isinstance(tools_raw, dict):
         tools = ToolsConfig(
@@ -200,14 +205,7 @@ def _load_single_provider(
             intrinsic_tools=tuple(tools_raw.get("intrinsic_tools") or ()),
         )
     else:
-        tools = ToolsConfig(
-            custom_tools=cfg.get("supports_custom_tools", False),
-            max_description_length=cfg.get("max_tool_description_length"),
-            search_mode=cfg.get("tool_search_mode", "disabled"),
-            multimodal_result=cfg.get("multimodal_tool_result"),
-            tool_groups=cfg.get("tool_groups", False),
-            intrinsic_tools=tuple(cfg.get("intrinsic_tools") or ()),
-        )
+        tools = ToolsConfig()
 
     # Parse soft-error patterns for 200-but-error detection.
     raw_patterns = cfg.get("soft_error_patterns", [])

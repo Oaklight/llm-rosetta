@@ -454,7 +454,7 @@ class GoogleGenerateMessageOps(BaseMessageOps):
             )
             if func_response is not None:
                 # Tool results must go into role:"tool" messages so that
-                # fix_orphaned_tool_calls_ir can detect and fix ID
+                # normalize_tool_pairing can detect and fix ID
                 # mismatches correctly.
                 tool_result_parts.append(self.tool_ops.p_tool_result_to_ir(part))
                 continue

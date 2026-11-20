@@ -149,7 +149,7 @@ class TestHistoryIndependentOfShim:
         from llm_rosetta.shims.provider_shim import ProviderShim, ToolsConfig
 
         # A responses shim that declares NO intrinsic tools.
-        bare = ProviderShim(name="x", base="openai_responses", tools=ToolsConfig())
+        bare = ProviderShim(name="x", format="openai_responses", tools=ToolsConfig())
         pipe = ConversionPipeline("messages", "openai_responses", target_shim=bare)
         # feed an anthropic provider request (the shim is the target's)
         req = {

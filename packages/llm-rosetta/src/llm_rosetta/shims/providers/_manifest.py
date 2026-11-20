@@ -18,7 +18,6 @@ from ._fields import _declared_fields, _declares_identity
 from ._sidecars import _load_auth_exchange
 from ._constants import (
     _CONNECTION_KEYS,
-    _FLAT_CONNECTION_ALIASES,
     _IDENTITY_KEYS,
     _MANIFEST_KEYS,
 )
@@ -72,8 +71,8 @@ def _vendor_manifest(vendor_dir: Path) -> VendorManifest | None:
     if unknown:
         raise ValueError(
             f"{path}: a vendor manifest may declare {', '.join(_MANIFEST_KEYS)}; "
-            f"found {', '.join(sorted(unknown))}. Shim identity — 'name', "
-            f"'format', 'base' — belongs in a leaf's provider.yaml"
+            f"found {', '.join(sorted(unknown))}. Shim identity — 'name' "
+            f"and 'format' — belongs in a leaf's provider.yaml"
         )
     quota = cfg.get("quota")
     if quota is not None and not isinstance(quota, dict):
@@ -131,20 +130,13 @@ def _leaf_quota(
 
 
 def _leaf_connection(cfg: dict[str, Any]) -> dict[str, Any]:
-    """Return a shim's connection values under their ``connection:`` names.
+    """Return a shim's own ``connection:`` values.
 
-    A shim declares them under ``connection:`` or, in the pre-rename spelling,
-    at the top level.  Both are read into one mapping so a vendor manifest
-    merges the same way for either form.
+    The values live under ``connection:``; the flat top-level spelling was
+    removed in 0.14.0 and is refused when the shim is loaded.
     """
     connection = cfg.get("connection")
-    if isinstance(connection, dict):
-        return dict(connection)
-    flat = {key: cfg[key] for key in _CONNECTION_KEYS if key in cfg}
-    for legacy, canonical in _FLAT_CONNECTION_ALIASES.items():
-        if legacy in cfg:
-            flat[canonical] = cfg[legacy]
-    return flat
+    return dict(connection) if isinstance(connection, dict) else {}
 
 
 def _merged_connection(

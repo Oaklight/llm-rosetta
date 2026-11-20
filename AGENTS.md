@@ -131,7 +131,7 @@ declare the differences.
 | `ProviderShim` / `ModelShim` | `shims/provider_shim.py` | Data classes + registry |
 | `AuthExchange` | `shims/auth_exchange.py` | Credential-exchange contract a shim ships in `auth.py` |
 | `QuotaProbe` | `shims/quota_probe.py` | Allowance-probe contract a shim ships in `quota.py` |
-| `Transform` primitives | `shims/transforms.py` | `strip_fields`, `rename_field`, `set_defaults` |
+| `Transform` primitives | `transforms/` | `strip_fields`, `rename_field`, `set_defaults` |
 | Built-in shims | `shims/providers/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type |
 | Vendor manifest | `shims/providers/<vendor>/provider.yaml` | Optional per-vendor defaults every leaf inherits: `connection:` (the credential) plus the vendor's own `logo` / `group` / `group_label`; `auth.py` sits beside it |
 | Tree contract | `shims/_shim_template/` | The path rules (`<vendor>[/<lane>]/<type>[/<format>]/provider.yaml`), the file allow-list, and the skeleton `shims new` renders; `shims check` reports a tree that departs from it, `shims migrate --write` moves one onto it |
@@ -507,8 +507,8 @@ gate — missing any item means the converter is not fully integrated.
    (chat) or `shims/providers/<vendor>/<type>/provider.yaml` (embeddings, rerank,
    decision) with `model_type: <type>` and `format: <format>`.  The loader
    validates the `(model_type, format)` pair against the converter registry and
-   the directory name against `model_type`; `base:` is the deprecated alias for
-   `format:`.
+   the directory name against `model_type`; `base:` was removed in 0.14.0 and the
+   loader refuses it with a message that names `format:`.
 6. **Gateway route** — register a route handler in
    `llm_rosetta_gateway/app/routes_llm.py`.
    Update `llm_rosetta_gateway/proxy/` for error responses, stream detection,
@@ -527,7 +527,7 @@ gate — missing any item means the converter is not fully integrated.
 
 - Converter output mismatch → check IR types in `types/ir/`, then the
   converter's `*_ops.py` modules
-- Shim/transform issue → check `shims/providers/` and `shims/transforms.py`
+- Shim/transform issue → check `shims/providers/` and `transforms/`
 - Gateway config issue → check `config/` resolution order
   (`loader` → `core` → `parse`/`typed`/`settings`, then `resolve`)
   (shim → type → name fallback)

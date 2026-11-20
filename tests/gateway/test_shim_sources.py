@@ -54,7 +54,7 @@ def _write_provider(root: Path, slug: str, name: str) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     (directory / "provider.yaml").write_text(
         f"name: {name}\n"
-        "base: chat_completions\n"
+        "format: chat_completions\nmodel_type: llm\n"
         "connection:\n"
         f"  base_url: https://{slug}.example/v1\n"
         "  api_key_env: ACME_API_KEY\n"

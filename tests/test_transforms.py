@@ -205,7 +205,7 @@ class TestShimWithTransforms:
         t2 = rename_field("b", "c")
         s = ProviderShim(
             name="test",
-            base="openai_chat",
+            format="openai_chat",
             pre_ir_transforms=(t1,),
             post_ir_transforms=(t2,),
         )
@@ -213,7 +213,7 @@ class TestShimWithTransforms:
         assert s.post_ir_transforms == (t2,)
 
     def test_provider_shim_default_empty(self):
-        s = ProviderShim(name="test", base="openai_chat")
+        s = ProviderShim(name="test", format="openai_chat")
         assert s.pre_ir_transforms == ()
         assert s.post_ir_transforms == ()
 
@@ -375,7 +375,7 @@ class TestConvertWithTransforms:
         """Source shim's pre_ir_transforms should normalise before conversion."""
         custom = ProviderShim(
             name="custom-oai",
-            base="openai_chat",
+            format="openai_chat",
             pre_ir_transforms=(rename_field("custom_field", "model"),),
         )
         register_shim(custom)
@@ -393,7 +393,7 @@ class TestConvertWithTransforms:
         """Target shim's post_ir_transforms should adapt after conversion."""
         custom = ProviderShim(
             name="custom-target",
-            base="openai_chat",
+            format="openai_chat",
             post_ir_transforms=(strip_fields("logprobs"),),
         )
         register_shim(custom)
@@ -423,7 +423,7 @@ class TestConvertWithTransforms:
         t = strip_fields("logprobs")
         custom = ProviderShim(
             name="idem-test",
-            base="openai_chat",
+            format="openai_chat",
             post_ir_transforms=(t, t),
         )
         register_shim(custom)

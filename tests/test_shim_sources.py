@@ -32,7 +32,7 @@ from llm_rosetta.shims.provider_shim import (
 
 PROVIDER_YAML = (
     "name: {name}\n"
-    "base: chat_completions\n"
+    "format: chat_completions\nmodel_type: llm\n"
     "connection:\n"
     "  base_url: https://{slug}.example/v1\n"
 )
@@ -142,7 +142,9 @@ class TestLocalDirs:
         _write_provider(root, "good", name="good--chat_completions")
         broken = root / "broken"
         broken.mkdir(parents=True)
-        (broken / "provider.yaml").write_text("name: [oops\nbase: chat_completions\n")
+        (broken / "provider.yaml").write_text(
+            "name: [oops\nformat: chat_completions\nmodel_type: llm\n"
+        )
 
         report = rebuild_shims(extra_dirs=[root])
 
@@ -193,7 +195,7 @@ class TestOutOfBandShims:
 
     @staticmethod
     def _register(name: str) -> None:
-        register_shim(ProviderShim(name=name, base="chat_completions"))
+        register_shim(ProviderShim(name=name, format="chat_completions"))
 
     def test_survives_a_no_op_rebuild(self):
         """The CLI runs apply_shim_sources() at startup even with no `shims`."""
@@ -231,7 +233,7 @@ class TestEntryPointTier:
         import llm_rosetta.shims.providers as providers_mod
 
         def register_shims():
-            register_shim(ProviderShim(name="plugin--x", base="chat_completions"))
+            register_shim(ProviderShim(name="plugin--x", format="chat_completions"))
 
         class _EP:
             name = "fake-plugin"
@@ -261,7 +263,7 @@ class TestEntryPointTier:
             register_shim(
                 ProviderShim(
                     name="dup--x",
-                    base="chat_completions",
+                    format="chat_completions",
                     connection=ConnectionConfig(base_url="https://plugin.example/v1"),
                 )
             )
@@ -285,7 +287,7 @@ class TestEntryPointTier:
         directory.mkdir(parents=True)
         (directory / "provider.yaml").write_text(
             "name: dup--x\n"
-            "base: chat_completions\n"
+            "format: chat_completions\nmodel_type: llm\n"
             "connection:\n"
             "  base_url: https://source.example/v1\n"
         )

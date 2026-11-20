@@ -205,9 +205,8 @@ def _load_transforms(
 ) -> tuple[tuple, tuple, tuple, tuple, Any]:
     """Import transforms.py if present, return (pre, post, ir, response_body, module).
 
-    Accepts both new names (``pre_ir_transforms``, ``post_ir_transforms``)
-    and legacy names (``from_transforms``, ``to_transforms``) from the
-    transforms module.  New names take precedence if both are present.
+    Reads ``pre_ir_transforms``, ``post_ir_transforms``, ``ir_transforms`` and
+    ``response_body_transforms`` from the transforms module.
 
     The fourth element is the loaded module object (or ``None`` when no
     ``transforms.py`` exists).  Callers can inspect it for convention-based
@@ -277,26 +276,26 @@ def _declared_transforms(
 def _read_transform_exports(mod: Any, tf_path: Path) -> tuple:
     """Return ``(pre, post, ir, response_body)`` from a transforms module.
 
-    New names take precedence; legacy names are the fallback.  ``is None``
-    rather than truthiness, because an empty tuple is a valid declaration and
-    must not fall through to the legacy name.
+    ``is None`` rather than truthiness, because an empty tuple is a valid
+    declaration.  The 0.13 names ``from_transforms`` and ``to_transforms``
+    were removed in 0.14.0; a module that still exports one is refused rather
+    than loaded with its transforms dropped.
+
+    Raises:
+        TypeError: The module exports a removed name, or an export is not a
+            tuple of transforms.
     """
-    pre = _declared_transforms(mod, "pre_ir_transforms", tf_path)
-    if pre is None:
-        pre = _declared_transforms(mod, "from_transforms", tf_path) or ()
-        if pre and hasattr(mod, "from_transforms"):
-            logger.info(
-                "%s uses deprecated 'from_transforms'; rename to 'pre_ir_transforms'",
-                tf_path,
+    for removed, replacement in (
+        ("from_transforms", "pre_ir_transforms"),
+        ("to_transforms", "post_ir_transforms"),
+    ):
+        if hasattr(mod, removed):
+            raise TypeError(
+                f"{tf_path}: {removed} was removed in 0.14.0; "
+                f"rename it to {replacement}"
             )
-    post = _declared_transforms(mod, "post_ir_transforms", tf_path)
-    if post is None:
-        post = _declared_transforms(mod, "to_transforms", tf_path) or ()
-        if post and hasattr(mod, "to_transforms"):
-            logger.info(
-                "%s uses deprecated 'to_transforms'; rename to 'post_ir_transforms'",
-                tf_path,
-            )
+    pre = _declared_transforms(mod, "pre_ir_transforms", tf_path) or ()
+    post = _declared_transforms(mod, "post_ir_transforms", tf_path) or ()
     return (
         pre,
         post,

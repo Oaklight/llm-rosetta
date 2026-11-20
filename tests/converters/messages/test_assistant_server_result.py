@@ -31,7 +31,7 @@ from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
 from llm_rosetta.converters.llm.messages.message_ops import MessagesMessageOps
 from llm_rosetta.converters.llm.messages.tool_ops import MessagesToolOps
 from llm_rosetta.ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
-from llm_rosetta.converters.base.tools.orphan_fix import fix_orphaned_tool_calls_ir
+from llm_rosetta.converters.base.tools.orphan_fix import normalize_tool_pairing
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
 from llm_rosetta.types.ir import IRInputItem, Message
@@ -281,14 +281,14 @@ def _request_messages() -> list[IRInputItem]:
 class TestRequestLegDoesNotFabricateAResult:
     """An inline server result answers its call; no placeholder is injected.
 
-    ``fix_orphaned_tool_calls_ir`` used to count an answer only when it sat in a
+    ``normalize_tool_pairing`` used to count an answer only when it sat in a
     ``role: "tool"`` message.  Keeping the server result inline in the assistant
     turn left the call looking unanswered, so the fixer injected a synthetic
     ``role: "tool"`` placeholder next to the real block.
     """
 
     def test_orphan_fixer_leaves_the_list_alone(self):
-        out = fix_orphaned_tool_calls_ir(_request_messages())
+        out = normalize_tool_pairing(_request_messages())
 
         assert _PLACEHOLDER not in json.dumps(out)
         assert len(out) == 3
@@ -353,7 +353,7 @@ class TestRequestLegDoesNotFabricateAResult:
             ],
         )
 
-        out = fix_orphaned_tool_calls_ir(messages)
+        out = normalize_tool_pairing(messages)
 
         assert _PLACEHOLDER in json.dumps(out)
 
@@ -361,7 +361,7 @@ class TestRequestLegDoesNotFabricateAResult:
 class TestPipelineRequestLeg:
     """The production pipeline lands no placeholder in any target format.
 
-    ``fix_orphaned_tool_calls_ir`` is called from every writer, so the fix in
+    ``normalize_tool_pairing`` is called from every writer, so the fix in
     the shared ``_collect_ir_tool_ids`` has to hold for all of them, not just
     messages-to-messages.
     """

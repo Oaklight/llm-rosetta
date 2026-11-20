@@ -149,7 +149,7 @@ class TestGoogleInteractionsToolCallSignatureRoundTrip:
             ir["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
         )
 
-        gi_step = GoogleInteractionsToolOps.ir_function_call_to_p(ir)
+        gi_step = GoogleInteractionsToolOps.ir_tool_call_to_p(ir)
         assert gi_step["signature"] == self.THOUGHT_SIG
 
     def test_gi_to_messages_to_gi_signature_survives(self):
@@ -176,7 +176,7 @@ class TestGoogleInteractionsToolCallSignatureRoundTrip:
             ir2["provider_metadata"]["google"]["thought_signature"] == self.THOUGHT_SIG
         )
 
-        gi_back = GoogleInteractionsToolOps.ir_function_call_to_p(ir2)
+        gi_back = GoogleInteractionsToolOps.ir_tool_call_to_p(ir2)
         assert gi_back["signature"] == self.THOUGHT_SIG
 
     def test_no_signature_no_metadata(self):
@@ -189,7 +189,7 @@ class TestGoogleInteractionsToolCallSignatureRoundTrip:
         ir = GoogleInteractionsToolOps.p_function_call_to_ir(gi_step)
         assert "provider_metadata" not in ir
 
-        gi_back = GoogleInteractionsToolOps.ir_function_call_to_p(ir)
+        gi_back = GoogleInteractionsToolOps.ir_tool_call_to_p(ir)
         assert "signature" not in gi_back
 
 

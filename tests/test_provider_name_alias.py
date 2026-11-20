@@ -367,7 +367,7 @@ class TestRegisterShimKeys:
         saved = dict(ps._SHIM_REGISTRY)
         try:
             ps._SHIM_REGISTRY.clear()
-            register_shim(ProviderShim(name="google", base="google_generate"))
+            register_shim(ProviderShim(name="google", format="google_generate"))
             # The registry holds canonical (exact) names only; a base format
             # is never a shim key.
             assert "google" in ps._SHIM_REGISTRY
@@ -392,8 +392,8 @@ class TestRegisterShimKeys:
         saved = dict(ps._SHIM_REGISTRY)
         try:
             ps._SHIM_REGISTRY.clear()
-            neutral = ProviderShim(name="open_responses", base="open_responses")
-            profile = ProviderShim(name="openai_responses", base="open_responses")
+            neutral = ProviderShim(name="open_responses", format="open_responses")
+            profile = ProviderShim(name="openai_responses", format="open_responses")
             register_shim(neutral)
             register_shim(profile)
             assert ps.get_shim("open_responses") is neutral

@@ -70,7 +70,6 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "unregister_shim",
             "get_shim",
             "list_shims",
-            "resolve_base",
             "resolve_format",
             "resolve_model_type",
             # Transforms

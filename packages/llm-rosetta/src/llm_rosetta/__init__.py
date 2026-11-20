@@ -48,7 +48,6 @@ from .shims import (
     list_shims,
     register_shim,
     rename_field,
-    resolve_base,
     resolve_format,
     resolve_model_type,
     force_fields,
@@ -108,7 +107,6 @@ __all__ = [
     "unregister_shim",
     "get_shim",
     "list_shims",
-    "resolve_base",
     "resolve_format",
     "resolve_model_type",
     # Transforms

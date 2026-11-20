@@ -429,7 +429,11 @@ class TestLoadProviders:
     def test_skips_non_directory(self, tmp_path: Path, monkeypatch):
         """Files in the providers directory are ignored."""
         (tmp_path / "not_a_dir.txt").write_text("hello")
-        self._make_provider_dir(tmp_path, "valid", "name: valid\nbase: openai_chat\n")
+        self._make_provider_dir(
+            tmp_path,
+            "valid",
+            "name: valid\nformat: chat_completions\nmodel_type: llm\n",
+        )
         import llm_rosetta.shims.providers as mod
 
         monkeypatch.setattr(mod, "_PROVIDERS_DIR", tmp_path)
@@ -440,7 +444,11 @@ class TestLoadProviders:
     def test_skips_dir_without_yaml(self, tmp_path: Path, monkeypatch):
         """Directories without provider.yaml are skipped."""
         (tmp_path / "empty_dir").mkdir()
-        self._make_provider_dir(tmp_path, "valid", "name: valid\nbase: openai_chat\n")
+        self._make_provider_dir(
+            tmp_path,
+            "valid",
+            "name: valid\nformat: chat_completions\nmodel_type: llm\n",
+        )
         import llm_rosetta.shims.providers as mod
 
         monkeypatch.setattr(mod, "_PROVIDERS_DIR", tmp_path)
@@ -448,9 +456,11 @@ class TestLoadProviders:
         assert len(shims) == 1
 
     def test_skips_yaml_without_required_fields(self, tmp_path: Path, monkeypatch):
-        """YAML without 'name' or 'base' is skipped with warning."""
-        self._make_provider_dir(tmp_path, "bad", "description: no name or base\n")
-        self._make_provider_dir(tmp_path, "good", "name: good\nbase: openai_chat\n")
+        """YAML without 'name' or 'format' is skipped with warning."""
+        self._make_provider_dir(tmp_path, "bad", "description: no name or format\n")
+        self._make_provider_dir(
+            tmp_path, "good", "name: good\nformat: chat_completions\nmodel_type: llm\n"
+        )
         import llm_rosetta.shims.providers as mod
 
         monkeypatch.setattr(mod, "_PROVIDERS_DIR", tmp_path)
@@ -458,43 +468,105 @@ class TestLoadProviders:
         assert len(shims) == 1
         assert shims[0].name == "good"
 
-    def test_multimodal_tool_result_from_yaml(self, tmp_path: Path):
-        """multimodal_tool_result is parsed from provider YAML."""
+    def test_multimodal_result_from_yaml(self, tmp_path: Path):
+        """tools.multimodal_result is parsed from provider YAML."""
         d = tmp_path / "multimodal_provider"
         d.mkdir()
         (d / "provider.yaml").write_text(
-            "name: multimodal_provider\nbase: openai_chat\nmultimodal_tool_result: true\n"
+            "name: multimodal_provider\nformat: chat_completions\nmodel_type: llm\n"
+            "tools:\n  multimodal_result: true\n"
         )
         shims = load_providers_from_dir(tmp_path)
         assert len(shims) == 1
-        assert shims[0].multimodal_tool_result is True
+        assert shims[0].tools.multimodal_result is True
 
-    def test_tool_groups_reads_the_flat_spelling_too(self, tmp_path: Path):
-        """A shim with no ``tools:`` mapping still opts in through the flat key.
+    @pytest.mark.parametrize(
+        ("line", "replacement"),
+        [
+            ("default_base_url: https://a.example\n", "connection.base_url"),
+            ("default_api_key_env: KEY\n", "connection.api_key_env"),
+            ("base_url: https://a.example\n", "connection.base_url"),
+            ("keyless: true\n", "connection.keyless"),
+            ("supports_custom_tools: true\n", "tools.custom_tools"),
+            ("max_tool_description_length: 64\n", "tools.max_description_length"),
+            ("tool_search_mode: native\n", "tools.search_mode"),
+            ("multimodal_tool_result: true\n", "tools.multimodal_result"),
+            ("tool_groups: true\n", "tools.tool_groups"),
+            ("intrinsic_tools: [web_search]\n", "tools.intrinsic_tools"),
+        ],
+    )
+    def test_a_flat_key_is_refused_with_its_nested_replacement(
+        self, tmp_path: Path, line: str, replacement: str
+    ):
+        """The flat spellings were removed in 0.14.0.
 
-        ``tools.tool_groups`` is the documented spelling and the one every
-        shipping carrier uses, but the loader keeps a flat fallback for shims
-        written against the older shape — the same block that carries
-        ``supports_custom_tools`` and ``tool_search_mode``.  Without this test
-        the fallback's ``tool_groups`` read is unreachable code that a silent
-        ``False`` would disable for exactly the shims that depend on it.
+        The loader reads only the keys it knows, so without this refusal a flat
+        ``default_base_url:`` would load as a shim with no upstream.
         """
-        d = tmp_path / "flat_config"
+        d = tmp_path / "flat"
         d.mkdir()
         (d / "provider.yaml").write_text(
-            "name: flat_config\nmodel_type: llm\nformat: open_responses\n"
-            "tool_groups: true\n"
+            "name: flat\nmodel_type: llm\nformat: chat_completions\n" + line
         )
-        shims = load_providers_from_dir(tmp_path)
-        assert len(shims) == 1
-        assert shims[0].tools.tool_groups is True
+        with pytest.raises(ValueError, match="removed in 0.14.0") as exc:
+            load_providers_from_dir(tmp_path, on_error="raise")
+        assert line.split(":")[0] in str(exc.value)
+        assert replacement in str(exc.value)
 
-    def test_tool_groups_is_off_when_neither_spelling_says_it(self, tmp_path: Path):
-        """The default is off on both branches of the parser."""
-        flat = tmp_path / "flat_off"
-        flat.mkdir()
-        (flat / "provider.yaml").write_text(
-            "name: flat_off\nmodel_type: llm\nformat: open_responses\n"
+    def test_a_flat_key_is_skipped_not_fatal_for_a_warn_source(self, tmp_path: Path):
+        """An external source that still ships a flat key loses that shim only."""
+        bad = tmp_path / "bad"
+        bad.mkdir()
+        (bad / "provider.yaml").write_text(
+            "name: bad\nmodel_type: llm\nformat: chat_completions\n"
+            "default_base_url: https://a.example\n"
+        )
+        good = tmp_path / "good"
+        good.mkdir()
+        (good / "provider.yaml").write_text(
+            "name: good\nmodel_type: llm\nformat: chat_completions\n"
+        )
+        shims = load_providers_from_dir(tmp_path, on_error="warn")
+        assert [s.name for s in shims] == ["good"]
+
+    @pytest.mark.parametrize(
+        ("export", "replacement"),
+        [
+            ("from_transforms", "pre_ir_transforms"),
+            ("to_transforms", "post_ir_transforms"),
+        ],
+    )
+    def test_a_removed_transforms_export_is_refused(
+        self, tmp_path: Path, export: str, replacement: str
+    ):
+        d = tmp_path / "old_exports"
+        d.mkdir()
+        (d / "provider.yaml").write_text(
+            "name: old_exports\nmodel_type: llm\nformat: chat_completions\n"
+        )
+        (d / "transforms.py").write_text(f"{export} = ()\n")
+        with pytest.raises(TypeError, match="removed in 0.14.0") as exc:
+            load_providers_from_dir(tmp_path, on_error="raise")
+        assert export in str(exc.value)
+        assert f"rename it to {replacement}" in str(exc.value)
+
+    def test_the_current_transforms_exports_load(self, tmp_path: Path):
+        d = tmp_path / "new_exports"
+        d.mkdir()
+        (d / "provider.yaml").write_text(
+            "name: new_exports\nmodel_type: llm\nformat: chat_completions\n"
+        )
+        (d / "transforms.py").write_text(
+            "pre_ir_transforms = ()\npost_ir_transforms = ()\n"
+        )
+        assert [s.name for s in load_providers_from_dir(tmp_path)] == ["new_exports"]
+
+    def test_tool_groups_is_off_when_the_block_does_not_say_it(self, tmp_path: Path):
+        """The default is off with and without a ``tools:`` mapping."""
+        bare = tmp_path / "bare_off"
+        bare.mkdir()
+        (bare / "provider.yaml").write_text(
+            "name: bare_off\nmodel_type: llm\nformat: open_responses\n"
         )
         grouped = tmp_path / "grouped_off"
         grouped.mkdir()
@@ -502,29 +574,39 @@ class TestLoadProviders:
             "name: grouped_off\nmodel_type: llm\nformat: open_responses\n"
             "tools:\n  custom_tools: true\n"
         )
+        opted = tmp_path / "opted_in"
+        opted.mkdir()
+        (opted / "provider.yaml").write_text(
+            "name: opted_in\nmodel_type: llm\nformat: open_responses\n"
+            "tools:\n  tool_groups: true\n"
+        )
         shims = {s.name: s for s in load_providers_from_dir(tmp_path)}
-        assert shims["flat_off"].tools.tool_groups is False
+        assert shims["bare_off"].tools.tool_groups is False
         assert shims["grouped_off"].tools.tool_groups is False
+        assert shims["opted_in"].tools.tool_groups is True
 
-    def test_multimodal_tool_result_false_from_yaml(self, tmp_path: Path):
-        """multimodal_tool_result: false is parsed correctly."""
+    def test_multimodal_result_false_from_yaml(self, tmp_path: Path):
+        """tools.multimodal_result: false is parsed as False, not None."""
         d = tmp_path / "nomm"
         d.mkdir()
         (d / "provider.yaml").write_text(
-            "name: nomm\nbase: messages\nmultimodal_tool_result: false\n"
+            "name: nomm\nformat: messages\nmodel_type: llm\n"
+            "tools:\n  multimodal_result: false\n"
         )
         shims = load_providers_from_dir(tmp_path)
         assert len(shims) == 1
-        assert shims[0].multimodal_tool_result is False
+        assert shims[0].tools.multimodal_result is False
 
-    def test_multimodal_tool_result_absent_from_yaml(self, tmp_path: Path):
-        """Missing multimodal_tool_result defaults to None."""
+    def test_multimodal_result_absent_from_yaml(self, tmp_path: Path):
+        """Missing tools.multimodal_result defaults to None."""
         d = tmp_path / "plain"
         d.mkdir()
-        (d / "provider.yaml").write_text("name: plain\nbase: openai_chat\n")
+        (d / "provider.yaml").write_text(
+            "name: plain\nformat: chat_completions\nmodel_type: llm\n"
+        )
         shims = load_providers_from_dir(tmp_path)
         assert len(shims) == 1
-        assert shims[0].multimodal_tool_result is None
+        assert shims[0].tools.multimodal_result is None
 
     def test_hint_msg_string_is_stored_under_english(self, tmp_path: Path):
         """A bare string is the single-language form of hint_msg."""
@@ -608,7 +690,9 @@ class TestLoadProvidersFromDir:
         """load_providers_from_dir loads from any directory."""
         d = tmp_path / "mything"
         d.mkdir()
-        (d / "provider.yaml").write_text("name: mything\nbase: openai_chat\n")
+        (d / "provider.yaml").write_text(
+            "name: mything\nformat: chat_completions\nmodel_type: llm\n"
+        )
         shims = load_providers_from_dir(tmp_path)
         assert any(s.name == "mything" for s in shims)
 
@@ -616,7 +700,9 @@ class TestLoadProvidersFromDir:
         """Plugin transforms are loaded from arbitrary directories."""
         d = tmp_path / "myplugin"
         d.mkdir()
-        (d / "provider.yaml").write_text("name: myplugin\nbase: openai_chat\n")
+        (d / "provider.yaml").write_text(
+            "name: myplugin\nformat: chat_completions\nmodel_type: llm\n"
+        )
         (d / "transforms.py").write_text(
             "from llm_rosetta.transforms import strip_fields\n"
             'post_ir_transforms = (strip_fields("foo"),)\n'
@@ -634,7 +720,9 @@ class TestLoadProvidersFromDir:
         """A plugin transforms.py can import a sibling helper via `from .x`."""
         d = tmp_path / "relimp"
         d.mkdir()
-        (d / "provider.yaml").write_text("name: relimp\nbase: openai_chat\n")
+        (d / "provider.yaml").write_text(
+            "name: relimp\nformat: chat_completions\nmodel_type: llm\n"
+        )
         (d / "helpers.py").write_text("def mark():\n    return 'sentinel'\n")
         (d / "transforms.py").write_text(
             "from .helpers import mark\n"
@@ -650,7 +738,9 @@ class TestLoadProvidersFromDir:
         """Grouped plugin layout also supports sibling imports."""
         leaf = tmp_path / "grp" / "leaf"
         leaf.mkdir(parents=True)
-        (leaf / "provider.yaml").write_text("name: grp--leaf\nbase: openai_chat\n")
+        (leaf / "provider.yaml").write_text(
+            "name: grp--leaf\nformat: chat_completions\nmodel_type: llm\n"
+        )
         (leaf / "helper.py").write_text("NAME = 'gone'\n")
         (leaf / "transforms.py").write_text(
             "from .helper import NAME\n"
@@ -668,7 +758,9 @@ class TestLoadProvidersFromDir:
         for root, marker in ((tmp_path / "a", "a"), (tmp_path / "b", "b")):
             leaf = root / "grp" / "leaf"
             leaf.mkdir(parents=True)
-            (leaf / "provider.yaml").write_text("name: grp--leaf\nbase: openai_chat\n")
+            (leaf / "provider.yaml").write_text(
+                "name: grp--leaf\nformat: chat_completions\nmodel_type: llm\n"
+            )
             (leaf / "tag.py").write_text(f"MARK = {marker!r}\n")
             (leaf / "transforms.py").write_text(
                 "from .tag import MARK\nLOADED = MARK\n"
@@ -694,7 +786,9 @@ class TestLoadProvidersFromDir:
 
         d = tmp_path / "bad"
         d.mkdir()
-        (d / "provider.yaml").write_text("name: bad\nbase: openai_chat\n")
+        (d / "provider.yaml").write_text(
+            "name: bad\nformat: chat_completions\nmodel_type: llm\n"
+        )
         (d / "leaky.py").write_text("VALUE = 1\n")
         (d / "transforms.py").write_text(
             "from . import leaky\nraise RuntimeError('boom')\n"
@@ -714,13 +808,17 @@ class TestLoadProvidersFromDir:
 
         good = tmp_path / "aaa_good"
         good.mkdir()
-        (good / "provider.yaml").write_text("name: aaa_good\nbase: openai_chat\n")
+        (good / "provider.yaml").write_text(
+            "name: aaa_good\nformat: chat_completions\nmodel_type: llm\n"
+        )
         (good / "transforms.py").write_text("post_ir_transforms = ()\n")
         load_providers_from_dir(tmp_path)  # namespace + aaa_good.transforms now exist
 
         bad = tmp_path / "zzz_bad"
         bad.mkdir()
-        (bad / "provider.yaml").write_text("name: zzz_bad\nbase: openai_chat\n")
+        (bad / "provider.yaml").write_text(
+            "name: zzz_bad\nformat: chat_completions\nmodel_type: llm\n"
+        )
         (bad / "transforms.py").write_text("raise RuntimeError('boom')\n")
         with pytest.raises(RuntimeError, match="boom"):
             load_providers_from_dir(tmp_path)
@@ -745,7 +843,9 @@ class TestLoadProvidersFromDir:
 
         d = tmp_path / "resettest"
         d.mkdir()
-        (d / "provider.yaml").write_text("name: resettest\nbase: openai_chat\n")
+        (d / "provider.yaml").write_text(
+            "name: resettest\nformat: chat_completions\nmodel_type: llm\n"
+        )
         (d / "helpers.py").write_text("VALUE = 1\n")
         (d / "transforms.py").write_text("from .helpers import VALUE\n")
         load_providers_from_dir(tmp_path)
@@ -787,7 +887,7 @@ class TestPluginEntryPoints:
         """Entry points that return list[ProviderShim] are collected."""
         from llm_rosetta.shims.provider_shim import ProviderShim
 
-        test_shim = ProviderShim(name="ep-test", base="openai_chat")
+        test_shim = ProviderShim(name="ep-test", format="openai_chat")
 
         class FakeEP:
             name = "returner"
@@ -963,9 +1063,23 @@ class TestShimPair:
         with pytest.raises(ValueError, match="model_type is required"):
             self._load(tmp_path, "name: x\nformat: chat_completions\n")
 
-    def test_legacy_base_is_accepted(self, tmp_path: Path):
-        shims = self._load(tmp_path, "name: x\nbase: openai_chat\n")
-        assert shims[0].format == "chat_completions"
+    @pytest.mark.parametrize(
+        "content",
+        [
+            "name: x\nbase: openai_chat\n",
+            "name: x\nbase: decision\n",
+            "name: x\nbase: decision\nformat: systemone\n",
+            "name: x\nmodel_type: decisions\nbase: decisions\nformat: systemone\n",
+            "name: x\nmodel_type: llm\nformat: chat_completions\nbase: openai_chat\n",
+        ],
+    )
+    def test_base_is_refused_with_format_and_model_type(
+        self, tmp_path: Path, content: str
+    ):
+        """``base:`` was removed in 0.14.0, whatever sits beside it."""
+        with pytest.raises(ValueError, match="'base:' was removed in 0.14.0") as exc:
+            self._load(tmp_path, content)
+        assert "format:" in str(exc.value) and "model_type:" in str(exc.value)
 
     def test_non_llm_pair(self, tmp_path: Path):
         shims = self._load(
@@ -995,28 +1109,6 @@ class TestShimPair:
                 tmp_path,
                 "name: x\nmodel_type: speech\nformat: chat_completions\n",
             )
-
-    def test_legacy_paradigm_base_needs_a_format(self, tmp_path: Path):
-        with pytest.raises(ValueError, match="add a 'format'"):
-            self._load(tmp_path, "name: x\nbase: decision\n")
-
-    def test_legacy_paradigm_base_with_format_needs_model_type(self, tmp_path: Path):
-        """``format`` makes the category mandatory even beside a legacy ``base``.
-
-        A shim mid-migration that keeps ``base`` for one release and forgets
-        ``model_type`` must not silently load as ``llm``; only a declaration
-        with ``base`` and no ``format`` may omit the category.
-        """
-        with pytest.raises(ValueError, match="model_type is required"):
-            self._load(tmp_path, "name: x\nbase: decision\nformat: systemone\n")
-
-    def test_legacy_paradigm_base_with_format_and_model_type(self, tmp_path: Path):
-        shims = self._load(
-            tmp_path,
-            "name: x\nmodel_type: decision\nbase: decision\nformat: systemone\n",
-        )
-        assert shims[0].model_type == "decisions"
-        assert shims[0].format == "systemone"
 
     def test_every_builtin_shim_declares_a_valid_pair(self):
         """The totality check behind "every shim speaks the pair".
@@ -1052,7 +1144,7 @@ class TestConnectionTokenCommand:
         for filename, content in (extra or {}).items():
             (d / filename).write_text(content)
         (d / "provider.yaml").write_text(
-            f"name: vendor\nbase: openai_chat\nconnection:\n{connection}"
+            f"name: vendor\nformat: chat_completions\nmodel_type: llm\nconnection:\n{connection}"
         )
         shims = load_providers_from_dir(tmp_path)
         assert len(shims) == 1
@@ -1134,7 +1226,7 @@ class TestAuthExchange:
     def test_a_shipped_exchange_is_attached(self, tmp_path):
         self._write(
             tmp_path,
-            "name: vendor\nbase: openai_chat\n"
+            "name: vendor\nformat: chat_completions\nmodel_type: llm\n"
             "connection:\n  base_url: https://vendor.example/v1\n"
             "  token_refresh_interval: 1800\n",
             """
@@ -1160,7 +1252,7 @@ class TestAuthExchange:
     def test_a_shim_without_a_module_attaches_nothing(self, tmp_path):
         self._write(
             tmp_path,
-            "name: vendor\nbase: openai_chat\n"
+            "name: vendor\nformat: chat_completions\nmodel_type: llm\n"
             "connection:\n  base_url: https://vendor.example/v1\n",
         )
 
@@ -1169,7 +1261,7 @@ class TestAuthExchange:
     def test_a_module_without_an_exchange_attaches_nothing(self, tmp_path):
         self._write(
             tmp_path,
-            "name: vendor\nbase: openai_chat\n"
+            "name: vendor\nformat: chat_completions\nmodel_type: llm\n"
             "connection:\n  base_url: https://vendor.example/v1\n",
             "HELPERS = ()\n",
         )
@@ -1179,7 +1271,7 @@ class TestAuthExchange:
     def test_an_exchange_without_credential_is_rejected(self, tmp_path):
         self._write(
             tmp_path,
-            "name: vendor\nbase: openai_chat\n"
+            "name: vendor\nformat: chat_completions\nmodel_type: llm\n"
             "connection:\n  base_url: https://vendor.example/v1\n",
             "EXCHANGE = object()\n",
         )
@@ -1191,7 +1283,7 @@ class TestAuthExchange:
         """One slot, one declaration: the loader refuses to pick a winner."""
         self._write(
             tmp_path,
-            "name: vendor\nbase: openai_chat\n"
+            "name: vendor\nformat: chat_completions\nmodel_type: llm\n"
             "connection:\n  base_url: https://vendor.example/v1\n"
             "  token_command: [token-helper]\n",
             """
@@ -1214,7 +1306,7 @@ class TestAuthExchange:
         """An external source degrades to a warning, like a broken transforms.py."""
         self._write(
             tmp_path,
-            "name: vendor\nbase: openai_chat\n"
+            "name: vendor\nformat: chat_completions\nmodel_type: llm\n"
             "connection:\n  base_url: https://vendor.example/v1\n",
             "raise RuntimeError('boom')\n",
         )

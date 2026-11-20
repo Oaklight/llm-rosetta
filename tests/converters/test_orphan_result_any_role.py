@@ -17,7 +17,7 @@ from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.ir.tools.orphan_fix import (
     UnrepairableToolHistory,
-    fix_orphaned_tool_calls_ir,
+    normalize_tool_pairing,
 )
 
 ORPHAN_TURN = {
@@ -99,7 +99,7 @@ def test_a_result_that_answers_a_declaration_is_kept():
 def test_an_orphan_only_history_fails_instead_of_sending_nothing():
     """Dropping the lone result would leave an empty ``messages`` array."""
     with pytest.raises(UnrepairableToolHistory) as raised:
-        fix_orphaned_tool_calls_ir(cast(Any, [ORPHAN_TURN]))
+        normalize_tool_pairing(cast(Any, [ORPHAN_TURN]))
 
     assert "ghost" in str(raised.value)
 
@@ -145,7 +145,7 @@ def test_a_real_answer_beside_an_orphan_keeps_only_the_answer():
 
 
 def test_a_message_with_no_content_does_not_raise():
-    patched = fix_orphaned_tool_calls_ir(
+    patched = normalize_tool_pairing(
         cast(
             Any,
             [

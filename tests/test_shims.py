@@ -8,12 +8,13 @@ import pytest
 from pathlib import Path
 
 from llm_rosetta.shims.provider_shim import (
+    ConnectionConfig,
     ProviderShim,
+    ToolsConfig,
     _reset_registry,
     get_shim,
     list_shims,
     register_shim,
-    resolve_base,
     resolve_format,
     resolve_model_type,
     unregister_shim,
@@ -54,19 +55,21 @@ class TestProviderShim:
         assert s.format == "chat_completions"
         assert s.base == "chat_completions"
         assert s.model_type == "llm"
-        assert s.default_base_url is None
-        assert s.default_api_key_env is None
+        assert s.connection.base_url is None
+        assert s.connection.api_key_env is None
         assert s.logo is None
 
     def test_creation_full(self):
         s = ProviderShim(
             name="openai",
             format="openai_chat",
-            default_base_url="https://api.openai.com/v1",
-            default_api_key_env="OPENAI_API_KEY",
+            connection=ConnectionConfig(
+                base_url="https://api.openai.com/v1",
+                api_key_env="OPENAI_API_KEY",
+            ),
             logo="https://example.com/openai.svg",
         )
-        assert s.default_base_url == "https://api.openai.com/v1"
+        assert s.connection.base_url == "https://api.openai.com/v1"
         assert s.logo == "https://example.com/openai.svg"
 
     def test_frozen(self):
@@ -88,7 +91,7 @@ class TestGroupedConfig:
 
         s = ProviderShim(
             name="test",
-            base="openai_chat",
+            format="openai_chat",
             connection=ConnectionConfig(
                 base_url="https://example.com",
                 api_key_env="TEST_KEY",
@@ -111,58 +114,70 @@ class TestGroupedConfig:
         assert s.tools.search_mode == "native"
         assert s.tools.multimodal_result is True
 
-    def test_legacy_flat_kwargs_build_grouped(self):
-        s = ProviderShim(
-            name="test",
-            base="openai_chat",
-            default_base_url="https://example.com",
-            default_api_key_env="TEST_KEY",
-            models_path="/v1/models",
-            supports_custom_tools=True,
-            max_tool_description_length=1024,
-        )
-        assert s.connection.base_url == "https://example.com"
-        assert s.connection.api_key_env == "TEST_KEY"
-        assert s.connection.models_path == "/v1/models"
-        assert s.tools.custom_tools is True
-        assert s.tools.max_description_length == 1024
+    @pytest.mark.parametrize(
+        ("kwarg", "value", "replacement"),
+        [
+            ("base", "openai_chat", "format"),
+            ("from_transforms", (), "pre_ir_transforms"),
+            ("to_transforms", (), "post_ir_transforms"),
+            ("default_base_url", "https://a.com", "ConnectionConfig(base_url"),
+            ("default_api_key_env", "K", "ConnectionConfig(api_key_env"),
+            ("models_path", "/models", "ConnectionConfig(models_path"),
+            ("default_path", "/chat", "ConnectionConfig(default_path"),
+            ("model_id_field", "id", "ConnectionConfig(model_id_field"),
+            ("supports_custom_tools", True, "ToolsConfig(custom_tools"),
+            ("max_tool_description_length", 1, "ToolsConfig(max_description_length"),
+            ("tool_search_mode", "native", "ToolsConfig(search_mode"),
+            ("multimodal_tool_result", True, "ToolsConfig(multimodal_result"),
+        ],
+    )
+    def test_removed_kwargs_name_their_replacement(self, kwarg, value, replacement):
+        """A keyword removed in 0.14.0 raises TypeError naming what replaced it."""
+        with pytest.raises(TypeError, match="removed in 0.14.0") as exc:
+            ProviderShim(name="test", format="chat_completions", **{kwarg: value})
+        assert kwarg in str(exc.value)
+        assert replacement in str(exc.value)
 
-    def test_property_aliases(self):
-        from llm_rosetta.shims.provider_shim import ConnectionConfig, ToolsConfig
-
-        s = ProviderShim(
-            name="test",
-            base="openai_chat",
-            connection=ConnectionConfig(base_url="https://a.com", api_key_env="K"),
-            tools=ToolsConfig(custom_tools=True, max_description_length=256),
-        )
-        assert s.default_base_url == "https://a.com"
-        assert s.default_api_key_env == "K"
-        assert s.supports_custom_tools is True
-        assert s.max_tool_description_length == 256
-        assert s.tool_search_mode == "disabled"
-        assert s.multimodal_tool_result is None
-        assert s.models_path is None
-        assert s.model_id_field is None
-
-    def test_grouped_wins_over_flat(self):
-        import warnings
-
-        from llm_rosetta.shims.provider_shim import ConnectionConfig
-
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            s = ProviderShim(
+    def test_removed_kwargs_are_all_listed_in_one_message(self):
+        with pytest.raises(TypeError) as exc:
+            ProviderShim(
                 name="test",
-                base="openai_chat",
-                connection=ConnectionConfig(base_url="https://grouped.com"),
-                default_base_url="https://flat.com",
+                format="chat_completions",
+                from_transforms=(),
+                default_base_url="https://a.com",
             )
-        assert s.connection.base_url == "https://grouped.com"
-        assert any("ignored" in str(x.message) for x in w)
+        message = str(exc.value)
+        assert "from_transforms" in message and "default_base_url" in message
+
+    def test_removed_properties_are_gone(self):
+        s = ProviderShim(name="test", format="openai_chat")
+        for gone in (
+            "from_transforms",
+            "to_transforms",
+            "default_base_url",
+            "default_api_key_env",
+            "models_path",
+            "model_id_field",
+            "supports_custom_tools",
+            "tool_search_mode",
+            "multimodal_tool_result",
+        ):
+            assert not hasattr(s, gone), gone
+
+    def test_property_aliases_still_read(self):
+        """Three aliases stay while a gateway or shim-repo reader remains."""
+        s = ProviderShim(
+            name="test",
+            format="openai_chat",
+            connection=ConnectionConfig(default_path="/chat"),
+            tools=ToolsConfig(max_description_length=256),
+        )
+        assert s.base == "chat_completions"
+        assert s.default_path == "/chat"
+        assert s.max_tool_description_length == 256
 
     def test_defaults_when_no_fields(self):
-        s = ProviderShim(name="test", base="openai_chat")
+        s = ProviderShim(name="test", format="openai_chat")
         assert s.connection.base_url is None
         assert s.connection.api_key_env is None
         assert s.connection.session_header is None
@@ -202,7 +217,7 @@ class TestGroupedConfig:
 
 class TestRegistry:
     def test_register_and_get(self):
-        s = ProviderShim(name="test-provider", base="openai_chat")
+        s = ProviderShim(name="test-provider", format="openai_chat")
         register_shim(s)
         assert get_shim("test-provider") is s
 
@@ -210,8 +225,8 @@ class TestRegistry:
         assert get_shim("nonexistent") is None
 
     def test_register_replaces(self):
-        s1 = ProviderShim(name="test", base="openai_chat")
-        s2 = ProviderShim(name="test", base="messages")
+        s1 = ProviderShim(name="test", format="openai_chat")
+        s2 = ProviderShim(name="test", format="messages")
         register_shim(s1)
         register_shim(s2)
         result = get_shim("test")
@@ -219,7 +234,7 @@ class TestRegistry:
         assert result.base == "messages"
 
     def test_unregister(self):
-        s = ProviderShim(name="test", base="openai_chat")
+        s = ProviderShim(name="test", format="openai_chat")
         register_shim(s)
         removed = unregister_shim("test")
         assert removed is s
@@ -229,8 +244,8 @@ class TestRegistry:
         assert unregister_shim("nonexistent") is None
 
     def test_list_shims(self):
-        s1 = ProviderShim(name="a", base="openai_chat")
-        s2 = ProviderShim(name="b", base="messages")
+        s1 = ProviderShim(name="a", format="openai_chat")
+        s2 = ProviderShim(name="b", format="messages")
         register_shim(s1)
         register_shim(s2)
         shims = list_shims()
@@ -305,10 +320,59 @@ class TestResolveModelType:
         assert resolve_model_type("not-a-provider") is None
 
 
-class TestResolveBaseDeprecated:
-    def test_it_warns_and_agrees(self):
-        with pytest.warns(DeprecationWarning, match="resolve_format"):
-            assert resolve_base("google") == "google_generate"
+class TestRemovedDeprecatedSurface:
+    """Issue 919 (P6): the deprecated shim, loader and tool-repair names are gone."""
+
+    def test_resolve_base_is_gone(self):
+        import llm_rosetta
+        import llm_rosetta.shims
+        import llm_rosetta.shims.provider_shim as provider_shim
+
+        for module in (llm_rosetta, llm_rosetta.shims, provider_shim):
+            assert not hasattr(module, "resolve_base")
+        assert provider_shim.resolve_format("google") == "google_generate"
+
+    def test_the_shims_transforms_forwarder_is_gone(self):
+        import importlib
+
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("llm_rosetta.shims.transforms")
+        # The replacement the forwarder named keeps working.
+        from llm_rosetta.transforms import strip_fields
+
+        assert callable(strip_fields)
+
+    def test_the_unused_type_aliases_are_gone(self):
+        import llm_rosetta.shims.provider_shim as provider_shim
+
+        for name in (
+            "EffortLevel",
+            "DisabledStrategy",
+            "ThinkingType",
+            "UnsignedReasoningBlocks",
+            "EffortMap",
+            "EffortField",
+        ):
+            assert not hasattr(provider_shim, name), name
+
+    def test_fix_orphaned_tool_calls_ir_is_gone(self):
+        from llm_rosetta.converters.base import tools as base_tools
+        from llm_rosetta.ir import tools as ir_tools
+        from llm_rosetta.ir.tools import orphan_fix
+
+        for module in (base_tools, ir_tools, orphan_fix):
+            assert not hasattr(module, "fix_orphaned_tool_calls_ir")
+            assert callable(module.normalize_tool_pairing)
+
+    def test_the_google_interactions_function_aliases_are_gone(self):
+        from llm_rosetta.converters.llm.google_interactions.tool_ops import (
+            GoogleInteractionsToolOps,
+        )
+
+        assert not hasattr(GoogleInteractionsToolOps, "ir_function_call_to_p")
+        assert not hasattr(GoogleInteractionsToolOps, "ir_function_result_to_p")
+        assert callable(GoogleInteractionsToolOps.ir_tool_call_to_p)
+        assert callable(GoogleInteractionsToolOps.ir_tool_result_to_p)
 
 
 # ---------------------------------------------------------------------------
@@ -862,16 +926,24 @@ class TestGroupedProviders:
 
 class TestMultimodalToolResultCapability:
     def test_shim_default_is_none(self):
-        s = ProviderShim(name="test", base="openai_chat")
-        assert s.multimodal_tool_result is None
+        s = ProviderShim(name="test", format="openai_chat")
+        assert s.tools.multimodal_result is None
 
     def test_shim_explicit_true(self):
-        s = ProviderShim(name="test", base="openai_chat", multimodal_tool_result=True)
-        assert s.multimodal_tool_result is True
+        s = ProviderShim(
+            name="test",
+            format="openai_chat",
+            tools=ToolsConfig(multimodal_result=True),
+        )
+        assert s.tools.multimodal_result is True
 
     def test_shim_explicit_false(self):
-        s = ProviderShim(name="test", base="messages", multimodal_tool_result=False)
-        assert s.multimodal_tool_result is False
+        s = ProviderShim(
+            name="test",
+            format="messages",
+            tools=ToolsConfig(multimodal_result=False),
+        )
+        assert s.tools.multimodal_result is False
 
     def test_convert_wires_shim_override_into_context(self):
         """convert() sets ctx.options['multimodal_tool_result'] from target shim."""
@@ -883,10 +955,12 @@ class TestMultimodalToolResultCapability:
 
         register_shim(
             ProviderShim(
-                name="mm-target", base="openai_chat", multimodal_tool_result=True
+                name="mm-target",
+                format="openai_chat",
+                tools=ToolsConfig(multimodal_result=True),
             )
         )
-        register_shim(ProviderShim(name="mm-source", base="messages"))
+        register_shim(ProviderShim(name="mm-source", format="messages"))
 
         captured_ctx: list[Any] = []
 
@@ -923,8 +997,8 @@ class TestMultimodalToolResultCapability:
 
         from llm_rosetta.auto_detect import convert
 
-        register_shim(ProviderShim(name="plain-target", base="openai_chat"))
-        register_shim(ProviderShim(name="plain-source", base="messages"))
+        register_shim(ProviderShim(name="plain-target", format="openai_chat"))
+        register_shim(ProviderShim(name="plain-source", format="messages"))
 
         captured_ctx: list[Any] = []
 
@@ -959,7 +1033,9 @@ class TestMultimodalToolResultCapability:
 
         register_shim(
             ProviderShim(
-                name="pipe-target", base="openai_chat", multimodal_tool_result=True
+                name="pipe-target",
+                format="openai_chat",
+                tools=ToolsConfig(multimodal_result=True),
             )
         )
 
@@ -983,7 +1059,9 @@ class TestMultimodalToolResultCapability:
 
         register_shim(
             ProviderShim(
-                name="mm-chat", base="openai_chat", multimodal_tool_result=True
+                name="mm-chat",
+                format="openai_chat",
+                tools=ToolsConfig(multimodal_result=True),
             )
         )
 

@@ -20,7 +20,8 @@ Directory layout
 Each subdirectory that contains a ``provider.yaml`` is treated as a leaf
 provider definition.  An optional ``transforms.py`` alongside the YAML
 may export ``pre_ir_transforms`` and/or ``post_ir_transforms`` tuples
-(legacy names ``from_transforms`` / ``to_transforms`` are also accepted).
+(the 0.13 names ``from_transforms`` / ``to_transforms`` are refused with an
+error that names the replacement).
 
 **Grouped directories** are also supported: a child directory that does
 NOT contain ``provider.yaml`` but DOES contain subdirectories with one is
@@ -99,7 +100,7 @@ from ..provider_shim import (  # noqa: F401
 )
 from ._constants import (  # noqa: F401
     _CONNECTION_KEYS,
-    _FLAT_CONNECTION_ALIASES,
+    _REMOVED_LEAF_KEYS,
     _IDENTITY_KEYS,
     _MANIFEST_KEYS,
     _MAX_LANE_DEPTH,

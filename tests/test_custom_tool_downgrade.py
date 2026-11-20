@@ -22,6 +22,7 @@ from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
+    ToolsConfig,
     register_shim,
     unregister_shim,
 )
@@ -49,8 +50,8 @@ FUNCTION_TOOL_IR = {
 def _make_shim(supports: bool, name: str = "__test_custom_tool__") -> ProviderShim:
     return ProviderShim(
         name=name,
-        base="openai_chat",
-        supports_custom_tools=supports,
+        format="openai_chat",
+        tools=ToolsConfig(custom_tools=supports),
     )
 
 
@@ -671,15 +672,21 @@ class TestPipelineStreamingRoundtrip:
 
 class TestProviderShimCustomToolField:
     def test_default_false(self):
-        shim = ProviderShim(name="test", base="openai_chat")
-        assert shim.supports_custom_tools is False
+        shim = ProviderShim(name="test", format="openai_chat")
+        assert shim.tools.custom_tools is False
 
     def test_explicit_true(self):
-        shim = ProviderShim(name="test", base="openai_chat", supports_custom_tools=True)
-        assert shim.supports_custom_tools is True
+        shim = ProviderShim(
+            name="test", format="openai_chat", tools=ToolsConfig(custom_tools=True)
+        )
+        assert shim.tools.custom_tools is True
 
     def test_explicit_false(self):
         shim = ProviderShim(
-            name="test", base="openai_chat", supports_custom_tools=False
+            name="test", format="openai_chat", tools=ToolsConfig(custom_tools=False)
         )
-        assert shim.supports_custom_tools is False
+        assert shim.tools.custom_tools is False
+
+    def test_the_flat_kwarg_is_refused(self):
+        with pytest.raises(TypeError, match="ToolsConfig\\(custom_tools"):
+            ProviderShim(name="test", format="openai_chat", supports_custom_tools=True)

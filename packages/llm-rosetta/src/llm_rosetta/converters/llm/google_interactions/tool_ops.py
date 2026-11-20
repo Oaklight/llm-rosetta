@@ -262,23 +262,6 @@ class GoogleInteractionsToolOps(BaseToolOps):
         """
         return {}
 
-    @classmethod
-    def ir_function_call_to_p(cls, ir_part: ToolCallPart, **kwargs: Any) -> Any:
-        """Deprecated alias of :meth:`ir_tool_call_to_p`.
-
-        The dialect's client call is a ``function_call`` step, so this name
-        predates the base template that owns the dispatch.  Kept so existing
-        callers keep working; new code should call :meth:`ir_tool_call_to_p`.
-
-        Args:
-            ir_part: IR tool call part.
-            **kwargs: Extra arguments.
-
-        Returns:
-            The step for the part, native or client.
-        """
-        return cls.ir_tool_call_to_p(ir_part, **kwargs)
-
     # ── Server step calls ─────────────────────────────────────────
 
     @staticmethod
@@ -288,7 +271,7 @@ class GoogleInteractionsToolOps(BaseToolOps):
         The native step carries no ``name``; its identity is the canonical
         intrinsic kind derived from the step type.  It does carry a
         ``signature``, which a replay needs, so it is kept on the part's
-        ``provider_metadata`` and restored by ``ir_function_call_to_p``.
+        ``provider_metadata`` and restored by ``ir_tool_call_to_p``.
         """
         step_type = step.get("type", "")
         intrinsic_kind = SERVER_CALL_TYPES.get(step_type, step_type)
@@ -329,7 +312,7 @@ class GoogleInteractionsToolOps(BaseToolOps):
         }
         # Keep the function name the step carries so it survives a passthrough
         # and a result-only replay (no function_call in the batch to resolve it
-        # from) — see ``ir_function_result_to_p``.
+        # from) — see ``ir_tool_result_to_p``.
         name = step.get("name")
         if name:
             part.setdefault("provider_metadata", {}).setdefault("google", {})[
@@ -390,21 +373,6 @@ class GoogleInteractionsToolOps(BaseToolOps):
             ``{}`` — no step is written.
         """
         return {}
-
-    @classmethod
-    def ir_function_result_to_p(cls, ir_part: ToolResultPart, **kwargs: Any) -> Any:
-        """Deprecated alias of :meth:`ir_tool_result_to_p`.
-
-        See :meth:`ir_function_call_to_p`.
-
-        Args:
-            ir_part: IR tool result part.
-            **kwargs: Extra arguments.
-
-        Returns:
-            The step for the part, native or client.
-        """
-        return cls.ir_tool_result_to_p(ir_part, **kwargs)
 
     @classmethod
     def ir_client_result_to_p(
