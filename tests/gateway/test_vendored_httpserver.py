@@ -84,7 +84,7 @@ def test_vendored_httpserver_matches_the_lock():
 
     # The tag the bundle was last fetched from.  ``acp``/``jsonrpc`` entered
     # the bundle at v2026.11.11; the hashes below are what actually moved.
-    assert lock["source"]["ref"] == "v2026.11.11"
+    assert lock["source"]["ref"] == "v2026.11.20"
     assert lock["modules"]["httpserver"]["version"] == "0.7.1"
     for filename, expected in lock["modules"]["httpserver"]["files"].items():
         actual = hashlib.sha256((_VENDOR / filename).read_bytes()).hexdigest()
