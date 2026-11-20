@@ -301,10 +301,10 @@ class TestProbeResolution:
             resolve_probe("https://api.example.com", probes=_PROBES, probe_id="nope")
 
     def test_shims_attach_their_probes(self):
-        from llm_rosetta.shims import _load_providers, get_shim
+        from llm_rosetta.api import get_shim, load_providers
 
         if get_shim("opencode--chat_completions") is None:
-            _load_providers()
+            load_providers()
         opencode = get_shim("opencode--chat_completions")
         openai = get_shim("openai--open_responses")
         assert opencode is not None and openai is not None
@@ -477,12 +477,12 @@ class TestQuotaIntervals:
         from types import SimpleNamespace
 
         from llm_rosetta_gateway.quota.service import quota_intervals
-        from llm_rosetta.shims import _load_providers, get_shim
+        from llm_rosetta.api import get_shim, load_providers
 
         # Other test modules reset the shim registry; load the built-ins so
         # this test reads the declaration it is about.
         if get_shim("opencode--chat_completions") is None:
-            _load_providers()
+            load_providers()
 
         config = SimpleNamespace(
             providers={"oc": object(), "plain": object()},
@@ -501,10 +501,10 @@ class TestQuotaIntervals:
         from types import SimpleNamespace
 
         from llm_rosetta_gateway.quota.service import quota_intervals
-        from llm_rosetta.shims import _load_providers, get_shim
+        from llm_rosetta.api import get_shim, load_providers
 
         if get_shim("opencode--chat_completions") is None:
-            _load_providers()
+            load_providers()
 
         config = SimpleNamespace(
             providers={"oc": object()},

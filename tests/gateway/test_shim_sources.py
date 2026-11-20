@@ -29,7 +29,7 @@ from llm_rosetta_gateway.shims.sources import (
     ShimSourceStatus,
     check_remote_updates,
 )
-from llm_rosetta.shims.provider_shim import _reset_registry
+from llm_rosetta.api import restore_registry, snapshot_registry, staging_registry
 
 
 @pytest.fixture(autouse=True)
@@ -41,12 +41,11 @@ def _clean_registry():
     registry empty would break every later test in the process that resolves a
     provider through a built-in shim.
     """
-    from llm_rosetta.shims.providers import load_providers
-
-    _reset_registry()
+    snapshot = snapshot_registry()
+    with staging_registry():
+        pass
     yield
-    _reset_registry()
-    load_providers()
+    restore_registry(snapshot)
 
 
 def _write_provider(root: Path, slug: str, name: str) -> None:

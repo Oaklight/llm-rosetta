@@ -495,35 +495,17 @@ def test_an_undeclared_name_on_the_surface_is_reported():
 # D5 of #1630: a gateway test may import non-private core modules, but not a
 # private name or a private module.  Shrink only; never add an entry.  Lower
 # _TESTS_PRIVATE_CEILING with every deletion.
-_TESTS_PRIVATE_CEILING = 7
+_TESTS_PRIVATE_CEILING = 2
 _TESTS_PRIVATE_ALLOWLIST: frozenset[tuple[str, str, str]] = frozenset(
     {
-        (
-            "test_admin_credential_payload.py",
-            "llm_rosetta.shims.providers",
-            "_load_single_provider",
-        ),
+        # Waits on PR 9b (the manifest core change): the test pins the gateway's
+        # own copy of the key list to core's.
         (
             "test_admin_shim_manifests.py",
             "llm_rosetta.shims.providers",
             "_CONNECTION_KEYS",
         ),
-        (
-            "test_proxy_transforms.py",
-            "llm_rosetta.shims.provider_shim",
-            "_reset_registry",
-        ),
-        ("test_quota.py", "llm_rosetta.shims", "_load_providers"),
-        (
-            "test_shim_selection.py",
-            "llm_rosetta.shims.provider_shim",
-            "_reset_registry",
-        ),
-        (
-            "test_shim_sources.py",
-            "llm_rosetta.shims.provider_shim",
-            "_reset_registry",
-        ),
+        # Tests a core internal: the fold's echo list must equal the catalog's.
         ("test_stream_bridge.py", "llm_rosetta.ir.primitives.fold", "_ECHO_FIELDS"),
     }
 )

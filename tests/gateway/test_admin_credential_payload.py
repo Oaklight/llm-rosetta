@@ -38,7 +38,11 @@ class TestTheShimDeclaresIt:
         assert shim.connection.manage_usage_url == "https://chatgpt.com/settings/usage"
 
     def test_the_field_travels_through_both_yaml_shapes(self, tmp_path):
-        from llm_rosetta.shims.providers import _load_single_provider
+        from llm_rosetta.api import (
+            load_providers_from_dir,
+            restore_registry,
+            snapshot_registry,
+        )
 
         grouped = tmp_path / "grouped"
         grouped.mkdir()
@@ -60,8 +64,13 @@ class TestTheShimDeclaresIt:
             "manage_usage_url: https://example.test/usage2\n"
         )
 
-        grouped_shim = _load_single_provider(grouped)
-        legacy_shim = _load_single_provider(legacy)
+        snapshot = snapshot_registry()
+        try:
+            loaded = {s.name: s for s in load_providers_from_dir(tmp_path)}
+        finally:
+            restore_registry(snapshot)
+        grouped_shim = loaded.get("g--open_responses")
+        legacy_shim = loaded.get("l--open_responses")
         assert grouped_shim is not None and legacy_shim is not None
 
         assert grouped_shim.connection.manage_usage_url == "https://example.test/usage"

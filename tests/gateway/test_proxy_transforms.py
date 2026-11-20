@@ -20,9 +20,9 @@ from llm_rosetta_gateway.transport._base import UpstreamResponse
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,
     SoftErrorPattern,
-    _reset_registry,
     register_shim,
 )
+from llm_rosetta.api import restore_registry, snapshot_registry
 from llm_rosetta.transforms import rename_field, strip_fields
 from llm_rosetta_gateway.routing import SelectionContext
 
@@ -34,9 +34,10 @@ from llm_rosetta_gateway.routing import SelectionContext
 
 @pytest.fixture(autouse=True)
 def _clean_registry():
-    """Reset the shim registry before each test."""
+    """Restore the shim registry after each test."""
+    snapshot = snapshot_registry()
     yield
-    _reset_registry()
+    restore_registry(snapshot)
 
 
 @pytest.fixture()
