@@ -44,6 +44,7 @@ from .._vendor.acp import (
     FsCapabilities,
     ImplementationInfo,
     InitializeParams,
+    PermissionOptionKind,
 )
 from .._vendor.jsonrpc import JSONRPCException
 from ..transport._base import UpstreamConnectionError, UpstreamResponse, UpstreamStream
@@ -71,7 +72,27 @@ CHUNK_ERROR = "error"
 #: Default agent argv.  A provider may override it with ``connection.acp_argv``
 #: (a shim declares the command its vendor ships); ``agy acp`` is the
 #: Antigravity one.
-DEFAULT_AGENT_ARGV: tuple[str, ...] = ("agy", "acp")
+DEFAULT_AGENT_ARGV: tuple[str, ...] = (
+    "agy",
+    "acp",
+    "--dangerously-skip-permissions=false",
+)
+
+#: Phase 1 runs the agent as a plain text model: its own tools (file read,
+#: write, shell, web) are OFF.  Two settings enforce this together.  The argv
+#: above makes the agent *ask* before using a tool (agy auto-approves by
+#: default, which would give every gateway client the host's files and shell),
+#: and this switch makes the gateway's ACP client refuse every such ask.  Phase
+#: 2 will add a controlled tool path; flipping this to ``False`` is one half of
+#: re-enabling tools.  An operator-supplied ``acp_argv`` that keeps agy's
+#: default auto-approve bypasses the gateway's refusal entirely, so overriding
+#: ``acp_argv`` can re-enable host tools, at the operator's own risk.
+DENY_AGENT_TOOLS = True
+
+#: The agent mode that asks before *every* tool use, reads included.  agy's
+#: default mode reads files without asking, and the permission flag does not
+#: change that; ``plan`` mode asks, and the client then refuses.
+AGENT_TOOLS_OFF_MODE = "plan"
 
 #: A session that cannot be opened usually means the agent is not signed in.
 #: The ACP error carries no code of its own, so the wording is the signal.
@@ -171,6 +192,61 @@ def _capability(info: Any, name: str) -> Any:
     return getattr(session_caps, name, None)
 
 
+def _agent_request_handler(provider: str) -> Any:
+    """Build the handler for requests the agent sends to this client.
+
+    ``session/request_permission`` is answered with a rejection (the
+    ``reject_once`` option when offered, else ``reject_always``, else the
+    protocol's ``cancelled`` outcome), so the agent can only answer in text
+    and the turn goes on.  Any other agent-to-client request (``fs/*``,
+    ``terminal/*``) is refused with an error: none is advertised.  One WARNING
+    line names the provider and the tool title; arguments and contents are
+    never logged.
+    """
+
+    def handle(method: str, params: dict[str, Any]) -> dict[str, Any]:
+        if method != "session/request_permission":
+            raise RuntimeError(f"{method} is not available: agent tools are off")
+        tool = params.get("toolCall") or {}
+        title = tool.get("title") if isinstance(tool, dict) else None
+        options = params.get("options") or []
+        if not DENY_AGENT_TOOLS:
+            # Relaxed (phase 2): approve once what the agent asks.
+            return _permission_outcome(
+                options,
+                (PermissionOptionKind.ALLOW_ONCE, PermissionOptionKind.ALLOW_ALWAYS),
+            )
+        logger.warning(
+            "ACP provider %r: agent tool request refused (tool: %s); "
+            "agent tools are disabled",
+            provider,
+            # A shell tool's title is the command line: cap it.
+            str(title or "unknown")[:60],
+        )
+        return _permission_outcome(
+            options,
+            (PermissionOptionKind.REJECT_ONCE, PermissionOptionKind.REJECT_ALWAYS),
+        )
+
+    return handle
+
+
+def _permission_outcome(
+    options: Any, wanted: tuple[PermissionOptionKind, ...]
+) -> dict[str, Any]:
+    """Pick the first offered option of a wanted kind, else ``cancelled``."""
+    for kind in wanted:
+        for option in options:
+            if isinstance(option, dict) and option.get("kind") == kind.value:
+                return {
+                    "outcome": {
+                        "outcome": "selected",
+                        "optionId": option.get("optionId"),
+                    }
+                }
+    return {"outcome": {"outcome": "cancelled"}}
+
+
 def _looks_like_sign_in(message: str) -> bool:
     lowered = message.lower()
     return any(hint in lowered for hint in _SIGN_IN_HINTS)
@@ -248,6 +324,7 @@ class AcpTransport:
         """Start one agent process and complete the handshake."""
         argv = self._argv(provider_info)
         client = ACPClient(argv)
+        client.set_request_handler(_agent_request_handler(provider_info.config_name))
         try:
             await client.start()
             info = await client.initialize(
@@ -255,8 +332,10 @@ class AcpTransport:
                     client_info=ImplementationInfo(
                         name="llm-rosetta-gateway", version=""
                     ),
+                    # No fs and no terminal: the agent must not be able to
+                    # use the client as a tool.
                     client_capabilities=ClientCapabilities(
-                        fs=FsCapabilities(),
+                        fs=FsCapabilities(read_text_file=False, write_text_file=False),
                         terminal=False,
                     ),
                 )
@@ -512,6 +591,7 @@ class AcpTransport:
                     exc,
                 )
                 return None
+            await self._text_only(provider_info, agent, entry.session_id, deadline)
             entry.live = True
             return entry.session_id
         if agent.can_load():
@@ -535,6 +615,7 @@ class AcpTransport:
                     replayed,
                     entry.session_id,
                 )
+            await self._text_only(provider_info, agent, entry.session_id, deadline)
             entry.live = True
             return entry.session_id
         logger.info(
@@ -567,6 +648,7 @@ class AcpTransport:
             ) from exc
 
         session_id = getattr(session, "session_id", "") or ""
+        await self._text_only(provider_info, agent, session_id, deadline)
         model = _current_model(getattr(session, "config_options", None))
         requested = str(body.get("model") or "")
         if requested and requested != model:
@@ -600,6 +682,34 @@ class AcpTransport:
             for displaced in self._ledger.put(entry):
                 await self._close_entry(displaced)
         return turn
+
+    async def _text_only(
+        self,
+        provider_info: ProviderInfo,
+        agent: _Agent,
+        session_id: str,
+        deadline: float,
+    ) -> None:
+        """Put the session in the mode in which every tool use is asked for.
+
+        agy's default mode reads files without asking (the permission flag
+        does not cover reads); in ``plan`` mode a read asks too, and the
+        client refuses.  Failing to set the mode fails the turn: a session
+        whose tools cannot be shown to be gated must not run.
+        """
+        if not DENY_AGENT_TOOLS:
+            return
+        try:
+            await _bounded(
+                agent.client.set_mode(session_id, AGENT_TOOLS_OFF_MODE), deadline
+            )
+        except JSONRPCException as exc:
+            raise AcpTurnError(
+                f"provider {provider_info.config_name!r}: the ACP agent would not "
+                f"enter its {AGENT_TOOLS_OFF_MODE!r} mode, so its tools cannot be "
+                f"gated: {exc}",
+                status_code=502,
+            ) from exc
 
     async def _match_model(
         self,

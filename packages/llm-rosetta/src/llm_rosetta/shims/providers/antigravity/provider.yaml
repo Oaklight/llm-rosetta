@@ -8,6 +8,16 @@
 # Why not call Code Assist directly: Google suspends accounts it sees calling
 # Code Assist outside Antigravity's own client.  Driving the vendor's CLI
 # keeps the request inside the client Google expects.
+#
+# Phase 1 runs agy as a text model: its own tools (file writes, shell, reads
+# outside the temp dir) are disabled; web search still works.  agy
+# auto-approves them by default, which would give every client of the
+# gateway the gateway host; the lane starts agy with
+# ``--dangerously-skip-permissions=false``, puts each session in agy's
+# ``plan`` mode and refuses every permission request.  Residual: agy's own
+# policy lets it read files under the system temp dir without asking.  A
+# provider entry that overrides ``acp_argv`` can re-enable the tools, at the
+# operator's own risk.
 group_label: Google (Antigravity)
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/antigravity.svg
 
