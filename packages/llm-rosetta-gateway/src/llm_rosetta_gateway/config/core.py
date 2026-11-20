@@ -382,7 +382,7 @@ class GatewayConfig:
         # attribute — no ``getattr`` fallback — so moving this loop earlier
         # fails the load with an AttributeError instead of quietly leaving every
         # typed endpoint without an owner.  A test pins the shared key ring.
-        from llm_rosetta.formats import legacy_model_type
+        from llm_rosetta.api import legacy_model_type
 
         credential_owners = self.providers
         for descriptor in _typed_descriptors():
@@ -469,7 +469,7 @@ class GatewayConfig:
         caller that only has the type's name.  A legacy spelling names the
         same pools.
         """
-        from llm_rosetta.formats import canonical_model_type
+        from llm_rosetta.api import canonical_model_type
 
         type_name = canonical_model_type(type_name)
         return (
@@ -531,7 +531,7 @@ class GatewayConfig:
             KeyError: If the model is not configured for that type.
             ProviderNotReady: If no candidate can serve it right now.
         """
-        from llm_rosetta.formats import canonical_model_type
+        from llm_rosetta.api import canonical_model_type
 
         from ..model_types import get_model_type
 

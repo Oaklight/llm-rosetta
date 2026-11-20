@@ -97,7 +97,7 @@ class ProfilerState:
         Returns:
             A :class:`~llm_rosetta.profiling.DeepProfiler` instance.
         """
-        from llm_rosetta.profiling import DeepProfiler
+        from llm_rosetta.api import DeepProfiler
 
         return DeepProfiler(async_mode=True, tracing=self.tracing)
 

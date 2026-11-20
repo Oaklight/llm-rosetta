@@ -10,7 +10,7 @@ from llm_rosetta_gateway.observability.ops_log import (
     SOURCE_CONFIG,
     OpsLogEntry,
 )
-from llm_rosetta.shims import get_shim
+from llm_rosetta.api import get_shim
 
 from ..shims import find_source_package, legacy_shim_migration_advice
 

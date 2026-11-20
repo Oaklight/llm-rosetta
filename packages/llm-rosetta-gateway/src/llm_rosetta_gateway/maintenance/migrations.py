@@ -297,7 +297,7 @@ def _serving_providers(raw: dict[str, Any]) -> dict[str, set[str]]:
     question (it is disabled there with a reason), while whether the document
     routes the type at it is a document question.
     """
-    from llm_rosetta.formats import legacy_model_type
+    from llm_rosetta.api import legacy_model_type
 
     from ..config.typed import _typed_descriptors, parse_typed_config
 

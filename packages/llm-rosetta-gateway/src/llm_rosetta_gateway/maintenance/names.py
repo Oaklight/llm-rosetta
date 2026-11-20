@@ -17,7 +17,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from llm_rosetta.provider_names import (
+from llm_rosetta.api import (
     canonical_provider_name,
     canonical_shim_name,
 )

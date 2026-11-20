@@ -52,7 +52,7 @@ async def handle_list_models(request: Any) -> Response:
     qp = getattr(request, "query_params", {})
     type_vals = qp.get("type")
     if type_vals:
-        from llm_rosetta.formats import canonical_model_type
+        from llm_rosetta.api import canonical_model_type
 
         type_filter = type_vals[0] if isinstance(type_vals, list) else type_vals
         if type_filter == "all":
@@ -149,7 +149,7 @@ async def handle_list_models_google(request: Any) -> Response:
     qp = getattr(request, "query_params", {})
     type_vals = qp.get("type")
     if type_vals:
-        from llm_rosetta.formats import canonical_model_type
+        from llm_rosetta.api import canonical_model_type
 
         type_filter = type_vals[0] if isinstance(type_vals, list) else type_vals
         if type_filter == "all":
