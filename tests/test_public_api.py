@@ -165,7 +165,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "SURFACE_VERSION",
             "__version__",
         ],
-        "max_count": 64,
+        "max_count": 62,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
