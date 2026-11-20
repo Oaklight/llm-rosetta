@@ -113,6 +113,42 @@ def endpoint_identity(
     return None
 
 
+def _check_face_shims(
+    cfg: dict[str, Any],
+    endpoint_types: list[tuple[str, str, str | None]],
+    name: str,
+) -> None:
+    """Refuse a retired shim name in a per-face shim value.
+
+    ``embeddings_shim`` (and every face key a descriptor declares) is read
+    through :func:`face_value`, like ``shim:``; without this check a retired
+    value silently disabled the endpoint as an unknown shim.
+
+    Raises:
+        RetiredConfigName: Naming the provider and the key.
+    """
+    from llm_rosetta.api import retired_names
+
+    for type_name, shim_key, _format_key in endpoint_types:
+        # Read the keys as written: ``face_value`` would run the face-block
+        # guard first, which raises without the provider's location.
+        block = cfg.get(type_name)
+        values = [cfg.get(shim_key)]
+        if isinstance(block, dict):
+            values.append(block.get("shim"))
+        for value in values:
+            if not isinstance(value, str) or not value:
+                continue
+            try:
+                retired_names.check_not_retired(
+                    value, retired_names.SHIM, retired_names.PROVIDER_TYPE
+                )
+            except ValueError as exc:
+                raise RetiredConfigName(
+                    str(exc), where=f"providers.{name}.{shim_key}"
+                ) from None
+
+
 def resolve_provider_identities(
     raw_providers: dict[str, dict[str, str]],
 ) -> tuple[dict[str, ProviderIdentity], dict[str, str | None]]:
@@ -191,6 +227,8 @@ def resolve_provider_identities(
             # name.
             source = name
             provider_shim_names[name] = name
+
+        _check_face_shims(cfg, endpoint_types, name)
 
         wire_format = resolve_format(source)
         model_type = resolve_model_type(source)
