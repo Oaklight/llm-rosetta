@@ -16,10 +16,11 @@ the command keeps working after the alias tables are deleted.  It never
 guesses: a name it cannot map is reported and left in place, and the exit code
 says so.
 
-Exit codes: ``0`` nothing to do, or everything mapped; ``1`` something was
-reported that needs a person (an unmapped item, or a ``--scan`` finding);
-``2`` the command could not run (unreadable file, parse error, database held by
-a running gateway); ``3`` ``--check`` found pending rewrites.
+Exit codes: ``0`` nothing to do, or everything mapped (a ``note``, an item the
+tool leaves on purpose, does not count); ``1`` something was reported that needs
+a person (an unmapped item, or a ``--scan`` mention); ``2`` the command could
+not run (unreadable file, parse error, database held by a running gateway);
+``3`` ``--check`` found pending rewrites.
 
 Configs are edited as text (:mod:`.jsonc_spans`): comments, key order and
 formatting outside the rewritten names are untouched.  The database step runs
@@ -78,8 +79,10 @@ class Item:
     Attributes:
         scope: ``config``, ``db`` or ``scan``.
         action: ``rewrite`` (done, or done on ``--write``), ``add`` (a value
-            that must be added alongside a rewrite), or ``unmapped`` (needs a
-            person; never changed).
+            that must be added alongside a rewrite), ``unmapped`` (needs a
+            person; never changed), ``mention`` (a ``--scan`` hit: advisory,
+            a textual mention that may or may not be a use) or ``note`` (left
+            on purpose; informational, never counted in the exit code).
         file: The file the item is about.
         where: A dotted path inside a config, or ``table.column`` in a database.
         line: 1-based line number, for text files.
@@ -106,6 +109,10 @@ class Item:
             place += f" [{self.where}]"
         if self.action == "unmapped":
             return f"{place}: UNMAPPED {self.old!r}: {self.detail}"
+        if self.action == "mention":
+            return f"{place}: mentions {self.old!r} (advisory): {self.detail}"
+        if self.action == "note":
+            return f"{place}: NOTE {self.old!r} left as it is: {self.detail}"
         change = f"{self.old!r} -> {self.new!r}" if self.old else f"add {self.new!r}"
         extra = f" ({self.count} rows)" if self.count is not None else ""
         extra += f"  {self.detail}" if self.detail else ""
@@ -705,7 +712,8 @@ def _target_counter_items(
     """Report the ``by_target_provider`` keys that are retired tags.
 
     The key is a provider name when the request had one and a format tag when
-    it had none, so the two cannot be told apart; it is left as it is.
+    it had none, so the two cannot be told apart; it is left as it is, and
+    reported as a ``note`` that does not count in the exit code.
     """
     target = counters.get("by_target_provider")
     if not isinstance(target, dict):
@@ -716,7 +724,7 @@ def _target_counter_items(
         "(the counters can be rebuilt from request_log)"
     )
     return [
-        Item("db", "unmapped", file, _COUNTER_TARGET, None, old, detail=detail)
+        Item("db", "note", file, _COUNTER_TARGET, None, old, detail=detail)
         for old in sorted(tags)
         if old in target
     ]
@@ -928,26 +936,32 @@ def _scan_files(root: Path) -> Iterator[Path]:
                 yield path
 
 
-def scan_path(root: Path) -> list[Item]:
+def scan_path(root: Path, skip: Iterable[Path] = ()) -> list[Item]:
     """Report every occurrence of a retired name under *root*; edit nothing.
 
     Finds the name as an exact quoted string (``"openai_chat"``) in ``.py``,
     ``.json``/``.jsonc`` and ``.yaml``/``.yml`` files, and unquoted as a YAML
     key or value.  A quoted string is a match, not a proof: ``"anthropic"`` may
     be your own variable, so the report names every replacement the table has.
+    Each finding is an advisory textual mention, not a proof of a use.
 
     Args:
         root: A file or a directory.
+        skip: Files to leave out, such as the configs ``--config`` rewrites in
+            the same run.
 
     Returns:
         One ``scan`` item per occurrence.
     """
+    skipped = {Path(p).resolve() for p in skip}
     vocab = _scan_vocabulary()
     alternation = "|".join(re.escape(n) for n in sorted(vocab, key=len, reverse=True))
     quoted = re.compile(r"([\x22\x27])(" + alternation + r")\1")
     bare = re.compile(r"(?:^|[\s:\-])(" + alternation + r")\s*(?::|(?:#.*)?$)")
     items: list[Item] = []
     for path in _scan_files(root):
+        if path.resolve() in skipped:
+            continue
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except (OSError, UnicodeDecodeError):
@@ -962,12 +976,12 @@ def scan_path(root: Path) -> list[Item]:
                 items.append(
                     Item(
                         "scan",
-                        "unmapped",
+                        "mention",
                         str(path),
                         line=number,
                         old=name,
                         new=use,
-                        detail="use " + use,
+                        detail="if it names a provider, format or shim, use " + use,
                     )
                 )
     return items
@@ -1055,7 +1069,8 @@ def _run_configs(args: argparse.Namespace, report: dict[str, Any]) -> None:
 def _run_dbs(args: argparse.Namespace, report: dict[str, Any]) -> None:
     for name in args.db:
         result = migrate_db(resolve_db_path(name), args.write, args.force)
-        report["items"].extend(result.items)
+        for item in result.items:
+            report["notes" if item.action == "note" else "items"].append(item)
         entry: dict[str, Any] = dict(
             path=result.path, pending=result.pending, backup=result.backup
         )
@@ -1068,7 +1083,7 @@ def _exit_code(args: argparse.Namespace, report: dict[str, Any]) -> int:
     files = report["configs"] + report["databases"]
     if any("error" in f for f in files):
         return 2
-    if any(item.action == "unmapped" for item in report["items"]):
+    if any(item.action in ("unmapped", "mention") for item in report["items"]):
         return 1
     pending = any(item.action == "rewrite" for item in report["items"])
     if args.check and not args.write and pending:
@@ -1081,7 +1096,7 @@ def _print_text(args: argparse.Namespace, report: dict[str, Any]) -> None:
     print(f"llm-rosetta-migrate: {mode}")
     for diff in report["diffs"]:
         print(diff, end="" if diff.endswith("\n") else "\n")
-    for item in report["items"]:
+    for item in report["items"] + report["notes"]:
         print(item.render())
     for entry in report["configs"] + report["databases"]:
         if "error" in entry:
@@ -1090,7 +1105,12 @@ def _print_text(args: argparse.Namespace, report: dict[str, Any]) -> None:
             print(f"backup: {entry['backup']}")
     rewrites = sum(1 for i in report["items"] if i.action == "rewrite")
     unmapped = sum(1 for i in report["items"] if i.action == "unmapped")
-    print(f"{rewrites} rewrite(s), {unmapped} unmapped; exit {report['exit_code']}")
+    mentions = sum(1 for i in report["items"] if i.action == "mention")
+    notes = len(report["notes"])
+    print(
+        f"{rewrites} rewrite(s), {unmapped} unmapped, {mentions} mention(s), "
+        f"{notes} note(s); exit {report['exit_code']}"
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -1111,11 +1131,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         if found is None:
             parser.error("nothing to do: pass --config, --db or --scan")
         args.config = [found]
-    report: dict[str, Any] = dict(configs=[], databases=[], items=[], diffs=[])
+    report: dict[str, Any] = dict(
+        configs=[], databases=[], items=[], notes=[], diffs=[]
+    )
     _run_configs(args, report)
     _run_dbs(args, report)
     for name in args.scan:
-        report["items"].extend(scan_path(Path(name)))
+        report["items"].extend(scan_path(Path(name), skip=map(Path, args.config)))
     report["exit_code"] = _exit_code(args, report)
     if args.json:
         out = dict(
@@ -1125,6 +1147,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             configs=report["configs"],
             databases=report["databases"],
             items=[asdict(item) for item in report["items"]],
+            notes=[asdict(item) for item in report["notes"]],
         )
         print(json.dumps(out, indent=2))
     else:

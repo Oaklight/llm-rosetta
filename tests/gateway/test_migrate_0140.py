@@ -453,7 +453,8 @@ def test_db_write_is_one_backed_up_idempotent_rewrite(tmp_path) -> None:
     assert counters["by_source_provider"] == dict(chat_completions=5, messages=1)
     # by_target_provider mixes provider names and tags: left as it was.
     assert counters["by_target_provider"] == dict(anthropic=4, main=1)
-    assert [i.old for i in result.items if i.action == "unmapped"] == ["anthropic"]
+    assert [i.old for i in result.items if i.action == "note"] == ["anthropic"]
+    assert not [i for i in result.items if i.action == "unmapped"]
     # Second run: nothing pending, no second backup.
     files = sorted(p.name for p in tmp_path.iterdir())
     again = mig.migrate_db(db, write=True)
@@ -519,10 +520,15 @@ def test_db_command_accepts_a_data_directory_and_reports_exit_codes(
     tmp_path, capsys
 ) -> None:
     _make_db(tmp_path / "gateway.db")
-    # The unmapped by_target_provider key makes the exit code 1.
-    assert mig.main(["--db", str(tmp_path), "--write", "--json"]) == 1
+    # The kept by_target_provider key is a note: it does not make the exit 1.
+    assert mig.main(["--db", str(tmp_path), "--write", "--json"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["databases"][0]["backup"]
+    assert [n["old"] for n in report["notes"]] == ["anthropic"]
+    assert all(i["action"] != "note" for i in report["items"])
+    # A finished migration stays at 0 on every later run.
+    assert mig.main(["--db", str(tmp_path), "--write"]) == 0
+    assert "NOTE" in capsys.readouterr().out
     assert mig.main(["--db", str(tmp_path / "nope.db")]) == 2
 
 
@@ -604,6 +610,38 @@ def test_scan_reports_old_names_beside_current_ones(tmp_path) -> None:
         (3, "volcengine--openai_chat", "volcengine--chat_completions (shim)"),
         (5, "google", "google_generate (provider_type)"),
     ]
+
+
+def test_db_with_a_row_that_needs_a_person_still_exits_1(tmp_path, monkeypatch) -> None:
+    _make_db(tmp_path / "gateway.db")
+    extra = mig.Item("db", "unmapped", "gateway.db", "request_log.x", None, "old")
+    real = mig.migrate_db
+
+    def with_extra(*args, **kwargs):
+        result = real(*args, **kwargs)
+        result.items.append(extra)
+        return result
+
+    monkeypatch.setattr(mig, "migrate_db", with_extra)
+    assert mig.main(["--db", str(tmp_path), "--write"]) == 1
+
+
+def test_scan_skips_a_file_that_config_rewrites(tmp_path, capsys) -> None:
+    conf = tmp_path / "config.jsonc"
+    conf.write_text(json.dumps(dict(providers=dict(p=dict(type="openai_chat")))))
+    other = tmp_path / "app.py"
+    other.write_text('x = "openai_chat"\n')
+    argv = ["--config", str(conf), "--scan", str(tmp_path), "--json"]
+    assert mig.main(argv + ["--write"]) == 1
+    items = json.loads(capsys.readouterr().out)["items"]
+    scans = [i for i in items if i["scope"] == "scan"]
+    assert [(Path(i["file"]).name, i["action"]) for i in scans] == [
+        ("app.py", "mention")
+    ]
+    assert "UNMAPPED" not in mig.Item(**scans[0]).render()
+    # The config alone, scanned and rewritten in one run, is a clean run.
+    conf.write_text(json.dumps(dict(providers=dict(p=dict(type="openai_chat")))))
+    assert mig.main(["--config", str(conf), "--scan", str(conf), "--write"]) == 0
 
 
 def test_scan_of_a_clean_tree_exits_0(tmp_path) -> None:
@@ -694,8 +732,8 @@ def test_db_dry_run_reports_the_embedding_provider_tag(tmp_path) -> None:
     assert counts[("error_dumps.source_provider", "embedding")] == ("embeddings", 1)
     assert counts[("error_dumps.target_provider", "embedding")] == ("embeddings", 1)
     assert counts[(mig._COUNTER_SOURCE, "embedding")] == ("embeddings", 5)
-    unmapped = [(i.where, i.old) for i in result.items if i.action == "unmapped"]
-    assert unmapped == [(mig._COUNTER_TARGET, "embedding")]
+    notes = [(i.where, i.old) for i in result.items if i.action == "note"]
+    assert notes == [(mig._COUNTER_TARGET, "embedding")]
 
 
 def test_db_write_rewrites_the_embedding_provider_tag_and_nothing_else(
