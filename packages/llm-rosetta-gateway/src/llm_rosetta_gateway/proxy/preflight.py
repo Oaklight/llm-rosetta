@@ -37,7 +37,7 @@ def _build_preflight_body(
     body.pop("stream_options", None)
 
     # Set minimal output
-    if target_provider in ("google", "google_generate"):
+    if target_provider == "google_generate":
         gc = dict(body.get("generationConfig", {}))
         gc["maxOutputTokens"] = 1
         gc.pop("responseModalities", None)
@@ -46,7 +46,7 @@ def _build_preflight_body(
         gc = dict(body.get("generation_config", {}))
         gc["max_output_tokens"] = 1
         body["generation_config"] = gc
-    elif target_provider in ("openai_responses", "open_responses"):
+    elif target_provider == "open_responses":
         body["max_output_tokens"] = 1
     else:
         body["max_tokens"] = 1
@@ -67,7 +67,7 @@ def _extract_preflight_input_tokens(
 ) -> int | None:
     """Extract input/prompt token count from a non-streaming response."""
     try:
-        if target_provider in ("google", "google_generate"):
+        if target_provider == "google_generate":
             return int(response_body["usageMetadata"]["promptTokenCount"])
         if target_provider == "google_interactions":
             return int(response_body["usage"]["total_input_tokens"])

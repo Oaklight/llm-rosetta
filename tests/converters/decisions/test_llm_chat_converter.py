@@ -16,7 +16,7 @@ from llm_rosetta.types.ir.decision import (
 
 
 @pytest.fixture
-def converter():  # openai_chat default
+def converter():  # chat_completions default
     return LLMChatDecisionConverter()
 
 
@@ -42,7 +42,7 @@ def google_interactions_converter():
 
 @pytest.fixture
 def openai_responses_converter():
-    return LLMChatDecisionConverter(output_format="openai_responses")
+    return LLMChatDecisionConverter(output_format="open_responses")
 
 
 @pytest.fixture

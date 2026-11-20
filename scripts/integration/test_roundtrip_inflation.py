@@ -941,25 +941,29 @@ def main() -> None:
 
     # Basic cases
     basic_cases = [
-        ("basic", "anthropic", ANTHROPIC_EVENTS),
-        ("basic", "openai_chat", OPENAI_CHAT_EVENTS),
-        ("basic", "openai_responses", OPENAI_RESPONSES_EVENTS),
-        ("basic", "google", GOOGLE_EVENTS),
+        ("basic", "messages", ANTHROPIC_EVENTS),
+        ("basic", "chat_completions", OPENAI_CHAT_EVENTS),
+        ("basic", "open_responses", OPENAI_RESPONSES_EVENTS),
+        ("basic", "google_generate", GOOGLE_EVENTS),
     ]
 
     # Edge cases
     edge_cases = [
-        ("thinking+tool", "anthropic", ANTHROPIC_THINKING_TOOL_EVENTS),
-        ("no-initial-usage", "anthropic", ANTHROPIC_NO_INITIAL_USAGE_EVENTS),
-        ("finish-no-usage", "anthropic", ANTHROPIC_FINISH_NO_USAGE_EVENTS),
-        ("tool-calls", "openai_chat", OPENAI_CHAT_TOOL_EVENTS),
-        ("reasoning", "openai_chat", OPENAI_CHAT_REASONING_EVENTS),
-        ("tool-call", "google", GOOGLE_TOOL_EVENTS),
-        ("thinking", "google", GOOGLE_THINKING_EVENTS),
-        ("no-empty-text", "google", GOOGLE_NO_EMPTY_TEXT_EVENTS),
-        ("role-empty-content", "openai_chat", OPENAI_CHAT_ROLE_EMPTY_CONTENT_EVENTS),
-        ("compound-text-finish", "google", GOOGLE_COMPOUND_TEXT_FINISH_EVENTS),
-        ("tool-call", "openai_responses", OPENAI_RESPONSES_TOOL_EVENTS),
+        ("thinking+tool", "messages", ANTHROPIC_THINKING_TOOL_EVENTS),
+        ("no-initial-usage", "messages", ANTHROPIC_NO_INITIAL_USAGE_EVENTS),
+        ("finish-no-usage", "messages", ANTHROPIC_FINISH_NO_USAGE_EVENTS),
+        ("tool-calls", "chat_completions", OPENAI_CHAT_TOOL_EVENTS),
+        ("reasoning", "chat_completions", OPENAI_CHAT_REASONING_EVENTS),
+        ("tool-call", "google_generate", GOOGLE_TOOL_EVENTS),
+        ("thinking", "google_generate", GOOGLE_THINKING_EVENTS),
+        ("no-empty-text", "google_generate", GOOGLE_NO_EMPTY_TEXT_EVENTS),
+        (
+            "role-empty-content",
+            "chat_completions",
+            OPENAI_CHAT_ROLE_EMPTY_CONTENT_EVENTS,
+        ),
+        ("compound-text-finish", "google_generate", GOOGLE_COMPOUND_TEXT_FINISH_EVENTS),
+        ("tool-call", "open_responses", OPENAI_RESPONSES_TOOL_EVENTS),
     ]
 
     print("\n" + "=" * 60)

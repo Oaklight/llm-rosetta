@@ -69,15 +69,12 @@ _SSE_BY_KEY: dict[str, Any] = {
     "google_interactions": _format_sse_google_interactions,
 }
 
-# Derived from the format catalog.  The two legacy keys are historical route
-# spellings kept until #919 removes them; they are not separate formats.
+# Derived from the format catalog.
 SSE_FORMATTERS: dict[str, Any] = {
     spec.format: _SSE_BY_KEY[spec.sse]
     for spec in FORMAT_SPECS
     if spec.model_type == "llm" and spec.sse is not None
 }
-SSE_FORMATTERS["openai_responses"] = _SSE_BY_KEY["open_responses"]
-SSE_FORMATTERS["google"] = _SSE_BY_KEY["google"]
 
 
 # ---------------------------------------------------------------------------
@@ -135,7 +132,7 @@ def build_stream_error_events(
     message = message or _TERMINAL_ERROR_MESSAGE.format(reason=reason)
 
     terminal = classify_status(status)
-    if source_provider in ("openai_responses", "open_responses"):
+    if source_provider == "open_responses":
         response: dict[str, Any] = {
             "id": response_id or request_id,
             "object": "response",
@@ -175,7 +172,7 @@ def build_stream_error_events(
             }
         ]
 
-    if source_provider in ("google", "google_generate"):
+    if source_provider == "google_generate":
         return [
             {
                 "error": {

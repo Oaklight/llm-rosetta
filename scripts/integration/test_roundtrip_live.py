@@ -405,10 +405,10 @@ def print_result(
 
 
 PROVIDERS = {
-    "anthropic": capture_anthropic,
-    "openai_chat": capture_openai_chat,
-    "openai_responses": capture_openai_responses,
-    "google": capture_google,
+    "messages": capture_anthropic,
+    "chat_completions": capture_openai_chat,
+    "open_responses": capture_openai_responses,
+    "google_generate": capture_google,
 }
 
 

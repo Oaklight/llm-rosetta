@@ -51,14 +51,8 @@ _DEFAULT_GOOGLE_GENERATE = ReasoningCapability(
 DEFAULT_REASONING_CAPS: dict[str, ReasoningCapability] = {
     "chat_completions": _DEFAULT_CHAT_COMPLETIONS,
     "open_responses": _DEFAULT_OPEN_RESPONSES,
-    # Legacy alias of ``open_responses``, kept for the deprecated
-    # ``OpenAIResponsesConverter`` preset and direct callers.
-    "openai_responses": _DEFAULT_OPEN_RESPONSES,
     "messages": _DEFAULT_ANTHROPIC,
     "google_generate": _DEFAULT_GOOGLE_GENERATE,
-    # Legacy alias — the Google generate base type was renamed
-    # ``google`` → ``google_generate``.
-    "google": _DEFAULT_GOOGLE_GENERATE,
 }
 
 
@@ -110,12 +104,6 @@ def apply_reasoning_config(
     4. Converter-specific structural pass-through (thinking blocks,
        budget, visibility).
     """
-    # Legacy alias: the OpenAI Chat base type was renamed openai_chat →
-    # chat_completions; accept the old label so external callers of this
-    # public helper don't silently lose the Chat structural pass.
-    if converter_type == "openai_chat":
-        converter_type = "chat_completions"
-
     ir = normalize_reasoning_input(ir_reasoning)
 
     mode = ir.get("mode")
@@ -130,7 +118,7 @@ def apply_reasoning_config(
     # Do NOT add thinking_modes to Google's shim — _serialize_disabled
     # would produce the wrong structure (thinking.type vs thinking_config).
     if mode == "disabled":
-        if converter_type in ("google_generate", "google"):
+        if converter_type == "google_generate":
             _apply_google_extras(ir, result, mode, budget_tokens, cap)
             return result
         disabled = _serialize_disabled(cap)
@@ -147,13 +135,13 @@ def apply_reasoning_config(
     # Converter-specific structural pass-through.
     if converter_type == "chat_completions":
         _apply_chat_completions_extras(ir, result, mode, budget_tokens, cap, max_tokens)
-    elif converter_type in ("open_responses", "openai_responses"):
+    elif converter_type == "open_responses":
         _apply_open_responses_extras(ir, result, mode, budget_tokens, cap)
     elif converter_type == "messages":
         _apply_anthropic_extras(
             ir, result, mode, effort, budget_tokens, cap, max_tokens
         )
-    elif converter_type in ("google_generate", "google"):
+    elif converter_type == "google_generate":
         _apply_google_extras(ir, result, mode, budget_tokens, cap)
 
     _report_unexpressed(
@@ -190,7 +178,7 @@ def _report_unexpressed(
                 "declares one; ignored",
                 subject="reasoning.budget_tokens",
             )
-    elif converter_type in ("open_responses", "openai_responses"):
+    elif converter_type == "open_responses":
         # The API's ``reasoning.mode`` is standard/pro, a different axis; the
         # on/off switch has no spelling.  The budget is reported by the
         # Responses extras, which own that structure.

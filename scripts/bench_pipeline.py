@@ -401,7 +401,7 @@ def _generate_request(provider: str, profile: str) -> dict[str, Any]:
     n_tools = cfg["n_tools"]
     text_size = cfg["text_size"]
 
-    if provider == "anthropic":
+    if provider == "messages":
         return {
             "model": "claude-sonnet-4-20250514",
             "max_tokens": 4096,
@@ -412,7 +412,7 @@ def _generate_request(provider: str, profile: str) -> dict[str, Any]:
             "tools": [_make_tool_anthropic(i) for i in range(n_tools)],
         }
 
-    if provider == "openai_chat":
+    if provider == "chat_completions":
         return {
             "model": "gpt-4",
             "messages": [
@@ -422,7 +422,7 @@ def _generate_request(provider: str, profile: str) -> dict[str, Any]:
             "tools": [_make_tool_openai(i) for i in range(n_tools)],
         }
 
-    if provider == "openai_responses":
+    if provider == "open_responses":
         return {
             "model": "gpt-4",
             "input": _make_openai_responses_messages(
@@ -431,7 +431,7 @@ def _generate_request(provider: str, profile: str) -> dict[str, Any]:
             "tools": [_make_tool_openai_responses(i) for i in range(n_tools)],
         }
 
-    if provider == "google":
+    if provider == "google_generate":
         return {
             "model": "gemini-2.0-flash",
             "contents": _make_google_messages(
@@ -472,11 +472,11 @@ def _generate_request(provider: str, profile: str) -> dict[str, Any]:
 
 # Keep backward-compatible public API
 def generate_anthropic_request(profile: str) -> dict[str, Any]:
-    return _generate_request("anthropic", profile)
+    return _generate_request("messages", profile)
 
 
 def generate_openai_request(profile: str) -> dict[str, Any]:
-    return _generate_request("openai_chat", profile)
+    return _generate_request("chat_completions", profile)
 
 
 # ---------------------------------------------------------------------------
@@ -546,15 +546,15 @@ def bench_pipeline(
 
 
 BENCH_PATHS = [
-    ("anthropic", "anthropic"),
-    ("anthropic", "openai_chat"),
-    ("openai_chat", "openai_chat"),
-    ("openai_chat", "anthropic"),
-    ("openai_responses", "openai_responses"),
-    ("openai_responses", "anthropic"),
-    ("google", "google"),
-    ("google", "openai_chat"),
-    ("google", "anthropic"),
+    ("messages", "messages"),
+    ("messages", "chat_completions"),
+    ("chat_completions", "chat_completions"),
+    ("chat_completions", "messages"),
+    ("open_responses", "open_responses"),
+    ("open_responses", "messages"),
+    ("google_generate", "google_generate"),
+    ("google_generate", "chat_completions"),
+    ("google_generate", "messages"),
     ("google_interactions", "google_interactions"),
 ]
 
@@ -627,7 +627,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--path",
-        help="Run only one conversion path (e.g. google:anthropic)",
+        help="Run only one conversion path (e.g. google_generate:messages)",
     )
     args = parser.parse_args()
 

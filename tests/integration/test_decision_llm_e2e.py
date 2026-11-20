@@ -241,7 +241,7 @@ class TestOpenAIChatDecision:
             pytest.skip("OPENAI_API_KEY not set")
 
     def test_gpt4o_mini(self):
-        converter = LLMChatDecisionConverter(output_format="openai_chat")
+        converter = LLMChatDecisionConverter(output_format="chat_completions")
         ctx = ConversionContext()
         wire, _ = converter.request_to_provider(
             _make_request("gpt-4o-mini"), context=ctx
@@ -383,7 +383,7 @@ class TestDiscreteMode:
 
     def test_discrete_gpt4o_mini(self):
         converter = LLMChatDecisionConverter(
-            output_format="openai_chat", answer_mode="discrete"
+            output_format="chat_completions", answer_mode="discrete"
         )
         ctx = ConversionContext()
         wire, _ = converter.request_to_provider(

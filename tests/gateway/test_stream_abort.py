@@ -66,7 +66,7 @@ def _make_processor(source: str, target: str | None = None) -> Any:
             "input": [{"role": "user", "content": "hi"}],
             "stream": True,
         }
-        if source in ("openai_responses", "open_responses")
+        if source == "open_responses"
         else {
             "model": "test-model",
             "messages": [{"role": "user", "content": "hi"}],
@@ -110,7 +110,7 @@ async def _drain(
 
 @pytest.mark.parametrize(
     "provider",
-    ["chat_completions", "openai_responses", "open_responses", "messages", "google"],
+    ["chat_completions", "open_responses", "messages", "google_generate"],
 )
 def test_terminal_event_emitted_on_abort(provider: str) -> None:
     """Every format gets a terminal notice carrying the upstream reason."""
@@ -126,14 +126,14 @@ def test_terminal_event_emitted_on_abort(provider: str) -> None:
 
 def test_responses_emits_response_failed() -> None:
     """Responses clients get `response.failed`, the event Codex waits on."""
-    processor = _make_processor("openai_responses")
+    processor = _make_processor("open_responses")
     ctx = processor.source_context
     ctx.response_id = "abc"
     ctx.options["response_id_prefix"] = "resp_"
 
     events, _ = asyncio.run(
         _drain(
-            cast(ProviderType, "openai_responses"),
+            cast(ProviderType, "open_responses"),
             exc=ConnectionError(UPSTREAM_MESSAGE),
             processor=processor,
         )
@@ -153,12 +153,12 @@ def test_responses_emits_response_failed() -> None:
 
 def test_no_terminal_event_when_stream_already_ended() -> None:
     """A failure during teardown must not append a second terminal event."""
-    processor = _make_processor("openai_responses")
+    processor = _make_processor("open_responses")
     processor.source_context.mark_ended()
 
     events, raised = asyncio.run(
         _drain(
-            cast(ProviderType, "openai_responses"),
+            cast(ProviderType, "open_responses"),
             exc=ConnectionError("late failure"),
             processor=processor,
         )
@@ -172,7 +172,7 @@ def test_cancellation_emits_nothing() -> None:
     """Client disconnects leave nobody to notify, and must stay cancellations."""
     events, raised = asyncio.run(
         _drain(
-            cast(ProviderType, "openai_responses"),
+            cast(ProviderType, "open_responses"),
             exc=asyncio.CancelledError(),
         )
     )
@@ -206,7 +206,7 @@ def test_original_exception_survives_builder_failure() -> None:
 
     events, raised = asyncio.run(
         _drain(
-            cast(ProviderType, "openai_responses"),
+            cast(ProviderType, "open_responses"),
             exc=ConnectionError(UPSTREAM_MESSAGE),
             processor=_ExplodingProcessor(),
         )
@@ -229,7 +229,7 @@ def test_builder_returns_empty_for_unknown_format() -> None:
 
 @pytest.mark.parametrize(
     "provider",
-    ["chat_completions", "openai_responses", "messages", "google"],
+    ["chat_completions", "open_responses", "messages", "google_generate"],
 )
 def test_context_exposes_abort_path_attributes(provider: str) -> None:
     """Every converter's stream context satisfies the abort-path contract.
@@ -257,7 +257,7 @@ def test_context_exposes_abort_path_attributes(provider: str) -> None:
 
 def test_responses_context_supplies_sequence_number() -> None:
     """`next_sequence_number` resolves on the real Responses context."""
-    processor = _make_processor("openai_responses")
+    processor = _make_processor("open_responses")
     ctx = processor.source_context
 
     assert isinstance(ctx.next_sequence_number, int)
@@ -282,13 +282,13 @@ def test_terminal_event_id_matches_the_stream_it_ends() -> None:
         },
     }
 
-    processor = _make_processor("openai_responses")
+    processor = _make_processor("open_responses")
     gen = _stream_event_generator(
-        source_provider=cast(ProviderType, "openai_responses"),
+        source_provider=cast(ProviderType, "open_responses"),
         stream=_AbortingStream([upstream_created], ConnectionError(UPSTREAM_MESSAGE)),
         processor=processor,
         model="test-model",
-        format_sse=SSE_FORMATTERS["openai_responses"],
+        format_sse=SSE_FORMATTERS["open_responses"],
     )
 
     events: list[str] = []

@@ -105,9 +105,11 @@ def test_error_event_uses_source_envelope():
     assert (
         build_stream_error_events("messages", "boom")[0]["error"]["type"] == "api_error"
     )
-    assert build_stream_error_events("google", "boom")[0]["error"]["code"] == 500
     assert (
-        build_stream_error_events("openai_responses", "boom")[0]["type"]
+        build_stream_error_events("google_generate", "boom")[0]["error"]["code"] == 500
+    )
+    assert (
+        build_stream_error_events("open_responses", "boom")[0]["type"]
         == "response.failed"
     )
 
@@ -151,7 +153,7 @@ def test_a_responses_error_event_is_an_error():
 
 def test_the_terminal_event_keeps_the_upstream_code_and_request_id():
     events = build_stream_error_events(
-        "openai_responses",
+        "open_responses",
         "plan limit",
         code="subscription_sharing_usage_limit_exceeded",
         request_id="resp_chatgpt_plan_1",
@@ -161,7 +163,7 @@ def test_the_terminal_event_keeps_the_upstream_code_and_request_id():
     assert events[0]["response"]["id"] == "resp_chatgpt_plan_1"
 
     # Without a code, the previous generic shape is unchanged.
-    generic = build_stream_error_events("openai_responses", "boom")
+    generic = build_stream_error_events("open_responses", "boom")
     assert generic[0]["response"]["error"]["code"] == "server_error"
 
 
