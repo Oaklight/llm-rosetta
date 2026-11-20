@@ -93,6 +93,24 @@ def test_a_retired_top_level_section_names_the_key(tmp_path: Path) -> None:
     assert str(error).endswith(retired_names.MIGRATE_HINT)
 
 
+@pytest.mark.parametrize("value", ["openai", "openai_chat"])
+def test_a_retired_face_shim_is_refused_with_its_location(
+    tmp_path: Path, value: str
+) -> None:
+    provider = dict(type="chat_completions", base_url=URL, embeddings_shim=value)
+    error = _error(tmp_path, _doc(providers=dict(p=provider)))
+    assert error.where == "providers.p.embeddings_shim"
+    assert f"'{value}' was renamed" in str(error)
+    assert str(error).endswith(retired_names.MIGRATE_HINT)
+
+
+def test_a_face_shim_typo_gets_no_rename_hint(tmp_path: Path) -> None:
+    provider = dict(type="chat_completions", base_url=URL, embeddings_shim="opnai")
+    path = _write(tmp_path, _doc(providers=dict(p=provider)))
+    # The typo disables the endpoint (a warning) and is not a retired name.
+    assert load_gateway_config(str(path)).providers is not None
+
+
 def test_a_current_config_still_loads(tmp_path: Path) -> None:
     doc = _doc(models=dict(m=dict(provider="p", capabilities=["text"])))
     assert "m" in load_gateway_config(str(_write(tmp_path, doc))).models
