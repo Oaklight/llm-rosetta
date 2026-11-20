@@ -214,11 +214,10 @@ def test_manifest_vocabulary_matches_the_loader_and_a_described_manifest(tmp_pat
     assert d.identity_keys == vocab.identity_keys
 
 
-def test_leaf_connection_reads_block_flat_and_legacy_spellings():
+def test_leaf_connection_reads_the_connection_block_only():
     assert api.leaf_connection({"connection": {"base_url": "u"}}) == {"base_url": "u"}
-    assert api.leaf_connection(
-        {"name": "x", "base_url": "u", "default_api_key_env": "K"}
-    ) == {"base_url": "u", "api_key_env": "K"}
+    # The flat spellings were removed in 0.14.0 and are not read.
+    assert api.leaf_connection({"name": "x", "base_url": "u"}) == {}
     assert api.leaf_connection({"base_url": "f", "connection": {}}) == {}
 
 

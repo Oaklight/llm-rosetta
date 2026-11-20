@@ -682,7 +682,8 @@ class TestLeafAndMergedConnection:
             "headers": {"a": "1"},
         }
 
-    def test_a_leaf_reads_the_flat_spelling_and_the_legacy_aliases(self):
+    def test_a_leaf_does_not_read_the_flat_spelling(self):
+        """The flat connection keys were removed in 0.14.0; only the block counts."""
         cfg = {
             "name": "x",
             "base_url": "u",
@@ -690,11 +691,7 @@ class TestLeafAndMergedConnection:
             "default_api_key_env": "K",
             "display_name": "ignored",
         }
-        assert shim_manifests._leaf_connection(cfg) == {
-            "base_url": "u",
-            "keyless": True,
-            "api_key_env": "K",
-        }
+        assert shim_manifests._leaf_connection(cfg) == {}
 
     def test_a_connection_block_wins_over_flat_keys(self):
         cfg = {"base_url": "flat", "connection": {"api_key_env": "K"}}
@@ -746,8 +743,8 @@ class TestLeafAndMergedConnection:
         assert leaf == {"headers": {"b": "2"}}
 
 
-async def test_a_leaf_with_a_legacy_spelling_override_is_not_changed(tmp_path):
-    """A flat ``default_base_url`` leaf overrides the manifest's ``base_url``."""
+async def test_a_leaf_with_its_own_base_url_is_not_changed(tmp_path):
+    """A leaf that declares its own ``base_url`` overrides the manifest's."""
     root = tmp_path / "shims"
     vendor = root / "demo"
     (vendor / "legacy").mkdir(parents=True)
@@ -756,8 +753,8 @@ async def test_a_leaf_with_a_legacy_spelling_override_is_not_changed(tmp_path):
         _manifest("  base_url: https://m.example/v1\n"), encoding="utf-8"
     )
     (vendor / "legacy" / "provider.yaml").write_text(
-        "name: demo--legacy\nformat: chat_completions\n"
-        "default_base_url: https://leaf.example/v1\n",
+        "name: demo--legacy\nmodel_type: llm\nformat: chat_completions\n"
+        "connection:\n  base_url: https://leaf.example/v1\n",
         encoding="utf-8",
     )
     (vendor / "plain" / "provider.yaml").write_text(

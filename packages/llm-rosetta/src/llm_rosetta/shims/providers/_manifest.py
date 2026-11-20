@@ -382,7 +382,7 @@ def leaf_connection(cfg: Any) -> dict[str, Any]:
     """Return the connection values one shim declares itself.
 
     The values come under their ``connection:`` names, from the ``connection:``
-    block or, in the pre-rename spelling, from the top level of the shim.
+    block.  The flat top-level spellings were removed in 0.14.0.
 
     Args:
         cfg: A shim's parsed ``provider.yaml``.
