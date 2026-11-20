@@ -81,7 +81,7 @@ _PACKAGE_ONLY = frozenset({"llm_rosetta.observability.usage"})
 # had; #1639 removed `shims/catalog.py` -> `llm_rosetta.provider_names`; #1637
 # removed the three `llm_rosetta._vendor.yaml` imports (the gateway vendors its
 # own yaml).
-_LEGACY_CEILING = 29
+_LEGACY_CEILING = 25
 _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
         ("admin/routes/_shared.py", "llm_rosetta.shims"),
@@ -107,12 +107,8 @@ _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("admin/routes/observability.py", "llm_rosetta.provider_names"),
         ("admin/routes/observability.py", "llm_rosetta.shims"),
         ("cli.py", "llm_rosetta.shims.scaffold"),
-        ("providers.py", "llm_rosetta.formats"),
-        ("providers.py", "llm_rosetta.provider_names"),
-        ("providers.py", "llm_rosetta.shims"),
         ("shims/sources.py", "llm_rosetta.shims.provider_shim"),
         ("shims/sources.py", "llm_rosetta.shims.providers"),
-        ("transport/sse_format.py", "llm_rosetta.formats"),
     }
 )
 _LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset(
@@ -140,12 +136,8 @@ _LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset(
         ("admin/routes/observability.py", "llm_rosetta.provider_names"),
         ("admin/routes/observability.py", "llm_rosetta.shims"),
         ("cli.py", "llm_rosetta.shims.scaffold"),
-        ("providers.py", "llm_rosetta.formats"),
-        ("providers.py", "llm_rosetta.provider_names"),
-        ("providers.py", "llm_rosetta.shims"),
         ("shims/sources.py", "llm_rosetta.shims.provider_shim"),
         ("shims/sources.py", "llm_rosetta.shims.providers"),
-        ("transport/sse_format.py", "llm_rosetta.formats"),
     }
 )
 
