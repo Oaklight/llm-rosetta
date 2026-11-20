@@ -98,6 +98,7 @@ def test_loader_rejects_every_retired_name(
         if other is not None:
             replacement = other.replacement
     assert f"{row.name!r} was renamed to {replacement!r}" in message
+    assert message.endswith(retired_names.MIGRATE_HINT)
     if row.preset:
         assert f"shims.presets: ['{row.preset}']" in message
 

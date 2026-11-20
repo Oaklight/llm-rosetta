@@ -159,6 +159,16 @@ def test_message_names_the_replacement(row: retired_names.RetiredName) -> None:
         assert "shims.presets" not in message
 
 
+@pytest.mark.parametrize("row", ROWS)
+def test_message_ends_with_the_migrate_command(row: retired_names.RetiredName) -> None:
+    message = retired_name_message(row.name, row.kind)
+    assert message is not None
+    assert message.endswith(
+        "run 'llm-rosetta-migrate --config <path>' (add --write to apply), "
+        "see the migration guide"
+    )
+
+
 @pytest.mark.parametrize("name", ["openai_chatt", "chat_completions", "", "Embedding"])
 def test_unretired_names_get_no_hint(name: str) -> None:
     for kind in retired_names.KINDS:

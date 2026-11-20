@@ -10,7 +10,7 @@ import pytest
 
 from llm_rosetta import retired_names
 from llm_rosetta_gateway.maintenance import names
-from llm_rosetta_gateway.maintenance.names import DOCS_URL, legacy_name_error
+from llm_rosetta_gateway.maintenance.names import legacy_name_error
 
 
 def test_the_rewrite_is_gone() -> None:
@@ -40,7 +40,7 @@ def test_legacy_name_error_names_the_replacement(cfg: dict, replacement: str) ->
 
     assert message is not None
     assert repr(replacement) in message
-    assert DOCS_URL in message
+    assert message.endswith(retired_names.MIGRATE_HINT)
     assert "'p'" in message
 
 
