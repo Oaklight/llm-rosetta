@@ -13,74 +13,21 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _import_scan import import_hits
+
 _IR = Path(__file__).parents[1] / "packages/llm-rosetta/src/llm_rosetta/ir"
 _LAYERS = (_IR / "primitives", _IR / "tools")
 _CONVERTERS = "llm_rosetta.converters"
-
-
-def _absolute_module(path: Path, node: ast.ImportFrom) -> str:
-    """Resolve an ImportFrom to its absolute module name."""
-    if not node.level:
-        return node.module or ""
-    package = ["llm_rosetta", "ir", *path.relative_to(_IR).parent.parts]
-    base = package[: len(package) - (node.level - 1)]
-    if node.module:
-        base += node.module.split(".")
-    return ".".join(base)
 
 
 def _is_converters(name: str) -> bool:
     return name == _CONVERTERS or name.startswith(_CONVERTERS + ".")
 
 
-def _from_hit(path: Path, node: ast.ImportFrom) -> str | None:
-    module = _absolute_module(path, node)
-    if _is_converters(module):
-        return f"{path}:{node.lineno} {module}"
-    for alias in node.names:
-        if alias.name == "*":
-            continue
-        qualified = f"{module}.{alias.name}" if module else alias.name
-        if _is_converters(qualified):
-            return f"{path}:{node.lineno} {qualified}"
-    return None
-
-
-def _import_hit(path: Path, node: ast.Import) -> str | None:
-    for alias in node.names:
-        if _is_converters(alias.name):
-            return f"{path}:{node.lineno} {alias.name}"
-    return None
-
-
-def _dynamic_target(node: ast.Call) -> str | None:
-    is_import = (isinstance(node.func, ast.Name) and node.func.id == "__import__") or (
-        isinstance(node.func, ast.Attribute) and node.func.attr == "import_module"
-    )
-    if not is_import or not node.args:
-        return None
-    arg = node.args[0]
-    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-        return arg.value
-    return None
-
-
-def _node_hit(path: Path, node: ast.AST) -> str | None:
-    if isinstance(node, ast.ImportFrom):
-        return _from_hit(path, node)
-    if isinstance(node, ast.Import):
-        return _import_hit(path, node)
-    if isinstance(node, ast.Call):
-        target = _dynamic_target(node)
-        if target is not None and _is_converters(target):
-            return f"{path}:{node.lineno} <dynamic> {target}"
-    return None
-
-
 def _converter_imports(path: Path, source: str) -> list[str]:
     """Return every import in *source* that reaches ``llm_rosetta.converters``."""
-    hits = (_node_hit(path, node) for node in ast.walk(ast.parse(source)))
-    return [hit for hit in hits if hit is not None]
+    package = ("llm_rosetta", "ir", *path.relative_to(_IR).parent.parts)
+    return import_hits(path, source, package, _is_converters)
 
 
 def test_primitives_and_tools_never_import_converters():

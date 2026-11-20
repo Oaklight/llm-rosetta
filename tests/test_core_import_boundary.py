@@ -17,6 +17,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from _import_scan import absolute_module, dynamic_target, import_hits, package_parts
+
 _PKG_ROOT = Path(__file__).parents[1] / "packages/llm-rosetta/src/llm_rosetta"
 _GATEWAY = "llm_rosetta_gateway"
 #: The deprecation shim in the core tree resolves to the same package.
@@ -61,17 +63,6 @@ _GATEWAY_TELEMETRY_ALIASES = {
 }
 
 
-def _absolute_module(path: Path, node: ast.ImportFrom) -> str:
-    """Resolve an ImportFrom to its absolute module name."""
-    if not node.level:
-        return node.module or ""
-    package = ["llm_rosetta", *path.relative_to(_PKG_ROOT).parent.parts]
-    base = package[: len(package) - (node.level - 1)]
-    if node.module:
-        base += node.module.split(".")
-    return ".".join(base)
-
-
 def _is_gateway(name: str) -> bool:
     if name in (_GATEWAY, _GATEWAY_ALIAS) or name.startswith(
         (_GATEWAY + ".", _GATEWAY_ALIAS + ".")
@@ -83,53 +74,9 @@ def _is_gateway(name: str) -> bool:
     )
 
 
-def _from_hit(path: Path, node: ast.ImportFrom) -> str | None:
-    module = _absolute_module(path, node)
-    if _is_gateway(module):
-        return f"{path}:{node.lineno} {module}"
-    for alias in node.names:
-        if alias.name == "*":
-            continue
-        qualified = f"{module}.{alias.name}" if module else alias.name
-        if _is_gateway(qualified):
-            return f"{path}:{node.lineno} {qualified}"
-    return None
-
-
-def _import_hit(path: Path, node: ast.Import) -> str | None:
-    for alias in node.names:
-        if _is_gateway(alias.name):
-            return f"{path}:{node.lineno} {alias.name}"
-    return None
-
-
-def _dynamic_target(node: ast.Call) -> str | None:
-    is_import = (isinstance(node.func, ast.Name) and node.func.id == "__import__") or (
-        isinstance(node.func, ast.Attribute) and node.func.attr == "import_module"
-    )
-    if not is_import or not node.args:
-        return None
-    arg = node.args[0]
-    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-        return arg.value
-    return None
-
-
 def _gateway_imports(path: Path, source: str) -> list[str]:
-    hits: list[str] = []
-    for node in ast.walk(ast.parse(source)):
-        hit: str | None = None
-        if isinstance(node, ast.ImportFrom):
-            hit = _from_hit(path, node)
-        elif isinstance(node, ast.Import):
-            hit = _import_hit(path, node)
-        elif isinstance(node, ast.Call):
-            target = _dynamic_target(node)
-            if target is not None and _is_gateway(target):
-                hit = f"{path}:{node.lineno} <dynamic> {target}"
-        if hit is not None:
-            hits.append(hit)
-    return hits
+    package = package_parts(path, _PKG_ROOT, "llm_rosetta")
+    return import_hits(path, source, package, _is_gateway)
 
 
 def test_core_sources_never_import_the_gateway():
@@ -216,7 +163,9 @@ def _api_imports(path: Path, source: str) -> list[str]:
     for node in ast.walk(ast.parse(source)):
         found: str | None
         if isinstance(node, ast.ImportFrom):
-            module = _absolute_module(path, node)
+            module = absolute_module(
+                package_parts(path, _PKG_ROOT, "llm_rosetta"), node
+            )
             names = [module] + [
                 f"{module}.{alias.name}" for alias in node.names if alias.name != "*"
             ]
@@ -224,7 +173,7 @@ def _api_imports(path: Path, source: str) -> list[str]:
         elif isinstance(node, ast.Import):
             found = next((a.name for a in node.names if _is_api(a.name)), None)
         elif isinstance(node, ast.Call):
-            target = _dynamic_target(node)
+            target = dynamic_target(node)
             found = target if target is not None and _is_api(target) else None
         else:
             continue
