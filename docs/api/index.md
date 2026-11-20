@@ -27,7 +27,7 @@ The gateway and external shim authors build on the core through one flat module 
 - `llm_rosetta.shims.auth_exchange`
 - `llm_rosetta.shims.quota_probe`
 
-`llm_rosetta.api` has a literal, grouped `__all__` of 68 names: chat conversion, the typed pipelines, the format catalog and model-type vocabulary, provider and shim names, the shim registry (read and write side) and loaders, the manifest vocabulary and leaf merge, the scaffold entry points, fidelity and profiling, and the IR types a host inspects. Core code never imports `llm_rosetta.api`: the dependency runs from the host to the core.
+`llm_rosetta.api` has a literal, grouped `__all__` of 62 names: chat conversion, the typed pipelines, the format catalog and model-type vocabulary, provider and shim names, the shim registry (read and write side) and loaders, the manifest vocabulary and leaf merge, the scaffold entry points, fidelity and profiling, and the IR types a host inspects. Core code never imports `llm_rosetta.api`: the dependency runs from the host to the core.
 
 ### The gateway rule
 

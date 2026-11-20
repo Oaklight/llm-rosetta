@@ -6,7 +6,7 @@ title: Migrating to 0.14
 
 Release 0.14.0 removes the deprecated import paths and class aliases that 0.13.0 kept for one release (epic [#919](https://github.com/Oaklight/llm-rosetta/issues/919)). A removed name fails with a plain `ImportError`, `ModuleNotFoundError` or `AttributeError`; the [retired-names](#retired-names) diagnostic covers provider, shim and model-type names, not Python import paths. This page lists what is gone, what replaces it, and what still works. To rewrite a gateway config and database, use [`llm-rosetta-migrate`](#llm-rosetta-migrate); the [upgrade recipe](#upgrade-recipe) gives the order.
 
-The rows up to [Removed helper modules, gateway stubs and `tool_ops` aliases](#removed-shims) were checked against `origin/master` (commit `756f084169`). The rows from [Removed facades](#removed-facades) on were checked against the head of PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656) (commit `47fe04b2ea`): each removed name fails to import or raises, and each replacement imports.
+The rows up to [Removed helper modules, gateway stubs and `tool_ops` aliases](#removed-shims) were checked against `origin/master` (commit `756f084169`). The rows from [Removed facades](#removed-facades) on were checked against the head of PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656) (commit `0a8c0be374`): each removed name fails to import or raises, and each replacement imports.
 
 ## Removed converter packages {#removed-converter-packages}
 
@@ -115,6 +115,8 @@ llm-rosetta-gateway: error: config.jsonc: providers.p.type: 'openai_chat' was re
 
 The process exits 1 and prints no traceback. In code, the exception is `RetiredConfigName`, a `ValueError` whose message is `<config file>: <json path>: <retired-names message>`.
 
+The refusal comes before any write. A config at an older `config_version` is not rewritten, and gets no `.pre-migration.bak`, when it also spells a retired name: the file keeps its bytes until you run the migrate command. A per-face shim value (`embeddings_shim`, `decisions_shim`, and the same key inside an `embeddings:` block) is checked like `shim:`: a retired value such as `openai` or `openai_chat` raises with its path, `providers.<name>.embeddings_shim`. A misspelled value that is not a retired name gets no rename hint and disables the endpoint as an unknown shim.
+
 ## Removed shim declarations (P6) {#removed-shim-declarations}
 
 Removed in PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656). `ProviderShim(...)` raises a `TypeError` naming the replacement, and the loader refuses a `provider.yaml` that still uses the old keys.
@@ -166,7 +168,15 @@ Other removals in the same step:
 | `llm_rosetta.ir.tools.fix_orphaned_tool_calls_ir` | `normalize_tool_pairing` |
 | `GoogleInteractionsToolOps.ir_function_call_to_p`, `ir_function_result_to_p` | `ir_tool_call_to_p`, `ir_tool_result_to_p` |
 
-`ProviderShim.base`, `.default_path` and `.max_tool_description_length` stay as read-only properties, because a reader in the gateway or a shim package remains. The admin shim editor now validates a saved `provider.yaml` with the loader's own check, so it refuses `base:` with the same message as the loader.
+Three read-only properties of `ProviderShim` are kept for existing readers (in the gateway and in shim packages) and emit no warning. New code reads their replacements:
+
+| Kept property | Use instead |
+| --- | --- |
+| `ProviderShim.base` | `ProviderShim.format` |
+| `ProviderShim.default_path` | `ProviderShim.connection.default_path` |
+| `ProviderShim.max_tool_description_length` | `ProviderShim.tools.max_description_length` |
+
+ The admin shim editor now validates a saved `provider.yaml` with the loader's own check, so it refuses `base:` with the same message as the loader.
 
 ## Removed model-type spellings (P7) {#removed-model-type-spellings}
 
@@ -283,22 +293,24 @@ llm-rosetta-migrate --scan src/                            # advisory report, ed
 
 **Config.** The edit is at text level: comments, key order and layout outside the rewritten names are untouched. It rewrites retired `type:` and `shim:` values, model `type:` and `capabilities:` entries, the `embedding_*` and `decision_*` keys and sections to their plural names, and adds the `shims.presets` entry when a shim moved to a standalone package. For example, `"type": "openai_chat"` becomes `"type": "chat_completions"`, `"shim": "argo--openai_chat"` becomes `"argo--chat_completions"` with `"shims": {"presets": ["argo"]}` added, and `embedding_providers` becomes `embeddings_providers`.
 
-**Database.** It rewrites the retired tags in `request_log.source_provider`, `request_log.target_provider`, `error_dumps.source_provider` and `error_dumps.target_provider`: the retired format names, and the value `embedding`, which becomes `embeddings`. It also folds `metrics.counters.by_source_provider["embedding"]` into `embeddings`. A `by_target_provider` key `embedding` is reported and not rewritten, and `request_log.model_type` is unchanged. The write runs in one transaction after a backup, and the command refuses while another process holds the file (`--force` overrides). The rewrite is idempotent. On a copy of a production-sized database (268275 `request_log` rows, 775 `error_dumps` rows), the 334 rows tagged `embedding` became `embeddings` in both columns, with row counts, token sums, a checksum of the untouched columns and `integrity_check` unchanged, and a second run wrote nothing.
+**Database.** It rewrites the retired tags in `request_log.source_provider`, `request_log.target_provider`, `error_dumps.source_provider` and `error_dumps.target_provider`: the retired format names, and the value `embedding`, which becomes `embeddings`. It also folds `metrics.counters.by_source_provider["embedding"]` into `embeddings`. A `by_target_provider` key `embedding` is reported as a note and not rewritten (the `--json` report lists notes under `notes`, apart from `items`), and `request_log.model_type` is unchanged. The write runs in one transaction after a backup, and the command refuses while another process holds the file (`--force` overrides). The rewrite is idempotent. On a copy of a production-sized database (268275 `request_log` rows, 775 `error_dumps` rows), the 334 rows tagged `embedding` became `embeddings` in both columns, with row counts, token sums, a checksum of the untouched columns and `integrity_check` unchanged, and a second run wrote nothing.
 
 Persisted internal keys stay as they are by decision: the `provider_metadata` tags, the converter tag, native tool definitions and the committed baselines. A database row you do not migrate is not an error; the gateway starts and logs one warning (see [P8](#ledger-tags)).
 
+**`--check` and the first start.** The gateway rewrites a config whose `config_version` is older than the current one (comments are not kept). So that a config the tool has finished is not rewritten again, the tool writes `config_version: 5` when the gateway's load-time steps would change nothing else (the flat `embeddings_*` keys it writes stay readable; the gateway folds them into blocks only when it migrates). When those steps would restructure the document, the tool reports a `pending` item and `--check` exits `3`; only the gateway can run them. A config with no `config_version` is not predicted.
+
 **Modes.** The default is a dry run. `--write` applies the rewrites and makes a copy first: `<file>.bak`, or `<file>.bak-<timestamp>` when that name is taken. `--check` is a dry run that exits `3` when rewrites are pending, for CI. `--json` prints a machine-readable report.
 
-**`--scan`.** The scan is advisory. It reports retired names found in `.py`, `.json`, `.jsonc`, `.yaml` and `.yml` files under a path, and edits nothing. It keeps only strings that are retired wherever they appear: the current formats `google_generate` and `google_interactions`, and the bare vendor words `openai`, `google` and `anthropic` as shims, are not reported. A quoted string is a match, not a proof; `"anthropic"` may be your own variable.
+**`--scan`.** The scan is advisory. Each finding is a textual mention of a retired name, not a proof of a use, and it is printed as `mentions ... (advisory)`, not as unmapped. A file that is also a `--config` target in the same run is skipped, because `--config` rewrites it. It reports retired names found in `.py`, `.json`, `.jsonc`, `.yaml` and `.yml` files under a path, and edits nothing. It keeps only strings that are retired wherever they appear: the current formats `google_generate` and `google_interactions`, and the bare vendor words `openai`, `google` and `anthropic` as shims, are not reported. A quoted string is a match, not a proof; `"anthropic"` may be your own variable.
 
 **Exit codes.**
 
 | Code | Meaning |
 | --- | --- |
-| `0` | Nothing to do, or everything mapped. |
-| `1` | Something needs a person: an unmapped item, or any `--scan` finding. |
-| `2` | The command could not run: an unreadable file, a parse error, or a database held by a running process. |
-| `3` | `--check` found pending rewrites. |
+| `0` | Nothing to do, or everything mapped. A note (an item the tool leaves on purpose, such as a `by_target_provider` key) does not count, so a finished `--db` migration exits `0`. |
+| `1` | Something needs a person: an unmapped item, or any `--scan` mention. |
+| `2` | The command could not run: an unreadable file, a parse error, a database held by a running process, or a database locked by another writer (`--force` skips the open-file check, not a SQLite lock; the message is one line naming the lock). |
+| `3` | `--check` found pending rewrites, or a load-time migration only the gateway can run. |
 
 ## Upgrade recipe {#upgrade-recipe}
 
