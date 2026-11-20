@@ -31,7 +31,12 @@ is sorted.
 
 from __future__ import annotations
 
-from llm_rosetta import ProviderType, __version__, get_converter_for_provider
+from llm_rosetta import (
+    ProviderType,
+    __version__,
+    get_converter_for_provider,
+    retired_names,
+)
 from llm_rosetta.capabilities import ToolNameMap
 from llm_rosetta.converters import get_converter_class
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
@@ -115,6 +120,7 @@ __all__ = [
     "ProviderType",
     "canonical_provider_name",
     "canonical_shim_name",
+    "retired_names",
     "warn_legacy_provider_names",
     "warn_legacy_shim_names",
     # Shim registry, read side

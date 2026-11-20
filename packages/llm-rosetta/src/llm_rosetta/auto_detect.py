@@ -155,6 +155,11 @@ def get_converter_for_provider(provider: str):
         _converter_cache[base] = instance
         return instance
 
+    from . import retired_names
+
+    retired_names.check_not_retired(
+        provider, retired_names.PROVIDER_TYPE, retired_names.SHIM
+    )
     raise ValueError(f"Unsupported provider: {provider}")
 
 
