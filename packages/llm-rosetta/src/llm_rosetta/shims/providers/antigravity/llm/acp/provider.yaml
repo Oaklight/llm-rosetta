@@ -27,29 +27,30 @@ connection:
   # with the HTTP lanes) and is never opened.
   base_url: http://agy.local
   transport: acp
-  # Phase 1: agent tools are OFF.  agy auto-approves its own tools by default
-  # (file read/write, shell, web), which would hand the gateway host to every
-  # client of the gateway.  The flag makes agy ask first, the gateway puts
-  # each session in agy's ``plan`` mode (which also asks before reading files
-  # outside the workspace and the system temp dir), and the gateway's ACP
-  # client refuses every ask.  agy's own policy still lets it read files under
-  # the system temp dir.  Overriding ``acp_argv`` per provider entry without
-  # this flag re-enables host tools, at the operator's own risk.
+  # Phase 1: agent tools are OFF.  agy approves its own tools by default,
+  # which would hand the gateway host to every client of the gateway.  The
+  # transport therefore starts agy in a gateway-owned profile (it appends
+  # ``--gemini-dir <data_dir>/acp/<provider>`` and ``--agent
+  # gateway-text-only`` to this command), writes ``toolPermission: strict``, a
+  # deny-all PreToolUse hook and a no-tools agent into it before every turn,
+  # and refuses every permission request.  This command is the base the
+  # profile flags are added to.  Overriding ``acp_argv`` per provider entry
+  # uses that argv as written, with none of the profile: it re-enables host
+  # tools, at the operator's own risk.
   acp_argv: ["agy", "acp", "--dangerously-skip-permissions=false"]
 
 hint_msg:
   en: >-
     Runs the local agy CLI over ACP. Google may suspend an account it sees
     used outside Antigravity's own client; use an account you can afford to
-    lose. Sign in on the gateway host first (run agy in a terminal). Agent
-    tools (file writes, shell, reads outside the temp dir) are disabled, so
-    agy answers in text; agy's own policy still lets it read files under the
-    system temp dir. A custom acp_argv without
-    --dangerously-skip-permissions=false re-enables host tools, at your own
-    risk.
+    lose. Sign in on the gateway host first (run agy in a terminal). agy runs
+    in a profile the gateway owns, with all of its own tools (files, shell,
+    web search) disabled, so it answers in text; a
+    turn in which agy starts a tool fails with HTTP 502. A custom acp_argv
+    gets none of this and re-enables host tools, at your own risk.
   zh: >-
     通过 ACP 驱动本机 agy CLI。Google 可能封禁被判定在 Antigravity 之外使用的账号，
     请只使用可以承受损失的账号。先在网关主机上登录（在终端运行 agy）。
-    智能体工具（写文件、命令行、读取临时目录之外的文件）已禁用，agy 以文本作答；
-    但 agy 自身策略仍允许其读取系统临时目录下的文件。自定义 acp_argv 若不含
-    --dangerously-skip-permissions=false，会重新启用主机工具，风险自负。
+    agy 运行在网关自有的配置目录中，其自带工具（文件、命令行、网页搜索）全部禁用，
+    只以文本作答；agy 一旦启动工具，该轮请求返回 HTTP 502。
+    自定义 acp_argv 不会获得上述保护，会重新启用主机工具，风险自负。

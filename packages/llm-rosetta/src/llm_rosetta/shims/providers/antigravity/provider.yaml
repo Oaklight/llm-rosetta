@@ -9,15 +9,20 @@
 # Code Assist outside Antigravity's own client.  Driving the vendor's CLI
 # keeps the request inside the client Google expects.
 #
-# Phase 1 runs agy as a text model: its own tools (file writes, shell, reads
-# outside the temp dir) are disabled; web search still works.  agy
-# auto-approves them by default, which would give every client of the
-# gateway the gateway host; the lane starts agy with
-# ``--dangerously-skip-permissions=false``, puts each session in agy's
-# ``plan`` mode and refuses every permission request.  Residual: agy's own
-# policy lets it read files under the system temp dir without asking.  A
-# provider entry that overrides ``acp_argv`` can re-enable the tools, at the
-# operator's own risk.
+# Phase 1 runs agy as a text model: none of agy's own tools (file read and
+# write, shell, web search, scheduling, sub-agents, workflows) is available.
+# agy is an upstream here, not the gateway's client, and must not run a tool
+# on the gateway host for an API request.  agy has no single switch for that,
+# so the gateway starts it in a profile it owns (``agy acp --gemini-dir
+# <data_dir>/acp/<provider>``) and layers four measures (agy 1.5.13): a custom
+# agent with no tools, a deny-all PreToolUse hook, ``toolPermission: strict``
+# in the profile's settings, and its own ACP client, which refuses every
+# permission request and stops a turn at the first tool frame (HTTP 502).  The
+# gateway re-asserts the profile before every turn.  Not measured: tools with
+# lasting or outward effects (schedule, swarm, run_workflow, sub-agents,
+# send_message) were not run; they are blocked by the same layers.  A provider
+# entry that overrides ``acp_argv`` gets none of this and can re-enable the
+# tools, at the operator's own risk.
 group_label: Google (Antigravity)
 logo: https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/antigravity.svg
 

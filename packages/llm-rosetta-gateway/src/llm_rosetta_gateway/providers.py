@@ -333,6 +333,20 @@ def _auth_state_dir(data_dir: str | None, provider: str) -> str | None:
     return os.path.join(data_dir, "shim-auth", slug)
 
 
+def _acp_state_dir(data_dir: str | None, provider: str) -> str | None:
+    """Return the directory the ACP transport keeps a provider's agent profile in.
+
+    One directory per configured provider, ``<data_dir>/acp/<slug>``, so two
+    entries are two profiles and two processes.  ``None`` (no data dir) leaves
+    the location to the transport's per-user default.
+    """
+    if not data_dir:
+        return None
+    from .transport.acp_profile import state_dir_for
+
+    return state_dir_for(data_dir, provider)
+
+
 def _auth_context(provider: str, cfg: dict[str, Any], state_dir: str | None) -> Any:
     """Build the context an exchange is handed.
 
@@ -876,6 +890,8 @@ def build_provider_info(
             if isinstance(cfg.get("acp_argv"), (list, tuple))
             else (shim.connection.acp_argv if shim is not None else None)
         ),
+        acp_argv_custom=isinstance(cfg.get("acp_argv"), (list, tuple)),
+        acp_state_dir=_acp_state_dir(data_dir, provider_key),
         **acp_limits,
         quota_probe_id=quota_probe,
         quota_url=quota_url,

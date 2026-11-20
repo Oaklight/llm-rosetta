@@ -58,7 +58,7 @@ FAKE_AGENT = textwrap.dedent(
 
     # One line per process, so a test can tell a replaced agent from a reused
     # one: a process that has to be thrown away shows up as a second pid.
-    note("start", pid=os.getpid())
+    note("start", pid=os.getpid(), argv=sys.argv[1:])
 
     def capabilities():
         if MODE == "resume":
@@ -136,6 +136,18 @@ FAKE_AGENT = textwrap.dedent(
             note("prompt", session=sid, text=text)
             if MODE in ("stalls", "wedged"):
                 continue
+            if MODE in ("tool", "mcp-tool"):
+                # A frame for a tool the agent has started: the name is the
+                # tool, the title and the raw input carry what a log must
+                # never repeat.
+                update(sid, {"sessionUpdate": "tool_call",
+                             "toolCallId": "call_1",
+                             "name": ("search_web" if MODE == "tool"
+                                      else "mcp_bridge_echo"),
+                             "title": "SECRET-TITLE", "kind": "search",
+                             "status": "in_progress",
+                             "rawInput": {"query": "SECRET-ARGUMENT"}})
+                continue
             if MODE == "exits":
                 sys.exit(3)
             if MODE == "fails":
@@ -171,6 +183,8 @@ FAKE_AGENT = textwrap.dedent(
                          "size": 1000})
             send({"jsonrpc": "2.0", "id": req_id,
                   "result": {"stopReason": "end_turn"}})
+        elif method == "session/cancel":
+            note("cancel", session=msg["params"]["sessionId"])
         elif method == "session/close":
             if MODE == "wedged":
                 continue
@@ -1099,5 +1113,7 @@ class TestAgentToolsAreOff:
             keyless=True,
             transport="acp",
             acp_argv=("agy", "acp"),
+            acp_argv_custom=True,
         )
+        # Written by the operator: used as written, no profile, no flags.
         assert AcpTransport()._argv(provider) == ["agy", "acp"]
