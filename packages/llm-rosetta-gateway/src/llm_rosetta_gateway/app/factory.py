@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from llm_rosetta._compat import sync_compat as _sync_compat
+from llm_rosetta_gateway._compat import sync_compat as _sync_compat
 
 from ._state import set_config
 
