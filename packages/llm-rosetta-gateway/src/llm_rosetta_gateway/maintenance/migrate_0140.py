@@ -145,6 +145,17 @@ def _format_tag_map() -> dict[str, str]:
     }
 
 
+def _db_tag_map() -> dict[str, str]:
+    """Retired value -> replacement, for a column that holds a provider tag.
+
+    The gateway wrote the *format* of the request into ``source_provider`` and
+    ``target_provider``; for a typed (non-chat) request that was the model type,
+    so the retired model-type spellings (``embedding``) appear there as well as
+    the retired format names.  Both come from the retired-names table.
+    """
+    return {**_model_type_map(), **_format_tag_map()}
+
+
 def _current_formats() -> frozenset[str]:
     """Every format name the catalog knows, in any model type."""
     return frozenset(name for names in FORMATS_BY_TYPE.values() for name in names)
@@ -669,7 +680,7 @@ def _plan_db(
         counters need no change).
     """
     items: list[Item] = []
-    tags, types = _format_tag_map(), _model_type_map()
+    tags, types = _db_tag_map(), _model_type_map()
     plan = [(t, c, tags) for t, c in _FORMAT_TAG_COLUMNS]
     plan += [(t, c, types) for t, c in _MODEL_TYPE_COLUMNS]
     for table, column, mapping in plan:
@@ -839,7 +850,7 @@ def _backup_db(path: Path, result: DbResult) -> None:
 
 
 def _apply_db(conn: sqlite3.Connection, counters: dict[str, Any] | None) -> None:
-    tags, types = _format_tag_map(), _model_type_map()
+    tags, types = _db_tag_map(), _model_type_map()
     plan = [(t, c, tags) for t, c in _FORMAT_TAG_COLUMNS]
     plan += [(t, c, types) for t, c in _MODEL_TYPE_COLUMNS]
     for table, column, mapping in plan:
