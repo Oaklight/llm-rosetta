@@ -111,6 +111,23 @@ def test_a_face_shim_typo_gets_no_rename_hint(tmp_path: Path) -> None:
     assert load_gateway_config(str(path)).providers is not None
 
 
+def test_a_refused_config_is_not_rewritten_first(tmp_path: Path) -> None:
+    # An old config_version makes the load-time steps run; a retired name must
+    # still be refused before any write, so the file keeps its bytes and gets
+    # no .pre-migration.bak.
+    document = _doc(
+        providers=dict(p=dict(type="openai_chat", base_url=URL, api_key="k"))
+    )
+    document["config_version"] = 1
+    path = tmp_path / "config.jsonc"
+    path.write_text("// keep me\n" + json.dumps(document))
+    before = path.read_bytes()
+    with pytest.raises(RetiredConfigName):
+        load_gateway_config(str(path))
+    assert path.read_bytes() == before
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["config.jsonc"]
+
+
 def test_a_current_config_still_loads(tmp_path: Path) -> None:
     doc = _doc(models=dict(m=dict(provider="p", capabilities=["text"])))
     assert "m" in load_gateway_config(str(_write(tmp_path, doc))).models

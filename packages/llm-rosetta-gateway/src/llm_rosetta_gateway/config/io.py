@@ -203,10 +203,17 @@ class JsoncConfigIO:
         #: it over explicitly, so a config built from a literal reports nothing —
         #: the same answer as "no load ran".
         self.last_load_registry: Registry | None = None
+        self._pending_write: tuple[dict[str, Any], str, bool] | None = None
 
-    def load(self, path: str) -> dict[str, Any]:
+    def load(self, path: str, *, defer_write: bool = False) -> dict[str, Any]:
+        """Read, migrate and (unless *defer_write*) write back one config.
+
+        With *defer_write* a changed document is not written yet: the caller
+        validates the migrated document and then calls :meth:`flush`, so a
+        document that is refused (a retired name) leaves the file untouched.
+        """
         raw = _parse_config(path)
-        return self._apply_migrations(raw, path, is_raw=False)
+        return self._apply_migrations(raw, path, is_raw=False, defer=defer_write)
 
     def load_raw(self, path: str) -> dict[str, Any]:
         raw = _parse_config_raw(path)
@@ -215,8 +222,20 @@ class JsoncConfigIO:
     def save(self, path: str, data: dict[str, Any]) -> None:
         write_config(path, data)
 
+    def flush(self) -> None:
+        """Write back the migration a ``defer_write`` load held, if any."""
+        pending, self._pending_write = self._pending_write, None
+        if pending is not None:
+            raw, path, is_raw = pending
+            self._write_back(raw, path, is_raw=is_raw)
+
     def _apply_migrations(
-        self, raw: dict[str, Any], path: str, *, is_raw: bool = False
+        self,
+        raw: dict[str, Any],
+        path: str,
+        *,
+        is_raw: bool = False,
+        defer: bool = False,
     ) -> dict[str, Any]:
         """Bring one config document up to date, through the load-time registry.
 
@@ -230,7 +249,9 @@ class JsoncConfigIO:
 
         raw, changed, registry = apply(raw, path=path)
         self.last_load_registry = registry
-        if changed:
+        if changed and defer:
+            self._pending_write = (raw, path, is_raw)
+        elif changed:
             self._write_back(raw, path, is_raw=is_raw)
         return raw
 

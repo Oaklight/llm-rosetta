@@ -77,10 +77,14 @@ def load_gateway_config(path: str) -> GatewayConfig:
     keeping any trace of them.
     """
     reader = JsoncConfigIO()
-    raw = reader.load(path)
+    # The migrated document is written back only once it has been accepted, so
+    # a config that is refused for a retired name keeps its bytes.
+    raw = reader.load(path, defer_write=True)
     try:
-        return GatewayConfig(
+        config = GatewayConfig(
             raw, maintenance=reader.last_load_registry, config_path=path
         )
     except RetiredConfigName as exc:
         raise exc.located(path=path) from None
+    reader.flush()
+    return config
