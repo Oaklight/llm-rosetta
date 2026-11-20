@@ -182,3 +182,45 @@ export function keyCounts(items) {
   }
   return counts;
 }
+
+/**
+ * Find every `esc(t(...))` / `_esc(t(...))` call in a source text.
+ *
+ * Returns `{keys, dynamic}`: `keys` are the string-literal keys (with line),
+ * including both arms of a ternary; `dynamic` are the sites whose key is built
+ * at run time (`t('jobs.' + action)`) and so cannot be resolved here.
+ */
+export function scanEscT(src) {
+  const keys = [];
+  const dynamic = [];
+  const re = /(?<![\w$.])_?esc\(\s*t\(/g;
+  let m;
+  while ((m = re.exec(src))) {
+    const start = m.index + m[0].length;
+    const line = src.slice(0, m.index).split('\n').length;
+    // The first argument of t(): up to the `,` or `)` at depth 0.
+    let i = start;
+    let depth = 0;
+    const lits = [];
+    let hasOther = false;
+    while (i < src.length) {
+      const c = src[i];
+      if (c === '"' || c === "'") {
+        const end = skipString(src, i);
+        lits.push(src.slice(i + 1, end - 1));
+        i = end;
+        continue;
+      }
+      if (c === '(' || c === '[' || c === '{') depth++;
+      else if (c === ')' || c === ']' || c === '}') {
+        if (depth === 0) break;
+        depth--;
+      } else if (c === ',' && depth === 0) break;
+      else if (c === '+' && depth === 0) hasOther = true;
+      i++;
+    }
+    if (hasOther || !lits.length) dynamic.push({ line });
+    else for (const key of lits) keys.push({ key, line });
+  }
+  return { keys, dynamic };
+}
