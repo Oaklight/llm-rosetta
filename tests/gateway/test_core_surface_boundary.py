@@ -25,7 +25,8 @@ delete them from the frozen copy too.
 
 A private name (leading underscore, or a private module) has its own small
 allowlist, ``_PRIVATE_ALLOWLIST``.  PR 9 of the #1630 plan replaces those
-reaches and deletes the list.
+reaches and deletes the list; the four left are the manifest helpers of
+``admin/routes/config/shim_manifests.py`` (see the PR for what blocks them).
 
 Regenerate both lists with ``python tests/gateway/test_core_surface_boundary.py``.
 ``--report-tests`` prints the same counts for ``tests/gateway/**``, which this
@@ -333,14 +334,9 @@ _LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset(
 )
 
 # --- Private allowlist: (file, module, name).  PR 9 of #1630 deletes it. ---
-_PRIVATE_CEILING = 6
+_PRIVATE_CEILING = 4
 _PRIVATE_ALLOWLIST: frozenset[tuple[str, str, str]] = frozenset(
     {
-        (
-            "admin/routes/config/payload.py",
-            "llm_rosetta.ir.passes.enforcement",
-            "_apply_config_reasoning_override",
-        ),
         (
             "admin/routes/config/shim_manifests.py",
             "llm_rosetta.shims.providers",
@@ -360,11 +356,6 @@ _PRIVATE_ALLOWLIST: frozenset[tuple[str, str, str]] = frozenset(
             "admin/routes/config/shim_manifests.py",
             "llm_rosetta.shims.providers",
             "_merged_connection",
-        ),
-        (
-            "shims/sources.py",
-            "llm_rosetta.shims.provider_shim",
-            "_clear_registry_caches",
         ),
     }
 )
