@@ -863,8 +863,3 @@ class OpenResponsesMessageOps(BaseMessageOps):
             ]
 
         return []
-
-
-# Backward-compatible alias (deprecated): the OpenAI Responses profile reuses
-# the same message operations as the vendor-neutral Open Responses base.
-OpenAIResponsesMessageOps = OpenResponsesMessageOps

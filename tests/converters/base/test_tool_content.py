@@ -8,7 +8,7 @@ from llm_rosetta.converters.base.tools.content import (
 )
 from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
 from llm_rosetta.converters.llm.open_responses.content_ops import (
-    OpenAIResponsesContentOps,
+    OpenResponsesContentOps,
 )
 
 
@@ -26,7 +26,7 @@ class TestConvertContentBlocksToIR:
     def test_input_text_block(self):
         """Test OpenAI input_text → IR TextPart."""
         blocks = [{"type": "input_text", "text": "hello"}]
-        result = convert_content_blocks_to_ir(blocks, OpenAIResponsesContentOps)
+        result = convert_content_blocks_to_ir(blocks, OpenResponsesContentOps)
         assert len(result) == 1
         assert result[0]["type"] == "text"
         assert result[0]["text"] == "hello"
@@ -56,7 +56,7 @@ class TestConvertContentBlocksToIR:
                 "image_url": "data:image/png;base64,BBBB",
             }
         ]
-        result = convert_content_blocks_to_ir(blocks, OpenAIResponsesContentOps)
+        result = convert_content_blocks_to_ir(blocks, OpenResponsesContentOps)
         assert len(result) == 1
         assert result[0]["type"] == "image"
         assert result[0]["image_data"]["data"] == "BBBB"
@@ -115,7 +115,7 @@ class TestConvertIRContentBlocksToP:
     def test_text_to_openai_responses(self):
         """Test IR TextPart → OpenAI input_text block."""
         blocks = [{"type": "text", "text": "hello"}]
-        result = convert_ir_content_blocks_to_p(blocks, OpenAIResponsesContentOps)
+        result = convert_ir_content_blocks_to_p(blocks, OpenResponsesContentOps)
         assert len(result) == 1
         assert result[0]["type"] == "input_text"
         assert result[0]["text"] == "hello"
@@ -142,7 +142,7 @@ class TestConvertIRContentBlocksToP:
                 "image_data": {"data": "EEEE", "media_type": "image/jpeg"},
             }
         ]
-        result = convert_ir_content_blocks_to_p(blocks, OpenAIResponsesContentOps)
+        result = convert_ir_content_blocks_to_p(blocks, OpenResponsesContentOps)
         assert len(result) == 1
         assert result[0]["type"] == "input_image"
         assert "base64,EEEE" in result[0]["image_url"]
@@ -183,9 +183,7 @@ class TestCrossProviderRoundTrip:
                 "image_url": "data:image/png;base64,iVBOR",
             }
         ]
-        ir_blocks = convert_content_blocks_to_ir(
-            openai_blocks, OpenAIResponsesContentOps
-        )
+        ir_blocks = convert_content_blocks_to_ir(openai_blocks, OpenResponsesContentOps)
         assert len(ir_blocks) == 1
         assert ir_blocks[0]["type"] == "image"
 
@@ -213,7 +211,7 @@ class TestCrossProviderRoundTrip:
         assert ir_blocks[0]["type"] == "image"
 
         openai_blocks = convert_ir_content_blocks_to_p(
-            ir_blocks, OpenAIResponsesContentOps
+            ir_blocks, OpenResponsesContentOps
         )
         assert openai_blocks[0]["type"] == "input_image"
         assert "base64,FFFF" in openai_blocks[0]["image_url"]
@@ -227,9 +225,7 @@ class TestCrossProviderRoundTrip:
                 "image_url": "data:image/png;base64,CHART",
             },
         ]
-        ir_blocks = convert_content_blocks_to_ir(
-            openai_blocks, OpenAIResponsesContentOps
-        )
+        ir_blocks = convert_content_blocks_to_ir(openai_blocks, OpenResponsesContentOps)
         assert len(ir_blocks) == 2
 
         anthropic_blocks = convert_ir_content_blocks_to_p(ir_blocks, MessagesContentOps)

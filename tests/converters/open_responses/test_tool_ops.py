@@ -11,7 +11,7 @@ from llm_rosetta.converters.base.tools import (
     TOOL_ERROR_MARKER,
     make_intrinsic_tool_result,
 )
-from llm_rosetta.converters.llm.open_responses.tool_ops import OpenAIResponsesToolOps
+from llm_rosetta.converters.llm.open_responses.tool_ops import OpenResponsesToolOps
 from llm_rosetta.types.ir import (
     ToolCallConfig,
     ToolCallPart,
@@ -21,8 +21,8 @@ from llm_rosetta.types.ir import (
 )
 
 
-class TestOpenAIResponsesToolOps:
-    """Unit tests for OpenAIResponsesToolOps."""
+class TestOpenResponsesToolOps:
+    """Unit tests for OpenResponsesToolOps."""
 
     # ==================== Tool Definition ====================
 
@@ -43,7 +43,7 @@ class TestOpenAIResponsesToolOps:
                 "metadata": {},
             },
         )
-        result = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
+        result = OpenResponsesToolOps.ir_tool_definition_to_p(ir_tool)
         assert result["type"] == "function"
         assert result["name"] == "get_weather"
         assert result["description"] == "Get current weather"
@@ -70,7 +70,7 @@ class TestOpenAIResponsesToolOps:
                 "metadata": {},
             },
         )
-        result = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
+        result = OpenResponsesToolOps.ir_tool_definition_to_p(ir_tool)
         assert result["type"] == "function"
         assert result["name"] == "search"
 
@@ -86,7 +86,7 @@ class TestOpenAIResponsesToolOps:
                 "required": ["city"],
             },
         }
-        result = OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool)
+        result = OpenResponsesToolOps.p_tool_definition_to_ir(provider_tool)
         assert isinstance(result, dict)
         assert result["type"] == "function"
         assert result["name"] == "get_weather"
@@ -108,7 +108,7 @@ class TestOpenAIResponsesToolOps:
                 },
             },
         }
-        result = OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool)
+        result = OpenResponsesToolOps.p_tool_definition_to_ir(provider_tool)
         assert isinstance(result, dict)
         assert result["type"] == "function"
         assert result["name"] == "search"
@@ -132,14 +132,14 @@ class TestOpenAIResponsesToolOps:
                 "definition": "start: ...",
             },
         }
-        result = OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool)
+        result = OpenResponsesToolOps.p_tool_definition_to_ir(provider_tool)
         assert isinstance(result, dict)
         assert result["type"] == "custom"
         assert result["name"] == "apply_patch"
         assert result["description"] == "Apply a unified-diff style patch."
         assert result["metadata"]["format"] == provider_tool["format"]
         # Round-trip: IR → provider restores original shape.
-        restored = OpenAIResponsesToolOps.ir_tool_definition_to_p(result)
+        restored = OpenResponsesToolOps.ir_tool_definition_to_p(result)
         assert restored["type"] == "custom"
         assert restored["name"] == "apply_patch"
         assert restored["format"] == provider_tool["format"]
@@ -157,8 +157,8 @@ class TestOpenAIResponsesToolOps:
                 "metadata": {},
             },
         )
-        provider = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
-        restored = OpenAIResponsesToolOps.p_tool_definition_to_ir(provider)
+        provider = OpenResponsesToolOps.ir_tool_definition_to_p(ir_tool)
+        restored = OpenResponsesToolOps.p_tool_definition_to_ir(provider)
         assert isinstance(restored, dict)
         assert restored["name"] == ir_tool["name"]
         assert restored["description"] == ir_tool["description"]
@@ -179,11 +179,11 @@ class TestOpenAIResponsesToolOps:
         }
         ir = cast(
             ToolDefinition,
-            OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool),
+            OpenResponsesToolOps.p_tool_definition_to_ir(provider_tool),
         )
         assert ir["strict"] is True
         assert "strict" not in ir["metadata"]
-        restored = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir)
+        restored = OpenResponsesToolOps.ir_tool_definition_to_p(ir)
         assert restored["strict"] is True
 
     def test_tool_definition_reads_legacy_strict_metadata(self):
@@ -199,7 +199,7 @@ class TestOpenAIResponsesToolOps:
                 "metadata": {"strict": True},
             },
         )
-        restored = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
+        restored = OpenResponsesToolOps.ir_tool_definition_to_p(ir_tool)
         assert restored["strict"] is True
 
     def test_tool_definition_preserves_output_schema(self):
@@ -216,10 +216,10 @@ class TestOpenAIResponsesToolOps:
         }
         ir = cast(
             ToolDefinition,
-            OpenAIResponsesToolOps.p_tool_definition_to_ir(provider_tool),
+            OpenResponsesToolOps.p_tool_definition_to_ir(provider_tool),
         )
         assert ir["metadata"]["output_schema"] == provider_tool["output_schema"]
-        restored = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir)
+        restored = OpenResponsesToolOps.ir_tool_definition_to_p(ir)
         assert restored["output_schema"] == provider_tool["output_schema"]
 
     def test_tool_definition_strict_false_default(self):
@@ -235,71 +235,71 @@ class TestOpenAIResponsesToolOps:
                 "metadata": {},
             },
         )
-        provider = OpenAIResponsesToolOps.ir_tool_definition_to_p(ir_tool)
+        provider = OpenResponsesToolOps.ir_tool_definition_to_p(ir_tool)
         assert provider["strict"] is False
 
     # ==================== Tool Choice ====================
 
     def test_ir_tool_choice_none(self):
         """Test mode:none → 'none'."""
-        result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
+        result = OpenResponsesToolOps.ir_tool_choice_to_p(
             cast(ToolChoice, {"mode": "none", "tool_name": ""})
         )
         assert result == "none"
 
     def test_ir_tool_choice_auto(self):
         """Test mode:auto → 'auto'."""
-        result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
+        result = OpenResponsesToolOps.ir_tool_choice_to_p(
             cast(ToolChoice, {"mode": "auto", "tool_name": ""})
         )
         assert result == "auto"
 
     def test_ir_tool_choice_any(self):
         """Test mode:any → 'required'."""
-        result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
+        result = OpenResponsesToolOps.ir_tool_choice_to_p(
             cast(ToolChoice, {"mode": "any", "tool_name": ""})
         )
         assert result == "required"
 
     def test_ir_tool_choice_required(self):
         """Test mode:required → 'required'."""
-        result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
+        result = OpenResponsesToolOps.ir_tool_choice_to_p(
             cast(Any, {"mode": "required", "tool_name": ""})
         )
         assert result == "required"
 
     def test_ir_tool_choice_specific(self):
         """Test mode:tool → specific function dict."""
-        result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
+        result = OpenResponsesToolOps.ir_tool_choice_to_p(
             cast(ToolChoice, {"mode": "tool", "tool_name": "get_weather"})
         )
         assert result == {"type": "function", "name": "get_weather"}
 
     def test_ir_tool_choice_legacy_type_field(self):
         """Test legacy 'type' field support."""
-        result = OpenAIResponsesToolOps.ir_tool_choice_to_p(
+        result = OpenResponsesToolOps.ir_tool_choice_to_p(
             cast(Any, {"type": "auto", "tool_name": ""})
         )
         assert result == "auto"
 
     def test_p_tool_choice_none(self):
         """Test 'none' → mode:none."""
-        result = OpenAIResponsesToolOps.p_tool_choice_to_ir("none")
+        result = OpenResponsesToolOps.p_tool_choice_to_ir("none")
         assert result["mode"] == "none"
 
     def test_p_tool_choice_auto(self):
         """Test 'auto' → mode:auto."""
-        result = OpenAIResponsesToolOps.p_tool_choice_to_ir("auto")
+        result = OpenResponsesToolOps.p_tool_choice_to_ir("auto")
         assert result["mode"] == "auto"
 
     def test_p_tool_choice_required(self):
         """Test 'required' → mode:any."""
-        result = OpenAIResponsesToolOps.p_tool_choice_to_ir("required")
+        result = OpenResponsesToolOps.p_tool_choice_to_ir("required")
         assert result["mode"] == "any"
 
     def test_p_tool_choice_specific(self):
         """Test specific function → mode:tool."""
-        result = OpenAIResponsesToolOps.p_tool_choice_to_ir(
+        result = OpenResponsesToolOps.p_tool_choice_to_ir(
             {"type": "function", "function": {"name": "get_weather"}}
         )
         assert result["mode"] == "tool"
@@ -307,29 +307,29 @@ class TestOpenAIResponsesToolOps:
 
     def test_p_tool_choice_unknown_string(self):
         """Test unknown string → mode:auto fallback."""
-        result = OpenAIResponsesToolOps.p_tool_choice_to_ir("unknown")
+        result = OpenResponsesToolOps.p_tool_choice_to_ir("unknown")
         assert result["mode"] == "auto"
 
     def test_tool_choice_round_trip(self):
         """Test tool choice round-trip."""
         for mode in ["none", "auto"]:
             ir = cast(ToolChoice, {"mode": mode, "tool_name": ""})
-            provider = OpenAIResponsesToolOps.ir_tool_choice_to_p(ir)
-            restored = OpenAIResponsesToolOps.p_tool_choice_to_ir(provider)
+            provider = OpenResponsesToolOps.ir_tool_choice_to_p(ir)
+            restored = OpenResponsesToolOps.p_tool_choice_to_ir(provider)
             assert restored["mode"] == mode
 
     def test_tool_choice_any_round_trip(self):
         """Test mode:any round-trip (any → required → any)."""
         ir = cast(ToolChoice, {"mode": "any", "tool_name": ""})
-        provider = OpenAIResponsesToolOps.ir_tool_choice_to_p(ir)
+        provider = OpenResponsesToolOps.ir_tool_choice_to_p(ir)
         assert provider == "required"
-        restored = OpenAIResponsesToolOps.p_tool_choice_to_ir(provider)
+        restored = OpenResponsesToolOps.p_tool_choice_to_ir(provider)
         assert restored["mode"] == "any"
 
     def test_p_tool_choice_namespace_warns_and_falls_back(self):
         """A namespace container has no IR slot; the drop is reported."""
         warnings: list[str] = []
-        result = OpenAIResponsesToolOps.p_tool_choice_to_ir(
+        result = OpenResponsesToolOps.p_tool_choice_to_ir(
             {
                 "type": "namespace",
                 "name": "tasks",
@@ -343,7 +343,7 @@ class TestOpenAIResponsesToolOps:
 
     def test_p_tool_choice_namespace_without_a_sink_stays_silent(self):
         """The ops dispatcher calls this with no sink; it must not raise."""
-        result = OpenAIResponsesToolOps.p_tool_choice_to_ir(
+        result = OpenResponsesToolOps.p_tool_choice_to_ir(
             {"type": "namespace", "name": "tasks", "tools": []}
         )
         assert result["mode"] == "auto"
@@ -358,7 +358,7 @@ class TestOpenAIResponsesToolOps:
             tool_name="get_weather",
             tool_input={"city": "Beijing"},
         )
-        result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
+        result = OpenResponsesToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "function_call"
         assert result["id"] == "fc_123"  # call_ prefix → fc_ prefix for Responses API
         assert result["call_id"] == "call_123"
@@ -374,7 +374,7 @@ class TestOpenAIResponsesToolOps:
             tool_input={"param": "value"},
             tool_type="mcp",
         )
-        result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
+        result = OpenResponsesToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "mcp_call"
         assert result["id"] == "call_mcp"
 
@@ -386,7 +386,7 @@ class TestOpenAIResponsesToolOps:
             tool_name="mcp://myserver/mytool",
             tool_input={},
         )
-        result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
+        result = OpenResponsesToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "mcp_call"
 
     def test_ir_tool_call_to_p_web_search(self):
@@ -399,7 +399,7 @@ class TestOpenAIResponsesToolOps:
             tool_type="intrinsic",
             provider_metadata={"intrinsic_kind": "web_search"},
         )
-        result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
+        result = OpenResponsesToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "web_search_call"
         # Native server-item shape: an `action`, no `call_id`/`arguments`.
         assert result["action"]["query"] == "test"
@@ -415,7 +415,7 @@ class TestOpenAIResponsesToolOps:
             tool_type="intrinsic",
             provider_metadata={"intrinsic_kind": "code_interpreter"},
         )
-        result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
+        result = OpenResponsesToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "code_interpreter_call"
         assert result["code"] == "print('hello')"
 
@@ -427,7 +427,7 @@ class TestOpenAIResponsesToolOps:
             "name": "search",
             "arguments": '{"query": "test"}',
         }
-        result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        result = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert result["type"] == "tool_call"
         assert result["tool_call_id"] == "call_456"
         assert result["tool_name"] == "search"
@@ -443,7 +443,7 @@ class TestOpenAIResponsesToolOps:
             "tool": "mytool",
             "arguments": '{"key": "val"}',
         }
-        result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        result = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert result["type"] == "tool_call"
         assert result["tool_type"] == "mcp"
         assert "mcp://" in result["tool_name"]
@@ -456,7 +456,7 @@ class TestOpenAIResponsesToolOps:
             "name": "shell",
             "arguments": '{"cmd": "ls"}',
         }
-        result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        result = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert result["type"] == "tool_call"
         assert result["tool_type"] == "intrinsic"
         assert result["intrinsic_kind"] == "shell"
@@ -469,7 +469,7 @@ class TestOpenAIResponsesToolOps:
             "name": "tool",
             "arguments": "not valid json",
         }
-        result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        result = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert result["tool_input"] == {"input": "not valid json"}
 
     def test_p_tool_call_to_ir_empty_arguments(self):
@@ -480,7 +480,7 @@ class TestOpenAIResponsesToolOps:
             "name": "tool",
             "arguments": "",
         }
-        result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        result = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert result["tool_input"] == {}
 
     def test_p_tool_call_to_ir_dict_arguments(self):
@@ -491,7 +491,7 @@ class TestOpenAIResponsesToolOps:
             "name": "tool",
             "arguments": {"key": "value"},
         }
-        result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        result = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert result["tool_input"] == {"key": "value"}
 
     def test_p_tool_call_to_ir_unsupported_type(self):
@@ -499,7 +499,7 @@ class TestOpenAIResponsesToolOps:
         import pytest
 
         with pytest.raises(ValueError, match="Unsupported"):
-            OpenAIResponsesToolOps.p_tool_call_to_ir({"type": "unknown_call"})
+            OpenResponsesToolOps.p_tool_call_to_ir({"type": "unknown_call"})
 
     def test_tool_call_round_trip(self):
         """Test tool call round-trip."""
@@ -509,8 +509,8 @@ class TestOpenAIResponsesToolOps:
             tool_name="func",
             tool_input={"a": 1, "b": "two"},
         )
-        provider = OpenAIResponsesToolOps.ir_tool_call_to_p(original)
-        restored = OpenAIResponsesToolOps.p_tool_call_to_ir(provider)
+        provider = OpenResponsesToolOps.ir_tool_call_to_p(original)
+        restored = OpenResponsesToolOps.p_tool_call_to_ir(provider)
         assert restored["tool_call_id"] == original["tool_call_id"]
         assert restored["tool_name"] == original["tool_name"]
         assert restored["tool_input"] == original["tool_input"]
@@ -523,11 +523,11 @@ class TestOpenAIResponsesToolOps:
             "name": "code_interpreter",
             "arguments": '{"code": "print(42)"}',
         }
-        ir = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        ir = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert ir["tool_type"] == "intrinsic"
         assert ir["intrinsic_kind"] == "code_interpreter"
 
-        restored = OpenAIResponsesToolOps.ir_tool_call_to_p(ir)
+        restored = OpenResponsesToolOps.ir_tool_call_to_p(ir)
         assert restored["type"] == "code_interpreter_call"
         # A native server item identifies itself with `id`, not `call_id`, and
         # the API rejects `call_id`/`arguments` on this item type (#981).
@@ -543,11 +543,11 @@ class TestOpenAIResponsesToolOps:
             "name": "shell",
             "arguments": '{"cmd": "ls"}',
         }
-        ir = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        ir = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert ir["tool_type"] == "intrinsic"
         assert ir["intrinsic_kind"] == "shell"
 
-        restored = OpenAIResponsesToolOps.ir_tool_call_to_p(ir)
+        restored = OpenResponsesToolOps.ir_tool_call_to_p(ir)
         assert restored["type"] == "shell_call"
 
     # ==================== Custom Tool Call ====================
@@ -561,7 +561,7 @@ class TestOpenAIResponsesToolOps:
             tool_input={"input": "--- a/foo.py\n+++ b/foo.py\n@@ -1 +1 @@\n-old\n+new"},
             tool_type="custom",
         )
-        result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
+        result = OpenResponsesToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "custom_tool_call"
         assert result["call_id"] == "call_custom1"
         assert result["name"] == "apply_patch"
@@ -577,7 +577,7 @@ class TestOpenAIResponsesToolOps:
             tool_input={"a": 1, "b": 2},
             tool_type="custom",
         )
-        result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tc)
+        result = OpenResponsesToolOps.ir_tool_call_to_p(ir_tc)
         assert result["type"] == "custom_tool_call"
         assert json.loads(result["input"]) == {"a": 1, "b": 2}
 
@@ -589,7 +589,7 @@ class TestOpenAIResponsesToolOps:
             "name": "apply_patch",
             "input": "--- a/foo.py\n+++ b/foo.py\n@@ -1 +1 @@\n-old\n+new",
         }
-        result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        result = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert result["type"] == "tool_call"
         assert result["tool_call_id"] == "call_custom3"
         assert result["tool_name"] == "apply_patch"
@@ -607,7 +607,7 @@ class TestOpenAIResponsesToolOps:
             "name": "json_tool",
             "input": '{"key": "value", "count": 42}',
         }
-        result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        result = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert result["tool_input"] == {"key": "value", "count": 42}
         assert result["tool_type"] == "custom"
 
@@ -619,7 +619,7 @@ class TestOpenAIResponsesToolOps:
             "name": "empty_tool",
             "input": "",
         }
-        result = OpenAIResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        result = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
         assert result["tool_input"] == {}
 
     def test_custom_tool_call_round_trip(self):
@@ -630,8 +630,8 @@ class TestOpenAIResponsesToolOps:
             "name": "apply_patch",
             "input": "--- patch content ---",
         }
-        ir = OpenAIResponsesToolOps.p_tool_call_to_ir(original)
-        restored = OpenAIResponsesToolOps.ir_tool_call_to_p(ir)
+        ir = OpenResponsesToolOps.p_tool_call_to_ir(original)
+        restored = OpenResponsesToolOps.ir_tool_call_to_p(ir)
         assert restored["type"] == "custom_tool_call"
         assert restored["call_id"] == original["call_id"]
         assert restored["name"] == original["name"]
@@ -646,7 +646,7 @@ class TestOpenAIResponsesToolOps:
             tool_call_id="call_123",
             result="Sunny, 25°C",
         )
-        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir_tr)
+        result = OpenResponsesToolOps.ir_tool_result_to_p(ir_tr)
         assert result["type"] == "function_call_output"
         assert result["call_id"] == "call_123"
         assert result["output"] == "Sunny, 25°C"
@@ -658,7 +658,7 @@ class TestOpenAIResponsesToolOps:
             tool_call_id="call_dict",
             result={"temp": 25, "condition": "sunny"},
         )
-        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir_tr)
+        result = OpenResponsesToolOps.ir_tool_result_to_p(ir_tr)
         assert result["type"] == "function_call_output"
         # Dict result is converted to string
         assert isinstance(result["output"], str)
@@ -672,7 +672,7 @@ class TestOpenAIResponsesToolOps:
             intrinsic_kind="web_search",
             is_error=True,
         )
-        result = OpenAIResponsesToolOps.ir_tool_result_to_p(
+        result = OpenResponsesToolOps.ir_tool_result_to_p(
             cast(ToolResultPart, ir_tr), warnings=warnings
         )
         assert result == {}
@@ -686,7 +686,7 @@ class TestOpenAIResponsesToolOps:
             intrinsic_kind="web_search",
         )
         warnings: list[str] = []
-        result = OpenAIResponsesToolOps.ir_tool_result_to_p(
+        result = OpenResponsesToolOps.ir_tool_result_to_p(
             cast(ToolResultPart, ir_tr), warnings=warnings
         )
         assert result == {}
@@ -699,7 +699,7 @@ class TestOpenAIResponsesToolOps:
             "call_id": "call_456",
             "output": "Result data",
         }
-        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+        result = OpenResponsesToolOps.p_tool_result_to_ir(provider_tr)
         assert result["type"] == "tool_result"
         assert result["tool_call_id"] == "call_456"
         assert result["result"] == "Result data"
@@ -712,7 +712,7 @@ class TestOpenAIResponsesToolOps:
             "call_id": "call_json",
             "output": '{"temp": 25}',
         }
-        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+        result = OpenResponsesToolOps.p_tool_result_to_ir(provider_tr)
         assert result["result"] == '{"temp": 25}'
 
     def test_p_tool_result_to_ir_with_error(self):
@@ -723,7 +723,7 @@ class TestOpenAIResponsesToolOps:
             "output": "Error occurred",
             "is_error": True,
         }
-        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+        result = OpenResponsesToolOps.p_tool_result_to_ir(provider_tr)
         assert result["is_error"] is True
 
     def test_p_tool_result_to_ir_preserves_false_is_error(self):
@@ -735,7 +735,7 @@ class TestOpenAIResponsesToolOps:
             "is_error": False,
         }
 
-        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+        result = OpenResponsesToolOps.p_tool_result_to_ir(provider_tr)
 
         assert result["is_error"] is False
 
@@ -748,7 +748,7 @@ class TestOpenAIResponsesToolOps:
             "status": "incomplete",
         }
 
-        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+        result = OpenResponsesToolOps.p_tool_result_to_ir(provider_tr)
 
         assert result["is_error"] is True
         # The status rides along so a Responses target can replay it.
@@ -763,7 +763,7 @@ class TestOpenAIResponsesToolOps:
             "is_error": False,
         }
 
-        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+        result = OpenResponsesToolOps.p_tool_result_to_ir(provider_tr)
 
         assert result["is_error"] is True
 
@@ -776,13 +776,13 @@ class TestOpenAIResponsesToolOps:
             "status": status,
         }
 
-        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+        result = OpenResponsesToolOps.p_tool_result_to_ir(provider_tr)
 
         assert "is_error" not in result
 
     def test_ir_client_result_to_p_marks_error_without_status(self):
         """An error flag with no carried status still gets the marker."""
-        result = OpenAIResponsesToolOps.ir_client_result_to_p(
+        result = OpenResponsesToolOps.ir_client_result_to_p(
             cast(
                 ToolResultPart,
                 {
@@ -802,7 +802,7 @@ class TestOpenAIResponsesToolOps:
 
     def test_ir_client_result_to_p_replays_incomplete_status(self):
         """A carried incomplete status is replayed without the marker."""
-        result = OpenAIResponsesToolOps.ir_client_result_to_p(
+        result = OpenResponsesToolOps.ir_client_result_to_p(
             cast(
                 ToolResultPart,
                 {
@@ -821,7 +821,7 @@ class TestOpenAIResponsesToolOps:
     @pytest.mark.parametrize("malformed", ["true", 1, 0, {}, [], "False"])
     def test_p_tool_result_to_ir_ignores_non_bool_is_error(self, malformed):
         """The IR field is typed bool, so a malformed value must not be copied."""
-        result = OpenAIResponsesToolOps.p_tool_result_to_ir(
+        result = OpenResponsesToolOps.p_tool_result_to_ir(
             {
                 "type": "function_call_output",
                 "call_id": "call_1",
@@ -838,8 +838,8 @@ class TestOpenAIResponsesToolOps:
             tool_call_id="call_rt",
             result="Sunny, 25°C",
         )
-        provider = OpenAIResponsesToolOps.ir_tool_result_to_p(original)
-        restored = OpenAIResponsesToolOps.p_tool_result_to_ir(provider)
+        provider = OpenResponsesToolOps.ir_tool_result_to_p(original)
+        restored = OpenResponsesToolOps.p_tool_result_to_ir(provider)
         assert restored["tool_call_id"] == original["tool_call_id"]
         assert restored["result"] == original["result"]
 
@@ -855,16 +855,16 @@ class TestOpenAIResponsesToolOps:
             "call_id": "call_rt_custom",
             "output": "README.md",
         }
-        ir = OpenAIResponsesToolOps.p_tool_result_to_ir(original)
+        ir = OpenResponsesToolOps.p_tool_result_to_ir(original)
         assert ir["tool_type"] == "custom"
-        restored = OpenAIResponsesToolOps.ir_tool_result_to_p(ir)
+        restored = OpenResponsesToolOps.ir_tool_result_to_p(ir)
         assert restored["type"] == "custom_tool_call_output"
         assert restored["call_id"] == original["call_id"]
         assert restored["output"] == original["output"]
 
     def test_p_tool_result_to_ir_function_output_has_no_tool_type(self):
         """The default type stays absent, leaving the context fallback."""
-        ir = OpenAIResponsesToolOps.p_tool_result_to_ir(
+        ir = OpenResponsesToolOps.p_tool_result_to_ir(
             {"type": "function_call_output", "call_id": "call_fn", "output": "ok"}
         )
         assert "tool_type" not in ir
@@ -885,7 +885,7 @@ class TestOpenAIResponsesToolOps:
                 "tool_type": "custom",
             },
         )
-        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir, context=_Ctx())
+        result = OpenResponsesToolOps.ir_tool_result_to_p(ir, context=_Ctx())
         assert result["type"] == "custom_tool_call_output"
 
     def test_p_tool_result_to_ir_converts_input_image_to_ir(self):
@@ -900,7 +900,7 @@ class TestOpenAIResponsesToolOps:
                 }
             ],
         }
-        result = OpenAIResponsesToolOps.p_tool_result_to_ir(provider_tr)
+        result = OpenResponsesToolOps.p_tool_result_to_ir(provider_tr)
         assert isinstance(result["result"], list)
         assert len(result["result"]) == 1
         assert result["result"][0]["type"] == "image"
@@ -920,7 +920,7 @@ class TestOpenAIResponsesToolOps:
                 },
             ],
         )
-        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir_tr)
+        result = OpenResponsesToolOps.ir_tool_result_to_p(ir_tr)
         assert result["type"] == "function_call_output"
         output = result["output"]
         assert isinstance(output, list)
@@ -939,7 +939,7 @@ class TestOpenAIResponsesToolOps:
             is_error=True,
         )
         warnings: list[str] = []
-        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir_tr, warnings=warnings)
+        result = OpenResponsesToolOps.ir_tool_result_to_p(ir_tr, warnings=warnings)
         assert result["output"] == [
             {"type": "input_text", "text": "exit code 1"},
             {"type": "input_text", "text": TOOL_ERROR_MARKER},
@@ -955,7 +955,7 @@ class TestOpenAIResponsesToolOps:
             result="",
             is_error=True,
         )
-        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir_tr)
+        result = OpenResponsesToolOps.ir_tool_result_to_p(ir_tr)
         assert result["output"] == [{"type": "input_text", "text": TOOL_ERROR_MARKER}]
 
     def test_ir_tool_result_to_p_is_error_false_is_untouched(self):
@@ -967,7 +967,7 @@ class TestOpenAIResponsesToolOps:
             is_error=False,
         )
         warnings: list[str] = []
-        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir_tr, warnings=warnings)
+        result = OpenResponsesToolOps.ir_tool_result_to_p(ir_tr, warnings=warnings)
         assert result["output"] == "exit code 0"
         assert warnings == []
 
@@ -983,7 +983,7 @@ class TestOpenAIResponsesToolOps:
                 "is_error": True,
             },
         )
-        result = OpenAIResponsesToolOps.ir_tool_result_to_p(ir_tr)
+        result = OpenResponsesToolOps.ir_tool_result_to_p(ir_tr)
         assert result["type"] == "custom_tool_call_output"
         assert result["output"] == [
             {"type": "input_text", "text": "patch failed"},
@@ -994,26 +994,26 @@ class TestOpenAIResponsesToolOps:
 
     def test_ir_tool_config_to_p_disable_parallel(self):
         """Test IR ToolCallConfig disable_parallel → parallel_tool_calls."""
-        result = OpenAIResponsesToolOps.ir_tool_config_to_p(
+        result = OpenResponsesToolOps.ir_tool_config_to_p(
             cast(ToolCallConfig, {"disable_parallel": True})
         )
         assert result["parallel_tool_calls"] is False
 
-        result = OpenAIResponsesToolOps.ir_tool_config_to_p(
+        result = OpenResponsesToolOps.ir_tool_config_to_p(
             cast(ToolCallConfig, {"disable_parallel": False})
         )
         assert result["parallel_tool_calls"] is True
 
     def test_ir_tool_config_to_p_max_calls(self):
         """Test IR ToolCallConfig max_calls → max_tool_calls."""
-        result = OpenAIResponsesToolOps.ir_tool_config_to_p(
+        result = OpenResponsesToolOps.ir_tool_config_to_p(
             cast(ToolCallConfig, {"max_calls": 5})
         )
         assert result["max_tool_calls"] == 5
 
     def test_ir_tool_config_to_p_both(self):
         """Test IR ToolCallConfig with both fields."""
-        result = OpenAIResponsesToolOps.ir_tool_config_to_p(
+        result = OpenResponsesToolOps.ir_tool_config_to_p(
             cast(ToolCallConfig, {"disable_parallel": True, "max_calls": 3})
         )
         assert result["parallel_tool_calls"] is False
@@ -1021,30 +1021,28 @@ class TestOpenAIResponsesToolOps:
 
     def test_p_tool_config_to_ir(self):
         """Test OpenAI parallel_tool_calls → IR ToolCallConfig."""
-        result = OpenAIResponsesToolOps.p_tool_config_to_ir(
+        result = OpenResponsesToolOps.p_tool_config_to_ir(
             {"parallel_tool_calls": False}
         )
         assert result["disable_parallel"] is True
 
-        result = OpenAIResponsesToolOps.p_tool_config_to_ir(
-            {"parallel_tool_calls": True}
-        )
+        result = OpenResponsesToolOps.p_tool_config_to_ir({"parallel_tool_calls": True})
         assert result["disable_parallel"] is False
 
     def test_p_tool_config_to_ir_max_calls(self):
         """Test OpenAI max_tool_calls → IR ToolCallConfig."""
-        result = OpenAIResponsesToolOps.p_tool_config_to_ir({"max_tool_calls": 10})
+        result = OpenResponsesToolOps.p_tool_config_to_ir({"max_tool_calls": 10})
         assert result["max_calls"] == 10
 
     def test_p_tool_config_to_ir_non_dict(self):
         """Test p_tool_config_to_ir with non-dict input."""
-        result = OpenAIResponsesToolOps.p_tool_config_to_ir("invalid")
+        result = OpenResponsesToolOps.p_tool_config_to_ir("invalid")
         assert result == {}
 
     def test_tool_config_round_trip(self):
         """Test tool config round-trip."""
         original = cast(ToolCallConfig, {"disable_parallel": True, "max_calls": 5})
-        provider = OpenAIResponsesToolOps.ir_tool_config_to_p(original)
-        restored = OpenAIResponsesToolOps.p_tool_config_to_ir(provider)
+        provider = OpenResponsesToolOps.ir_tool_config_to_p(original)
+        restored = OpenResponsesToolOps.p_tool_config_to_ir(provider)
         assert restored["disable_parallel"] == original["disable_parallel"]
         assert restored["max_calls"] == original["max_calls"]

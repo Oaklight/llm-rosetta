@@ -805,8 +805,3 @@ class OpenResponsesToolOps(IntrinsicToolOpsMixin, BaseToolOps):
                 result["max_calls"] = max_calls
 
         return cast(ToolCallConfig, result)
-
-
-# Backward-compatible alias (deprecated): the OpenAI Responses profile reuses
-# the same tool operations as the vendor-neutral Open Responses base.
-OpenAIResponsesToolOps = OpenResponsesToolOps

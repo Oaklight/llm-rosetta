@@ -195,7 +195,7 @@ class TestSanitizationInConverters:
 
     def test_openai_responses_tool_call_sanitized(self):
         from llm_rosetta.converters.llm.open_responses.tool_ops import (
-            OpenAIResponsesToolOps,
+            OpenResponsesToolOps,
         )
 
         ir_tool_call = {
@@ -205,6 +205,6 @@ class TestSanitizationInConverters:
             "tool_input": {"x": 1},
             "tool_type": "function",
         }
-        result = OpenAIResponsesToolOps.ir_tool_call_to_p(ir_tool_call)  # ty: ignore[invalid-argument-type]
+        result = OpenResponsesToolOps.ir_tool_call_to_p(ir_tool_call)  # ty: ignore[invalid-argument-type]
         assert "\n" not in result.get("call_id", "")
         assert re.match(r"^[a-zA-Z0-9_-]+$", result["call_id"])

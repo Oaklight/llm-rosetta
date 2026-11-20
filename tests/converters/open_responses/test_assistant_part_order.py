@@ -12,12 +12,12 @@ import pytest
 
 from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
 from llm_rosetta.converters.llm.open_responses.content_ops import (
-    OpenAIResponsesContentOps,
+    OpenResponsesContentOps,
 )
 from llm_rosetta.converters.llm.open_responses.message_ops import (
-    OpenAIResponsesMessageOps,
+    OpenResponsesMessageOps,
 )
-from llm_rosetta.converters.llm.open_responses.tool_ops import OpenAIResponsesToolOps
+from llm_rosetta.converters.llm.open_responses.tool_ops import OpenResponsesToolOps
 from llm_rosetta.types.ir import Message
 
 _REASONING_ID = "rs_order_1"
@@ -51,10 +51,8 @@ def _call(call_id: str = "c1") -> dict[str, Any]:
 
 
 @pytest.fixture()
-def message_ops() -> OpenAIResponsesMessageOps:
-    return OpenAIResponsesMessageOps(
-        OpenAIResponsesContentOps(), OpenAIResponsesToolOps()
-    )
+def message_ops() -> OpenResponsesMessageOps:
+    return OpenResponsesMessageOps(OpenResponsesContentOps(), OpenResponsesToolOps())
 
 
 #: Each case is (IR parts, the item types the writer must emit, in order).

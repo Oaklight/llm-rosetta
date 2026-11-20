@@ -248,8 +248,3 @@ class OpenResponsesStreamContext(StreamContext):
         super().register_tool_call_item(tool_call_id, item_id)
         if tool_call_id and item_id:
             self.item_id_to_call_id[item_id] = tool_call_id
-
-
-# Backward-compatible alias (deprecated): the OpenAI Responses profile reuses
-# the same stream context as the vendor-neutral Open Responses base.
-OpenAIResponsesStreamContext = OpenResponsesStreamContext

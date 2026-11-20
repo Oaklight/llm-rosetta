@@ -31,7 +31,7 @@ from llm_rosetta.converters.llm.google_interactions.content_ops import (
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
 from llm_rosetta.converters.llm.open_responses.content_ops import (
-    OpenAIResponsesContentOps,
+    OpenResponsesContentOps,
 )
 from llm_rosetta.types.ir import IRRequest, ToolCallPart
 
@@ -116,7 +116,7 @@ class TestOpaqueOriginHelper:
 
 class TestCrossProviderDrop:
     def test_responses_encrypted_dropped_for_anthropic(self):
-        ir = OpenAIResponsesContentOps.p_reasoning_to_ir(
+        ir = OpenResponsesContentOps.p_reasoning_to_ir(
             {
                 "type": "reasoning",
                 "id": "rs_1",
@@ -131,7 +131,7 @@ class TestCrossProviderDrop:
         ir = MessagesContentOps.p_redacted_thinking_to_ir(
             {"type": "redacted_thinking", "data": "blob"}
         )
-        out = OpenAIResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
+        out = OpenResponsesContentOps.ir_reasoning_to_p(ir, output_item=True)
         assert out is not None
         assert "encrypted_content" not in out
 

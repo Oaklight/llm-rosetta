@@ -11,7 +11,7 @@ from llm_rosetta.converters.llm.open_responses.converter import OpenAIResponsesC
 from llm_rosetta.converters.llm.messages.converter import MessagesConverter
 from llm_rosetta.converters.llm.google_generate.converter import GoogleGenerateConverter
 from llm_rosetta.converters.llm.open_responses.stream_context import (
-    OpenAIResponsesStreamContext,
+    OpenResponsesStreamContext,
 )
 from llm_rosetta.types.ir import UserMessage
 from llm_rosetta.types.ir.request import IRRequest
@@ -91,23 +91,23 @@ class TestStreamContextInheritance:
         assert sc.response_id == ""  # stream fields still default
 
 
-class TestOpenAIResponsesStreamContextInheritance:
-    """Test the full inheritance chain: OpenAIResponsesStreamContext -> StreamContext -> ConversionContext."""
+class TestOpenResponsesStreamContextInheritance:
+    """Test the full inheritance chain: OpenResponsesStreamContext -> StreamContext -> ConversionContext."""
 
     def test_isinstance_chain(self):
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         assert isinstance(ctx, StreamContext)
         assert isinstance(ctx, ConversionContext)
 
     def test_has_all_fields(self):
-        ctx = OpenAIResponsesStreamContext()
+        ctx = OpenResponsesStreamContext()
         # ConversionContext fields
         assert ctx.warnings == []
         assert ctx.options == {}
         # StreamContext fields
         assert ctx.response_id == ""
         assert ctx.tool_call_id_map == {}
-        # OpenAIResponsesStreamContext fields
+        # OpenResponsesStreamContext fields
         assert ctx.item_id_to_call_id == {}
         assert ctx._message_items == []
         assert ctx.current_message_item is None

@@ -12,7 +12,7 @@ from llm_rosetta.converters.llm.chat_completions.converter import (
 )
 from llm_rosetta.converters.llm.open_responses.converter import OpenAIResponsesConverter
 from llm_rosetta.converters.llm.open_responses.stream_context import (
-    OpenAIResponsesStreamContext,
+    OpenResponsesStreamContext,
 )
 
 
@@ -118,7 +118,7 @@ def _collect_ir(chunks):
 def _chat_to_responses(ir_events, chat_ctx):
     """Convert IR events through the Responses converter."""
     resp_conv = OpenAIResponsesConverter()
-    resp_ctx = OpenAIResponsesStreamContext.from_base(chat_ctx)
+    resp_ctx = OpenResponsesStreamContext.from_base(chat_ctx)
     sse_events = []
     for ev in ir_events:
         result = resp_conv.stream_response_to_provider(ev, context=resp_ctx)
@@ -222,7 +222,7 @@ class TestStreamContextFromBase:
         base.register_tool_call("call_1", "fn_a")
         base.register_tool_call("call_2", "fn_b")
 
-        derived = OpenAIResponsesStreamContext.from_base(base)
+        derived = OpenResponsesStreamContext.from_base(base)
         assert derived._tool_call_index == {"call_1": 0, "call_2": 1}
         assert derived._tool_call_order == ["call_1", "call_2"]
 
@@ -231,7 +231,7 @@ class TestStreamContextFromBase:
         base = StreamContext()
         base.register_tool_call("call_1", "fn_a")
 
-        derived = OpenAIResponsesStreamContext.from_base(base)
+        derived = OpenResponsesStreamContext.from_base(base)
         derived.register_tool_call("call_1", "fn_a")
         assert derived._tool_call_order == ["call_1"]
 
