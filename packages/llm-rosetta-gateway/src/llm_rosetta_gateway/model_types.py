@@ -141,7 +141,7 @@ def get_model_type(name: str) -> ModelTypeDescriptor | None:
     or a request written before the rename keeps working without every caller
     restating the alias.
     """
-    from llm_rosetta.formats import canonical_model_type
+    from llm_rosetta.api import canonical_model_type
 
     return MODEL_TYPE_REGISTRY.get(canonical_model_type(name))
 
@@ -203,8 +203,7 @@ def _default_paths(model_type: str) -> dict[str, str]:
     A format whose path equals the type's own ``default_path`` is not an
     override and is left out, so the admin payload lists only the differences.
     """
-    from llm_rosetta.formats import FORMAT_SPECS
-    from llm_rosetta.formats.catalog import default_path
+    from llm_rosetta.api import FORMAT_SPECS, default_path
 
     base = default_path(model_type)
     return {
@@ -221,7 +220,7 @@ def _register_builtins() -> None:
 
     # The format catalog is the single source of truth for formats and their
     # routes; the converter registry supplies the class each one binds to.
-    from llm_rosetta.formats.catalog import FORMAT_SPECS
+    from llm_rosetta.api import FORMAT_SPECS
 
     from .source_formats import detect_embedding_source, detect_rerank_source
 
@@ -334,7 +333,7 @@ def _register_decision() -> None:
     LLM-backed decision (via structured output) uses the chat pipeline, not
     this route.
     """
-    from llm_rosetta.formats.catalog import FORMAT_SPECS
+    from llm_rosetta.api import FORMAT_SPECS
 
     from .source_formats import detect_decision_source
 

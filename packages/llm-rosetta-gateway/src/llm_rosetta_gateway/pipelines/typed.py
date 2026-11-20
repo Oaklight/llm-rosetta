@@ -41,7 +41,7 @@ def detect_source_format(
     when the registry has no detector for it — a test double, or a type that
     has not declared one.
     """
-    from llm_rosetta.formats import canonical_model_type
+    from llm_rosetta.api import canonical_model_type
 
     from ..model_types import get_model_type
 

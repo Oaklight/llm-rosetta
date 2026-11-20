@@ -27,8 +27,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from llm_rosetta.capabilities import ToolNameMap
-from llm_rosetta.formats.tool_locations import ToolDeclaration, read_tool_declarations
+from llm_rosetta.api import ToolDeclaration, ToolNameMap, read_tool_declarations
 
 # Marks a message this module already annotated, so a chained gateway or a
 # client retry does not stack a second copy of the hint.

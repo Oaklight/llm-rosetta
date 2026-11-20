@@ -10,10 +10,8 @@ from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import Response
 
-from llm_rosetta.auto_detect import ProviderType
-from llm_rosetta.capabilities import ToolNameMap
+from llm_rosetta.api import ProviderType, SoftErrorPattern, ToolNameMap, resolve_format
 from llm_rosetta.routing import ResolvedRoute
-from llm_rosetta.shims.provider_shim import SoftErrorPattern, resolve_format
 
 from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta_gateway.observability.error_dump import dump_error

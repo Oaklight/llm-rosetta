@@ -21,13 +21,14 @@ Every request that reaches an upstream is recorded in the usage ledger with
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import Response
-from llm_rosetta.converters.embeddings.pipeline import (
+from llm_rosetta.api import (
     EmbeddingConversionPipeline,
     get_embedding_converter,
-    response_usage,
+    typed_response_usage,
 )
 
 from ..config import GatewayConfig, TypedRoute
@@ -149,7 +150,7 @@ _EMBEDDINGS = TypedHandler(
     resolve=_resolve_route,
     resolve_excluding=_resolve_route,
     configured_models=lambda config: config.embeddings_models.keys(),
-    response_usage=response_usage,
+    response_usage=partial(typed_response_usage, "embeddings"),
     upstream_url=_upstream_url,
     response_post=_response_post,
     upstream_error=_upstream_error,

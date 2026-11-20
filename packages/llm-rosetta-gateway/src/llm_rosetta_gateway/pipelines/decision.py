@@ -19,13 +19,11 @@ Every request that reaches an upstream is recorded in the usage ledger with
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import Response
-from llm_rosetta.converters.decisions.pipeline import (
-    DecisionConversionPipeline,
-    response_usage,
-)
+from llm_rosetta.api import DecisionConversionPipeline, typed_response_usage
 
 from ..config import GatewayConfig, TypedRoute
 from .typed import TypedHandler, detect_source_format, handle_typed_request
@@ -65,7 +63,7 @@ _DECISION = TypedHandler(
     resolve=_resolve_route,
     resolve_excluding=_resolve_route,
     configured_models=lambda config: config.decisions_models.keys(),
-    response_usage=response_usage,
+    response_usage=partial(typed_response_usage, "decisions"),
     not_found_label="decision model",
     response_post=_response_post,
 )
