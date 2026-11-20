@@ -98,6 +98,7 @@ from llm_rosetta.shims.providers import (
     manifest_vocabulary,
     merge_connection,
     plugin_source,
+    validate_shim_declaration,
 )
 from llm_rosetta.shims.scaffold import add_arguments as add_scaffold_arguments
 from llm_rosetta.shims.scaffold import run as run_scaffold
@@ -168,6 +169,7 @@ __all__ = [
     "snapshot_registry",
     "staging_registry",
     "unregister_shim",
+    "validate_shim_declaration",
     # Shim scaffolding (the ``shims new`` / ``check`` / ``migrate`` commands)
     "add_scaffold_arguments",
     "run_scaffold",

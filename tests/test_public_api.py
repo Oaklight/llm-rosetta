@@ -83,7 +83,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
     },
     # The host-facing surface (#1630).  Re-exports only; a name enters it with a
     # gateway call site or an external-shim use.  The ceiling leaves room for
-    # the six functions added in PR 6 (``spec_for``, ``legacy_names`` (since removed),
+    # the six functions added in PR 6 (``spec_for``, ``legacy_names`` (removed again in 0.14.0, never released),
     # ``typed_response_usage``, ``staging_registry``, ``reasoning_capability``,
     # ``describe_vendor_manifest``) and ``SURFACE_VERSION``.  The manifest-text
     # trio (``leaf_connection``, ``manifest_vocabulary``, ``merge_connection``)
@@ -147,6 +147,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "snapshot_registry",
             "staging_registry",
             "unregister_shim",
+            "validate_shim_declaration",
             # Shim scaffolding
             "add_scaffold_arguments",
             "run_scaffold",
@@ -166,7 +167,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "SURFACE_VERSION",
             "__version__",
         ],
-        "max_count": 68,
+        "max_count": 64,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
