@@ -87,7 +87,9 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
     # gateway call site or an external-shim use.  The ceiling leaves room for
     # the six functions added in PR 6 (``spec_for``, ``legacy_names``,
     # ``typed_response_usage``, ``staging_registry``, ``reasoning_capability``,
-    # ``describe_vendor_manifest``) and ``SURFACE_VERSION``.
+    # ``describe_vendor_manifest``) and ``SURFACE_VERSION``.  The manifest-text
+    # trio (``leaf_connection``, ``manifest_vocabulary``, ``merge_connection``)
+    # replaces the gateway's last private reaches (#1630).
     "llm_rosetta.api": {
         "items": [
             # Chat conversion
@@ -138,8 +140,11 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "resolve_shim",
             # Shim registry, write side and loaders
             "describe_vendor_manifest",
+            "leaf_connection",
             "load_providers",
             "load_providers_from_dir",
+            "manifest_vocabulary",
+            "merge_connection",
             "register_shim",
             "restore_registry",
             "snapshot_registry",
@@ -158,7 +163,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             # Version
             "__version__",
         ],
-        "max_count": 60,
+        "max_count": 64,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count

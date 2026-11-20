@@ -97,7 +97,10 @@ from llm_rosetta.shims.provider_shim import (
 from llm_rosetta.shims.providers import (
     describe_vendor_manifest,
     get_model_list_transform,
+    leaf_connection,
     load_providers,
+    manifest_vocabulary,
+    merge_connection,
 )
 from llm_rosetta.transforms import flatten_system_content
 from llm_rosetta.types.ir import is_image_part, is_tool_result_part
@@ -151,8 +154,11 @@ __all__ = [
     "resolve_shim",
     # Shim registry, write side and loaders
     "describe_vendor_manifest",
+    "leaf_connection",
     "load_providers",
     "load_providers_from_dir",
+    "manifest_vocabulary",
+    "merge_connection",
     "register_shim",
     "restore_registry",
     "snapshot_registry",

@@ -116,8 +116,12 @@ from ._fields import (  # noqa: F401
 from ._leaf import _load_single_provider  # noqa: F401
 from ._manifest import (  # noqa: F401
     ManifestLeaf,
+    ManifestVocabulary,
     VendorManifestDescription,
     describe_vendor_manifest,
+    leaf_connection,
+    manifest_vocabulary,
+    merge_connection,
     _leaf_connection,
     _leaf_exchange,
     _leaf_quota,
