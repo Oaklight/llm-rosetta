@@ -15,7 +15,9 @@ The five allowed import paths are:
 The four contract modules stay where they are and are not re-exported here, so
 each name has one home.
 
-Stability rule: within one minor release this module only gains names.  A name
+Stability rule: within one minor release this module only gains names, and
+``SURFACE_VERSION`` stays put; it is bumped on a removal or a changed meaning,
+never on an addition.  A name
 that is renamed or removed keeps a deprecated alias for one minor release.  A
 breaking change needs an entry in ``scripts/dev/public_api_allowlist.json``,
 and ``scripts/dev/public_api_diff.py`` flags it.
@@ -111,6 +113,12 @@ from llm_rosetta.shims.scaffold import run_migrate as run_scaffold_migrate
 from llm_rosetta.transforms import flatten_system_content
 from llm_rosetta.types.ir import is_image_part, is_tool_result_part
 
+#: The surface's compatibility level.  It rises only when a name is removed or
+#: changes meaning, never when one is added, so a host asserts a *minimum*: a
+#: gateway built for level N runs on any core at level N or above.  A host that
+#: needs a name added in a later minor pins that minor instead.
+SURFACE_VERSION = 1
+
 __all__ = [
     # Chat conversion
     "ConversionError",
@@ -188,5 +196,6 @@ __all__ = [
     "read_tool_declarations",
     "strip_internal_metadata",
     # Version
+    "SURFACE_VERSION",
     "__version__",
 ]

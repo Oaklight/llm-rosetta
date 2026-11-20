@@ -170,6 +170,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "read_tool_declarations",
             "strip_internal_metadata",
             # Version
+            "SURFACE_VERSION",
             "__version__",
         ],
         "max_count": 68,

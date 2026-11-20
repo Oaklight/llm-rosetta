@@ -393,6 +393,9 @@ async def create_app(
         load_shim_sources: Set ``False`` to skip the automatic application
             (tests, or callers that already applied the sources themselves).
     """
+    from ..surface import check_core_surface
+
+    check_core_surface()
     set_config(config)
     ext = extensions or GatewayExtensions()
 
