@@ -5,10 +5,19 @@ name: Pure move
 # and class-level assignment of the changed files by AST between the PR base and
 # the PR head and fails on a def that is missing or moved with a difference.
 #
-# It is its own workflow because it must also run when a PR is labelled or
-# retitled: with the default `pull_request` types a `pure-move` label added
-# after the PR was opened starts no run.  Giving the main CI workflow those
-# types would re-run every job on each label change.
+# It runs only for PRs that carry the `pure-move` label: the author claims the
+# change moves code and nothing else, and this job holds the claim to the AST.
+# It is not keyed on a `refactor(` title, because a refactor is often not a
+# pure move (an added parameter, a lazy import that breaks a cycle) and would
+# then fail a check it never claimed to pass.  A move that the tool reports as
+# clean can still be labelled, as can any PR that wants the proof.
+#
+# It is its own workflow because it must also run when a PR is labelled: with
+# the default `pull_request` types a `pure-move` label added after the PR was
+# opened starts no run.  Giving the main CI workflow those types would re-run
+# every job on each label change.  `edited` fires on any title, body or base
+# change, so it re-runs the check when the description or the base branch
+# changes.
 on:
   pull_request:
     branches: [master]
@@ -19,12 +28,12 @@ permissions:
 
 jobs:
   pure-move:
-    # Runs for titles that start with `refactor(` and for PRs labelled
-    # `pure-move`.  While it is skipped for ordinary PRs it cannot be a
-    # required check without blocking all of them.
-    if: >-
-      startsWith(github.event.pull_request.title, 'refactor(') ||
-      contains(github.event.pull_request.labels.*.name, 'pure-move')
+    # Runs for PRs labelled `pure-move`.  A job skipped by its `if:` counts as
+    # SUCCESS for branch protection, so a PR that fails this check can still be
+    # merged by removing the label; and while the job is skipped for ordinary
+    # PRs it cannot be a required check without blocking all of them.  The
+    # claim is advisory, held by review, not enforced by the merge button.
+    if: contains(github.event.pull_request.labels.*.name, 'pure-move')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -32,10 +41,10 @@ jobs:
           # The tool needs the merge base of the PR and its base branch.
           fetch-depth: 0
 
-      - name: Set up Python 3.11
+      - name: Set up Python 3.10
         uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.10"  # the floor both packages declare (requires-python >=3.10)
 
       - name: Check that the refactor is a pure move
         # `shell: bash` is an explicit pin: it runs `bash -eo pipefail`, so the

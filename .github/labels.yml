@@ -102,3 +102,7 @@
 - name: "ui/ux"
   color: "1DE9B6"
   description: "UI/UX design and interaction"
+
+- name: "pure-move"
+  color: "57606A"
+  description: "PR only moves code; runs the pure-move CI check"
