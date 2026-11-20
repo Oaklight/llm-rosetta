@@ -12,8 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from llm_rosetta.shims.provider_shim import _reset_registry
-from llm_rosetta.shims.providers import load_providers, load_providers_from_dir
+from llm_rosetta.api import (
+    load_providers_from_dir,
+    restore_registry,
+    snapshot_registry,
+    staging_registry,
+)
 from llm_rosetta_gateway.shim_sources import parse_shims_section
 from llm_rosetta_gateway.shims import sources as shim_sources
 from llm_rosetta_gateway.shims.manifest import (
@@ -32,10 +36,11 @@ from llm_rosetta_gateway.shims.sources import (
 @pytest.fixture(autouse=True)
 def _clean_registry():
     """Start and end every test with no source shims registered."""
-    _reset_registry()
+    snapshot = snapshot_registry()
+    with staging_registry():
+        pass
     yield
-    _reset_registry()
-    load_providers()
+    restore_registry(snapshot)
 
 
 def _leaf(root: Path, slug: str, name: str | None = None) -> Path:
