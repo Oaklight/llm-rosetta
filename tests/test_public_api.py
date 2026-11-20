@@ -190,6 +190,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
     "llm_rosetta.observability.usage": {
         "items": [
             "ADDITIVE_CACHE_STANDARDS",
+            "DEFAULT_MODEL_TYPE",
             "GOOGLE_METADATA",
             "INTERNAL_LABEL",
             "INTERNAL_SUBJECT",
@@ -214,7 +215,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "usage_columns",
             "zero_windows",
         ],
-        "max_count": 24,
+        "max_count": 25,
     },
 }
 

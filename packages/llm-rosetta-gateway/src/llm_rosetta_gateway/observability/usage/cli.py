@@ -43,7 +43,7 @@ from typing import Any
 
 from llm_rosetta import __version__
 from ..persistence import PersistenceManager
-from llm_rosetta.observability.usage.report import (
+from llm_rosetta.observability.usage import (
     INTERNAL_LABEL,
     INTERNAL_SUBJECT,
     NO_SUBJECT_LABEL,

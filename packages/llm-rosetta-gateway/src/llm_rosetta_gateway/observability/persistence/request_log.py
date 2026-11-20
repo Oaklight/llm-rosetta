@@ -7,7 +7,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from llm_rosetta.formats import canonical_model_type
-from llm_rosetta.observability.usage.normalize import DEFAULT_MODEL_TYPE
+from llm_rosetta.observability.usage import DEFAULT_MODEL_TYPE
 
 from ._common import (
     _and,
