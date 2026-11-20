@@ -29,24 +29,33 @@ class TestDeclaredModelTypePriority:
     @pytest.mark.parametrize(
         ("caps", "expected"),
         [
-            (["rerank", "embedding"], "embeddings"),
-            (["embedding", "rerank"], "embeddings"),
-            (["decision", "embedding"], "embeddings"),
+            (["rerank", "embeddings"], "embeddings"),
+            (["embeddings", "rerank"], "embeddings"),
+            (["decisions", "embeddings"], "embeddings"),
             (["decisions", "rerank"], "rerank"),
-            (["decision"], "decisions"),
             (["decisions"], "decisions"),
-            (["embedding", "text"], "llm"),
+            (["embeddings", "text"], "llm"),
         ],
     )
     def test_fixed_priority(self, caps: list[str], expected: str) -> None:
         assert declared_model_type({"capabilities": caps}) == expected
 
+    @pytest.mark.parametrize(
+        ("old", "new"), [("embedding", "embeddings"), ("decision", "decisions")]
+    )
+    def test_a_retired_spelling_is_rejected_with_its_replacement(
+        self, old: str, new: str
+    ) -> None:
+        for entry in (dict(type=old), dict(capabilities=[old])):
+            with pytest.raises(ValueError, match=f"'{new}'"):
+                declared_model_type(entry)
+
     def test_explicit_type_wins(self) -> None:
-        entry = {"type": "llm", "capabilities": ["embedding"]}
+        entry = {"type": "llm", "capabilities": ["embeddings"]}
         assert declared_model_type(entry) == "llm"
 
     def test_an_unknown_type_is_kept(self) -> None:
-        """Only canonicalised, not validated: the pools skip it themselves."""
+        """Not validated against the registry: the pools skip it themselves."""
         assert declared_model_type({"type": "ghost"}) == "ghost"
 
     def test_a_bare_string_is_not_a_capability_list(self) -> None:
@@ -67,9 +76,8 @@ class TestBuiltinRegistration:
         assert desc.name == "llm"
 
     def test_embedding_registered(self) -> None:
-        # The legacy spelling resolves to the canonical descriptor, which is
-        # the compatibility the config and shim loaders rely on.
-        desc = get_model_type("embedding")
+        assert get_model_type("embedding") is None
+        desc = get_model_type("embeddings")
         assert desc is not None
         assert desc.name == "embeddings"
 
@@ -149,13 +157,13 @@ class TestEmbeddingDescriptor:
     """Verify the embedding type descriptor properties."""
 
     def test_embedding_routes(self) -> None:
-        desc = get_model_type("embedding")
+        desc = get_model_type("embeddings")
         assert desc is not None
         paths = [r.path for r in desc.routes]
         assert "/v1/embeddings" in paths
 
     def test_embeddings_formats(self) -> None:
-        desc = get_model_type("embedding")
+        desc = get_model_type("embeddings")
         assert desc is not None
         assert "openai" in desc.formats
         assert "jina" in desc.formats
@@ -163,30 +171,30 @@ class TestEmbeddingDescriptor:
         assert "voyage" in desc.formats
 
     def test_embedding_no_streaming(self) -> None:
-        desc = get_model_type("embedding")
+        desc = get_model_type("embeddings")
         assert desc is not None
         assert desc.supports_streaming is False
 
     def test_embedding_config_keys(self) -> None:
-        desc = get_model_type("embedding")
+        desc = get_model_type("embeddings")
         assert desc is not None
         assert desc.config_format_key == "embeddings_format"
         assert desc.config_path_key == "embeddings_path"
         assert desc.default_path == "/v1/embeddings"
 
     def test_embedding_is_not_llm(self) -> None:
-        desc = get_model_type("embedding")
+        desc = get_model_type("embeddings")
         assert desc is not None
         assert desc.is_llm is False
 
     def test_embedding_icon_svg(self) -> None:
-        desc = get_model_type("embedding")
+        desc = get_model_type("embeddings")
         assert desc is not None
         assert desc.icon_svg.startswith("<svg")
         assert "</svg>" in desc.icon_svg
 
     def test_embedding_color(self) -> None:
-        desc = get_model_type("embedding")
+        desc = get_model_type("embeddings")
         assert desc is not None
         assert desc.color == "var(--info)"
 
@@ -246,12 +254,12 @@ class TestDecisionDescriptor:
     """Verify the decision type descriptor properties."""
 
     def test_decision_registered(self) -> None:
-        desc = get_model_type("decision")
+        desc = get_model_type("decisions")
         assert desc is not None
         assert desc.name == "decisions"
 
     def test_decision_routes(self) -> None:
-        desc = get_model_type("decision")
+        desc = get_model_type("decisions")
         assert desc is not None
         paths = [r.path for r in desc.routes]
         assert "/v1/decision" in paths
@@ -259,18 +267,18 @@ class TestDecisionDescriptor:
         assert "/v1/systemone" in paths
 
     def test_decisions_formats(self) -> None:
-        desc = get_model_type("decision")
+        desc = get_model_type("decisions")
         assert desc is not None
         assert "systemone" in desc.formats
         assert "openai_decisions" in desc.formats
 
     def test_decision_no_streaming(self) -> None:
-        desc = get_model_type("decision")
+        desc = get_model_type("decisions")
         assert desc is not None
         assert desc.supports_streaming is False
 
     def test_decision_config_keys(self) -> None:
-        desc = get_model_type("decision")
+        desc = get_model_type("decisions")
         assert desc is not None
         assert desc.config_format_key == "decisions_format"
         assert desc.config_path_key == "decisions_path"
@@ -278,29 +286,29 @@ class TestDecisionDescriptor:
 
     def test_decisions_path_follows_the_format(self) -> None:
         """The OpenAI format is served at its own path, System One at ours."""
-        desc = get_model_type("decision")
+        desc = get_model_type("decisions")
         assert desc is not None
         assert desc.path_for("openai_decisions") == "/v1/decisions"
         assert desc.path_for("systemone") == "/v1/systemone"
 
     def test_decision_badge_class(self) -> None:
-        desc = get_model_type("decision")
+        desc = get_model_type("decisions")
         assert desc is not None
         assert desc.badge_class == "cap-badge-decision"
 
     def test_decision_is_not_llm(self) -> None:
-        desc = get_model_type("decision")
+        desc = get_model_type("decisions")
         assert desc is not None
         assert desc.is_llm is False
 
     def test_decision_icon_svg(self) -> None:
-        desc = get_model_type("decision")
+        desc = get_model_type("decisions")
         assert desc is not None
         assert desc.icon_svg.startswith("<svg")
         assert "</svg>" in desc.icon_svg
 
     def test_decision_color(self) -> None:
-        desc = get_model_type("decision")
+        desc = get_model_type("decisions")
         assert desc is not None
         assert desc.color == "var(--purple)"
 
@@ -377,7 +385,7 @@ class TestConfigIntegration:
     def test_embeddings_formats_match_registry(self) -> None:
         from llm_rosetta_gateway.config import GatewayConfig
 
-        desc = get_model_type("embedding")
+        desc = get_model_type("embeddings")
         assert desc is not None
         # The static method delegates to the registry — results should
         # match the descriptor's formats.
@@ -393,9 +401,9 @@ class TestConfigIntegration:
     def test_formats_for_type_helper(self) -> None:
         from llm_rosetta_gateway.config import GatewayConfig
 
-        desc = get_model_type("embedding")
+        desc = get_model_type("embeddings")
         assert desc is not None
-        assert GatewayConfig._formats_for_type("embedding") == list(desc.formats)
+        assert GatewayConfig._formats_for_type("embeddings") == list(desc.formats)
         assert GatewayConfig._formats_for_type("nonexistent") == []
 
 
@@ -480,7 +488,7 @@ class TestDistributeTypedModels:
                 },
             },
             "models": {
-                "bge-m3": {"provider": "sf", "capabilities": ["embedding"]},
+                "bge-m3": {"provider": "sf", "capabilities": ["embeddings"]},
             },
         }
         config = GatewayConfig(raw)
@@ -501,7 +509,7 @@ class TestDistributeTypedModels:
                 },
             },
             "models": {
-                "decider": {"provider": "oa", "capabilities": ["decision"]},
+                "decider": {"provider": "oa", "capabilities": ["decisions"]},
             },
         }
         config = GatewayConfig(raw)
@@ -522,7 +530,7 @@ class TestDistributeTypedModels:
                 },
             },
             "models": {
-                "multi": {"provider": "sf", "capabilities": ["text", "embedding"]},
+                "multi": {"provider": "sf", "capabilities": ["text", "embeddings"]},
             },
         }
         config = GatewayConfig(raw)
@@ -683,7 +691,7 @@ class TestPipelineField:
     """Verify that non-LLM descriptors have a callable pipeline."""
 
     def test_embedding_pipeline_returns_handler(self) -> None:
-        desc = get_model_type("embedding")
+        desc = get_model_type("embeddings")
         assert desc is not None
         assert desc.pipeline is not None
         handler = desc.pipeline()
@@ -723,11 +731,11 @@ class TestResetRegistry:
         """Built-in types should be re-registered after reset."""
         _reset_registry()
         assert get_model_type("llm") is not None
-        assert get_model_type("embedding") is not None
+        assert get_model_type("embeddings") is not None
         assert get_model_type("rerank") is not None
         # Registered from its own function, so a reset that forgot it would
         # strip the type from every later test in the process.
-        assert get_model_type("decision") is not None
+        assert get_model_type("decisions") is not None
 
 
 # ---------------------------------------------------------------------------

@@ -173,7 +173,7 @@ class TestEmbeddingUpstreamModel:
                     "cohere": {
                         "api_key": "k",
                         "base_url": "https://api.cohere.com",
-                        "embedding_shim": "cohere--embedding",
+                        "embeddings_shim": "cohere--embedding",
                     }
                 },
                 "models": {"my-embed": {"provider": "cohere", "type": "embeddings"}},
@@ -204,7 +204,7 @@ class TestEmbeddingUpstreamModel:
                     "cohere": {
                         "api_key": "k",
                         "base_url": "https://api.cohere.com",
-                        "embedding_shim": "cohere--embedding",
+                        "embeddings_shim": "cohere--embedding",
                     }
                 },
                 "models": {"my-embed": {"provider": "cohere", "type": "embeddings"}},

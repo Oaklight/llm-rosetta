@@ -112,9 +112,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "FORMAT_SPECS",
             "MODEL_TYPES",
             "FormatSpec",
-            "canonical_model_type",
             "default_path",
-            "legacy_model_type",
             "spec_for",
             # Provider and shim names
             "ProviderType",

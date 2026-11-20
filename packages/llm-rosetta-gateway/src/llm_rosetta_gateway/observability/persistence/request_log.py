@@ -6,7 +6,6 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
-from llm_rosetta.api import canonical_model_type
 from llm_rosetta.observability.usage import DEFAULT_MODEL_TYPE
 
 from ._common import (
@@ -93,7 +92,7 @@ class _RequestLogMixin(_StoreState):
                     # would fall out of every model-type breakdown, and a row
                     # that no breakdown counts is a row the report cannot
                     # reconcile.
-                    canonical_model_type(e.get("model_type") or DEFAULT_MODEL_TYPE),
+                    e.get("model_type") or DEFAULT_MODEL_TYPE,
                     e.get("request_id"),
                     # Absent on a non-stream row and on every row written
                     # before the column existed.

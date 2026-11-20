@@ -7,6 +7,7 @@ from typing import Any
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from .._shared import (
+    retired_type_error,
     config_mutate,
     parse_json_body,
 )
@@ -31,9 +32,7 @@ def _add_new_models(
         if display_name in models_section:
             skipped.append(display_name)
             continue
-        from llm_rosetta.api import canonical_model_type
-
-        model_type = canonical_model_type(body.get("type", "llm"))
+        model_type = body.get("type", "llm")
         entry: dict[str, Any] = {
             "provider": provider,
             "capabilities": body.get("capabilities", ["text", "vision", "tools"]),
@@ -239,6 +238,10 @@ async def bulk_add_models(request: Any) -> Response:
     body, err = parse_json_body(request)
     if err:
         return err
+
+    retired = retired_type_error(body)
+    if retired is not None:
+        return retired
 
     provider = body.get("provider")
     models_to_add: list[str] = body.get("models", [])

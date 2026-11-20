@@ -7,6 +7,8 @@ import logging
 import os
 from typing import Any
 
+import pytest
+
 
 from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION, migrate
 
@@ -597,10 +599,14 @@ class TestConfigIOIntegration:
         assert on_disk["config_version"] == CURRENT_VERSION
         assert on_disk["models"]["bge-m3"]["type"] == "embeddings"
 
-    def test_a_capability_only_entry_its_provider_cannot_serve_stays_chat(
-        self, tmp_path
-    ):
-        """The negative case, end to end: no ``type`` on disk, chat in memory."""
+    def test_a_retired_capability_its_provider_cannot_serve_is_rejected(self, tmp_path):
+        """No ``type`` is written, so the retired capability name reaches the loader.
+
+        The migration writes a type only for an entry its provider can serve.
+        For any other the document keeps ``capabilities: ["embedding"]``, and
+        the loader rejects that spelling with its replacement rather than
+        guessing a chat model.
+        """
         config_path = str(tmp_path / "config.jsonc")
         old_config = {
             "config_version": 3,
@@ -618,13 +624,8 @@ class TestConfigIOIntegration:
 
         from llm_rosetta_gateway.config import load_gateway_config
 
-        config = load_gateway_config(config_path)
-
-        assert "m" in config.models
-        assert "m" not in config.embeddings_models
-        with open(config_path) as f:
-            on_disk = json.load(f)
-        assert "type" not in on_disk["models"]["m"]
+        with pytest.raises(ValueError, match="'embeddings'"):
+            load_gateway_config(config_path)
 
     def test_load_raw_migrates_preserving_env_vars(self, tmp_path):
         config_path = str(tmp_path / "config.jsonc")

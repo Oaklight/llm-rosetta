@@ -16,7 +16,6 @@ import pytest
 from llm_rosetta import ConversionPipeline, convert, convert_response, retired_names
 from llm_rosetta.auto_detect import get_converter_for_provider
 from llm_rosetta.converters.embeddings.pipeline import get_embedding_converter
-from llm_rosetta.formats import LEGACY_MODEL_TYPES, canonical_model_type
 from llm_rosetta.retired_names import (
     MODEL_TYPE,
     PROVIDER_TYPE,
@@ -111,11 +110,10 @@ def test_provider_type_literal_has_no_legacy_members() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_every_live_model_type_alias_has_a_row() -> None:
-    for old, new in LEGACY_MODEL_TYPES.items():
-        row = lookup(old, MODEL_TYPE)
-        assert row is not None, f"model type {old!r} is not in RETIRED_NAMES"
-        assert row.replacement == new
+def test_the_model_type_rows() -> None:
+    assert {row.name: row.replacement for row in MODEL_TYPE_ROWS} == dict(
+        embedding="embeddings", decision="decisions"
+    )
 
 
 def test_table_size_by_kind() -> None:
@@ -176,44 +174,113 @@ def test_unretired_names_get_no_hint(name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# The switch governs model types only
+# Every row raises; there is no switch
 # ---------------------------------------------------------------------------
 
 
-def test_switch_defaults_on() -> None:
-    assert retired_names.ALIASES_ENABLED is True
+def test_the_switch_is_gone() -> None:
+    assert not hasattr(retired_names, "ALIASES_ENABLED")
 
 
 @pytest.mark.parametrize("row", ROWS)
-def test_check_with_the_switch_on(row: retired_names.RetiredName) -> None:
-    """Provider-type and shim rows raise; model-type rows still translate."""
-    if row.kind == MODEL_TYPE:
-        check_not_retired(row.name, row.kind)
-        return
+def test_check_raises_for_every_row(row: retired_names.RetiredName) -> None:
     with pytest.raises(ValueError, match="was renamed") as info:
         check_not_retired(row.name, row.kind)
     assert row.replacement in str(info.value)
 
 
-@pytest.mark.parametrize("row", _ids(MODEL_TYPE_ROWS))
-def test_model_type_rows_raise_with_the_switch_off(
-    row: retired_names.RetiredName, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(retired_names, "ALIASES_ENABLED", False)
-    with pytest.raises(ValueError, match=row.replacement):
-        canonical_model_type(row.name)
-    with pytest.raises(ValueError, match=row.replacement):
-        resolve_model_type(row.name)
-
-
-def test_model_types_translate_with_the_switch_on() -> None:
-    assert canonical_model_type("embedding") == "embeddings"
-    assert canonical_model_type("decision") == "decisions"
+def test_check_tries_the_kinds_in_order() -> None:
+    with pytest.raises(ValueError, match="'google_generate'"):
+        check_not_retired("google", PROVIDER_TYPE, SHIM)
+    with pytest.raises(ValueError, match="'google--google_generate'"):
+        check_not_retired("google", SHIM, PROVIDER_TYPE)
 
 
 def test_non_string_is_ignored() -> None:
     check_not_retired(None, PROVIDER_TYPE, SHIM)
     check_not_retired(3, PROVIDER_TYPE, SHIM)
+
+
+def test_retired_key_message() -> None:
+    message = retired_names.retired_key_message("embedding_path", "embeddings_path")
+    assert "'embedding_path' was renamed to 'embeddings_path' in 0.14" in message
+    assert message.endswith(retired_names.MIGRATE_HINT)
+
+
+# ---------------------------------------------------------------------------
+# Retired model types fail at every library boundary
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("row", _ids(MODEL_TYPE_ROWS))
+def test_the_model_type_vocabulary_is_gone(row: retired_names.RetiredName) -> None:
+    import llm_rosetta.formats as formats
+
+    for name in ("LEGACY_MODEL_TYPES", "canonical_model_type", "legacy_model_type"):
+        assert not hasattr(formats, name), name
+
+
+@pytest.mark.parametrize("row", _ids(MODEL_TYPE_ROWS))
+def test_registry_and_pipelines_reject_a_retired_model_type(
+    row: retired_names.RetiredName,
+) -> None:
+    from llm_rosetta.api import typed_response_usage
+    from llm_rosetta.converters.registry import (
+        converter_map,
+        formats_for,
+        get_converter_class,
+    )
+    from llm_rosetta.fidelity import FidelityChecker
+
+    expected = repr(row.replacement)
+    with pytest.raises(ValueError, match=expected):
+        formats_for(row.name)
+    with pytest.raises(ValueError, match=expected):
+        converter_map(row.name)
+    with pytest.raises(ValueError, match=expected):
+        get_converter_class(row.name, "openai")
+    with pytest.raises(ValueError, match=expected):
+        typed_response_usage(row.name, "openai", {})
+    with pytest.raises(ValueError, match=expected):
+        FidelityChecker(model_type=row.name)
+    with pytest.raises(ValueError, match=expected):
+        resolve_model_type(row.name)
+    with pytest.raises(ValueError, match=expected):
+        ProviderShim(name="x", format="openai", model_type=row.name)
+
+
+@pytest.mark.parametrize("row", _ids(MODEL_TYPE_ROWS))
+def test_a_shim_yaml_with_a_retired_model_type_is_rejected(
+    row: retired_names.RetiredName, tmp_path
+) -> None:
+    from llm_rosetta.shims.providers import load_providers_from_dir
+
+    leaf = tmp_path / "leaf"
+    leaf.mkdir()
+    (leaf / "provider.yaml").write_text(
+        f"name: x\nmodel_type: {row.name}\nformat: openai\n"
+    )
+    with pytest.raises(ValueError, match=repr(row.replacement)):
+        load_providers_from_dir(tmp_path, on_error="raise")
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "fmt"),
+    [("embedding", "embeddings", "openai"), ("decision", "decisions", "systemone")],
+)
+def test_a_shim_yaml_with_a_retired_type_section_is_rejected(
+    old: str, new: str, fmt: str, tmp_path
+) -> None:
+    from llm_rosetta.shims.providers import load_providers_from_dir
+
+    leaf = tmp_path / "leaf"
+    leaf.mkdir()
+    (leaf / "provider.yaml").write_text(
+        f"name: x\nmodel_type: {new}\nformat: {fmt}\n{old}:\n  dimensions: 3\n"
+    )
+    with pytest.raises(ValueError) as info:
+        load_providers_from_dir(tmp_path, on_error="raise")
+    assert f"{old}:" in str(info.value) and f"{new}:" in str(info.value)
 
 
 # ---------------------------------------------------------------------------

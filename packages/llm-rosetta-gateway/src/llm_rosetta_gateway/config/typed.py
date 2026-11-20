@@ -19,57 +19,87 @@ if TYPE_CHECKING:
 logger = logging.getLogger("llm-rosetta-gateway")
 
 
-def legacy_config_key(key: str, type_name: str) -> str | None:
-    """The pre-rename spelling of *key*, when *type_name* was renamed.
+def retired_spellings(type_name: str) -> tuple[str, ...]:
+    """The retired spellings of the model type *type_name*.
 
-    ``embeddings_format`` → ``embedding_format``.  A config written before
-    the model type was renamed is rewritten by the load-time migration; this
-    is the read-side fallback for a programmatic config, or a file that could
-    not be written back (a read-only mount).
-
-    Args:
-        key: A config key derived from *type_name* (``embeddings_path``).
-        type_name: The canonical model type.
-
-    Returns:
-        The legacy key, or ``None`` when the type was never renamed or the
-        key does not carry the type's prefix.
+    ``embeddings`` was ``embedding``.  Empty for a type that was never renamed.
     """
-    from llm_rosetta.api import legacy_model_type
+    from llm_rosetta.api import retired_names
 
-    old = legacy_model_type(type_name)
-    prefix = f"{type_name}_"
-    if old is None or not key.startswith(prefix):
-        return None
-    return f"{old}_" + key[len(prefix) :]
+    return tuple(
+        row.name
+        for row in retired_names.RETIRED_NAMES
+        if row.kind == retired_names.MODEL_TYPE and row.replacement == type_name
+    )
+
+
+def reject_retired_keys(cfg: dict[str, Any], type_name: str) -> None:
+    """Raise if *cfg* carries a key spelled with a retired model type.
+
+    ``embedding_format``, ``embedding_path``, ``embedding_shim`` and the nested
+    ``embedding:`` block are no longer read: the config loader answers with the
+    key that replaces each, and the ``llm-rosetta-migrate`` command.
+
+    Raises:
+        ValueError: Naming the first such key and its replacement.
+    """
+    from llm_rosetta.api import retired_names
+
+    for old in retired_spellings(type_name):
+        prefix = f"{old}_"
+        for key in cfg:
+            if key == old or (isinstance(key, str) and key.startswith(prefix)):
+                new = type_name if key == old else f"{type_name}_" + key[len(prefix) :]
+                raise ValueError(retired_names.retired_key_message(str(key), new))
+
+
+def reject_retired_sections(raw: dict[str, Any], type_name: str) -> None:
+    """Raise if the config carries a key spelled with a retired model type.
+
+    The top-level ``embedding_providers``, ``embedding_models`` and
+    ``default_embedding_format``, and the ``embedding_*`` keys and ``embedding:``
+    block of any provider entry, are no longer read as the pools and endpoint
+    settings of ``embeddings``.  The check runs at load: an endpoint that fails
+    to parse is only disabled, and a retired spelling must not be quietly
+    dropped that way.
+
+    Raises:
+        ValueError: Naming the first such key and the key that replaces it.
+    """
+    from llm_rosetta.api import retired_names
+
+    for entry in (raw.get("providers") or {}).values():
+        if isinstance(entry, dict):
+            reject_retired_keys(entry, type_name)
+    for section in (
+        f"{type_name}_providers",
+        *(f"{old}_providers" for old in retired_spellings(type_name)),
+    ):
+        for entry in (raw.get(section) or {}).values():
+            if isinstance(entry, dict):
+                reject_retired_keys(entry, type_name)
+
+    for old in retired_spellings(type_name):
+        for key in raw:
+            if not isinstance(key, str):
+                continue
+            if key.startswith(f"{old}_"):
+                new = f"{type_name}_" + key[len(old) + 1 :]
+            elif key.startswith(f"default_{old}_"):
+                new = f"default_{type_name}_" + key[len(old) + 9 :]
+            else:
+                continue
+            raise ValueError(retired_names.retired_key_message(key, new))
 
 
 def _declared(cfg: dict[str, Any], key: str, type_name: str) -> Any:
-    """Read *key*, falling back to its pre-rename spelling.
+    """Read *key*: present and non-empty, or ``None``.
 
-    ``False`` is a value the endpoint flag relies on, so for an ``*_enabled``
-    key presence decides, not truthiness.  Every other key keeps the "an empty
-    value means the operator said nothing" rule: an empty canonical key still
-    falls through to the legacy spelling, so a stale file that carries both
-    does not lose the format it holds.
-
-    The fallback logs once per read so an operator sees which key to change;
-    the migration normally rewrites the file before this runs.
+    Presence decides, so ``False`` stays a value for an ``*_enabled`` key.
     """
-    if key in cfg and (cfg[key] or key.endswith("_enabled")):
+    if key in cfg:
         return cfg[key]
-    legacy = legacy_config_key(key, type_name)
-    if legacy is None or legacy not in cfg:
-        if key in cfg:
-            return cfg[key]
-        return None
-    logger.warning(
-        "config: %r is deprecated for the %s endpoint; use %r",
-        legacy,
-        type_name,
-        key,
-    )
-    return cfg[legacy]
+    return None
 
 
 def face_section(cfg: dict[str, Any], type_name: str) -> dict[str, Any]:
@@ -105,6 +135,7 @@ def face_section(cfg: dict[str, Any], type_name: str) -> dict[str, Any]:
         mapping is reported and treated as absent rather than crashing the
         parse of every other endpoint on the entry.
     """
+    reject_retired_keys(cfg, type_name)
     block = cfg.get(type_name)
     if block is None:
         return {}

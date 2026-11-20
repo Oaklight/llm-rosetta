@@ -20,15 +20,6 @@ from llm_rosetta.formats.spec import FormatSpec
 #: has no single endpoint.
 MODEL_TYPES: tuple[str, ...] = ("llm", "embeddings", "rerank", "decisions")
 
-#: Spellings an earlier release used for a category.  They are accepted at
-#: every boundary that takes a model type from outside the process — a shim's
-#: ``model_type``, a config key or ``type:`` value, a request parameter — and
-#: rewritten to the canonical name, so the alias never reaches stored state.
-LEGACY_MODEL_TYPES: dict[str, str] = {
-    "embedding": "embeddings",
-    "decision": "decisions",
-}
-
 #: Every format, in display order within its model type.  A pair is unique;
 #: format names are namespaced by the model type (``google_generate`` names
 #: both a chat and an embedding format).
@@ -189,59 +180,17 @@ def spec_for(model_type: str, format: str) -> FormatSpec | None:
     finds its record.
 
     Args:
-        model_type: A model type, canonical or legacy.
-        format: A format name; it is not alias-resolved.
+        model_type: A model type.
+        format: A format name.
 
     Returns:
         The :class:`FormatSpec`, or ``None`` when the pair is not in the catalog.
     """
-    return BY_PAIR.get((canonical_model_type(model_type), format))
-
-
-def canonical_model_type(name: str) -> str:
-    """The canonical spelling of the model type *name*.
-
-    The one place a legacy spelling is translated.  Callers pass the result
-    to anything that stores or compares a model type; the legacy name itself
-    is never persisted.
-
-    Args:
-        name: A model type as read from a shim, a config or a request.
-
-    Returns:
-        The canonical name, unchanged when *name* is already canonical (or is
-        not a known type at all).
-    """
-    from llm_rosetta import retired_names
-
-    if not retired_names.ALIASES_ENABLED:
-        retired_names.check_not_retired(name, retired_names.MODEL_TYPE)
-        return name
-    return LEGACY_MODEL_TYPES.get(name, name)
-
-
-def legacy_model_type(name: str) -> str | None:
-    """The spelling an earlier release used for canonical *name*, if any.
-
-    The reverse of :func:`canonical_model_type`, for a reader that must also
-    accept the old spelling of a key it derives (``embeddings_format`` →
-    ``embedding_format``).
-
-    Args:
-        name: A canonical model type.
-
-    Returns:
-        The legacy spelling, or ``None`` when the name was never renamed.
-    """
-    for old, new in LEGACY_MODEL_TYPES.items():
-        if new == name:
-            return old
-    return None
+    return BY_PAIR.get((model_type, format))
 
 
 def default_format(model_type: str) -> str:
     """The default (first listed) format of *model_type*."""
-    model_type = canonical_model_type(model_type)
     for spec in FORMAT_SPECS:
         if spec.model_type == model_type:
             return spec.format
@@ -250,6 +199,4 @@ def default_format(model_type: str) -> str:
 
 def default_path(model_type: str) -> str | None:
     """The upstream endpoint path of *model_type*'s default format."""
-    return BY_PAIR[
-        (canonical_model_type(model_type), default_format(model_type))
-    ].default_path
+    return BY_PAIR[(model_type, default_format(model_type))].default_path

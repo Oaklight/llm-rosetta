@@ -15,6 +15,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import patch
 
+import pytest
+
 from llm_rosetta_gateway.config import GatewayConfig
 
 
@@ -211,12 +213,12 @@ class TestEmbeddingSection:
             {
                 "providers": {
                     "p": {
-                        "embedding_shim": "cohere--embedding",
+                        "embeddings_shim": "cohere--embedding",
                         "api_key": "k",
                         "base_url": "https://x",
                     }
                 },
-                "models": {"m": {"providers": ["p"], "type": "embedding"}},
+                "models": {"m": {"providers": ["p"], "type": "embeddings"}},
             }
         )
 
@@ -230,51 +232,38 @@ class TestEmbeddingSection:
             {
                 "providers": {
                     "p": {
-                        "embedding_shim": "cohere--embedding",
-                        "embedding_format": "openai",
+                        "embeddings_shim": "cohere--embedding",
+                        "embeddings_format": "openai",
                         "api_key": "k",
                         "base_url": "https://x",
                     }
                 },
-                "models": {"m": {"providers": ["p"], "type": "embedding"}},
+                "models": {"m": {"providers": ["p"], "type": "embeddings"}},
             }
         )
 
         assert cfg.resolve_embedding("m").params is None
 
-    def test_an_empty_canonical_key_falls_through_to_the_legacy_spelling(self) -> None:
-        """An empty value still means "the operator said nothing".
-
-        Only the ``*_enabled`` key decides by presence; every other key keeps
-        the fallback, so a stale file that carries both spellings does not
-        lose the format it holds.
-        """
-        cfg = GatewayConfig(
-            {
-                "providers": {
-                    "p": {
-                        "embeddings_format": "",
-                        "embedding_format": "jina",
-                        "base_url": "https://x",
-                    }
-                }
-            }
-        )
-        assert cfg.embeddings_providers["p"]["format"] == "jina"
-
-    def test_a_none_canonical_key_falls_through_too(self) -> None:
-        cfg = GatewayConfig(
-            {
-                "providers": {
-                    "p": {
-                        "embeddings_format": None,
-                        "embedding_format": "jina",
-                        "base_url": "https://x",
-                    }
-                }
-            }
-        )
-        assert cfg.embeddings_providers["p"]["format"] == "jina"
+    @pytest.mark.parametrize("canonical", ["", None, "jina"])
+    def test_a_retired_key_is_rejected_whatever_the_canonical_one_holds(
+        self, canonical
+    ) -> None:
+        """The retired spelling is an error, not a fallback for an empty value."""
+        with pytest.raises(ValueError) as info:
+            GatewayConfig(
+                dict(
+                    providers=dict(
+                        p=dict(
+                            embeddings_format=canonical,
+                            embedding_format="jina",
+                            base_url="https://x",
+                        )
+                    )
+                )
+            )
+        message = str(info.value)
+        assert "'embedding_format' was renamed to 'embeddings_format'" in message
+        assert "llm-rosetta-migrate" in message
 
     def test_a_quoted_flag_warns_and_leaves_the_endpoint_enabled(self) -> None:
         """``"false"`` is a string, not a switch: say so instead of guessing."""
@@ -440,49 +429,28 @@ class TestDecisionSection:
         assert "multi" not in cfg.decisions_providers
         assert "_auto_disabled_endpoints" not in raw["providers"]["multi"]
 
-    def test_the_endpoint_flag_accepts_the_legacy_spelling(self) -> None:
+    def test_the_retired_endpoint_flag_is_rejected(self) -> None:
+        with pytest.raises(ValueError, match="'decision_enabled' was renamed"):
+            GatewayConfig(
+                dict(
+                    providers=dict(
+                        p=dict(base_url="https://x", decision_enabled=False)
+                    ),
+                    decisions_providers=dict(
+                        p=dict(base_url="https://x", decision_enabled=False)
+                    ),
+                )
+            )
+
+    def test_the_endpoint_flag_decides_by_presence(self) -> None:
         cfg = GatewayConfig(
-            {
-                "decisions_providers": {
-                    "p": {"base_url": "https://x", "decision_enabled": False}
-                }
-            }
+            dict(
+                decisions_providers=dict(
+                    p=dict(base_url="https://x", decisions_enabled=False)
+                )
+            )
         )
         assert "p" not in cfg.decisions_providers
-
-    def test_the_canonical_flag_wins_when_both_spellings_are_present(self) -> None:
-        """Presence, not truthiness: the canonical `False` is the answer.
-
-        Without the `*_enabled` carve-out the falsy canonical value would fall
-        through to the legacy `True` and the endpoint would stay in the pool.
-        """
-        cfg = GatewayConfig(
-            {
-                "decisions_providers": {
-                    "p": {
-                        "base_url": "https://x",
-                        "decisions_enabled": False,
-                        "decision_enabled": True,
-                    }
-                }
-            }
-        )
-        assert "p" not in cfg.decisions_providers
-
-    def test_an_empty_canonical_flag_does_not_fall_through(self) -> None:
-        """The flag decides by presence, so an empty canonical value wins too."""
-        cfg = GatewayConfig(
-            {
-                "decisions_providers": {
-                    "p": {
-                        "base_url": "https://x",
-                        "decisions_enabled": "",
-                        "decision_enabled": False,
-                    }
-                }
-            }
-        )
-        assert "p" in cfg.decisions_providers
 
     def test_an_enabled_flag_participates_as_usual(self) -> None:
         cfg = GatewayConfig(

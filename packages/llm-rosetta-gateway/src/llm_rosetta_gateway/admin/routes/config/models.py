@@ -8,6 +8,7 @@ from typing import Any
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from .._shared import (
+    retired_type_error,
     config_mutate,
     parse_json_body,
 )
@@ -117,11 +118,9 @@ def _build_model_entry(
     render (yet) is carried over rather than silently dropped by a save that
     never knew about it.
     """
-    from llm_rosetta.api import canonical_model_type
-
     from ....model_types import registered_type_names
 
-    model_type = canonical_model_type(body.get("type", "llm"))
+    model_type = body.get("type", "llm")
     valid_types = registered_type_names()
     if model_type not in valid_types:
         # Fall back to "llm" for unrecognised types — maintains backward
@@ -291,9 +290,7 @@ def _update_multi_provider_entry(
         _append_lane(existing, provider, body)
     if "capabilities" in body:
         existing["capabilities"] = body["capabilities"]
-    from llm_rosetta.api import canonical_model_type
-
-    model_type = canonical_model_type(body["type"]) if body.get("type") else None
+    model_type = body["type"] if body.get("type") else None
     if model_type and model_type != "llm":
         existing["type"] = model_type
     elif "type" in existing and (not model_type or model_type == "llm"):
@@ -461,6 +458,10 @@ async def put_model(request: Any, **kwargs: Any) -> Response:
     body, err = parse_json_body(request)
     if err:
         return err
+
+    retired = retired_type_error(body)
+    if retired is not None:
+        return retired
 
     provider = body.get("provider")
     if not provider:

@@ -47,81 +47,46 @@ def test_a_provider_without_endpoint_failures_has_no_marker():
     assert "_auto_disabled_endpoints" not in masked
 
 
-def test_a_legacy_endpoint_flag_is_spelled_the_way_the_panel_reads_it():
-    """The parser honours `embedding_enabled`; the panel reads the canonical key.
-
-    Without the normalisation the card shows an endpoint as enabled while the
-    gateway has already stopped routing to it.
-    """
+def test_a_flat_endpoint_flag_is_folded_into_the_face_block():
+    """The panel reads the face block; the flat canonical key reaches it."""
     masked = _mask_provider_entry(
         "p",
-        {
-            "type": "openai",
-            "base_url": "https://a.example/v1",
-            "embedding_enabled": False,
-        },
+        dict(type="openai", base_url="https://a.example/v1", embeddings_enabled=False),
     )
 
-    assert masked["embeddings_enabled"] is False
+    assert masked["embeddings"] == dict(enabled=False)
 
 
-def test_the_canonical_flag_wins_over_the_legacy_one():
+def test_the_flat_endpoint_keys_reach_the_panel_in_the_face_block():
     masked = _mask_provider_entry(
         "p",
-        {
-            "type": "openai",
-            "base_url": "https://a.example/v1",
-            "embeddings_enabled": True,
-            "embedding_enabled": False,
-        },
+        dict(
+            base_url="https://a.example/v1",
+            embeddings_format="cohere",
+            embeddings_path="/v2/embed",
+            embeddings_shim="cohere--embedding",
+        ),
     )
 
-    assert masked["embeddings_enabled"] is True
+    assert masked["embeddings"] == dict(
+        shim="cohere--embedding", format="cohere", path="/v2/embed"
+    )
 
 
-def test_the_legacy_endpoint_keys_reach_the_panel_under_their_canonical_names():
-    """The capability is invisible without them: `_getProviderCaps` reads the
-    canonical format/shim keys, so a pre-rename provider showed as LLM-only and
-    the next save dropped the endpoint."""
+def test_a_retired_endpoint_key_is_not_translated_for_the_panel():
+    """The loader rejects ``embedding_*``; the payload does not paper over it."""
     masked = _mask_provider_entry(
         "p",
-        {
-            "base_url": "https://a.example/v1",
-            "embedding_format": "cohere",
-            "embedding_path": "/v2/embed",
-            "embedding_shim": "cohere--embedding",
-        },
+        dict(
+            base_url="https://a.example/v1",
+            embedding_format="cohere",
+            embedding_enabled=False,
+        ),
     )
 
-    assert masked["embeddings_format"] == "cohere"
-    assert masked["embeddings_path"] == "/v2/embed"
-    assert masked["embeddings_shim"] == "cohere--embedding"
-
-
-def test_a_non_empty_canonical_key_wins_over_the_legacy_one():
-    masked = _mask_provider_entry(
-        "p",
-        {
-            "base_url": "https://a.example/v1",
-            "embeddings_format": "openai",
-            "embedding_format": "cohere",
-        },
-    )
-
-    assert masked["embeddings_format"] == "openai"
-
-
-def test_an_empty_canonical_key_falls_through_to_the_legacy_one():
-    masked = _mask_provider_entry(
-        "p",
-        {
-            "base_url": "https://a.example/v1",
-            "embeddings_format": "",
-            "embedding_format": "cohere",
-        },
-    )
-
-    assert masked["embeddings_format"] == "cohere"
+    assert "embeddings_format" not in masked
+    assert "embeddings_enabled" not in masked
+    assert "embeddings" not in masked
 
 
 def test_a_non_mapping_marker_is_dropped():

@@ -2,46 +2,31 @@
 
 This table is an **error table, not an alias table**.  A name listed here is
 a spelling an earlier release accepted for a provider type, a shim or a model
-type.  The provider-type and shim spellings are no longer translated
-(:mod:`llm_rosetta.provider_names` is gone, #919): a name listed here must not
-fall through to "unknown type" or "no base_url configured", so it fails with a
-message that names its replacement.  This module supplies that message.  The
-model-type spellings (``embedding``, ``decision``) are still translated by
-:data:`llm_rosetta.formats.LEGACY_MODEL_TYPES` until their own removal.
+type.  No spelling is translated any more (the alias tables are gone, #919): a
+name listed here must not fall through to "unknown type" or "no base_url
+configured", so it fails with a message that names its replacement and ends
+with the ``llm-rosetta-migrate`` command.  This module supplies that message.
 
-The module has no imports from the rest of the package, so the core library,
-the gateway and the alias tables can all read it without a cycle.  Core owns
-it (rather than the gateway) because the library entry points
-(``convert()``, ``ConversionPipeline``, ``get_converter_for_provider``)
-receive retired names too, and core must not import the gateway.
+The module has no imports from the rest of the package, so the core library
+and the gateway can both read it without a cycle.  Core owns it (rather than
+the gateway) because the library entry points (``convert()``,
+``ConversionPipeline``, ``get_converter_for_provider``) receive retired names
+too, and core must not import the gateway.
 
-The switch
-----------
-
-:data:`ALIASES_ENABLED` now governs the ``model_type`` rows only.  Provider
-type and shim rows always raise: their alias tables were deleted, so there is
-nothing left to switch on.  While the flag is ``True`` (the default) the
-legacy model-type spellings still translate; with it ``False`` they raise
-:class:`ValueError` carrying :func:`retired_name_message`.  Removing the
-model-type aliases deletes the flag; the table stays.
+Every row raises: there is no switch.  :func:`check_not_retired` is the one
+call a boundary makes.
 
 Retiring a name
 ---------------
 
 Add one :class:`RetiredName` row.  Never edit a row's meaning and never reuse
 a retired name for something new: a row says what the name *used to* mean.
-A test keeps every key of the live alias tables covered and rejects a chain
-(a replacement that is itself retired).
+A test rejects a chain (a replacement that is itself retired).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-
-#: Switch for the ``model_type`` rows only.  ``True``: ``embedding`` /
-#: ``decision`` still translate.  ``False``: they raise a ValueError naming the
-#: replacement.  Provider-type and shim rows ignore it and always raise.
-ALIASES_ENABLED: bool = True
 
 #: Release that renamed these names, for the message.
 RENAMED_IN = "0.14"
@@ -194,7 +179,7 @@ RETIRED_NAMES: tuple[RetiredName, ...] = (
         kind=SHIM,
         preset="asksage",
     ),
-    # -- model types (formats.LEGACY_MODEL_TYPES) ---------------------------
+    # -- model types ---------------------------------------------------------
     RetiredName(name="embedding", replacement="embeddings", kind=MODEL_TYPE),
     RetiredName(name="decision", replacement="decisions", kind=MODEL_TYPE),
 )
@@ -251,12 +236,26 @@ def retired_name_message(name: str, kind: str) -> str | None:
     return f"{message}; {MIGRATE_HINT}"
 
 
+def retired_key_message(old: str, new: str) -> str:
+    """Return the sentence for a config key whose spelling was retired.
+
+    A key such as ``embedding_providers`` is a compound of a retired model
+    type, so it has no row of its own; the caller names its replacement.
+
+    Args:
+        old: The retired key.
+        new: The key that replaces it.
+    """
+    return (
+        f"config key {old!r} was renamed to {new!r} in {RENAMED_IN} "
+        f"and the old spelling is no longer accepted (use {new!r}); {MIGRATE_HINT}"
+    )
+
+
 def check_not_retired(name: object, *kinds: str) -> None:
     """Raise if *name* is retired under any of *kinds*.
 
-    Provider-type and shim rows always raise.  A ``model_type`` row raises only
-    once :data:`ALIASES_ENABLED` is ``False``.  A name that is not retired is
-    a no-op.
+    A name that is not retired is a no-op.
 
     Args:
         name: The name to check; a non-string is ignored.
@@ -268,15 +267,12 @@ def check_not_retired(name: object, *kinds: str) -> None:
     if not isinstance(name, str):
         return
     for kind in kinds:
-        if kind == MODEL_TYPE and ALIASES_ENABLED:
-            continue
         message = retired_name_message(name, kind)
         if message is not None:
             raise ValueError(message)
 
 
 __all__ = [
-    "ALIASES_ENABLED",
     "KINDS",
     "MIGRATE_HINT",
     "MODEL_TYPE",
@@ -287,5 +283,6 @@ __all__ = [
     "check_not_retired",
     "lookup",
     "replacement_for",
+    "retired_key_message",
     "retired_name_message",
 ]

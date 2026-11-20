@@ -233,6 +233,29 @@ def _migrate_v2_to_v3(raw: dict[str, Any]) -> None:
                 cfg["type"] = "decisions"
 
 
+def _in_current_spelling(cfg: dict[str, Any]) -> dict[str, Any]:
+    """A copy of a model entry with a retired type spelling read as its successor.
+
+    A v3 document spells a capability ``embedding``.  The loader rejects that
+    spelling now, so the migration that upgrades such a document reads it
+    through the retired-names table instead of through the loader's parser.
+    """
+    from llm_rosetta.api import retired_names
+
+    def current(name: Any) -> Any:
+        if not isinstance(name, str):
+            return name
+        return retired_names.replacement_for(name, retired_names.MODEL_TYPE) or name
+
+    entry = dict(cfg)
+    if "type" in entry:
+        entry["type"] = current(entry["type"])
+    caps = entry.get("capabilities")
+    if isinstance(caps, list):
+        entry["capabilities"] = [current(cap) for cap in caps]
+    return entry
+
+
 def _migrate_v3_to_v4(raw: dict[str, Any]) -> None:
     """Give a legacy capability-only model an explicit ``type``.
 
@@ -276,7 +299,7 @@ def _migrate_v3_to_v4(raw: dict[str, Any]) -> None:
     for cfg in models.values():
         if not isinstance(cfg, dict) or cfg.get("type"):
             continue
-        model_type = declared_model_type(cfg)
+        model_type = declared_model_type(_in_current_spelling(cfg))
         if model_type == "llm":
             continue
         if not serving:
@@ -285,6 +308,13 @@ def _migrate_v3_to_v4(raw: dict[str, Any]) -> None:
         if not any(name in serving.get(model_type, ()) for name in names):
             continue
         cfg["type"] = model_type
+
+
+#: The spellings the versioned migrations upgrade a document *from*.  These are
+#: the document's history, fixed in the migrations that rewrite them; they are
+#: not a vocabulary the loader accepts (a current document that spells them is
+#: rejected with the retired-names message).
+_PRE_RENAME_TYPE = dict(embeddings="embedding", decisions="decision")
 
 
 def _serving_providers(raw: dict[str, Any]) -> dict[str, set[str]]:
@@ -297,8 +327,6 @@ def _serving_providers(raw: dict[str, Any]) -> dict[str, set[str]]:
     question (it is disabled there with a reason), while whether the document
     routes the type at it is a document question.
     """
-    from llm_rosetta.api import legacy_model_type
-
     from ..config.typed import _typed_descriptors, parse_typed_config
 
     raw_providers = raw.get("providers") or {}
@@ -314,7 +342,7 @@ def _serving_providers(raw: dict[str, Any]) -> dict[str, set[str]]:
             global_proxy=proxy,
             refuse_unowned_minted=False,
         )[0]
-        old_name = legacy_model_type(descriptor.name)
+        old_name = _PRE_RENAME_TYPE.get(descriptor.name)
         legacy_raw = raw.get(f"{descriptor.name}_providers") or (
             raw.get(f"{old_name}_providers", {}) if old_name else {}
         )

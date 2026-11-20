@@ -14,10 +14,7 @@ from llm_rosetta.formats.batch import (
 from llm_rosetta.formats.catalog import (
     BY_PAIR,
     FORMAT_SPECS,
-    LEGACY_MODEL_TYPES,
     MODEL_TYPES,
-    canonical_model_type,
-    legacy_model_type,
     spec_for,
 )
 from llm_rosetta.formats.detect import DETECTORS, Detector, detect_format
@@ -33,15 +30,12 @@ __all__ = [
     "BatchSpec",
     "DETECTORS",
     "FORMAT_SPECS",
-    "LEGACY_MODEL_TYPES",
     "MODEL_TYPES",
     "Detector",
     "FormatSpec",
     "batch_spec_for",
     "batch_spec_for_dialect",
     "batch_specs_for_dialect",
-    "canonical_model_type",
     "detect_format",
-    "legacy_model_type",
     "spec_for",
 ]

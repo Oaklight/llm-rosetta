@@ -137,13 +137,30 @@ def register_model_type(descriptor: ModelTypeDescriptor) -> None:
 def get_model_type(name: str) -> ModelTypeDescriptor | None:
     """Return the descriptor for *name*, or ``None`` if not registered.
 
-    The legacy ``embedding`` spelling resolves to ``embeddings`` so a config
-    or a request written before the rename keeps working without every caller
-    restating the alias.
+    A retired spelling (``embedding``, ``decision``) is not registered either;
+    use :func:`retired_type_message` where one must be answered with its
+    replacement.
     """
-    from llm_rosetta.api import canonical_model_type
+    return MODEL_TYPE_REGISTRY.get(name)
 
-    return MODEL_TYPE_REGISTRY.get(canonical_model_type(name))
+
+def retired_type_message(name: object) -> str | None:
+    """Return the retired-names message when *name* is a retired model type.
+
+    For a boundary that reads a model type from a request or a config and
+    answers with an error rather than raising.
+
+    Args:
+        name: The model type as supplied; a non-string is not retired.
+
+    Returns:
+        The message naming the replacement and the migrate command, or ``None``.
+    """
+    from llm_rosetta.api import retired_names
+
+    if not isinstance(name, str):
+        return None
+    return retired_names.retired_name_message(name, retired_names.MODEL_TYPE)
 
 
 def all_model_types() -> list[ModelTypeDescriptor]:

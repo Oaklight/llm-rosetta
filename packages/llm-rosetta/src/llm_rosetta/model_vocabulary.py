@@ -9,15 +9,11 @@ initialising, without importing the converter package.
 from __future__ import annotations
 
 from llm_rosetta.formats import FORMAT_SPECS as _SPECS
-from llm_rosetta.formats import LEGACY_MODEL_TYPES, MODEL_TYPES
-from llm_rosetta.formats import canonical_model_type, legacy_model_type
+from llm_rosetta.formats import MODEL_TYPES
 
 __all__ = [
     "FORMATS_BY_TYPE",
-    "LEGACY_MODEL_TYPES",
     "MODEL_TYPES",
-    "canonical_model_type",
-    "legacy_model_type",
 ]
 
 #: Formats within each category, in catalog (display) order.

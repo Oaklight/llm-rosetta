@@ -24,7 +24,7 @@ from llm_rosetta.converters.rerank.pipeline import (
     get_rerank_converter,
     response_usage as _rerank_usage,
 )
-from llm_rosetta.formats import canonical_model_type
+from llm_rosetta import retired_names
 
 _USAGE_READERS = {
     "embeddings": _embedding_usage,
@@ -58,9 +58,9 @@ def typed_response_usage(
         ValueError: *model_type* is not a typed family (``llm`` has no
             separate usage reader).
     """
-    canonical = canonical_model_type(model_type)
-    reader = _USAGE_READERS.get(canonical)
+    reader = _USAGE_READERS.get(model_type)
     if reader is None:
+        retired_names.check_not_retired(model_type, retired_names.MODEL_TYPE)
         raise ValueError(
             f"no typed usage reader for model type {model_type!r}; "
             f"expected one of {sorted(_USAGE_READERS)}"

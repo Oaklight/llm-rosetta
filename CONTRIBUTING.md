@@ -102,10 +102,9 @@ alias: the old name fails with a message that names the replacement instead of
 
 Add the row in the same PR that renames. Never edit an existing row and never
 give a retired name a new meaning. A replacement must not itself be retired.
-`tests/test_retired_names.py` fails when a row forms a chain or a live legacy
-model type has no row. Provider-type and shim rows always raise;
-`retired_names.ALIASES_ENABLED` now switches only the model-type rows (their
-aliases are still live).
+`tests/test_retired_names.py` fails when a row forms a chain, and checks that
+every row raises at the boundaries that read a name.  A retired name always
+raises; there is no switch.
 
 ## Checking that a refactor is a pure move
 
