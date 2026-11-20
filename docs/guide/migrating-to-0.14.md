@@ -6,7 +6,7 @@ title: Migrating to 0.14
 
 Release 0.14.0 removes the deprecated import paths and class aliases that 0.13.0 kept for one release (epic [#919](https://github.com/Oaklight/llm-rosetta/issues/919)). A removed name fails with a plain `ImportError`, `ModuleNotFoundError` or `AttributeError`; the [retired-names](#retired-names) diagnostic covers provider, shim and model-type names, not Python import paths. This page lists what is gone, what replaces it, and what still works.
 
-Every row below was checked against `origin/master` (commit `1ef424793a`): each removed name fails to import, and each replacement imports.
+Every row below was checked against `origin/master` (commit `756f084169`): each removed name fails to import, and each replacement imports.
 
 ## Removed converter packages {#removed-converter-packages}
 
@@ -46,6 +46,31 @@ The four names are gone from `llm_rosetta`, `llm_rosetta.converters`, `llm_roset
 | `OpenAIResponsesStreamContext` | `OpenResponsesStreamContext` |
 
 The `OpenResponses*` names live in `llm_rosetta.converters.llm.open_responses`. `OpenAIResponsesConverter` is a real class (the OpenAI profile of the Open Responses converter) and is **not** removed.
+
+## Removed helper modules, gateway stubs and `tool_ops` aliases {#removed-shims}
+
+Removed in [#1647](https://github.com/Oaklight/llm-rosetta/pull/1647). The shims had said 0.16.0; they are gone in 0.14.0. Importing a removed path raises `ModuleNotFoundError`.
+
+| Removed import path | Use instead |
+| --- | --- |
+| `llm_rosetta.converters.base.helpers.cache_breakpoints` | `llm_rosetta.ir.primitives.cache_breakpoints` |
+| `llm_rosetta.converters.base.helpers.image_limit` | `llm_rosetta.ir.primitives.image_limit` |
+| `llm_rosetta.converters.base.helpers.system_message_hoist` | `llm_rosetta.ir.primitives.system_message_hoist` |
+| `llm_rosetta_gateway.auth` | `llm_rosetta_gateway.middleware.auth` |
+| `llm_rosetta_gateway.headers` | `llm_rosetta_gateway.middleware.headers` |
+| `llm_rosetta_gateway.embeddings` | `llm_rosetta_gateway.pipelines.embeddings` |
+| `llm_rosetta_gateway.migrations` | `llm_rosetta_gateway.maintenance.migrations` |
+
+| Removed `llm_rosetta.tool_ops` function | Use instead |
+| --- | --- |
+| `to_openai_chat` | `to_chat_completions` |
+| `from_openai_chat` | `from_chat_completions` |
+| `to_openai_responses` | `to_open_responses` |
+| `from_openai_responses` | `from_open_responses` |
+| `to_anthropic` | `to_messages` |
+| `from_anthropic` | `from_messages` |
+
+`tool_ops.to_provider` and the other provider-keyed functions no longer accept the old provider spellings (`openai_chat`, `anthropic`, `google-genai` and the rest of the [provider types](#provider-types) table). They raise `ValueError`, and the message names the replacement, for example `'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions')`.
 
 ## Find the old names in your code {#find-old-names}
 
