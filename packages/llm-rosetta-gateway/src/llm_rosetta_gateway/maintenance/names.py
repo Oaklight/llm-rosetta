@@ -13,7 +13,9 @@ from __future__ import annotations
 from typing import Any
 
 
-def _retired_error(name: str, value: str, kinds: tuple[str, ...]) -> str | None:
+def _retired_error(
+    name: str, slot: str, value: str, kinds: tuple[str, ...]
+) -> str | None:
     """The message for *value* when it is retired under one of *kinds*.
 
     The message is the retired-names diagnostic: it names the replacement, the
@@ -26,7 +28,8 @@ def _retired_error(name: str, value: str, kinds: tuple[str, ...]) -> str | None:
         row = retired_names.lookup(value, kind)
         if row is None:
             continue
-        return f"provider {name!r}: {retired_names.retired_name_message(value, kind)}"
+        message = retired_names.retired_name_message(value, kind)
+        return f"providers.{name}.{slot}: provider {name!r}: {message}"
     return None
 
 
@@ -47,16 +50,16 @@ def legacy_name_error(providers: dict[str, Any]) -> str | None:
             continue
         shim = cfg.get("shim")
         if isinstance(shim, str):
-            error = _retired_error(name, shim, (retired_names.SHIM,))
+            error = _retired_error(name, "shim", shim, (retired_names.SHIM,))
             if error is not None:
                 return error
         typ = cfg.get("type")
         if isinstance(typ, str):
-            error = _retired_error(name, typ, (retired_names.PROVIDER_TYPE,))
+            error = _retired_error(name, "type", typ, (retired_names.PROVIDER_TYPE,))
             if error is not None:
                 return error
             if typ not in BASE_FORMATS:
-                error = _retired_error(name, typ, (retired_names.SHIM,))
+                error = _retired_error(name, "type", typ, (retired_names.SHIM,))
                 if error is not None:
                     return error
     return None

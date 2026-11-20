@@ -12,6 +12,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
+from .errors import RetiredConfigName
 from ..routing import ModelRoute, ProviderEntry, strategy_for
 from ..routing.model_routing import parse_model_routing, routing_from_legacy
 
@@ -602,7 +603,17 @@ def declared_provider_entries(value: Any, *, label: str = "model") -> list[Any]:
     return kept
 
 
-def declared_model_type(value: Any) -> str:
+def _check_model_type(name: Any, where: str | None) -> None:
+    """Raise :class:`RetiredConfigName` when *name* is a retired model type."""
+    from llm_rosetta.api import retired_names
+
+    try:
+        retired_names.check_not_retired(name, retired_names.MODEL_TYPE)
+    except ValueError as exc:
+        raise RetiredConfigName(str(exc), where=where) from None
+
+
+def declared_model_type(value: Any, where: str | None = None) -> str:
     """The model type a ``models`` entry declares.
 
     An explicit ``type`` is authoritative and is not validated against the
@@ -623,29 +634,29 @@ def declared_model_type(value: Any) -> str:
 
     Args:
         value: One entry of the ``models`` section.
+        where: Its JSON path (``models.<name>``), named in the error for a
+            retired spelling.
 
     Returns:
         A model type name; ``"llm"`` when the entry declares none.
 
     Raises:
-        ValueError: If the entry spells its type with a retired name.
+        RetiredConfigName: If the entry spells its type with a retired name.
     """
-    from llm_rosetta.api import retired_names
-
     from ..model_types import registered_type_names
 
     if not isinstance(value, dict):
         return "llm"
     declared = value.get("type")
     if declared:
-        retired_names.check_not_retired(declared, retired_names.MODEL_TYPE)
+        _check_model_type(declared, f"{where}.type" if where else None)
         return declared
 
     caps = value.get("capabilities")
     if not isinstance(caps, list) or "text" in caps:
         return "llm"
-    for cap in caps:
-        retired_names.check_not_retired(cap, retired_names.MODEL_TYPE)
+    for index, cap in enumerate(caps):
+        _check_model_type(cap, f"{where}.capabilities[{index}]" if where else None)
     declared_types = {cap for cap in caps if isinstance(cap, str)}
     for name in registered_type_names():
         if name != "llm" and name in declared_types:
@@ -684,7 +695,7 @@ def distribute_typed_models(config: GatewayConfig, raw_models: dict[str, Any]) -
             continue
         # An explicit ``type`` or the legacy capability-only spelling; the
         # pools are keyed by the canonical name.
-        model_type = declared_model_type(value)
+        model_type = declared_model_type(value, f"models.{name}")
         if model_type == "llm" or value.get("enabled") is False:
             continue
 

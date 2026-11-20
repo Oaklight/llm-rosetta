@@ -19,6 +19,7 @@ from llm_rosetta.routing import ResolvedRoute
 
 from ..providers import BASE_FORMATS
 from ..transport import ProviderInfo
+from .errors import RetiredConfigName
 from .schema import ProviderIdentity
 from .typed import resolve_endpoint_shim
 
@@ -156,7 +157,7 @@ def resolve_provider_identities(
     # not rewrite the config or resolve the old spelling at runtime.
     error = legacy_name_error(raw_providers)
     if error is not None:
-        raise ValueError(error)
+        raise RetiredConfigName(error)
 
     endpoint_types = [
         (desc.name, desc.config_shim_key, desc.config_format_key)
@@ -180,7 +181,10 @@ def resolve_provider_identities(
             kinds = (retired_names.PROVIDER_TYPE,)
             if name not in BASE_FORMATS:
                 kinds += (retired_names.SHIM,)
-            retired_names.check_not_retired(name, *kinds)
+            try:
+                retired_names.check_not_retired(name, *kinds)
+            except ValueError as exc:
+                raise RetiredConfigName(str(exc), where=f"providers.{name}") from None
             # Resolve through the shim registry too: a provider named after
             # a shim (e.g. ``openai--open_responses``) uses that shim's base
             # and keeps its identity, rather than being read as a bare format

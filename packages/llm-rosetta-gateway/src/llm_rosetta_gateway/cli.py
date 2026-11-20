@@ -8,7 +8,7 @@ import logging
 import os
 import subprocess
 import sys
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import asyncio
 
@@ -30,6 +30,7 @@ from .config import (
     load_config_raw,
     write_config,
 )
+from .config.errors import RetiredConfigName
 from .logging import get_logger, setup_logging
 from .providers import (
     get_default_api_key_env,
@@ -625,6 +626,8 @@ def _cmd_credential(args: argparse.Namespace) -> None:
         # That is a typing mistake, not a crash report.
         print(f"Cannot read config file {config_path}: {exc}", file=sys.stderr)
         sys.exit(1)
+    except RetiredConfigName as exc:
+        _exit_with_config_error(exc)
     _report_shim_sources(report)
 
     name: str = args.provider
@@ -793,6 +796,12 @@ def _report_shim_sources(report: ShimLoadReport | None) -> None:
         )
 
 
+def _exit_with_config_error(exc: Exception) -> NoReturn:
+    """Print a config error as one line, without a traceback, and exit 1."""
+    print(f"llm-rosetta-gateway: error: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+
 def _load_startup_config(
     config_path: str, args: argparse.Namespace
 ) -> tuple[GatewayConfig, ShimLoadReport | None]:
@@ -832,9 +841,12 @@ def _load_startup_config(
     recovery_result = asyncio.run(recovery.execute())
     if recovery_result.get("disabled"):
         logger.warning("Provider recovery disabled: %s", recovery_result["disabled"])
-    config = GatewayConfig(
-        raw_config, maintenance=reader.last_load_registry, config_path=config_path
-    )
+    try:
+        config = GatewayConfig(
+            raw_config, maintenance=reader.last_load_registry, config_path=config_path
+        )
+    except RetiredConfigName as exc:
+        raise exc.located(path=config_path) from None
     # The ops log is not open yet, so the run cannot record itself.  Leave the
     # result on the config; run_gateway writes the row once the log exists
     # (issue #1386: the startup disable was the one missing from the audit).
@@ -1088,7 +1100,10 @@ def main() -> None:  # noqa: C901
         )
         sys.exit(1)
 
-    config, shim_source_report = _load_startup_config(config_path, args)
+    try:
+        config, shim_source_report = _load_startup_config(config_path, args)
+    except RetiredConfigName as exc:
+        _exit_with_config_error(exc)
 
     # Resolve verbosity: CLI --verbose wins, then config/env, then --log-level
     verbose = args.verbose or config.verbose
