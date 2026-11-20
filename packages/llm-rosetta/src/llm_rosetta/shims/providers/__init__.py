@@ -175,6 +175,30 @@ from ._walk import (  # noqa: F401
     # ``load_providers_from_dir`` stays below: it reads ``_PROVIDERS_DIR`` here.
 )
 
+
+def validate_shim_declaration(
+    cfg: dict[str, Any], source: str | Path
+) -> tuple[str, str]:
+    """Check a parsed ``provider.yaml`` the way the loader does.
+
+    The one place a shim definition's ``(model_type, format)`` is validated, so
+    a host that accepts a definition (the admin editor) refuses exactly what
+    :func:`load_providers_from_dir` would, with the same message.
+
+    Args:
+        cfg: The parsed YAML mapping.
+        source: The file it came from, named in the error.
+
+    Returns:
+        The ``(format, model_type)`` pair the definition declares.
+
+    Raises:
+        ValueError: If the definition declares ``base:``, omits ``model_type`` or
+            ``format``, or names a retired or unknown format.
+    """
+    return _resolve_shim_pair(cfg, Path(source))
+
+
 #: The built-in providers root.  :func:`load_providers_from_dir` reads this
 #: attribute from the package at call time, so rebinding it redirects the scan.
 _PROVIDERS_DIR = Path(__file__).parent

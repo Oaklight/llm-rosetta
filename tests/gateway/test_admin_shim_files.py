@@ -117,7 +117,28 @@ class TestYamlProblem:
         assert _yaml_problem("name: [unclosed", "demo") is not None
 
     def test_rejects_a_missing_format(self):
-        assert _yaml_problem("name: demo\n", "demo") is not None
+        assert _yaml_problem("name: demo\nmodel_type: llm\n", "demo") is not None
+
+    def test_rejects_the_removed_base_key_like_the_loader(self, tmp_path: Path):
+        """The admin editor and the loader refuse a ``base:`` with one message."""
+        from llm_rosetta.shims.providers import load_providers_from_dir
+
+        text = "name: demo\nbase: chat_completions\n"
+        problem = _yaml_problem(text, "demo")
+        assert problem and "'base:' was removed in 0.14.0" in problem
+
+        leaf = tmp_path / "demo"
+        leaf.mkdir()
+        (leaf / "provider.yaml").write_text(text)
+        with pytest.raises(ValueError) as loader:
+            load_providers_from_dir(tmp_path, on_error="raise")
+        assert problem.split(": ", 1)[1] == str(loader.value).split(": ", 1)[1]
+
+    def test_rejects_a_retired_format_with_its_replacement(self):
+        problem = _yaml_problem(
+            "name: demo\nmodel_type: llm\nformat: openai_chat\n", "demo"
+        )
+        assert problem and "'chat_completions'" in problem
 
 
 @pytest.fixture()

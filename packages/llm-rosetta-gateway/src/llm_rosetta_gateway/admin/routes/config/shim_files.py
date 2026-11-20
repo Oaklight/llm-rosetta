@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from llm_rosetta_gateway._vendor.yaml import load as yaml_load
-from llm_rosetta.api import list_shims
+from llm_rosetta.api import list_shims, validate_shim_declaration
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from .._shared import (
@@ -86,7 +86,7 @@ def _yaml_meta(path: Path) -> dict[str, Any] | None:
     return {
         "name": cfg["name"],
         "model_type": model_type if isinstance(model_type, str) else "llm",
-        "format": cfg.get("format") or cfg.get("base") or "",
+        "format": cfg.get("format") or "",
         "display_name": cfg.get("display_name"),
         # A manifest-backed shim names the vendor it belongs to; a disabled
         # one is read from this index alone, and without the group it would
@@ -364,8 +364,10 @@ def _yaml_problem(text: str, name: str) -> str | None:
             f"The file declares name {cfg['name']!r}; rename a shim by creating "
             "a new directory instead of editing this one"
         )
-    if "format" not in cfg and "base" not in cfg:
-        return "The file must declare a 'format'"
+    try:
+        validate_shim_declaration(cfg, "provider.yaml")
+    except ValueError as exc:
+        return str(exc)
     return None
 
 
