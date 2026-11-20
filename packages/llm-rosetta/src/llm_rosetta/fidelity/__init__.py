@@ -8,8 +8,6 @@ the ``llm_rosetta.fidelity`` import path.
 
 from __future__ import annotations
 
-from llm_rosetta.provider_names import canonical_provider_name  # noqa: F401 (re-exported)
-
 from .baseline import (
     BASELINE_FORMAT_VERSION,
     BaselineComparisonReport,

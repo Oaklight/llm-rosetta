@@ -19,22 +19,9 @@ def get_model_list_transform(
 ) -> ModelListTransform | None:
     """Return the model_list_transform for *shim_name*, or ``None``.
 
-    Transforms are registered under the canonical shim name; a legacy spelling
-    (e.g. ``"kilo--chat_completions"``) is normalised before lookup so both resolve
-    to the same hook.
+    Transforms are registered under the canonical shim name.
     """
-    transform = _model_list_transforms.get(shim_name)
-    if transform is not None:
-        return transform
-    from llm_rosetta.provider_names import (
-        canonical_provider_name,
-        canonical_shim_name,
-    )
-
-    canonical = canonical_shim_name(canonical_provider_name(shim_name))
-    if canonical == shim_name:
-        return None
-    return _model_list_transforms.get(canonical)
+    return _model_list_transforms.get(shim_name)
 
 
 def register_model_list_transform(name: str, transform: ModelListTransform) -> None:

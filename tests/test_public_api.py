@@ -55,7 +55,6 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "convert",
             "convert_response",
             "ProviderType",
-            "normalize_provider_name",
             # Conversion pipeline
             "ConversionPipeline",
             "ConversionError",
@@ -85,7 +84,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
     },
     # The host-facing surface (#1630).  Re-exports only; a name enters it with a
     # gateway call site or an external-shim use.  The ceiling leaves room for
-    # the six functions added in PR 6 (``spec_for``, ``legacy_names``,
+    # the six functions added in PR 6 (``spec_for``, ``legacy_names`` (since removed),
     # ``typed_response_usage``, ``staging_registry``, ``reasoning_capability``,
     # ``describe_vendor_manifest``) and ``SURFACE_VERSION``.  The manifest-text
     # trio (``leaf_connection``, ``manifest_vocabulary``, ``merge_connection``)
@@ -120,12 +119,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "spec_for",
             # Provider and shim names
             "ProviderType",
-            "canonical_provider_name",
-            "canonical_shim_name",
-            "legacy_names",
             "retired_names",
-            "warn_legacy_provider_names",
-            "warn_legacy_shim_names",
             # Shim registry, read side
             "ConnectionConfig",
             "ProviderShim",

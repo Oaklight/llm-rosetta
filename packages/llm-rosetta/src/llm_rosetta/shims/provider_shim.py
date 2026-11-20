@@ -31,10 +31,7 @@ from llm_rosetta.model_vocabulary import (
     MODEL_TYPES,
     canonical_model_type,
 )
-from llm_rosetta.provider_names import (
-    canonical_provider_name,
-    canonical_shim_name,
-)
+from llm_rosetta import retired_names
 from llm_rosetta.transforms import IRTransform, Transform
 
 logger = logging.getLogger(__name__)
@@ -528,7 +525,8 @@ def _normalize_format_kwargs(kwargs: dict[str, Any]) -> None:
     """Fold the deprecated ``base`` keyword into ``format``.
 
     ``format`` is the canonical spelling; ``base`` is its deprecated alias.
-    Both are canonicalised, so the stored pair never carries a legacy spelling.
+    A retired format spelling (``openai_chat``, ``anthropic``) raises a
+    :class:`ValueError` that names its replacement.
     """
     if "base" in kwargs:
         warnings.warn(
@@ -536,21 +534,17 @@ def _normalize_format_kwargs(kwargs: dict[str, Any]) -> None:
             DeprecationWarning,
             stacklevel=3,
         )
-        legacy_base = canonical_provider_name(kwargs.pop("base"))
-        if "format" in kwargs:
-            canonical = canonical_provider_name(kwargs["format"])
-            if canonical != legacy_base:
-                raise ValueError(
-                    f"ProviderShim: base={legacy_base!r} disagrees with "
-                    f"format={canonical!r}"
-                )
-            kwargs["format"] = canonical
-        else:
-            kwargs["format"] = legacy_base
+        legacy_base = kwargs.pop("base")
+        if "format" in kwargs and kwargs["format"] != legacy_base:
+            raise ValueError(
+                f"ProviderShim: base={legacy_base!r} disagrees with "
+                f"format={kwargs['format']!r}"
+            )
+        kwargs["format"] = legacy_base
     if "format" in kwargs:
-        # Legacy spellings (openai_chat, anthropic, google) normalise to
-        # their canonical format; the stored pair is always canonical.
-        kwargs["format"] = canonical_provider_name(kwargs["format"])
+        # A retired spelling (openai_chat, anthropic, google) is an error that
+        # names its replacement, not a name the shim could be stored under.
+        retired_names.check_not_retired(kwargs["format"], retired_names.PROVIDER_TYPE)
 
 
 @dataclass(frozen=True)
@@ -986,16 +980,12 @@ def staging_registry() -> Iterator[dict[str, ProviderShim]]:
 # deliberately absent: ``openai``, ``cohere``, ``jina`` and ``voyage`` are also
 # vendor names, so a bare name is only resolved within a model-type context.
 _CHAT_FORMATS: frozenset[str] = frozenset(FORMATS_BY_TYPE["llm"])
-_NON_SHIM_NAMES: frozenset[str] = _CHAT_FORMATS | frozenset(MODEL_TYPES)
 
 
 def register_shim(shim: ProviderShim) -> None:
     """Register (or replace) a :class:`ProviderShim` in the global registry.
 
-    The shim is keyed by its **exact** declared name.  Only canonical names are
-    stored: :func:`get_shim` resolves legacy spellings on lookup (see
-    :data:`llm_rosetta.provider_names.LEGACY_SHIM_ALIASES`), so the registry
-    never holds an alias key that could shadow a real shim.
+    The shim is keyed by its **exact** declared name.
 
     If a shim with the same name is already registered, it is silently
     replaced and an INFO-level log is emitted.  This allows plugin shims
@@ -1012,50 +1002,22 @@ def register_shim(shim: ProviderShim) -> None:
 
 
 def unregister_shim(name: str) -> ProviderShim | None:
-    """Remove and return a shim by name.  Returns ``None`` if not found.
-
-    The exact name is tried first; only if that misses is *name* resolved to
-    its canonical *shim* spelling.  This internal lookup never warns.
-    """
-    registry = _current_registry()
-    shim = registry.pop(name, None)
-    if shim is None:
-        shim = registry.pop(canonical_shim_name(name), None)
-    return shim
+    """Remove and return a shim by name.  Returns ``None`` if not found."""
+    return _current_registry().pop(name, None)
 
 
 def get_shim(name: str) -> ProviderShim | None:
     """Look up a registered :class:`ProviderShim` by *name*.
 
-    The exact name is tried first, so a shim whose name is itself a legacy
-    alias (a plugin case) is reachable under that name.  A **bare chat format**
+    Only the exact registered name resolves.  A **bare chat format**
     (``chat_completions``, ``open_responses``, ``messages``, ``google_generate``,
-    ``google_interactions``) or a **model-type name** (``llm``, ``embedding``,
-    ``rerank``, ``decision``) is never a shim: it resolves to ``None`` so a
-    format name can never silently inherit a vendor shim's connection defaults
-    (#917).  Any other name falls back to its canonical *shim* spelling
-    (``LEGACY_SHIM_ALIASES``) and then to its canonical provider spelling, so a
-    shim registered under its canonical ``<provider>--<format>`` name stays
-    reachable via a legacy alias (e.g. ``"google"`` →
-    ``"google--google_generate"``, ``"openai_responses"`` →
-    ``"openai--open_responses"``).  This is an internal lookup and never warns.
+    ``google_interactions``), a **model-type name** and a retired spelling
+    (``"google"``, ``"openai_responses"``) are not shim names: each resolves to
+    ``None``, so a format name can never silently inherit a vendor shim's
+    connection defaults (#917).  The boundaries that accept names from outside
+    reject a retired spelling with the retired-names message instead.
     """
-    registry = _current_registry()
-    shim = registry.get(name)
-    if shim is not None:
-        return shim
-    if name in _NON_SHIM_NAMES:
-        return None
-    legacy_shim = canonical_shim_name(name)
-    if legacy_shim in _NON_SHIM_NAMES:
-        return None
-    shim = registry.get(legacy_shim)
-    if shim is not None:
-        return shim
-    provider = canonical_provider_name(name)
-    if provider in _NON_SHIM_NAMES:
-        return None
-    return registry.get(provider)
+    return _current_registry().get(name)
 
 
 def resolve_shim(shim: ProviderShim | str | None) -> ProviderShim | None:
@@ -1124,31 +1086,15 @@ def list_shims() -> list[ProviderShim]:
 def resolve_format(name: str) -> str:
     """Resolve a provider/shim *name* to its wire format.
 
-    An exact registered shim name is tried first, so a shim whose name is also
-    a legacy alias resolves to *its* declared format rather than being rewritten
-    (the OpenAI Responses profile ``"openai_responses"`` now normalises to the
-    ``"openai--open_responses"`` shim, whose format is ``"open_responses"``).
-    Otherwise legacy *name* inputs are resolved to canonical spellings (see
-    :func:`llm_rosetta.provider_names.canonical_provider_name`); this is an
-    internal lookup and never warns.  A shim's stored format is already
-    canonical.  If the normalised *name* is a known chat format or a model-type
-    name, it is returned unchanged.  If the name is not found in either, it is
-    returned as-is (caller decides how to handle unknown names).
+    An exact registered shim name is tried first.  If *name* is a known chat
+    format or a model-type name, it is returned unchanged.  If the name is not
+    found in either, it is returned as-is (caller decides how to handle unknown
+    names, including a retired spelling).
     """
-    registry = _current_registry()
-    shim = registry.get(name)
+    shim = _current_registry().get(name)
     if shim is not None:
         return shim.format
-    resolved = canonical_provider_name(name)
-    if resolved in _NON_SHIM_NAMES:
-        return resolved
-    shim = registry.get(resolved)
-    if shim is not None:
-        return shim.format
-    shim = registry.get(canonical_shim_name(name))
-    if shim is not None:
-        return shim.format
-    return resolved
+    return name
 
 
 def resolve_model_type(name: str) -> str | None:
@@ -1165,13 +1111,10 @@ def resolve_model_type(name: str) -> str | None:
         ``None`` when the name does not identify a category.  The legacy
         ``"embedding"`` spelling is canonicalised here.
     """
-    registry = _current_registry()
-    shim = registry.get(name)
-    if shim is None:
-        shim = registry.get(canonical_shim_name(name))
+    shim = _current_registry().get(name)
     if shim is not None:
         return shim.model_type
-    resolved = canonical_model_type(canonical_provider_name(name))
+    resolved = canonical_model_type(name)
     if resolved in MODEL_TYPES:
         return resolved
     if resolved in _CHAT_FORMATS:

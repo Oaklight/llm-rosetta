@@ -5,7 +5,6 @@ from __future__ import annotations
 import pytest
 
 import llm_rosetta.api as api
-from llm_rosetta.provider_names import LEGACY_PROVIDER_ALIASES, LEGACY_SHIM_ALIASES
 from llm_rosetta.shims import ProviderShim, ReasoningCapability
 from llm_rosetta.shims.provider_shim import get_shim, register_shim
 
@@ -83,22 +82,6 @@ def test_typed_usage_empty_or_unreadable_body_is_empty():
 def test_typed_usage_rejects_non_typed_model_type():
     with pytest.raises(ValueError):
         api.typed_response_usage("llm", "messages", {"usage": {}})
-
-
-# -------------------------------------------------------------- legacy_names
-def test_legacy_names_mirrors_the_tables():
-    names = api.legacy_names()
-    assert names["provider"] == LEGACY_PROVIDER_ALIASES
-    assert names["shim"] == LEGACY_SHIM_ALIASES
-    assert names["provider"] and names["shim"]
-
-
-def test_legacy_names_returns_copies():
-    names = api.legacy_names()
-    names["provider"]["zzz"] = "yyy"
-    names["shim"].clear()
-    assert "zzz" not in LEGACY_PROVIDER_ALIASES
-    assert LEGACY_SHIM_ALIASES
 
 
 # ------------------------------------------------------ reasoning_capability

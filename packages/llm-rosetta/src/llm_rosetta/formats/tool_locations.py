@@ -25,8 +25,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from typing import Any
 
-from llm_rosetta.provider_names import canonical_provider_name
-
 
 @dataclass(frozen=True)
 class ToolDeclaration:
@@ -98,7 +96,7 @@ def read_tool_declarations(provider: str, body: Any) -> list[ToolDeclaration]:
 
 
 def _format_name(provider: str) -> str:
-    """The format a provider/shim name denotes, with legacy spellings resolved.
+    """The format a provider/shim name denotes.
 
     Resolving shim names keeps a caller from having to know whether the route
     named a format or a vendor profile of one: ``openai--open_responses`` and
@@ -106,7 +104,7 @@ def _format_name(provider: str) -> str:
     """
     from llm_rosetta.shims.provider_shim import resolve_format
 
-    return resolve_format(canonical_provider_name(provider))
+    return resolve_format(provider)
 
 
 # ---------------------------------------------------------------------------

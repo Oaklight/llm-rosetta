@@ -13,7 +13,7 @@ were never its declared surface.
 from __future__ import annotations
 
 from llm_rosetta import fidelity, profiling, routing
-from llm_rosetta.fidelity import DEFAULT_SEVERITY_BY_KIND, canonical_provider_name
+from llm_rosetta.fidelity import DEFAULT_SEVERITY_BY_KIND
 from llm_rosetta.profiling import Profiler, TracingProfiler
 from llm_rosetta.routing import ProviderType, SoftErrorPattern
 
@@ -26,7 +26,6 @@ def test_routing_preserves_flat_module_names() -> None:
 
 
 def test_fidelity_preserves_flat_module_names() -> None:
-    assert fidelity.canonical_provider_name is canonical_provider_name
     assert fidelity.DEFAULT_SEVERITY_BY_KIND is DEFAULT_SEVERITY_BY_KIND
     # The constant is owned by the module, so it is declared API.
     assert "DEFAULT_SEVERITY_BY_KIND" in fidelity.__all__

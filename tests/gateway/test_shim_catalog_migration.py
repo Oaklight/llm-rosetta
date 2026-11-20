@@ -8,8 +8,8 @@ Both cases have to lead to the same two facts — the canonical spelling, and th
 preset that makes it loadable — so the catalogue records the legacy spellings
 and the advice sentences are built from that record.
 
-The catalogue is hand-maintained and the core alias table is separate, so the
-first tests here keep the two in step; the rest pin the sentences and the
+The catalogue is hand-maintained and the core retired-names table is separate,
+so the first tests here keep the two in step; the rest pin the sentences and the
 warning path that delivers them.
 """
 
@@ -19,7 +19,7 @@ import logging
 
 import pytest
 
-from llm_rosetta.provider_names import LEGACY_SHIM_ALIASES, canonical_shim_name
+from llm_rosetta import retired_names
 from llm_rosetta_gateway.providers import build_provider_info
 from llm_rosetta_gateway.shims import (
     SHIM_SOURCE_PACKAGES,
@@ -42,7 +42,7 @@ ALL_LEGACY_NAMES = pytest.mark.parametrize(
 
 
 class TestCatalogueAndAliasTableAgree:
-    """The catalogue's legacy names are only useful if they canonicalise."""
+    """The catalogue's legacy names are only useful if the table retires them."""
 
     @ALL_LEGACY_NAMES
     def test_every_legacy_name_resolves_within_its_package(self, package, legacy):
@@ -50,15 +50,17 @@ class TestCatalogueAndAliasTableAgree:
         assert canonical in package.shims, (legacy, canonical)
 
     @ALL_LEGACY_NAMES
-    def test_every_legacy_name_is_in_the_core_alias_table(self, package, legacy):
-        """A catalogue entry without an alias silently keeps the old spelling.
+    def test_every_legacy_name_is_in_the_retired_names_table(self, package, legacy):
+        """A catalogue entry without a row would not name its replacement.
 
-        The alias table is what rewrites the name before a lookup, so a legacy
-        name recorded only in the catalogue would still be handed to the shim
-        registry verbatim — the advice would then fire on a name the operator
-        never gets corrected to.
+        The retired-names table is what the config loader and the library
+        boundaries answer with, so a legacy name recorded only in the catalogue
+        would be rejected without saying what it became.
         """
-        assert canonical_shim_name(legacy) == canonical_shim_for(package, legacy)
+        row = retired_names.lookup(legacy, retired_names.SHIM)
+        assert row is not None
+        assert row.replacement == canonical_shim_for(package, legacy)
+        assert row.preset == package.key
 
     @ALL_LEGACY_NAMES
     def test_no_legacy_name_is_still_a_registered_shim(self, package, legacy):
@@ -70,21 +72,23 @@ class TestCatalogueAndAliasTableAgree:
         assert legacy not in {s.name for s in list_shims()}
         assert get_shim(legacy) is None
 
-    def test_every_alias_pointing_at_a_package_is_a_catalogue_name(self):
-        """The reverse direction: no alias invents a package name.
+    def test_every_retired_name_pointing_at_a_package_is_a_catalogue_name(self):
+        """The reverse direction: no row invents a package name.
 
-        ``LEGACY_SHIM_ALIASES`` also carries core renames, so only entries
-        whose target a package provides are checked — those must be listed in
-        that package's ``legacy_names``, or the advice lookup misses them.
+        The table also carries core renames, so only rows whose replacement a
+        package provides are checked — those must be listed in that package's
+        ``legacy_names``, or the advice lookup misses them.
         """
         catalogued = {
             (p.key, name) for p in SHIM_SOURCE_PACKAGES for name in p.legacy_names
         }
-        for old, new in LEGACY_SHIM_ALIASES.items():
-            package = find_source_package(new)
+        for row in retired_names.RETIRED_NAMES:
+            if row.kind != retired_names.SHIM:
+                continue
+            package = find_source_package(row.replacement)
             if package is None:
                 continue
-            assert (package.key, old) in catalogued, old
+            assert (package.key, row.name) in catalogued, row.name
 
     @ALL_PACKAGES
     def test_lookup_returns_the_owning_package(self, package):

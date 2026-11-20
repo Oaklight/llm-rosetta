@@ -212,15 +212,20 @@ class TestGatewayConfigView:
         # ...while the routing view still hides it.
         assert "off" not in config._raw_providers
 
-    def test_legacy_names_arrive_corrected(self, scheduled_minimax):
-        config = GatewayConfig(
-            {
-                "providers": {"p": {"shim": "minimax--anthropic", "api_key": "k"}},
-                "models": {"m": "p"},
-            }
-        )
-        assert config.raw_providers["p"]["shim"] == "minimax--messages"
-        advisories = shim_removal_advisories(config.raw_providers, None)
+    def test_legacy_names_are_rejected_with_the_replacement(self, scheduled_minimax):
+        with pytest.raises(ValueError, match="'minimax--messages'"):
+            GatewayConfig(
+                {
+                    "providers": {"p": {"shim": "minimax--anthropic", "api_key": "k"}},
+                    "models": {"m": "p"},
+                }
+            )
+
+    def test_a_legacy_name_in_a_raw_config_reports_the_current_shim(
+        self, scheduled_minimax
+    ):
+        raw = {"p": {"shim": "minimax--anthropic", "api_key": "k"}}
+        advisories = shim_removal_advisories(raw, None)
         assert [a.shim for a in advisories] == ["minimax--messages"]
 
 

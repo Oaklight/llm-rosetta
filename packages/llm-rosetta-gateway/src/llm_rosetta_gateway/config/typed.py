@@ -382,14 +382,12 @@ def parse_typed_provider(
 def typed_wire_format(
     cfg: dict[str, Any], keys: _TypedKeys, explicit_format: str, shim: Any
 ) -> str:
-    """The wire format an entry resolves to, canonicalised."""
-    from llm_rosetta.api import canonical_provider_name
-
+    """The wire format an entry resolves to."""
     if explicit_format:
-        return canonical_provider_name(explicit_format)
+        return explicit_format
     if shim is not None:
         return shim.format
-    return canonical_provider_name(cfg.get("type") or keys.default_format)
+    return cfg.get("type") or keys.default_format
 
 
 def typed_path(

@@ -8,75 +8,19 @@ Utility functions for auto-detecting LLM provider request body formats
 from typing import Any, Literal, cast
 
 from .formats.detect import detect_format as _detect_body
-from .provider_names import (
-    canonical_provider_name,
-    warn_legacy_provider_names,
-    warn_legacy_shim_names,
-)
 
-# Canonical provider/format names.  Legacy spellings are mapped onto these by
-# :func:`llm_rosetta.provider_names.canonical_provider_name` at every internal
-# lookup, after the public boundary (:func:`convert` / :func:`convert_response`
-# / :class:`~llm_rosetta.pipeline.ConversionPipeline`) has emitted the single
-# deprecation warning; see that module for the single alias table.  Legacy
-# entries are kept in the union for backward-compatible type hints.
+# Canonical provider/format names.  A retired spelling (``openai_chat``,
+# ``anthropic``, ``google``, ...) is not accepted: it fails with the
+# retired-names message, which names its replacement (see
+# :mod:`llm_rosetta.retired_names`).
 ProviderType = Literal[
     "chat_completions",
-    "openai_chat",  # legacy alias of "chat_completions"
     "open_responses",
-    # ``openai_responses`` is not a base type: it is a legacy alias of the
-    # ``openai--open_responses`` shim (an OpenAI profile over ``open_responses``).
     "messages",
-    "anthropic",  # legacy alias of "messages"
     "google_generate",
-    "google",  # legacy alias of "google_generate"
     "google_interactions",
     "decision",
 ]
-
-# Canonical base converter/format names.  A bare base format (e.g.
-# ``google_generate``) must not be mistaken for a legacy *shim* name that
-# merely shares its spelling: ``google_generate`` doubles as a legacy shim
-# alias for ``google--google_generate``, but at a provider/format boundary it
-# names the base format.
-_BASE_FORMAT_NAMES: frozenset[str] = frozenset(
-    {
-        "chat_completions",
-        "open_responses",
-        "messages",
-        "google_generate",
-        "google_interactions",
-        "decision",
-    }
-)
-
-
-def _legacy_shim_boundary_names(*names: str | None) -> list[str]:
-    """Filter user-supplied names down to legacy *shim* spellings.
-
-    The public :func:`convert` / :func:`convert_response` boundaries resolve
-    shim names to :class:`~llm_rosetta.shims.provider_shim.ProviderShim`
-    objects before constructing the pipeline, so the pipeline's own
-    string-based shim warning never sees them.  These boundaries therefore
-    warn for a legacy shim name (``volcengine--openai_chat``) themselves.
-
-    Base formats (``google_generate``) and legacy *provider* aliases
-    (``openai_chat``) are skipped: the former is a canonical format that
-    merely doubles as a legacy shim key, and the latter is handled by
-    :func:`~llm_rosetta.provider_names.warn_legacy_provider_names`, so warning
-    again here would be a false positive.
-    """
-    out: list[str] = []
-    for name in names:
-        if name is None:
-            continue
-        text = str(name)
-        if text in _BASE_FORMAT_NAMES:
-            continue
-        if canonical_provider_name(text) != text:
-            continue
-        out.append(text)
-    return out
 
 
 def detect_provider(body: dict[str, Any]) -> ProviderType | None:
@@ -109,9 +53,6 @@ _converter_cache: dict[str, Any] = {}
 def get_converter_for_provider(provider: str):
     """Get the corresponding converter for a provider type or shim name.
 
-    Legacy provider names are normalised to their canonical spelling first
-    (see :func:`llm_rosetta.provider_names.canonical_provider_name`); this is
-    an internal lookup and never warns.
     Converter instances are cached — the same object is returned for the
     same resolved base provider.  This is safe because converters are
     stateless (all per-request state lives in ``ConversionContext``).
@@ -123,13 +64,14 @@ def get_converter_for_provider(provider: str):
         Corresponding converter instance (cached).
 
     Raises:
-        ValueError: If the provider is not a known type or shim name.
+        ValueError: If the provider is not a known type or shim name.  A
+            retired spelling gets the retired-names message, which names its
+            replacement.
     """
-    provider = canonical_provider_name(provider)
     # The OpenAI Responses profile shim shares the base converter (its traits
     # come from the shim's ``context.options``, not a subclass).  Fold it onto
-    # the base so both spellings return the same cached instance, and so a
-    # legacy ``openai_responses`` spelling resolves without the shim registry.
+    # the base so both spellings return the same cached instance, and so the
+    # profile resolves without the shim registry.
     if provider == "openai--open_responses":
         provider = "open_responses"
     if provider in _converter_cache:
@@ -146,9 +88,8 @@ def get_converter_for_provider(provider: str):
         _converter_cache[provider] = instance
         return instance
 
-    # Resolve through shim registry.  A shim's declared ``base`` may itself be
-    # a legacy spelling, so normalise it before the map lookup.
-    base = canonical_provider_name(resolve_format(provider))
+    # Resolve through the shim registry.
+    base = resolve_format(provider)
     if base in converter_map:
         instance = converter_map[base]()
         _converter_cache[provider] = instance
@@ -167,13 +108,9 @@ def _detect_source(
     source_body: dict[str, Any],
     source_provider: ProviderType | str | None,
 ) -> str:
-    """Detect or validate the source provider, raising on failure.
-
-    This is an internal helper; it never warns (the public :func:`convert`
-    boundary warns for a user-supplied legacy name before delegating here).
-    """
+    """Detect or validate the source provider, raising on failure."""
     if source_provider is not None:
-        return canonical_provider_name(str(source_provider))
+        return str(source_provider)
     detected = detect_provider(source_body)
     if detected is None:
         raise ValueError(
@@ -217,7 +154,7 @@ def convert(
 
     Examples:
         >>> openai_body = {"messages": [{"role": "user", "content": "Hello"}]}
-        >>> google_body = convert(openai_body, "google")
+        >>> google_body = convert(openai_body, "google_generate")
 
         >>> anthropic_body = {"messages": [...]}
         >>> openai_body = convert(anthropic_body, "chat_completions", source_provider="messages")
@@ -232,25 +169,12 @@ def convert(
     from .pipeline import ConversionPipeline
     from .shims import get_shim
 
-    # Public boundary: emit one warning per distinct user-supplied legacy
-    # name, attributed to the caller of ``convert``.  Every lookup below uses
-    # the canonical form, so no duplicate or mis-attributed warnings fire.
-    # Legacy *shim* names (``volcengine--openai_chat``) need their own warning:
-    # the shim is resolved to a ProviderShim object below, so the pipeline's
-    # string check never sees the raw name.
-    warn_legacy_provider_names(source_provider, target_provider)
-    warn_legacy_shim_names(
-        *_legacy_shim_boundary_names(source_provider, target_provider)
-    )
-
+    # A retired name (``openai_chat``, ``volcengine--openai_chat``) is not
+    # resolved here: the pipeline below raises a ValueError that names its
+    # replacement.
     src = _detect_source(source_body, source_provider)
-    tgt = canonical_provider_name(str(target_provider))
+    tgt = str(target_provider)
 
-    # Resolve shims from the *raw* names: a legacy spelling such as
-    # ``openai_responses`` (aliased to the ``openai--open_responses`` shim, a
-    # distinct OpenAI-profile provider over the neutral ``open_responses`` base)
-    # must keep its shim identity, which normalisation to the canonical name
-    # preserves via the shim registry.
     source_shim = (
         get_shim(str(source_provider)) if source_provider is not None else get_shim(src)
     )
@@ -302,22 +226,12 @@ def convert_response(
     from .pipeline import ConversionPipeline
     from .shims import get_shim
 
-    # Public boundary: one warning per distinct user-supplied legacy name,
-    # attributed to the caller of ``convert_response`` (see ``convert``).
-    # A legacy shim name warns here too — the shim is resolved to a
-    # ProviderShim object below, bypassing the pipeline's string check.
-    warn_legacy_provider_names(source_provider, target_provider)
-    warn_legacy_shim_names(
-        *_legacy_shim_boundary_names(source_provider, target_provider)
-    )
-
-    src = canonical_provider_name(str(source_provider))
-    tgt = canonical_provider_name(str(target_provider))
+    src = str(source_provider)
+    tgt = str(target_provider)
 
     pipeline = ConversionPipeline(
         src,
         tgt,
-        # Raw names preserve shim identity (see ``convert`` above).
         source_shim=get_shim(str(source_provider)),
         target_shim=get_shim(str(target_provider)),
         upstream_model=model,

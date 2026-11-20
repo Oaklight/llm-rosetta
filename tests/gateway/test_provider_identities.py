@@ -38,7 +38,9 @@ class TestProviderIdentities:
     def test_chat_provider_identity(self):
         cfg = GatewayConfig(
             {
-                "providers": {"openai": {"type": "openai", "api_key": "k"}},
+                "providers": {
+                    "openai": {"type": "openai--chat_completions", "api_key": "k"}
+                },
                 "models": {"m": "openai"},
             }
         )
@@ -62,7 +64,12 @@ class TestProviderIdentities:
     def test_chat_identity_is_not_overridden_by_an_endpoint_shim(self, embeddings_shim):
         cfg = GatewayConfig(
             {
-                "providers": {"acme": {"type": "openai", "embeddings_shim": SHIM_NAME}},
+                "providers": {
+                    "acme": {
+                        "type": "openai--chat_completions",
+                        "embeddings_shim": SHIM_NAME,
+                    }
+                },
                 "models": {"m": "acme"},
             }
         )
@@ -244,14 +251,29 @@ class TestEndpointResolution:
         # own default applies instead.
         assert cfg.embeddings_providers["acme"]["embeddings_path"] == "/v2/embed"
 
-    def test_explicit_format_is_canonicalised(self):
+    def test_a_retired_explicit_format_is_rejected(self):
+        with pytest.raises(ValueError, match="'google_generate'"):
+            GatewayConfig(
+                {
+                    "providers": {
+                        "acme": {
+                            "base_url": "https://acme.test",
+                            "api_key": "k",
+                            "embeddings_format": "google",
+                        }
+                    },
+                    "models": {},
+                }
+            )
+
+    def test_explicit_google_generate_format(self):
         cfg = GatewayConfig(
             {
                 "providers": {
                     "acme": {
                         "base_url": "https://acme.test",
                         "api_key": "k",
-                        "embeddings_format": "google",
+                        "embeddings_format": "google_generate",
                     }
                 },
                 "models": {},

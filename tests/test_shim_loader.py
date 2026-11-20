@@ -231,14 +231,13 @@ class TestLoadProviders:
             assert shim is not None
             assert shim.name == name
 
-        # Legacy spellings are deprecated aliases of the same shim (#917).
+        # Legacy spellings are not aliases of the same shim (#919).
         for legacy, canonical in (
             ("openai", "openai--chat_completions"),
             ("anthropic", "anthropic--messages"),
-            ("deepseek--chat_completions", "deepseek--chat_completions"),
-            ("volcengine--open_responses", "volcengine--open_responses"),
         ):
-            assert get_shim(legacy) is get_shim(canonical)
+            assert get_shim(legacy) is None
+            assert get_shim(canonical) is not None
 
     def test_volcengine_has_transforms(self):
         """Volcengine shim should have strip_fields transforms loaded."""
@@ -429,7 +428,9 @@ class TestLoadProviders:
     def test_skips_non_directory(self, tmp_path: Path, monkeypatch):
         """Files in the providers directory are ignored."""
         (tmp_path / "not_a_dir.txt").write_text("hello")
-        self._make_provider_dir(tmp_path, "valid", "name: valid\nbase: openai_chat\n")
+        self._make_provider_dir(
+            tmp_path, "valid", "name: valid\nbase: chat_completions\n"
+        )
         import llm_rosetta.shims.providers as mod
 
         monkeypatch.setattr(mod, "_PROVIDERS_DIR", tmp_path)
@@ -440,7 +441,9 @@ class TestLoadProviders:
     def test_skips_dir_without_yaml(self, tmp_path: Path, monkeypatch):
         """Directories without provider.yaml are skipped."""
         (tmp_path / "empty_dir").mkdir()
-        self._make_provider_dir(tmp_path, "valid", "name: valid\nbase: openai_chat\n")
+        self._make_provider_dir(
+            tmp_path, "valid", "name: valid\nbase: chat_completions\n"
+        )
         import llm_rosetta.shims.providers as mod
 
         monkeypatch.setattr(mod, "_PROVIDERS_DIR", tmp_path)
@@ -450,7 +453,9 @@ class TestLoadProviders:
     def test_skips_yaml_without_required_fields(self, tmp_path: Path, monkeypatch):
         """YAML without 'name' or 'base' is skipped with warning."""
         self._make_provider_dir(tmp_path, "bad", "description: no name or base\n")
-        self._make_provider_dir(tmp_path, "good", "name: good\nbase: openai_chat\n")
+        self._make_provider_dir(
+            tmp_path, "good", "name: good\nbase: chat_completions\n"
+        )
         import llm_rosetta.shims.providers as mod
 
         monkeypatch.setattr(mod, "_PROVIDERS_DIR", tmp_path)
@@ -463,7 +468,7 @@ class TestLoadProviders:
         d = tmp_path / "multimodal_provider"
         d.mkdir()
         (d / "provider.yaml").write_text(
-            "name: multimodal_provider\nbase: openai_chat\nmultimodal_tool_result: true\n"
+            "name: multimodal_provider\nbase: chat_completions\nmultimodal_tool_result: true\n"
         )
         shims = load_providers_from_dir(tmp_path)
         assert len(shims) == 1
@@ -521,7 +526,7 @@ class TestLoadProviders:
         """Missing multimodal_tool_result defaults to None."""
         d = tmp_path / "plain"
         d.mkdir()
-        (d / "provider.yaml").write_text("name: plain\nbase: openai_chat\n")
+        (d / "provider.yaml").write_text("name: plain\nbase: chat_completions\n")
         shims = load_providers_from_dir(tmp_path)
         assert len(shims) == 1
         assert shims[0].multimodal_tool_result is None
@@ -608,7 +613,7 @@ class TestLoadProvidersFromDir:
         """load_providers_from_dir loads from any directory."""
         d = tmp_path / "mything"
         d.mkdir()
-        (d / "provider.yaml").write_text("name: mything\nbase: openai_chat\n")
+        (d / "provider.yaml").write_text("name: mything\nbase: chat_completions\n")
         shims = load_providers_from_dir(tmp_path)
         assert any(s.name == "mything" for s in shims)
 
@@ -616,7 +621,7 @@ class TestLoadProvidersFromDir:
         """Plugin transforms are loaded from arbitrary directories."""
         d = tmp_path / "myplugin"
         d.mkdir()
-        (d / "provider.yaml").write_text("name: myplugin\nbase: openai_chat\n")
+        (d / "provider.yaml").write_text("name: myplugin\nbase: chat_completions\n")
         (d / "transforms.py").write_text(
             "from llm_rosetta.transforms import strip_fields\n"
             'post_ir_transforms = (strip_fields("foo"),)\n'
@@ -634,7 +639,7 @@ class TestLoadProvidersFromDir:
         """A plugin transforms.py can import a sibling helper via `from .x`."""
         d = tmp_path / "relimp"
         d.mkdir()
-        (d / "provider.yaml").write_text("name: relimp\nbase: openai_chat\n")
+        (d / "provider.yaml").write_text("name: relimp\nbase: chat_completions\n")
         (d / "helpers.py").write_text("def mark():\n    return 'sentinel'\n")
         (d / "transforms.py").write_text(
             "from .helpers import mark\n"
@@ -650,7 +655,7 @@ class TestLoadProvidersFromDir:
         """Grouped plugin layout also supports sibling imports."""
         leaf = tmp_path / "grp" / "leaf"
         leaf.mkdir(parents=True)
-        (leaf / "provider.yaml").write_text("name: grp--leaf\nbase: openai_chat\n")
+        (leaf / "provider.yaml").write_text("name: grp--leaf\nbase: chat_completions\n")
         (leaf / "helper.py").write_text("NAME = 'gone'\n")
         (leaf / "transforms.py").write_text(
             "from .helper import NAME\n"
@@ -668,7 +673,9 @@ class TestLoadProvidersFromDir:
         for root, marker in ((tmp_path / "a", "a"), (tmp_path / "b", "b")):
             leaf = root / "grp" / "leaf"
             leaf.mkdir(parents=True)
-            (leaf / "provider.yaml").write_text("name: grp--leaf\nbase: openai_chat\n")
+            (leaf / "provider.yaml").write_text(
+                "name: grp--leaf\nbase: chat_completions\n"
+            )
             (leaf / "tag.py").write_text(f"MARK = {marker!r}\n")
             (leaf / "transforms.py").write_text(
                 "from .tag import MARK\nLOADED = MARK\n"
@@ -694,7 +701,7 @@ class TestLoadProvidersFromDir:
 
         d = tmp_path / "bad"
         d.mkdir()
-        (d / "provider.yaml").write_text("name: bad\nbase: openai_chat\n")
+        (d / "provider.yaml").write_text("name: bad\nbase: chat_completions\n")
         (d / "leaky.py").write_text("VALUE = 1\n")
         (d / "transforms.py").write_text(
             "from . import leaky\nraise RuntimeError('boom')\n"
@@ -714,13 +721,13 @@ class TestLoadProvidersFromDir:
 
         good = tmp_path / "aaa_good"
         good.mkdir()
-        (good / "provider.yaml").write_text("name: aaa_good\nbase: openai_chat\n")
+        (good / "provider.yaml").write_text("name: aaa_good\nbase: chat_completions\n")
         (good / "transforms.py").write_text("post_ir_transforms = ()\n")
         load_providers_from_dir(tmp_path)  # namespace + aaa_good.transforms now exist
 
         bad = tmp_path / "zzz_bad"
         bad.mkdir()
-        (bad / "provider.yaml").write_text("name: zzz_bad\nbase: openai_chat\n")
+        (bad / "provider.yaml").write_text("name: zzz_bad\nbase: chat_completions\n")
         (bad / "transforms.py").write_text("raise RuntimeError('boom')\n")
         with pytest.raises(RuntimeError, match="boom"):
             load_providers_from_dir(tmp_path)
@@ -745,7 +752,7 @@ class TestLoadProvidersFromDir:
 
         d = tmp_path / "resettest"
         d.mkdir()
-        (d / "provider.yaml").write_text("name: resettest\nbase: openai_chat\n")
+        (d / "provider.yaml").write_text("name: resettest\nbase: chat_completions\n")
         (d / "helpers.py").write_text("VALUE = 1\n")
         (d / "transforms.py").write_text("from .helpers import VALUE\n")
         load_providers_from_dir(tmp_path)
@@ -787,7 +794,7 @@ class TestPluginEntryPoints:
         """Entry points that return list[ProviderShim] are collected."""
         from llm_rosetta.shims.provider_shim import ProviderShim
 
-        test_shim = ProviderShim(name="ep-test", base="openai_chat")
+        test_shim = ProviderShim(name="ep-test", base="chat_completions")
 
         class FakeEP:
             name = "returner"
@@ -949,10 +956,36 @@ class TestShimPair:
         (leaf / "provider.yaml").write_text(content)
         return load_providers_from_dir(tmp_path, on_error="raise")
 
-    def test_format_is_canonicalised(self, tmp_path: Path):
-        shims = self._load(tmp_path, "name: x\nmodel_type: llm\nformat: openai_chat\n")
+    def test_format_is_stored(self, tmp_path: Path):
+        shims = self._load(
+            tmp_path, "name: x\nmodel_type: llm\nformat: chat_completions\n"
+        )
         assert shims[0].format == "chat_completions"
         assert shims[0].model_type == "llm"
+
+    @pytest.mark.parametrize(
+        ("spelling", "replacement"),
+        [
+            ("openai_chat", "chat_completions"),
+            ("anthropic", "messages"),
+            ("google", "google_generate"),
+        ],
+    )
+    def test_a_retired_format_spelling_is_rejected(
+        self, tmp_path: Path, spelling: str, replacement: str
+    ):
+        """A retired spelling no longer loads; the error names its replacement."""
+        for key in ("format", "base"):
+            leaf = tmp_path / key
+            leaf.mkdir()
+            prefix = "model_type: llm\n" if key == "format" else ""
+            (leaf / "provider.yaml").write_text(
+                f"name: {key}\n{prefix}{key}: {spelling}\n"
+            )
+            with pytest.raises(ValueError, match=repr(replacement)):
+                load_providers_from_dir(leaf.parent, on_error="raise")
+            (leaf / "provider.yaml").unlink()
+            leaf.rmdir()
 
     def test_format_requires_model_type(self, tmp_path: Path):
         """A new-style shim cannot omit the category.
@@ -964,7 +997,7 @@ class TestShimPair:
             self._load(tmp_path, "name: x\nformat: chat_completions\n")
 
     def test_legacy_base_is_accepted(self, tmp_path: Path):
-        shims = self._load(tmp_path, "name: x\nbase: openai_chat\n")
+        shims = self._load(tmp_path, "name: x\nbase: chat_completions\n")
         assert shims[0].format == "chat_completions"
 
     def test_non_llm_pair(self, tmp_path: Path):
@@ -1052,7 +1085,7 @@ class TestConnectionTokenCommand:
         for filename, content in (extra or {}).items():
             (d / filename).write_text(content)
         (d / "provider.yaml").write_text(
-            f"name: vendor\nbase: openai_chat\nconnection:\n{connection}"
+            f"name: vendor\nbase: chat_completions\nconnection:\n{connection}"
         )
         shims = load_providers_from_dir(tmp_path)
         assert len(shims) == 1
@@ -1134,7 +1167,7 @@ class TestAuthExchange:
     def test_a_shipped_exchange_is_attached(self, tmp_path):
         self._write(
             tmp_path,
-            "name: vendor\nbase: openai_chat\n"
+            "name: vendor\nbase: chat_completions\n"
             "connection:\n  base_url: https://vendor.example/v1\n"
             "  token_refresh_interval: 1800\n",
             """
@@ -1160,7 +1193,7 @@ class TestAuthExchange:
     def test_a_shim_without_a_module_attaches_nothing(self, tmp_path):
         self._write(
             tmp_path,
-            "name: vendor\nbase: openai_chat\n"
+            "name: vendor\nbase: chat_completions\n"
             "connection:\n  base_url: https://vendor.example/v1\n",
         )
 
@@ -1169,7 +1202,7 @@ class TestAuthExchange:
     def test_a_module_without_an_exchange_attaches_nothing(self, tmp_path):
         self._write(
             tmp_path,
-            "name: vendor\nbase: openai_chat\n"
+            "name: vendor\nbase: chat_completions\n"
             "connection:\n  base_url: https://vendor.example/v1\n",
             "HELPERS = ()\n",
         )
@@ -1179,7 +1212,7 @@ class TestAuthExchange:
     def test_an_exchange_without_credential_is_rejected(self, tmp_path):
         self._write(
             tmp_path,
-            "name: vendor\nbase: openai_chat\n"
+            "name: vendor\nbase: chat_completions\n"
             "connection:\n  base_url: https://vendor.example/v1\n",
             "EXCHANGE = object()\n",
         )
@@ -1191,7 +1224,7 @@ class TestAuthExchange:
         """One slot, one declaration: the loader refuses to pick a winner."""
         self._write(
             tmp_path,
-            "name: vendor\nbase: openai_chat\n"
+            "name: vendor\nbase: chat_completions\n"
             "connection:\n  base_url: https://vendor.example/v1\n"
             "  token_command: [token-helper]\n",
             """
@@ -1214,7 +1247,7 @@ class TestAuthExchange:
         """An external source degrades to a warning, like a broken transforms.py."""
         self._write(
             tmp_path,
-            "name: vendor\nbase: openai_chat\n"
+            "name: vendor\nbase: chat_completions\n"
             "connection:\n  base_url: https://vendor.example/v1\n",
             "raise RuntimeError('boom')\n",
         )

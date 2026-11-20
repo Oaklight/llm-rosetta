@@ -53,7 +53,7 @@ from llm_rosetta_gateway.maintenance.config import ConfigMigrationError
 #: ``providers``, and a name that has since been renamed.
 _V0 = {
     "providers": {
-        "alcf": {"type": "openai_chat", "api_key": "k", "base_url": "https://a"}
+        "alcf": {"type": "chat_completions", "api_key": "k", "base_url": "https://a"}
     },
     "models": {"m": {"provider": "alcf", "model": "m"}},
     "rerank_providers": {"jina": {"api_key": "k", "base_url": "https://j"}},
@@ -153,7 +153,10 @@ class TestThePublicReader:
         """
         path = _write(
             tmp_path / "gateway.jsonc",
-            {"providers": {"alcf": {"type": "openai_chat"}}, "rerank_providers": []},
+            {
+                "providers": {"alcf": {"type": "chat_completions"}},
+                "rerank_providers": [],
+            },
         )
 
         with pytest.raises(ConfigMigrationError) as caught:
@@ -256,10 +259,7 @@ class TestTheStartPath:
         assert config.maintenance is not None
         assert config.maintenance.name == "config"
         changed = {r.name: r.changed for r in config.maintenance.results}
-        assert changed == {
-            "config.migrate_structure": 1,
-            "config.correct_legacy_names": 1,
-        }
+        assert changed == {"config.migrate_structure": 1}
 
     def test_the_cli_overrides_still_land_on_top(self, tmp_path):
         """They are applied to the migrated document, not instead of migrating."""
@@ -285,7 +285,6 @@ class TestTheOneCallThatKeepsBoth:
         assert config.maintenance is not None
         assert [r.name for r in config.maintenance.results] == [
             "config.migrate_structure",
-            "config.correct_legacy_names",
         ]
 
     def test_a_config_built_by_hand_still_reports_nothing(self, tmp_path):

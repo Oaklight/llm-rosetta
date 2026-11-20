@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
-from llm_rosetta.api import FORMAT_SPECS, canonical_provider_name
+from llm_rosetta.api import FORMAT_SPECS
 
 # ---------------------------------------------------------------------------
 # Path → API format detection (single mapping table)
@@ -42,10 +42,6 @@ _PATH_FORMAT_TABLE: list[tuple[str, str]] = sorted(
 _PROVIDER_FORMAT_MAP: dict[str, str] = {
     spec.format: spec.wire_family for spec in FORMAT_SPECS if spec.model_type == "llm"
 }
-# Historical route spellings kept until #919 removes them.
-_PROVIDER_FORMAT_MAP["openai_responses"] = "openai"
-_PROVIDER_FORMAT_MAP["anthropic"] = "anthropic"
-_PROVIDER_FORMAT_MAP["google"] = "google"
 
 
 def detect_api_format(path: str) -> str:
@@ -68,7 +64,7 @@ def detect_api_format_from_provider(source_provider: str) -> str:
         One of ``"openai"``, ``"anthropic"``, or ``"google"``.
         Defaults to ``"openai"`` for unknown provider types.
     """
-    return _PROVIDER_FORMAT_MAP.get(canonical_provider_name(source_provider), "openai")
+    return _PROVIDER_FORMAT_MAP.get(source_provider, "openai")
 
 
 # ---------------------------------------------------------------------------

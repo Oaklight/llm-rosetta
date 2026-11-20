@@ -97,14 +97,15 @@ A renamed provider type, shim name or model type needs one row in
 `packages/llm-rosetta/src/llm_rosetta/retired_names.py` (`RETIRED_NAMES`): the
 old name, what it became, its kind, and the `shims.presets` key when a
 standalone package now owns the shim. The table is an error table, not an
-alias: once the alias is removed, the old name fails with a message that names
-the replacement instead of "unknown type" or "no base_url configured".
+alias: the old name fails with a message that names the replacement instead of
+"unknown type" or "no base_url configured".
 
 Add the row in the same PR that renames. Never edit an existing row and never
 give a retired name a new meaning. A replacement must not itself be retired.
-`tests/test_retired_names.py` fails when a live alias has no row or a row forms
-a chain. `retired_names.ALIASES_ENABLED` is the one switch that turns the alias
-paths off and the diagnostic on.
+`tests/test_retired_names.py` fails when a row forms a chain or a live legacy
+model type has no row. Provider-type and shim rows always raise;
+`retired_names.ALIASES_ENABLED` now switches only the model-type rows (their
+aliases are still live).
 
 ## Checking that a refactor is a pure move
 

@@ -2,11 +2,12 @@
 
 This table is an **error table, not an alias table**.  A name listed here is
 a spelling an earlier release accepted for a provider type, a shim or a model
-type.  Today :mod:`llm_rosetta.provider_names` and
-:data:`llm_rosetta.formats.LEGACY_MODEL_TYPES` still translate those spellings
-silently.  When an alias table is removed, the name must not fall through to
-"unknown type" or "no base_url configured": it must fail with a message that
-names its replacement.  This module supplies that message.
+type.  The provider-type and shim spellings are no longer translated
+(:mod:`llm_rosetta.provider_names` is gone, #919): a name listed here must not
+fall through to "unknown type" or "no base_url configured", so it fails with a
+message that names its replacement.  This module supplies that message.  The
+model-type spellings (``embedding``, ``decision``) are still translated by
+:data:`llm_rosetta.formats.LEGACY_MODEL_TYPES` until their own removal.
 
 The module has no imports from the rest of the package, so the core library,
 the gateway and the alias tables can all read it without a cycle.  Core owns
@@ -17,12 +18,12 @@ receive retired names too, and core must not import the gateway.
 The switch
 ----------
 
-:data:`ALIASES_ENABLED` is the one switch.  While it is ``True`` (the
-default) every alias path behaves as before and nothing here raises.  With it
-``False`` the alias tables behave as if they were empty, and every boundary
-that used to warn about a retired name raises :class:`ValueError` carrying
-:func:`retired_name_message` instead.  Removing the alias tables means
-deleting the alias code paths and the flag; the table stays.
+:data:`ALIASES_ENABLED` now governs the ``model_type`` rows only.  Provider
+type and shim rows always raise: their alias tables were deleted, so there is
+nothing left to switch on.  While the flag is ``True`` (the default) the
+legacy model-type spellings still translate; with it ``False`` they raise
+:class:`ValueError` carrying :func:`retired_name_message`.  Removing the
+model-type aliases deletes the flag; the table stays.
 
 Retiring a name
 ---------------
@@ -37,8 +38,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-#: The one switch.  ``True``: aliases resolve (today's behaviour).  ``False``:
-#: a retired name raises a ValueError naming its replacement.
+#: Switch for the ``model_type`` rows only.  ``True``: ``embedding`` /
+#: ``decision`` still translate.  ``False``: they raise a ValueError naming the
+#: replacement.  Provider-type and shim rows ignore it and always raise.
 ALIASES_ENABLED: bool = True
 
 #: Release that renamed these names, for the message.
@@ -73,7 +75,7 @@ class RetiredName:
 
 
 RETIRED_NAMES: tuple[RetiredName, ...] = (
-    # -- provider types / formats (provider_names.LEGACY_PROVIDER_ALIASES) --
+    # -- provider types / formats -------------------------------------------
     RetiredName(name="google", replacement="google_generate", kind=PROVIDER_TYPE),
     RetiredName(name="google-genai", replacement="google_generate", kind=PROVIDER_TYPE),
     RetiredName(name="openai_chat", replacement="chat_completions", kind=PROVIDER_TYPE),
@@ -97,7 +99,7 @@ RETIRED_NAMES: tuple[RetiredName, ...] = (
         replacement="google_interactions",
         kind=PROVIDER_TYPE,
     ),
-    # -- shim names (provider_names.LEGACY_SHIM_ALIASES) --------------------
+    # -- shim names ---------------------------------------------------------
     RetiredName(name="openai", replacement="openai--chat_completions", kind=SHIM),
     RetiredName(name="google", replacement="google--google_generate", kind=SHIM),
     RetiredName(
@@ -243,10 +245,11 @@ def retired_name_message(name: str, kind: str) -> str | None:
 
 
 def check_not_retired(name: object, *kinds: str) -> None:
-    """Raise if aliases are off and *name* is retired under any of *kinds*.
+    """Raise if *name* is retired under any of *kinds*.
 
-    A no-op while :data:`ALIASES_ENABLED` is ``True``, and for any name that
-    is not retired.
+    Provider-type and shim rows always raise.  A ``model_type`` row raises only
+    once :data:`ALIASES_ENABLED` is ``False``.  A name that is not retired is
+    a no-op.
 
     Args:
         name: The name to check; a non-string is ignored.
@@ -255,9 +258,11 @@ def check_not_retired(name: object, *kinds: str) -> None:
     Raises:
         ValueError: With :func:`retired_name_message`.
     """
-    if ALIASES_ENABLED or not isinstance(name, str):
+    if not isinstance(name, str):
         return
     for kind in kinds:
+        if kind == MODEL_TYPE and ALIASES_ENABLED:
+            continue
         message = retired_name_message(name, kind)
         if message is not None:
             raise ValueError(message)

@@ -16,9 +16,9 @@ once the operator declares the preset.
 It is also the record of *which* package replaces a name that no longer
 resolves, including the older spellings of its shims: a config that still says
 ``alcf--sophia`` or ``asksage--openai_chat`` is told the canonical name and the
-preset to declare, instead of only that the shim is unknown.  The core alias
-table (``llm_rosetta.provider_names.LEGACY_SHIM_ALIASES``) canonicalises those
-spellings; the two lists are kept in step by a test here.
+preset to declare, instead of only that the shim is unknown.  The retired-names
+table (``llm_rosetta.retired_names``) names the replacement for those spellings;
+the two lists are kept in step by a test here.
 """
 
 from __future__ import annotations

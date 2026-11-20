@@ -15,7 +15,6 @@ from llm_rosetta_gateway._vendor.httpserver import (
     StreamingResponse,
 )
 from llm_rosetta.api import ProviderType
-from llm_rosetta.api import canonical_provider_name
 
 from ..keystore import INTERNAL_LABEL
 from ..middleware.auth import (
@@ -130,10 +129,6 @@ async def _proxy_handler(
 ) -> Response | StreamingResponse:
     """Shared handler for all proxy endpoints."""
     assert _state._config is not None
-
-    # Legacy provider spellings (e.g. ``openai_chat``) migrate to the
-    # canonical format so downstream route/table lookups match.
-    source_provider = cast(ProviderType, canonical_provider_name(str(source_provider)))
 
     async def _handle(
         request: Any, config: GatewayConfig

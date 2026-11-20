@@ -1,7 +1,7 @@
 """The config's load-time steps: the same vocabulary, a different store.
 
-Two mechanisms bring a config document up to what the code expects, and they
-differ from the database ones in every way that matters:
+The load-time step brings a config document up to what the code expects, and it
+differs from the database steps in every way that matters:
 
 - they run while the document is *loaded*, on the calling thread, because a
   reader of the config cannot wait for a background task and the load is not
@@ -9,15 +9,14 @@ differ from the database ones in every way that matters:
   and :meth:`~...Registry.run_sync` exists for exactly this);
 - their ledger is ``config_version`` *in the document*, not a table beside it —
   a migration here is recorded by the file it corrected, so the file can be read
-  by an older release without leaving a database behind;
-- the name correction has no ledger at all and needs none: it re-derives every
-  value and reports whether any differed, which is what makes it idempotent.
+  by an older release without leaving a database behind.
 
-They are steps rather than two calls in a row so that the order is declared
-(versioned structure first, names second), each one says whether it changed
-anything, and one surface can report both alongside the repairs the databases
-needed.  Their ``store`` is the document, not a file they own: a load-time step
+It is a step rather than a bare call so that it says whether it changed
+anything, and one surface can report it alongside the repairs the databases
+needed.  Its ``store`` is the document, not a file it owns: a load-time step
 changes the bytes that were read, and the caller decides whether to write them.
+Retired provider and shim names are not corrected here; they are rejected at
+resolution with the retired-names diagnostic (:mod:`.names`).
 
 Nothing here re-runs a step against a document it did not read.  A load-time
 step is run by a load — the admin surface lists these but refuses to re-run one,
@@ -44,7 +43,7 @@ NAME = "config"
 STORE = "config"
 
 #: The registry's steps, in the order they must run.
-STEPS = ["config.migrate_structure", "config.correct_legacy_names"]
+STEPS = ["config.migrate_structure"]
 
 
 def _migrate_structure(context: StepContext) -> int:
@@ -61,20 +60,6 @@ def _migrate_structure(context: StepContext) -> int:
     return 1 if changed else 0
 
 
-def _correct_legacy_names(context: StepContext) -> int:
-    """Rewrite provider and shim names that were renamed, in place.
-
-    Unversioned and idempotent by construction: it re-derives each value and
-    reports whether any differed.  It is deliberately not part of
-    ``config_version`` — it corrects *names*, not structure, and it must run for
-    a config whose version is already current.
-    """
-    from .names import correct_legacy_names
-
-    raw: dict[str, Any] = context.config
-    return 1 if correct_legacy_names(raw) else 0
-
-
 def build_registry() -> Registry:
     """The load-time steps, over the document the caller passes in the context."""
     return Registry(
@@ -87,12 +72,6 @@ def build_registry() -> Registry:
                 ),
                 store=STORE,
                 run=_migrate_structure,
-            ),
-            Step(
-                name="config.correct_legacy_names",
-                description=("rewrite provider and shim names that have been renamed"),
-                store=STORE,
-                run=_correct_legacy_names,
             ),
         ],
         policy=Policy.LOAD_TIME,

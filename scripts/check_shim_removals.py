@@ -7,7 +7,7 @@ they still work — so it passes.  The day the version reaches it, every remaini
 mention under the scanned roots, and every one still registered, becomes an
 error, so a removal cannot land without the cleanup that belongs with it:
 
-* the built-in shim directory and its ``LEGACY_SHIM_ALIASES`` entry,
+* the built-in shim directory and its retired-names row,
 * the ``SHIM_REMOVALS`` entry in ``llm_rosetta_gateway.shims.removals``,
 * the examples under ``examples/`` and the tables in ``docs_en`` / ``docs_zh``.
 
@@ -53,7 +53,7 @@ from llm_rosetta.shims.providers import load_providers  # noqa: E402
 
 #: Where the repository spells shim names.  ``src`` and ``scripts`` are here
 #: because the cleanup a removal owes is not only prose: a leftover
-#: ``LEGACY_SHIM_ALIASES`` entry, a built-in ``provider.yaml``, or a config
+#: retired-names row, a built-in ``provider.yaml``, or a config
 #: *example* in a helper script would otherwise outlive the shim it names — and
 #: the registration half cannot stand in for the scan, since a shim that is
 #: already gone resolves to ``None`` whether or not its alias remains.

@@ -1,85 +1,84 @@
-"""Tests for the gateway one-time provider/shim name correction."""
+"""Tests for the gateway guard against retired provider and shim names.
+
+The one-time rewrite (``correct_legacy_names``) is gone (#919): a retired name
+is rejected with the retired-names diagnostic instead of being rewritten.
+"""
 
 from __future__ import annotations
 
 import pytest
 
-from llm_rosetta_gateway.maintenance.names import (
-    DOCS_URL,
-    correct_legacy_names,
-    legacy_name_error,
-)
+from llm_rosetta import retired_names
+from llm_rosetta_gateway.maintenance import names
+from llm_rosetta_gateway.maintenance.names import DOCS_URL, legacy_name_error
+
+
+def test_the_rewrite_is_gone() -> None:
+    assert not hasattr(names, "correct_legacy_names")
+    import llm_rosetta_gateway.maintenance as maintenance
+
+    assert "correct_legacy_names" not in maintenance.__all__
+    assert not hasattr(maintenance, "correct_legacy_names")
 
 
 @pytest.mark.parametrize(
-    ("slot", "value", "expected"),
+    ("cfg", "replacement"),
     [
-        # shim: slot — unambiguous shim identity.
-        ("shim", "openai", "openai--chat_completions"),
-        ("shim", "anthropic", "anthropic--messages"),
-        ("shim", "google", "google--google_generate"),
-        ("shim", "volcengine--openai_chat", "volcengine--chat_completions"),
-        ("shim", "openai--chat_completions", "openai--chat_completions"),
-        # type: slot — names a format.
-        ("type", "openai_chat", "chat_completions"),
-        ("type", "google", "google_generate"),
-        ("type", "anthropic", "messages"),
-        ("type", "openai_responses", "openai--open_responses"),
-        ("type", "openai", "openai--chat_completions"),
-        # A canonical base format must NOT be rewritten to a shim.
-        ("type", "google_generate", "google_generate"),
-        ("type", "google_interactions", "google_interactions"),
-        ("type", "messages", "messages"),
-        ("type", "chat_completions", "chat_completions"),
+        (dict(shim="openai"), "openai--chat_completions"),
+        (dict(shim="anthropic"), "anthropic--messages"),
+        (dict(shim="google"), "google--google_generate"),
+        (dict(shim="volcengine--openai_chat"), "volcengine--chat_completions"),
+        (dict(type="openai_chat"), "chat_completions"),
+        (dict(type="google"), "google_generate"),
+        (dict(type="anthropic"), "messages"),
+        (dict(type="openai_responses"), "openai--open_responses"),
+        (dict(type="openai"), "openai--chat_completions"),
     ],
 )
-def test_correct_legacy_names(slot: str, value: str, expected: str) -> None:
-    raw = {"providers": {"p": {slot: value}}}
-
-    assert correct_legacy_names(raw) is (value != expected)
-    assert raw["providers"]["p"][slot] == expected
-
-
-def test_correct_legacy_names_is_idempotent() -> None:
-    raw = {"providers": {"p": {"shim": "openai", "type": None}}}
-
-    assert correct_legacy_names(raw) is True
-    # Second pass changes nothing.
-    assert correct_legacy_names(raw) is False
-
-
-def test_correct_legacy_names_handles_missing_providers() -> None:
-    assert correct_legacy_names({}) is False
-    assert correct_legacy_names({"providers": "nope"}) is False
-
-
-@pytest.mark.parametrize(
-    "cfg",
-    [
-        {"shim": "openai"},
-        {"shim": "anthropic"},
-        {"type": "openai_chat"},
-        {"type": "google"},
-        {"type": "openai"},
-    ],
-)
-def test_legacy_name_error_flags_legacy(cfg: dict) -> None:
-    message = legacy_name_error({"p": cfg})
+def test_legacy_name_error_names_the_replacement(cfg: dict, replacement: str) -> None:
+    message = legacy_name_error(dict(p=cfg))
 
     assert message is not None
+    assert repr(replacement) in message
     assert DOCS_URL in message
+    assert "'p'" in message
+
+
+def test_a_standalone_package_shim_names_its_preset() -> None:
+    message = legacy_name_error(dict(p=dict(shim="alcf--sophia")))
+
+    assert message is not None
+    assert "'alcf_sophia--chat_completions'" in message
+    assert "shims.presets: ['alcf']" in message
 
 
 @pytest.mark.parametrize(
     "cfg",
     [
-        {"shim": "openai--chat_completions"},
-        {"shim": "anthropic--messages"},
-        {"type": "google_generate"},
-        {"type": "messages"},
-        {"type": "chat_completions"},
-        {"base_url": "https://example.invalid"},
+        dict(shim="openai--chat_completions"),
+        dict(shim="anthropic--messages"),
+        dict(type="google_generate"),
+        dict(type="google_interactions"),
+        dict(type="messages"),
+        dict(type="chat_completions"),
+        dict(base_url="https://example.invalid"),
     ],
 )
 def test_legacy_name_error_passes_canonical(cfg: dict) -> None:
-    assert legacy_name_error({"p": cfg}) is None
+    assert legacy_name_error(dict(p=cfg)) is None
+
+
+def test_the_guard_ignores_non_mapping_entries() -> None:
+    assert legacy_name_error(dict(p="nope")) is None
+
+
+def test_the_guard_reads_the_table_not_a_copy() -> None:
+    for row in retired_names.RETIRED_NAMES:
+        if row.kind == retired_names.MODEL_TYPE:
+            continue
+        slot = "shim" if row.kind == retired_names.SHIM else "type"
+        message = legacy_name_error(dict(p={slot: row.name}))
+        assert message is not None, row
+        assert repr(row.replacement) in message or retired_names.lookup(
+            row.name, retired_names.PROVIDER_TYPE
+        ), row

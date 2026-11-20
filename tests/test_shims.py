@@ -49,7 +49,7 @@ def _clean_registry():
 
 class TestProviderShim:
     def test_creation_minimal(self):
-        s = ProviderShim(name="test", format="openai_chat")
+        s = ProviderShim(name="test", format="chat_completions")
         assert s.name == "test"
         assert s.format == "chat_completions"
         assert s.base == "chat_completions"
@@ -61,7 +61,7 @@ class TestProviderShim:
     def test_creation_full(self):
         s = ProviderShim(
             name="openai",
-            format="openai_chat",
+            format="chat_completions",
             default_base_url="https://api.openai.com/v1",
             default_api_key_env="OPENAI_API_KEY",
             logo="https://example.com/openai.svg",
@@ -70,7 +70,7 @@ class TestProviderShim:
         assert s.logo == "https://example.com/openai.svg"
 
     def test_frozen(self):
-        s = ProviderShim(name="test", format="openai_chat")
+        s = ProviderShim(name="test", format="chat_completions")
         with pytest.raises(AttributeError):
             s.name = "other"  # type: ignore
 
@@ -88,7 +88,7 @@ class TestGroupedConfig:
 
         s = ProviderShim(
             name="test",
-            base="openai_chat",
+            base="chat_completions",
             connection=ConnectionConfig(
                 base_url="https://example.com",
                 api_key_env="TEST_KEY",
@@ -114,7 +114,7 @@ class TestGroupedConfig:
     def test_legacy_flat_kwargs_build_grouped(self):
         s = ProviderShim(
             name="test",
-            base="openai_chat",
+            base="chat_completions",
             default_base_url="https://example.com",
             default_api_key_env="TEST_KEY",
             models_path="/v1/models",
@@ -132,7 +132,7 @@ class TestGroupedConfig:
 
         s = ProviderShim(
             name="test",
-            base="openai_chat",
+            base="chat_completions",
             connection=ConnectionConfig(base_url="https://a.com", api_key_env="K"),
             tools=ToolsConfig(custom_tools=True, max_description_length=256),
         )
@@ -154,7 +154,7 @@ class TestGroupedConfig:
             warnings.simplefilter("always")
             s = ProviderShim(
                 name="test",
-                base="openai_chat",
+                base="chat_completions",
                 connection=ConnectionConfig(base_url="https://grouped.com"),
                 default_base_url="https://flat.com",
             )
@@ -162,7 +162,7 @@ class TestGroupedConfig:
         assert any("ignored" in str(x.message) for x in w)
 
     def test_defaults_when_no_fields(self):
-        s = ProviderShim(name="test", base="openai_chat")
+        s = ProviderShim(name="test", base="chat_completions")
         assert s.connection.base_url is None
         assert s.connection.api_key_env is None
         assert s.connection.session_header is None
@@ -202,7 +202,7 @@ class TestGroupedConfig:
 
 class TestRegistry:
     def test_register_and_get(self):
-        s = ProviderShim(name="test-provider", base="openai_chat")
+        s = ProviderShim(name="test-provider", base="chat_completions")
         register_shim(s)
         assert get_shim("test-provider") is s
 
@@ -210,7 +210,7 @@ class TestRegistry:
         assert get_shim("nonexistent") is None
 
     def test_register_replaces(self):
-        s1 = ProviderShim(name="test", base="openai_chat")
+        s1 = ProviderShim(name="test", base="chat_completions")
         s2 = ProviderShim(name="test", base="messages")
         register_shim(s1)
         register_shim(s2)
@@ -219,7 +219,7 @@ class TestRegistry:
         assert result.base == "messages"
 
     def test_unregister(self):
-        s = ProviderShim(name="test", base="openai_chat")
+        s = ProviderShim(name="test", base="chat_completions")
         register_shim(s)
         removed = unregister_shim("test")
         assert removed is s
@@ -229,7 +229,7 @@ class TestRegistry:
         assert unregister_shim("nonexistent") is None
 
     def test_list_shims(self):
-        s1 = ProviderShim(name="a", base="openai_chat")
+        s1 = ProviderShim(name="a", base="chat_completions")
         s2 = ProviderShim(name="b", base="messages")
         register_shim(s1)
         register_shim(s2)
@@ -249,23 +249,23 @@ class TestRegistry:
 
 class TestResolveFormat:
     def test_base_type_passthrough(self):
-        assert resolve_format("openai_chat") == "chat_completions"
-        assert resolve_format("anthropic") == "messages"
+        assert resolve_format("chat_completions") == "chat_completions"
+        assert resolve_format("messages") == "messages"
         assert resolve_format("google_generate") == "google_generate"
         assert resolve_format("open_responses") == "open_responses"
 
-    def test_responses_legacy_alias_resolves_to_shim_format(self):
-        """The legacy Responses spellings resolve via the OpenAI profile shim."""
+    def test_retired_spellings_are_not_translated(self):
+        """A retired name is returned as given, not resolved to its shim."""
         register_shim(
             ProviderShim(name="openai--open_responses", format="open_responses")
         )
-        assert resolve_format("openai_responses") == "open_responses"
-        assert resolve_format("openai-responses") == "open_responses"
         assert resolve_format("openai--open_responses") == "open_responses"
+        assert resolve_format("openai-responses") == "openai-responses"
+        assert resolve_format("anthropic") == "anthropic"
 
     def test_shim_name_resolves(self):
         register_shim(
-            ProviderShim(name="deepseek--chat_completions", format="openai_chat")
+            ProviderShim(name="deepseek--chat_completions", format="chat_completions")
         )
         assert resolve_format("deepseek--chat_completions") == "chat_completions"
 
@@ -286,7 +286,10 @@ class TestResolveModelType:
 
     def test_chat_format_is_llm(self):
         assert resolve_model_type("chat_completions") == "llm"
-        assert resolve_model_type("google") == "llm"
+        assert resolve_model_type("google_generate") == "llm"
+
+    def test_retired_chat_spelling_is_not_a_category(self):
+        assert resolve_model_type("google") is None
 
     def test_category_name_is_itself(self):
         for name in ("llm", "embeddings", "rerank", "decisions"):
@@ -308,7 +311,7 @@ class TestResolveModelType:
 class TestResolveBaseDeprecated:
     def test_it_warns_and_agrees(self):
         with pytest.warns(DeprecationWarning, match="resolve_format"):
-            assert resolve_base("google") == "google_generate"
+            assert resolve_base("google_generate") == "google_generate"
 
 
 # ---------------------------------------------------------------------------
@@ -350,16 +353,15 @@ class TestBuiltinShims:
             shim = get_shim(name)
             assert shim is not None, f"Built-in shim '{name}' not registered"
 
-    def test_legacy_shim_names_are_aliases(self):
-        """Old shim names resolve to the same object as canonical ones (#917)."""
+    def test_legacy_shim_names_no_longer_resolve(self):
+        """Old shim names are not aliases (#919); the canonical ones resolve."""
         pairs = (
             ("openai", "openai--chat_completions"),
             ("anthropic", "anthropic--messages"),
-            ("deepseek--open_responses", "deepseek--open_responses"),
-            ("volcengine--chat_completions", "volcengine--chat_completions"),
         )
         for legacy, canonical in pairs:
-            assert get_shim(legacy) is get_shim(canonical) is not None
+            assert get_shim(legacy) is None
+            assert get_shim(canonical) is not None
 
     def test_openai_base_type(self):
         shim = get_shim("openai--chat_completions")
@@ -786,10 +788,12 @@ class TestShimConverterIntegration:
         )
 
         assert isinstance(
-            get_converter_for_provider("openai_chat"), ChatCompletionsConverter
+            get_converter_for_provider("chat_completions"), ChatCompletionsConverter
         )
         assert isinstance(get_converter_for_provider("messages"), MessagesConverter)
-        assert isinstance(get_converter_for_provider("google"), GoogleGenerateConverter)
+        assert isinstance(
+            get_converter_for_provider("google_generate"), GoogleGenerateConverter
+        )
 
     def test_unknown_provider_raises(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
@@ -862,11 +866,13 @@ class TestGroupedProviders:
 
 class TestMultimodalToolResultCapability:
     def test_shim_default_is_none(self):
-        s = ProviderShim(name="test", base="openai_chat")
+        s = ProviderShim(name="test", base="chat_completions")
         assert s.multimodal_tool_result is None
 
     def test_shim_explicit_true(self):
-        s = ProviderShim(name="test", base="openai_chat", multimodal_tool_result=True)
+        s = ProviderShim(
+            name="test", base="chat_completions", multimodal_tool_result=True
+        )
         assert s.multimodal_tool_result is True
 
     def test_shim_explicit_false(self):
@@ -883,7 +889,7 @@ class TestMultimodalToolResultCapability:
 
         register_shim(
             ProviderShim(
-                name="mm-target", base="openai_chat", multimodal_tool_result=True
+                name="mm-target", base="chat_completions", multimodal_tool_result=True
             )
         )
         register_shim(ProviderShim(name="mm-source", base="messages"))
@@ -923,7 +929,7 @@ class TestMultimodalToolResultCapability:
 
         from llm_rosetta.auto_detect import convert
 
-        register_shim(ProviderShim(name="plain-target", base="openai_chat"))
+        register_shim(ProviderShim(name="plain-target", base="chat_completions"))
         register_shim(ProviderShim(name="plain-source", base="messages"))
 
         captured_ctx: list[Any] = []
@@ -959,13 +965,13 @@ class TestMultimodalToolResultCapability:
 
         register_shim(
             ProviderShim(
-                name="pipe-target", base="openai_chat", multimodal_tool_result=True
+                name="pipe-target", base="chat_completions", multimodal_tool_result=True
             )
         )
 
         pipeline = ConversionPipeline(
             source_provider="messages",
-            target_provider="openai_chat",
+            target_provider="chat_completions",
             shim="pipe-target",
         )
         body = {
@@ -983,13 +989,13 @@ class TestMultimodalToolResultCapability:
 
         register_shim(
             ProviderShim(
-                name="mm-chat", base="openai_chat", multimodal_tool_result=True
+                name="mm-chat", base="chat_completions", multimodal_tool_result=True
             )
         )
 
         pipeline = ConversionPipeline(
             source_provider="messages",
-            target_provider="openai_chat",
+            target_provider="chat_completions",
             shim="mm-chat",
         )
         body = {

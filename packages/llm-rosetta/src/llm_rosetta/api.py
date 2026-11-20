@@ -68,13 +68,6 @@ from llm_rosetta.pipeline import (
 )
 from llm_rosetta.ir.passes.enforcement import reasoning_capability
 from llm_rosetta.profiling import DeepProfiler
-from llm_rosetta.provider_names import (
-    canonical_provider_name,
-    canonical_shim_name,
-    legacy_names,
-    warn_legacy_provider_names,
-    warn_legacy_shim_names,
-)
 from llm_rosetta.shims import (
     ConnectionConfig,
     ProviderShim,
@@ -146,12 +139,7 @@ __all__ = [
     "spec_for",
     # Provider and shim names
     "ProviderType",
-    "canonical_provider_name",
-    "canonical_shim_name",
-    "legacy_names",
     "retired_names",
-    "warn_legacy_provider_names",
-    "warn_legacy_shim_names",
     # Shim registry, read side
     "ConnectionConfig",
     "ProviderShim",

@@ -15,7 +15,7 @@ Each store keeps its own ledger:
   registry's results.
 - :mod:`.startup` — the deferred task that runs the backfills.
 - :mod:`.dumps` — error dumps held until their request-log row exists.
-- :mod:`.names` — the idempotent provider/shim name correction.
+- :mod:`.names` — the guard that rejects a retired provider/shim name.
 - :mod:`.migrations` — versioned config-schema migrations.
 
 The public names are re-exported lazily: importing a submodule (for example
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
     from .dumps import DeferredDumpStore
     from .keystore import COLUMN_OF, build_registry as build_keystore_registry
     from .migrations import CURRENT_VERSION, migrate
-    from .names import correct_legacy_names, legacy_name_error
+    from .names import legacy_name_error
     from .startup import DeferredStartup, ProviderInitState, ProviderNotReady
 
 #: Public name -> (submodule, attribute).  Kept as data so the façade costs
@@ -58,7 +58,6 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "build_config_registry": (".config", "build_registry"),
     "build_deferred_registry": (".backfills", "build_registry"),
     "build_keystore_registry": (".keystore", "build_registry"),
-    "correct_legacy_names": (".names", "correct_legacy_names"),
     "legacy_name_error": (".names", "legacy_name_error"),
     "migrate": (".migrations", "migrate"),
 }
@@ -76,7 +75,6 @@ __all__ = [
     "build_config_registry",
     "build_deferred_registry",
     "build_keystore_registry",
-    "correct_legacy_names",
     "legacy_name_error",
     "migrate",
 ]
