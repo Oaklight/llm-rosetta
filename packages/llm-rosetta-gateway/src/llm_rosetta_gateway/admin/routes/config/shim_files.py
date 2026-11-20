@@ -61,17 +61,16 @@ def _plugin_source(name: str) -> str | None:
     A plugin shim has no ``provider.yaml`` for the index to walk to, so this
     is the only way the inventory can say where its code came from.
     """
-    from llm_rosetta.shims import providers as _providers
+    from llm_rosetta.api import plugin_source
 
-    getter = getattr(_providers, "plugin_source", None)
-    return getter(name) if callable(getter) else None
+    return plugin_source(name)
 
 
 def _builtin_root() -> Path:
     """Return the directory the bundled shims are loaded from."""
-    from llm_rosetta.shims import providers as _providers
+    from llm_rosetta.api import builtin_providers_dir
 
-    return Path(_providers.__file__).parent
+    return builtin_providers_dir()
 
 
 def _yaml_meta(path: Path) -> dict[str, Any] | None:

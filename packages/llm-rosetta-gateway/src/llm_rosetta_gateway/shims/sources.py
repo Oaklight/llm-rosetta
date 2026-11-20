@@ -43,15 +43,13 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta.shims.provider_shim import (
+from llm_rosetta.api import (  # noqa: F401
     list_shims,
+    load_providers,
+    load_providers_from_dir,
     register_shim,
     staging_registry,
     unregister_shim,
-)
-from llm_rosetta.shims.providers import (  # noqa: F401
-    load_providers,
-    load_providers_from_dir,
 )
 
 # ``MAX_ARCHIVE_BYTES`` is bound into this module and read here (the size
