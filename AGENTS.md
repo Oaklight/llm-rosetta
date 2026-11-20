@@ -205,8 +205,8 @@ Nothing in `ir/` may import `converters` (enforced by
 `tests/test_ir_import_boundary.py`); `ConversionContext` / `StreamContext` live
 in `ir/context.py` and `converters/base/context.py` re-exports them. A pass may
 use the shim contract. `llm_rosetta.transforms` and
-`llm_rosetta.capabilities` are facades, and the old
-`converters/base/{helpers,tools}/*` submodule paths re-export from `ir/`.
+`llm_rosetta.capabilities` are facades, and the package-level
+`converters.base.{helpers,tools}` names re-export from `ir/`.
 
 ## Repository layout
 

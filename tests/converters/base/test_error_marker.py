@@ -1,6 +1,6 @@
 """Unit tests for tool-result error marking."""
 
-from llm_rosetta.converters.base.tools.error_marker import (
+from llm_rosetta.ir.tools.error_marker import (
     TOOL_ERROR_MARKER,
     mark_tool_error,
     warn_tool_error,

@@ -38,7 +38,7 @@ from llm_rosetta.conversion_warnings import DOWNGRADED, DROPPED, report_loss
 from ...base.helpers.opaque import (
     set_opaque_origin,
 )
-from ...base.tools.batch import assign_tool_batch_ids
+from llm_rosetta.ir.tools.batch import assign_tool_batch_ids
 from ...base.tools.multimodal_patch import (
     has_multimodal_content,
     inject_packed_tool_content,

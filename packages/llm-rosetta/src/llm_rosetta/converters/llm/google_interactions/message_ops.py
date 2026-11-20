@@ -19,7 +19,7 @@ from ...base import BaseMessageOps
 from ...base.helpers.citations import report_dropped_citation
 from ...base.helpers.opaque import inject_interactions_function_call_signature
 from ...base.tools import is_intrinsic_part
-from ...base.tools.batch import assign_tool_batch_ids
+from llm_rosetta.ir.tools.batch import assign_tool_batch_ids
 from .content_ops import GoogleInteractionsContentOps
 from .tool_ops import (
     GoogleInteractionsToolOps,

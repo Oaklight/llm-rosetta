@@ -105,16 +105,11 @@ def test_old_paths_are_identity_reattachments():
     """The facades re-export the same objects, not copies."""
     from llm_rosetta.capabilities import enforce_vision as legacy_pass
     from llm_rosetta.converters.base.tools import sanitize_tool_call_id as legacy_id
-    from llm_rosetta.converters.base.tools.intrinsic import (
-        intrinsic_kind_of as legacy_intrinsic,
-    )
     from llm_rosetta.ir.passes import enforce_vision as canonical_pass
     from llm_rosetta.ir.tools import sanitize_tool_call_id as canonical_id
-    from llm_rosetta.ir.tools.intrinsic import intrinsic_kind_of as canonical_intrinsic
     from llm_rosetta.transforms import strip_fields as legacy_transform
     from llm_rosetta.ir.primitives.body import strip_fields as canonical_transform
 
     assert legacy_pass is canonical_pass
     assert legacy_id is canonical_id
-    assert legacy_intrinsic is canonical_intrinsic
     assert legacy_transform is canonical_transform

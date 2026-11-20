@@ -5,7 +5,7 @@
 spelling, and the constructors write only the first-class field.
 """
 
-from llm_rosetta.converters.base.tools.intrinsic import (
+from llm_rosetta.ir.tools.intrinsic import (
     get_definition_kind,
     get_intrinsic_kind,
     intrinsic_kind_of,

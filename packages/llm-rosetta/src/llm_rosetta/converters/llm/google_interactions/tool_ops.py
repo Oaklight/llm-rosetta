@@ -16,7 +16,7 @@ from ...base.tools import (
     allowed_tool_names,
     allowed_tool_refs,
 )
-from ...base.tools.intrinsic import (
+from llm_rosetta.ir.tools.intrinsic import (
     get_native_definition,
     intrinsic_kind_of,
     make_intrinsic_tool_definition,

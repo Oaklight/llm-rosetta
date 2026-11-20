@@ -42,7 +42,7 @@ from collections.abc import Callable
 
 import pytest
 
-from llm_rosetta.converters.base.tools.intrinsic import (
+from llm_rosetta.ir.tools.intrinsic import (
     make_intrinsic_tool_call,
     make_intrinsic_tool_definition,
     make_intrinsic_tool_result,

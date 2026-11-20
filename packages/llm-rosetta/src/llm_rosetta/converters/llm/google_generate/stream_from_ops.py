@@ -28,7 +28,7 @@ from ...base.context import (
     StreamContext,
     carry_registered_call_identity,
 )
-from ...base.tools.intrinsic import (
+from llm_rosetta.ir.tools.intrinsic import (
     intrinsic_kind_of,
 )
 from ...base.helpers.opaque import (

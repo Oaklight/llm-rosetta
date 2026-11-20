@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from llm_rosetta.converters.base import BaseToolOps
-from llm_rosetta.converters.base.tools.intrinsic import (
+from llm_rosetta.ir.tools.intrinsic import (
     intrinsic_kind_of,
     make_intrinsic_tool_call,
     make_intrinsic_tool_result,

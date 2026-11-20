@@ -7,7 +7,7 @@ from llm_rosetta.converters.llm.messages.converter import MessagesConverter
 from llm_rosetta.converters.base import BaseConverter
 from llm_rosetta.converters.base.context import ConversionContext, StreamContext
 from llm_rosetta.pipeline import StreamProcessor
-from llm_rosetta.converters.base.tools.orphan_fix import (
+from llm_rosetta.ir.tools.orphan_fix import (
     fix_orphaned_tool_calls_ir,
 )
 from llm_rosetta.converters.llm.open_responses.converter import OpenAIResponsesConverter

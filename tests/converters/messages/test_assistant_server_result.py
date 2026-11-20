@@ -31,7 +31,7 @@ from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
 from llm_rosetta.converters.llm.messages.message_ops import MessagesMessageOps
 from llm_rosetta.converters.llm.messages.tool_ops import MessagesToolOps
 from llm_rosetta.ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
-from llm_rosetta.converters.base.tools.orphan_fix import fix_orphaned_tool_calls_ir
+from llm_rosetta.ir.tools.orphan_fix import fix_orphaned_tool_calls_ir
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
 from llm_rosetta.types.ir import IRInputItem, Message

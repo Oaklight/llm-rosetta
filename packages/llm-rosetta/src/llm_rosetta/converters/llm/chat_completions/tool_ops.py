@@ -515,7 +515,7 @@ class ChatCompletionsToolOps(BaseToolOps):
         Chat Completions has no tool error field, so an ``is_error`` flag is
         re-encoded as a trailing marker — a text block when blocks are
         allowed, the marker line of the same string otherwise (see
-        ``base.tools.error_marker``).
+        ``ir.tools.error_marker``).
 
         Args:
             ir_tool_result: IR tool result part.

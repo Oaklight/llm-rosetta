@@ -31,7 +31,7 @@ from ...base.context import (
 from ...base.tools import (
     sanitize_tool_call_id,
 )
-from ...base.tools.intrinsic import (
+from llm_rosetta.ir.tools.intrinsic import (
     intrinsic_kind_of,
 )
 from ...base.helpers.citations import (

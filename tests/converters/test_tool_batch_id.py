@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.converters.base.tools.batch import (
+from llm_rosetta.ir.tools.batch import (
     assign_tool_batch_ids,
     merge_tool_messages,
 )

@@ -2,7 +2,7 @@
 
 import pytest
 
-from llm_rosetta.converters.base.helpers.truncate import (
+from llm_rosetta.ir.primitives.truncate import (
     HASH_SUFFIX_LEN,
     truncate_with_digest,
 )

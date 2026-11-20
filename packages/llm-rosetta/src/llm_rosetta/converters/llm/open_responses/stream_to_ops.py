@@ -23,7 +23,7 @@ from ...base.helpers.opaque import (
     get_opaque_origin,
     is_own_origin,
 )
-from ...base.helpers.tool_group import (
+from llm_rosetta.ir.primitives.tool_group import (
     tool_call_group,
 )
 from ...base.tools import (
