@@ -26,6 +26,7 @@ from .typed import (
     get_decision_converter,
     get_embedding_converter,
     get_rerank_converter,
+    typed_response_usage,
 )
 
 __all__ = [
@@ -44,4 +45,5 @@ __all__ = [
     "get_embedding_converter",
     "get_rerank_converter",
     "setup_shim_context",
+    "typed_response_usage",
 ]

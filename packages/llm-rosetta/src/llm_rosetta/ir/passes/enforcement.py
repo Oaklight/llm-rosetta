@@ -81,6 +81,38 @@ def _apply_config_reasoning_override(
 # ---------------------------------------------------------------------------
 
 
+def reasoning_capability(
+    shim: ProviderShim | str | None,
+    model: str | None = None,
+    override: dict[str, Any] | None = None,
+) -> ReasoningCapability | None:
+    """The reasoning capability a request to *model* through *shim* will use.
+
+    The resolution :func:`enforce_reasoning` applies, as a pure function, so a
+    host that reports the capability (an admin panel) reads the same answer the
+    request path uses.  Priority, highest first: *override* (merged field by
+    field onto the next layer), the shim's per-model entry for *model*, the
+    shim's provider-level default.
+
+    Args:
+        shim: ProviderShim instance, registered name, or ``None``.
+        model: Upstream model ID, for the per-model entry.
+        override: Config-level override mapping (``thinking_modes``,
+            ``effort_field``, ...); only the fields it names replace the base.
+
+    Returns:
+        The capability, or ``None`` when the shim is unknown or declares no
+        reasoning.  *override* is ignored when there is no base to merge onto.
+    """
+    resolved = resolve_shim(shim)
+    if resolved is None:
+        return None
+    cap = match_model_reasoning(resolved, model) or resolved.reasoning
+    if cap is not None and override:
+        cap = _apply_config_reasoning_override(cap, override)
+    return cap
+
+
 def enforce_reasoning(
     ctx: ConversionContext,
     shim: ProviderShim | str | None,
@@ -112,14 +144,7 @@ def enforce_reasoning(
         model: Upstream model ID (for per-model reasoning overrides).
         config_override: External reasoning override (highest priority).
     """
-    resolved = resolve_shim(shim)
-    if resolved is None:
-        return
-
-    cap = match_model_reasoning(resolved, model) or resolved.reasoning
-    # Config-level override (from admin UI, keyed by gateway model name)
-    if cap is not None and config_override:
-        cap = _apply_config_reasoning_override(cap, config_override)
+    cap = reasoning_capability(shim, model, config_override)
     if cap is not None:
         ctx.options["reasoning_cap"] = cap
 

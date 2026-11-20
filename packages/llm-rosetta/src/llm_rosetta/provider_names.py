@@ -138,6 +138,24 @@ LEGACY_SHIM_ALIASES: dict[str, str] = {
 }
 
 
+def legacy_names() -> dict[str, dict[str, str]]:
+    """The retired provider and shim spellings and what each became.
+
+    A host that rewrites a stored config reads the tables here instead of
+    importing the two module-level dicts.  The result is a copy: mutating it
+    does not change how names resolve.
+
+    Returns:
+        ``{"provider": {old: new}, "shim": {old: new}}``.  ``provider`` holds
+        the format-level aliases (what :func:`canonical_provider_name` maps);
+        ``shim`` holds the shim-level ones (:func:`canonical_shim_name`).
+    """
+    return {
+        "provider": dict(LEGACY_PROVIDER_ALIASES),
+        "shim": dict(LEGACY_SHIM_ALIASES),
+    }
+
+
 def canonical_shim_name(name: str) -> str:
     """Resolve a legacy *shim* name to its canonical ``<provider>--<base>`` form.
 
@@ -298,6 +316,7 @@ __all__ = [
     "LEGACY_SHIM_ALIASES",
     "canonical_provider_name",
     "canonical_shim_name",
+    "legacy_names",
     "normalize_provider_name",
     "warn_legacy_provider_names",
     "warn_legacy_shim_names",

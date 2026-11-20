@@ -180,6 +180,24 @@ BY_PAIR: dict[tuple[str, str], FormatSpec] = {
 }
 
 
+def spec_for(model_type: str, format: str) -> FormatSpec | None:
+    """The catalog record of one ``(model_type, format)`` pair, if there is one.
+
+    A host reads per-format facts (models path, stream echo fields, ...) here
+    rather than through :data:`BY_PAIR`, whose key layout stays internal.  The
+    model type is canonicalised first, so a legacy spelling (``embedding``)
+    finds its record.
+
+    Args:
+        model_type: A model type, canonical or legacy.
+        format: A format name; it is not alias-resolved.
+
+    Returns:
+        The :class:`FormatSpec`, or ``None`` when the pair is not in the catalog.
+    """
+    return BY_PAIR.get((canonical_model_type(model_type), format))
+
+
 def canonical_model_type(name: str) -> str:
     """The canonical spelling of the model type *name*.
 

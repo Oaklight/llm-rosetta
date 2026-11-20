@@ -955,7 +955,18 @@ def staging_registry() -> Iterator[dict[str, ProviderShim]]:
     partially-populated one.  On a clean exit the staging dict replaces the
     global in a **single reference assignment**; if the block raises, the live
     registry is left exactly as it was and the staging dict is discarded.
+
+    Everything derived from the registry (converter instances, convention
+    model-list transforms, plugin transform namespaces) is dropped on entry,
+    so the staged registry starts from a clean slate and a caller does not need
+    to know which caches exist.  If the block raises, the convention model-list
+    transforms are put back, because they are registered while shims load and
+    the live registry still needs them.
     """
+    from .providers import _model_list_transforms
+
+    kept_transforms = dict(_model_list_transforms)
+    _clear_registry_caches()
     previous = getattr(_registry_staging, "registry", None)
     staging: dict[str, ProviderShim] = {}
     _registry_staging.registry = staging
@@ -963,6 +974,8 @@ def staging_registry() -> Iterator[dict[str, ProviderShim]]:
         yield staging
     except BaseException:
         _registry_staging.registry = previous
+        _model_list_transforms.clear()
+        _model_list_transforms.update(kept_transforms)
         raise
     _registry_staging.registry = previous
     global _SHIM_REGISTRY

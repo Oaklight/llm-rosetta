@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +19,7 @@ from ._sidecars import _load_auth_exchange
 from ._constants import (
     _CONNECTION_KEYS,
     _FLAT_CONNECTION_ALIASES,
+    _IDENTITY_KEYS,
     _MANIFEST_KEYS,
 )
 
@@ -201,3 +206,147 @@ def _leaf_exchange(provider_dir: Path, manifest: VendorManifest | None) -> Any |
             f"declares one exchange"
         )
     return manifest.auth
+
+
+@dataclass(frozen=True)
+class ManifestLeaf:
+    """One shim a vendor manifest's connection reaches.
+
+    Attributes:
+        name: The shim name the leaf declares (empty when it declares none).
+        path: The leaf's ``provider.yaml``.
+        own: The connection values the leaf declares itself, under their
+            ``connection:`` names.
+        effective: The connection the loader would use: *own* over the
+            manifest's.
+    """
+
+    name: str
+    path: Path
+    own: dict[str, Any]
+    effective: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class VendorManifestDescription:
+    """What a vendor manifest declares and what its leaves inherit from it.
+
+    Attributes:
+        path: The manifest's ``provider.yaml``.
+        vendor: The directory name the manifest sits in.
+        connection: The ``connection:`` values in force: the manifest's own, or
+            the ``connection`` argument of :func:`describe_vendor_manifest`.
+        leaves: Every shim below the manifest, in path order.  A nested vendor
+            manifest owns the shims under it, so they are not listed here.
+        connection_keys: The ``connection:`` keys a manifest may declare.
+        identity_keys: The keys that make a ``provider.yaml`` a shim rather
+            than a manifest.
+        schema: The ``vendorManifest`` and ``connection`` definitions of
+            ``provider.schema.json``, as ``{"manifest": ..., "connection": ...}``.
+    """
+
+    path: Path
+    vendor: str
+    connection: dict[str, Any]
+    leaves: tuple[ManifestLeaf, ...] = ()
+    connection_keys: tuple[str, ...] = _CONNECTION_KEYS
+    identity_keys: tuple[str, ...] = _IDENTITY_KEYS
+    schema: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+
+def _read_mapping(path: Path) -> dict[str, Any]:
+    """A ``provider.yaml`` as a mapping; a comment-only or unreadable file is empty."""
+    try:
+        cfg = yaml_load(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _manifest_schema() -> dict[str, dict[str, Any]]:
+    """The manifest and connection definitions of ``provider.schema.json``."""
+    text = (Path(__file__).parent / "provider.schema.json").read_text(encoding="utf-8")
+    definitions = json.loads(text).get("definitions") or {}
+    return {
+        "manifest": definitions.get("vendorManifest") or {},
+        "connection": definitions.get("connection") or {},
+    }
+
+
+def _leaf_definitions(manifest_path: Path) -> list[Path]:
+    """The shim ``provider.yaml`` files below *manifest_path*'s directory.
+
+    A directory whose own ``provider.yaml`` declares no identity is a nested
+    vendor manifest; it owns what is below it, so the walk does not enter it.
+    """
+    root = manifest_path.parent
+    found: list[Path] = []
+    for directory, subdirs, files in os.walk(root):
+        here = Path(directory)
+        subdirs.sort()
+        if here == root or "provider.yaml" not in files:
+            continue
+        cfg = _read_mapping(here / "provider.yaml")
+        if any(key in cfg for key in _IDENTITY_KEYS):
+            found.append(here / "provider.yaml")
+        else:
+            subdirs[:] = []
+    return sorted(found)
+
+
+def describe_vendor_manifest(
+    path: str | os.PathLike[str],
+    connection: Mapping[str, Any] | None = None,
+) -> VendorManifestDescription:
+    """Describe a vendor manifest and what each of its shims inherits from it.
+
+    This is the read-only view an editor needs: the keys a manifest may use,
+    the schema, and per shim both the values it declares and the values the
+    loader would end up with.  It reads files only and registers nothing.
+
+    Args:
+        path: A vendor's ``provider.yaml``, or the vendor directory holding it.
+        connection: Describe the leaves as if the manifest declared this
+            ``connection:`` instead of what the file holds, for a preview of an
+            edit before it is saved.
+
+    Returns:
+        The description.
+
+    Raises:
+        FileNotFoundError: *path* holds no ``provider.yaml``.
+    """
+    manifest_path = Path(path)
+    if manifest_path.is_dir():
+        manifest_path = manifest_path / "provider.yaml"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(f"no provider.yaml at {manifest_path}")
+    if connection is None:
+        declared = _read_mapping(manifest_path).get("connection")
+        in_force = dict(declared) if isinstance(declared, dict) else {}
+    else:
+        in_force = dict(connection)
+    manifest = VendorManifest(
+        vendor=manifest_path.parent.name, path=manifest_path, connection=in_force
+    )
+
+    leaves: list[ManifestLeaf] = []
+    for leaf_path in _leaf_definitions(manifest_path):
+        cfg = _read_mapping(leaf_path)
+        own = _leaf_connection(cfg)
+        effective, _resolve = _merged_connection(own, manifest)
+        leaves.append(
+            ManifestLeaf(
+                name=str(cfg.get("name") or ""),
+                path=leaf_path,
+                own=own,
+                effective=dict(effective),
+            )
+        )
+    return VendorManifestDescription(
+        path=manifest_path,
+        vendor=manifest.vendor,
+        connection=in_force,
+        leaves=tuple(leaves),
+        schema=_manifest_schema(),
+    )
