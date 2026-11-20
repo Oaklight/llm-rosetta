@@ -268,10 +268,10 @@ class TestGetConverterForProvider:
 
     def test_get_google_converter(self):
         """测试获取 Google 转换器"""
-        from llm_rosetta.converters import GoogleConverter
+        from llm_rosetta.converters import GoogleGenerateConverter
 
         converter = get_converter_for_provider("google")
-        assert isinstance(converter, GoogleConverter)
+        assert isinstance(converter, GoogleGenerateConverter)
 
     def test_get_invalid_provider(self):
         """测试无效的 provider"""

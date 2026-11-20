@@ -84,7 +84,7 @@ class TestTheDescriptorsAgree:
 
 
 class TestModuleLayout:
-    """Where each family's packages live, and which old paths still resolve."""
+    """Where each family's packages live, and which old paths are gone."""
 
     def test_llm_formats_live_under_the_llm_package(self) -> None:
         import importlib
@@ -92,37 +92,6 @@ class TestModuleLayout:
         for fmt in FORMATS_BY_TYPE["llm"]:
             module = importlib.import_module(f"llm_rosetta.converters.llm.{fmt}")
             assert module.__name__ == f"llm_rosetta.converters.llm.{fmt}"
-
-    def test_google_packages_keep_their_0130_paths(self) -> None:
-        """``converters.google_generate`` was importable in 0.13.0.
-
-        The implementations moved under ``converters.llm``; the old path is a
-        stub package that warns on import and registers the new submodules
-        under the old dotted names, so a class fetched by the old path is the
-        one the registry holds, not a second copy.
-        """
-        import importlib
-        import sys
-
-        for name in ("google_generate", "google_interactions"):
-            sys.modules.pop(f"llm_rosetta.converters.{name}", None)
-            with pytest.warns(
-                DeprecationWarning, match=f"converters.{name} is deprecated"
-            ):
-                old = importlib.import_module(f"llm_rosetta.converters.{name}")
-            new = importlib.import_module(f"llm_rosetta.converters.llm.{name}")
-            assert old.__all__ == new.__all__
-            old_sub = importlib.import_module(
-                f"llm_rosetta.converters.{name}.converter"
-            )
-            new_sub = importlib.import_module(
-                f"llm_rosetta.converters.llm.{name}.converter"
-            )
-            assert old_sub is new_sub
-            # The 0.13.0 attribute form (``gg.converter.X``) must resolve too,
-            # not just the dotted import form registered in ``sys.modules``.
-            assert old.converter is new.converter
-        assert old_sub.GoogleInteractionsConverter is new.GoogleInteractionsConverter
 
     def test_other_llm_formats_have_no_legacy_top_level_path(self) -> None:
         """Those three names did not exist in 0.13.0, so they keep no alias."""
@@ -132,6 +101,37 @@ class TestModuleLayout:
             assert importlib.util.find_spec(f"llm_rosetta.converters.{fmt}") is None, (
                 fmt
             )
+
+    def test_removed_compat_packages_do_not_resolve(self) -> None:
+        """The 0.13.0 compat packages are gone (#919), not aliased."""
+        import importlib.util
+
+        for name in (
+            "embedding",
+            "openai_chat",
+            "anthropic",
+            "openai_responses",
+            "google_genai",
+            "google_generate",
+            "google_interactions",
+        ):
+            assert importlib.util.find_spec(f"llm_rosetta.converters.{name}") is None, (
+                name
+            )
+
+    def test_removed_class_aliases_are_gone(self) -> None:
+        import llm_rosetta
+        from llm_rosetta import converters
+        from llm_rosetta.converters import llm
+
+        for name in (
+            "OpenAIChatConverter",
+            "AnthropicConverter",
+            "GoogleGenAIConverter",
+            "GoogleConverter",
+        ):
+            for module in (llm_rosetta, converters, llm):
+                assert not hasattr(module, name), (module.__name__, name)
 
 
 class TestBasePackage:

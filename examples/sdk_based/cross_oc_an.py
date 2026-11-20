@@ -40,11 +40,11 @@ from common import (  # noqa: E402
     process_tool_calls,
 )
 
-from llm_rosetta import AnthropicConverter, OpenAIChatConverter  # noqa: E402
+from llm_rosetta import MessagesConverter, ChatCompletionsConverter  # noqa: E402
 
 # Initialize converters
-oc_converter = OpenAIChatConverter()
-an_converter = AnthropicConverter()
+oc_converter = ChatCompletionsConverter()
+an_converter = MessagesConverter()
 
 
 def init_openai_client():

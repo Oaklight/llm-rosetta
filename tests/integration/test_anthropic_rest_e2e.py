@@ -29,7 +29,7 @@ import requests
 from typing import cast
 
 from examples.tools import available_tools, tools_spec
-from llm_rosetta.converters.anthropic import AnthropicConverter
+from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.types.ir import (
     IRRequest,
     ToolCallPart,
@@ -60,7 +60,7 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-converter = AnthropicConverter()
+converter = MessagesConverter()
 
 
 # ============================================================================

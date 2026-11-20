@@ -624,8 +624,3 @@ class MessagesMessageOps(BaseMessageOps):
             return [self.tool_ops.p_server_tool_result_to_ir(provider_part)]
 
         return []
-
-
-# Backward-compatible alias (deprecated) — the base type was renamed
-# ``anthropic`` → ``messages``.
-AnthropicMessageOps = MessagesMessageOps

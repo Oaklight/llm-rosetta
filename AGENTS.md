@@ -58,8 +58,12 @@ vendor URL for a bare format is offered in the admin UI as a *placeholder*
 hint only.
 
 `ChatCompletionsConverter` (module `converters/llm/chat_completions/`) is the
-canonical name of the Chat Completions converter; the `OpenAIChat*` classes and
-the `converters/openai_chat/` module are retained as deprecated aliases.
+name of the Chat Completions converter.  The 0.13.0 names (`OpenAIChat*`,
+`AnthropicConverter`, `GoogleGenAIConverter`, `GoogleConverter`) and the compat
+packages (`converters/openai_chat/`, `converters/anthropic/`,
+`converters/openai_responses/`, `converters/google_genai/`,
+`converters/google_generate/`, `converters/google_interactions/`,
+`converters/embedding/`) were removed in 0.14.0 (#919); do not reintroduce them.
 
 Each chat converter implements bidirectional conversion (request/response) and
 streaming. Converters are provider-agnostic — provider-specific quirks are
@@ -256,12 +260,10 @@ Conventions the filesystem does not show:
 
 - `llm_rosetta/gateway/` forwards to `llm_rosetta_gateway`; it is removed in
   0.16.0. Do not add code to it.
-- These converter packages are deprecated aliases; the canonical package is
-  on the right: `converters/embedding/` → `converters/embeddings/`,
-  `converters/openai_chat/` → `converters/llm/chat_completions/`,
-  `converters/openai_responses/` → `converters/llm/open_responses/`,
-  `converters/anthropic/` → `converters/llm/messages/`,
-  `converters/google_genai/` → `converters/llm/google_generate/`.
+- The 0.13.0 converter compat packages and class aliases are removed (#919).
+  The packages are `converters/{embedding,openai_chat,openai_responses,anthropic,
+  google_genai,google_generate,google_interactions}/`; the canonical homes are
+  `converters/embeddings/` and `converters/llm/<format>/`.
 - Core must not import the gateway distribution
   (`tests/test_core_import_boundary.py`).
 - `packages/*/src/*/_vendor/**` is vendored through `zerodep`; never edit it

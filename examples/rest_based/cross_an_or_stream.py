@@ -46,11 +46,11 @@ from common import (  # noqa: E402
     process_tool_calls,
 )
 
-from llm_rosetta import AnthropicConverter, OpenAIResponsesConverter  # noqa: E402
+from llm_rosetta import MessagesConverter, OpenAIResponsesConverter  # noqa: E402
 from llm_rosetta.converters.base.context import StreamContext  # noqa: E402
 
 # Initialize converters
-an_converter = AnthropicConverter()
+an_converter = MessagesConverter()
 or_converter = OpenAIResponsesConverter()
 
 

@@ -10,7 +10,6 @@ import pytest
 
 from llm_rosetta.converters.base.helpers.citations import citation_url
 from llm_rosetta.converters.llm.google_generate import (
-    GoogleConverter,
     GoogleGenerateConverter,
 )
 from llm_rosetta.types.ir import (
@@ -1272,24 +1271,6 @@ class TestGoogleGenerateConverter:
         )
         result, warnings = self.converter.request_to_provider(ir_request)
         assert len(result["config"]["tools"]) == 1
-
-    # ==================== GoogleConverter Alias ====================
-
-    def test_google_converter_alias(self):
-        """Test GoogleConverter is an alias for GoogleGenerateConverter."""
-        assert GoogleConverter is GoogleGenerateConverter
-
-    def test_google_converter_alias_works(self):
-        """Test GoogleConverter alias can be instantiated and used."""
-        converter = GoogleConverter()
-        ir_request: IRRequest = {
-            "model": "gemini-2.0-flash",
-            "messages": [
-                {"role": "user", "content": [{"type": "text", "text": "Hello!"}]}
-            ],
-        }
-        result, warnings = converter.request_to_provider(ir_request)
-        assert result["model"] == "gemini-2.0-flash"
 
 
 class TestGoogleGenerateConverterFullRoundTrip:

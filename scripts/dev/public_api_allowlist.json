@@ -14,26 +14,6 @@
       "reason": "0.14.0 replaced force_conversion (default False) with its inverse baseline (default True). Landed before this check existed."
     },
     {
-      "key": "llm_rosetta.converters.openai_responses::OpenAIResponsesStreamContext::removed-parameter::accumulated_refusal",
-      "reason": "0.14.0 restructured the Responses stream context into _message_items/_reasoning_items. This field was internal stream state exposed only because the dataclass is in __all__."
-    },
-    {
-      "key": "llm_rosetta.converters.openai_responses::OpenAIResponsesStreamContext::removed-parameter::accumulated_text",
-      "reason": "0.14.0 restructured the Responses stream context into _message_items/_reasoning_items. This field was internal stream state exposed only because the dataclass is in __all__."
-    },
-    {
-      "key": "llm_rosetta.converters.openai_responses::OpenAIResponsesStreamContext::removed-parameter::content_part_done_emitted",
-      "reason": "0.14.0 restructured the Responses stream context into _message_items/_reasoning_items. This field was internal stream state exposed only because the dataclass is in __all__."
-    },
-    {
-      "key": "llm_rosetta.converters.openai_responses::OpenAIResponsesStreamContext::removed-parameter::item_id",
-      "reason": "0.14.0 restructured the Responses stream context into _message_items/_reasoning_items. This field was internal stream state exposed only because the dataclass is in __all__."
-    },
-    {
-      "key": "llm_rosetta.converters.openai_responses::OpenAIResponsesStreamContext::removed-parameter::output_item_emitted",
-      "reason": "0.14.0 restructured the Responses stream context into _message_items/_reasoning_items. This field was internal stream state exposed only because the dataclass is in __all__."
-    },
-    {
       "key": "llm_rosetta.observability::DEFAULT_ERROR_MAX::removed",
       "reason": "0.14.0 renamed it to DEFAULT_DUMP_MAX as part of the retention policy. Landed before this check existed."
     },
@@ -132,6 +112,38 @@
     {
       "key": "llm_rosetta.tool_ops::ToolResultPart::removed",
       "reason": "0.14.0 moved the IR tool types to llm_rosetta.types.ir (and the top-level package); tool_ops imports them for signatures only. Tracked by #1116."
+    },
+    {
+      "key": "llm_rosetta::AnthropicConverter::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P1): the 0.13.0 class alias is gone; use llm_rosetta.MessagesConverter."
+    },
+    {
+      "key": "llm_rosetta::GoogleConverter::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P1): the 0.13.0 class alias is gone; use llm_rosetta.GoogleGenerateConverter."
+    },
+    {
+      "key": "llm_rosetta::GoogleGenAIConverter::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P1): the 0.13.0 class alias is gone; use llm_rosetta.GoogleGenerateConverter."
+    },
+    {
+      "key": "llm_rosetta::OpenAIChatConverter::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P1): the 0.13.0 class alias is gone; use llm_rosetta.ChatCompletionsConverter."
+    },
+    {
+      "key": "llm_rosetta.converters::AnthropicConverter::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P1): the 0.13.0 class alias is gone; use llm_rosetta.converters.MessagesConverter."
+    },
+    {
+      "key": "llm_rosetta.converters::GoogleConverter::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P1): the 0.13.0 class alias is gone; use llm_rosetta.converters.GoogleGenerateConverter."
+    },
+    {
+      "key": "llm_rosetta.converters::GoogleGenAIConverter::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P1): the 0.13.0 class alias is gone; use llm_rosetta.converters.GoogleGenerateConverter."
+    },
+    {
+      "key": "llm_rosetta.converters::OpenAIChatConverter::removed",
+      "reason": "Removed in 0.14.0 (issue 919, P1): the 0.13.0 class alias is gone; use llm_rosetta.converters.ChatCompletionsConverter."
     }
   ]
 }

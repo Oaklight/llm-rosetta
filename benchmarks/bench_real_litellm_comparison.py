@@ -71,11 +71,11 @@ def bench_litellm(payload: dict, iterations: int) -> list[float]:
 
 def bench_rosetta(payload: dict, iterations: int) -> list[float]:
     """Benchmark Rosetta's OpenAI Chat → IR → Anthropic conversion."""
-    from llm_rosetta.converters.anthropic import AnthropicConverter
+    from llm_rosetta.converters.llm.messages import MessagesConverter
     from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
     oc = ChatCompletionsConverter()
-    an = AnthropicConverter()
+    an = MessagesConverter()
 
     # Warmup
     for _ in range(3):

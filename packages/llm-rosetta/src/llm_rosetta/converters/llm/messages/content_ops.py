@@ -525,8 +525,3 @@ class MessagesContentOps(BaseContentOps):
                 (*MessagesContentOps._SHARED, "document_title", "source"),
             ),
         )
-
-
-# Backward-compatible alias (deprecated) — the base type was renamed
-# ``anthropic`` → ``messages``.
-AnthropicContentOps = MessagesContentOps

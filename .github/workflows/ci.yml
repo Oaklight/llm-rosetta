@@ -431,7 +431,7 @@ jobs:
         run: |
           source /tmp/smoke-venv/bin/activate
           python -c "from llm_rosetta import get_converter_for_provider; print('core import OK')"
-          python -c "from llm_rosetta.converters.google_generate.content_ops import GoogleGenerateContentOps; print('google generate converter OK')"
+          python -c "from llm_rosetta.converters.llm.google_generate.content_ops import GoogleGenerateContentOps; print('google generate converter OK')"
           python -c "from llm_rosetta import GoogleInteractionsConverter; print('google interactions converter OK')"
           python -c "from llm_rosetta.converters.decisions import SystemOneDecisionConverter; print('decision converter OK')"
 

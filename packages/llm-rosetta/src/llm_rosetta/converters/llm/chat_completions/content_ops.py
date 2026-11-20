@@ -358,8 +358,3 @@ class ChatCompletionsContentOps(BaseContentOps):
                 provider_metadata={"openai": {"_raw": dict(provider_citation)}},
             )
         return CitationPart(type="citation")
-
-
-# Backward-compatible alias (deprecated): ``chat_completions`` is the canonical
-# base name now.
-OpenAIChatContentOps = ChatCompletionsContentOps

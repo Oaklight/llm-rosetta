@@ -636,8 +636,3 @@ class ChatCompletionsToolOps(BaseToolOps):
                 result["disable_parallel"] = not parallel
 
         return cast(ToolCallConfig, result)
-
-
-# Backward-compatible alias (deprecated): ``chat_completions`` is the canonical
-# base name now.
-OpenAIChatToolOps = ChatCompletionsToolOps

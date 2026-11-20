@@ -834,8 +834,3 @@ class MessagesToolOps(BaseToolOps):
                 result["disable_parallel"] = disable_parallel
 
         return cast(ToolCallConfig, result)
-
-
-# Backward-compatible alias (deprecated) — the base type was renamed
-# ``anthropic`` → ``messages``.
-AnthropicToolOps = MessagesToolOps

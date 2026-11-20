@@ -1006,8 +1006,3 @@ class ChatCompletionsMessageOps(BaseMessageOps):
             ]
 
         return []
-
-
-# Backward-compatible alias (deprecated): ``chat_completions`` is the canonical
-# base name now.
-OpenAIChatMessageOps = ChatCompletionsMessageOps
