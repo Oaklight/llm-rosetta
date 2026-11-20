@@ -136,7 +136,7 @@ def apply_shim_default_capabilities(
     An explicit per-model ``capabilities`` list is never touched.  The shim of
     the route's first provider decides, the same provider ``/v1/models`` names.
     """
-    from llm_rosetta.shims import resolve_shim
+    from llm_rosetta.api import resolve_shim
 
     for name, route in models.items():
         value = raw_models.get(name)
@@ -625,7 +625,7 @@ def declared_model_type(value: Any) -> str:
     Returns:
         A canonical model type name; ``"llm"`` when the entry declares none.
     """
-    from llm_rosetta.formats import canonical_model_type
+    from llm_rosetta.api import canonical_model_type
 
     from ..model_types import registered_type_names
 

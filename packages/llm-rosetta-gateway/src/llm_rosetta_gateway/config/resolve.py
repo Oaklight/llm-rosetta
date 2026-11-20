@@ -14,7 +14,7 @@ from ..routing import (
     SelectionContext,
     classify_unavailable,
 )
-from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta.api import ProviderType
 from llm_rosetta.routing import ResolvedRoute
 
 from ..providers import BASE_FORMATS
@@ -39,7 +39,7 @@ def identity_category(wire_format: str, cfg: dict[str, Any]) -> str | None:
     appears in no category stays unknown, which lets the caller keep the
     legacy ``llm`` default for a provider with no declared type.
     """
-    from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
+    from llm_rosetta.api import FORMATS_BY_TYPE
 
     from ..model_types import all_model_types
     from .typed import face_value
@@ -87,7 +87,7 @@ def endpoint_identity(
     with the provider *name* as its format and an ``llm`` identity, which
     hid it from the admin picker and from the LLM-model validator.
     """
-    from llm_rosetta.provider_names import canonical_provider_name
+    from llm_rosetta.api import canonical_provider_name
 
     from .typed import face_value
 
@@ -150,12 +150,12 @@ def resolve_provider_identities(
     Returns:
         Tuple of (provider_identities, provider_shim_names).
     """
-    from llm_rosetta.provider_names import (
+    from llm_rosetta.api import (
         canonical_provider_name,
         warn_legacy_provider_names,
         warn_legacy_shim_names,
     )
-    from llm_rosetta.shims import resolve_format, resolve_model_type
+    from llm_rosetta.api import resolve_format, resolve_model_type
 
     from ..model_types import all_model_types
     from ..maintenance.names import correct_legacy_names, legacy_name_error
@@ -314,7 +314,7 @@ def resolve(
     caps = config.model_capabilities.get(model, list(config.DEFAULT_CAPABILITIES))
     reasoning = config.model_reasoning_overrides.get(model)
     flatten_system = config.model_flatten_system.get(model, False)
-    from llm_rosetta.shims import resolve_shim
+    from llm_rosetta.api import resolve_shim
 
     _shim = resolve_shim(shim_name) if shim_name else None
     custom_tools = config.provider_supports_custom_tools.get(

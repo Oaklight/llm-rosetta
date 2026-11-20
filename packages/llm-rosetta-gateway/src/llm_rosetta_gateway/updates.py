@@ -99,7 +99,7 @@ def is_newer(candidate: str, current: str) -> bool:
 
 def running_versions() -> dict[str, str]:
     """The core and gateway versions this process imported."""
-    from llm_rosetta import __version__ as core_version
+    from llm_rosetta.api import __version__ as core_version
 
     from . import __version__ as gateway_version
 

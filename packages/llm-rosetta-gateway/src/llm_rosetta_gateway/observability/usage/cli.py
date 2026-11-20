@@ -41,7 +41,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta import __version__
+from llm_rosetta.api import __version__
 from ..persistence import PersistenceManager
 from llm_rosetta.observability.usage import (
     INTERNAL_LABEL,

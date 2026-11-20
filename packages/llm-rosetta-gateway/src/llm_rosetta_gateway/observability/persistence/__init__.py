@@ -53,7 +53,7 @@ from .schema import (  # noqa: F401
     _migration_steps,
     _recorded_version,
 )
-from llm_rosetta.formats import canonical_model_type  # noqa: F401, E402
+from llm_rosetta.api import canonical_model_type  # noqa: F401, E402
 from llm_rosetta.observability.usage import (  # noqa: F401, E402
     ADDITIVE_CACHE_STANDARDS,
     DEFAULT_MODEL_TYPE,

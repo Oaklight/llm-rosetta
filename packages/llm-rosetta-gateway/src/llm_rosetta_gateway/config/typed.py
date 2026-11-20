@@ -35,7 +35,7 @@ def legacy_config_key(key: str, type_name: str) -> str | None:
         The legacy key, or ``None`` when the type was never renamed or the
         key does not carry the type's prefix.
     """
-    from llm_rosetta.formats import legacy_model_type
+    from llm_rosetta.api import legacy_model_type
 
     old = legacy_model_type(type_name)
     prefix = f"{type_name}_"
@@ -383,7 +383,7 @@ def typed_wire_format(
     cfg: dict[str, Any], keys: _TypedKeys, explicit_format: str, shim: Any
 ) -> str:
     """The wire format an entry resolves to, canonicalised."""
-    from llm_rosetta.provider_names import canonical_provider_name
+    from llm_rosetta.api import canonical_provider_name
 
     if explicit_format:
         return canonical_provider_name(explicit_format)
@@ -588,7 +588,7 @@ def _endpoint_hosts(shim: Any, type_name: str, wire_format: str) -> list[str]:
     host = getattr(connection, "base_url", None) or ""
     if host:
         return [str(host)]
-    from llm_rosetta.shims import list_shims
+    from llm_rosetta.api import list_shims
 
     hosts: list[str] = []
     for candidate in list_shims():
@@ -644,7 +644,7 @@ def resolve_endpoint_shim(cfg: dict[str, Any], *, type_name: str, shim_key: str)
     Raises:
         ValueError: If ``cfg[shim_key]`` is unknown or serves another type.
     """
-    from llm_rosetta.shims import get_shim
+    from llm_rosetta.api import get_shim
 
     declared = face_value(cfg, shim_key, type_name)
     if declared:

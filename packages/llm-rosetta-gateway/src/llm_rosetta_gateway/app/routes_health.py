@@ -28,7 +28,7 @@ def version_info() -> dict[str, str]:
     They are released together (epic #1127) but can drift by a patch when a
     gateway-only fix ships; exposing both lets an operator confirm the pair.
     """
-    from llm_rosetta import __version__ as core_version
+    from llm_rosetta.api import __version__ as core_version
 
     from .. import __version__ as gateway_version
 

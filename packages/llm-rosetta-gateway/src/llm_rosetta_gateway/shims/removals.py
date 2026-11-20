@@ -26,7 +26,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from llm_rosetta.provider_names import canonical_provider_name, canonical_shim_name
+from llm_rosetta.api import canonical_provider_name, canonical_shim_name
 
 
 @dataclass(frozen=True)
