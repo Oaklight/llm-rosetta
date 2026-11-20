@@ -14,20 +14,17 @@ package; each is keyed by ``(model_type, format)`` in
 :mod:`llm_rosetta.converters.registry`.
 """
 
-from .chat_completions import ChatCompletionsConverter, OpenAIChatConverter
-from .google_generate import GoogleConverter, GoogleGenerateConverter
+from .chat_completions import ChatCompletionsConverter
+from .google_generate import GoogleGenerateConverter
 from .google_interactions import GoogleInteractionsConverter
-from .messages import AnthropicConverter, MessagesConverter
+from .messages import MessagesConverter
 from .open_responses import OpenAIResponsesConverter, OpenResponsesConverter
 
 __all__ = [
     "ChatCompletionsConverter",
-    "OpenAIChatConverter",  # deprecated alias
     "MessagesConverter",
-    "AnthropicConverter",  # deprecated alias
     "OpenResponsesConverter",
     "OpenAIResponsesConverter",  # deprecated alias
     "GoogleGenerateConverter",
-    "GoogleConverter",  # deprecated alias
     "GoogleInteractionsConverter",
 ]

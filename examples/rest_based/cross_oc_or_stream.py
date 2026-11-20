@@ -46,11 +46,11 @@ from common import (  # noqa: E402
     process_tool_calls,
 )
 
-from llm_rosetta import OpenAIChatConverter, OpenAIResponsesConverter  # noqa: E402
+from llm_rosetta import ChatCompletionsConverter, OpenAIResponsesConverter  # noqa: E402
 from llm_rosetta.converters.base.context import StreamContext  # noqa: E402
 
 # Initialize converters
-oc_converter = OpenAIChatConverter()
+oc_converter = ChatCompletionsConverter()
 or_converter = OpenAIResponsesConverter()
 
 

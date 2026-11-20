@@ -35,7 +35,7 @@ from examples.tools import (
     multimodal_tools_spec,
     tools_spec,
 )
-from llm_rosetta.converters.google_genai import GoogleGenAIConverter
+from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.types.ir import (
     IRRequest,
     Message,
@@ -69,7 +69,7 @@ if not google_api_key:
     sys.exit(1)
 
 client = genai.Client(api_key=google_api_key)
-converter = GoogleGenAIConverter()
+converter = GoogleGenerateConverter()
 
 
 # ============================================================================

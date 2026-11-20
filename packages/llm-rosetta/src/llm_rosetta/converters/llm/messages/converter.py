@@ -778,8 +778,3 @@ class MessagesConverter(MessagesStreamReader, MessagesStreamWriter, BaseConverte
         "tool_result": "_handle_ir_tool_result_to_p",
         "refusal_delta": "_handle_ir_refusal_delta_to_p",
     }
-
-
-# Backward-compatible alias (deprecated) — the base type was renamed
-# ``anthropic`` → ``messages``.
-AnthropicConverter = MessagesConverter

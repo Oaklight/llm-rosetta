@@ -362,8 +362,3 @@ class MessagesConfigOps(BaseConfigOps):
             Empty IR CacheConfig.
         """
         return cast(CacheConfig, {})
-
-
-# Backward-compatible alias (deprecated) — the base type was renamed
-# ``anthropic`` → ``messages``.
-AnthropicConfigOps = MessagesConfigOps

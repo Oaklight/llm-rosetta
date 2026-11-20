@@ -372,8 +372,3 @@ class ChatCompletionsConfigOps(BaseConfigOps):
             )
 
         return cast(CacheConfig, result)
-
-
-# Backward-compatible alias (deprecated): ``chat_completions`` is the canonical
-# base name now.
-OpenAIChatConfigOps = ChatCompletionsConfigOps

@@ -81,13 +81,6 @@ PUBLIC_MODULES = (
     "llm_rosetta.converters.llm.open_responses",
     "llm_rosetta.converters.llm.google_generate",
     "llm_rosetta.converters.llm.google_interactions",
-    # 0.13.0 package paths, kept as deprecated aliases until 0.16.0.
-    "llm_rosetta.converters.embedding",
-    "llm_rosetta.converters.openai_chat",
-    "llm_rosetta.converters.anthropic",
-    "llm_rosetta.converters.openai_responses",
-    "llm_rosetta.converters.google_generate",
-    "llm_rosetta.converters.google_genai",
     "llm_rosetta.types",
     "llm_rosetta.types.ir",
     "llm_rosetta.shims",

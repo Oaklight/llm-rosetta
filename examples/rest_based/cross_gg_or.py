@@ -44,10 +44,10 @@ from common import (  # noqa: E402
     process_tool_calls,
 )
 
-from llm_rosetta import GoogleGenAIConverter, OpenAIResponsesConverter  # noqa: E402
+from llm_rosetta import GoogleGenerateConverter, OpenAIResponsesConverter  # noqa: E402
 
 # Initialize converters
-gg_converter = GoogleGenAIConverter()
+gg_converter = GoogleGenerateConverter()
 or_converter = OpenAIResponsesConverter()
 
 

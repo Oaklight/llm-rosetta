@@ -861,7 +861,3 @@ class GoogleGenerateConverter(
         return None
 
     # ==================== Stream Support ====================
-
-
-# Backward compatibility alias
-GoogleConverter = GoogleGenerateConverter

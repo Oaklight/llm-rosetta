@@ -1516,7 +1516,3 @@ class ChatCompletionsConverter(BaseConverter):
             "choices": [],
             "usage": self._build_ir_usage_to_p(usage),
         }
-
-
-# Deprecated alias — ``chat_completions`` is the canonical base name now.
-OpenAIChatConverter = ChatCompletionsConverter

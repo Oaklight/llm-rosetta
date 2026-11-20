@@ -307,8 +307,8 @@ def test_inferred_surface_keeps_data_constants_of_a_real_module():
 
 
 def test_listed_modules_have_a_real_surface():
-    # Runtime, not static: ``converters.google_generate`` is a ``sys.modules``
-    # alias on some branches, so it has ``__all__`` without a file that declares it.
+    # Runtime, not static: a listed module can take its ``__all__`` from a
+    # ``sys.modules`` alias, with no file that declares it.
     missing = [
         module_name
         for module_name in api.PUBLIC_MODULES

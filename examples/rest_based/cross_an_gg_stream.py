@@ -46,12 +46,12 @@ from common import (  # noqa: E402
     process_tool_calls,
 )
 
-from llm_rosetta import AnthropicConverter, GoogleGenAIConverter  # noqa: E402
+from llm_rosetta import MessagesConverter, GoogleGenerateConverter  # noqa: E402
 from llm_rosetta.converters.base.context import StreamContext  # noqa: E402
 
 # Initialize converters
-an_converter = AnthropicConverter()
-gg_converter = GoogleGenAIConverter()
+an_converter = MessagesConverter()
+gg_converter = GoogleGenerateConverter()
 
 
 def send_anthropic_rest_stream(ir_messages: list, model: str, config: dict) -> dict:

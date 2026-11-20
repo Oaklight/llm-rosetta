@@ -182,11 +182,11 @@ def bench_rosetta_to_anthropic(payload: dict, iterations: int) -> list[float]:
     """Benchmark LLM-Rosetta's OpenAI Chat → IR → Anthropic conversion."""
     import copy
 
-    from llm_rosetta.converters.anthropic import AnthropicConverter
+    from llm_rosetta.converters.llm.messages import MessagesConverter
     from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
     oc_conv = ChatCompletionsConverter()
-    an_conv = AnthropicConverter()
+    an_conv = MessagesConverter()
 
     # Warmup
     for _ in range(10):
@@ -208,11 +208,11 @@ def bench_rosetta_to_google(payload: dict, iterations: int) -> list[float]:
     """Benchmark LLM-Rosetta's OpenAI Chat → IR → Google conversion."""
     import copy
 
-    from llm_rosetta.converters.google_genai import GoogleGenAIConverter
+    from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
     from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
     oc_conv = ChatCompletionsConverter()
-    gg_conv = GoogleGenAIConverter()
+    gg_conv = GoogleGenerateConverter()
 
     # Warmup
     for _ in range(10):

@@ -781,7 +781,7 @@ class TestShimConverterIntegration:
         from llm_rosetta.auto_detect import get_converter_for_provider
         from llm_rosetta.converters import (
             MessagesConverter,
-            GoogleConverter,
+            GoogleGenerateConverter,
             ChatCompletionsConverter,
         )
 
@@ -789,7 +789,7 @@ class TestShimConverterIntegration:
             get_converter_for_provider("openai_chat"), ChatCompletionsConverter
         )
         assert isinstance(get_converter_for_provider("messages"), MessagesConverter)
-        assert isinstance(get_converter_for_provider("google"), GoogleConverter)
+        assert isinstance(get_converter_for_provider("google"), GoogleGenerateConverter)
 
     def test_unknown_provider_raises(self):
         from llm_rosetta.auto_detect import get_converter_for_provider

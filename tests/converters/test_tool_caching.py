@@ -14,7 +14,7 @@ from llm_rosetta.converters.base.helpers.cache import (
     cache_info,
     clear_all_caches,
 )
-from llm_rosetta.converters.llm.google_generate import GoogleConverter
+from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
 
@@ -175,7 +175,9 @@ CONVERTER_CONFIGS = [
         _openai_responses_request,
         id="openai_responses",
     ),
-    pytest.param(GoogleConverter, GOOGLE_TOOLS, _google_request, id="google_generate"),
+    pytest.param(
+        GoogleGenerateConverter, GOOGLE_TOOLS, _google_request, id="google_generate"
+    ),
 ]
 
 
@@ -291,12 +293,12 @@ def test_cache_survives_new_instance():
     """Module-level cache persists across converter instances."""
     clear_all_caches()
 
-    conv1 = GoogleConverter()
+    conv1 = GoogleGenerateConverter()
     req = _google_request(GOOGLE_TOOLS)
     conv1.request_to_provider(conv1.request_from_provider(copy.deepcopy(req)))
 
     # Brand new instance
-    conv2 = GoogleConverter()
+    conv2 = GoogleGenerateConverter()
     conv2.request_to_provider(conv2.request_from_provider(copy.deepcopy(req)))
 
     info = cache_info()["tool_entry"]

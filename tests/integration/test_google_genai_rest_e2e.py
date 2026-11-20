@@ -29,7 +29,7 @@ import requests
 from typing import cast
 
 from examples.tools import available_tools, tools_spec
-from llm_rosetta.converters.google_genai import GoogleGenAIConverter
+from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.types.ir import (
     IRRequest,
     ToolCallPart,
@@ -61,7 +61,7 @@ HEADERS = {
     "Content-Type": "application/json",
 }
 
-converter = GoogleGenAIConverter()
+converter = GoogleGenerateConverter()
 
 
 # ============================================================================

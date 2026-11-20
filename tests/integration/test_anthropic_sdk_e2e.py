@@ -34,7 +34,7 @@ from examples.tools import (
     multimodal_tools_spec,
     tools_spec,
 )
-from llm_rosetta.converters.anthropic import AnthropicConverter
+from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.types.ir import (
     IRRequest,
     ToolCallPart,
@@ -67,7 +67,7 @@ if not anthropic_api_key:
     sys.exit(1)
 
 client = anthropic.Anthropic(api_key=anthropic_api_key, base_url=anthropic_base_url)
-converter = AnthropicConverter()
+converter = MessagesConverter()
 
 
 # ============================================================================
