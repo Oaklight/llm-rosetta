@@ -884,6 +884,16 @@ def migrate_db(path: Path, write: bool = False, force: bool = False) -> DbResult
             return result
     try:
         return _migrate_open(path, write, result)
+    except sqlite3.OperationalError as exc:
+        if "locked" in str(exc):
+            result.error = (
+                f"{path}: the database is locked by another writer (sqlite: {exc}); "
+                "stop the process that writes it and run again (--force skips only "
+                "the open-file check, not a SQLite lock)"
+            )
+        else:
+            result.error = f"{path}: {exc}"
+        return result
     except sqlite3.Error as exc:
         result.error = f"{path}: {exc}"
         return result
