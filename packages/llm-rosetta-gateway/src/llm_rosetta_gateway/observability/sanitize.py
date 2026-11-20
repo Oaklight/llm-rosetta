@@ -28,6 +28,11 @@ _CREDENTIAL_PATTERNS = re.compile(
             # vendor that issues it also issues the runtime key above.
             r"vela_ctrl_[A-Za-z0-9_-]{8,}",
             r"AIza[A-Za-z0-9_-]{30,}",
+            # Google OAuth: an access token (``ya29.``) and a refresh token
+            # (``1//``).  A local agent CLI that signs in with Google may print
+            # either, and neither is a JWT.
+            r"ya29\.[A-Za-z0-9_.-]{10,}",
+            r"1//[A-Za-z0-9_-]{20,}",
             # A JWT: three base64url segments, the first always decoding to
             # ``{"`` — hence the ``eyJ`` prefix.  OAuth access and ID tokens
             # are shaped this way, so the pattern a bearer-token upstream is

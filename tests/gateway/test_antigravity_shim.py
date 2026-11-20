@@ -40,18 +40,21 @@ class TestWhatTheShimDeclares:
         connection = shim().connection
 
         assert connection.transport == "acp"
-        assert connection.acp_argv == (
-            "agy",
-            "acp",
-            "--dangerously-skip-permissions=false",
-        )
+        assert connection.acp_argv == ("agy", "acp")
 
     def test_it_declares_no_credential_of_its_own(self):
-        """``agy`` owns the Google token; the gateway must not hold one."""
-        connection = shim().connection
+        """``agy`` owns the Google token; the gateway must not hold one.
 
-        assert connection.keyless is True
-        assert not connection.api_key_env
+        The lane is not *keyless* any more: ``auth.py`` asks agy whether it is
+        signed in and starts agy's own sign-in, so the credential is a state,
+        never a key — and no key, env var or command can stand in for it.
+        """
+        profile = shim()
+
+        assert profile.connection.keyless is False
+        assert not profile.connection.api_key_env
+        assert profile.connection.token_command is None
+        assert profile.auth is not None and profile.auth.kind == "agent"
 
 
 class TestTheTransportTable:
@@ -65,8 +68,10 @@ class TestHowTheGatewayReadsIt:
         info = build_provider_info("acp", {}, shim_name=SHIM)
 
         assert info.transport == "acp"
-        assert info.acp_argv == ("agy", "acp", "--dangerously-skip-permissions=false")
-        assert info.keyless is True
+        assert info.acp_argv == ("agy", "acp")
+        # Not keyless, and not a key either: the exchange reports signed-in.
+        assert info.keyless is False
+        assert info.mints_credential is True
 
     def test_a_config_override_wins_over_the_shim(self):
         info = build_provider_info("acp", {"transport": "http"}, shim_name=SHIM)

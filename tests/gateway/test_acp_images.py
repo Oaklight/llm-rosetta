@@ -84,7 +84,12 @@ def serve(tmp_path):
 
     @asynccontextmanager
     async def _serve(model: Any):
-        app = await create_app(_config(tmp_path, model))
+        config = _config(tmp_path, model)
+        # The shim's sign-in exchange would otherwise leave the entry waiting
+        # for a credential no test agent has.
+        for info in config.providers.values():
+            info.key_ring.refresh("signed-in")
+        app = await create_app(config)
         agent = _FakeAgent()
         wired: Any = app
         wired.transports = {"acp": agent}

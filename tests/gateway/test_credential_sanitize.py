@@ -158,3 +158,28 @@ class TestSanitizeUpstreamError:
         assert isinstance(result, str)
         assert "sk-proj-abc123" not in result
         assert "invalid_api_key" in result
+
+
+class TestGoogleOAuthTokens:
+    """A local agent CLI that signs in with Google may print either token."""
+
+    def test_an_access_token_and_a_refresh_token_are_redacted(self):
+        from llm_rosetta_gateway.observability.sanitize import (
+            scrub_credential_patterns,
+        )
+
+        text = "a ya29.A0ARrdaMsecretsecret b 1//0gRefreshTokenValueHere123 c"
+
+        out = scrub_credential_patterns(text)
+
+        assert "ya29" not in out and "1//0g" not in out
+        assert out.startswith("a ") and out.endswith(" c")
+
+    def test_an_ordinary_path_is_left_alone(self):
+        from llm_rosetta_gateway.observability.sanitize import (
+            scrub_credential_patterns,
+        )
+
+        assert scrub_credential_patterns("see 1//2 and /usr/ya29") == (
+            "see 1//2 and /usr/ya29"
+        )

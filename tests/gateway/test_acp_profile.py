@@ -399,3 +399,151 @@ class TestArgvHelpers:
     def test_state_dir_is_per_provider_under_the_data_dir(self):
         assert state_dir_for("/data", "agy one") == "/data/acp/agy_one"
         assert state_dir_for("/data", "../x") == "/data/acp/_x"
+
+
+class TestPerEntryLoginProfile:
+    """An ``agy_profile: separate`` entry: its own dir holds login and profile."""
+
+    @staticmethod
+    def _entry(monkeypatch, tmp_path, name="agy-sep", *, separate=True):
+        from llm_rosetta.shims.auth_exchange import AuthContext
+        from llm_rosetta.shims.provider_shim import get_shim
+
+        provider = _agy_provider(monkeypatch, tmp_path, "ok", name=name)
+        shim = get_shim("antigravity--acp")
+        assert shim is not None
+        cfg: dict = {"auth_fields": {"agy_profile": "separate"}} if separate else {}
+        provider.auth_exchange = shim.auth
+        provider.auth_context = AuthContext(
+            provider=name, config=cfg, state_dir=str(tmp_path / "shim-auth" / name)
+        )
+        return provider
+
+    async def test_agent_args_come_before_hardening_and_hold_the_strict_profile(
+        self, monkeypatch, tmp_path
+    ):
+        provider = self._entry(monkeypatch, tmp_path)
+        own = tmp_path / "shim-auth" / "agy-sep" / "agy"
+        transport = AcpTransport(timeout=5)
+        try:
+            await _chunks(transport, provider)
+        finally:
+            await transport.close()
+        (argv,) = _started_argv(tmp_path)
+        assert argv.count("--gemini-dir") == 1
+        assert flag_value(argv, ("--gemini-dir",)) == str(own)
+        assert argv.count(PERMISSION_FLAG) == 1
+        assert flag_value(argv, ("--agent",)) == AGENT_NAME
+        settings = json.loads((own / "antigravity-cli" / "settings.json").read_text())
+        assert settings["toolPermission"] == "strict"
+        assert (own / "config" / "hooks.json").is_file()
+        assert (own / "config" / "agents" / AGENT_NAME / "agent.md").is_file()
+        # The default profile directory of the entry is not used at all.
+        assert not (_root(provider) / "antigravity-cli").exists()
+        assert oct(own.stat().st_mode & 0o777) == "0o700"
+
+    async def test_the_agent_args_precede_the_hardening_flags(
+        self, monkeypatch, tmp_path
+    ):
+        provider = self._entry(monkeypatch, tmp_path)
+        argv = AcpTransport(timeout=5)._argv(provider)
+        own = str(tmp_path / "shim-auth" / "agy-sep" / "agy")
+        assert argv[argv.index("--gemini-dir") + 1] == own
+        assert argv.index("--gemini-dir") < argv.index("--agent")
+        assert argv.count("--gemini-dir") == 1
+
+    async def test_a_login_made_under_the_dir_survives_every_re_assertion(
+        self, monkeypatch, tmp_path
+    ):
+        provider = self._entry(monkeypatch, tmp_path)
+        own = tmp_path / "shim-auth" / "agy-sep" / "agy"
+        # The "login" writes a marker file, a credential-like blob in a nested
+        # dir, and an auth method into settings.json, as agy's own login would.
+        (own / "antigravity-cli").mkdir(parents=True)
+        (own / "login-marker").write_text("signed in")
+        (own / "oauth").mkdir()
+        (own / "oauth" / "token.json").write_text("{}")
+        (own / "antigravity-cli" / "settings.json").write_text(
+            json.dumps({"selectedAuthType": "oauth-personal", "toolPermission": "off"})
+        )
+        transport = AcpTransport(timeout=5)
+        try:
+            await _chunks(transport, provider)
+            drift = ensure_profile(str(own))
+            ensure_profile(str(own))
+        finally:
+            await transport.close()
+        assert (own / "login-marker").read_text() == "signed in"
+        assert (own / "oauth" / "token.json").read_text() == "{}"
+        settings = json.loads((own / "antigravity-cli" / "settings.json").read_text())
+        assert settings["selectedAuthType"] == "oauth-personal"
+        assert settings["toolPermission"] == "strict"
+        assert drift == []
+        # Only the three profile files and their directories are ours.
+        names = {p.name for p in own.rglob("*") if p.is_file()}
+        assert names == {
+            "login-marker",
+            "token.json",
+            "settings.json",
+            "hooks.json",
+            "agent.md",
+        }
+
+    async def test_a_marker_written_by_the_agent_before_a_turn_survives(
+        self, monkeypatch, tmp_path
+    ):
+        provider = self._entry(monkeypatch, tmp_path)
+        own = tmp_path / "shim-auth" / "agy-sep" / "agy"
+        agy = Path(provider.acp_argv[0])
+        body = agy.read_text(encoding="utf-8").split("\n", 1)[1]
+        agy.write_text(
+            f"#!{sys.executable}\n"
+            "import os, sys\n"
+            "d = sys.argv[sys.argv.index('--gemini-dir') + 1]\n"
+            "open(os.path.join(d, 'login'), 'w').write('x')\n" + body,
+            encoding="utf-8",
+        )
+        transport = AcpTransport(timeout=5)
+        try:
+            await _chunks(transport, provider)
+            transport._profile(provider, transport._argv(provider))
+        finally:
+            await transport.close()
+        assert (own / "login").read_text() == "x"
+
+    async def test_a_host_entry_is_unchanged(self, monkeypatch, tmp_path):
+        provider = self._entry(monkeypatch, tmp_path, "agy-host", separate=False)
+        transport = AcpTransport(timeout=5)
+        try:
+            await _chunks(transport, provider)
+        finally:
+            await transport.close()
+        (argv,) = _started_argv(tmp_path)
+        assert flag_value(argv, ("--gemini-dir",)) == provider.acp_state_dir
+        assert argv.count("--gemini-dir") == 1
+        assert not (tmp_path / "shim-auth" / "agy-host" / "agy").exists()
+
+    async def test_the_status_probe_works_with_the_profile_files_present(
+        self, monkeypatch, tmp_path
+    ):
+        from tests.gateway.fake_agy import install_fake_agy, starts
+
+        provider = self._entry(monkeypatch, tmp_path, "agy-probe")
+        own = tmp_path / "shim-auth" / "agy-probe" / "agy"
+        ensure_profile(str(own))
+        (own / "signed-in").write_text("x")
+        bin_dir = tmp_path / "fakebin"
+        bin_dir.mkdir()
+        agy = install_fake_agy(bin_dir)
+        monkeypatch.setenv("FAKE_AGY_HOST", str(tmp_path / "host"))
+        monkeypatch.setenv("FAKE_AGY_LOG", str(tmp_path / "probe.jsonl"))
+        ctx = provider.auth_context
+        ctx.config["acp_argv"] = [str(agy), "acp"]
+        assert await provider.auth_exchange.credential(ctx)
+        (start,) = starts(tmp_path / "probe.jsonl")
+        # Un-hardened: no agent flag, no permission flag, and no prompt sent.
+        assert "--agent" not in start["argv"]
+        assert PERMISSION_FLAG not in start["argv"]
+        assert start["argv"][-2:] == ["--gemini-dir", str(own)]
+        # The probe leaves the profile as it found it.
+        assert ensure_profile(str(own)) == []

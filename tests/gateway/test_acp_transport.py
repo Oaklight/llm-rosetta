@@ -1097,10 +1097,15 @@ class TestAgentToolsAreOff:
         assert b"cannot be gated" in response.raw_content
         assert "prompt" not in _kinds(tmp_path)
 
-    def test_the_default_argv_turns_the_agent_auto_approve_off(self):
+    def test_the_hardened_default_argv_turns_the_agent_auto_approve_off_once(self):
         from llm_rosetta_gateway.transport.acp import DEFAULT_AGENT_ARGV
+        from llm_rosetta_gateway.transport.acp_profile import harden_argv
 
-        assert "--dangerously-skip-permissions=false" in DEFAULT_AGENT_ARGV
+        argv = harden_argv(list(DEFAULT_AGENT_ARGV), "/x")
+        assert argv.count("--dangerously-skip-permissions=false") == 1
+        # An argv that already names the flag does not get a second one.
+        again = harden_argv(argv, "/x")
+        assert again.count("--dangerously-skip-permissions=false") == 1
 
     def test_an_argv_override_is_kept(self):
         provider = ProviderInfo(

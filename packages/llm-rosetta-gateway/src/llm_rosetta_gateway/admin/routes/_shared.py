@@ -91,6 +91,17 @@ def _normalize_field(entry: Any) -> dict[str, Any] | None:
     return field
 
 
+def exchange_can_host_login(exchange: Any) -> bool:
+    """Whether the vendor's own program signs in on the gateway host.
+
+    Such an exchange reports progress through ``login_status`` instead of
+    handing back an authorization URL and waiting for a pasted callback.
+    """
+    status = getattr(exchange, "login_status", None)
+    capability = getattr(exchange, "can_host_login", None)
+    return callable(status) and (capability() if callable(capability) else True)
+
+
 def exchange_fields(exchange: Any) -> list[dict[str, Any]]:
     """The inputs an exchange declares in code, in the panel's own shape.
 

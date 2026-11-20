@@ -101,12 +101,15 @@ export function credentialUiSource(source) {
  *
  * A card that is offered must produce a saved entry the loader accepts:
  *
- * - ``config`` is always available — an argv in the entry outranks whatever
+ * - ``config`` is available — an argv in the entry outranks whatever
  *   the shim declares, and needs no shim at all.
  * - ``shim`` exists only when the shim ships a command.
  * - ``exchange`` exists only when the shim mints a non-command credential.
  *   A stored exchange is offered even after its shim stops loading, so the
  *   card that describes the live credential is never hidden.
+ * - ``config`` is refused for a shim that signs in through the vendor's own
+ *   program on the gateway host (``host_login``): the lane sends no credential,
+ *   so a token command and a stored key have nothing to be sent as.
  * - ``static`` exists only when the shim mints nothing.  A key beside a
  *   command or an exchange is the one pair the loader refuses.  A keyless
  *   shim still gets the card: the operator may bring a paid key.
@@ -124,9 +127,13 @@ export function availableCredentialSources(shim, cfg) {
   const kind = shimKind
     || (live === 'shim_command' || live === 'config_command' ? 'command' : null);
   const exchangeLive = live === 'auth_exchange' || (!!mints && kind !== 'command');
+  // A lane whose vendor program signs in on the gateway host sends no
+  // credential at all, so a command that mints one has nothing to feed: the
+  // override is not a choice there.
+  const hostLogin = !!(shim && shim.host_login);
   return {
     static: !mints,
-    config: true,
+    config: !hostLogin,
     // The shim card needs a shim: a command in the entry is the config card.
     shim: !!shim && shimKind === 'command',
     exchange: exchangeLive,
@@ -345,4 +352,35 @@ export function shortAccount(value) {
   if (typeof value !== 'string' || value === '') return null;
   if (value.length <= 28) return value;
   return `${value.slice(0, 10)}…${value.slice(-6)}`;
+}
+
+/** The states a host sign-in run reports, in the order it passes through them. */
+const HOST_LOGIN_STATES = ['idle', 'running', 'verifying', 'succeeded', 'failed', 'cancelled'];
+
+/** A sign-in snapshot's state, or ``idle`` for anything unrecognised. */
+export function hostLoginState(login) {
+  const state = login && login.state;
+  return HOST_LOGIN_STATES.includes(state) ? state : 'idle';
+}
+
+/** Whether the sign-in is still in progress: poll while it is, stop after. */
+export function hostLoginActive(login) {
+  const state = hostLoginState(login);
+  return state === 'running' || state === 'verifying';
+}
+
+/**
+ * The URL a host sign-in printed, if it is safe to show as a link.
+ *
+ * The program's output reaches the admin origin, so the URL is held to the
+ * same rule as any other link a shim supplies: ``https`` only.
+ */
+export function hostLoginUrl(login) {
+  return safeLinkUrl(login && login.url);
+}
+
+/** The output lines worth showing: strings only, bounded, newest last. */
+export function hostLoginLines(login, limit = 12) {
+  const lines = login && Array.isArray(login.lines) ? login.lines : [];
+  return lines.filter(line => typeof line === 'string' && line !== '').slice(-limit);
 }

@@ -21,6 +21,7 @@ from ....providers import (
 from ....shims import SHIM_SOURCE_PACKAGES
 from ....transport.token_refresh import public_token_status
 from .._shared import (
+    exchange_can_host_login,
     _TOKEN_COMMAND_MARKER,
     _get_config_io,
     _get_config_path,
@@ -553,6 +554,11 @@ async def get_config(request: Any) -> Response:
                     "mints_credential": (
                         s.auth is not None or s.connection.token_command is not None
                     ),
+                    # The vendor's own program signs in on the gateway host: the
+                    # editor offers its sign-in and offers no static key or
+                    # command override, because the lane sends no credential.
+                    "host_login": s.auth is not None
+                    and exchange_can_host_login(s.auth),
                     "credential_kind": (
                         getattr(s.auth, "kind", None)
                         or ("command" if s.connection.token_command else None)

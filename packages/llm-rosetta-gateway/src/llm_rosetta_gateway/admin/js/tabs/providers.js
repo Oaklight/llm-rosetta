@@ -15,6 +15,7 @@ import {
   credentialLoadedFor, credentialSaveFields, shortCredential,
   credentialSourceId, credentialUiSource, availableCredentialSources,
   credentialFallbackSource, credentialSourceFields, credentialNeedsAttention,
+  hostLoginActive, hostLoginLines, hostLoginState, hostLoginUrl,
 } from '../core/credential.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect, createTypePicker } from '../components/type-picker.js';
@@ -418,6 +419,9 @@ function _syncCredentialUI() {
     _credentialFor = name;
     _credentialData = null;
     _credFormDirty = false;
+    // A sign-in being watched belongs to the provider it was started for.
+    _clearHostLoginTimer();
+    _renderHostLogin(null);
     // A record pasted for the *previous* provider must not be installable
     // into this one: two providers of one shim share a client id.
     _resetCredentialBox();
@@ -473,6 +477,26 @@ function _renderSourceCards(avail, ui) {
     card.setAttribute('aria-checked', String(id === ui));
   }
   _renderOverrideButton(avail, ui);
+  // The exchange card's words describe a record installed from elsewhere; a
+  // host sign-in is a different act and says so.
+  const exchangeShim = _selectedShim();
+  const hostCard = document.getElementById('provSourceCard_exchange');
+  if (hostCard) {
+    const hosted = !!(exchangeShim && exchangeShim.host_login);
+    const title = hostCard.querySelector('.t');
+    const desc = hostCard.querySelector('.d');
+    const meta = hostCard.querySelector('.m');
+    if (hosted) {
+      if (title) title.textContent = _credentialText('prov.sourceHostLogin', 'Sign in on the gateway host');
+      if (desc) desc.textContent = _credentialText('prov.sourceHostLoginDesc',
+        "The vendor's own CLI signs in on the machine that runs the gateway");
+      if (meta) meta.textContent = 'auth.py';
+    } else {
+      if (title) title.textContent = _credentialText('prov.sourceExchange', 'Sign-in (auth.py)');
+      if (desc) desc.textContent = _credentialText('prov.sourceExchangeDesc',
+        'The shim mints the credential; install a record from the CLI');
+    }
+  }
   const note = document.getElementById('provSourceNote');
   if (note) note.textContent = _sourceNote(ui, _selectedShim(), _editingCfg());
 }
@@ -490,7 +514,8 @@ function _renderOverrideButton(avail, ui) {
   const btn = document.getElementById('provOverrideBtn');
   if (!btn) return;
   const alternatives = ['static', 'shim', 'exchange'].filter(id => avail[id]);
-  btn.hidden = alternatives.length === 0;
+  // No override where no command can stand in (the lane sends no credential).
+  btn.hidden = alternatives.length === 0 || (!avail.config && ui !== 'config');
   const removing = ui === 'config';
   btn.textContent = removing
     ? _credentialText('btn.commandOverrideRemove', 'Remove override')
@@ -532,6 +557,10 @@ function _sourceNote(ui, shim, cfg) {
   if (ui === 'shim') {
     return _credentialText('prov.noteShim',
       'The command ships with the shim. This entry can only change how often it runs.');
+  }
+  if (shim && shim.host_login) {
+    return _credentialText('prov.noteHostLogin',
+      "The vendor's own program holds the sign-in. The gateway only asks it, and never sees a token.");
   }
   return _credentialText('prov.noteExchange',
     'The shim signs in. Produce the record where a browser is and install it here.');
@@ -827,6 +856,7 @@ function _clearExpiryTimer() {
 //: the exported name instead, so a closed drawer leaves no interval behind.
 function clearProviderExpiryTimer() {
   _clearExpiryTimer();
+  _clearHostLoginTimer();
 }
 
 /**
@@ -924,6 +954,15 @@ function _renderExchangePanel(data, ui) {
     return;
   }
   _appendRow(rows, _credentialText('prov.stateLabel', 'State'), _stateLabel(data.state));
+  // A run that was already going when the drawer opened (or that the operator
+  // started in another tab) is shown, and polled, instead of hidden.
+  if (data.can_host_login) {
+    _renderHostLogin(data.login);
+    if (hostLoginActive(data.login) && _hostLoginTimer === null) {
+      const watched = _credentialFor;
+      _hostLoginTimer = setInterval(() => { _pollHostLogin(watched); }, 2000);
+    }
+  }
   const summary = data.summary || {};
   if (data.state === 'connected') {
     // ``data.account`` is a digest, not a name — only the exchange's own
@@ -958,12 +997,23 @@ function _renderExchangePanel(data, ui) {
   // A browser-capable exchange keeps the credential record on the gateway.
   // The panel receives only an authorization URL and later a callback URL.
   const browserLogin = !!(data.can_begin_login && data.can_complete_login);
+  const hostLogin = !!data.can_host_login;
+  if (hostLogin) {
+    // The vendor's own program signs in, on the machine that runs the
+    // gateway.  Nothing is pasted back: the panel starts it and shows what it
+    // prints.
+    _appendAction(acts, {kind: 'primary',
+      label: data.state === 'connected'
+        ? _credentialText('btn.hostLoginAgain', 'Sign in again on the gateway host')
+        : _credentialText('btn.hostLogin', 'Sign in on the gateway host'),
+      fn: 'beginProviderHostLogin()'});
+  }
   if (browserLogin) {
     _appendAction(acts, {kind: 'primary',
       label: _credentialText('btn.startBrowserLogin', 'Start browser sign-in'),
       fn: 'beginProviderBrowserLogin()'});
   }
-  if (data.can_install !== false) {
+  if (data.can_install !== false && !hostLogin) {
     // 501 is what an exchange that never implemented install() answers; the
     // panel asks the endpoint instead of offering a dead button.  A CLI
     // record path stays available even when the browser flow is offered: the
@@ -982,7 +1032,10 @@ function _renderExchangePanel(data, ui) {
   // flow signs in, and one with neither takes a record produced elsewhere.
   const hint = document.getElementById('provCredentialHint');
   if (hint) {
-    if (_authFieldDefs().length) {
+    if (hostLogin) {
+      hint.textContent = _credentialText('label.credentialHintHost',
+        'The sign-in runs agy on the machine that runs the gateway, and its browser step happens there. For another account, add another provider entry.');
+    } else if (_authFieldDefs().length) {
       hint.textContent = _credentialText('label.credentialFieldsHint',
         'The shim mints the credential from the account key and the details above.');
     } else if (browserLogin) {
@@ -992,6 +1045,125 @@ function _renderExchangePanel(data, ui) {
       hint.textContent = _credentialText('label.credentialHintInstall',
         'Install a record produced where a browser is.');
     }
+  }
+}
+
+// ── Host sign-in: the vendor's own program, run on the gateway host ──
+//
+// Started by a click, observed by polling, ended by the program exiting.  The
+// timer lives only while a run is in progress and the drawer shows it.
+
+let _hostLoginTimer = null;
+
+function _clearHostLoginTimer() {
+  if (_hostLoginTimer !== null) {
+    clearInterval(_hostLoginTimer);
+    _hostLoginTimer = null;
+  }
+}
+
+/** Paint a sign-in snapshot; ``null`` hides the box. */
+function _renderHostLogin(login) {
+  const box = document.getElementById('provHostLoginBox');
+  if (!box) return;
+  const state = hostLoginState(login);
+  box.hidden = !login || state === 'idle';
+  if (box.hidden) return;
+  const status = document.getElementById('provHostLoginStatus');
+  if (status) {
+    const text = _credentialText('prov.hostLogin.' + state, state);
+    status.textContent = login.message && state !== 'running'
+      ? text + ' · ' + login.message : text;
+  }
+  const url = hostLoginUrl(login);
+  const link = document.getElementById('provHostLoginLink');
+  const code = document.getElementById('provHostLoginUrl');
+  if (link) {
+    link.hidden = !url;
+    if (url) {
+      link.href = url;
+      link.textContent = _credentialText('prov.hostLoginOpen', 'Open the sign-in page');
+    } else {
+      link.removeAttribute('href');
+      link.textContent = '';
+    }
+  }
+  if (code) code.textContent = url || '';
+  const out = document.getElementById('provHostLoginOutput');
+  if (out) {
+    const lines = hostLoginLines(login);
+    out.textContent = lines.join('\n');
+    out.hidden = lines.length === 0;
+  }
+  const cancel = document.getElementById('provHostLoginCancel');
+  if (cancel) cancel.hidden = !hostLoginActive(login);
+}
+
+async function _pollHostLogin(name) {
+  const open = document.getElementById('providerModal')?.classList.contains('open');
+  if (!open || _credentialFor !== name || _credentialFor !== _editingProviderName) {
+    _clearHostLoginTimer();
+    return;
+  }
+  let res;
+  try {
+    res = await api.get(`/admin/api/config/providers/${encodeURIComponent(name)}/credential/login`);
+  } catch (err) {
+    _clearHostLoginTimer();
+    _setCredentialError(String(err && err.message || err));
+    return;
+  }
+  if (_credentialFor !== name) return;
+  _renderHostLogin(res && res.login);
+  if (res && res.error) _setCredentialError(res.error);
+  if (!hostLoginActive(res && res.login)) {
+    _clearHostLoginTimer();
+    // The run is over: the card and the status now describe the new state.
+    await loadProviderCredential(name);
+    if (res && res.login && hostLoginState(res.login) === 'succeeded' && !res.error) {
+      showToast?.(_credentialText('prov.hostLoginDone', 'agy is signed in'), 'success');
+    }
+  }
+}
+
+async function beginProviderHostLogin() {
+  const name = _credentialFor;
+  if (!name || name !== _editingProviderName) return;
+  // The sign-in runs against the *saved* entry (its agy profile is a saved
+  // field); a draft that differs would sign in to something else.
+  if (_credentialDrift()) {
+    _setCredentialError(_credentialText('prov.saveProviderFirst',
+      'The provider has unsaved changes — Save it first, then sign in.'));
+    return;
+  }
+  _setCredentialError('');
+  try {
+    const res = await api.post(
+      `/admin/api/config/providers/${encodeURIComponent(name)}/credential/login`);
+    if (!res || res.error || !res.login) {
+      throw new Error((res && res.error) || 'The server returned no sign-in status.');
+    }
+    _renderHostLogin(res.login);
+    _clearHostLoginTimer();
+    if (hostLoginActive(res.login)) {
+      _hostLoginTimer = setInterval(() => { _pollHostLogin(name); }, 2000);
+    }
+  } catch (err) {
+    _setCredentialError(String(err && err.message || err));
+  }
+}
+
+async function cancelProviderHostLogin() {
+  const name = _credentialFor;
+  if (!name || name !== _editingProviderName) return;
+  try {
+    const res = await api.del(
+      `/admin/api/config/providers/${encodeURIComponent(name)}/credential/login`);
+    _clearHostLoginTimer();
+    _renderHostLogin(res && res.login);
+    if (res && res.error) _setCredentialError(res.error);
+  } catch (err) {
+    _setCredentialError(String(err && err.message || err));
   }
 }
 
@@ -1081,11 +1253,14 @@ function _renderStatusCard(data, ui) {
     line(_credentialText('label.credentialRefresherOff',
       'Automatic refresh is off — this token will not renew.'), true);
   }
+  const hostLogin = !!data.can_host_login;
   if (st.last_refresh) {
-    line(_credentialText('label.credentialLastRefresh', 'Last token') + ' '
+    line(_credentialText(hostLogin ? 'label.credentialLastCheck' : 'label.credentialLastRefresh',
+      hostLogin ? 'Last checked' : 'Last token') + ' '
       + new Date(st.last_refresh).toLocaleString(), true);
   } else if (!st.last_error) {
-    line(_credentialText('label.credentialNever', 'No token yet'), true);
+    line(_credentialText(hostLogin ? 'label.credentialNotChecked' : 'label.credentialNever',
+      hostLogin ? 'Not checked yet' : 'No token yet'), true);
   }
   const failures = Number(st.consecutive_failures || 0);
   if (failures > 0) {
@@ -1099,7 +1274,7 @@ function _renderStatusCard(data, ui) {
     line(_credentialText('label.credentialNeedsSetup',
       'No credential yet — a sign-in is needed.'));
   }
-  const fingerprint = shortCredential(data.credential);
+  const fingerprint = hostLogin ? '' : shortCredential(data.credential);
   if (fingerprint) {
     line(_credentialText('label.credentialFingerprint', 'Fingerprint') + ' ' + fingerprint, true);
   }
@@ -1115,6 +1290,15 @@ function _renderStatusCard(data, ui) {
   }
   const saveFirst = _credentialText('prov.saveFirst',
     'Save this provider first — refresh and test run the saved command.');
+  if (hostLogin) {
+    // There is no token to refresh or send: the one question is whether agy
+    // is signed in, and sign-out is the sign-in card's.
+    _appendAction(actions, {
+      label: _credentialText('btn.checkSignIn', 'Check sign-in'),
+      fn: 'refreshProviderCredential()', disabled: stale, title: saveFirst,
+    });
+    return;
+  }
   _appendAction(actions, {
     label: _credentialText('btn.refreshCredential', 'Refresh now'),
     fn: 'refreshProviderCredential()', disabled: stale, title: saveFirst,
@@ -1465,8 +1649,13 @@ async function installProviderCredential() {
 async function signOutProviderCredential() {
   const name = _credentialFor;
   if (!name) return;
-  if (!confirm(_credentialText('label.confirmSignOut',
-    'Sign out of this account? Requests will fail until a new record is installed.'))) return;
+  const hosted = !!(_credentialData && _credentialData.can_host_login);
+  const confirmText = hosted
+    ? _credentialText('label.confirmSignOutHost',
+      "Sign out this entry's agy profile? Requests will fail until you sign in again.")
+    : _credentialText('label.confirmSignOut',
+      'Sign out of this account? Requests will fail until a new record is installed.');
+  if (!confirm(confirmText)) return;
   try {
     const res = await api.del(`/admin/api/config/providers/${encodeURIComponent(name)}/credential`);
     await loadProviderCredential(name);
@@ -3400,6 +3589,7 @@ Object.assign(window, {
   showProviderQuota,
   installProviderCredential, signOutProviderCredential, toggleProviderCredentialBox,
   beginProviderBrowserLogin, completeProviderBrowserLogin, resetProviderBrowserLogin,
+  beginProviderHostLogin, cancelProviderHostLogin,
   refreshProviderCredential, testProviderCredential,
   setProviderPane, selectCredentialSource, addProviderArg, refreshProviderAuthPane,
   toggleCommandOverride, clearProviderExpiryTimer,
