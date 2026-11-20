@@ -6,7 +6,7 @@ title: 迁移到 0.14
 
 0.14.0 移除了 0.13.0 为过渡保留一个版本的已弃用导入路径与类别名（epic [#919](https://github.com/Oaklight/llm-rosetta/issues/919)）。被移除的名字会以普通的 `ImportError`、`ModuleNotFoundError` 或 `AttributeError` 失败；[retired-names](#retired-names) 诊断只覆盖提供方、shim 与模型类型名称，不覆盖 Python 导入路径。本页列出已移除的内容、替代写法，以及仍然可用的部分。要改写网关配置和数据库，请使用 [`llm-rosetta-migrate`](#llm-rosetta-migrate)；[升级流程](#upgrade-recipe)给出了步骤顺序。
 
-截至 [已移除的 helper 模块、网关存根与 `tool_ops` 别名](#removed-shims) 的各行已针对 `origin/master`（commit `756f084169`）核对。从 [已移除的 facade](#removed-facades) 起的各行已针对 PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656) 的 head（commit `47fe04b2ea`）核对：每个被移除的名字导入失败或抛出异常，每个替代写法都能导入。
+截至 [已移除的 helper 模块、网关存根与 `tool_ops` 别名](#removed-shims) 的各行已针对 `origin/master`（commit `756f084169`）核对。从 [已移除的 facade](#removed-facades) 起的各行已针对 PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656) 的 head（commit `0a8c0be374`）核对：每个被移除的名字导入失败或抛出异常，每个替代写法都能导入。
 
 ## 已移除的转换器包 {#removed-converter-packages}
 
@@ -115,6 +115,8 @@ llm-rosetta-gateway: error: config.jsonc: providers.p.type: 'openai_chat' was re
 
 进程以退出码 1 结束，不打印 traceback。在代码里，该异常是 `RetiredConfigName`（`ValueError` 的子类），消息格式为 `<配置文件>: <json 路径>: <retired-names 消息>`。
 
+拒绝发生在任何写入之前。`config_version` 较旧的配置如果同时写有退役名称，不会被改写，也不会生成 `.pre-migration.bak`：在你运行迁移命令之前，文件保持原样。按 face 的 shim 值（`embeddings_shim`、`decisions_shim`，以及 `embeddings:` 块内的同名键）与 `shim:` 一样被检查：`openai`、`openai_chat` 这类退役值会带着路径 `providers.<name>.embeddings_shim` 报错。拼写错误但不是退役名称的值不给改名提示，并把该端点当作未知 shim 禁用。
+
 ## 已移除的 shim 声明（P6） {#removed-shim-declarations}
 
 在 PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656) 中移除。`ProviderShim(...)` 会抛出写明替代写法的 `TypeError`，loader 会拒绝仍使用旧键的 `provider.yaml`。
@@ -166,7 +168,15 @@ connection:
 | `llm_rosetta.ir.tools.fix_orphaned_tool_calls_ir` | `normalize_tool_pairing` |
 | `GoogleInteractionsToolOps.ir_function_call_to_p`、`ir_function_result_to_p` | `ir_tool_call_to_p`、`ir_tool_result_to_p` |
 
-`ProviderShim.base`、`.default_path` 与 `.max_tool_description_length` 作为只读属性保留，因为网关或 shim 包里仍有读取方。管理面板的 shim 编辑器现在用 loader 自己的检查来校验保存的 `provider.yaml`，因此对 `base:` 给出与 loader 相同的拒绝信息。
+`ProviderShim` 的三个只读属性为现有读取方（网关与 shim 包中）保留，不发出警告。新代码请读取它们的替代项：
+
+| 保留的属性 | 改用 |
+| --- | --- |
+| `ProviderShim.base` | `ProviderShim.format` |
+| `ProviderShim.default_path` | `ProviderShim.connection.default_path` |
+| `ProviderShim.max_tool_description_length` | `ProviderShim.tools.max_description_length` |
+
+管理面板的 shim 编辑器现在用 loader 自己的检查来校验保存的 `provider.yaml`，因此对 `base:` 给出与 loader 相同的拒绝信息。
 
 ## 已移除的模型类型写法（P7） {#removed-model-type-spellings}
 
@@ -283,22 +293,24 @@ llm-rosetta-migrate --scan src/                            # 仅提示，不修�
 
 **配置。** 编辑在文本层面进行：被改写名称之外的注释、键顺序与排版保持不变。它改写已退役的 `type:` 与 `shim:` 值、模型的 `type:` 与 `capabilities:` 项、`embedding_*` 与 `decision_*` 的键和段（改为复数名），并在 shim 已迁入独立包时添加 `shims.presets` 项。例如 `"type": "openai_chat"` 变为 `"type": "chat_completions"`，`"shim": "argo--openai_chat"` 变为 `"argo--chat_completions"` 并添加 `"shims": {"presets": ["argo"]}`，`embedding_providers` 变为 `embeddings_providers`。
 
-**数据库。** 它改写 `request_log.source_provider`、`request_log.target_provider`、`error_dumps.source_provider` 与 `error_dumps.target_provider` 中的退役标签：退役的格式名，以及值 `embedding`（改为 `embeddings`）。它还把 `metrics.counters.by_source_provider["embedding"]` 合并进 `embeddings`。`by_target_provider` 中的 `embedding` 键只报告、不改写，`request_log.model_type` 不变。写入在备份之后的一个事务中完成，另一个进程占用该文件时命令拒绝执行（`--force` 可覆盖）。改写是幂等的。在一份生产规模数据库的副本上（268275 行 `request_log`，775 行 `error_dumps`），334 行标记为 `embedding` 的数据在两列中都变成了 `embeddings`，行数、token 总和、未触及列的校验和以及 `integrity_check` 均未变化，第二次运行没有写入任何内容。
+**数据库。** 它改写 `request_log.source_provider`、`request_log.target_provider`、`error_dumps.source_provider` 与 `error_dumps.target_provider` 中的退役标签：退役的格式名，以及值 `embedding`（改为 `embeddings`）。它还把 `metrics.counters.by_source_provider["embedding"]` 合并进 `embeddings`。`by_target_provider` 中的 `embedding` 键只作为注记报告、不改写（`--json` 报告把注记列在 `notes` 下，与 `items` 分开），`request_log.model_type` 不变。写入在备份之后的一个事务中完成，另一个进程占用该文件时命令拒绝执行（`--force` 可覆盖）。改写是幂等的。在一份生产规模数据库的副本上（268275 行 `request_log`，775 行 `error_dumps`），334 行标记为 `embedding` 的数据在两列中都变成了 `embeddings`，行数、token 总和、未触及列的校验和以及 `integrity_check` 均未变化，第二次运行没有写入任何内容。
 
 持久化的内部键有意保持原样：`provider_metadata` 标签、转换器标签、原生工具定义与已提交的基线。你没有迁移的数据库行不是错误；网关照常启动并记录一条警告（见 [P8](#ledger-tags)）。
 
+**`--check` 与首次启动。** 网关会改写 `config_version` 低于当前版本的配置（注释不保留）。为避免工具处理完的配置被再次改写，当网关的加载期步骤除版本号外不会改变其他内容时，工具会写入 `config_version: 5`（工具写出的扁平 `embeddings_*` 键仍可读取；网关只在迁移时才把它们折叠成块）。当这些步骤会重构文档时，工具报告一条 `pending` 项，`--check` 以退出码 `3` 结束；只有网关能运行这些步骤。没有 `config_version` 的配置不做预测。
+
 **模式。** 默认是试运行。`--write` 应用改写，并先做副本：`<file>.bak`，该名称已被占用时为 `<file>.bak-<时间戳>`。`--check` 是试运行，有待改写项时以退出码 `3` 结束，供 CI 使用。`--json` 输出机器可读的报告。
 
-**`--scan`。** 扫描只做提示。它报告路径下 `.py`、`.json`、`.jsonc`、`.yaml` 与 `.yml` 文件中的退役名称，不修改任何文件。它只保留在任何位置都已退役的字符串：当前格式 `google_generate` 与 `google_interactions`，以及作为 shim 的裸厂商词 `openai`、`google`、`anthropic`，都不会被报告。带引号的字符串是匹配项，不是证明；`"anthropic"` 可能是你自己的变量。
+**`--scan`。** 扫描只做提示。每条发现都是对退役名称的文本提及，不证明它被使用，输出为 `mentions ... (advisory)` 而不是“无法映射”。同一次运行中同时作为 `--config` 目标的文件会被跳过，因为 `--config` 会改写它。它报告路径下 `.py`、`.json`、`.jsonc`、`.yaml` 与 `.yml` 文件中的退役名称，不修改任何文件。它只保留在任何位置都已退役的字符串：当前格式 `google_generate` 与 `google_interactions`，以及作为 shim 的裸厂商词 `openai`、`google`、`anthropic`，都不会被报告。带引号的字符串是匹配项，不是证明；`"anthropic"` 可能是你自己的变量。
 
 **退出码。**
 
 | 退出码 | 含义 |
 | --- | --- |
-| `0` | 无事可做，或全部已映射。 |
-| `1` | 有项目需要人工处理：存在无法映射的项，或任何 `--scan` 发现。 |
-| `2` | 命令无法运行：文件不可读、解析错误，或数据库被运行中的进程占用。 |
-| `3` | `--check` 发现有待改写项。 |
+| `0` | 无事可做，或全部已映射。注记（工具有意保留的项，例如 `by_target_provider` 键）不计入，因此完成后的 `--db` 迁移退出码为 `0`。 |
+| `1` | 有项目需要人工处理：存在无法映射的项，或任何 `--scan` 提及。 |
+| `2` | 命令无法运行：文件不可读、解析错误、数据库被运行中的进程占用，或数据库被其他写入方锁定（`--force` 只跳过打开文件检查，不跳过 SQLite 锁；信息为一行，指明该锁）。 |
+| `3` | `--check` 发现有待改写项，或有只有网关能运行的加载期迁移。 |
 
 ## 升级流程 {#upgrade-recipe}
 

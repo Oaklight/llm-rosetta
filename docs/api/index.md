@@ -27,7 +27,7 @@ title: API 参考
 - `llm_rosetta.shims.auth_exchange`
 - `llm_rosetta.shims.quota_probe`
 
-`llm_rosetta.api` 有一份字面量、分组的 `__all__`，共 68 个名字：聊天转换、类型化管道、格式目录与模型类型词汇表、提供方与 shim 名称、shim 注册表（读侧与写侧）与加载器、清单词汇表与叶子合并、脚手架入口、保真度与性能分析，以及宿主要检查的 IR 类型。core 自己从不导入 `llm_rosetta.api`：依赖方向是从宿主指向 core。
+`llm_rosetta.api` 有一份字面量、分组的 `__all__`，共 62 个名字：聊天转换、类型化管道、格式目录与模型类型词汇表、提供方与 shim 名称、shim 注册表（读侧与写侧）与加载器、清单词汇表与叶子合并、脚手架入口、保真度与性能分析，以及宿主要检查的 IR 类型。core 自己从不导入 `llm_rosetta.api`：依赖方向是从宿主指向 core。
 
 ### 网关规则
 
