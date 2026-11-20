@@ -99,3 +99,31 @@ async def test_a_migrated_ledger_is_silent(tmp_path, warnings_seen):
         await pm.close()
 
     assert not [m for m in warnings_seen if "retired provider tag" in m]
+
+
+@pytest.mark.asyncio
+async def test_the_embedding_provider_tag_is_reported_too(tmp_path, warnings_seen):
+    """Typed requests were logged under their model type; ``embedding`` is retired."""
+    pm = await PersistenceManager.create(str(tmp_path))
+    try:
+        await pm.insert_log_entries([_entry("embedding"), _entry("messages")])
+        count = await pm._warn_about_retired_tags()
+    finally:
+        await pm.close()
+
+    assert count == 1
+    message = next(m for m in warnings_seen if "retired provider tag" in m)
+    assert "embedding" in message
+    assert "llm-rosetta-migrate --db" in message
+
+
+@pytest.mark.asyncio
+async def test_a_migrated_embeddings_row_is_not_reported(tmp_path, warnings_seen):
+    pm = await PersistenceManager.create(str(tmp_path))
+    try:
+        await pm.insert_log_entries([_entry("embeddings")])
+        count = await pm._warn_about_retired_tags()
+    finally:
+        await pm.close()
+
+    assert count == 0

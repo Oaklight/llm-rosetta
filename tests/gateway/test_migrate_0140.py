@@ -629,3 +629,116 @@ def test_the_scan_vocabulary_is_the_table_plus_derived_keys() -> None:
     assert vocab["google"] == ["google_generate (provider_type)"]
     assert "google_generate" not in vocab and "google_interactions" not in vocab
     assert "openai" not in vocab
+
+
+# --------------------------------------------------------------------------
+# The provider tag ``embedding`` (a typed request was logged under its type)
+# --------------------------------------------------------------------------
+
+
+def _make_embedding_db(path: Path) -> None:
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE request_log (id TEXT, source_provider TEXT, "
+        "target_provider TEXT, model_type TEXT, total_tokens INTEGER)"
+    )
+    conn.execute(
+        "CREATE TABLE error_dumps (id TEXT, source_provider TEXT, target_provider TEXT)"
+    )
+    conn.execute("CREATE TABLE metrics (key TEXT PRIMARY KEY, value TEXT)")
+    conn.executemany(
+        "INSERT INTO request_log VALUES (?, ?, ?, ?, ?)",
+        [
+            ("1", "embedding", "embedding", "embeddings", 7),
+            ("2", "embedding", "openai", "embeddings", 11),
+            ("3", "chat_completions", "embedding", "embeddings", 13),
+            ("4", "chat_completions", "messages", "llm", 17),
+        ],
+    )
+    conn.execute("INSERT INTO error_dumps VALUES ('e1', 'embedding', 'embedding')")
+    counters = dict(
+        by_source_provider=dict(embedding=5, embeddings=2, chat_completions=1),
+        by_target_provider=dict(embedding=4, main=1),
+    )
+    conn.execute("INSERT INTO metrics VALUES ('counters', ?)", (json.dumps(counters),))
+    conn.commit()
+    conn.close()
+
+
+def _provider_columns(path: Path) -> list:
+    conn = sqlite3.connect(path)
+    try:
+        return conn.execute(
+            "SELECT id, source_provider, target_provider, model_type, total_tokens "
+            "FROM request_log ORDER BY id"
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def test_db_dry_run_reports_the_embedding_provider_tag(tmp_path) -> None:
+    db = tmp_path / "gateway.db"
+    _make_embedding_db(db)
+    before = db.read_bytes()
+
+    result = mig.migrate_db(db)
+
+    assert db.read_bytes() == before
+    counts = dict(
+        ((i.where, i.old), (i.new, i.count))
+        for i in result.items
+        if i.action == "rewrite"
+    )
+    assert counts[("request_log.source_provider", "embedding")] == ("embeddings", 2)
+    assert counts[("request_log.target_provider", "embedding")] == ("embeddings", 2)
+    assert counts[("error_dumps.source_provider", "embedding")] == ("embeddings", 1)
+    assert counts[("error_dumps.target_provider", "embedding")] == ("embeddings", 1)
+    assert counts[(mig._COUNTER_SOURCE, "embedding")] == ("embeddings", 5)
+    unmapped = [(i.where, i.old) for i in result.items if i.action == "unmapped"]
+    assert unmapped == [(mig._COUNTER_TARGET, "embedding")]
+
+
+def test_db_write_rewrites_the_embedding_provider_tag_and_nothing_else(
+    tmp_path,
+) -> None:
+    db = tmp_path / "gateway.db"
+    _make_embedding_db(db)
+
+    result = mig.migrate_db(db, write=True)
+
+    assert result.error is None and result.backup
+    assert _provider_columns(db) == [
+        ("1", "embeddings", "embeddings", "embeddings", 7),
+        ("2", "embeddings", "openai", "embeddings", 11),
+        ("3", "chat_completions", "embeddings", "embeddings", 13),
+        ("4", "chat_completions", "messages", "llm", 17),
+    ]
+    conn = sqlite3.connect(db)
+    try:
+        dumps = conn.execute("SELECT * FROM error_dumps").fetchall()
+        counters = json.loads(
+            conn.execute("SELECT value FROM metrics WHERE key = 'counters'").fetchone()[
+                0
+            ]
+        )
+    finally:
+        conn.close()
+    assert dumps == [("e1", "embeddings", "embeddings")]
+    assert counters["by_source_provider"] == dict(embeddings=7, chat_completions=1)
+    # The target counter mixes provider names and tags, so it is only reported.
+    assert counters["by_target_provider"] == dict(embedding=4, main=1)
+
+
+def test_db_embedding_rewrite_is_idempotent(tmp_path) -> None:
+    db = tmp_path / "gateway.db"
+    _make_embedding_db(db)
+    mig.migrate_db(db, write=True)
+    after_first = _dump(db)
+    files = sorted(p.name for p in tmp_path.iterdir())
+
+    again = mig.migrate_db(db, write=True)
+
+    assert again.error is None and again.backup is None
+    assert [i for i in again.items if i.action == "rewrite"] == []
+    assert _dump(db) == after_first
+    assert sorted(p.name for p in tmp_path.iterdir()) == files

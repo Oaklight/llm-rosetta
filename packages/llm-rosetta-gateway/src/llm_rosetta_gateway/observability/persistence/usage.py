@@ -125,10 +125,12 @@ class _UsageMixin(_StoreState):
         """
         from llm_rosetta.api import retired_names
 
+        # The tags the gateway wrote: retired formats, and the retired
+        # model-type spelling a typed request was logged under (``embedding``).
         retired = tuple(
             row.name
             for row in retired_names.RETIRED_NAMES
-            if row.kind == retired_names.PROVIDER_TYPE
+            if row.kind in (retired_names.PROVIDER_TYPE, retired_names.MODEL_TYPE)
         )
         marks = ", ".join("?" * len(retired))
         cursor = await self._conn.execute(
