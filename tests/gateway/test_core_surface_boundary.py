@@ -491,6 +491,59 @@ def test_an_undeclared_name_on_the_surface_is_reported():
     ]
 
 
+# --- Tests allowlist: (file relative to tests/gateway, module, name). ---
+# D5 of #1630: a gateway test may import non-private core modules, but not a
+# private name or a private module.  Shrink only; never add an entry.  Lower
+# _TESTS_PRIVATE_CEILING with every deletion.
+_TESTS_PRIVATE_CEILING = 7
+_TESTS_PRIVATE_ALLOWLIST: frozenset[tuple[str, str, str]] = frozenset(
+    {
+        (
+            "test_admin_credential_payload.py",
+            "llm_rosetta.shims.providers",
+            "_load_single_provider",
+        ),
+        (
+            "test_admin_shim_manifests.py",
+            "llm_rosetta.shims.providers",
+            "_CONNECTION_KEYS",
+        ),
+        (
+            "test_proxy_transforms.py",
+            "llm_rosetta.shims.provider_shim",
+            "_reset_registry",
+        ),
+        ("test_quota.py", "llm_rosetta.shims", "_load_providers"),
+        (
+            "test_shim_selection.py",
+            "llm_rosetta.shims.provider_shim",
+            "_reset_registry",
+        ),
+        (
+            "test_shim_sources.py",
+            "llm_rosetta.shims.provider_shim",
+            "_reset_registry",
+        ),
+        ("test_stream_bridge.py", "llm_rosetta.ir.primitives.fold", "_ECHO_FIELDS"),
+    }
+)
+
+
+def _tests_edges() -> list[Edge]:
+    """Scan ``tests/gateway`` (this file's own fixtures included)."""
+    return _scan_tree(_TESTS, "tests")
+
+
+def test_gateway_tests_reach_no_private_core_name_off_the_list():
+    reaches = private_offenders(_tests_edges())
+    assert sorted(reaches - _TESTS_PRIVATE_ALLOWLIST) == [], (
+        "a gateway test imports a private core name; use llm_rosetta.api "
+        "(snapshot_registry / restore_registry, load_providers, ...)"
+    )
+    assert sorted(_TESTS_PRIVATE_ALLOWLIST - reaches) == [], "stale: delete the entry"
+    assert len(_TESTS_PRIVATE_ALLOWLIST) <= _TESTS_PRIVATE_CEILING
+
+
 def _render(name: str, annotation: str, items: Iterable[tuple[str, ...]]) -> str:
     lines = [f"{name}: {annotation} = frozenset(", "    {"]
     lines += [f"        {item!r}," for item in sorted(items)]
