@@ -194,3 +194,65 @@ def test_observability_facade_still_exposes_every_public_name():
         pass
     else:  # pragma: no cover - defensive
         raise AssertionError("unknown names must raise AttributeError")
+
+
+#: The host-facing surface (#1630).  Core code must not import it: the
+#: dependency runs from the host to core, and an import from inside core
+#: would be a cycle.  A module-scope import fails earlier than this test: it
+#: dies at import time with ``ImportError: cannot import name '__version__'
+#: from partially initialized module 'llm_rosetta'``, because ``api`` imports
+#: back into the package.  That is a circular import, not this test's message,
+#: so a red suite caused by one points here: look for an ``llm_rosetta.api``
+#: import in a core module.
+_API = "llm_rosetta.api"
+
+
+def _is_api(name: str) -> bool:
+    return name == _API or name.startswith(_API + ".")
+
+
+def _api_imports(path: Path, source: str) -> list[str]:
+    hits: list[str] = []
+    for node in ast.walk(ast.parse(source)):
+        found: str | None
+        if isinstance(node, ast.ImportFrom):
+            module = _absolute_module(path, node)
+            names = [module] + [
+                f"{module}.{alias.name}" for alias in node.names if alias.name != "*"
+            ]
+            found = next((n for n in names if _is_api(n)), None)
+        elif isinstance(node, ast.Import):
+            found = next((a.name for a in node.names if _is_api(a.name)), None)
+        elif isinstance(node, ast.Call):
+            target = _dynamic_target(node)
+            found = target if target is not None and _is_api(target) else None
+        else:
+            continue
+        if found is not None:
+            hits.append(f"{path}:{node.lineno} {found}")
+    return hits
+
+
+def test_core_sources_never_import_the_api_surface():
+    offenders: list[str] = []
+    for path in _PKG_ROOT.rglob("*.py"):
+        rel = path.relative_to(_PKG_ROOT)
+        if rel.parts[0] == "_vendor" or rel == Path("api.py"):
+            continue
+        offenders.extend(_api_imports(path, path.read_text()))
+    assert offenders == []
+
+
+def test_api_guard_catches_absolute_relative_and_dynamic_imports():
+    probe = _PKG_ROOT / "pipeline" / "chat.py"
+
+    assert _api_imports(probe, "from llm_rosetta.api import x")
+    assert _api_imports(probe, "from llm_rosetta import api")
+    assert _api_imports(probe, "from .. import api as _api")
+    assert _api_imports(probe, "from ..api import x")
+    assert _api_imports(probe, "import llm_rosetta.api")
+    assert _api_imports(
+        probe, 'import importlib\nimportlib.import_module("llm_rosetta.api")'
+    )
+    assert _api_imports(probe, "from llm_rosetta import apis") == []
+    assert _api_imports(probe, "from llm_rosetta.pipeline import x") == []
