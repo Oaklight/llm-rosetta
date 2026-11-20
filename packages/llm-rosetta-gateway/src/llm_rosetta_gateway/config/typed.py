@@ -82,11 +82,22 @@ def reject_retired_sections(raw: dict[str, Any], type_name: str) -> None:
     for name, entry in (raw.get("providers") or {}).items():
         if isinstance(entry, dict):
             reject_retired_keys(entry, type_name, f"providers.{name}")
+    retired_sections = {f"{old}_providers" for old in retired_spellings(type_name)}
     for section in (
         f"{type_name}_providers",
         *(f"{old}_providers" for old in retired_spellings(type_name)),
     ):
-        for name, entry in (raw.get(section) or {}).items():
+        pool = raw.get(section)
+        if section in retired_sections and section in raw:
+            # The section name is the retired spelling; its value (a list,
+            # null or a string as well as a dict) does not matter.
+            raise RetiredConfigName(
+                retired_names.retired_key_message(
+                    section, f"{type_name}_" + section.split("_", 1)[1]
+                ),
+                where=section,
+            )
+        for name, entry in (pool if isinstance(pool, dict) else {}).items():
             if isinstance(entry, dict):
                 reject_retired_keys(entry, type_name, f"{section}.{name}")
 
