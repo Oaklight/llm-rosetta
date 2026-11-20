@@ -6,7 +6,7 @@ title: 迁移到 0.14
 
 0.14.0 移除了 0.13.0 为过渡保留一个版本的已弃用导入路径与类别名（epic [#919](https://github.com/Oaklight/llm-rosetta/issues/919)）。被移除的名字会以普通的 `ImportError`、`ModuleNotFoundError` 或 `AttributeError` 失败；[retired-names](#retired-names) 诊断只覆盖提供方、shim 与模型类型名称，不覆盖 Python 导入路径。本页列出已移除的内容、替代写法，以及仍然可用的部分。
 
-下表每一行都已针对 `origin/master`（commit `1ef424793a`）核对：每个被移除的名字导入失败，每个替代写法都能导入。
+下表每一行都已针对 `origin/master`（commit `756f084169`）核对：每个被移除的名字导入失败，每个替代写法都能导入。
 
 ## 已移除的转换器包 {#removed-converter-packages}
 
@@ -46,6 +46,31 @@ title: 迁移到 0.14
 | `OpenAIResponsesStreamContext` | `OpenResponsesStreamContext` |
 
 `OpenResponses*` 位于 `llm_rosetta.converters.llm.open_responses`。`OpenAIResponsesConverter` 是真实的类（Open Responses 转换器的 OpenAI profile），**没有**被移除。
+
+## 已移除的 helper 模块、网关存根与 `tool_ops` 别名 {#removed-shims}
+
+在 [#1647](https://github.com/Oaklight/llm-rosetta/pull/1647) 中移除。这些 shim 曾声明保留到 0.16.0，现在 0.14.0 即移除。导入已移除的路径会抛 `ModuleNotFoundError`。
+
+| 已移除的导入路径 | 改用 |
+| --- | --- |
+| `llm_rosetta.converters.base.helpers.cache_breakpoints` | `llm_rosetta.ir.primitives.cache_breakpoints` |
+| `llm_rosetta.converters.base.helpers.image_limit` | `llm_rosetta.ir.primitives.image_limit` |
+| `llm_rosetta.converters.base.helpers.system_message_hoist` | `llm_rosetta.ir.primitives.system_message_hoist` |
+| `llm_rosetta_gateway.auth` | `llm_rosetta_gateway.middleware.auth` |
+| `llm_rosetta_gateway.headers` | `llm_rosetta_gateway.middleware.headers` |
+| `llm_rosetta_gateway.embeddings` | `llm_rosetta_gateway.pipelines.embeddings` |
+| `llm_rosetta_gateway.migrations` | `llm_rosetta_gateway.maintenance.migrations` |
+
+| 已移除的 `llm_rosetta.tool_ops` 函数 | 改用 |
+| --- | --- |
+| `to_openai_chat` | `to_chat_completions` |
+| `from_openai_chat` | `from_chat_completions` |
+| `to_openai_responses` | `to_open_responses` |
+| `from_openai_responses` | `from_open_responses` |
+| `to_anthropic` | `to_messages` |
+| `from_anthropic` | `from_messages` |
+
+`tool_ops.to_provider` 及其他以 provider 为键的函数不再接受旧的 provider 拼写（`openai_chat`、`anthropic`、`google-genai`，以及[提供方类型](#provider-types)表中的其余名字）。它们抛 `ValueError`，消息会写出替代名，例如 `'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions')`。
 
 ## 在代码中查找旧名字 {#find-old-names}
 
