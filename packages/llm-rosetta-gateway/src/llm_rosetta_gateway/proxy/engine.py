@@ -8,9 +8,12 @@ from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
-from llm_rosetta.auto_detect import ProviderType
-from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
-from llm_rosetta.pipeline import ConversionError, ConversionPipeline
+from llm_rosetta.api import (
+    ConversionError,
+    ConversionPipeline,
+    ProviderType,
+    UnrepresentableFinishReason,
+)
 from llm_rosetta.routing import ResolvedRoute
 
 from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
@@ -249,7 +252,7 @@ async def prepare_request(
 
     # Per-model system message flattening (gateway config override)
     if route.flatten_system:
-        from llm_rosetta.transforms import flatten_system_content
+        from llm_rosetta.api import flatten_system_content
 
         target_body = flatten_system_content()(target_body)
 
@@ -455,11 +458,10 @@ def _stream_envelope(route: ResolvedRoute) -> dict[str, Any]:
     Responses stream declares none and the envelope stays empty.  Only chat
     routes reach the stream-required bridge, so the model type is ``llm``.
     """
-    from llm_rosetta.formats import BY_PAIR
-    from llm_rosetta.provider_names import canonical_provider_name
+    from llm_rosetta.api import canonical_provider_name, spec_for
 
     source = canonical_provider_name(route.source_provider)
-    spec = BY_PAIR.get(("llm", source))
+    spec = spec_for("llm", source)
     fields = spec.stream_echo_fields if spec is not None else ()
     return dict.fromkeys(fields)
 

@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
-from llm_rosetta.provider_names import canonical_provider_name
+from llm_rosetta.api import canonical_provider_name
 
 from .session_identity import SessionIdentity
 

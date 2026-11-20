@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 
-from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta.api import ProviderType
 
 
 from ..logging import (

@@ -14,8 +14,7 @@ from __future__ import annotations
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
-from llm_rosetta.formats import FORMAT_SPECS
-from llm_rosetta.provider_names import canonical_provider_name
+from llm_rosetta.api import FORMAT_SPECS, canonical_provider_name
 
 # ---------------------------------------------------------------------------
 # Path → API format detection (single mapping table)

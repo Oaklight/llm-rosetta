@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-from llm_rosetta.converters.base.helpers import strip_internal_metadata
+from llm_rosetta.api import strip_internal_metadata
 
 
 from ..logging import (

@@ -300,7 +300,7 @@ def facts_from_ir(
         The facts.  An absent or empty request is small, image-free and
         effort-free rather than an error: a rule must not fail a request.
     """
-    from llm_rosetta.types.ir.type_guards import is_image_part, is_tool_result_part
+    from llm_rosetta.api import is_image_part, is_tool_result_part
 
     if not ir_request:
         return RuleFacts(agents=agents, now=now)

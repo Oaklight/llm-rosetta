@@ -12,13 +12,11 @@ Every request that reaches an upstream is recorded in the usage ledger with
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import Response
-from llm_rosetta.converters.rerank.pipeline import (
-    RerankConversionPipeline,
-    response_usage,
-)
+from llm_rosetta.api import RerankConversionPipeline, typed_response_usage
 
 from ..config import GatewayConfig, TypedRoute
 from .typed import TypedHandler, detect_source_format, handle_typed_request
@@ -52,7 +50,7 @@ _RERANK = TypedHandler(
     resolve=_resolve_route,
     resolve_excluding=_resolve_route,
     configured_models=lambda config: config.rerank_models.keys(),
-    response_usage=response_usage,
+    response_usage=partial(typed_response_usage, "rerank"),
     not_found_label="rerank model",
     # Rerank marks an empty upstream body as a passthrough; embedding and
     # decision return the raw body instead.
