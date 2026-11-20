@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from ..transport import ProviderInfo
+from .errors import RetiredConfigName
 from .parse import first_pool_provider
 
 if TYPE_CHECKING:
@@ -33,15 +34,22 @@ def retired_spellings(type_name: str) -> tuple[str, ...]:
     )
 
 
-def reject_retired_keys(cfg: dict[str, Any], type_name: str) -> None:
+def reject_retired_keys(
+    cfg: dict[str, Any], type_name: str, where: str | None = None
+) -> None:
     """Raise if *cfg* carries a key spelled with a retired model type.
 
     ``embedding_format``, ``embedding_path``, ``embedding_shim`` and the nested
     ``embedding:`` block are no longer read: the config loader answers with the
     key that replaces each, and the ``llm-rosetta-migrate`` command.
 
+    Args:
+        cfg: A provider entry.
+        type_name: The current model type.
+        where: The entry's JSON path (``providers.<name>``), named in the error.
+
     Raises:
-        ValueError: Naming the first such key and its replacement.
+        RetiredConfigName: Naming the first such key and its replacement.
     """
     from llm_rosetta.api import retired_names
 
@@ -50,7 +58,10 @@ def reject_retired_keys(cfg: dict[str, Any], type_name: str) -> None:
         for key in cfg:
             if key == old or (isinstance(key, str) and key.startswith(prefix)):
                 new = type_name if key == old else f"{type_name}_" + key[len(prefix) :]
-                raise ValueError(retired_names.retired_key_message(str(key), new))
+                raise RetiredConfigName(
+                    retired_names.retired_key_message(str(key), new),
+                    where=f"{where}.{key}" if where else None,
+                )
 
 
 def reject_retired_sections(raw: dict[str, Any], type_name: str) -> None:
@@ -64,20 +75,20 @@ def reject_retired_sections(raw: dict[str, Any], type_name: str) -> None:
     dropped that way.
 
     Raises:
-        ValueError: Naming the first such key and the key that replaces it.
+        RetiredConfigName: Naming the first such key and the key that replaces it.
     """
     from llm_rosetta.api import retired_names
 
-    for entry in (raw.get("providers") or {}).values():
+    for name, entry in (raw.get("providers") or {}).items():
         if isinstance(entry, dict):
-            reject_retired_keys(entry, type_name)
+            reject_retired_keys(entry, type_name, f"providers.{name}")
     for section in (
         f"{type_name}_providers",
         *(f"{old}_providers" for old in retired_spellings(type_name)),
     ):
-        for entry in (raw.get(section) or {}).values():
+        for name, entry in (raw.get(section) or {}).items():
             if isinstance(entry, dict):
-                reject_retired_keys(entry, type_name)
+                reject_retired_keys(entry, type_name, f"{section}.{name}")
 
     for old in retired_spellings(type_name):
         for key in raw:
@@ -89,7 +100,9 @@ def reject_retired_sections(raw: dict[str, Any], type_name: str) -> None:
                 new = f"default_{type_name}_" + key[len(old) + 9 :]
             else:
                 continue
-            raise ValueError(retired_names.retired_key_message(key, new))
+            raise RetiredConfigName(
+                retired_names.retired_key_message(key, new), where=key
+            )
 
 
 def _declared(cfg: dict[str, Any], key: str, type_name: str) -> Any:

@@ -10,6 +10,7 @@ import os
 from typing import Any
 
 from .core import GatewayConfig
+from .errors import RetiredConfigName
 from .io import JsoncConfigIO
 
 
@@ -69,10 +70,17 @@ def load_gateway_config(path: str) -> GatewayConfig:
 
     The load-time steps run as part of the read, and the config carries the
     registry they ran — which is what the admin surface reports the config's
-    maintenance from.  That is the whole difference between this and
+    maintenance from.  A retired name in the document raises
+    :class:`~llm_rosetta_gateway.config.errors.RetiredConfigName` (a
+    :class:`ValueError`) naming this file and the JSON path of the name.  That is the whole difference between this and
     ``GatewayConfig(load_config(path))``, which has run the steps without
     keeping any trace of them.
     """
     reader = JsoncConfigIO()
     raw = reader.load(path)
-    return GatewayConfig(raw, maintenance=reader.last_load_registry, config_path=path)
+    try:
+        return GatewayConfig(
+            raw, maintenance=reader.last_load_registry, config_path=path
+        )
+    except RetiredConfigName as exc:
+        raise exc.located(path=path) from None
