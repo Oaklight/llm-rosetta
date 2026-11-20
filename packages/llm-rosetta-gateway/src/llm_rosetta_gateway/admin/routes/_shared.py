@@ -177,6 +177,21 @@ def parse_json_body(request: Any) -> tuple[dict[str, Any], Response | None]:
     return body, None
 
 
+def retired_type_error(body: Any) -> Response | None:
+    """A 400 answer when the request body names a retired model type.
+
+    ``type: embedding`` and ``type: decision`` are no longer accepted; the
+    answer names the replacement and the ``llm-rosetta-migrate`` command.
+    Returns ``None`` when the body names no retired type.
+    """
+    from ...model_types import retired_type_message
+
+    message = retired_type_message(body.get("type")) if isinstance(body, dict) else None
+    if message is None:
+        return None
+    return JSONResponse(dict(error=message), status_code=400)
+
+
 class ConfigMutationContext:
     """Holds state for a :func:`config_mutate` session.
 

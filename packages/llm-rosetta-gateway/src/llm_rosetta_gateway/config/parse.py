@@ -603,11 +603,13 @@ def declared_provider_entries(value: Any, *, label: str = "model") -> list[Any]:
 
 
 def declared_model_type(value: Any) -> str:
-    """The model type a ``models`` entry declares, canonicalised.
+    """The model type a ``models`` entry declares.
 
-    An explicit ``type`` is authoritative and is only canonicalised, not
-    validated: an entry that spells a type the registry does not know keeps
-    that spelling, and the pools treat it as an unknown non-chat type.
+    An explicit ``type`` is authoritative and is not validated against the
+    registry: an entry that spells a type the registry does not know keeps
+    that spelling, and the pools treat it as an unknown non-chat type.  A
+    retired spelling (``embedding``, ``decision``) is the exception: it raises
+    with its replacement.
 
     An entry written before the model editor sent that field names its type
     only as a capability — ``capabilities: ["embedding"]``.  Several typed
@@ -623,9 +625,12 @@ def declared_model_type(value: Any) -> str:
         value: One entry of the ``models`` section.
 
     Returns:
-        A canonical model type name; ``"llm"`` when the entry declares none.
+        A model type name; ``"llm"`` when the entry declares none.
+
+    Raises:
+        ValueError: If the entry spells its type with a retired name.
     """
-    from llm_rosetta.api import canonical_model_type
+    from llm_rosetta.api import retired_names
 
     from ..model_types import registered_type_names
 
@@ -633,12 +638,15 @@ def declared_model_type(value: Any) -> str:
         return "llm"
     declared = value.get("type")
     if declared:
-        return canonical_model_type(declared)
+        retired_names.check_not_retired(declared, retired_names.MODEL_TYPE)
+        return declared
 
     caps = value.get("capabilities")
     if not isinstance(caps, list) or "text" in caps:
         return "llm"
-    declared_types = {canonical_model_type(cap) for cap in caps if isinstance(cap, str)}
+    for cap in caps:
+        retired_names.check_not_retired(cap, retired_names.MODEL_TYPE)
+    declared_types = {cap for cap in caps if isinstance(cap, str)}
     for name in registered_type_names():
         if name != "llm" and name in declared_types:
             return name

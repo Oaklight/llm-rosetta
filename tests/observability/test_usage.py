@@ -185,12 +185,12 @@ class TestEachModelTypeNormalizesFromItsOwnIR:
 
     def test_embedding(self):
         """``EmbeddingUsageInfo``: ``total_tokens``, ``prompt_tokens``."""
-        assert usage_columns({"prompt_tokens": 5, "total_tokens": 5}, "embedding") == {
+        assert usage_columns({"prompt_tokens": 5, "total_tokens": 5}, "embeddings") == {
             "input_tokens": 5,
             "total_tokens": 5,
         }
         # Voyage reports only the total; the input column stays absent.
-        assert usage_columns({"total_tokens": 32}, "embedding") == {"total_tokens": 32}
+        assert usage_columns({"total_tokens": 32}, "embeddings") == {"total_tokens": 32}
 
     def test_rerank(self):
         """``RerankUsageInfo``: ``total_tokens``, ``prompt_tokens``, ``cached_tokens``."""
@@ -200,7 +200,7 @@ class TestEachModelTypeNormalizesFromItsOwnIR:
 
     def test_decision(self):
         """``DecisionUsageInfo``: ``input_tokens`` and ``output_tokens`` only."""
-        assert usage_columns({"input_tokens": 10, "output_tokens": 5}, "decision") == {
+        assert usage_columns({"input_tokens": 10, "output_tokens": 5}, "decisions") == {
             "input_tokens": 10,
             "output_tokens": 5,
             "total_tokens": 15,
@@ -208,13 +208,13 @@ class TestEachModelTypeNormalizesFromItsOwnIR:
 
     def test_token_total_reads_the_familys_own_fields(self):
         assert token_total({"prompt_tokens": 10, "completion_tokens": 5}) == 15
-        assert token_total({"prompt_tokens": 10}, "embedding") == 10
+        assert token_total({"prompt_tokens": 10}, "embeddings") == 10
         assert token_total({"prompt_tokens": 7}, "rerank") == 7
-        assert token_total({"input_tokens": 10, "output_tokens": 5}, "decision") == 15
+        assert token_total({"input_tokens": 10, "output_tokens": 5}, "decisions") == 15
 
     def test_the_canonical_rule_is_the_same_for_every_family(self):
         """The provider's own total wins wherever the family declares one."""
-        assert token_total({"prompt_tokens": 4, "total_tokens": 9}, "embedding") == 9
+        assert token_total({"prompt_tokens": 4, "total_tokens": 9}, "embeddings") == 9
         assert (
             token_total(
                 {"prompt_tokens": 4, "cached_tokens": 2, "total_tokens": 9}, "rerank"
@@ -222,11 +222,11 @@ class TestEachModelTypeNormalizesFromItsOwnIR:
             == 9
         )
         # The decision IR declares no total, so the additive rule always runs.
-        assert token_total({"input_tokens": 4, "output_tokens": 1}, "decision") == 5
+        assert token_total({"input_tokens": 4, "output_tokens": 1}, "decisions") == 5
 
     def test_a_family_that_reports_nothing_totals_nothing(self):
-        assert token_total({"model": "text-embedding-3"}, "embedding") is None
-        assert usage_columns({"model": "text-embedding-3"}, "embedding") == {}
+        assert token_total({"model": "text-embedding-3"}, "embeddings") is None
+        assert usage_columns({"model": "text-embedding-3"}, "embeddings") == {}
 
     def test_an_unknown_model_type_is_refused_not_guessed(self):
         """A writer's typo must not quietly record chat's field names."""
@@ -489,7 +489,7 @@ class TestTheReportBreaksDownByModelType:
             subjects=[("b1", "k")],
         )
         assert set(report.by_model_type) == set(MODEL_TYPES)
-        assert report.for_model_type("embedding", "24h")["total_tokens"] == 10
+        assert report.for_model_type("embeddings", "24h")["total_tokens"] == 10
         # The cut is orthogonal to the classes: the subject's own total is every
         # type summed, and so is the report's.
         assert report.attributed("b1", "24h")["total_tokens"] == 116
@@ -499,7 +499,7 @@ class TestTheReportBreaksDownByModelType:
     def test_a_type_with_no_traffic_is_absent_not_a_measured_zero(self):
         report = UsageReport.build(groups=[_group(None, None, total_tokens=5)])
         assert set(report.by_model_type) == {"llm"}
-        assert report.for_model_type("embedding", "24h")["total_tokens"] == 0
+        assert report.for_model_type("embeddings", "24h")["total_tokens"] == 0
 
     def test_a_group_that_names_no_type_counts_as_chat(self):
         """A library user's groups predate the column, or never had one."""
@@ -699,3 +699,21 @@ class TestThePackageStandsAlone:
             env={**os.environ, "PYTHONPATH": src},
         )
         assert result.stdout.strip() == "False", result.stdout + result.stderr
+
+
+class TestRetiredModelTypeSpellings:
+    """``embedding`` and ``decision`` are no longer read as their successors."""
+
+    @pytest.mark.parametrize(
+        ("old", "new"), [("embedding", "embeddings"), ("decision", "decisions")]
+    )
+    def test_the_readers_name_the_replacement(self, old, new):
+        usage = dict(prompt_tokens=1)
+        with pytest.raises(ValueError, match=f"'{new}'"):
+            token_total(usage, old)
+        with pytest.raises(ValueError, match="llm-rosetta-migrate"):
+            usage_columns(usage, old)
+
+    def test_an_unknown_type_is_still_a_key_error(self):
+        with pytest.raises(KeyError):
+            token_total(dict(prompt_tokens=1), "speech")

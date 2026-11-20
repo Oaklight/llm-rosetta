@@ -1104,13 +1104,11 @@ class TestShimPair:
         assert shims[0].model_type == "embeddings"
         assert shims[0].format == "openai"
 
-    def test_the_legacy_type_spelling_is_accepted(self, tmp_path: Path):
-        """``embedding`` is rewritten to the canonical ``embeddings``."""
-        with pytest.warns(DeprecationWarning, match="model_type 'embedding'"):
-            shims = self._load(
-                tmp_path, "name: x\nmodel_type: embedding\nformat: openai\n"
-            )
-        assert shims[0].model_type == "embeddings"
+    def test_the_retired_type_spelling_is_rejected(self, tmp_path: Path):
+        """``embedding`` is an error that names ``embeddings`` and the migrate command."""
+        with pytest.raises(ValueError, match="'embeddings'") as info:
+            self._load(tmp_path, "name: x\nmodel_type: embedding\nformat: openai\n")
+        assert "llm-rosetta-migrate" in str(info.value)
 
     def test_mismatched_pair_is_refused(self, tmp_path: Path):
         with pytest.raises(ValueError, match="not a embeddings format"):
@@ -2059,20 +2057,21 @@ class TestTypeParams:
             "truncation": True,
         }
 
-    def test_the_legacy_section_spelling_is_read(self, tmp_path: Path):
-        """A shim written before the rename keeps its defaults."""
-        with pytest.warns(DeprecationWarning, match="model_type 'embedding'"):
-            (shim,) = self._load(
+    def test_the_retired_section_spelling_is_rejected(self, tmp_path: Path):
+        """An ``embedding:`` block is an error naming ``embeddings:``."""
+        with pytest.raises(
+            ValueError, match="'embedding:' was renamed to 'embeddings:'"
+        ):
+            self._load(
                 tmp_path,
                 """\
                 name: x
-                model_type: embedding
+                model_type: embeddings
                 format: openai
                 embedding:
                   task_type: retrieval_document
                 """,
             )
-        assert shim.params == {"task_type": "retrieval_document"}
 
     def test_an_unknown_parameter_is_refused(self, tmp_path: Path):
         with pytest.raises(

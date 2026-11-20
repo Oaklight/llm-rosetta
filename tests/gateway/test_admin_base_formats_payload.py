@@ -54,7 +54,7 @@ def test_a_model_entry_carries_its_derived_type():
     """
     from llm_rosetta_gateway.admin.routes.config.payload import _normalize_model_entry
 
-    legacy = _normalize_model_entry({"provider": "p", "capabilities": ["embedding"]})
+    legacy = _normalize_model_entry({"provider": "p", "capabilities": ["embeddings"]})
     assert legacy["type"] == "embeddings"
 
     plain = _normalize_model_entry({"provider": "p", "capabilities": ["text"]})

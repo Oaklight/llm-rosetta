@@ -18,7 +18,6 @@ import functools
 import logging
 import re
 import threading
-import warnings
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,7 +28,6 @@ from ..types.ir.constraints import RequestConstraints
 from llm_rosetta.model_vocabulary import (
     FORMATS_BY_TYPE,
     MODEL_TYPES,
-    canonical_model_type,
 )
 from llm_rosetta import retired_names
 from llm_rosetta.transforms import IRTransform, Transform
@@ -502,18 +500,9 @@ class SoftErrorPattern:
 
 
 def _normalize_model_type_kwargs(kwargs: dict[str, Any]) -> None:
-    """Rewrite a legacy ``model_type`` to its canonical spelling."""
-    if "model_type" not in kwargs:
-        return
-    canonical = canonical_model_type(kwargs["model_type"])
-    if canonical != kwargs["model_type"]:
-        warnings.warn(
-            f"ProviderShim(model_type={kwargs['model_type']!r}) is "
-            f"deprecated, use {canonical!r}",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        kwargs["model_type"] = canonical
+    """Reject a retired ``model_type`` spelling (``embedding``, ``decision``)."""
+    if "model_type" in kwargs:
+        retired_names.check_not_retired(kwargs["model_type"], retired_names.MODEL_TYPE)
 
 
 def _normalize_format_kwargs(kwargs: dict[str, Any]) -> None:
@@ -999,16 +988,18 @@ def resolve_model_type(name: str) -> str | None:
 
     Returns:
         ``"llm"``, ``"embeddings"``, ``"rerank"`` or ``"decisions"``, or
-        ``None`` when the name does not identify a category.  The legacy
-        ``"embedding"`` spelling is canonicalised here.
+        ``None`` when the name does not identify a category.
+
+    Raises:
+        ValueError: If *name* is a retired model-type spelling.
     """
     shim = _current_registry().get(name)
     if shim is not None:
         return shim.model_type
-    resolved = canonical_model_type(name)
-    if resolved in MODEL_TYPES:
-        return resolved
-    if resolved in _CHAT_FORMATS:
+    retired_names.check_not_retired(name, retired_names.MODEL_TYPE)
+    if name in MODEL_TYPES:
+        return name
+    if name in _CHAT_FORMATS:
         return "llm"
     return None
 

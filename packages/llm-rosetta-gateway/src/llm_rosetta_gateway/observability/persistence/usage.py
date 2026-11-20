@@ -6,7 +6,6 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from llm_rosetta.api import canonical_model_type
 from llm_rosetta.observability.usage import (
     DEFAULT_MODEL_TYPE,
     LEDGER_COLUMNS,
@@ -155,7 +154,7 @@ class _UsageMixin(_StoreState):
             params.append(api_key_label)
         if model_type:
             sql += " AND model_type = ?"
-            params.append(canonical_model_type(model_type))
+            params.append(model_type)
         vis_sql, vis_params = self._visible("request_log", since=cutoff)
         if vis_sql:
             sql += _and(vis_sql)

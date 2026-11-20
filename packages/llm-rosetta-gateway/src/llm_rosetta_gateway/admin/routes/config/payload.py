@@ -257,13 +257,8 @@ def _normalize_model_entry(value: Any) -> dict[str, Any]:
 
 def _merge_typed_models(raw: dict[str, Any], models: dict[str, Any]) -> None:
     """Merge embeddings/rerank/decision models into the main models dict."""
-    from llm_rosetta.api import legacy_model_type
-
     for model_type in ("embeddings", "rerank", "decisions"):
-        old = legacy_model_type(model_type)
         section = raw.get(f"{model_type}_models")
-        if not section and old is not None:
-            section = raw.get(f"{old}_models", {})
         for model_name, provider_name in (section or {}).items():
             if model_name not in models:
                 prov = (
@@ -324,42 +319,19 @@ def _with_live_endpoint_markers(
 
 
 def _normalise_endpoint_flags(masked: dict[str, Any]) -> None:
-    """Spell every type-derived endpoint key the way the panel reads it.
+    """Spell every type-derived endpoint setting the way the panel reads it.
 
-    The parser accepts the pre-rename spelling of each of them
-    (``embedding_format``, ``embedding_path``, ``embedding_shim``,
-    ``embedding_enabled``) with a deprecation warning.  The panel reads the
-    canonical names only, so a config written before the rename would
-    otherwise show an endpoint as enabled while the gateway had stopped
-    routing to it, hide the capability from ``_getProviderCaps`` altogether,
-    and then drop the endpoint on the next save — the editor sends the
-    canonical keys it knows, all empty.  Normalising here keeps that one rule
-    in the browser.
-
-    Precedence follows ``config/typed.py::_declared``: an ``*_enabled`` key
-    decides by presence (``False`` is a value), every other key falls through
-    to the legacy spelling only when the canonical one is empty.
+    The panel reads an endpoint's settings from its face block
+    (``embeddings: {shim, format, path, enabled}``); this folds the flat
+    ``embeddings_*`` keys into it, for the payload only.  The pre-rename
+    ``embedding_*`` keys are not read any more: the loader rejects them with
+    the key that replaces each and the ``llm-rosetta-migrate`` command.
     """
-    from ....config.typed import legacy_config_key
     from ....model_types import all_model_types
 
     for desc in all_model_types():
         if desc.is_llm:
             continue
-        pairs = [
-            (f"{desc.name}_enabled", True),
-            (desc.config_format_key, False),
-            (desc.config_path_key, False),
-            (desc.config_shim_key, False),
-        ]
-        for canonical, by_presence in pairs:
-            if not canonical:
-                continue
-            if canonical in masked and (by_presence or masked[canonical]):
-                continue
-            legacy = legacy_config_key(canonical, desc.name)
-            if legacy is not None and legacy in masked:
-                masked[canonical] = masked[legacy]
         _normalise_face_block(masked, desc)
 
 

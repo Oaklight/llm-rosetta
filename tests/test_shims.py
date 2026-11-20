@@ -310,9 +310,11 @@ class TestResolveModelType:
         for name in ("llm", "embeddings", "rerank", "decisions"):
             assert resolve_model_type(name) == name
 
-    def test_the_legacy_category_spelling_resolves(self):
-        assert resolve_model_type("embedding") == "embeddings"
-        assert resolve_model_type("decision") == "decisions"
+    def test_the_retired_category_spelling_names_its_replacement(self):
+        with pytest.raises(ValueError, match="'embeddings'"):
+            resolve_model_type("embedding")
+        with pytest.raises(ValueError, match="'decisions'"):
+            resolve_model_type("decision")
 
     def test_ambiguous_non_chat_format_is_none(self):
         # `openai` is both a vendor and an embedding format; without a shim or

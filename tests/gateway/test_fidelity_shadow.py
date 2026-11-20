@@ -164,7 +164,7 @@ class TestNonLlmFidelityShadow:
     def test_same_format_diff_logs_a_warning(self, caplog):
         with caplog.at_level(logging.WARNING):
             check_same_format_fidelity(
-                "embedding",
+                "embeddings",
                 "openai",
                 "openai",
                 {"model": "m", "input": ["hi"], "dimensions": 8},
@@ -177,7 +177,7 @@ class TestNonLlmFidelityShadow:
     def test_cross_format_is_skipped(self, caplog):
         with caplog.at_level(logging.WARNING):
             check_same_format_fidelity(
-                "embedding",
+                "embeddings",
                 "openai",
                 "cohere",
                 {"texts": ["hi"]},
@@ -190,6 +190,6 @@ class TestNonLlmFidelityShadow:
         body = {"model": "m", "input": ["hi"]}
         with caplog.at_level(logging.WARNING):
             check_same_format_fidelity(
-                "embedding", "openai", "openai", body, dict(body), "request"
+                "embeddings", "openai", "openai", body, dict(body), "request"
             )
         assert not any("[FIDELITY]" in record.message for record in caplog.records)

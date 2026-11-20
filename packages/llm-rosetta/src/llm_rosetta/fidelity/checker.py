@@ -518,11 +518,10 @@ class FidelityChecker:
         model_type: str = "llm",
     ) -> None:
         self.mode = mode
-        # Accept the legacy ``embedding`` spelling; the critical-path tables
-        # are keyed by the canonical name.
-        from llm_rosetta.formats import canonical_model_type
+        from llm_rosetta import retired_names
 
-        self.model_type = canonical_model_type(model_type)
+        retired_names.check_not_retired(model_type, retired_names.MODEL_TYPE)
+        self.model_type = model_type
         self.format_name = format_name
 
     def _request_paths(self) -> list[str]:

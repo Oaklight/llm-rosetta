@@ -297,8 +297,8 @@ class TestTheDailyTable:
         await pm.insert_log_entries(
             [
                 # The pre-rename spelling; the writer canonicalises it.
-                self._row("a", 30, "embedding"),
-                self._row("b", 20, "embedding"),
+                self._row("a", 30, "embeddings"),
+                self._row("b", 20, "embeddings"),
                 self._row("c", 5, "rerank"),
                 # Written by an older writer, or by a caller that never names
                 # a type: chat.
@@ -327,8 +327,8 @@ class TestTheDailyTable:
     async def test_the_type_filter_narrows_the_whole_table(self, pm):
         await pm.insert_log_entries(
             [
-                self._row("a", 30, "embedding"),
-                self._row("b", 20, "embedding"),
+                self._row("a", 30, "embeddings"),
+                self._row("b", 20, "embeddings"),
                 self._row("c", 5, "rerank"),
             ]
         )

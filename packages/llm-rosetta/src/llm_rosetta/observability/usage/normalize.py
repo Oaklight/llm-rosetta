@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from llm_rosetta.formats import canonical_model_type
+from llm_rosetta import retired_names
 
 __all__ = [
     "DEFAULT_MODEL_TYPE",
@@ -98,6 +98,15 @@ ADDITIVE_COLUMNS: tuple[str, ...] = (
     "cache_read_tokens",
     "cache_creation_tokens",
 )
+
+
+def _fields_for(model_type: str) -> Mapping[str, Any]:
+    """The usage field map of *model_type*; a retired spelling names its successor."""
+    try:
+        return MODEL_TYPE_FIELDS[model_type]
+    except KeyError:
+        retired_names.check_not_retired(model_type, retired_names.MODEL_TYPE)
+        raise
 
 
 def _count(value: Any) -> int | None:
@@ -199,7 +208,7 @@ def token_total(
     Raises:
         KeyError: If *model_type* is not one of :data:`MODEL_TYPES`.
     """
-    fields = MODEL_TYPE_FIELDS[canonical_model_type(model_type)]
+    fields = _fields_for(model_type)
     if not usage or _refused(usage, fields):
         return None
     total_field = fields.get("total_tokens")
@@ -234,7 +243,7 @@ def usage_columns(
     Raises:
         KeyError: If *model_type* is not one of :data:`MODEL_TYPES`.
     """
-    fields = MODEL_TYPE_FIELDS[canonical_model_type(model_type)]
+    fields = _fields_for(model_type)
     if not usage:
         return {}
     total = token_total(usage, model_type)

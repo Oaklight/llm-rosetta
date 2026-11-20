@@ -14,11 +14,32 @@ from llm_rosetta_gateway._vendor.httpserver import (
 )
 
 from ..logging import get_logger
+from ..model_types import retired_type_message
 
 
 from . import _state
 
 logger = get_logger()
+
+
+def _type_filter(request: Any) -> tuple[str | None, Response | None]:
+    """The ``?type=`` filter of a listing, or a 400 for a retired spelling.
+
+    Returns:
+        ``(filter, None)`` where *filter* is ``None`` for no filter or ``all``;
+        or ``(None, response)`` when the value is a retired model type
+        (``embedding``, ``decision``), answered with its replacement.
+    """
+    type_vals = getattr(request, "query_params", {}).get("type")
+    if not type_vals:
+        return None, None
+    value = type_vals[0] if isinstance(type_vals, list) else type_vals
+    if value == "all":
+        return None, None
+    retired = retired_type_message(value)
+    if retired is not None:
+        return None, JSONResponse(dict(error=retired), status_code=400)
+    return value, None
 
 
 def _visible(names: list[str]) -> list[str]:
@@ -40,25 +61,17 @@ async def handle_list_models(request: Any) -> Response:
     Supports an optional ``?type=`` query parameter to filter by model type:
 
     * ``type=llm`` — only LLM models (default pool)
-    * ``type=embeddings`` — only embeddings models (the legacy
-      ``type=embedding`` is accepted)
+    * ``type=embeddings`` — only embeddings models (the retired
+      ``type=embedding`` is answered with 400 and its replacement)
     * ``type=rerank`` — only rerank models
     * ``type=all`` or omitted — all model types
     """
     assert _state._config is not None
 
     # Parse optional type filter from query params
-    type_filter = None
-    qp = getattr(request, "query_params", {})
-    type_vals = qp.get("type")
-    if type_vals:
-        from llm_rosetta.api import canonical_model_type
-
-        type_filter = type_vals[0] if isinstance(type_vals, list) else type_vals
-        if type_filter == "all":
-            type_filter = None
-        else:
-            type_filter = canonical_model_type(type_filter)
+    type_filter, rejected = _type_filter(request)
+    if rejected is not None:
+        return rejected
 
     data = []
 
@@ -145,17 +158,9 @@ async def handle_list_models_google(request: Any) -> Response:
     assert _state._config is not None
 
     # Parse optional type filter from query params
-    type_filter = None
-    qp = getattr(request, "query_params", {})
-    type_vals = qp.get("type")
-    if type_vals:
-        from llm_rosetta.api import canonical_model_type
-
-        type_filter = type_vals[0] if isinstance(type_vals, list) else type_vals
-        if type_filter == "all":
-            type_filter = None
-        else:
-            type_filter = canonical_model_type(type_filter)
+    type_filter, rejected = _type_filter(request)
+    if rejected is not None:
+        return rejected
 
     models_list: list[dict[str, Any]] = []
 

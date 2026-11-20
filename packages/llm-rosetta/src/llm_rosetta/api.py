@@ -48,8 +48,6 @@ from llm_rosetta.formats import (
     FORMAT_SPECS,
     MODEL_TYPES,
     FormatSpec,
-    canonical_model_type,
-    legacy_model_type,
     spec_for,
 )
 from llm_rosetta.formats.catalog import default_path
@@ -134,9 +132,7 @@ __all__ = [
     "FORMAT_SPECS",
     "FormatSpec",
     "MODEL_TYPES",
-    "canonical_model_type",
     "default_path",
-    "legacy_model_type",
     "spec_for",
     # Provider and shim names
     "ProviderType",

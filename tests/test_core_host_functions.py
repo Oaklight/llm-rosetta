@@ -24,9 +24,9 @@ def test_spec_for_unknown_pair_is_none():
     assert api.spec_for("embeddings", "messages") is None
 
 
-def test_spec_for_accepts_legacy_model_type():
-    assert api.spec_for("embedding", "openai") is api.spec_for("embeddings", "openai")
-    assert api.spec_for("embedding", "openai") is not None
+def test_spec_for_does_not_translate_a_retired_model_type():
+    assert api.spec_for("embedding", "openai") is None
+    assert api.spec_for("embeddings", "openai") is not None
 
 
 # ------------------------------------------------------ typed_response_usage
@@ -68,10 +68,9 @@ def test_typed_usage_dispatches_per_family():
     assert got
 
 
-def test_typed_usage_accepts_legacy_spelling():
-    assert api.typed_response_usage(
-        "embedding", "openai", _EMBED_BODY
-    ) == api.typed_response_usage("embeddings", "openai", _EMBED_BODY)
+def test_typed_usage_rejects_a_retired_spelling():
+    with pytest.raises(ValueError, match="'embeddings'"):
+        api.typed_response_usage("embedding", "openai", _EMBED_BODY)
 
 
 def test_typed_usage_empty_or_unreadable_body_is_empty():

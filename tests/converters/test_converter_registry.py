@@ -51,14 +51,16 @@ class TestLookup:
         with pytest.raises(ValueError, match="Unknown embeddings format.*openai"):
             get_converter_class("embeddings", "openai_embeddings")
 
-    def test_the_legacy_category_spelling_resolves(self) -> None:
-        """A caller that still says ``embedding`` gets the same converters."""
-        from llm_rosetta.converters.embeddings.openai import OpenAIEmbeddingConverter
-        from llm_rosetta.formats import LEGACY_MODEL_TYPES
-
-        assert get_converter_class("embedding", "openai") is OpenAIEmbeddingConverter
-        for legacy, canonical in LEGACY_MODEL_TYPES.items():
-            assert converter_map(legacy) is converter_map(canonical), legacy
+    def test_a_retired_category_spelling_names_its_replacement(self) -> None:
+        """``embedding`` and ``decision`` are errors that say what they became."""
+        for legacy, canonical in (
+            ("embedding", "embeddings"),
+            ("decision", "decisions"),
+        ):
+            with pytest.raises(ValueError, match=f"'{canonical}'"):
+                get_converter_class(legacy, "openai")
+            with pytest.raises(ValueError, match="llm-rosetta-migrate"):
+                converter_map(legacy)
 
 
 class TestTheDescriptorsAgree:

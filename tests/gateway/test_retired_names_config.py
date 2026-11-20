@@ -28,12 +28,6 @@ from llm_rosetta_gateway.shims.catalog import (
 URL = "http://upstream.invalid/v1"
 
 
-@pytest.fixture
-def model_type_aliases_off(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Model-type spellings still translate by default; turn that off."""
-    monkeypatch.setattr(retired_names, "ALIASES_ENABLED", False)
-
-
 def _load(tmp_path: Path, doc: dict[str, Any]):
     path = tmp_path / "config.jsonc"
     path.write_text(json.dumps(doc))
@@ -82,7 +76,6 @@ def _cases():
 def test_loader_rejects_every_retired_name(
     row: retired_names.RetiredName,
     doc: dict[str, Any],
-    model_type_aliases_off: None,
     tmp_path: Path,
 ) -> None:
     with pytest.raises(ValueError) as info:
@@ -101,17 +94,6 @@ def test_loader_rejects_every_retired_name(
     assert message.endswith(retired_names.MIGRATE_HINT)
     if row.preset:
         assert f"shims.presets: ['{row.preset}']" in message
-
-
-@pytest.mark.parametrize(
-    ("row", "doc"), [c.values for c in _cases() if c.values[0].kind != MODEL_TYPE]
-)
-def test_provider_names_are_rejected_with_the_default_switch(
-    row: retired_names.RetiredName, doc: dict[str, Any], tmp_path: Path
-) -> None:
-    """Provider-type and shim rows no longer depend on the switch."""
-    with pytest.raises(ValueError, match="was renamed"):
-        _load(tmp_path, doc)
 
 
 def test_every_retired_name_has_a_loader_case() -> None:
@@ -213,3 +195,69 @@ def test_every_shim_replacement_is_registered_or_packaged() -> None:
         and find_source_package(row.replacement) is None
     ]
     assert missing == []
+
+
+# ---------------------------------------------------------------------------
+# Retired model-type spellings in config keys
+# ---------------------------------------------------------------------------
+
+_KEY_CASES = [
+    ("embedding_providers", "embeddings_providers", "root"),
+    ("embedding_models", "embeddings_models", "root"),
+    ("default_embedding_format", "default_embeddings_format", "root"),
+    ("decision_providers", "decisions_providers", "root"),
+    ("embedding_format", "embeddings_format", "provider"),
+    ("embedding_path", "embeddings_path", "provider"),
+    ("embedding_shim", "embeddings_shim", "provider"),
+    ("decision_enabled", "decisions_enabled", "provider"),
+    ("embedding", "embeddings", "provider"),
+]
+
+
+@pytest.mark.parametrize(
+    ("old", "new", "where"), _KEY_CASES, ids=[case[0] for case in _KEY_CASES]
+)
+def test_a_retired_config_key_names_its_replacement(
+    old: str, new: str, where: str, tmp_path: Path
+) -> None:
+    provider: dict[str, Any] = dict(type="chat_completions", base_url=URL, api_key="k")
+    doc: dict[str, Any] = dict(config_version=5, providers=dict(p=provider), models={})
+    if where == "root":
+        doc[old] = {}
+    else:
+        provider[old] = {} if old == "embedding" else "x"
+    with pytest.raises(ValueError) as info:
+        _load(tmp_path, doc)
+    message = str(info.value)
+    assert f"{old!r} was renamed to {new!r}" in message
+    assert message.endswith(retired_names.MIGRATE_HINT)
+
+
+@pytest.mark.parametrize("capability", ["embedding", "decision"])
+def test_a_retired_capability_spelling_names_its_replacement(
+    capability: str, tmp_path: Path
+) -> None:
+    doc = dict(
+        config_version=5,
+        providers=dict(p=dict(type="chat_completions", base_url=URL)),
+        models=dict(m=dict(provider="p", capabilities=[capability])),
+    )
+    with pytest.raises(ValueError, match="was renamed"):
+        _load(tmp_path, doc)
+
+
+def test_the_current_spellings_still_load(tmp_path: Path) -> None:
+    doc = dict(
+        config_version=5,
+        providers=dict(
+            p=dict(
+                type="chat_completions",
+                base_url=URL,
+                api_key="k",
+                embeddings_format="openai",
+            )
+        ),
+        models={},
+    )
+    config = _load(tmp_path, doc)
+    assert "p" in config.embeddings_providers

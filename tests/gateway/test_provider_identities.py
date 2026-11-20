@@ -358,7 +358,7 @@ class TestValidation:
         cfg = GatewayConfig(
             {
                 "providers": {"acme": {"embeddings_shim": SHIM_NAME}},
-                "models": {"e": {"provider": "acme", "capabilities": ["embedding"]}},
+                "models": {"e": {"provider": "acme", "capabilities": ["embeddings"]}},
             }
         )
         assert cfg.embeddings_models["e"] == "acme"

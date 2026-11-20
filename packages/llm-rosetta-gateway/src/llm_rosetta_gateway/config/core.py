@@ -56,7 +56,7 @@ from .settings import (
     parse_preflight_token_count_overrides,
     validate,
 )
-from .typed import _typed_descriptors, parse_typed_config
+from .typed import _typed_descriptors, parse_typed_config, reject_retired_sections
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -382,19 +382,14 @@ class GatewayConfig:
         # attribute — no ``getattr`` fallback — so moving this loop earlier
         # fails the load with an AttributeError instead of quietly leaving every
         # typed endpoint without an owner.  A test pins the shared key ring.
-        from llm_rosetta.api import legacy_model_type
-
         credential_owners = self.providers
         for descriptor in _typed_descriptors():
             name = descriptor.name
-            # A legacy spelling of the type names the same pools (the v1
-            # config's ``embedding_providers`` / ``embedding_models`` /
-            # ``default_embedding_format``).  Normalise it here so the loop
-            # stays one shape and a programmatic config that skipped the
-            # file migration still loads.
-            old_name = legacy_model_type(name)
-            old_providers = raw.get(f"{old_name}_providers", {}) if old_name else {}
-            old_models = raw.get(f"{old_name}_models", {}) if old_name else {}
+            # A retired spelling of the type (``embedding_providers``,
+            # ``embedding_models``, ``default_embedding_format``) is an error
+            # that names the key which replaces it, not a section read as the
+            # same pools.
+            reject_retired_sections(raw, name)
             pools = parse_typed_config(
                 self._raw_providers,
                 {},
@@ -405,8 +400,8 @@ class GatewayConfig:
                 credential_owner=credential_owners,
             )
             legacy = parse_typed_config(
-                raw.get(f"{name}_providers") or old_providers,
-                raw.get(f"{name}_models") or old_models,
+                raw.get(f"{name}_providers") or {},
+                raw.get(f"{name}_models") or {},
                 descriptor=descriptor,
                 format_key="format",
                 global_proxy=self.proxy,
@@ -423,8 +418,6 @@ class GatewayConfig:
             setattr(self, f"{name}_provider_infos", provider_infos)
             setattr(self, f"{name}_models", models)
             default_format = raw.get(f"default_{name}_format")
-            if default_format is None and old_name is not None:
-                default_format = raw.get(f"default_{old_name}_format")
             setattr(
                 self,
                 f"default_{name}_format",
@@ -466,12 +459,8 @@ class GatewayConfig:
         """The ``(providers, provider_infos, models)`` pools of *type_name*.
 
         The registry-driven counterpart of the per-type attributes, for a
-        caller that only has the type's name.  A legacy spelling names the
-        same pools.
+        caller that only has the type's name.
         """
-        from llm_rosetta.api import canonical_model_type
-
-        type_name = canonical_model_type(type_name)
         return (
             getattr(self, f"{type_name}_providers"),
             getattr(self, f"{type_name}_provider_infos"),
@@ -531,11 +520,8 @@ class GatewayConfig:
             KeyError: If the model is not configured for that type.
             ProviderNotReady: If no candidate can serve it right now.
         """
-        from llm_rosetta.api import canonical_model_type
-
         from ..model_types import get_model_type
 
-        type_name = canonical_model_type(type_name)
         descriptor = get_model_type(type_name)
         path_key = (
             descriptor.config_path_key if descriptor is not None else None

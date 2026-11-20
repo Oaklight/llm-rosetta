@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import dataclasses
-import warnings
 from pathlib import Path
 from typing import Any
 
@@ -99,7 +98,7 @@ def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
     # module scope (for ReasoningCapability), so a module-level import here
     # would close the cycle while the shims package is initialising.  The
     # vocabulary module is data-only and safe to import at any time.
-    from llm_rosetta.formats import canonical_model_type
+    from llm_rosetta import retired_names
     from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE, MODEL_TYPES
 
     if "base" in cfg:
@@ -111,15 +110,11 @@ def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
 
     declared_type = cfg.get("model_type")
     if isinstance(declared_type, str):
-        canonical = canonical_model_type(declared_type)
-        if canonical != declared_type:
-            warnings.warn(
-                f"{yaml_path}: model_type {declared_type!r} is deprecated; "
-                f"use {canonical!r}",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            declared_type = canonical
+        message = retired_names.retired_name_message(
+            declared_type, retired_names.MODEL_TYPE
+        )
+        if message is not None:
+            raise ValueError(f"{yaml_path}: {message}")
 
     # The schema requires the category with the format: without
     # ``model_type`` the pair would silently default to ``llm``, so a future
@@ -480,23 +475,27 @@ def _parse_type_params(
     ``decisions:``) and its keys are the IR field names the target converter
     already writes.  A section for another type is a mistake rather than a
     declaration, so it is refused, as is a key the type does not know.  The
-    pre-rename spelling (``embedding:``) is read as the same section.
+    pre-rename spelling (``embedding:``) is refused with its replacement.
 
     Raises:
         ValueError: Naming the file, the offending section or key, and what
             the type accepts.
     """
-    from llm_rosetta.formats import legacy_model_type
+    from llm_rosetta import retired_names
 
     values = dict(cfg)
-    legacy = legacy_model_type(model_type)
-    if legacy is not None and legacy in values and model_type not in values:
-        warnings.warn(
-            f"{yaml_path}: {legacy}: is deprecated; use {model_type}:",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        values[model_type] = values.pop(legacy)
+    for retired in retired_names.RETIRED_NAMES:
+        if (
+            retired.kind == retired_names.MODEL_TYPE
+            and retired.replacement == model_type
+            and retired.name in values
+        ):
+            raise ValueError(
+                f"{yaml_path}: "
+                + retired_names.retired_key_message(
+                    f"{retired.name}:", f"{model_type}:"
+                )
+            )
     declared = {key for key in TYPE_PARAM_KEYS if key in values}
     foreign = declared - {model_type}
     if foreign:
