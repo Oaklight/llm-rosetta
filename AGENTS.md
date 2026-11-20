@@ -64,7 +64,7 @@ name of the Chat Completions converter.  The 0.13.0 names (`OpenAIChat*`,
 packages (`converters/openai_chat/`, `converters/anthropic/`,
 `converters/openai_responses/`, `converters/google_genai/`,
 `converters/google_generate/`, `converters/google_interactions/`,
-`converters/embedding/`) were removed in 0.14.0 (#919); do not reintroduce them.
+`converters/embedding/`) were removed in 0.14.0; do not reintroduce them.
 
 Each chat converter implements bidirectional conversion (request/response) and
 streaming. Converters are provider-agnostic — provider-specific quirks are
@@ -101,9 +101,9 @@ IR question types: `assertion` (a proposition → P(true) ∈ [0,1]),
 Embedding and rerank each have one converter per wire dialect, all under one
 module per family (their dialects differ in parameters, not in message
 structure).  The model-type vocabulary is `llm`, `embeddings`, `rerank`,
-`decisions`; the category follows its endpoint's spelling, and `embedding` is
-accepted as a deprecated alias (`decision` too) at every boundary that reads a
-model type:
+`decisions`; the category follows its endpoint's spelling.  `embedding` and
+`decision` were retired in 0.14.0: every boundary that reads a model type
+rejects them with the replacement and the `llm-rosetta-migrate` command.
 
 | Model type | Formats | Module |
 |-----------|---------|--------|
@@ -155,7 +155,7 @@ supported format and forwards them to any configured upstream provider.
 | `routing/` | Candidate selection: the route container plus the pluggable strategies (weighted round-robin, affinity) |
 | `jobs/` | Background jobs: the envelope (`model.py`), store, queue, worker, handlers |
 | `quota/` | Provider quota probing and quota-aware credential rotation |
-| `maintenance/` | Maintenance steps: backfills, config, dumps, keystore, migrations, startup |
+| `maintenance/` | Maintenance steps: backfills, config, dumps, keystore, migrations, startup, the retired-name guard (`names.py`); `migrate_0140.py` is the `llm-rosetta-migrate` console script |
 | `middleware/` | Auth, rate limiting, error format, hop limit, headers |
 | `transport/` | Upstream transports: `http` (HTTP/SSE), `acp` (a local agent CLI over stdio JSON-RPC); a provider picks one with `connection.transport` |
 | `ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
@@ -234,20 +234,20 @@ Core modules (`packages/llm-rosetta/src/llm_rosetta/`):
 | `auto_detect.py` | Provider auto-detection (delegates to `formats/detect.py`) |
 | `tool_ops.py` | Cross-provider tool-call utilities |
 | `model_vocabulary.py` | The model-type and format vocabulary |
-| `provider_names.py` | Canonical provider/format names and legacy alias resolution |
+| `retired_names.py` | The table of renamed provider types, shims and model types, and the error each one raises (an error table, never an alias) |
 | `conversion_warnings.py` | The warning sink for lossy conversions |
 | `formats/` | `spec.py` (record type), `catalog.py` (records and `BY_PAIR`), `detect.py` (body detectors) |
 | `converters/` | One package per `(model_type, format)`; `base/` is the abstract contract; `registry.py` binds formats to classes |
 | `ir/` | IR logic: `primitives/`, `tools/`, `passes/` |
 | `types/` | Typed IR dataclasses in `types/ir/`; provider shapes for reference in `types/messages/`, `types/openai/`, `types/google/` |
-| `shims/` | `provider_shim.py`, `auth_exchange.py`, `quota_probe.py`, `transforms.py`, and `providers/` (one manifest per vendor/model-type/format) |
+| `shims/` | `provider_shim.py`, `auth_exchange.py`, `quota_probe.py`, and `providers/` (one manifest per vendor/model-type/format) |
 | `pipeline/` | Chat and typed conversion pipelines |
 | `fidelity/` | Fidelity baseline and checker |
 | `profiling/` | The profiler |
 | `routing/` | Routing contract types |
 | `observability/usage/` | The meaning of a usage report (no store) |
 | `transforms/`, `capabilities/` | Compatibility facades over `ir/` |
-| `gateway/` | Deprecated forward shim to `llm_rosetta_gateway`; removed in 0.16.0 (#919) |
+| `gateway/` | Deprecated forward shim to `llm_rosetta_gateway`; it warns on import and will be removed in a later release |
 | `_vendor/` | Vendored modules (DO NOT EDIT) |
 
 Other top-level paths:
@@ -262,9 +262,13 @@ Other top-level paths:
 
 Conventions the filesystem does not show:
 
-- `llm_rosetta/gateway/` forwards to `llm_rosetta_gateway`; it is removed in
-  0.16.0. Do not add code to it.
-- The 0.13.0 converter compat packages and class aliases are removed (#919).
+- `llm_rosetta/gateway/` forwards to `llm_rosetta_gateway`; it is deprecated
+  and will be removed in a later release. Do not add code to it.
+- Provider-type, shim and model-type names that were renamed have no alias.
+  A retired spelling raises, naming its replacement and the
+  `llm-rosetta-migrate` command (`retired_names.py`); to retire another name,
+  add a row there. Do not add a translating table.
+- The 0.13.0 converter compat packages and class aliases are removed.
   The packages are `converters/{embedding,openai_chat,openai_responses,anthropic,
   google_genai,google_generate,google_interactions}/`; the canonical homes are
   `converters/embeddings/` and `converters/llm/<format>/`.

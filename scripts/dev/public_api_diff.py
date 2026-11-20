@@ -98,7 +98,7 @@ PUBLIC_MODULES = (
     "llm_rosetta_gateway.observability.request_log",
     "llm_rosetta_gateway.observability.ops_log",
     "llm_rosetta_gateway",
-    # Deprecated alias, kept importable until 0.16.0 (#919).
+    # Deprecated alias, kept importable for now; it will be removed in a later release.
     "llm_rosetta.gateway",
 )
 
