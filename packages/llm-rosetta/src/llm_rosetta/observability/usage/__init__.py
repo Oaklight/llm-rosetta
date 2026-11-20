@@ -59,7 +59,13 @@ gateway writes that store: :mod:`llm_rosetta_gateway.observability.usage.cli`.
 from __future__ import annotations
 
 from .ledger import UsageLedger, UsageRecord
-from .normalize import IR_FIELDS, LEDGER_COLUMNS, token_total, usage_columns
+from .normalize import (
+    DEFAULT_MODEL_TYPE,
+    IR_FIELDS,
+    LEDGER_COLUMNS,
+    token_total,
+    usage_columns,
+)
 from .report import (
     INTERNAL_LABEL,
     INTERNAL_SUBJECT,
@@ -85,6 +91,7 @@ from .semantics import (
 
 __all__ = [
     "ADDITIVE_CACHE_STANDARDS",
+    "DEFAULT_MODEL_TYPE",
     "GOOGLE_METADATA",
     "INTERNAL_LABEL",
     "INTERNAL_SUBJECT",

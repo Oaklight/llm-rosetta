@@ -80,7 +80,7 @@ _PACKAGE_ONLY = frozenset({"llm_rosetta.observability.usage"})
 # had; #1639 removed `shims/catalog.py` -> `llm_rosetta.provider_names`; #1637
 # removed the three `llm_rosetta._vendor.yaml` imports (the gateway vendors its
 # own yaml).
-_LEGACY_CEILING = 100
+_LEGACY_CEILING = 89
 _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
         ("admin/routes/_shared.py", "llm_rosetta.shims"),
@@ -127,7 +127,6 @@ _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("config/typed.py", "llm_rosetta.shims"),
         ("fidelity_check.py", "llm_rosetta.fidelity"),
         ("lifecycle.py", "llm_rosetta.auto_detect"),
-        ("lifecycle.py", "llm_rosetta.observability.usage.normalize"),
         ("maintenance/migrations.py", "llm_rosetta.formats"),
         ("maintenance/names.py", "llm_rosetta.provider_names"),
         ("middleware/error_annotate.py", "llm_rosetta.capabilities"),
@@ -137,42 +136,11 @@ _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("model_types.py", "llm_rosetta.formats"),
         ("model_types.py", "llm_rosetta.formats.catalog"),
         ("observability/persistence/__init__.py", "llm_rosetta.formats"),
-        (
-            "observability/persistence/__init__.py",
-            "llm_rosetta.observability.usage.normalize",
-        ),
-        (
-            "observability/persistence/__init__.py",
-            "llm_rosetta.observability.usage.report",
-        ),
-        (
-            "observability/persistence/__init__.py",
-            "llm_rosetta.observability.usage.semantics",
-        ),
-        (
-            "observability/persistence/_common.py",
-            "llm_rosetta.observability.usage.semantics",
-        ),
         ("observability/persistence/request_log.py", "llm_rosetta.formats"),
-        (
-            "observability/persistence/request_log.py",
-            "llm_rosetta.observability.usage.normalize",
-        ),
         ("observability/persistence/usage.py", "llm_rosetta.formats"),
-        (
-            "observability/persistence/usage.py",
-            "llm_rosetta.observability.usage.normalize",
-        ),
-        (
-            "observability/persistence/usage.py",
-            "llm_rosetta.observability.usage.report",
-        ),
         ("observability/profiling.py", "llm_rosetta.profiling"),
-        ("observability/request_log.py", "llm_rosetta.observability.usage.normalize"),
         ("observability/usage/cli.py", "llm_rosetta"),
-        ("observability/usage/cli.py", "llm_rosetta.observability.usage.report"),
         ("ops/provider_validation.py", "llm_rosetta.shims"),
-        ("ops/proxy.py", "llm_rosetta.observability.usage.normalize"),
         ("pipelines/decision.py", "llm_rosetta.converters.decisions.pipeline"),
         ("pipelines/embeddings.py", "llm_rosetta.converters.embeddings.pipeline"),
         ("pipelines/rerank.py", "llm_rosetta.converters.rerank.pipeline"),
@@ -252,7 +220,6 @@ _LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset(
         ("config/typed.py", "llm_rosetta.shims"),
         ("fidelity_check.py", "llm_rosetta.fidelity"),
         ("lifecycle.py", "llm_rosetta.auto_detect"),
-        ("lifecycle.py", "llm_rosetta.observability.usage.normalize"),
         ("maintenance/migrations.py", "llm_rosetta.formats"),
         ("maintenance/names.py", "llm_rosetta.provider_names"),
         ("middleware/error_annotate.py", "llm_rosetta.capabilities"),
@@ -262,42 +229,11 @@ _LEGACY_FROZEN: frozenset[tuple[str, str]] = frozenset(
         ("model_types.py", "llm_rosetta.formats"),
         ("model_types.py", "llm_rosetta.formats.catalog"),
         ("observability/persistence/__init__.py", "llm_rosetta.formats"),
-        (
-            "observability/persistence/__init__.py",
-            "llm_rosetta.observability.usage.normalize",
-        ),
-        (
-            "observability/persistence/__init__.py",
-            "llm_rosetta.observability.usage.report",
-        ),
-        (
-            "observability/persistence/__init__.py",
-            "llm_rosetta.observability.usage.semantics",
-        ),
-        (
-            "observability/persistence/_common.py",
-            "llm_rosetta.observability.usage.semantics",
-        ),
         ("observability/persistence/request_log.py", "llm_rosetta.formats"),
-        (
-            "observability/persistence/request_log.py",
-            "llm_rosetta.observability.usage.normalize",
-        ),
         ("observability/persistence/usage.py", "llm_rosetta.formats"),
-        (
-            "observability/persistence/usage.py",
-            "llm_rosetta.observability.usage.normalize",
-        ),
-        (
-            "observability/persistence/usage.py",
-            "llm_rosetta.observability.usage.report",
-        ),
         ("observability/profiling.py", "llm_rosetta.profiling"),
-        ("observability/request_log.py", "llm_rosetta.observability.usage.normalize"),
         ("observability/usage/cli.py", "llm_rosetta"),
-        ("observability/usage/cli.py", "llm_rosetta.observability.usage.report"),
         ("ops/provider_validation.py", "llm_rosetta.shims"),
-        ("ops/proxy.py", "llm_rosetta.observability.usage.normalize"),
         ("pipelines/decision.py", "llm_rosetta.converters.decisions.pipeline"),
         ("pipelines/embeddings.py", "llm_rosetta.converters.embeddings.pipeline"),
         ("pipelines/rerank.py", "llm_rosetta.converters.rerank.pipeline"),

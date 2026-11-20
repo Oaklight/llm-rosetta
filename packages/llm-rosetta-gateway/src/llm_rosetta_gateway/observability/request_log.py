@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from llm_rosetta.observability.usage.normalize import DEFAULT_MODEL_TYPE
+from llm_rosetta.observability.usage import DEFAULT_MODEL_TYPE
 
 if TYPE_CHECKING:
     from .persistence import PersistenceManager
