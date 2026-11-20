@@ -92,7 +92,7 @@ def test_vendored_httpclient_matches_the_lock():
 
     # The tag the bundle was last fetched from.  ``acp``/``jsonrpc`` entered
     # the bundle at v2026.11.11; the hashes below are what actually moved.
-    assert lock["source"]["ref"] == "v2026.11.11"
+    assert lock["source"]["ref"] == "v2026.11.20"
     assert lock["modules"]["httpclient"]["version"] == "0.6.4"
     for entry in lock["modules"].values():
         for filename, expected in entry["files"].items():

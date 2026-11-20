@@ -49,10 +49,18 @@
       "requested": true,
       "upstream_hash": "8631c3eec614fbf0f12022840f498ff3b558ca8a5e1846bcc1205192baf61ef0",
       "version": "0.2.0"
+    },
+    "yaml": {
+      "files": {
+        "yaml.py": "5433d7b3580b112ade9e1777d18e40d2a27fa4258818c10cd64fb7803934d0e9"
+      },
+      "requested": true,
+      "upstream_hash": "0b5ac3e3980f027dbf90f8516a4c465f5b49d9250a0164f4b0696b586d9e7b78",
+      "version": "0.4.0"
     }
   },
   "source": {
-    "ref": "v2026.11.11",
+    "ref": "v2026.11.20",
     "repo": "Oaklight/zerodep"
   }
 }

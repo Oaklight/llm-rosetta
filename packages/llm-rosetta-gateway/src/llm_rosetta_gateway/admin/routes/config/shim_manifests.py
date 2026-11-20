@@ -21,7 +21,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta._vendor.yaml import load as yaml_load
+from llm_rosetta_gateway._vendor.yaml import load as yaml_load
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from .._shared import _qp, parse_json_body
