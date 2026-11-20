@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_rosetta.provider_names import canonical_provider_name
+from llm_rosetta.api import canonical_provider_name
 
 
 def detect_embedding_source(request: Any, body: dict[str, Any], config: Any) -> str:

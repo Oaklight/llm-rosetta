@@ -196,7 +196,7 @@ def core_version_problem(requirement: str, current: str | None = None) -> str | 
         The sentence to report, or ``None`` when the requirement holds.
     """
     if current is None:
-        from llm_rosetta import __version__ as current_version
+        from llm_rosetta.api import __version__ as current_version
 
         current = current_version
     match = _AT_LEAST.match(requirement.strip())

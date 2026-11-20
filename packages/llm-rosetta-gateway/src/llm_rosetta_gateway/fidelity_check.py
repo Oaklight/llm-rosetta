@@ -49,7 +49,7 @@ def compare_same_format(
     if original is None or source_format != target_format:
         return None
     try:
-        from llm_rosetta.fidelity import FidelityChecker
+        from llm_rosetta.api import FidelityChecker
 
         checker = FidelityChecker(
             mode="critical", format_name=source_format, model_type=model_type

@@ -74,7 +74,7 @@ def _quota_declaration(config: Any, name: str) -> dict[str, Any]:
     The shim supplies vendor defaults; a ``quota`` object in the provider
     config overrides them field by field.
     """
-    from llm_rosetta.shims import get_shim
+    from llm_rosetta.api import get_shim
 
     cfg = getattr(config, "_raw_providers", {}).get(name, {}) or {}
     declared: dict[str, Any] = {}

@@ -8,7 +8,7 @@ from collections.abc import Callable, Collection
 from pathlib import Path
 from typing import Any, Literal
 
-from llm_rosetta.shims.providers import load_providers_from_dir
+from llm_rosetta.api import load_providers_from_dir
 
 from .manifest import (
     MANIFEST_FILENAME,

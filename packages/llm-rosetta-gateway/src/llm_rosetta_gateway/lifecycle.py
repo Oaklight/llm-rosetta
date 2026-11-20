@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, cast
 
 from llm_rosetta_gateway._vendor.httpserver import Response, StreamingResponse
-from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta.api import ProviderType
 from llm_rosetta_gateway.observability.error_dump import dump_error
 from llm_rosetta_gateway.observability.sanitize import scrub_body_text
 from llm_rosetta.observability.usage import DEFAULT_MODEL_TYPE

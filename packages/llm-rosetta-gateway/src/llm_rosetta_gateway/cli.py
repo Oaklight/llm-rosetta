@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 import asyncio
 
-from llm_rosetta import __version__ as _core_version
+from llm_rosetta.api import __version__ as _core_version
 
 from . import __version__ as _gateway_version
 from .shims import ShimSourceError
@@ -149,7 +149,7 @@ def _cmd_add_provider(args: argparse.Namespace) -> None:
     # A vendor shim (reachable under a vendor spelling like ``anthropic`` or
     # ``openai``) supplies a connection default; a bare base format is
     # vendor-neutral, so its base_url must be given explicitly.
-    from llm_rosetta.shims import get_shim
+    from llm_rosetta.api import get_shim
 
     shim = get_shim(name)
     env = (shim.connection.api_key_env if shim else None) or get_default_api_key_env(

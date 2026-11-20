@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from llm_rosetta import __version__ as core_version
+from llm_rosetta.api import __version__ as core_version
 
 from . import __version__ as gateway_version
 

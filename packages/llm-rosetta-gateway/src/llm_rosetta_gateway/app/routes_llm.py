@@ -14,8 +14,8 @@ from llm_rosetta_gateway._vendor.httpserver import (
     Response,
     StreamingResponse,
 )
-from llm_rosetta.auto_detect import ProviderType
-from llm_rosetta.provider_names import canonical_provider_name
+from llm_rosetta.api import ProviderType
+from llm_rosetta.api import canonical_provider_name
 
 from ..keystore import INTERNAL_LABEL
 from ..middleware.auth import (
@@ -183,7 +183,7 @@ def _rule_facts(source_provider: str, body: dict[str, Any], request: Any):
     without them pays nothing.  A conversion failure is not fatal: the engine
     will report it properly a moment later, and a rule must not fail a request.
     """
-    from llm_rosetta.converters.registry import get_converter_class
+    from llm_rosetta.api import get_converter_class
 
     from ..routing import facts_from_ir
 
