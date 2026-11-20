@@ -34,10 +34,9 @@ Example usage::
     provider_call = tool_ops.call_to_provider(ir_call, provider="chat_completions")
 """
 
-import warnings
 from typing import Any, Literal
 
-from .provider_names import LEGACY_PROVIDER_ALIASES
+from .retired_names import PROVIDER_TYPE, retired_name_message
 from .types.ir.tools import ToolCallConfig, ToolChoice, ToolDefinition
 from .types.ir.parts import ToolCallPart, ToolResultPart
 
@@ -55,21 +54,15 @@ __all__ = [
     "config_from_provider",
     # Per-format shortcuts
     "to_chat_completions",
-    "to_openai_chat",
     "to_open_responses",
-    "to_openai_responses",
     "to_messages",
     "to_google_generate",
     "to_google_interactions",
     "from_chat_completions",
-    "from_openai_chat",
     "from_open_responses",
-    "from_openai_responses",
     "from_messages",
     "from_google_generate",
     "from_google_interactions",
-    "to_anthropic",
-    "from_anthropic",
 ]
 
 ToolProvider = Literal[
@@ -92,46 +85,6 @@ _CANONICAL_TOOL_PROVIDERS = frozenset(
     }
 )
 
-# Deprecated spellings accepted only by this convenience API (removed in
-# 0.16.0, see #919 / #921).  Everything else that was once accepted is a key
-# in the shared ``LEGACY_PROVIDER_ALIASES`` table and is handled by
-# :func:`normalize_provider_name`.
-_TOOL_LOCAL_ALIASES: dict[str, str] = {
-    # OpenAI-Responses flavoured spellings.  tool_ops has no OpenAI-profile
-    # variant, so they all collapse onto the neutral ``open_responses`` base
-    # (the shared table would route them to the ``openai--open_responses``
-    # shim instead).
-    "openai_responses": "open_responses",
-    "openai-responses": "open_responses",
-    "openai--open_responses": "open_responses",
-    # Earlier-proposed hyphenated spellings (tool_ops only).
-    "google-generate": "google_generate",
-    "chat-completions": "chat_completions",
-}
-
-
-def _resolve(provider: str) -> str:
-    """Normalize *provider* to one of the canonical tool_ops names.
-
-    Deprecated spellings are still accepted but emit a
-    :class:`DeprecationWarning`; they are removed in 0.16.0.
-    """
-    if provider in _CANONICAL_TOOL_PROVIDERS:
-        return provider
-    canonical = _TOOL_LOCAL_ALIASES.get(provider)
-    if canonical is None:
-        canonical = LEGACY_PROVIDER_ALIASES.get(provider, provider)
-    if canonical != provider:
-        # Both alias sources warn from here; ``stacklevel=4`` points at the
-        # user's call site (the public ``to_provider`` / ``from_provider`` /
-        # ``to_*`` / ``from_*`` entry point is one frame below).
-        warnings.warn(
-            f"Provider name {provider!r} is deprecated; use {canonical!r} instead.",
-            DeprecationWarning,
-            stacklevel=4,
-        )
-    return canonical
-
 
 def _get_tool_ops(provider: str) -> Any:
     """Return the ToolOps class bound to *provider*'s converter.
@@ -139,21 +92,19 @@ def _get_tool_ops(provider: str) -> Any:
     Resolved through the converter registry — the format's own package names
     its ToolOps class, so a new format needs no branch here.
     """
-    canonical = _resolve(provider)
-
     from .converters.registry import CONVERTER_REGISTRY
 
-    converter_cls = CONVERTER_REGISTRY.get("llm", {}).get(canonical)
+    converter_cls = CONVERTER_REGISTRY.get("llm", {}).get(provider)
     tool_ops_cls = getattr(converter_cls, "tool_ops_class", None)
     if tool_ops_cls is None:
-        raise ValueError(
+        message = (
             f"Unknown provider: {provider!r}. "
-            f"Supported: {', '.join(sorted(_CANONICAL_TOOL_PROVIDERS))}. "
-            f"Deprecated aliases (removed in 0.16.0): openai_chat, openai-chat, "
-            f"openai_responses, openai-responses, openai--open_responses, "
-            f"open-responses, google, google-genai, google-generate, "
-            f"google-interactions, chat-completions"
+            f"Supported: {', '.join(sorted(_CANONICAL_TOOL_PROVIDERS))}."
         )
+        hint = retired_name_message(provider, PROVIDER_TYPE)
+        if hint is not None:
+            message += f" {hint[0].upper()}{hint[1:]}."
+        raise ValueError(message)
     return tool_ops_cls
 
 
@@ -275,31 +226,11 @@ def to_chat_completions(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any
     return ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
-def to_openai_chat(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
-    """Deprecated alias for :func:`to_chat_completions` (removed in 0.16.0)."""
-    warnings.warn(
-        "tool_ops.to_openai_chat is deprecated; use to_chat_completions instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return to_chat_completions(ir_tool, **kwargs)
-
-
 def to_open_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to OpenAI Responses format."""
     from .converters.llm.open_responses import OpenResponsesToolOps
 
     return OpenResponsesToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
-
-
-def to_openai_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
-    """Deprecated alias for :func:`to_open_responses` (removed in 0.16.0)."""
-    warnings.warn(
-        "tool_ops.to_openai_responses is deprecated; use to_open_responses instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return to_open_responses(ir_tool, **kwargs)
 
 
 def to_messages(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
@@ -330,16 +261,6 @@ def from_chat_completions(provider_tool: Any, **kwargs: Any) -> ToolDefinition |
     return ChatCompletionsToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
 
-def from_openai_chat(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
-    """Deprecated alias for :func:`from_chat_completions` (removed in 0.16.0)."""
-    warnings.warn(
-        "tool_ops.from_openai_chat is deprecated; use from_chat_completions instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return from_chat_completions(provider_tool, **kwargs)
-
-
 def from_open_responses(
     provider_tool: Any, **kwargs: Any
 ) -> ToolDefinition | list[ToolDefinition] | None:
@@ -347,18 +268,6 @@ def from_open_responses(
     from .converters.llm.open_responses import OpenResponsesToolOps
 
     return OpenResponsesToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
-
-
-def from_openai_responses(
-    provider_tool: Any, **kwargs: Any
-) -> ToolDefinition | list[ToolDefinition] | None:
-    """Deprecated alias for :func:`from_open_responses` (removed in 0.16.0)."""
-    warnings.warn(
-        "tool_ops.from_openai_responses is deprecated; use from_open_responses instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return from_open_responses(provider_tool, **kwargs)
 
 
 def from_messages(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
@@ -384,23 +293,3 @@ def from_google_interactions(
     from .converters.llm.google_interactions import GoogleInteractionsToolOps
 
     return GoogleInteractionsToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
-
-
-def to_anthropic(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
-    """Deprecated alias for :func:`to_messages` (removed in 0.16.0)."""
-    warnings.warn(
-        "tool_ops.to_anthropic is deprecated; use to_messages instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return to_messages(ir_tool, **kwargs)
-
-
-def from_anthropic(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
-    """Deprecated alias for :func:`from_messages` (removed in 0.16.0)."""
-    warnings.warn(
-        "tool_ops.from_anthropic is deprecated; use from_messages instead",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return from_messages(provider_tool, **kwargs)

@@ -38,20 +38,19 @@ ALL_PROVIDERS = [
     "open_responses",
 ]
 
-# Deprecated spellings still accepted by the convenience API; each maps to the
-# canonical name it resolves to.  All are removed in 0.16.0 (#919 / #921).
-DEPRECATED_ALIASES = [
-    ("openai_chat", "chat_completions"),
-    ("openai-chat", "chat_completions"),
-    ("chat-completions", "chat_completions"),
-    ("openai_responses", "open_responses"),
-    ("openai-responses", "open_responses"),
-    ("openai--open_responses", "open_responses"),
-    ("open-responses", "open_responses"),
-    ("google", "google_generate"),
-    ("google-genai", "google_generate"),
-    ("google-generate", "google_generate"),
-    ("google-interactions", "google_interactions"),
+# Spellings the convenience API accepted before 0.14.0; each now raises.
+REMOVED_ALIASES = [
+    "openai_chat",
+    "openai-chat",
+    "chat-completions",
+    "openai_responses",
+    "openai-responses",
+    "openai--open_responses",
+    "open-responses",
+    "google",
+    "google-genai",
+    "google-generate",
+    "google-interactions",
 ]
 
 
@@ -73,13 +72,19 @@ class TestToProvider:
         assert result["name"] == "get_weather"
         assert "parameters" in result
 
-    def test_deprecated_to_aliases_warn_and_match(self):
-        with pytest.warns(DeprecationWarning):
-            legacy_chat = tool_ops.to_openai_chat(IR_TOOL)
-        with pytest.warns(DeprecationWarning):
-            legacy_responses = tool_ops.to_openai_responses(IR_TOOL)
-        assert legacy_chat == tool_ops.to_chat_completions(IR_TOOL)
-        assert legacy_responses == tool_ops.to_open_responses(IR_TOOL)
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "to_openai_chat",
+            "to_openai_responses",
+            "from_openai_chat",
+            "from_openai_responses",
+            "to_anthropic",
+            "from_anthropic",
+        ],
+    )
+    def test_removed_shortcuts_are_gone(self, name: str):
+        assert not hasattr(tool_ops, name)
 
     def test_to_messages(self):
         result = tool_ops.to_messages(IR_TOOL)
@@ -117,22 +122,6 @@ class TestFromProvider:
         assert recovered is not None
         assert isinstance(recovered, dict)
         assert recovered["name"] == "get_weather"
-
-    def test_deprecated_from_aliases_warn_and_match(self):
-        with pytest.warns(DeprecationWarning):
-            legacy_chat = tool_ops.from_openai_chat(
-                tool_ops.to_chat_completions(IR_TOOL)
-            )
-        with pytest.warns(DeprecationWarning):
-            legacy_responses = tool_ops.from_openai_responses(
-                tool_ops.to_open_responses(IR_TOOL)
-            )
-        assert legacy_chat == tool_ops.from_chat_completions(
-            tool_ops.to_chat_completions(IR_TOOL)
-        )
-        assert legacy_responses == tool_ops.from_open_responses(
-            tool_ops.to_open_responses(IR_TOOL)
-        )
 
     def test_from_messages(self):
         provider_tool = tool_ops.to_messages(IR_TOOL)
@@ -181,12 +170,14 @@ class TestUnifiedDispatch:
             result = tool_ops.to_provider(IR_TOOL, provider=provider)  # ty: ignore[invalid-argument-type]
         assert isinstance(result, dict)
 
-    @pytest.mark.parametrize("alias,canonical", DEPRECATED_ALIASES)
-    def test_to_provider_aliases(self, alias: str, canonical: str):
-        with pytest.warns(DeprecationWarning):
-            result_alias = tool_ops.to_provider(IR_TOOL, provider=alias)  # ty: ignore[invalid-argument-type]
-        result_canonical = tool_ops.to_provider(IR_TOOL, provider=canonical)  # ty: ignore[invalid-argument-type]
-        assert result_alias == result_canonical
+    @pytest.mark.parametrize("alias", REMOVED_ALIASES)
+    def test_removed_aliases_raise(self, alias: str):
+        with pytest.raises(ValueError, match="Unknown provider"):
+            tool_ops.to_provider(IR_TOOL, provider=alias)  # ty: ignore[invalid-argument-type]
+
+    def test_retired_name_error_names_the_replacement(self):
+        with pytest.raises(ValueError, match="chat_completions"):
+            tool_ops.to_provider(IR_TOOL, provider="openai_chat")  # ty: ignore[invalid-argument-type]
 
     def test_to_provider_invalid(self):
         with pytest.raises(ValueError, match="Unknown provider"):
