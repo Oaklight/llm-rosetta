@@ -53,7 +53,7 @@ echo fields). The ops classes and the stream context carry the
 Base formats are vendor-neutral: a bare `type: <base>` provider (e.g.
 `type: open_responses`) carries no implied host or credential env var and must
 set `base_url` explicitly. Vendors ship a `<vendor>--<base>` shim (e.g.
-`openrouter--open_responses`, `openai--open_responses`) whose
+`deepseek--open_responses`, `openai--open_responses`) whose
 `connection.base_url` / `connection.api_key_env` supply the defaults; the
 vendor URL for a bare format is offered in the admin UI as a *placeholder*
 hint only.
@@ -275,6 +275,14 @@ Conventions the filesystem does not show:
   `converters/embeddings/` and `converters/llm/<format>/`.
 - Core must not import the gateway distribution
   (`tests/test_core_import_boundary.py`).
+- Core vendors follow the placement rule (#1660): the model maker's own API
+  with a static API key — no `auth.py`, and a `quota.py` probe that its own
+  shims select (`tests/test_shim_placement.py`).  Every other vendor lives in
+  `Oaklight/llm-rosetta-shim-contrib`; `retired_names.MOVED_VENDORS` lists the
+  ones that left core, and the gateway installs a listed vendor by itself when
+  a config names its shim (`llm_rosetta_gateway/shims/moved.py`).
+  `tests/fixtures/moved_vendors/` holds frozen copies for core's own tests
+  (load them with the `moved_vendors` fixture); nothing ships them.
 - `packages/*/src/*/_vendor/**` is vendored through `zerodep`; never edit it
   in place.
 - `docs_en/`, `docs_zh/` are separate branches; edit inside the worktree only.
