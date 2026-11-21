@@ -230,7 +230,7 @@ class TestThemeFiles:
             *(ADMIN_DIR / "css").rglob("*.css"),
             *(ADMIN_DIR / "js").rglob("*.js"),
             ADMIN_DIR / "admin.html",
-            ADMIN_DIR.parent / "model_types.py",
+            ADMIN_DIR.parent / "model_types/__init__.py",
         ]
         offenders = []
         for path in sources:

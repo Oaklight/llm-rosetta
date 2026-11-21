@@ -41,7 +41,7 @@ def _detect_embedding_source(
 ) -> str:
     """Infer the source embedding format through the type descriptor.
 
-    The detector lives in :mod:`gateway.source_formats` and is attached to the
+    The detector lives in :mod:`gateway.model_types.source_formats` and is attached to the
     ``embedding`` descriptor, so it is the same object the descriptor exposes
     and stays testable without a handler.
     """

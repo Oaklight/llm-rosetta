@@ -27,7 +27,7 @@ def _detect_source_format(
 ) -> str:
     """Infer the source rerank format through the type descriptor.
 
-    The detector lives in :mod:`gateway.source_formats` and is attached to the
+    The detector lives in :mod:`gateway.model_types.source_formats` and is attached to the
     ``rerank`` descriptor; this wrapper keeps the handler-local name used by
     the tests.
     """
