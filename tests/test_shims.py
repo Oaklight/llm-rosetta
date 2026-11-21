@@ -51,7 +51,7 @@ class TestProviderShim:
         s = ProviderShim(name="test", format="chat_completions")
         assert s.name == "test"
         assert s.format == "chat_completions"
-        assert s.base == "chat_completions"
+        assert s.format == "chat_completions"
         assert s.model_type == "llm"
         assert s.connection.base_url is None
         assert s.connection.api_key_env is None
@@ -162,17 +162,38 @@ class TestGroupedConfig:
         ):
             assert not hasattr(s, gone), gone
 
-    def test_property_aliases_still_read(self):
-        """Three aliases stay while a gateway or shim-repo reader remains."""
+    @pytest.mark.parametrize(
+        ("removed", "replacement"),
+        [
+            ("base", "format"),
+            ("default_path", "connection.default_path"),
+            ("max_tool_description_length", "tools.max_description_length"),
+        ],
+    )
+    def test_removed_read_only_aliases_name_their_replacement(
+        self, removed, replacement
+    ):
+        """The three read-only aliases were removed in 0.14.0 (#919)."""
         s = ProviderShim(
             name="test",
             format="chat_completions",
             connection=ConnectionConfig(default_path="/chat"),
             tools=ToolsConfig(max_description_length=256),
         )
-        assert s.base == "chat_completions"
-        assert s.default_path == "/chat"
-        assert s.max_tool_description_length == 256
+        with pytest.raises(AttributeError) as info:
+            getattr(s, removed)
+        assert str(info.value) == (
+            f"ProviderShim.{removed} was removed in 0.14.0; read {replacement}"
+        )
+        assert not hasattr(s, removed)
+        assert s.format == "chat_completions"
+        assert s.connection.default_path == "/chat"
+        assert s.tools.max_description_length == 256
+
+    def test_an_unknown_attribute_is_a_plain_attribute_error(self):
+        s = ProviderShim(name="test", format="chat_completions")
+        with pytest.raises(AttributeError, match="has no attribute 'nope'"):
+            getattr(s, "nope")
 
     def test_defaults_when_no_fields(self):
         s = ProviderShim(name="test", format="chat_completions")
@@ -229,7 +250,7 @@ class TestRegistry:
         register_shim(s2)
         result = get_shim("test")
         assert result is not None
-        assert result.base == "messages"
+        assert result.format == "messages"
 
     def test_unregister(self):
         s = ProviderShim(name="test", format="chat_completions")
@@ -429,12 +450,12 @@ class TestBuiltinShims:
     def test_openai_base_type(self):
         shim = get_shim("openai--chat_completions")
         assert shim is not None
-        assert shim.base == "chat_completions"
+        assert shim.format == "chat_completions"
 
     def test_deepseek_base_type(self):
         shim = get_shim("deepseek--chat_completions")
         assert shim is not None
-        assert shim.base == "chat_completions"
+        assert shim.format == "chat_completions"
 
     def test_deepseek_declares_reasoning_replay(self):
         """The thinking-mode requirement is a capability, not a transform.
@@ -492,12 +513,12 @@ class TestBuiltinShims:
     def test_deepseek_responses_base_type(self):
         shim = get_shim("deepseek--open_responses")
         assert shim is not None
-        assert shim.base == "open_responses"
+        assert shim.format == "open_responses"
 
     def test_anthropic_base_type(self):
         shim = get_shim("anthropic--messages")
         assert shim is not None
-        assert shim.base == "messages"
+        assert shim.format == "messages"
 
     def test_signature_requiring_messages_shims_preserve_unsigned_blocks(self):
         """Anthropic rejects a thinking block without a signature (#954).
@@ -637,7 +658,7 @@ class TestBuiltinShims:
     def test_google_base_type(self):
         shim = get_shim("google--google_generate")
         assert shim is not None
-        assert shim.base == "google_generate"
+        assert shim.format == "google_generate"
 
     def test_max_tool_description_length_loaded_from_yaml(self):
         """The YAML threshold must reach the shim object.
@@ -649,14 +670,14 @@ class TestBuiltinShims:
         for name in ("openai--chat_completions",):
             shim = get_shim(name)
             assert shim is not None
-            assert shim.max_tool_description_length == 1024, (
+            assert shim.tools.max_description_length == 1024, (
                 f"{name} should load max_tool_description_length from YAML"
             )
 
     def test_max_tool_description_length_absent_stays_none(self):
         shim = get_shim("anthropic--messages")
         assert shim is not None
-        assert shim.max_tool_description_length is None
+        assert shim.tools.max_description_length is None
 
 
 # ---------------------------------------------------------------------------
@@ -888,8 +909,8 @@ class TestGroupedProviders:
         """Grouped shims resolve to the correct base converter."""
         chat = get_shim("openai--chat_completions")
         responses = get_shim("openai--open_responses")
-        assert chat is not None and chat.base == "chat_completions"
-        assert responses is not None and responses.base == "open_responses"
+        assert chat is not None and chat.format == "chat_completions"
+        assert responses is not None and responses.format == "open_responses"
 
     def test_grouped_provider_transforms_loaded(self):
         """Grouped shims have their transforms.py imported."""
@@ -1239,7 +1260,7 @@ class TestFreeSourceShim:
         shim = get_shim("kilo--chat_completions")
 
         assert shim is not None
-        assert shim.base == "chat_completions"
+        assert shim.format == "chat_completions"
         assert shim.free_source is False
         assert shim.connection.keyless is False
         assert shim.connection.api_key_env == "KILO_API_KEY"

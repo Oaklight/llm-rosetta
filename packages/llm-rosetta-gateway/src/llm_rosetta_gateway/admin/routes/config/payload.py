@@ -541,7 +541,9 @@ async def get_config(request: Any) -> Response:
             "registered_shims": [
                 {
                     "name": s.name,
-                    "base": s.base,  # deprecated alias for `format`
+                    # The admin picker (core/shim-tree.js) reads this key; it
+                    # carries the same value as ``format``.
+                    "base": s.format,
                     "format": s.format,
                     "model_type": s.model_type,
                     "logo": s.logo,

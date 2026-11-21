@@ -404,8 +404,8 @@ class TestLoadProviders:
         for name, base in expected.items():
             shim = get_shim(name)
             assert shim is not None, f"Shim {name!r} not found"
-            assert shim.base == base, (
-                f"{name}: expected base={base!r}, got {shim.base!r}"
+            assert shim.format == base, (
+                f"{name}: expected base={base!r}, got {shim.format!r}"
             )
 
     # Shims that intentionally have no public logo
@@ -969,7 +969,7 @@ class TestDeclaredGrouping:
         assert all(s.group_label is None for s in shims)
         # Every cluster speaks the same format, so the picker reads
         # "metis · chat_completions" inside the one group.
-        assert {s.base for s in shims} == {"chat_completions"}
+        assert {s.format for s in shims} == {"chat_completions"}
 
     def test_a_title_can_be_declared_without_a_group_key(self, tmp_path: Path):
         root = tmp_path / "providers"

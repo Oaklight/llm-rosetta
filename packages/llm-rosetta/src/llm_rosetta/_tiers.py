@@ -26,6 +26,11 @@ measured with its own table.  The 0.13.0 base has no table and is measured
 with the head's list, so it is covered by the frozen module list in
 ``tests/test_public_api_diff.py`` (``V0_13_0_PUBLIC_MODULES``) instead.
 
+The diff compares module-level names and constructor signatures only.  An
+attribute removed from a class (the three ``ProviderShim`` properties of
+0.14.0) is outside it; such removals are recorded in ``REMOVED_ATTRIBUTES`` in
+``tests/test_no_deprecation_bounds.py``.
+
 Every module not listed is **internal** and may move in any release.
 ``tests/test_tiers.py`` checks that every module of the first three tiers
 imports and that no ``REMOVED`` module does.
