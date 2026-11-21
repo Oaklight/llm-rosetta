@@ -7,6 +7,8 @@ name (``{"type":"function","function":{"name":"web_search"}}``) or explicitly
 (``{"type":"intrinsic","name":"web_search"}``).
 """
 
+import pytest
+
 from llm_rosetta.ir.passes import resolve_intrinsic_tools
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
@@ -20,6 +22,11 @@ from llm_rosetta.ir.tools.intrinsic import (
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.shims import resolve_shim
 from llm_rosetta.contracts.shim import ProviderShim, ToolsConfig
+from _moved_vendors import load_providers_with_moved
+
+# The vendors these tests read moved to contrib (#1660); their frozen copies
+# are registered for every test here.
+pytestmark = pytest.mark.usefixtures("moved_vendors")
 
 
 def _shim(base, kinds):
@@ -475,9 +482,8 @@ class TestShimEmitConsistency:
         against ``set()`` passes on absence, so a shim that stops loading or
         gets renamed would satisfy every test in this class.
         """
-        from llm_rosetta.shims.providers import load_providers
 
-        shims = {s.name: s for s in load_providers()}
+        shims = {s.name: s for s in load_providers_with_moved()}
         assert name in shims, f"{name} is not a loaded shim: {sorted(shims)}"
         return set(shims[name].tools.intrinsic_tools)
 

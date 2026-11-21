@@ -23,6 +23,8 @@ from llm_rosetta.shims.providers import (
     load_providers_from_dir,
 )
 
+from _moved_vendors import load_providers_with_moved
+
 #: The registry recorded before the model-type layout landed.  It is the old
 #: tree's answer, kept as the expectation the new tree has to reproduce.
 SNAPSHOT_PATH = Path(__file__).with_name("shim_registry_snapshot.json")
@@ -137,14 +139,19 @@ class TestLoadProviders:
         return d
 
     def test_loads_from_builtin_directory(self):
-        """Verify the real providers/ directory loads all built-in shims."""
+        """Verify the real providers/ directory loads all built-in shims.
+
+        Since #1660 core ships only the model makers' own API-key lanes and
+        one real vendor per non-chat format; every other vendor installs from
+        the contrib shim source under the same name.
+        """
+        from llm_rosetta.retired_names import moved_vendor
+
         shims = load_providers()
         names = {s.name for s in shims}
         expected = {
             # Grouped vendor shims use the canonical ``<provider>--<base>`` form.
             "anthropic--messages",
-            # An upstream lane driven over ACP: no HTTP model API at all.
-            "antigravity--acp",
             # Embedding and rerank shims.
             "cohere--chat_completions",
             "cohere--embedding",
@@ -154,75 +161,36 @@ class TestLoadProviders:
             "jina--rerank",
             "minimax--embedding",
             "openai--embedding",
-            "siliconflow--embedding",
-            "siliconflow--rerank",
             "voyage--embedding",
             "voyage--rerank",
-            "zai--embedding",
-            "zai--rerank",
             "deepseek--chat_completions",
             "deepseek--open_responses",
             "google--google_generate",
             "google--google_interactions",
-            "groq--chat_completions",
-            "kilo--chat_completions",
-            "minimax--messages",
+            # MiniMax stays: it is the minimax embeddings format's vendor.
             "minimax--chat_completions",
-            "modelscope--chat_completions",
-            "moonshot",
-            "nvidia--chat_completions",
+            "minimax--messages",
             "openai--chat_completions",
             "openai--openai_decisions",
             "openai--open_responses",
-            "openai_chatgpt--open_responses",
-            "openrouter--messages",
-            "openrouter--chat_completions",
-            "openrouter--open_responses",
-            "openrouter--rerank",
-            "opencode--chat_completions",
-            "opencode--messages",
-            "opencode--open_responses",
-            "qwen",
-            "siliconflow--chat_completions",
             "typesafe--systemone",
-            "volcengine--chat_completions",
-            "volcengine--embedding",
-            "volcengine--open_responses",
-            "xai",
-            "zai--chat_completions",
-            "zai--messages",
-            "zhipu",
-            "zhipu--embedding",
-            "zhipu--rerank",
         }
         assert names == expected, (
             f"Unexpected shim diff: {names.symmetric_difference(expected)}"
         )
+        assert not [name for name in names if moved_vendor(name) is not None]
 
     def test_all_registered_after_load(self):
         """After load_providers, all shims are queryable via get_shim."""
         load_providers()
         for name in (
             "openai--chat_completions",
-            "openrouter--chat_completions",
-            "openrouter--messages",
-            "openrouter--open_responses",
-            "opencode--chat_completions",
-            "opencode--messages",
-            "opencode--open_responses",
-            "kilo--chat_completions",
             "anthropic--messages",
             "google--google_generate",
             "deepseek--chat_completions",
             "deepseek--open_responses",
-            "volcengine--chat_completions",
-            "volcengine--open_responses",
-            "xai",
-            "qwen",
-            "moonshot",
             "minimax--chat_completions",
             "minimax--messages",
-            "zhipu",
             "google--google_interactions",
             "typesafe--systemone",
             "openai--openai_decisions",
@@ -241,7 +209,7 @@ class TestLoadProviders:
 
     def test_volcengine_has_transforms(self):
         """Volcengine shim should have strip_fields transforms loaded."""
-        load_providers()
+        load_providers_with_moved()
         v = get_shim("volcengine--chat_completions")
         assert v is not None
         assert len(v.post_ir_transforms) == 1
@@ -271,7 +239,7 @@ class TestLoadProviders:
 
     def test_xai_has_transforms(self):
         """xAI shim should strip logit_bias."""
-        load_providers()
+        load_providers_with_moved()
         s = get_shim("xai")
         assert s is not None
         assert len(s.post_ir_transforms) == 1
@@ -283,7 +251,7 @@ class TestLoadProviders:
 
     def test_moonshot_has_transforms(self):
         """Moonshot shim should strip logprobs, top_logprobs, logit_bias, seed."""
-        load_providers()
+        load_providers_with_moved()
         s = get_shim("moonshot")
         assert s is not None
         assert len(s.post_ir_transforms) == 1
@@ -304,7 +272,7 @@ class TestLoadProviders:
 
     def test_qwen_has_transforms(self):
         """Qwen shim should strip frequency_penalty, logit_bias."""
-        load_providers()
+        load_providers_with_moved()
         s = get_shim("qwen")
         assert s is not None
         assert len(s.post_ir_transforms) == 1
@@ -317,7 +285,7 @@ class TestLoadProviders:
 
     def test_minimax_has_transforms(self):
         """MiniMax shim should strip fields + inject reasoning_split."""
-        load_providers()
+        load_providers_with_moved()
         s = get_shim("minimax--chat_completions")
         assert s is not None
         assert len(s.post_ir_transforms) == 2  # strip_fields + inject_reasoning_split
@@ -338,7 +306,7 @@ class TestLoadProviders:
 
     def test_zhipu_has_transforms(self):
         """Zhipu shim should strip n, penalties, logprobs, logit_bias, seed."""
-        load_providers()
+        load_providers_with_moved()
         s = get_shim("zhipu")
         assert s is not None
         assert len(s.post_ir_transforms) == 1
@@ -365,7 +333,7 @@ class TestLoadProviders:
 
     def test_base_types_correct(self):
         """Each shim should have the expected base converter type."""
-        load_providers()
+        load_providers_with_moved()
         expected = {
             "openai--chat_completions": "chat_completions",
             "openai--open_responses": "open_responses",
@@ -675,7 +643,7 @@ class TestLoadProviders:
 
     def test_every_shipped_hint_declares_both_languages(self):
         """A built-in hint that ships must reach a reader in either language."""
-        load_providers()
+        load_providers_with_moved()
         hints = {s.name: s.hint_msg for s in list_shims() if s.hint_msg}
         assert hints, "no built-in shim declares hint_msg"
         for name, hint in hints.items():
@@ -1000,7 +968,7 @@ class TestDeclaredGrouping:
         pinned is that a title never comes with a ``group`` key it does not
         need, and that these two render exactly as intended.
         """
-        shims = load_providers()
+        shims = load_providers_with_moved()
         titled = {s.name: s for s in shims if s.group_label}
 
         assert "openai_chatgpt--open_responses" in titled

@@ -248,7 +248,7 @@ class TestTheLoadTimeSteps:
     _DOCUMENT = {
         "config_version": 1,
         "providers": {
-            "alcf": {"type": "chat_completions", "shim": "volcengine--chat_completions"}
+            "alcf": {"type": "chat_completions", "shim": "deepseek--chat_completions"}
         },
     }
 

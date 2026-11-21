@@ -467,7 +467,7 @@ def test_replacement_shim_names_still_work() -> None:
     ConversionPipeline(
         "chat_completions",
         "chat_completions",
-        target_shim="volcengine--chat_completions",
+        target_shim="deepseek--chat_completions",
     )
 
 
@@ -708,6 +708,25 @@ def test_no_moved_shim_name_is_also_retired() -> None:
         for name in row.shims:
             assert row.owns(name), name
             assert lookup(name, SHIM) is None, name
+
+
+def test_a_library_lookup_of_a_moved_shim_names_the_contrib_repository() -> None:
+    with pytest.raises(ValueError) as caught:
+        get_converter_for_provider("opencode--chat_completions")
+    message = str(caught.value)
+    assert "Unsupported provider: opencode--chat_completions" in message
+    assert "moved in 0.14 to the shim repository llm-rosetta-shim-contrib" in message
+    assert "load_providers_from_dir" in message
+
+
+def test_a_pipeline_with_a_moved_target_shim_names_the_contrib_repository() -> None:
+    with pytest.raises(ValueError, match="llm-rosetta-shim-contrib"):
+        ConversionPipeline("chat_completions", "chat_completions", target_shim="xai")
+
+
+def test_an_installed_moved_shim_works_from_the_library(moved_vendors) -> None:
+    ConversionPipeline("chat_completions", "chat_completions", target_shim="xai")
+    assert get_converter_for_provider("opencode--messages") is not None
 
 
 def test_a_retired_spelling_of_a_moved_shim_says_both_things() -> None:

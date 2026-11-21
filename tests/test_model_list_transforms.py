@@ -8,14 +8,14 @@ from llm_rosetta.shims.providers import (
     _jina_model_list_transform,
     _cohere_model_list_transform,
     get_model_list_transform,
-    load_providers,
 )
+from _moved_vendors import load_providers_with_moved
 
 
 @pytest.fixture(autouse=True)
 def _ensure_transforms_loaded():
     """Repopulate built-in transforms in case another test reset the registry."""
-    load_providers()
+    load_providers_with_moved()
     yield
 
 

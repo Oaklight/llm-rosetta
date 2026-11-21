@@ -6,6 +6,10 @@ the pure detection the consumers share.
 
 Nothing is scheduled at the moment: ALCF, AskSage and Argo all ship standalone
 from 0.14.0 and their names are served by ``shims.presets``.  The machinery is
+
+# The vendors these tests read moved to contrib (#1660); their frozen copies
+# are registered for every test here.
+pytestmark = pytest.mark.usefixtures("moved_vendors")
 kept self-arming, so the detection and gate tests use a synthetic manifest of
 shims that are still built in.
 """
@@ -30,7 +34,8 @@ from llm_rosetta_gateway.shims import (
     scan_removal_references,
 )
 from llm_rosetta.shims.provider_shim import _reset_registry
-from llm_rosetta.shims.providers import load_providers
+
+from _moved_vendors import load_providers_with_moved
 
 #: Synthetic manifest entries for the still-built-in ``minimax`` and ``deepseek``
 #: shims.  Real entries would be deleted from the manifest the day the shims go
@@ -82,7 +87,7 @@ def empty_registry():
         yield
     finally:
         _reset_registry()
-        load_providers()
+        load_providers_with_moved()
 
 
 class TestManifest:
@@ -116,13 +121,13 @@ class TestManifest:
 
         Deleting a shim without deleting its manifest entry fails here.
         """
-        load_providers()
+        load_providers_with_moved()
         unregistered = [e.shim for e in SAMPLES if get_shim(e.shim) is None]
         assert unregistered == []
 
     def test_every_legacy_name_is_retired_in_favour_of_its_shim(self):
         """An old spelling no longer resolves; the table names its shim."""
-        load_providers()
+        load_providers_with_moved()
         for entry in SAMPLES:
             for legacy in entry.legacy_names:
                 row = retired_names.lookup(legacy, retired_names.SHIM)

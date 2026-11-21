@@ -16,6 +16,7 @@ from llm_rosetta.contracts.transform import (
     strip_fields,
     strip_fields_for_model,
 )
+from _moved_vendors import load_providers_with_moved
 
 
 # ---------------------------------------------------------------------------
@@ -222,9 +223,8 @@ class TestShimWithTransforms:
 class TestBuiltinTransforms:
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     def test_volcengine_has_post_ir_transforms(self):
         shim = get_shim("volcengine--chat_completions")
@@ -363,9 +363,8 @@ class TestBuiltinTransforms:
 class TestConvertWithTransforms:
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     def test_convert_applies_source_pre_ir_transforms(self):
         """Source shim's pre_ir_transforms should normalise before conversion."""

@@ -92,8 +92,10 @@ SIDECAR_NAMES = frozenset(("transforms.py", "auth.py", "quota.py"))
 
 
 def test_there_are_sidecars_to_check():
+    # No core vendor ships ``auth.py`` since #1660 (``test_shim_placement``
+    # holds that rule); the other two kinds must still be scanned.
     names = frozenset(path.name for path in _sidecars())
-    assert SIDECAR_NAMES <= names
+    assert SIDECAR_NAMES - {"auth.py"} <= names
 
 
 @pytest.mark.parametrize(
@@ -152,26 +154,6 @@ def test_the_rule():
     cross = "1 llm_rosetta.shims.providers.openai.quota"
     assert check("from llm_rosetta.shims.providers.openai.quota import X") == [cross]
     assert check("from ..openai.quota import X") == [cross]
-
-
-def _body_without_docstring(path: Path) -> str:
-    import ast
-
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    body = tree.body[1:] if ast.get_docstring(tree) is not None else tree.body
-    return "\n".join(ast.dump(node) for node in body)
-
-
-def test_the_two_copies_of_the_codex_probe_stay_identical():
-    # openai_chatgpt used to import openai's probe; a sidecar may not reach
-    # another vendor, so it carries a copy.  Only the module docstring may
-    # differ; function docstrings are compared too (comments are not in the
-    # AST, so they may differ).  Comparing the whole file is deliberate: if the plan
-    # lane ever needs a difference, extract the shared part instead of
-    # loosening this test.
-    openai = _PROVIDERS / "openai" / "quota.py"
-    chatgpt = _PROVIDERS / "openai_chatgpt" / "quota.py"
-    assert _body_without_docstring(openai) == _body_without_docstring(chatgpt)
 
 
 def test_a_contract_package_is_imported_as_a_package_only():

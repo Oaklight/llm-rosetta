@@ -1,8 +1,13 @@
-"""ChatGPT plan quota probe — the Codex backend's usage endpoint.
+"""The plan lane's allowance probe — the Codex backend's usage endpoint.
 
-Loaded once for the ``openai`` group.  A regular API-key provider never uses
-it: the probe is bound only when a shim (or a provider entry) declares
-``quota.probe: openai_codex``, as the Sign in with ChatGPT shim will.
+The plan route meters the same account windows the Codex backend reports.
+The probe moved here from core's ``openai`` vendor in llm-rosetta 0.14
+(#1660); no copy remains in core.  It keeps its ``openai_codex`` id, so a
+config that names ``quota.probe: openai_codex`` still resolves.
+
+This shim declares ``in_band: true``, which means the probe is loaded for its
+refusal classifier and never polled — there is no usage endpoint the
+application may read.
 """
 
 from __future__ import annotations

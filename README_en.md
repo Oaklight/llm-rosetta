@@ -249,15 +249,19 @@ Open Responses spec; the OpenAI profile (`openai--open_responses` shim) adds its
 ### Provider Shims
 
 Vendors differ from the base format in field names, defaults, auth and URL
-paths. A shim declares those differences, so converters stay generic. 39 shims
-ship with the package across 19 vendor prefixes, including Anthropic, Cohere,
-DeepSeek, Google, Jina, MiniMax, Moonshot, OpenAI, OpenRouter, Qwen, Volcengine,
-Voyage, xAI and Zhipu.
+paths. A shim declares those differences, so converters stay generic. The
+package ships the model makers' own API-key lanes — Anthropic, DeepSeek, Google
+and OpenAI — plus Cohere, Jina, MiniMax, Voyage and TypeSafe as one real vendor
+per embedding, rerank and decision format. Every other vendor (aggregators, free
+endpoints, OAuth and subscription lanes, and makers such as Moonshot, Qwen,
+Volcengine, xAI and Zhipu) is published in the
+[contrib shim repository](https://github.com/Oaklight/llm-rosetta-shim-contrib)
+under the same shim name; the gateway installs one automatically when a config
+names it.
 
-Most shim names are `<vendor>--<format>` — `openrouter--open_responses`,
-`deepseek--chat_completions`, `anthropic--messages`. A few single-lane shims keep
-the bare vendor name — `moonshot`, `qwen`, `xai` and `zhipu` — while their
-embedding and rerank siblings carry the suffix. A provider with a bare format type
+Most shim names are `<vendor>--<format>` — `openai--open_responses`,
+`deepseek--chat_completions`, `anthropic--messages`. A few single-lane contrib
+shims keep the bare vendor name — `moonshot`, `qwen`, `xai` and `zhipu`. A provider with a bare format type
 (for example `type: open_responses`) is vendor-neutral and must set `base_url`; a
 vendor shim supplies the default URL and credential environment variable. A shim
 can also carry a credential exchange (`auth.py`) and a quota probe (`quota.py`). See

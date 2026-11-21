@@ -19,6 +19,10 @@ from llm_rosetta_gateway.app import create_app
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.transport._base import UpstreamResponse
 
+# The vendors these tests read moved to contrib (#1660); their frozen copies
+# are registered for every test here.
+pytestmark = pytest.mark.usefixtures("moved_vendors")
+
 _PNG = "iVBORw0KGgo="
 _REPLY = {
     "updates": [

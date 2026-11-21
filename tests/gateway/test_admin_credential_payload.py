@@ -14,13 +14,17 @@ import pytest
 from types import SimpleNamespace
 from typing import Any
 
-from llm_rosetta.shims.providers import load_providers
+from _moved_vendors import load_providers_with_moved
+
+# The vendors these tests read moved to contrib (#1660); their frozen copies
+# are registered for every test here.
+pytestmark = pytest.mark.usefixtures("moved_vendors")
 
 PLAN_SHIM = "openai_chatgpt--open_responses"
 
 
 def _shims() -> dict[str, Any]:
-    return {s.name: s for s in load_providers()}
+    return {s.name: s for s in load_providers_with_moved()}
 
 
 class TestTheShimDeclaresIt:

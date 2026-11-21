@@ -27,9 +27,10 @@ import pytest
 
 from llm_rosetta.contracts.auth import AuthContext, InteractiveSetupRequired
 
+# The vendor moved to the contrib shim repository (#1660); its frozen copy is
+# the test fixture.
 MODULE_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "packages/llm-rosetta/src/llm_rosetta/shims/providers/openai_chatgpt/auth.py"
+    Path(__file__).resolve().parent / "fixtures/moved_vendors/openai_chatgpt/auth.py"
 )
 
 # A throwaway 2048-bit key, generated for these tests only.  The exchange

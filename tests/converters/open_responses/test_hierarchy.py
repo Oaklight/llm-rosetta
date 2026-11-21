@@ -7,12 +7,18 @@ Responses API is a derived profile.
 
 from __future__ import annotations
 
+import pytest
+
 from llm_rosetta.auto_detect import get_converter_for_provider
 from llm_rosetta.converters.llm.open_responses import (
     OpenAIResponsesConverter,
     OpenResponsesConverter,
 )
 from llm_rosetta.shims import get_shim, resolve_format
+
+# The vendors these tests read moved to contrib (#1660); their frozen copies
+# are registered for every test here.
+pytestmark = pytest.mark.usefixtures("moved_vendors")
 
 
 class TestHierarchy:

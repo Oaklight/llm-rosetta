@@ -31,6 +31,10 @@ from llm_rosetta_gateway.shim_sources import (
 from llm_rosetta_gateway.shims import SHIM_SOURCE_PACKAGES, ShimRemoval
 from llm_rosetta_gateway.shims.sources import ShimLoadReport, ShimSourceStatus
 
+# The vendors these tests read moved to contrib (#1660); their frozen copies
+# are registered for every test here.
+pytestmark = pytest.mark.usefixtures("moved_vendors")
+
 ARGO_PACKAGE = next(p for p in SHIM_SOURCE_PACKAGES if p.key == "argo")
 ALCF_PACKAGE = next(p for p in SHIM_SOURCE_PACKAGES if p.key == "alcf")
 

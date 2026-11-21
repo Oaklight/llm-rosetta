@@ -23,6 +23,10 @@ from llm_rosetta.conversion_warnings import DROPPED, WarningSink, recording_to
 from llm_rosetta.ir.passes import drop_nameless_tools
 from llm_rosetta.pipeline import ConversionPipeline
 
+# The vendors these tests read moved to contrib (#1660); their frozen copies
+# are registered for every test here.
+pytestmark = pytest.mark.usefixtures("moved_vendors")
+
 NAMED = {
     "type": "function",
     "name": "lookup",
