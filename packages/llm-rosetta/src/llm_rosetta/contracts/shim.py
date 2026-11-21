@@ -8,7 +8,15 @@ reads; they hold no state.
 
 The registry that stores shims, and the functions that read and write it
 (``register_shim``, ``get_shim``, ``list_shims``, ...), are not part of this
-contract: a host reaches them through :mod:`llm_rosetta.api`.
+contract: a host reaches them through :mod:`llm_rosetta.api`.  The one
+exception is :func:`load_providers_from_dir`, the call a plugin's
+``llm_rosetta.shim_providers`` entry point makes to register its shim tree.
+
+Every module under :mod:`llm_rosetta.contracts` is importable while
+``llm_rosetta`` itself is still initialising: plugin entry points run during
+``import llm_rosetta``, so a sidecar or an entry point that imports a contract
+must not pull in :mod:`llm_rosetta.api` or a name defined by
+``llm_rosetta/__init__.py``.
 
 These classes lived in :mod:`llm_rosetta.shims.provider_shim` in 0.13.0; that
 module re-exports them until 0.15.0.
@@ -20,6 +28,7 @@ import functools
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Callable, Collection
 from typing import Any, Literal
 
 from llm_rosetta import retired_names
@@ -804,6 +813,43 @@ class ProviderShim:
         return self.tools.max_description_length
 
 
+def load_providers_from_dir(
+    providers_dir: Path,
+    *,
+    group: str | None = None,
+    on_error: str = "raise",
+    only_paths: Collection[str] | None = None,
+    keep_names: Callable[[str], bool] | None = None,
+) -> list[ProviderShim]:
+    """Scan *providers_dir* for provider shims and register them.
+
+    The registration call a plugin's ``llm_rosetta.shim_providers`` entry
+    point makes.  It delegates to the shim loader, imported on call, so this
+    module stays importable while the loader itself is starting up.
+
+    Args:
+        providers_dir: The root of the plugin's shim tree
+            (``<vendor>[/<lane>]/<type>/provider.yaml``).
+        group: Group prefix for a tree nested under one vendor directory.
+        on_error: ``"raise"`` (default) or ``"warn"`` for a broken directory.
+        only_paths: Load only these directories (relative to
+            *providers_dir*), when given.
+        keep_names: Register only the shims whose name this predicate keeps.
+
+    Returns:
+        The shims this call registered.
+    """
+    from llm_rosetta.shims.providers import load_providers_from_dir as _load
+
+    return _load(
+        providers_dir,
+        group=group,
+        on_error=on_error,
+        only_paths=only_paths,
+        keep_names=keep_names,
+    )
+
+
 __all__ = [
     "TYPE_PARAM_KEYS",
     "BatchDeclaration",
@@ -817,4 +863,5 @@ __all__ = [
     "ToolsConfig",
     "UnsignedBlocks",
     "VendorManifest",
+    "load_providers_from_dir",
 ]

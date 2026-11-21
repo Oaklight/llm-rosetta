@@ -26,6 +26,57 @@ from ._constants import (
 )
 
 
+def describe_load_failure(directory: Path, exc: BaseException) -> str:
+    """Return the reason a shim directory was skipped, as one log line.
+
+    A shim package built against an older core fails with a
+    :class:`ModuleNotFoundError` for a core module that moved or was removed
+    (``llm_rosetta.shims.auth_exchange``, ``llm_rosetta.transforms``).  Said
+    plainly, that is a version mismatch, not a broken install: the line names
+    the package and its installed version when they can be found, the missing
+    module, and the fix.  Any other error is returned as it is.
+    """
+    missing = getattr(exc, "name", None)
+    if not (
+        isinstance(exc, ModuleNotFoundError)
+        and isinstance(missing, str)
+        and missing.startswith("llm_rosetta.")
+        and not _importable(missing)
+    ):
+        return str(exc)
+    return (
+        f"{_shim_package_label(directory)} was built for an older llm-rosetta: "
+        f"it imports {missing}, which this llm-rosetta does not have; "
+        "upgrade the shim package"
+    )
+
+
+def _importable(module: str) -> bool:
+    try:
+        return importlib.util.find_spec(module) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _shim_package_label(directory: Path) -> str:
+    """``<distribution> <version>`` owning *directory*, else the directory."""
+    top: Path | None = None
+    for parent in (directory, *directory.parents):
+        if (parent / "__init__.py").is_file():
+            top = parent
+        elif top is not None:
+            break
+    if top is not None:
+        try:
+            from importlib.metadata import packages_distributions, version
+
+            for dist in packages_distributions().get(top.name, []):
+                return f"the shim package {dist} {version(dist)} ({directory})"
+        except Exception:  # noqa: BLE001 - metadata is best effort
+            pass
+    return f"the shim package at {directory}"
+
+
 # Synthetic package namespace for plugin (non-builtin) shim transforms.  The
 # namespace is keyed per providers root so two external sources with the same
 # group/leaf names do not collide in ``sys.modules``.

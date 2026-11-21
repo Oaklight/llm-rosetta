@@ -9,6 +9,7 @@ from typing import Any
 
 from llm_rosetta.contracts.shim import ProviderShim, VendorManifest
 from ._leaf import _load_single_provider
+from ._sidecars import describe_load_failure
 from ._constants import (
     _MAX_LANE_DEPTH,
     _TYPE_DIRS,
@@ -84,7 +85,11 @@ def _load_provider_tolerant(
         )
     except Exception as exc:
         if on_error == "warn":
-            logger.warning("Skipping shim directory %s: %s", directory, exc)
+            logger.warning(
+                "Skipping shim directory %s: %s",
+                directory,
+                describe_load_failure(directory, exc),
+            )
             return None
         raise
 
