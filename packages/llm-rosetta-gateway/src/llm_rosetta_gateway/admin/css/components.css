@@ -3179,6 +3179,51 @@ button.shim-update.unknown { color: var(--tag-warn); }
 }
 .shim-grid-inline { grid-column: 1 / -1; }
 
+/* ── Manifest sources (#1660 S9) ─────────────────────────────────────── */
+/* A source's section head carries its state and its repository link, so a
+   source that did not answer is visible where its vendors would be. */
+.shim-source-head { flex-wrap: wrap; }
+.shim-source-head .tag { text-transform: none; letter-spacing: normal; }
+.shim-source-link { margin-left: auto; font-weight: 400; text-transform: none; letter-spacing: normal; }
+.shim-source-error { grid-column: 1 / -1; margin: 0; font-size: 12px; color: var(--tag-warn); overflow-wrap: anywhere; }
+.tag.is-warn { color: var(--tag-warn); }
+/* Maturity and state qualify the vendor name the way tier does: same cut. */
+.tag.is-maturity,
+.tag.is-state { font-size: calc(var(--fs-micro) - 2px); padding: 0 4px; text-transform: none; }
+.tag.is-maturity.is-stable { color: var(--tag-pos); }
+.tag.is-maturity.is-beta { color: var(--tag-info); }
+.tag.is-maturity.is-experimental { color: var(--tag-warn); }
+.tag.is-state.is-installed { color: var(--tag-pos); }
+.tag.is-state.is-selected { color: var(--tag-accent); }
+.tag.is-state.is-skipped,
+.tag.is-state.is-failed { color: var(--tag-warn); }
+.tag.is-state.is-available { color: var(--text-dim); }
+.shim-src-card .shim-preset-shim { cursor: default; }
+
+/* The editor: one block per source, the checkboxes wrapping in rows. */
+.shim-src-editor { display: flex; flex-direction: column; gap: 12px; }
+.shim-src-block {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--radius);
+  background: var(--surface);
+}
+.shim-src-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.shim-src-name { font-weight: 600; font-size: 13px; }
+.shim-src-id { font-size: 11px; color: var(--text-muted); }
+.shim-src-state {
+  flex: 1 1 160px; min-width: 0; font-size: 11px; color: var(--text-muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.shim-src-state.is-bad { color: var(--tag-warn); }
+.shim-src-row { display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; }
+.shim-src-label { flex: 0 0 100%; font-size: 11px; color: var(--text-muted); }
+.shim-src-check { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer; }
+.shim-src-check-name { font-family: var(--font-mono, monospace); }
+.shim-src-check-extra { font-size: 11px; color: var(--text-muted); }
+.shim-src-check input:disabled + .shim-src-check-name { opacity: .6; }
+.shim-src-add { display: flex; gap: 8px; align-items: center; }
+.shim-src-add .input { flex: 1 1 260px; min-width: 0; }
+
 
 /* ── Shims page: vendor sections and logos ─────────────────────────── */
 

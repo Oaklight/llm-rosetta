@@ -824,6 +824,18 @@
           </label>
           <span class="scope-badge server"><span class="dot is-sm" aria-hidden="true"></span><span data-i18n="scope.serverNow">Server config · saves on change</span></span>
         </header>
+        <div class="settings-group" id="shimManifestGroup">
+          <div class="settings-group-head">
+            <h4 data-i18n="shimSrc.editorTitle">Manifest sources</h4>
+            <p data-i18n="shimSrc.editorHint"></p>
+          </div>
+          <div id="shimManifestEditor" class="shim-src-editor"></div>
+          <div class="settings-group-actions">
+            <button class="btn btn-sm" id="shimManifestSave" onclick="saveShimManifestSources(this)" data-i18n="btn.save" disabled>Save</button>
+            <button class="btn btn-sm" onclick="renderShimManifestEditor(true)" data-i18n="shimSrc.reread">Re-read manifests</button>
+            <span id="shimManifestDirty" class="shim-dirty" hidden data-i18n="shim.dirty"></span>
+          </div>
+        </div>
         <div class="settings-group">
           <div class="settings-group-head">
             <p data-i18n="hint.shimTrust"></p>

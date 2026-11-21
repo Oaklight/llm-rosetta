@@ -10,6 +10,7 @@ import { api, showToast, esc, copyText, openModal, closeModal } from '../core/ut
 import {
   inheritanceRows, annotateBlast, changedLeaves, nameList,
 } from '../core/manifest-inherit.js';
+import { renderShimManifestEditor, resetShimManifestEditor } from './shim-sources-editor.js';
 
 function _section() {
   const sec = S.configData && S.configData.shims;
@@ -56,6 +57,8 @@ function renderShimSources() {
   // the saved section, or a config with a remote/cache/TTL/strict opens dirty.
   _updateShimDirty();
   loadLoadedShims();
+  // The manifest sources and their selection (#1660 S9).
+  renderShimManifestEditor();
 }
 
 /** Persist the shim sources and reload the config. */
@@ -105,6 +108,8 @@ async function reloadShimSources(forceRefresh) {
   try {
     const r = await api.post('/admin/api/config/shims/reload',
       forceRefresh ? { refresh: 'always' } : {});
+    // A refetch rewrote the manifest cache; the selection being edited stays.
+    resetShimManifestEditor({ keepDraft: true });
     await window.loadConfig();
     renderShimSources();
     const failures = (r && r.status && r.status.failure_count) || 0;
