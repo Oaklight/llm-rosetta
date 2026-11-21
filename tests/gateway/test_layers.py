@@ -85,8 +85,6 @@ ROOT_MODULES: dict[str, str] = {
     "__main__": "python -m llm_rosetta_gateway",
     "_compat": "sync/async compatibility helpers, scheduled for deletion (#1672 G7)",
     "admin_api": "the surface admin depends on; its own boundary",
-    "keystore": "imported from outside the gateway (argo-proxy: KeyContext), so "
-    "moving it needs a deprecated forwarder",
     "shim_sources": "moves into shims/ with the shim subsystem (#1672 G1)",
     "surface": "the core surface level this gateway needs; its boundary with core",
     "updates": "reads the changelog the release workflow writes beside the "
