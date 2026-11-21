@@ -228,3 +228,143 @@ def test_promoted_core_version():
     assert promoted_core_version(record) == (0, 15, 0)
     plain = parse_manifest(_doc(_release("0.1.0"))).vendors["acme"][0]
     assert promoted_core_version(plain) is None
+
+
+# ---------------------------------------------------------------------------
+# Shim names belong to their vendor (#1660)
+# ---------------------------------------------------------------------------
+
+
+def _named(*shims):
+    release = _release("0.1.0")
+    release["shims"] = list(shims)
+    return _doc(release)
+
+
+class TestShimNames:
+    @pytest.mark.parametrize(
+        "shims",
+        [
+            ["acme"],  # a bare chat shim keeps its vendor's name (xai, zhipu)
+            ["acme", "acme--embedding"],
+            ["acme_cluster--chat_completions"],  # a lane of the vendor (alcf)
+        ],
+    )
+    def test_a_name_of_the_vendor_is_valid(self, shims):
+        assert validate_manifest(_named(*shims)) == []
+
+    @pytest.mark.parametrize(
+        "name", ["other--chat_completions", "other", "acmeish--chat_completions"]
+    )
+    def test_another_vendors_name_is_refused(self, name):
+        problems = validate_manifest(_named(name))
+        assert problems == [
+            f"$.vendors.acme.versions[0].shims: {name!r} does not belong to vendor "
+            "'acme' (expected 'acme', 'acme--<name>' or 'acme_<lane>--<name>')"
+        ]
+
+    @pytest.mark.parametrize("name", ["acme_beta--chat_completions", "acme_beta"])
+    def test_a_lane_that_names_another_vendor_of_the_manifest_is_refused(self, name):
+        doc = _named(name)
+        doc["vendors"]["acme_beta"] = {
+            "versions": [dict(_release("0.1.0"), shims=["acme_beta--chat_completions"])]
+        }
+        problems = validate_manifest(doc)
+        assert problems == [
+            f"$.vendors.acme.versions[0].shims: {name!r} carries the prefix of "
+            "'acme_beta', another vendor of this manifest, not of 'acme'"
+        ]
+        # A consumer skips that record and keeps the other vendor.
+        manifest = parse_manifest(doc, invalid_records="skip")
+        assert set(manifest.vendors) == {"acme_beta"}
+
+    def test_the_same_lane_is_valid_when_no_vendor_of_that_name_is_listed(self):
+        assert validate_manifest(_named("acme_beta--chat_completions")) == []
+
+
+# ---------------------------------------------------------------------------
+# Record-level parsing for consumers (#1660)
+# ---------------------------------------------------------------------------
+
+
+class TestRecordLevelParse:
+    def _mixed(self):
+        doc = _doc(_release("0.1.0"), _release("0.2.0"))
+        doc["vendors"]["acme"]["versions"][1]["sha256"] = "nope"
+        doc["vendors"]["beta"] = {
+            "versions": [dict(_release("1.0.0"), shims=["beta--chat_completions"])]
+        }
+        doc["vendors"]["gamma"] = {"versions": "not a list"}
+        doc["vendors"]["delta"] = {
+            "versions": [dict(_release("1.0.0"), shims=["other--x"])]
+        }
+        return doc
+
+    def test_a_bad_record_is_skipped_and_the_rest_is_used(self):
+        manifest = parse_manifest(self._mixed(), invalid_records="skip")
+        assert {v: [r.version for r in rs] for v, rs in manifest.vendors.items()} == {
+            "acme": ["0.1.0"],
+            "beta": ["1.0.0"],
+        }
+        # delta: its one record, then the vendor as a whole.
+        assert len(manifest.skipped) == 4
+        assert "vendor 'delta' skipped: $.vendors.delta: no valid release" in (
+            manifest.skipped
+        )
+        assert any(
+            "vendor 'acme' version '0.2.0' skipped" in s and "sha256" in s
+            for s in manifest.skipped
+        )
+        assert any("vendor 'gamma' skipped" in s for s in manifest.skipped)
+        assert any(
+            "vendor 'delta' version '1.0.0' skipped" in s and "does not belong" in s
+            for s in manifest.skipped
+        )
+
+    def test_a_vendor_left_with_nothing_is_dropped_with_its_first_reason(self):
+        manifest = parse_manifest(self._mixed(), invalid_records="skip")
+        assert manifest.dropped == {
+            "gamma": "$.vendors.gamma.versions: needs a non-empty array",
+            "delta": "$.vendors.delta.versions[0].shims: 'other--x' does not "
+            "belong to vendor 'delta' (expected 'delta', 'delta--<name>' or "
+            "'delta_<lane>--<name>')",
+        }
+        assert parse_manifest(_doc(_release("0.1.0"))).dropped == {}
+
+    def test_the_default_parse_still_refuses_the_whole_document(self):
+        with pytest.raises(ShimManifestInvalid):
+            parse_manifest(self._mixed())
+
+    def test_a_version_listed_twice_drops_both_records(self):
+        manifest = parse_manifest(
+            _doc(_release("0.1.0"), _release("0.1.0"), _release("0.2.0")),
+            invalid_records="skip",
+        )
+        assert [r.version for r in manifest.vendors["acme"]] == ["0.2.0"]
+        assert manifest.skipped == (
+            "vendor 'acme' version '0.1.0' skipped: $.vendors.acme: version 0.1.0 "
+            "is listed twice",
+        )
+
+    @pytest.mark.parametrize(
+        "mutate",
+        [
+            lambda d: d.update(manifest_version=2),
+            lambda d: d.pop("vendors"),
+            lambda d: d.update(vendors=[]),
+            lambda d: d.pop("source"),
+        ],
+    )
+    def test_a_bad_top_level_still_fails(self, mutate):
+        doc = _doc(_release("0.1.0"))
+        mutate(doc)
+        with pytest.raises(ShimManifestInvalid):
+            parse_manifest(doc, invalid_records="skip")
+
+    def test_a_document_that_is_not_an_object_fails(self):
+        with pytest.raises(ShimManifestInvalid):
+            parse_manifest(["no"], invalid_records="skip")
+
+    def test_an_unknown_mode_is_refused(self):
+        with pytest.raises(ValueError, match="invalid_records"):
+            parse_manifest(_doc(_release("0.1.0")), invalid_records="lenient")

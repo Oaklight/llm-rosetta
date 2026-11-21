@@ -137,6 +137,14 @@ class SourceManifest:
         generated_at: When it was generated.
         vendors: Every vendor's releases, newest first by semantic version.
         manifest_version: The format level (always :data:`MANIFEST_VERSION`).
+        skipped: One sentence per vendor entry or release record that
+            :func:`parse_manifest` left out under ``invalid_records="skip"``,
+            each naming the vendor, the version when there is one, and the
+            JSON-path reason.  Empty for a strict parse.
+        dropped: The vendors that ``invalid_records="skip"`` left out
+            entirely (no valid entry or no valid release), each with the
+            first JSON-path reason, so a consumer can tell "this vendor is
+            listed but unreadable" from "this vendor is not listed".
     """
 
     source: str
@@ -144,6 +152,8 @@ class SourceManifest:
     generated_at: str
     vendors: Mapping[str, tuple[VendorRelease, ...]] = field(default_factory=dict)
     manifest_version: int = MANIFEST_VERSION
+    skipped: tuple[str, ...] = ()
+    dropped: Mapping[str, str] = field(default_factory=dict)
 
 
 def load_manifest_schema() -> dict[str, Any]:
@@ -297,7 +307,8 @@ def _check_object(
 def validate_manifest(document: Any) -> list[str]:
     """Check *document* against the manifest schema.
 
-    Beyond the schema, a vendor may not list the same version twice.
+    Beyond the schema, a vendor may not list the same version twice, and
+    every shim name must belong to its vendor (:func:`_shim_belongs_to`).
 
     Args:
         document: The parsed JSON value.
@@ -314,27 +325,99 @@ def validate_manifest(document: Any) -> list[str]:
         versions = [release["version"] for release in entry["versions"]]
         for version in sorted({v for v in versions if versions.count(v) > 1}):
             problems.append(f"$.vendors.{vendor}: version {version} is listed twice")
+        others = frozenset(document["vendors"]) - {vendor}
+        for index, release in enumerate(entry["versions"]):
+            path = f"$.vendors.{vendor}.versions[{index}].shims"
+            problems += _name_problems(path, release["shims"], vendor, others)
     return problems
 
 
-def parse_manifest(document: Any) -> SourceManifest:
+def _name_problems(
+    path: str, names: Any, vendor: str, others: frozenset[str]
+) -> list[str]:
+    """One sentence per shim name in *names* that does not belong to *vendor*."""
+    problems: list[str] = []
+    for name in names:
+        prefix = name.partition("--")[0]
+        if prefix in others:
+            problems.append(
+                f"{path}: {name!r} carries the prefix of {prefix!r}, another "
+                f"vendor of this manifest, not of {vendor!r}"
+            )
+        elif not _shim_belongs_to(name, vendor):
+            problems.append(
+                f"{path}: {name!r} does not belong to vendor {vendor!r} (expected "
+                f"{vendor!r}, '{vendor}--<name>' or '{vendor}_<lane>--<name>')"
+            )
+    return problems
+
+
+def _shim_belongs_to(name: str, vendor: str) -> bool:
+    """Whether shim *name* may be published under manifest vendor *vendor*.
+
+    A shim name is the vendor key itself (the bare chat shims ``xai``,
+    ``qwen``, ``moonshot``, ``zhipu``, kept unchanged so a ``type:`` value
+    keeps resolving), ``<vendor>--<name>``, or ``<vendor>_<lane>--<name>``
+    for a vendor that qualifies its lanes (``alcf_sophia--chat_completions``
+    under ``alcf``).  Anything else carries another vendor's prefix.
+
+    The lane form must not name another vendor of the same manifest: under
+    ``openai``, ``openai_chatgpt--open_responses`` is refused when
+    ``openai_chatgpt`` is a vendor of that manifest too
+    (:func:`_name_problems` checks that; this function sees one vendor).
+
+    Args:
+        name: A shim name from a release record.
+        vendor: The manifest's vendor key.
+    """
+    if name == vendor:
+        return True
+    head, sep, _ = name.partition("--")
+    return bool(sep) and (head == vendor or head.startswith(f"{vendor}_"))
+
+
+def parse_manifest(document: Any, *, invalid_records: str = "raise") -> SourceManifest:
     """Validate *document* and return it as a :class:`SourceManifest`.
 
     Args:
         document: The parsed JSON value.
+        invalid_records: ``"raise"`` (the default) refuses the whole document
+            on any problem, as :func:`validate_manifest` reports them.
+            ``"skip"`` is what a consumer reading a published manifest uses:
+            the top level (an object, a known ``manifest_version``, the
+            required keys, ``vendors`` an object) must still be valid, but an
+            invalid vendor entry or release record is left out and named in
+            :attr:`SourceManifest.skipped`, so one record a newer producer
+            wrote does not take every other vendor of the source down.  A
+            version listed twice drops every record of that version.
 
     Returns:
         The manifest, each vendor's releases ordered newest first.
 
     Raises:
-        ShimManifestInvalid: When :func:`validate_manifest` reports a problem.
+        ShimManifestInvalid: When :func:`validate_manifest` reports a problem
+            (``"raise"``), or when the top level is invalid (``"skip"``).
+        ValueError: On an unknown *invalid_records* mode.
     """
-    problems = validate_manifest(document)
-    if problems:
-        raise ShimManifestInvalid(problems)
+    if invalid_records not in ("raise", "skip"):
+        raise ValueError(
+            f"invalid_records must be 'raise' or 'skip', not {invalid_records!r}"
+        )
+    skipped: list[str] = []
+    dropped: dict[str, str] = {}
+    if invalid_records == "raise":
+        problems = validate_manifest(document)
+        if problems:
+            raise ShimManifestInvalid(problems)
+        entries = {
+            vendor: list(entry["versions"])
+            for vendor, entry in document["vendors"].items()
+        }
+    else:
+        entries = _valid_records(document, skipped, dropped)
     vendors: dict[str, tuple[VendorRelease, ...]] = {}
-    for vendor, entry in document["vendors"].items():
-        releases = [_release(vendor, raw) for raw in entry["versions"]]
+    for vendor, raws in entries.items():
+        releases = [_release(vendor, raw) for raw in raws]
         releases.sort(key=lambda r: version_key(r.version), reverse=True)
         vendors[vendor] = tuple(releases)
     return SourceManifest(
@@ -343,7 +426,120 @@ def parse_manifest(document: Any) -> SourceManifest:
         generated_at=document["generated_at"],
         vendors=vendors,
         manifest_version=document["manifest_version"],
+        skipped=tuple(skipped),
+        dropped=dropped,
     )
+
+
+def _valid_records(
+    document: Any, skipped: list[str], dropped: dict[str, str]
+) -> dict[str, list[Any]]:
+    """The release records of *document* that are valid one by one.
+
+    The top level is checked against the schema without its per-vendor part;
+    a problem there raises.  Each vendor key, vendor entry and release record
+    is then checked on its own, and what fails is reported in *skipped*; a
+    vendor left with nothing lands in *dropped* with its first reason.
+
+    Raises:
+        ShimManifestInvalid: When the top level is invalid.
+    """
+    root = _schema()
+    problems = _top_level_problems(document, root)
+    if problems:
+        raise ShimManifestInvalid(problems)
+    kept: dict[str, list[Any]] = {}
+    for vendor, entry in document["vendors"].items():
+        problems = _vendor_problems(vendor, entry, root)
+        if problems:
+            skipped.append(f"vendor {vendor!r} skipped: {'; '.join(problems)}")
+            dropped[vendor] = problems[0]
+            continue
+        others = frozenset(document["vendors"]) - {vendor}
+        first = len(skipped)
+        good = _valid_releases(vendor, list(entry["versions"]), root, skipped, others)
+        if good:
+            kept[vendor] = good
+        else:
+            reason = skipped[first].split(" skipped: ", 1)[1]
+            dropped[vendor] = reason.split("; ", 1)[0]
+    return kept
+
+
+def _top_level_problems(document: Any, root: Mapping[str, Any]) -> list[str]:
+    """Violations of the schema with the per-vendor part taken out."""
+    properties = dict(root.get("properties", {}))
+    properties["vendors"] = {
+        key: value
+        for key, value in properties["vendors"].items()
+        if key not in ("additionalProperties", "propertyNames")
+    }
+    problems: list[str] = []
+    _check(document, {**root, "properties": properties}, "$", root, problems)
+    return problems
+
+
+def _vendor_problems(vendor: str, entry: Any, root: Mapping[str, Any]) -> list[str]:
+    """Violations of one vendor key and entry, its release records aside."""
+    where = f"$.vendors.{vendor}"
+    names = root["properties"]["vendors"].get("propertyNames", {})
+    shape = {k: v for k, v in root["$defs"]["vendor"].items() if k != "properties"}
+    problems: list[str] = []
+    _check(vendor, names, f"$.vendors key {vendor!r}", root, problems)
+    _check(entry, shape, where, root, problems)
+    versions = entry.get("versions") if isinstance(entry, Mapping) else None
+    if not problems and (not isinstance(versions, list) or not versions):
+        problems.append(f"{where}.versions: needs a non-empty array")
+    return problems
+
+
+def _release_problems(
+    vendor: str,
+    index: int,
+    raw: Any,
+    root: Mapping[str, Any],
+    others: frozenset[str],
+) -> list[str]:
+    """Violations of one release record, its shim names' vendor included."""
+    path = f"$.vendors.{vendor}.versions[{index}]"
+    problems: list[str] = []
+    _check(raw, root["$defs"]["release"], path, root, problems)
+    if problems:
+        return problems
+    return _name_problems(f"{path}.shims", raw["shims"], vendor, others)
+
+
+def _valid_releases(
+    vendor: str,
+    records: list[Any],
+    root: Mapping[str, Any],
+    skipped: list[str],
+    others: frozenset[str],
+) -> list[Any]:
+    """The valid release records of one vendor; a version listed twice drops all."""
+    good: list[Any] = []
+    for index, raw in enumerate(records):
+        problems = _release_problems(vendor, index, raw, root, others)
+        if problems:
+            label = raw.get("version") if isinstance(raw, Mapping) else None
+            skipped.append(
+                f"vendor {vendor!r} version {label!r} skipped: {'; '.join(problems)}"
+            )
+            continue
+        good.append(raw)
+    versions = [raw["version"] for raw in good]
+    twice = sorted({v for v in versions if versions.count(v) > 1})
+    for version in twice:
+        skipped.append(
+            f"vendor {vendor!r} version {version!r} skipped: "
+            f"$.vendors.{vendor}: version {version} is listed twice"
+        )
+    good = [raw for raw in good if raw["version"] not in twice]
+    if not good and not twice:
+        skipped.append(
+            f"vendor {vendor!r} skipped: $.vendors.{vendor}: no valid release"
+        )
+    return good
 
 
 def _release(vendor: str, raw: Mapping[str, Any]) -> VendorRelease:
