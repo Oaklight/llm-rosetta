@@ -738,10 +738,18 @@ version. Open, it shows:
   *promoted to …*), and the earlier source that provides the same vendor.
 
 **Install** adds `<source>:<vendor>` to `shims.install` and reloads, which
-installs the vendor. When the source was only implied, it is also added to
-`shims.sources`. **Remove** drops the entries that name the vendor. When a tag,
-`*` or preset entry still selects the vendor, the panel names that entry and
-changes nothing, because that entry selects other vendors too.
+installs the vendor. When the declared `shims.sources` does not name the
+source, the source is written into it too. A config with no `sources` key gets
+the defaults written out with it, so the saved file names every source it
+reads and does not depend on the built-in default list.
+
+**Remove** drops only this source's `<source>:<vendor>` entries. When anything
+else would still select the vendor, the panel names it and changes nothing:
+
+- an unqualified `<vendor>` entry, which every source shares (change it under
+  Sources or in the config file);
+- a tag or `*` entry, which selects other vendors too;
+- a legacy `shims.presets` key that maps to the vendor (remove that package).
 
 **Shims → Sources → Manifest sources** edits both keys at once. Each source has
 a block with a checkbox for every vendor (`<source>:*`), one per tag and one per
@@ -749,11 +757,19 @@ vendor. The field under the blocks adds a catalogue id or a manifest URL, and
 *Remove source* drops a source together with the entries qualified with its id.
 A new URL source is read after the first save. The edits stay a draft until
 **Save**, which writes `shims.sources` and `shims.install` through the
-config-save path (under the config lock) and reloads the sources. Only entries
-qualified with a source are rewritten. An unqualified entry (`opendesign`,
+config-save path (under the config lock) and reloads the sources. Only the
+edited source's qualified entries are rebuilt; every other entry, duplicates
+included, stays as written. An unqualified entry (`opendesign`,
 `tag:tier:free`) reads every source, so it is listed as written; edit it in the
-config file. **Re-read manifests** fetches every manifest again. The raw
-*Directories* and *Remotes* fields below the group work as before.
+config file. The source list is written whenever it differs from the declared
+one, so a config that only implied the defaults gets them written out.
+**Re-read manifests** fetches every manifest again. The raw *Directories* and
+*Remotes* fields below the group work as before.
+
+A save from the panel rewrites the config file as plain JSON, without its
+comments. The file it replaces is kept beside it as `<config>.bak` (one rolling
+copy, replaced on every save; none is written when the file is created), and
+the editor says so under its blocks.
 
 #### Selecting part of a package { #selection }
 
