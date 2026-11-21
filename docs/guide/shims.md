@@ -673,7 +673,27 @@ publish, a renamed tag), the old remote is **not** loaded — it carries code
 built for an older core — and the gateway logs a WARNING and reports the
 selector as a source row marked *not in the manifest*, so the loss is visible
 in the log and on the Shims page. The same holds for any `install` entry that
-matches nothing.
+matches nothing. To spell the presets out, run `llm-rosetta-migrate --config
+config.jsonc` (dry run) and `--write`: each preset becomes its selector, an
+`include` one `<source>:<vendor>` per kept vendor, an `exclude` one
+`!<source>:<vendor>` per dropped vendor, and a shim dropped from a kept vendor
+goes to `shims.disabled`. Comments outside the rewritten keys stay, and the
+comment on the `presets` line moves to `install`. A source is added to a
+declared `shims.sources` only when no entry names it by id or by its catalogue
+manifest URL; an unknown URL may be a mirror, so the tool reports it instead.
+A preset that cannot be converted — unknown, pinned by an explicit remote, or
+one whose selection converts to nothing (an `include` that matches none of its
+vendors) — stays and is reported for a person (exit 1), and so does a
+conversion into an `install`, `disabled` or `sources` that is not an array.
+
+**Display fields.** A release record may carry `label` (1–80 characters, no
+control characters or `<`/`>`) and `logo` (an `https://` URL of at most 512
+characters); the source's builder reads them from the vendor's root
+`provider.yaml` (`group_label`, `logo`). The gateway reads them from the record
+it would install — the pinned one when a pin holds — so a vendor that is not
+installed is still drawn with its name and mark; core keeps no copy. A
+producer's validation refuses a bad value; a gateway drops only the bad field,
+with a WARNING, and keeps the record. Older gateways ignore both keys.
 
 **One bad record does not take a source down.** The gateway reads a published
 manifest record by record. An invalid top level — not an object, an unknown
@@ -750,6 +770,25 @@ accepted in `shims.sources`:
 | `tag:<tag>` | every vendor whose installable record carries the tag; the tag is matched whole |
 | `*` | every vendor |
 | `<source>:` + one of the above | the same, in that source only |
+| `!<vendor>`, `!<source>:<vendor>` | **exclusion**: the vendor is not installed, whatever else selects it |
+| `<source>:<vendor>@<version>` | **pin**: exactly that version |
+
+The vendor is the install unit (one archive, one version, one record) and the
+shim the enable unit inside it (`shims.disabled`). The rule is deterministic:
+an exclusion always wins, wherever it is listed; an explicit vendor entry beats
+a tag or `*` entry, and a pinned one beats an unpinned one; otherwise the first
+matching entry speaks. Only a vendor can be excluded or pinned — `!tag:…`,
+`!*`, a pinned tag and a pinned exclusion are refused. A pin installs exactly
+that version, below the installed one too, and nothing newer replaces it. A pin
+the manifest does not list, or whose `requires` this core cannot meet, logs a
+WARNING and keeps what runs (stale, with the reason); with nothing installed the
+vendor's row fails. Two pins of one vendor with different versions are refused
+the same way, with both named, rather than decided by their order. An entry an
+exclusion or another entry overrode is reported with the winning entry
+(*excluded by shims.install ('!contrib:kilo'); removing that entry brings it
+back*, *already selected by contrib:kilo@0.5.1*), not as *not in the manifest*;
+when a configured provider names an excluded vendor, one WARNING says so and
+the provider's auto-disable reason names the exclusion.
 
 Tags are free-form and written by the source. The two curated sources use
 `tier:free`, `tier:subscription`, `auth:oauth`, `auth:device`,
@@ -763,8 +802,9 @@ inside the gateway process. Add only sources you trust.
 
 #### Managing sources from the admin panel { #panel }
 
-**Shims → Available** opens with one section per source the gateway reads,
-then the legacy preset packages. A source the config only implies (the
+**Shims → Available** opens with one section per source the gateway reads;
+a legacy preset has no card of its own (the vendors it selects say *via
+preset*, and a note names the presets the config still declares). A source the config only implies (the
 defaults, or the source of a mapped preset) is tagged *default*. A source that
 did not answer is tagged *unreachable* and shows the error; one served from
 the cache after a failed fetch is tagged *cached copy*.
@@ -789,13 +829,23 @@ source, the source is written into it too. A config with no `sources` key gets
 the defaults written out with it, so the saved file names every source it
 reads and does not depend on the built-in default list.
 
-**Remove** drops only this source's `<source>:<vendor>` entries. When anything
-else would still select the vendor, the panel names it and changes nothing:
+**Install** also removes an exclusion of the vendor, and adds the entry only
+when nothing else then installs it, so removing a tag-selected vendor and
+installing it back restores the list (a pin is not restored: the toast that
+removed it said *pin dropped*).
 
-- an unqualified `<vendor>` entry, which every source shares (change it under
-  Sources or in the config file);
-- a tag or `*` entry, which selects other vendors too;
-- a legacy `shims.presets` key that maps to the vendor (remove that package).
+**Remove** never refuses. It drops this source's own entries for the vendor
+(pinned or not) and, when a tag, `*`, an unqualified entry or a legacy preset
+would still select it, writes `!<source>:<vendor>`. A preset is first rewritten
+as install entries by the gateway (the same rewrite as `llm-rosetta-migrate`),
+and one toast names what was rewritten; a preset that cannot be rewritten
+refuses the removal with the reason. A vendor the gateway installed because a
+provider names one of its shims names those providers and has no **Remove**.
+
+**Pin this version** writes `<source>:<vendor>@<installed>`; on a pinned
+vendor **Update to X** moves the pin to the newest installable release and
+**Follow latest** drops it. A pin replaces any earlier pin of the vendor. Each
+loaded shim on the card has its enable switch (`shims.disabled`).
 
 **Shims → Sources → Manifest sources** edits both keys at once. Each source has
 a block with a checkbox for every vendor (`<source>:*`), one per tag and one per
