@@ -659,6 +659,36 @@ selector as a source row marked *not in the manifest*, so the loss is visible
 in the log and on the Shims page. The same holds for any `install` entry that
 matches nothing.
 
+**One bad record does not take a source down.** The gateway reads a published
+manifest record by record. An invalid top level — not an object, an unknown
+`manifest_version`, a missing required key, `vendors` not an object — fails the
+whole source (the cached manifest is used, or nothing on a cold cache). An
+invalid vendor entry or release record is skipped with one WARNING naming the
+vendor, the version and the JSON-path reason, and the rest of the manifest is
+used, so a record written by a newer producer does not cost the free tier its
+other vendors; selection only ever sees valid records. A record's shim names
+must belong to its vendor: the vendor key itself (the bare `xai`, `qwen`,
+`moonshot` and `zhipu`), `<vendor>--<name>`, or `<vendor>_<lane>--<name>`
+(`alcf_sophia--chat_completions` under `alcf`); a name with another vendor's
+prefix invalidates the record, and so does a lane prefix that is itself
+another vendor key of the same manifest (`openai` may not publish
+`openai_chatgpt--x` when `openai_chatgpt` is a vendor there too). A selected
+vendor whose every record is invalid is reported as *no valid release:
+<first reason>*; when it already has a good install, that install is kept,
+marked stale with the same reason — a record that goes bad never uninstalls a
+working vendor.
+
+**A vendor that moved out of core is installed by itself.** When a config
+names a shim or quota probe of a vendor that left core
+([Migrating to 0.14](migrating-to-0.14.md#moved-to-contrib)), the gateway adds
+`contrib:<vendor>` to this selection, with or without a `shims` section. It
+adds the `contrib` source too only when the config declares no
+`shims.sources`. An explicit `sources` list is the operator's choice of where
+to fetch from (a mirror, or no egress), so only the selector is added: a
+declared source whose manifest calls itself `contrib` — a mirror — still
+serves the vendor, and when none does, the startup WARNING names `contrib` as
+where the vendor is published.
+
 Which vendors live in core and which in a source, and how a vendor moves
 between the two, is described in [Shim Placement and Maturity](shim-placement.md).
 
@@ -773,27 +803,6 @@ save and not written when the file is created. The gateway never writes
 `<config>.bak`, which belongs to `llm-rosetta-migrate --write` (the
 pre-migration original) and to any copy you make yourself. The editor states
 this under its blocks.
-**One bad record does not take a source down.** The gateway reads a published
-manifest record by record. An invalid top level — not an object, an unknown
-`manifest_version`, a missing required key, `vendors` not an object — fails the
-whole source (the cached manifest is used, or nothing on a cold cache). An
-invalid vendor entry or release record is skipped with one WARNING naming the
-vendor, the version and the JSON-path reason, and the rest of the manifest is
-used, so a record written by a newer producer does not cost the free tier its
-other vendors; selection only ever sees valid records. A record's shim names
-must belong to its vendor: the vendor key itself (the bare `xai`, `qwen`,
-`moonshot` and `zhipu`), `<vendor>--<name>`, or `<vendor>_<lane>--<name>`
-(`alcf_sophia--chat_completions` under `alcf`); a name with another vendor's
-prefix invalidates the record, and so does a lane prefix that is itself
-another vendor key of the same manifest (`openai` may not publish
-`openai_chatgpt--x` when `openai_chatgpt` is a vendor there too).
-
-**A vendor that moved out of core is installed by itself.** When a config
-names a shim or quota probe of a vendor that left core
-([Migrating to 0.14](migrating-to-0.14.md#moved-to-contrib)), the gateway adds
-`contrib:<vendor>` to this selection, and the `contrib` source when
-`sources` does not list it, with or without a `shims` section.
-
 #### Selecting part of a package { #selection }
 
 A package is loaded whole by default. Two optional maps narrow that without

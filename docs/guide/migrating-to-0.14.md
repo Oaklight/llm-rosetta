@@ -256,13 +256,21 @@ did not change, so nothing here is a rename and nothing needs an edit:
 block), a legacy `<type>_providers` entry, or `quota.probe: openai_codex` —
 makes the gateway add `contrib:<vendor>` to the
 [install selection](shims.md#manifest-sources) by itself, with or without a
-`shims` section, and log one INFO line per vendor. A disabled provider counts
+`shims` section, and log one INFO line per vendor. The `contrib` source is
+added as well only when the config declares no `shims.sources`; with an
+explicit list (a mirror, no egress) the vendor must come from a declared
+source. A disabled provider counts
 too. `quota.probe: openai_codex` on an `openai--*` provider resolves against
 the probe `openai_chatgpt` now ships. When contrib cannot be reached and
 nothing is cached yet, the gateway still starts: it logs a WARNING that names
 the vendors and the shims that are missing, and disables the providers that use
-them with a reason naming the move; they come back on the next load that
-reaches the source. Under `shims.strict: true` that failure stops the load, as
+them with a reason naming the actual cause: the shim is switched off by
+`shims.disabled` (it comes back when removed from that list), the vendor was
+not installed (with the reason, such as *not in the manifest* or *no valid
+release*), or the install failed; they come back on the next load that
+reaches the source. A vendor lost only through a face
+(`embeddings_shim: siliconflow--embedding`) disables that endpoint with the
+same wording. Under `shims.strict: true` that failure stops the load, as
 for any source.
 
 **Library.** `get_converter_for_provider("opencode--chat_completions")` and a
@@ -272,7 +280,9 @@ that repository and call `llm_rosetta.api.load_providers_from_dir(<checkout>/pro
 The table is `llm_rosetta.retired_names.MOVED_VENDORS`.
 
 **`llm-rosetta-migrate`.** `--config` and `--scan` report each moved name as a
-`note` ("now in llm-rosetta-shim-contrib; the gateway installs it
+`note` — `--scan` also finds the probe ids `openai_codex` and `opencode_go`,
+and the bare names `xai`, `qwen`, `zhipu` and `moonshot` where they are a whole
+`type`/`shim` value, a provider key or an `install` item — ("now in llm-rosetta-shim-contrib; the gateway installs it
 automatically"), which never counts in the exit code.
 
 ## Find the old names in your code {#find-old-names}
