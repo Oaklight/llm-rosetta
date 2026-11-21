@@ -493,14 +493,66 @@ def register_shims():
 }
 ```
 
-`presets` 条目命名源 catalog 中的包（ALCF、Argo、AskSage），并展开为下方所示的
-remote；同一 URL 的显式 remote 会合并到预设上（显式键优先）。远程源的 `path` 是归档内存放提供方目录的路径（对
+`presets` 条目命名源 catalog 中的包（ALCF、Argo、AskSage、免费端点、Open
+Design），并从其 manifest 源安装（见 [Manifest 源](#manifest-sources)）；若有显式 remote
+指向该包的仓库，则改用下方所示的 remote，并合并到 catalog 条目上（显式键优先）。远程源的 `path` 是归档内存放提供方目录的路径（对
 `llm-rosetta-shim-*` 包来说是 `src/<package>/providers`）。完整字段、缓存与刷新行为、优先级和安全提示见
 [Gateway → 外部 Shim 源](../gateway/configuration.md#external-shim-sources)。
 编程方式可用 `llm_rosetta.shims.rebuild_shims()`（无需配置文件）或
 `llm_rosetta_gateway.apply_shim_sources(raw, config_path)`。
 
 未知 preset 默认跳过并告警，`shims.strict` 为 `true` 时改为拒绝 —— 因此较新版本写出的配置仍能在较旧版本上启动。配置段形状错误（例如把 `presets` 写成字符串）会在加载配置时被拒绝，而不是等到启动时。
+
+### Manifest 源 { #manifest-sources }
+
+自 0.14.0 起，独立包由两个精选的源仓库发布，每个仓库在 `dist` 分支上提供带版本的
+`manifest.json`：
+[llm-rosetta-shim-argonne](https://github.com/Oaklight/llm-rosetta-shim-argonne)
+（`alcf`、`argo`、`asksage`）与
+[llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib)
+（免费端点与 `opendesign`）。manifest 中每个已发布的厂商版本对应一条记录：它的
+shim、标签、成熟度、归档及其 sha256，以及它需要的 core（`requires: {surface, ir}`）。
+格式定义在 `llm_rosetta.contracts.shim_manifest`，schema 随 core 一起发布。
+
+```jsonc
+"shims": {
+  "sources": ["contrib", "argonne"],               // catalog id 或 manifest URL
+  "install": ["opendesign", "tag:tier:free", "argonne:*"]
+}
+```
+
+`install` 条目：
+
+| 条目 | 选中 |
+|------|------|
+| `opendesign` | 所有源中该名称的厂商 |
+| `tag:tier:free` | 最新记录带有该标签的所有厂商；标签整体匹配（`tier:free`、`tier:subscription`、`auth:oauth`、`org:argonne`） |
+| `*` | 所有厂商 |
+| `argonne:*`、`argonne:alcf`、`contrib:tag:tier:free` | 以上任一种，限定在一个源内 |
+
+只写 `install` 而不写 `sources` 时读取 `contrib` 与 `argonne`。源也可以是 manifest
+URL，或对象 `{"url": …, "fallback": …, "token_env": …}`。
+
+对每个选中的厂商，网关安装 `requires` 被本 core 满足的最新版本 —— `surface` 等于
+`llm_rosetta.contracts.SURFACE_VERSION`，`ir` 不高于 `IR_VERSION` —— 并为每个被跳过的
+更新版本记录一条 WARNING，写明原因。归档在装入 shim 缓存前先按记录中的 sha256 校验。
+已安装的版本会一直保留，直到出现更新的*可安装*版本；重读 manifest 从不降级。manifest
+从 jsDelivr（`…@dist/manifest.json`）读取，`raw.githubusercontent.com` 作为备用，并在
+`remote_ttl` 内复用；**重新拉取**会立即重读。源不可达时使用缓存的 manifest 与上一次成功
+的安装；摘要不匹配时绝不安装（保留之前的版本，并标记为过期）。
+
+**core 优先。** 若厂商的 shim 名称已由 core 注册，该厂商不会被安装，日志会写明被忽略的
+源与厂商。记录带有 `promoted_to: core@X` 时，一旦运行中的 core 达到 `X` 或更高版本便不再
+安装，因为 core 已自带该厂商。manifest 安装先于 `paths` 与 `remotes` 加载，因此显式声明的
+源仍会覆盖它。
+
+**旧的预设继续可用。** `shims.presets` 无需修改：`alcf`、`argo`、`asksage` 映射为
+`argonne:<vendor>`，`free` 映射为 `contrib:tag:tier:free`，`opendesign` 映射为
+`contrib:opendesign`；以该预设为键的 `shims.include` / `shims.exclude` 条目随之生效。有两种
+情况仍走原来的 remote 路径：显式 `shims.remotes` 条目指向该包的仓库（用当前 URL 或旧 URL
+均可 —— `llm-rosetta-shim-argo` 现为 `-argonne`，`llm-rosetta-shim-free` 现为
+`-contrib`）；以及映射后的源从未应答过（尚未拉取或缓存过 manifest），此时会附带一条
+WARNING。
 
 #### 只装包的一部分 { #selection }
 
@@ -685,10 +737,10 @@ Open Design 与免费端点的 shim 作为独立包发布 ——
 | 包 | Shim 名称 | 仓库 |
 |----|----------|------|
 | ALCF | `alcf_metis--chat_completions`、`alcf_minerva--chat_completions`、`alcf_sophia--chat_completions` | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
-| Argo | `argo--chat_completions`、`argo--messages`、`argo--open_responses` | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
+| Argo | `argo--chat_completions`、`argo--messages`、`argo--open_responses` | [llm-rosetta-shim-argonne](https://github.com/Oaklight/llm-rosetta-shim-argonne)（原 `-argo`） |
 | AskSage | `asksage--chat_completions`、`asksage--messages`、`asksage--open_responses`、`asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
 | Open Design | `opendesign--chat_completions`、`opendesign--open_responses`、`opendesign--messages` | [llm-rosetta-shim-opendesign](https://github.com/Oaklight/llm-rosetta-shim-opendesign) |
-| 免费端点 | `kilo_free--chat_completions`、`llm7--chat_completions`、`opencode_zen_free--chat_completions`、`ovhcloud--chat_completions` | [llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free) |
+| 免费端点 | `kilo_free--chat_completions`、`llm7--chat_completions`、`opencode_zen_free--chat_completions`、`ovhcloud--chat_completions` | [llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib)（原 `-free`） |
 
 ALCF 与 AskSage 是在 0.14.0 开发周期中引入的，从未出现在任何稳定版的内置集合中；Argo 则自
 v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心。OpenCode 免费通道在 0.14 之后
@@ -718,8 +770,9 @@ ref 而不是提交，下次 `refresh` 允许的拉取才会重新固定。在�
 提示 "refetch to re-pin"。**Refetch** 会立即重新固定，`refresh: "never"` 不会挡住它——
 显式重拉不是该设置管辖的节奏。
 
-`shims.presets` 会把 catalog 键展开为仓库、路径与 token 变量，因此一行即可替代完整的
-remote 配置：
+每个包现在都从其 manifest 源安装（见 [Manifest 源](#manifest-sources)），卡片显示已安装
+的版本与各厂商的成熟度。`shims.presets` 仍按键名指定包；若有显式 remote 指向其仓库，则固定
+走下方的分支归档路径：
 
 ```jsonc
 "shims": {
@@ -732,7 +785,7 @@ remote 配置：
 "shims": {
   "remotes": [
     {
-      "url": "https://github.com/Oaklight/llm-rosetta-shim-argo",
+      "url": "https://github.com/Oaklight/llm-rosetta-shim-argonne",
       "path": "src/llm_rosetta_shim_argo/providers"
     }
   ]
@@ -897,7 +950,7 @@ Responses 格式通道，为拒绝 temperature 的 GPT/o 系列模型按模型�
 ```
 
 !!! note
-    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。三个 Argo shim 位于独立的 [`llm-rosetta-shim-argo`](https://github.com/Oaklight/llm-rosetta-shim-argo) 包中 —— 声明 `"shims": {"presets": ["argo"]}`，配置中的名称即可继续使用。**网关 → Shims → 可安装** 已将该包作为卡片提供。
+    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。三个 Argo shim 位于独立的 [`llm-rosetta-shim-argonne`](https://github.com/Oaklight/llm-rosetta-shim-argonne) 源中（原 `llm-rosetta-shim-argo`） —— 声明 `"shims": {"presets": ["argo"]}`，配置中的名称即可继续使用。**网关 → Shims → 可安装** 已将该包作为卡片提供。
 
 ## 能力标志
 

@@ -54,8 +54,13 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 额外扫描若干
 
 ```jsonc
 "shims": {
-  // 按名称预载 catalog 包：alcf | argo | asksage。每个都会展开为下方的 remote；
-  // 同一 URL 的显式 remote 会覆盖对应的预设。
+  // manifest 源（catalog id 或 manifest URL）以及从中安装的厂商：厂商名、
+  // tag:<标签>、*，均可加 "<source>:" 前缀。只写 install 时读取 contrib 与 argonne。
+  "sources": ["contrib", "argonne"],
+  "install": ["opendesign", "tag:tier:free", "argonne:*"],
+
+  // 按名称预载 catalog 包：alcf | argo | asksage | free | opendesign。每个都映射到
+  // 其 manifest 源；若有显式 remote 指向该包的仓库，则改用该 remote。
   "presets": ["alcf"],
 
   // 可选，按预设键书写：只装包的一部分。条目是 shim 名字或 * 通配；
@@ -168,10 +173,22 @@ stale。不掩盖的只有两类 —— `sha256` 不符，以及 body 不是可�
 `llm_rosetta_gateway.apply_shim_sources(raw, config_path)` 应用一个配置字典。
 `create_app` 也会自动应用该段。
 
-**独立包与预设。** ALCF、AskSage 与 Argo 的 shim 维护在各自的仓库中。`presets`
-命名其中之一（`alcf`、`argo`、`asksage`），并展开为 catalog 中的 remote —— 也就是上面
-`remotes` 示例里的那条条目。预设先被应用，同一 URL 的显式 remote 会合并到对应预设上
-（显式键优先），因此随后叠加固定的 `ref` 或 `sha256` 时不会丢掉 catalog 中的 `path`。发布的
+**Manifest 源。** `sources` 列出 manifest 源：catalog id（`contrib`、`argonne`）、
+manifest URL，或 `{"url", "fallback", "token_env"}`。`install` 从中选择厂商：`<vendor>`、
+`tag:<标签>`（整体匹配，如 `tag:tier:free`）、`*`，均可加 `<source>:` 前缀。网关为每个厂商
+安装 `requires` 与本 core 匹配的最新版本（`surface` 等于 `SURFACE_VERSION`，`ir` 不高于
+`IR_VERSION`），校验归档的 sha256，且只在出现更新的可安装版本时升级。manifest 在
+`remote_ttl` 内复用；源不可达时保留缓存的 manifest 与上一次成功的安装。若厂商带有 core 的
+shim 名称，或其记录写有 `promoted_to: core@X` 且本 core 已达到 `X`，则不会安装。manifest
+安装先于 `paths` 与 `remotes` 加载。见 [Manifest 源](../guide/shims.md#manifest-sources)。
+
+**独立包与预设。** ALCF、AskSage、Argo、免费端点与 Open Design 的 shim 位于 core 之外。
+`presets` 按键名指定其中之一，并在无需修改配置的情况下映射到其 manifest 源：`alcf`、`argo`、
+`asksage` → `argonne:<vendor>`；`free` → `contrib:tag:tier:free`；`opendesign` →
+`contrib:opendesign`。若有显式 remote 指向该包的仓库（当前 URL 或旧名
+`llm-rosetta-shim-argo`、`llm-rosetta-shim-free` 均可），该预设仍走那条 remote，并合并到
+catalog 条目上（显式键优先），因此叠加固定的 `ref` 或 `sha256` 时不会丢掉 catalog 中的
+`path`。映射后的源从未应答过时，预设加载原来的 remote，并附带一条警告。发布的
 仓库都是公开的，预设不带 `token_env`。若提供方配置仍使用这些 shim 却没有声明源，启动时会得到
 一条错误，指明包名、预设与展开后的 remote。管理面板的预设目录（见
 [管理面板 → Shim 源](admin-panel.md#shims)）可一键添加同样的条目。
