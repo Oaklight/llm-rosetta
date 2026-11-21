@@ -10,6 +10,9 @@ One module per contract:
 - :mod:`llm_rosetta.contracts.shim` — the shim data classes
   (:class:`~llm_rosetta.contracts.shim.ProviderShim` and the connection, tools,
   reasoning, quota and batch declarations);
+- :mod:`llm_rosetta.contracts.shim_manifest` — the manifest a shim source
+  repository publishes, its schema, and the rule that picks the newest
+  version this core can run;
 - :mod:`llm_rosetta.contracts.transform` — the transform hook types and the
   primitives a shim's ``transforms.py`` builds from;
 - :mod:`llm_rosetta.contracts.auth` — the credential exchange a shim ships in
