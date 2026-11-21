@@ -96,6 +96,10 @@ from llm_rosetta.shims.providers import (
     plugin_source,
     validate_shim_declaration,
 )
+
+# The four scaffold names are renamed at the import line, so each object keeps
+# its internal name: ``run_scaffold.__name__`` is ``"run"``, and
+# ``add_scaffold_arguments.__name__`` is ``"add_arguments"``.
 from llm_rosetta.shims.scaffold import add_arguments as add_scaffold_arguments
 from llm_rosetta.shims.scaffold import run as run_scaffold
 from llm_rosetta.shims.scaffold import run_check as run_scaffold_check
