@@ -35,12 +35,14 @@ from .preflight import (  # noqa: F401
     _run_preflight,
 )
 
-from .engine import (  # noqa: F401
+from .prepare import (  # noqa: F401
     _inject_stream_flags,
     detect_stream_request,
     extract_model,
     _REQUEST_STAGES,
     _apply_request_stages,
+)
+from .engine import (  # noqa: F401
     close_resources,
     _non_streaming_from_stream,
     handle_non_streaming,
