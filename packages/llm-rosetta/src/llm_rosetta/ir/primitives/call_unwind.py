@@ -17,6 +17,7 @@ Enabled per-provider via ``ProviderShim.unwind_parallel_tool_calls`` and
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from typing import Any
 
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
@@ -91,6 +92,83 @@ def _collect_tool_result_messages(
     return tool_messages, j
 
 
+def _split_batched_results(
+    tool_messages: list[dict[str, Any]],
+) -> list[dict[str, Any]] | None:
+    """Split every multi-result tool message into one message per result.
+
+    Anthropic sends all results of a parallel turn in one message, which
+    stays one ``role: "tool"`` message with several ``tool_result`` parts in
+    IR.  Each split message keeps the original's other keys (``batch_id``
+    and the like) and holds exactly one result.  A message with a single
+    result is passed through as the same object, so the one-result-per-
+    message shape is unchanged.
+
+    Args:
+        tool_messages: The consecutive tool messages after the turn.
+
+    A message whose content is not a list (``None``, a string) is not a
+    batch either: it passes through as one unit, paired by position.
+
+    Returns:
+        One message per ``tool_result`` part, in order; ``None`` when a
+        multi-result message also holds a non-result part, since a split
+        cannot say which result that part belongs to.
+    """
+    units: list[dict[str, Any]] = []
+    for msg in tool_messages:
+        content = msg.get("content")
+        if not isinstance(content, list):
+            # ``None`` or a string is not a batch: one message, paired by
+            # position as before.
+            units.append(msg)
+            continue
+        results = [p for p in content if is_tool_result_part(p)]
+        if len(results) <= 1:
+            units.append(msg)
+            continue
+        if len(results) != len(content):
+            return None
+        rest = {k: v for k, v in msg.items() if k != "content"}
+        units.extend({**rest, "content": [part]} for part in results)
+    return units
+
+
+def _batch_ids_mismatch(
+    tool_call_parts: list[Any],
+    collected: list[dict[str, Any]],
+    units: list[dict[str, Any]],
+) -> bool:
+    """Whether a split batch answers other ids than the turn called.
+
+    Splitting a batch can make the counts match while the ids do not (a
+    duplicated, foreign or missing ``tool_call_id``); the positional fallback
+    would then pair a call with another call\x27s result.  Only a group that
+    held a batch is checked: one result per message keeps the positional
+    pairing it always had.
+    """
+    if len(units) == len(collected):
+        return False
+    call_ids = Counter(p.get("tool_call_id", "") for p in tool_call_parts)
+    result_ids: Counter[str] = Counter()
+    for unit in units:
+        content = unit.get("content")
+        for part in content if isinstance(content, list) else ():
+            if is_tool_result_part(part):
+                result_ids[part.get("tool_call_id", "")] += 1
+    return call_ids != result_ids
+
+
+def _count_result_parts(tool_messages: list[dict[str, Any]]) -> int:
+    """Count the ``tool_result`` parts in list-content tool messages."""
+    count = 0
+    for msg in tool_messages:
+        content = msg.get("content")
+        if isinstance(content, list):
+            count += sum(1 for part in content if is_tool_result_part(part))
+    return count
+
+
 # ---------------------------------------------------------------------------
 # Matching helpers
 # ---------------------------------------------------------------------------
@@ -102,7 +180,8 @@ def _build_result_id_map(
     """Map ``tool_call_id`` → tool result message for O(1) lookup."""
     mapping: dict[str, dict[str, Any]] = {}
     for msg in tool_messages:
-        for part in msg.get("content", []):
+        content = msg.get("content")
+        for part in content if isinstance(content, list) else ():
             if is_tool_result_part(part):
                 tcid = part.get("tool_call_id", "")
                 if tcid:
@@ -223,8 +302,16 @@ def unwind_parallel_tool_calls_ir(
 
         [user, assistant(tc_1), tool(tr_1), assistant(tc_2), tool(tr_2)]
 
+    Results batched in one tool message (Anthropic's shape)::
+
+        [user, assistant(tc_1, tc_2), tool(tr_1, tr_2)]
+
+    are split into one message per result first, so each call is paired
+    with exactly its own result.
+
     Messages without parallel tool calls are passed through unchanged.
-    When tool call count does not match tool result count, the message
+    When the tool call count does not match the ``tool_result`` part count,
+    or a multi-result message also holds a non-result part, the message
     group is left unchanged (safety).
 
     A turn whose non-call parts (text, reasoning) sit after its first call
@@ -266,13 +353,42 @@ def unwind_parallel_tool_calls_ir(
             non_tool_call_parts = [p for p in content if not is_tool_call_part(p)]
             n_calls = len(tool_call_parts)
 
-            # Collect consecutive tool result messages
-            tool_messages, next_index = _collect_tool_result_messages(messages, i + 1)
+            # Collect consecutive tool result messages, then count results,
+            # not messages: one message may batch several results (#1611).
+            collected, next_index = _collect_tool_result_messages(messages, i + 1)
+            tool_messages = _split_batched_results(collected)
+
+            if tool_messages is None:
+                report_loss(
+                    f"Unwind: a tool message after the {n_calls}-call "
+                    "assistant turn batches several results with a "
+                    "non-result part; skipping reorder",
+                    code=DOWNGRADED,
+                    warnings=warnings,
+                )
+                transformed.append(msg)
+                i += 1
+                continue
 
             if len(tool_messages) != n_calls:
+                n_results = _count_result_parts(collected)
                 report_loss(
                     f"Unwind: mismatch — {n_calls} tool calls but "
-                    f"{len(tool_messages)} tool result message(s); "
+                    f"{len(tool_messages)} result unit(s) ({n_results} "
+                    f"tool_result part(s) in {len(collected)} tool message(s)); "
+                    "skipping reorder",
+                    code=DOWNGRADED,
+                    warnings=warnings,
+                )
+                transformed.append(msg)
+                i += 1
+                continue
+
+            if _batch_ids_mismatch(tool_call_parts, collected, tool_messages):
+                report_loss(
+                    f"Unwind: the {n_calls} tool calls and their batched "
+                    "results pair up by count, but the result ids do not "
+                    "match the call ids (duplicate, foreign or missing); "
                     "skipping reorder",
                     code=DOWNGRADED,
                     warnings=warnings,
