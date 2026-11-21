@@ -12,6 +12,7 @@ import json
 import logging
 import tarfile
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -629,7 +630,11 @@ class TestLegacyPresets:
             "'contrib:opendesign' (presets:opendesign) matched no vendor" in m
             for m in logs
         ), logs
-        assert not any("github" in c for c in http.calls)
+        # The freshness guard asks the fallback manifest once; the legacy
+        # remote (a GitHub archive) is never fetched.
+        source = get_shim_source("contrib")
+        assert source is not None
+        assert [c for c in http.calls if "github" in c] == [source.fallback_url]
 
     def test_the_argonne_presets_map_to_their_vendors(self):
         sources = parse_shims_section({"presets": ["alcf", "argo", "asksage"]})
@@ -866,6 +871,16 @@ def _legs_section(*install: str) -> dict[str, Any]:
     }
 
 
+@pytest.fixture
+def clock(monkeypatch):
+    """The clock the shim loader reads; advance ``clock["t"]`` to move it."""
+    from llm_rosetta_gateway.shims import sources as loader
+
+    state = {"t": 1_800_000_000.0}
+    monkeypatch.setattr(loader, "time", SimpleNamespace(time=lambda: state["t"]))
+    return state
+
+
 def _cached_generated_at(tmp_path: Path) -> str:
     (doc,) = tmp_path.rglob("manifests/*/manifest.json")
     return json.loads(doc.read_text())["generated_at"]
@@ -873,6 +888,56 @@ def _cached_generated_at(tmp_path: Path) -> str:
 
 class TestFreshnessGuard:
     """A manifest URL that answers with an old copy (#1660, the CDN lag)."""
+
+    def test_a_stale_primary_without_the_named_vendor_yields_to_the_fallback(
+        self, tmp_path, log_handler
+    ):
+        legs = TwoLegs()
+        legs.publish("other", "0.1.0", ["other--chat_completions"])
+        legs.primary.generated_at = OLD
+        legs.mirror.generated_at = NEW
+        data = _archive("acme", ["acme--chat_completions"])
+        legs.mirror.publish("acme", "0.1.0", ["acme--chat_completions"], data=data)
+
+        report = _apply(tmp_path, _legs_section("contrib:acme"), legs)
+
+        status = _vendor_status(report, "acme")
+        assert status.ok and not status.stale
+        assert status.archive_url == MIRROR_DIST + "0.1.0/acme.tar.gz"
+        assert get_shim("acme--chat_completions") is not None
+        assert legs.manifest_calls() == [MANIFEST, MIRROR]
+        assert _cached_generated_at(tmp_path) == NEW
+        (line,) = [m for m in log_handler.at(logging.INFO) if "using" in m]
+        assert f"using {MIRROR} (generated_at {NEW})" in line
+        assert "does not list acme" in line and OLD in line
+
+    def test_a_tie_keeps_the_primary(self, tmp_path, log_handler):
+        legs = TwoLegs()
+        legs.publish("other", "0.1.0", ["other--chat_completions"])
+        data = _archive("acme", ["acme--chat_completions"])
+        legs.mirror.publish("acme", "0.1.0", ["acme--chat_completions"], data=data)
+
+        report = _apply(tmp_path, _legs_section("contrib:acme"), legs)
+
+        assert _vendor_status(report, "acme").skipped == "not in the manifest"
+        assert any(f"using {MANIFEST}" in m for m in log_handler.at(logging.INFO))
+
+    def test_a_primary_older_than_the_cache_yields_to_a_fresher_fallback(
+        self, tmp_path
+    ):
+        legs = TwoLegs()
+        legs.publish("acme", "0.1.0", ["acme--chat_completions"])
+        legs.primary.generated_at = legs.mirror.generated_at = OLD
+        _apply(tmp_path, _legs_section("acme"), legs)
+        legs.primary.generated_at = "2026-11-21T11:00:00Z"
+        legs.mirror.generated_at = NEW
+        legs.calls.clear()
+
+        report = _apply(tmp_path, _legs_section("acme"), legs, force_refresh=True)
+
+        assert legs.manifest_calls() == [MANIFEST, MIRROR]
+        assert not _vendor_status(report, "acme").stale
+        assert _cached_generated_at(tmp_path) == NEW
 
     def test_a_manifest_older_than_the_cache_never_replaces_it(
         self, tmp_path, log_handler
@@ -934,6 +999,53 @@ class TestFreshnessGuard:
         _apply(tmp_path, _url_section("acme"), http)
         assert http.calls == []
 
+    def test_the_normal_case_requests_one_manifest(self, tmp_path, log_handler):
+        legs = TwoLegs()
+        legs.publish("acme", "0.1.0", ["acme--chat_completions"])
+
+        _apply(tmp_path, _legs_section("contrib:acme"), legs)
+        _apply(tmp_path, _legs_section("contrib:acme"), legs, force_refresh=True)
+
+        assert legs.manifest_calls() == [MANIFEST, MANIFEST]
+        assert not any("using" in m for m in log_handler.at(logging.INFO))
+
+    def test_an_unqualified_selector_does_not_trigger_the_guard(self, tmp_path):
+        legs = TwoLegs()
+        legs.publish("other", "0.1.0", ["other--chat_completions"])
+
+        _apply(tmp_path, _legs_section("acme"), legs)
+
+        assert legs.manifest_calls() == [MANIFEST]
+
+    def test_an_unreachable_fallback_during_the_guard_keeps_the_primary(
+        self, tmp_path, log_handler
+    ):
+        legs = TwoLegs()
+        legs.publish("other", "0.1.0", ["other--chat_completions"])
+        legs.mirror.down = True
+
+        report = _apply(tmp_path, _legs_section("contrib:acme", "contrib:other"), legs)
+
+        assert legs.manifest_calls() == [MANIFEST, MIRROR]
+        assert _vendor_status(report, "other").ok
+        assert _vendor_status(report, "acme").skipped == "not in the manifest"
+        assert any(
+            f"{MANIFEST} answered but it does not list acme; {MIRROR} failed" in m
+            for m in log_handler.at(logging.WARNING)
+        ), log_handler.messages
+
+    def test_a_cached_manifest_without_a_named_vendor_is_refetched(self, tmp_path):
+        legs = TwoLegs()
+        legs.publish("other", "0.1.0", ["other--chat_completions"])
+        _apply(tmp_path, _legs_section("contrib:other"), legs)
+        legs.calls.clear()
+
+        _apply(tmp_path, _legs_section("contrib:other"), legs)
+        assert legs.manifest_calls() == []
+
+        _apply(tmp_path, _legs_section("contrib:other", "contrib:acme"), legs)
+        assert legs.manifest_calls() == [MANIFEST, MIRROR]
+
 
 @pytest.mark.parametrize(
     ("earlier", "later"),
@@ -957,3 +1069,164 @@ def test_generated_at_compares_as_time(earlier, later):
     assert not _older(manifest(later), manifest(earlier))
     assert not _older(manifest(earlier), manifest(earlier))
     assert not _older(manifest("not a time"), manifest(later))
+
+
+class TestFreshnessGuardEdges:
+    """Invalid records, the recheck cooldown and the leg order."""
+
+    def test_a_vendor_only_in_dropped_counts_as_missing(self, tmp_path, log_handler):
+        """A vendor whose every record is invalid is doubt, not presence."""
+        legs = TwoLegs()
+        data = _archive("acme", ["acme--chat_completions"])
+        legs.primary.publish(
+            "acme", "0.1.0", ["acme--chat_completions"], sha256="not-a-digest"
+        )
+        legs.mirror.publish("acme", "0.1.0", ["acme--chat_completions"], data=data)
+        legs.primary.generated_at = OLD
+        legs.mirror.generated_at = NEW
+
+        report = _apply(tmp_path, _legs_section("contrib:acme"), legs)
+
+        assert legs.manifest_calls() == [MANIFEST, MIRROR]
+        status = _vendor_status(report, "acme")
+        assert status.ok and status.archive_url == MIRROR_DIST + "0.1.0/acme.tar.gz"
+        assert any("does not list acme" in m for m in log_handler.at(logging.INFO)), (
+            log_handler.messages
+        )
+
+    def test_a_vendor_no_source_publishes_is_checked_once_per_window(
+        self, tmp_path, clock
+    ):
+        """The missing-vendor recheck has a cooldown."""
+        from llm_rosetta_gateway.shims.manifest_sources import (
+            VENDOR_RECHECK_SECONDS,
+        )
+
+        legs = TwoLegs()
+        legs.publish("acme", "0.1.0", ["acme--chat_completions"])
+        section = _legs_section("contrib:acme", "contrib:ghost")
+
+        _apply(tmp_path, section, legs)
+        assert legs.manifest_calls() == [MANIFEST, MIRROR]
+
+        legs.calls.clear()
+        clock["t"] += VENDOR_RECHECK_SECONDS - 1
+        _apply(tmp_path, section, legs)
+        assert legs.manifest_calls() == []
+
+        clock["t"] += 2
+        _apply(tmp_path, section, legs)
+        assert legs.manifest_calls() == [MANIFEST, MIRROR]
+
+        legs.calls.clear()
+        clock["t"] += 1
+        _apply(tmp_path, section, legs)
+        assert legs.manifest_calls() == []
+
+    def test_refetch_ignores_the_cooldown(self, tmp_path, clock):
+        legs = TwoLegs()
+        legs.publish("acme", "0.1.0", ["acme--chat_completions"])
+        section = _legs_section("contrib:acme", "contrib:ghost")
+        _apply(tmp_path, section, legs)
+        legs.calls.clear()
+        clock["t"] += 1
+
+        _apply(tmp_path, section, legs, force_refresh=True)
+
+        assert legs.manifest_calls() == [MANIFEST, MIRROR]
+
+    def test_a_cooldown_covers_only_the_vendors_it_checked(self, tmp_path, clock):
+        legs = TwoLegs()
+        legs.publish("acme", "0.1.0", ["acme--chat_completions"])
+        _apply(tmp_path, _legs_section("contrib:acme", "contrib:ghost"), legs)
+        legs.calls.clear()
+        clock["t"] += 1
+
+        _apply(
+            tmp_path,
+            _legs_section("contrib:acme", "contrib:ghost", "contrib:phantom"),
+            legs,
+        )
+
+        assert legs.manifest_calls() == [MANIFEST, MIRROR]
+
+    def test_after_the_ttl_the_primary_is_tried_first_again(self, tmp_path, clock):
+        """A fallback win is not sticky past the TTL."""
+        from llm_rosetta_gateway.shims._types import REMOTE_TTL_SECONDS
+
+        legs = TwoLegs()
+        legs.publish("other", "0.1.0", ["other--chat_completions"])
+        data = _archive("acme", ["acme--chat_completions"])
+        legs.mirror.publish("acme", "0.1.0", ["acme--chat_completions"], data=data)
+        legs.primary.generated_at = OLD
+        legs.mirror.generated_at = NEW
+        _apply(tmp_path, _legs_section("contrib:acme"), legs)
+        legs.calls.clear()
+
+        clock["t"] += 60
+        _apply(tmp_path, _legs_section("contrib:acme"), legs, force_refresh=True)
+        assert legs.manifest_calls() == [MIRROR]
+
+        legs.calls.clear()
+        clock["t"] += REMOTE_TTL_SECONDS + 1
+        _apply(tmp_path, _legs_section("contrib:acme"), legs)
+        assert legs.manifest_calls()[0] == MANIFEST
+
+
+class TestTagPresetGuard:
+    """A tag-shaped legacy preset expects the vendors its package shipped."""
+
+    FREE = ("kilo_free", "llm7", "opencode_zen_free", "ovhcloud")
+
+    def _legs(self) -> TwoLegs:
+        source = get_shim_source("contrib")
+        assert source is not None
+        legs = TwoLegs(
+            dist=source.manifest_url.rsplit("/", 1)[0] + "/",
+            mirror_dist=source.fallback_url.rsplit("/", 1)[0] + "/",
+        )
+        for vendor in self.FREE[:2]:
+            legs.publish(
+                vendor, "0.1.0", [f"{vendor}--chat_completions"], tags=["tier:free"]
+            )
+        for vendor in self.FREE[2:]:
+            data = _archive(vendor, [f"{vendor}--chat_completions"])
+            legs.mirror.publish(
+                vendor,
+                "0.1.0",
+                [f"{vendor}--chat_completions"],
+                data=data,
+                tags=["tier:free"],
+            )
+        legs.primary.generated_at = OLD
+        legs.mirror.generated_at = NEW
+        return legs
+
+    def test_the_preset_carries_the_package_vendors(self):
+        package = get_source_package("free")
+        assert package is not None
+        (selector,) = parse_shims_section({"presets": ["free"]}).manifests.selectors
+        assert selector.kind == "tag"
+        assert selector.expected == tuple(package.vendors) == self.FREE
+
+    def test_a_stale_copy_missing_a_preset_vendor_yields_to_the_fallback(
+        self, tmp_path
+    ):
+        legs = self._legs()
+
+        report = _apply(tmp_path, {"presets": ["free"]}, legs)
+
+        assert len(legs.manifest_calls()) == 2
+        assert {s.vendor for s in report.sources if s.ok} == set(self.FREE)
+
+    def test_a_plain_tag_selector_is_not_checked(self, tmp_path):
+        legs = self._legs()
+
+        report = _apply(
+            tmp_path,
+            {"sources": ["contrib"], "install": ["contrib:tag:tier:free"]},
+            legs,
+        )
+
+        assert len(legs.manifest_calls()) == 1
+        assert {s.vendor for s in report.sources if s.ok} == set(self.FREE[:2])
