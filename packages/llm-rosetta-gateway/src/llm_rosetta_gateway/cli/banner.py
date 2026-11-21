@@ -6,7 +6,7 @@ from collections.abc import Sequence
 
 from llm_rosetta.api import __version__ as core_version
 
-from . import __version__ as gateway_version
+from .. import __version__ as gateway_version
 
 BANNER = r"""
  ██╗     ██╗     ███╗   ███╗      ██████╗  ██████╗ ███████╗███████╗████████╗████████╗ █████╗
