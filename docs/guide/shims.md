@@ -564,8 +564,10 @@ ships no `pip` and no `git`) and the shims live in their own repository:
 ```
 
 A `presets` entry names a package from the source catalog (ALCF, Argo,
-AskSage) and expands to the remote shown below; an explicit remote with the same
-URL is merged onto it (explicit keys win). A remote `path` is the directory inside the archive that holds
+AskSage, Free Endpoints, Open Design) and installs it from its manifest source
+(see [Manifest sources](#manifest-sources)); an explicit remote for the
+package's repository keeps it on the remote shown below, merged onto the
+catalog entry (explicit keys win). A remote `path` is the directory inside the archive that holds
 the provider directories (for the `llm-rosetta-shim-*` packages that is
 `src/<package>/providers`). See
 [Gateway → External Shim Sources](../gateway/configuration.md#external-shim-sources)
@@ -577,6 +579,66 @@ An unknown preset is skipped with a warning unless `shims.strict` is `true`,
 which refuses it, so a config written by a newer build still starts on an
 older one. A malformed section (a `presets` string, say) is refused when the
 config loads rather than at startup.
+
+### Manifest sources { #manifest-sources }
+
+Since 0.14.0 the standalone packages are published from two curated source
+repositories, each with a versioned `manifest.json` on its `dist` branch:
+[llm-rosetta-shim-argonne](https://github.com/Oaklight/llm-rosetta-shim-argonne)
+(`alcf`, `argo`, `asksage`) and
+[llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib)
+(the free endpoints and `opendesign`). The manifest has one record per released
+vendor version: its shims, tags, maturity, the archive and its sha256, and the
+core it needs (`requires: {surface, ir}`). The format is
+`llm_rosetta.contracts.shim_manifest` and its schema ships with core.
+
+```jsonc
+"shims": {
+  "sources": ["contrib", "argonne"],               // catalogue ids or manifest URLs
+  "install": ["opendesign", "tag:tier:free", "argonne:*"]
+}
+```
+
+`install` entries:
+
+| Entry | Selects |
+|-------|---------|
+| `opendesign` | the vendor of that name, in every source |
+| `tag:tier:free` | every vendor whose newest record carries that tag; tags are matched whole (`tier:free`, `tier:subscription`, `auth:oauth`, `org:argonne`) |
+| `*` | every vendor |
+| `argonne:*`, `argonne:alcf`, `contrib:tag:tier:free` | any of the above, limited to one source |
+
+`install` without `sources` reads `contrib` and `argonne`. A source may also be
+a manifest URL, or an object `{"url": …, "fallback": …, "token_env": …}`.
+
+For each selected vendor the gateway installs the newest version whose
+`requires` this core satisfies — `surface` equal to
+`llm_rosetta.contracts.SURFACE_VERSION` and `ir` not above `IR_VERSION` — and
+logs a WARNING for each newer version it passed over, with the reason. The
+archive is checked against the record's sha256 before it is installed into the
+shim cache. The installed version is kept until a newer *installable* version
+appears; re-reading the manifest never downgrades it. The manifest is read from
+jsDelivr (`…@dist/manifest.json`), with `raw.githubusercontent.com` as the
+fallback, and reused for `remote_ttl`; **Refetch** reads it at once. When the
+source cannot be reached the cached manifest and the last good install are used,
+and a digest mismatch never installs (the previous version stays, marked
+stale).
+
+**Core wins.** A vendor whose shim names core already registers is not
+installed, and the log names the source and vendor it ignored. A record that
+carries `promoted_to: core@X` is not installed once the running core is at `X`
+or later, because core then ships the vendor. A manifest install loads before
+`paths` and `remotes`, so an explicit source still overrides it.
+
+**Legacy presets keep working.** `shims.presets` needs no edit: `alcf`,
+`argo` and `asksage` map to `argonne:<vendor>`, `free` to
+`contrib:tag:tier:free`, and `opendesign` to `contrib:opendesign`; a
+`shims.include` / `shims.exclude` entry keyed by the preset travels with it. Two
+cases stay on the old remote path: a package an explicit `shims.remotes` entry
+names (by its current or its old repository URL — `llm-rosetta-shim-argo` is now
+`-argonne` and `llm-rosetta-shim-free` is now `-contrib`), and, with a WARNING,
+a mapped preset whose source has never answered (no manifest fetched or cached
+yet).
 
 #### Selecting part of a package { #selection }
 
@@ -815,10 +877,10 @@ Five shim sets live in their own repositories rather than in core:
 | Package | Shim names | Repository |
 |---------|------------|------------|
 | ALCF | `alcf_metis--chat_completions`, `alcf_minerva--chat_completions`, `alcf_sophia--chat_completions` | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
-| Argo | `argo--chat_completions`, `argo--messages`, `argo--open_responses` | [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo) |
+| Argo | `argo--chat_completions`, `argo--messages`, `argo--open_responses` | [llm-rosetta-shim-argonne](https://github.com/Oaklight/llm-rosetta-shim-argonne) (formerly `-argo`) |
 | AskSage | `asksage--chat_completions`, `asksage--messages`, `asksage--open_responses`, `asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
 | Open Design | `opendesign--chat_completions`, `opendesign--open_responses`, `opendesign--messages` | [llm-rosetta-shim-opendesign](https://github.com/Oaklight/llm-rosetta-shim-opendesign) |
-| Free Endpoints | `kilo_free--chat_completions`, `llm7--chat_completions`, `opencode_zen_free--chat_completions`, `ovhcloud--chat_completions` | [llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free) |
+| Free Endpoints | `kilo_free--chat_completions`, `llm7--chat_completions`, `opencode_zen_free--chat_completions`, `ovhcloud--chat_completions` | [llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib) (formerly `-free`) |
 
 ALCF and AskSage were introduced during the 0.14.0 development cycle and never
 appeared in a stable release's built-in set; Argo had shipped built in since
@@ -866,8 +928,11 @@ that `refresh` allows. Until then its badge reads *Check failed* with
 not stand in its way: an explicit refetch is not the schedule that setting
 governs.
 
-`shims.presets` expands a catalog key into the repository, path and token
-variable, so one line replaces the expanded remote:
+Each package now installs from its manifest source (see
+[Manifest sources](#manifest-sources)); the card shows the installed version
+and the vendors' maturity. `shims.presets` still names a package by its key,
+and an explicit remote for its repository pins it to the branch-archive path
+below:
 
 ```jsonc
 "shims": {
@@ -880,7 +945,7 @@ variable, so one line replaces the expanded remote:
 "shims": {
   "remotes": [
     {
-      "url": "https://github.com/Oaklight/llm-rosetta-shim-argo",
+      "url": "https://github.com/Oaklight/llm-rosetta-shim-argonne",
       "path": "src/llm_rosetta_shim_argo/providers"
     }
   ]
@@ -971,7 +1036,7 @@ Override the shim's `connection.base_url` in your gateway config:
 ```
 
 !!! note
-    The default URL (`https://apps.inside.anl.gov/argoapi/`) is only reachable from within the ANL network. The three Argo shims ship in the standalone [`llm-rosetta-shim-argo`](https://github.com/Oaklight/llm-rosetta-shim-argo) package — declare `"shims": {"presets": ["argo"]}` and the names in your config keep working. **Gateway → Shims → Available** offers that package as a card.
+    The default URL (`https://apps.inside.anl.gov/argoapi/`) is only reachable from within the ANL network. The three Argo shims ship in the standalone [`llm-rosetta-shim-argonne`](https://github.com/Oaklight/llm-rosetta-shim-argonne) source (formerly `llm-rosetta-shim-argo`) — declare `"shims": {"presets": ["argo"]}` and the names in your config keep working. **Gateway → Shims → Available** offers that package as a card.
 
 ## Reasoning Configuration
 

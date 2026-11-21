@@ -55,8 +55,15 @@ without installing anything into the gateway image.
 
 ```jsonc
 "shims": {
-  // Preload a catalog package by name: alcf | argo | asksage. Each expands to
-  // its remote below; an explicit remote with the same URL overrides the preset.
+  // Manifest sources (catalogue ids or manifest URLs) and the vendors to
+  // install from them: a vendor name, tag:<tag>, *, each optionally behind
+  // "<source>:". install without sources reads contrib and argonne.
+  "sources": ["contrib", "argonne"],
+  "install": ["opendesign", "tag:tier:free", "argonne:*"],
+
+  // Preload a catalog package by name: alcf | argo | asksage | free | opendesign.
+  // Each maps to its manifest source; an explicit remote for the package's
+  // repository keeps it on that remote instead.
   "presets": ["alcf"],
 
   // Optional, keyed by preset: install only part of a package. Entries are shim
@@ -205,12 +212,29 @@ startup instead.
 remotes directly (no config file needed); `llm_rosetta_gateway.apply_shim_sources(raw, config_path)`
 applies a config dict. `create_app` also applies the section automatically.
 
-**Standalone packages and presets.** The ALCF, AskSage and Argo shims ship in
-their own repositories. `presets` names one of them (`alcf`, `argo`, `asksage`)
-and expands to the catalog remote, which is exactly the `remotes` entry shown
-above. Presets are applied first and an explicit remote with the same URL is
-merged onto its preset (explicit keys win), so a pinned `ref` or `sha256` layers
-on without losing the catalog `path`. The published repositories are public, so
+**Manifest sources.** `sources` lists manifest sources: a catalogue id
+(`contrib`, `argonne`), a manifest URL, or `{"url", "fallback", "token_env"}`.
+`install` selects vendors from them: `<vendor>`, `tag:<tag>` (matched whole,
+e.g. `tag:tier:free`), `*`, each optionally behind `<source>:`. Per vendor the
+gateway installs the newest version whose `requires` matches this core
+(`surface` equal to `SURFACE_VERSION`, `ir` not above `IR_VERSION`), checks the
+archive's sha256, and upgrades only when a newer installable version appears.
+The manifest is reused for `remote_ttl`; an unreachable source keeps the cached
+manifest and the last good install. A vendor that ships a core shim name, or
+whose record says `promoted_to: core@X` with this core at `X` or later, is not
+installed. Manifest installs load before `paths` and `remotes`. See
+[Manifest sources](../guide/shims.md#manifest-sources).
+
+**Standalone packages and presets.** The ALCF, AskSage, Argo, free-endpoint and
+Open Design shims ship outside core. `presets` names one of them by key and maps
+to its manifest source with no config edit: `alcf`, `argo`, `asksage` →
+`argonne:<vendor>`; `free` → `contrib:tag:tier:free`; `opendesign` →
+`contrib:opendesign`. An explicit remote for the package's repository — by its
+current URL or by the old name (`llm-rosetta-shim-argo`, `llm-rosetta-shim-free`)
+— keeps the preset on that remote, merged onto the catalog entry (explicit keys
+win), so a pinned `ref` or `sha256` layers on without losing the catalog
+`path`. While a mapped preset's source has never answered, the preset loads its
+old remote, with a warning. The published repositories are public, so
 the presets carry no `token_env`. A
 provider config that still names one of these shims without a declared source
 fails at startup with an error naming the package, the preset and the expanded
