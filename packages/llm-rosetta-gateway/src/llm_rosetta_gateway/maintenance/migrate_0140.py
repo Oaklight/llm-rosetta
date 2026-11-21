@@ -661,8 +661,14 @@ def _read_text(path: Path) -> tuple[str, bool]:
 def _backup_name(path: Path) -> Path:
     """``<file>.bak``, or a timestamped name when that one is taken."""
     bak = path.with_name(path.name + ".bak")
-    if bak.exists():
-        bak = path.with_name(f"{path.name}.bak-{time.strftime('%Y%m%dT%H%M%S')}")
+    if not bak.exists():
+        return bak
+    stamp = time.strftime("%Y%m%dT%H%M%S")
+    bak = path.with_name(f"{path.name}.bak-{stamp}")
+    n = 1
+    while bak.exists():  # two runs inside one second
+        bak = path.with_name(f"{path.name}.bak-{stamp}-{n}")
+        n += 1
     return bak
 
 
@@ -903,6 +909,10 @@ def migrate_db(path: Path, write: bool = False, force: bool = False) -> DbResult
     except sqlite3.Error as exc:
         result.error = f"{path}: {exc}"
         return result
+    except OSError as exc:
+        # Creating the backup file: a full disk, a read-only directory.
+        result.error = f"{path}: could not write the backup: {exc}"
+        return result
 
 
 def _migrate_open(path: Path, write: bool, result: DbResult) -> DbResult:
@@ -938,13 +948,31 @@ def _backup_db(path: Path, result: DbResult) -> None:
     still reads the committed state, which is what the backup should hold.
     """
     backup = _backup_name(path)
-    source = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    target = sqlite3.connect(str(backup))
+    # The copy holds the same rows as the database, so it gets exactly the
+    # database's permission bits: sqlite would create it with the umask's
+    # (often 0644), which leaves a world-readable copy beside a 0600 original.
+    # ``open`` filters its mode through the umask, hence the ``fchmod``.
+    # ``O_EXCL`` keeps the never-overwrite rule even when two runs race.
+    mode = path.stat().st_mode & 0o777
+    fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
     try:
-        source.backup(target)
+        os.fchmod(fd, mode)
     finally:
-        target.close()
+        os.close(fd)
+    done = False
+    source = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        target = sqlite3.connect(str(backup))
+        try:
+            source.backup(target)
+        finally:
+            target.close()
+        done = True
+    finally:
         source.close()
+        if not done:
+            # A copy that did not complete is not a backup; leave nothing behind.
+            backup.unlink(missing_ok=True)
     result.backup = str(backup)
 
 
