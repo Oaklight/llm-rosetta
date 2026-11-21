@@ -157,7 +157,7 @@ class TestNonLlmFidelityShadow:
     def _propagate(self, monkeypatch):
         # The gateway logger sets propagate=False; caplog needs it to reach
         # the root handler.
-        from llm_rosetta_gateway.logging import _logger
+        from llm_rosetta_gateway.observability.logging import _logger
 
         monkeypatch.setattr(_logger, "propagate", True)
 

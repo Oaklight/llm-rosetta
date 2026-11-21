@@ -121,7 +121,7 @@ def prepare_failover(
         recording what the attempt spends, or ``None`` when there will not be
         one.
     """
-    from ..logging import get_logger
+    from ..observability.logging import get_logger
     from .errors import RefusalScope
 
     if config is None:
@@ -244,7 +244,7 @@ def record_failover(
     actually received.
     """
     from ..lifecycle import current_lifecycle
-    from ..logging import get_logger
+    from ..observability.logging import get_logger
 
     try:
         scope = getattr(decision.scope, "value", None)

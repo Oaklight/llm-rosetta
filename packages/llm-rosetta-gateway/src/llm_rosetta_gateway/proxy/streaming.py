@@ -16,7 +16,7 @@ from llm_rosetta.contracts.routing import ResolvedRoute
 from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta.contracts.usage import usage_columns
 
-from ..logging import (
+from ..observability.logging import (
     get_logger,
     log_stream_summary,
 )

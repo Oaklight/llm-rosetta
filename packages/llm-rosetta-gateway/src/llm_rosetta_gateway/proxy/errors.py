@@ -21,7 +21,7 @@ from ..middleware.error_format import (
     detect_api_format_from_provider,
     format_error_response,
 )
-from ..logging import (
+from ..observability.logging import (
     get_logger,
     log_upstream_error,
 )

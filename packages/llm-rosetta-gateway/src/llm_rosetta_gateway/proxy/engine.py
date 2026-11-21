@@ -19,7 +19,7 @@ from llm_rosetta.contracts.routing import ResolvedRoute
 from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta_gateway.observability.error_dump import dump_error
 
-from ..logging import (
+from ..observability.logging import (
     get_logger,
     log_converted_request,
     log_original_request,

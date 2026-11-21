@@ -8,7 +8,7 @@ from typing import Any
 from llm_rosetta.api import ProviderType
 
 
-from ..logging import (
+from ..observability.logging import (
     get_logger,
 )
 from ..transport import (

@@ -24,7 +24,7 @@ from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from ..config import GatewayConfig, TypedRoute
 from ..lifecycle import begin_typed, finish_typed
-from ..logging import get_logger
+from ..observability.logging import get_logger
 from ..middleware.headers import build_upstream_extra_headers, get_request_id
 from ..transport import UpstreamConnectionError, UpstreamTimeoutError, UpstreamTransport
 from ._fidelity import check_same_format_fidelity

@@ -19,7 +19,7 @@ from functools import cache
 from types import SimpleNamespace
 from typing import Any, ClassVar
 
-from ..logging import get_logger
+from ..observability.logging import get_logger
 from ..middleware.error_format import is_admin_path
 from ..middleware.headers import get_request_id
 from ..middleware.request_context import extract_client_ip, request_context_var

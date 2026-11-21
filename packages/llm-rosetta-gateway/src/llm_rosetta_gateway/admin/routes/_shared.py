@@ -458,7 +458,9 @@ async def _reload_gateway_config(
     _sync_auth_middleware(request.app, new_config)
 
     # Hot-reload log level
-    from llm_rosetta_gateway.logging import setup_logging as _setup_logging
+    from llm_rosetta_gateway.observability.logging import (
+        setup_logging as _setup_logging,
+    )
 
     _setup_logging(
         verbose=new_config.verbose,

@@ -37,7 +37,7 @@ from ..lifecycle import (
     finish_typed,
     instrumented_handler,
 )
-from ..logging import get_logger
+from ..observability.logging import get_logger
 from ..middleware.auth import api_key_context_var
 from ..middleware.headers import build_upstream_extra_headers, get_request_id
 from ..proxy import error_response_for_source

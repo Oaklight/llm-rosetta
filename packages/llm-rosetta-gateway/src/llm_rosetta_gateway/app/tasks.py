@@ -14,7 +14,7 @@ from llm_rosetta_gateway._vendor.httpserver import (
     App,
 )
 
-from ..logging import get_logger
+from ..observability.logging import get_logger
 
 
 logger = get_logger()

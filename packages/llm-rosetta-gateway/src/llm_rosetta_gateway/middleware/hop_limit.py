@@ -16,7 +16,7 @@ from llm_rosetta_gateway._vendor.httpserver import JSONResponse
 
 from .headers import MAX_HOPS, get_hop_count
 from .request_context import request_context_var
-from ..logging import get_logger
+from ..observability.logging import get_logger
 
 logger = get_logger()
 

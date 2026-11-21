@@ -153,7 +153,7 @@ def gateway_warnings():
 
     That logger is created with ``propagate = False`` — in the server it owns
     its handler — so caplog, which listens on the root logger, only saw these
-    warnings while ``llm_rosetta_gateway.logging`` had not been imported yet in
+    warnings while ``llm_rosetta_gateway.observability.logging`` had not been imported yet in
     the process.  Whether it had been is decided by the rest of the run, which
     is why these three tests passed alone and failed in a full run.
 
