@@ -96,7 +96,9 @@ def test_every_retired_name_migrates(row: retired_names.RetiredName) -> None:
     # A second run finds nothing to do.
     again = mig.migrate_config_text(result.new_text)
     assert not again.changed
-    assert again.items == []
+    # A replacement whose vendor moved to contrib (#1660) is reported as a
+    # note on every run; a note is not work left to do.
+    assert [i for i in again.items if i.action != "note"] == []
 
 
 def _doc(*lines: str) -> str:
