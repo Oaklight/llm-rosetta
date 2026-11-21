@@ -101,6 +101,10 @@ def get_converter_for_provider(provider: str):
     retired_names.check_not_retired(
         provider, retired_names.PROVIDER_TYPE, retired_names.SHIM
     )
+    # A shim whose vendor left core (#1660) is not a typo: say where it went.
+    moved = retired_names.moved_shim_message(provider)
+    if moved is not None:
+        raise ValueError(f"Unsupported provider: {provider}; {moved}")
     raise ValueError(f"Unsupported provider: {provider}")
 
 
