@@ -169,8 +169,30 @@ def _src_roots(root: Path) -> list[Path]:
     return found
 
 
+def _core_root(root: Path) -> Path:
+    """The source directory of *root* that holds ``llm_rosetta``.
+
+    Named by what it holds rather than by its position in
+    :func:`_src_roots`, so reordering the candidates cannot make the origin
+    check below compare against the gateway root.
+    """
+    core = next(
+        (path for path in _src_roots(root) if (path / "llm_rosetta").is_dir()),
+        None,
+    )
+    if core is None:
+        raise SystemExit(f"{root} has no llm_rosetta source directory")
+    return core
+
+
 def dump_surface(root: Path) -> dict:
-    src = _src_roots(root)[0]
+    src = _core_root(root)
+    # The tree's roots go to the front of ``sys.path``; this ordering is what
+    # makes the dump measure *root* and not an installed copy (an editable
+    # install's finder sits behind the path entries).  The two origin checks
+    # below are a backstop, not the protection: while the roots are first they
+    # can only fire for a shadow inside the checkout itself, such as a stray
+    # ``llm_rosetta_gateway`` directory on an earlier root of the same tree.
     for path in reversed(_src_roots(root)):
         sys.path.insert(0, str(path))
 

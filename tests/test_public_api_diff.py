@@ -6,6 +6,7 @@ import ast
 import importlib
 import importlib.util
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -407,3 +408,51 @@ def test_src_roots_of_an_old_layout_tree_has_only_the_core_root(tmp_path):
 def test_src_roots_rejects_a_tree_without_sources(tmp_path):
     with pytest.raises(SystemExit):
         api._src_roots(tmp_path)
+
+
+def test_core_root_is_named_by_what_it_holds(tmp_path):
+    _make_packages_tree(tmp_path)
+    assert api._core_root(tmp_path) == (tmp_path / "packages/llm-rosetta/src").resolve()
+
+
+def test_core_root_rejects_a_gateway_only_tree(tmp_path):
+    (tmp_path / "packages/llm-rosetta-gateway/src/llm_rosetta_gateway").mkdir(
+        parents=True
+    )
+    with pytest.raises(SystemExit, match="no llm_rosetta source directory"):
+        api._core_root(tmp_path)
+
+
+def _copy_clean_tree(destination: Path) -> Path:
+    """Copy the two source roots into a tree no editable install points at."""
+    ignore = shutil.ignore_patterns("__pycache__", "*.egg-info", "*.pyc")
+    for package in ("llm-rosetta", "llm-rosetta-gateway"):
+        shutil.copytree(
+            REPO_ROOT / "packages" / package / "src",
+            destination / "packages" / package / "src",
+            ignore=ignore,
+        )
+    return destination
+
+
+def test_the_script_runs_against_a_clean_tree(tmp_path):
+    """``--base <tree>`` on a bare copy runs end to end (#1644 review, #1630).
+
+    CI reaches the base through ``--base-ref`` and a git worktree; a plain
+    ``--base`` directory is the path that once died with ``ImportError``
+    while the installed copy masked it.  The copy has no editable install,
+    so every module must come from the copy itself (the dump's origin checks
+    fail the run otherwise), and a tree compared with itself has no finding.
+    """
+    tree = _copy_clean_tree(tmp_path / "tree")
+    allowlist = tmp_path / "allowlist.json"
+    allowlist.write_text('{"acknowledged": []}', encoding="utf-8")
+
+    surface = api.dump_in_subprocess(tree)
+    assert {name: entry["status"] for name, entry in surface.items()} == {
+        name: "ok" for name in api.COMPARED_MODULES
+    }
+    status = api.main(
+        ["--base", str(tree), "--head", str(tree), "--allowlist", str(allowlist)]
+    )
+    assert status == 0
