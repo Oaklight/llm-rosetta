@@ -13,6 +13,12 @@ repository that has no copy yet is a warning until the rollout finishes, and a
 failure once `--require-all` is passed (which the nightly job will do as soon
 as all five carry the file).
 
+A package published from a manifest source repository (#1660: `argonne`,
+`contrib`) is not checked: those repositories release through their own
+`release.yml`, which writes `dist/manifest.json`, and carry no
+`publish-branch.yml`.  The run names each skipped package, so the scope of the
+check is visible in its output.
+
 Usage::
 
     python scripts/dev/check_shim_workflow.py                  # token from $GITHUB_TOKEN
@@ -212,6 +218,28 @@ def report(
     return 0
 
 
+def split_packages(
+    packages: Iterable, source_repos: Iterable[str]
+) -> tuple[list, list]:
+    """Split the catalogue into branch-published and manifest-published packages.
+
+    Args:
+        packages: The ``ShimSourcePackage`` records.
+        source_repos: The repository URLs of the manifest sources.
+
+    Returns:
+        ``(checked, skipped)``, each in catalogue order.
+    """
+    manifest = {_slug(repo).lower() for repo in source_repos}
+    checked: list = []
+    skipped: list = []
+    for package in packages:
+        (skipped if _slug(package.repo).lower() in manifest else checked).append(
+            package
+        )
+    return checked, skipped
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the comparison.
 
@@ -241,11 +269,19 @@ def main(argv: list[str] | None = None) -> int:
 
     sys.path.insert(0, str(ROOT / "packages/llm-rosetta-gateway/src"))
     sys.path.insert(0, str(ROOT / "packages/llm-rosetta/src"))
-    from llm_rosetta_gateway.shims.catalog import SHIM_SOURCE_PACKAGES
+    from llm_rosetta_gateway.shims.catalog import SHIM_SOURCE_PACKAGES, SHIM_SOURCES
 
+    packages, skipped = split_packages(
+        SHIM_SOURCE_PACKAGES, [source.repo for source in SHIM_SOURCES]
+    )
+    for package in skipped:
+        print(
+            f"skip    {package.key}: {package.repo} publishes a manifest "
+            "(release.yml), not a branch archive"
+        )
     master = MASTER.read_bytes()
     if args.from_dir:
-        copies = _load_saved(Path(args.from_dir), list(SHIM_SOURCE_PACKAGES))
+        copies = _load_saved(Path(args.from_dir), packages)
     else:
         copies = [
             Copy(
@@ -253,7 +289,7 @@ def main(argv: list[str] | None = None) -> int:
                 repo=package.repo,
                 content=fetch_copy(package.repo, token=args.token),
             )
-            for package in SHIM_SOURCE_PACKAGES
+            for package in packages
         ]
     agreeing, missing, differing = compare_copies(master, copies)
     return report(master, agreeing, missing, differing, require_all=args.require_all)
