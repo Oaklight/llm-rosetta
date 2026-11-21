@@ -25,7 +25,7 @@ from typing import Any
 
 import pytest
 
-from llm_rosetta.shims.auth_exchange import AuthContext, InteractiveSetupRequired
+from llm_rosetta.contracts.auth import AuthContext, InteractiveSetupRequired
 
 MODULE_PATH = (
     Path(__file__).resolve().parent.parent
@@ -528,7 +528,7 @@ class TestTheExchangeContract:
 
     def test_the_base_class_offers_none_of_the_optional_half(self):
         """Presence is not the question: the members exist and refuse."""
-        from llm_rosetta.shims.auth_exchange import BaseAuthExchange
+        from llm_rosetta.contracts.auth import BaseAuthExchange
 
         exchange = BaseAuthExchange()
 

@@ -164,7 +164,7 @@ async def _probe_secret(
         control credential reports the quota unsupported rather than probing
         with the wrong one.
     """
-    from llm_rosetta.shims.auth_exchange import (
+    from llm_rosetta.contracts.auth import (
         AuthExchangeError,
         InteractiveSetupRequired,
         credential_for,
@@ -482,7 +482,7 @@ def note_upstream_quota_error(
     # no key to demote, but there may be another provider to try.
     if getattr(pinfo, "keyless", False):
         if status_code == 429:
-            from llm_rosetta.shims.quota_probe import InBandSignal
+            from llm_rosetta.contracts.quota import InBandSignal
 
             return InBandSignal(cooldown_seconds=60, reason="keyless lane rate limited")
         return None

@@ -39,7 +39,7 @@ from ..routing.failover import (
 )
 
 if TYPE_CHECKING:
-    from llm_rosetta.routing import ResolvedRoute
+    from llm_rosetta.contracts.routing import ResolvedRoute
 
     from ..config import GatewayConfig
     from ..routing import SelectionContext

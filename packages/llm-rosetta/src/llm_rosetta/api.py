@@ -7,10 +7,10 @@ may move in any release.
 The five allowed import paths are:
 
 - ``llm_rosetta.api`` (this module)
-- ``llm_rosetta.routing``
-- ``llm_rosetta.observability.usage`` (the package, never its submodules)
-- ``llm_rosetta.shims.auth_exchange``
-- ``llm_rosetta.shims.quota_probe``
+- ``llm_rosetta.contracts.routing``
+- ``llm_rosetta.contracts.usage`` (the package, never its submodules)
+- ``llm_rosetta.contracts.auth``
+- ``llm_rosetta.contracts.quota``
 
 The four contract modules stay where they are and are not re-exported here, so
 each name has one home.

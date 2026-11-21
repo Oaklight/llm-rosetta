@@ -7,7 +7,7 @@ rather than two spellings of one.
 
 ::
 
-    from llm_rosetta.observability import UsageLedger
+    from llm_rosetta.contracts.usage import UsageLedger
 
     ledger = UsageLedger()
     ledger.record(resp["usage"], model="gpt-5-nano", subject="batch-job")

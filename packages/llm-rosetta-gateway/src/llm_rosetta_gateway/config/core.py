@@ -12,7 +12,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from llm_rosetta_gateway.observability.maintenance import Registry
-from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.contracts.routing import ResolvedRoute
 
 from ..providers import build_provider_info
 from ..routing import (

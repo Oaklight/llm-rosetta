@@ -929,7 +929,7 @@ class _Exchange:
         return self.interactive
 
     async def credential(self, ctx: Any) -> str:
-        from llm_rosetta.shims.auth_exchange import InteractiveSetupRequired
+        from llm_rosetta.contracts.auth import InteractiveSetupRequired
 
         self.calls += 1
         if self.interactive:

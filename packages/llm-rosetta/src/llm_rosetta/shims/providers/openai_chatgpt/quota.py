@@ -7,7 +7,7 @@ means the probe is loaded for its refusal classifier and never polled — there
 is no usage endpoint the application may read.
 """
 
-from llm_rosetta.shims.quota_probe import QuotaProbe
+from llm_rosetta.contracts.quota import QuotaProbe
 from llm_rosetta.shims.providers.openai.quota import PROBES as _OPENAI_PROBES
 
 PROBES: tuple[QuotaProbe, ...] = _OPENAI_PROBES

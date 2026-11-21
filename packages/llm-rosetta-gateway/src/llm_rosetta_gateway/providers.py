@@ -341,7 +341,7 @@ def _auth_context(provider: str, cfg: dict[str, Any], state_dir: str | None) -> 
     The operator's key travels in ``input_key`` rather than in ``config``, so
     the secret lives in exactly one place even though the exchange is trusted.
     """
-    from llm_rosetta.shims.auth_exchange import AuthContext
+    from llm_rosetta.contracts.auth import AuthContext
 
     return AuthContext(
         provider=provider,

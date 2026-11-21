@@ -194,7 +194,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
         ],
         "max_count": 13,
     },
-    "llm_rosetta.observability.usage": {
+    "llm_rosetta.contracts.usage": {
         "items": [
             "ADDITIVE_CACHE_STANDARDS",
             "DEFAULT_MODEL_TYPE",

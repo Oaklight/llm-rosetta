@@ -428,7 +428,7 @@ class DeferredStartup:
     async def _seed_one_provider(self, name: str) -> None:
         """Fetch the initial credential for a single provider."""
         from ..transport.token_refresh import clip_error_text, mint_credential
-        from llm_rosetta.shims.auth_exchange import InteractiveSetupRequired
+        from llm_rosetta.contracts.auth import InteractiveSetupRequired
 
         pinfo = self._config.providers[name]
         assert pinfo.mints_credential

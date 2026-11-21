@@ -305,7 +305,7 @@ class TestStreamingIsRequired:
         """
         import asyncio
 
-        from llm_rosetta.routing import ResolvedRoute
+        from llm_rosetta.contracts.routing import ResolvedRoute
         from llm_rosetta_gateway.proxy.engine import _non_streaming_from_stream
 
         route = ResolvedRoute(

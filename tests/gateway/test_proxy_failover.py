@@ -61,7 +61,7 @@ class _Probe:
     """A vendor probe whose only job here is to classify the refusal."""
 
     def inband(self, status_code: int, body: Any) -> Any:
-        from llm_rosetta.shims.quota_probe import InBandSignal
+        from llm_rosetta.contracts.quota import InBandSignal
 
         if status_code != 429:
             return None
@@ -72,7 +72,7 @@ class _BalanceProbe:
     """A probe that reads the 402 as a spent balance, which has no refill."""
 
     def inband(self, status_code: int, body: Any) -> Any:
-        from llm_rosetta.shims.quota_probe import InBandSignal
+        from llm_rosetta.contracts.quota import InBandSignal
 
         if status_code != 402:
             return None

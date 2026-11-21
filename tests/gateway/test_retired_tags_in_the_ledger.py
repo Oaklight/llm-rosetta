@@ -11,7 +11,7 @@ import logging
 
 import pytest
 
-from llm_rosetta.observability.usage import (
+from llm_rosetta.contracts.usage import (
     STANDARD_SHAPES,
     cache_is_additive,
     shape_for,

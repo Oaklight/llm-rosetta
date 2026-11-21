@@ -21,7 +21,7 @@ from llm_rosetta_gateway.transport.token_refresh import (
     reset_reactive_state,
 )
 from llm_rosetta.auto_detect import ProviderType
-from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.contracts.routing import ResolvedRoute
 from llm_rosetta_gateway.routing import SelectionContext
 
 

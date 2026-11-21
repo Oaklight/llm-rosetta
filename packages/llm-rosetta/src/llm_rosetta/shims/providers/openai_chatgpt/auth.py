@@ -4,7 +4,7 @@ The plan route is OAuth, and none of it fits in an argv: the first run needs
 a browser, the refresh token rotates on every use, what is stored is a record
 rather than a string, and one installation may hold several accounts.  So the
 exchange is code, shipped beside the shim's ``provider.yaml`` and reached
-through :class:`llm_rosetta.shims.auth_exchange.AuthExchange` — the gateway
+through :class:`llm_rosetta.contracts.auth.AuthExchange` — the gateway
 only decides *when* to ask for a credential.
 
 What this module owns, and the gateway does not: dynamic client registration,
@@ -51,7 +51,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta.shims.auth_exchange import (
+from llm_rosetta.contracts.auth import (
     AuthContext,
     AuthExchangeError,
     BaseAuthExchange,

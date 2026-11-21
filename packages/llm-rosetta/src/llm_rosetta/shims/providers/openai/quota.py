@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 if TYPE_CHECKING:
-    from llm_rosetta.shims.quota_probe import InBandSignal, QuotaWindow
-    from llm_rosetta.shims.quota_probe import QuotaProbe
+    from llm_rosetta.contracts.quota import InBandSignal, QuotaWindow
+    from llm_rosetta.contracts.quota import QuotaProbe
 
 
 def _jwt_claims(token: str) -> dict[str, Any]:
@@ -63,8 +63,8 @@ class OpenAICodexProbe:
     def parse(self, body: Any) -> tuple[str | None, list[QuotaWindow]]:
         from dataclasses import replace
 
-        from llm_rosetta.shims.quota_probe import QuotaWindow
-        from llm_rosetta.shims.quota_probe import QuotaProbeError, vendor_message
+        from llm_rosetta.contracts.quota import QuotaWindow
+        from llm_rosetta.contracts.quota import QuotaProbeError, vendor_message
 
         if not isinstance(body, dict):
             raise QuotaProbeError("Codex usage reply is not an object")
@@ -111,7 +111,7 @@ class OpenAICodexProbe:
 
     @staticmethod
     def _window(entry: dict[str, Any]) -> QuotaWindow:
-        from llm_rosetta.shims.quota_probe import QuotaWindow
+        from llm_rosetta.contracts.quota import QuotaWindow
 
         span = entry.get("limit_window_seconds")
         span_seconds = int(span) if isinstance(span, (int, float)) and span else None
@@ -139,7 +139,7 @@ class OpenAICodexProbe:
         )
 
     def describe_error(self, status_code: int, body: Any) -> str:
-        from llm_rosetta.shims.quota_probe import vendor_message
+        from llm_rosetta.contracts.quota import vendor_message
 
         message = vendor_message(body)
         if status_code == 401:
@@ -149,8 +149,8 @@ class OpenAICodexProbe:
         return f"HTTP {status_code}: {message}"
 
     def inband(self, status_code: int, body: Any) -> InBandSignal | None:
-        from llm_rosetta.shims.quota_probe import InBandSignal
-        from llm_rosetta.shims.quota_probe import vendor_message
+        from llm_rosetta.contracts.quota import InBandSignal
+        from llm_rosetta.contracts.quota import vendor_message
 
         if status_code not in (429, 403):
             return None

@@ -325,7 +325,7 @@ class QuotaDeclaration:
 
     Attributes:
         probe: Identifier of a probe implemented in
-            :mod:`llm_rosetta.shims.quota_probe`.  ``None`` lets the
+            :mod:`llm_rosetta.contracts.quota`.  ``None`` lets the
             gateway resolve one from the base URL's host and lane.
         url: Explicit usage URL, for a vendor whose endpoint is not derivable
             from ``base_url``.
@@ -568,7 +568,7 @@ class ProviderShim:
             overrides).  ``None`` means none.  See :class:`BatchDeclaration`.
         auth: Credential exchange the shim ships in ``auth.py``, for a vendor
             whose credential is not one argv away (an OAuth profile).  See
-            :class:`~llm_rosetta.shims.auth_exchange.AuthExchange`.
+            :class:`~llm_rosetta.contracts.auth.AuthExchange`.
         tools: Tool handling config (custom tools, description length,
             search mode, multimodal tool results).
         pre_ir_transforms: Body-level transforms applied BEFORE IR
@@ -654,7 +654,7 @@ class ProviderShim:
 
     An exchange that does not fit in an argv (an OAuth profile with an
     interactive first run, a rotating refresh token and a stored record)
-    implements :class:`~llm_rosetta.shims.auth_exchange.AuthExchange` and is
+    implements :class:`~llm_rosetta.contracts.auth.AuthExchange` and is
     attached here.  A provider-level ``token_command`` still wins; a shim
     declares this form or ``connection.token_command``, never both.
     """

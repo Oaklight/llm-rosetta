@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from llm_rosetta_gateway.observability import PersistenceManager
-from llm_rosetta.observability.usage import (
+from llm_rosetta.contracts.usage import (
     INTERNAL_LABEL,
     INTERNAL_SUBJECT,
     UsageReport,

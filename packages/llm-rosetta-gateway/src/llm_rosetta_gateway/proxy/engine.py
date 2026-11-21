@@ -14,7 +14,7 @@ from llm_rosetta.api import (
     ProviderType,
     UnrepresentableFinishReason,
 )
-from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.contracts.routing import ResolvedRoute
 
 from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta_gateway.observability.error_dump import dump_error

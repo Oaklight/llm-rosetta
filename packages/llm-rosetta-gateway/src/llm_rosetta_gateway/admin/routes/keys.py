@@ -10,7 +10,7 @@ from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta_gateway._vendor.ratelimit import parse_quota
-from llm_rosetta.observability.usage import UsageReport
+from llm_rosetta.contracts.usage import UsageReport
 
 from ...keystore import INTERNAL_LABEL, INTERNAL_USAGE_BUCKET, KeyStore
 from ._shared import parse_json_body
@@ -104,7 +104,7 @@ async def get_key_usage(request: Any) -> Response:
 
     The classification — which rows are attributable to a live key, which are
     the admin panel's own traffic, and what nothing owns — lives in
-    :class:`~llm_rosetta.observability.usage.UsageReport`, because a library
+    :class:`~llm_rosetta.contracts.usage.UsageReport`, because a library
     user with no gateway needs the same answer.  This handler supplies the two
     things only the gateway knows: the credential bucket of every live key, and
     the sentinel its own token authenticates with.

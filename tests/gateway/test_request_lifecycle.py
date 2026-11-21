@@ -27,7 +27,7 @@ from llm_rosetta_gateway.model_types import (
 )
 from llm_rosetta_gateway.ops import OpsContext
 from llm_rosetta_gateway.observability import PersistenceManager, RequestLog
-from llm_rosetta.observability.usage.normalize import MODEL_TYPE_FIELDS
+from llm_rosetta.contracts.usage.normalize import MODEL_TYPE_FIELDS
 
 FAKE_TYPE = "fake"
 FAKE_PROVIDER = "fake-provider"

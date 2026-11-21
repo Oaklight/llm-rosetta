@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from llm_rosetta.observability.usage import (
+from llm_rosetta.contracts.usage import (
     DEFAULT_MODEL_TYPE,
     LEDGER_COLUMNS,
     USAGE_WINDOWS,
@@ -55,7 +55,7 @@ class _UsageMixin(_StoreState):
     async def backfill_total_tokens(self) -> int:
         """Fill totals the writer could not, and repair derived Anthropic ones.
 
-        The writer stores :func:`~llm_rosetta.observability.usage.token_total`
+        The writer stores :func:`~llm_rosetta.contracts.usage.token_total`
         — the provider's own total when it sends one, otherwise the additive
         sum.  Two kinds of historical row are missing that value, and only
         those two are touched here:

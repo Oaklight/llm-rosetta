@@ -18,7 +18,7 @@ import pytest
 
 import llm_rosetta.observability as observability
 from llm_rosetta_gateway.observability import PersistenceManager
-from llm_rosetta.observability.usage import (
+from llm_rosetta.contracts.usage import (
     ADDITIVE_CACHE_STANDARDS,
     GOOGLE_METADATA,
     MESSAGES_FIELDS,
@@ -31,12 +31,12 @@ from llm_rosetta.observability.usage import (
     token_total,
     usage_columns,
 )
-from llm_rosetta.observability.usage.normalize import (
+from llm_rosetta.contracts.usage.normalize import (
     DEFAULT_MODEL_TYPE,
     MODEL_TYPES,
     MODEL_TYPE_FIELDS,
 )
-from llm_rosetta.observability.usage.report import NO_SUBJECT_LABEL
+from llm_rosetta.contracts.usage.report import NO_SUBJECT_LABEL
 
 LEDGER = ("input_tokens", "output_tokens", "total_tokens")
 
@@ -687,7 +687,7 @@ class TestThePackageStandsAlone:
         """Transitively too: a fresh interpreter that only meters usage."""
         src = str(self._observability_dir().parent.parent)
         code = (
-            "import sys; import llm_rosetta.observability.usage as u; "
+            "import sys; import llm_rosetta.contracts.usage as u; "
             "u.token_total({'prompt_tokens': 1}); "
             "print(any(m.split('.')[:2] == ['llm_rosetta', 'gateway'] "
             "for m in sys.modules))"

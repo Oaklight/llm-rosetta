@@ -19,7 +19,7 @@ import json
 
 from llm_rosetta.formats import BY_PAIR
 from llm_rosetta.pipeline import ConversionPipeline
-from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.contracts.routing import ResolvedRoute
 from llm_rosetta_gateway.providers import build_provider_info
 from llm_rosetta_gateway.proxy.engine import (
     _gather_echo_fields,

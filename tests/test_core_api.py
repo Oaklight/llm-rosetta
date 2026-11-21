@@ -102,10 +102,10 @@ def test_contract_modules_are_not_re_exported():
     drops them from there once their home here settles.
     """
     for module in (
-        "llm_rosetta.shims.auth_exchange",
-        "llm_rosetta.shims.quota_probe",
-        "llm_rosetta.routing",
-        "llm_rosetta.observability.usage",
+        "llm_rosetta.contracts.auth",
+        "llm_rosetta.contracts.quota",
+        "llm_rosetta.contracts.routing",
+        "llm_rosetta.contracts.usage",
     ):
         contract = importlib.import_module(module)
         # Some contract modules declare no ``__all__``: take what they define.

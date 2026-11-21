@@ -12,10 +12,11 @@ were never its declared surface.
 
 from __future__ import annotations
 
-from llm_rosetta import fidelity, profiling, routing
+from llm_rosetta import fidelity, profiling
+from llm_rosetta.contracts import routing
 from llm_rosetta.fidelity import DEFAULT_SEVERITY_BY_KIND
 from llm_rosetta.profiling import Profiler, TracingProfiler
-from llm_rosetta.routing import ProviderType, SoftErrorPattern
+from llm_rosetta.contracts.routing import ProviderType, SoftErrorPattern
 
 
 def test_routing_preserves_flat_module_names() -> None:

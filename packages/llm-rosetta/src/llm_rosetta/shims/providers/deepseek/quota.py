@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 if TYPE_CHECKING:
-    from llm_rosetta.shims.quota_probe import InBandSignal, QuotaWindow
+    from llm_rosetta.contracts.quota import InBandSignal, QuotaWindow
 
 #: The reason the gateway stores with a permanent park.  It is the key the
 #: panel's ``BLOCK_REASON_KEYS`` translates, so both sides spell it once.
@@ -56,7 +56,7 @@ class DeepSeekBalanceProbe:
         return {}
 
     def parse(self, body: Any) -> tuple[str | None, list[QuotaWindow]]:
-        from llm_rosetta.shims.quota_probe import (
+        from llm_rosetta.contracts.quota import (
             QuotaProbeError,
             QuotaWindow,
             vendor_message,
@@ -83,14 +83,14 @@ class DeepSeekBalanceProbe:
         ]
 
     def describe_error(self, status_code: int, body: Any) -> str:
-        from llm_rosetta.shims.quota_probe import vendor_message
+        from llm_rosetta.contracts.quota import vendor_message
 
         if status_code == 401:
             return "the key does not authenticate (HTTP 401)"
         return f"HTTP {status_code}: {vendor_message(body)}"
 
     def inband(self, status_code: int, body: Any) -> InBandSignal | None:
-        from llm_rosetta.shims.quota_probe import InBandSignal
+        from llm_rosetta.contracts.quota import InBandSignal
 
         if status_code != 402:
             return None

@@ -201,7 +201,7 @@ assert json.loads(error_format.format_error_response("openai", 400, "boom").body
     "error": {"message": "boom", "type": "invalid_request_error", "code": None}
 }, "openai envelope"
 
-import llm_rosetta.observability.usage.semantics as semantics
+import llm_rosetta.contracts.usage.semantics as semantics
 
 importlib.reload(semantics)
 assert semantics.shape_for("fake_wire") is semantics.OPENAI_DETAILS, "usage shape"

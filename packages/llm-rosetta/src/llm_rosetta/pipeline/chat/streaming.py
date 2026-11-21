@@ -10,7 +10,7 @@ from llm_rosetta.capabilities import (
     CustomToolRestorer,
 )
 from llm_rosetta.conversion_warnings import recording_to
-from llm_rosetta.observability.usage.semantics import GOOGLE_METADATA, USAGE_SHAPES
+from llm_rosetta.contracts.usage.semantics import GOOGLE_METADATA, USAGE_SHAPES
 from llm_rosetta.transforms.body import Transform, apply_transforms
 
 logger = logging.getLogger("llm_rosetta.pipeline.chat")
@@ -102,7 +102,7 @@ class BaselineStreamProcessor:
 
         Which fields carry them, and whether the cache ones add to the input or
         sit inside it, is declared in
-        :mod:`llm_rosetta.observability.usage.semantics` — the same declaration
+        :mod:`llm_rosetta.contracts.usage.semantics` — the same declaration
         the total's derivation and the historical repair read, so the three
         cannot disagree.  Every shape is tried because a payload does not say
         which dialect produced it.

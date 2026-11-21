@@ -1244,7 +1244,7 @@ class TestAuthExchange:
             "connection:\n  base_url: https://vendor.example/v1\n"
             "  token_refresh_interval: 1800\n",
             """
-            from llm_rosetta.shims.auth_exchange import BaseAuthExchange
+            from llm_rosetta.contracts.auth import BaseAuthExchange
 
             class Exchange(BaseAuthExchange):
                 kind = "oauth"
@@ -1331,7 +1331,7 @@ class TestAuthExchange:
 def _exchange_source(kind: str = "oauth") -> str:
     """A minimal ``auth.py`` body the loader accepts."""
     return (
-        "from llm_rosetta.shims.auth_exchange import BaseAuthExchange\n"
+        "from llm_rosetta.contracts.auth import BaseAuthExchange\n"
         "\n"
         "class Exchange(BaseAuthExchange):\n"
         f'    kind = "{kind}"\n'

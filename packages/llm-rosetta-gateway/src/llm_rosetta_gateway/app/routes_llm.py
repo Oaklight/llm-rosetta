@@ -20,7 +20,7 @@ from ..keystore import INTERNAL_LABEL
 from ..middleware.auth import (
     api_key_context_var,
 )
-from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.contracts.routing import ResolvedRoute
 
 from ..config import GatewayConfig
 from ..routing import SelectionContext

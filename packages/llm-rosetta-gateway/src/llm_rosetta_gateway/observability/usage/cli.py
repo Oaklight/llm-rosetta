@@ -1,7 +1,7 @@
 """``llm-rosetta-usage`` — the usage report, read from a shell.
 
 The gateway renders this report in its admin panel and a library gets it from
-:meth:`~llm_rosetta.observability.usage.report.UsageReport.build`; this is the
+:meth:`~llm_rosetta.contracts.usage.report.UsageReport.build`; this is the
 third reader: an operator at a terminal asking the same question of the same
 store, without starting the gateway.  It builds the report with the same code
 and prints it as a table or as JSON, so ``--json`` is the report itself rather
@@ -43,7 +43,7 @@ from typing import Any
 
 from llm_rosetta.api import __version__
 from ..persistence import PersistenceManager
-from llm_rosetta.observability.usage import (
+from llm_rosetta.contracts.usage import (
     INTERNAL_LABEL,
     INTERNAL_SUBJECT,
     NO_SUBJECT_LABEL,
