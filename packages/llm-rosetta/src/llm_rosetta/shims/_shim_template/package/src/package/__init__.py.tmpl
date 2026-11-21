@@ -18,6 +18,6 @@ PROVIDERS_DIR = Path(__file__).parent / "providers"
 
 def register_shims() -> list:
     """Register this package's shims and return what was registered."""
-    from llm_rosetta.shims.providers import load_providers_from_dir
+    from llm_rosetta.contracts.shim import load_providers_from_dir
 
     return load_providers_from_dir(PROVIDERS_DIR)
