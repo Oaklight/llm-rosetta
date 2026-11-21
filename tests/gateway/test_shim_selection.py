@@ -489,7 +489,11 @@ class TestConfigSelection:
             }
         )
 
-        remote = sources.remotes[0]
+        (selector,) = sources.manifests.selectors
+        assert selector.include == ("llm7--chat_completions",)
+        assert selector.exclude == ("kilo_free--chat_completions",)
+        remote = selector.fallback_remote
+        assert remote is not None
         assert remote["include"] == ["llm7--chat_completions"]
         assert remote["exclude"] == ["kilo_free--chat_completions"]
 
@@ -526,7 +530,7 @@ class TestConfigSelection:
     def test_an_unknown_preset_key_is_skipped_unless_strict(self):
         section = {"presets": ["free"], "include": {"ghost": ["x"]}}
 
-        assert parse_shims_section(section).remotes
+        assert parse_shims_section(section).manifests
         with pytest.raises(ValueError, match="ghost"):
             parse_shims_section({**section, "strict": True})
 
@@ -548,9 +552,7 @@ class TestConfigSelection:
     def test_a_selection_for_an_undeclared_preset_warns(self, captured):
         sources = parse_shims_section({"presets": ["argo"], "include": {"free": ["x"]}})
 
-        assert [remote["url"] for remote in sources.remotes] == [
-            "https://github.com/Oaklight/llm-rosetta-shim-argo"
-        ]
+        assert [s.raw for s in sources.manifests.selectors] == ["argonne:argo"]
         assert any("does not declare" in message for message in captured)
 
 

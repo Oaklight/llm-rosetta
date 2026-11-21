@@ -135,6 +135,16 @@ class ShimSourceStatus:
             name is never here; ``shim_names`` plus this is the set a pattern
             can match, which is what makes an ``exclude`` that hit nothing
             visible at all.
+        source: The manifest source a vendor install came from (``contrib``,
+            ``argonne``, or the id a manifest URL declares).  ``None`` for a
+            directory or a plain remote.
+        vendor: The vendor a manifest install covers.  ``None`` otherwise.
+        release: The manifest record of the installed version (version,
+            commit, sha256, requires, shims, tags, maturity, ...), as the
+            manifest spells it.  ``None`` when nothing is installed.
+        skipped: Why a selected vendor was not installed (promoted to core,
+            core ships the name, no compatible version) — a decision, not a
+            failure, so ``ok`` stays true.
     """
 
     kind: Literal["path", "remote"]
@@ -162,6 +172,10 @@ class ShimSourceStatus:
     emptied_includes: tuple[str, ...] = ()
     manifest_shims: tuple[str, ...] = ()
     declined: tuple[str, ...] = ()
+    source: str | None = None
+    vendor: str | None = None
+    release: dict[str, Any] | None = None
+    skipped: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe view for the admin API."""
@@ -191,6 +205,10 @@ class ShimSourceStatus:
             "emptied_includes": list(self.emptied_includes),
             "manifest_shims": list(self.manifest_shims),
             "declined": list(self.declined),
+            "source": self.source,
+            "vendor": self.vendor,
+            "release": dict(self.release) if self.release else None,
+            "skipped": self.skipped,
         }
 
 

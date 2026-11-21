@@ -94,7 +94,7 @@ def test_a_catalogue_entry_whose_repository_is_gone_is_stale():
 def test_the_current_catalogue_matches_its_own_repositories():
     """The published packages are the baseline: this is what CI runs."""
     repos = check.shim_repositories(
-        [_repo(f"llm-rosetta-shim-{pkg.key}") for pkg in SHIM_SOURCE_PACKAGES]
+        [_repo(pkg.repo.rsplit("/", 1)[1]) for pkg in SHIM_SOURCE_PACKAGES]
     )
 
     missing, stale = check.compare_catalog(repos, SHIM_SOURCE_PACKAGES)
@@ -128,7 +128,7 @@ def test_the_skeleton_names_the_package_the_repository_holds(capsys):
 
 
 def test_offline_run_reads_a_saved_listing(tmp_path, capsys):
-    listing = [_repo(f"llm-rosetta-shim-{pkg.key}") for pkg in SHIM_SOURCE_PACKAGES]
+    listing = [_repo(pkg.repo.rsplit("/", 1)[1]) for pkg in SHIM_SOURCE_PACKAGES]
     source = tmp_path / "repos.json"
     source.write_text(json.dumps(listing), encoding="utf-8")
 

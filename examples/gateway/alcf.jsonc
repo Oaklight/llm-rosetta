@@ -3,10 +3,10 @@
 
   // ALCF Inference Service — all three clusters.
   //
-  // The ALCF shims ship as a standalone package (issue #666), so declare its
-  // source here: the gateway fetches and caches the repository itself — no
-  // pip install and no image rebuild.  Settings → Shim Sources offers the same
-  // entry as a one-click preset.
+  // The ALCF shims ship outside core, in the argonne source (#1660), so
+  // declare it here: the gateway reads the source's manifest, installs the
+  // newest alcf release this core can run (sha256-checked) and caches it — no
+  // pip install and no image rebuild.  `"presets": ["alcf"]` means the same.
   //
   // First-time setup (once per user):
   //   python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login
@@ -22,12 +22,18 @@
   // refresh concurrently near expiry; atomic writes keep the file valid, but
   // an external shared refresh process can avoid redundant Globus calls.
   "shims": {
-    "remotes": [
-      {
-        "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
-        "path": "src/llm_rosetta_shim_alcf/providers"
-      }
-    ]
+    "sources": ["argonne"],
+    "install": ["argonne:alcf"]
+
+    // Alternative: track the package repository's branch directly, without a
+    // manifest or a compatibility check (an explicit remote for the package's
+    // repository also keeps "presets": ["alcf"] on this path):
+    // "remotes": [
+    //   {
+    //     "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
+    //     "path": "src/llm_rosetta_shim_alcf/providers"
+    //   }
+    // ]
   },
   "providers": {
     "alcf-sophia": {

@@ -23,6 +23,7 @@ from llm_rosetta_gateway.admin.routes.config import (
 )
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.shim_sources import (
+    parse_shims_section,
     report_shim_removals,
     resolve_source_config,
     shim_removal_advisories,
@@ -287,6 +288,9 @@ class TestAdminPayload:
                 "tier",
                 "logos",
                 "note",
+                "source",
+                "install",
+                "vendors",
             }
             # Every published package tracks its branch and names a mirror
             # addressed by the commit; the picker writes the key, so the extra
@@ -346,18 +350,22 @@ class TestAdminPayload:
 class TestPresets:
     """``shims.presets`` preloads a catalogue package by name."""
 
-    def test_a_preset_expands_to_the_catalogue_remote(self):
-        _dirs, remotes, _cache = resolve_source_config({"presets": ["argo"]}, None)
-        assert remotes == [ARGO_PACKAGE.remote]
+    def test_a_preset_maps_to_its_source_with_the_catalogue_remote_as_fallback(
+        self,
+    ):
+        sources = parse_shims_section({"presets": ["argo"]})
+        assert sources.remotes == ()
+        (selector,) = sources.manifests.selectors
+        assert selector.raw == ARGO_PACKAGE.install
+        assert selector.fallback_remote == ARGO_PACKAGE.remote
 
-    def test_presets_expand_in_order_and_dedupe(self):
-        _dirs, remotes, _cache = resolve_source_config(
-            {"presets": ["argo", "alcf", "argo"]}, None
-        )
-        assert [remote["url"] for remote in remotes] == [
-            ARGO_PACKAGE.repo,
-            ALCF_PACKAGE.repo,
+    def test_presets_map_in_order_and_dedupe(self):
+        sources = parse_shims_section({"presets": ["argo", "alcf", "argo"]})
+        assert [s.raw for s in sources.manifests.selectors] == [
+            ARGO_PACKAGE.install,
+            ALCF_PACKAGE.install,
         ]
+        assert [s.key for s in sources.manifests.sources] == ["argonne"]
 
     def test_an_explicit_remote_layers_onto_the_same_url(self):
         """A pin adds keys to the preset; it must not drop the path."""
@@ -380,13 +388,9 @@ class TestPresets:
 
     def test_an_unrelated_explicit_remote_is_kept_alongside(self):
         explicit = {"url": "https://example.invalid/shims"}
-        _dirs, remotes, _cache = resolve_source_config(
-            {"presets": ["argo"], "remotes": [explicit]}, None
-        )
-        assert [remote["url"] for remote in remotes] == [
-            ARGO_PACKAGE.repo,
-            explicit["url"],
-        ]
+        sources = parse_shims_section({"presets": ["argo"], "remotes": [explicit]})
+        assert [remote["url"] for remote in sources.remotes] == [explicit["url"]]
+        assert [s.raw for s in sources.manifests.selectors] == [ARGO_PACKAGE.install]
 
     def test_an_unknown_preset_names_the_known_ones(self):
         with pytest.raises(ValueError, match="unknown shim preset 'nope'"):
@@ -400,8 +404,18 @@ class TestPresets:
             resolve_source_config({"presets": presets}, None)
 
     def test_the_preset_remote_needs_no_token_for_a_public_repo(self):
-        _dirs, remotes, _cache = resolve_source_config({"presets": ["argo"]}, None)
-        assert "token_env" not in remotes[0]
+        sources = parse_shims_section({"presets": ["argo"]})
+        fallback = sources.manifests.selectors[0].fallback_remote
+        assert fallback is not None and "token_env" not in fallback
+
+    def test_an_explicit_remote_spelling_the_old_repository_pins_the_preset(self):
+        """The renamed repo's old URL still names the package (#1660)."""
+        old = "https://github.com/Oaklight/llm-rosetta-shim-argo"
+        sources = parse_shims_section(
+            {"presets": ["argo"], "remotes": [{"url": old, "ref": "v1"}]}
+        )
+        assert not sources.manifests
+        assert sources.remotes == ({**ARGO_PACKAGE.remote, "url": old, "ref": "v1"},)
 
     def test_absent_presets_change_nothing(self):
         assert resolve_source_config({}, None)[1] == []

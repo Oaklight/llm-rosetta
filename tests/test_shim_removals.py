@@ -304,7 +304,10 @@ class TestSourceCatalog:
     def test_get_source_package_resolves_a_preset_key(self):
         package = get_source_package("argo")
         assert package is not None
-        assert package.repo.endswith("llm-rosetta-shim-argo")
+        assert package.repo.endswith("llm-rosetta-shim-argonne")
+        assert package.legacy_repos == (
+            "https://github.com/Oaklight/llm-rosetta-shim-argo",
+        )
         assert get_source_package("nope") is None
 
     def test_find_source_package_maps_a_shim_to_its_package(self):
@@ -330,6 +333,9 @@ class TestSourceCatalog:
             "tier",
             "logos",
             "note",
+            "source",
+            "install",
+            "vendors",
         }
 
 
