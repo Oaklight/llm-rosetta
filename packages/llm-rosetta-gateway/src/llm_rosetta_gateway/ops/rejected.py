@@ -2,7 +2,7 @@
 
 A request the auth or rate-limit middleware rejects, that matches no route, or
 that the server refuses while still reading it, never enters
-:func:`~llm_rosetta_gateway.lifecycle.instrumented_handler`, so nothing wrote
+:func:`~llm_rosetta_gateway.proxy.lifecycle.instrumented_handler`, so nothing wrote
 its ``request_log`` row (#1217).  :class:`OpsRejectedRequest` records one,
 through the same row builder as
 :class:`~llm_rosetta_gateway.ops.proxy.OpsProxyRequest`.

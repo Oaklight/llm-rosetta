@@ -31,7 +31,7 @@ from llm_rosetta_gateway._vendor.httpserver import (
 )
 
 from ..config import GatewayConfig
-from ..lifecycle import (
+from ..proxy.lifecycle import (
     begin_typed,
     current_lifecycle,
     finish_typed,
