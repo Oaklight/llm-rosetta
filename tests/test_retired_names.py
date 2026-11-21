@@ -655,3 +655,63 @@ def test_every_attribute_core_and_the_gateway_read_is_declared() -> None:
 
 def test_the_declared_names_all_exist() -> None:
     assert all(hasattr(retired_names, name) for name in retired_names.__all__)
+
+
+# ---------------------------------------------------------------------------
+# Vendors that moved to contrib (#1660)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "vendor"),
+    [
+        ("opencode--chat_completions", "opencode"),
+        ("openai_chatgpt--open_responses", "openai_chatgpt"),
+        ("xai", "xai"),
+        ("zhipu--rerank", "zhipu"),
+        ("opencode--a_lane_contrib_adds_later", "opencode"),
+        ("openrouter--openai_chat", "openrouter"),
+    ],
+)
+def test_a_moved_shim_is_traced_to_its_vendor(name: str, vendor: str) -> None:
+    row = retired_names.moved_vendor(name)
+    assert row is not None and row.vendor == vendor
+    assert row.package == "llm-rosetta-shim-contrib"
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "openai--chat_completions",
+        "openai",
+        "xai_like--x",
+        "zhipuish",
+        "",
+        # MiniMax stays in core as the minimax embeddings format's vendor.
+        "minimax--chat_completions",
+        "minimax--embedding",
+    ],
+)
+def test_a_core_or_unknown_name_is_not_moved(name: str) -> None:
+    assert retired_names.moved_vendor(name) is None
+
+
+def test_the_codex_probe_is_traced_to_the_plan_vendor() -> None:
+    row = retired_names.moved_probe_vendor("openai_codex")
+    assert row is not None and row.vendor == "openai_chatgpt"
+    assert retired_names.moved_probe_vendor("deepseek") is None
+
+
+def test_no_moved_shim_name_is_also_retired() -> None:
+    """A moved name is current: renaming it would break the configs it serves."""
+    for row in retired_names.MOVED_VENDORS:
+        for name in row.shims:
+            assert row.owns(name), name
+            assert lookup(name, SHIM) is None, name
+
+
+def test_a_retired_spelling_of_a_moved_shim_says_both_things() -> None:
+    message = retired_name_message("openrouter--openai_chat", SHIM)
+    assert message is not None
+    assert "'openrouter--chat_completions'" in message
+    assert "moved to llm-rosetta-shim-contrib" in message

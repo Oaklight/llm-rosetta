@@ -35,6 +35,18 @@ reader is ``llm-rosetta-migrate --scan``, which reports an import of a listed
 path only when that path does not resolve in the installed core, so a path
 that still exists is never reported.  Add one :class:`RetiredModule` row when
 a module path is removed or moved.
+
+Shims that moved out of core
+----------------------------
+
+:data:`MOVED_VENDORS` is a third table: a vendor whose shims core shipped and
+that now lives in a shim source repository (#1660).  A moved shim keeps its
+name, so nothing here is renamed: a config that names it keeps working once
+the vendor is installed from that repository, which the gateway does by
+itself.  The table is what makes a lookup that finds no such shim say where it
+went instead of "unsupported provider" (:func:`moved_shim_message`), and what
+``llm-rosetta-migrate`` reads to report a moved name as a note.  Add one
+:class:`MovedVendor` row when a vendor leaves core.
 """
 
 from __future__ import annotations
@@ -360,6 +372,12 @@ def retired_name_message(name: str, kind: str) -> str | None:
         )
     else:
         message += f" (use {row.replacement!r})"
+    moved = moved_vendor(row.replacement) if row.kind == SHIM else None
+    if moved is not None:
+        message += (
+            f"; the shim has since moved to {moved.package}, which the gateway "
+            "installs automatically"
+        )
     return f"{message}; {MIGRATE_HINT}"
 
 
@@ -439,19 +457,142 @@ def check_not_retired(name: object, *kinds: str) -> None:
             raise ValueError(message)
 
 
+#: The shim repository the moved vendors live in now.
+CONTRIB_REPOSITORY = "https://github.com/Oaklight/llm-rosetta-shim-contrib"
+
+
+@dataclass(frozen=True)
+class MovedVendor:
+    """One vendor whose shims moved from core to a shim source repository.
+
+    Attributes:
+        vendor: The vendor directory name, which is also the shim-name prefix
+            (``opencode`` for ``opencode--chat_completions``).
+        shims: The shim names core shipped for the vendor, for the record and
+            for ``llm-rosetta-migrate --scan``.  A name the repository adds
+            later (``<vendor>--<format>``) belongs to the vendor as well.
+        probes: The quota probe ids the vendor's ``quota.py`` provides, so a
+            ``quota.probe`` that names one is traced to the vendor.
+        repository: The repository that publishes the vendor now.
+        moved_in: The release that removed the vendor from core.
+    """
+
+    vendor: str
+    shims: tuple[str, ...]
+    probes: tuple[str, ...] = ()
+    repository: str = CONTRIB_REPOSITORY
+    moved_in: str = RENAMED_IN
+
+    @property
+    def package(self) -> str:
+        """The repository name, e.g. ``llm-rosetta-shim-contrib``."""
+        return self.repository.rstrip("/").rsplit("/", 1)[-1]
+
+    def owns(self, name: str) -> bool:
+        """Whether shim *name* belongs to this vendor."""
+        return name == self.vendor or name.startswith(f"{self.vendor}--")
+
+
+def _moved(vendor: str, *formats: str, probes: tuple[str, ...] = ()) -> MovedVendor:
+    """A row whose shims are ``<vendor>--<format>`` (``""``: the bare vendor)."""
+    names = tuple(f"{vendor}--{fmt}" if fmt else vendor for fmt in formats)
+    return MovedVendor(vendor=vendor, shims=names, probes=probes)
+
+
+#: The vendors that left core in 0.14 (#1660, the placement rule): OAuth and
+#: subscription lanes, aggregators and free endpoints, and the model makers
+#: that start in contrib before a promotion.  Their shim names are unchanged.
+MOVED_VENDORS: tuple[MovedVendor, ...] = (
+    _moved("antigravity", "acp"),
+    _moved("groq", "chat_completions"),
+    _moved("kilo", "chat_completions"),
+    _moved("modelscope", "chat_completions"),
+    _moved("moonshot", ""),
+    _moved("nvidia", "chat_completions"),
+    _moved("openai_chatgpt", "open_responses", probes=("openai_codex",)),
+    _moved(
+        "opencode",
+        "chat_completions",
+        "messages",
+        "open_responses",
+        probes=("opencode_go",),
+    ),
+    _moved("openrouter", "chat_completions", "messages", "open_responses", "rerank"),
+    _moved("qwen", ""),
+    _moved("siliconflow", "chat_completions", "embedding", "rerank"),
+    _moved("volcengine", "chat_completions", "open_responses", "embedding"),
+    _moved("xai", ""),
+    _moved("zai", "chat_completions", "messages", "embedding", "rerank"),
+    _moved("zhipu", "", "embedding", "rerank"),
+)
+
+
+def moved_vendor(name: object) -> MovedVendor | None:
+    """Return the moved vendor that shim *name* belongs to, or ``None``.
+
+    A retired spelling is read as the name it became first
+    (``openrouter--openai_chat`` belongs to ``openrouter``).
+
+    Args:
+        name: A shim name; a non-string is ``None``.
+    """
+    if not isinstance(name, str) or not name:
+        return None
+    name = replacement_for(name, SHIM) or name
+    return next((row for row in MOVED_VENDORS if row.owns(name)), None)
+
+
+def moved_probe_vendor(probe_id: object) -> MovedVendor | None:
+    """Return the moved vendor whose ``quota.py`` provides *probe_id*, or ``None``."""
+    if not isinstance(probe_id, str):
+        return None
+    return next((row for row in MOVED_VENDORS if probe_id in row.probes), None)
+
+
+def moved_shim_message(name: object) -> str | None:
+    """Return the sentence for a lookup of a moved shim that is not registered.
+
+    The caller decides that the shim is missing (this module reads no
+    registry); the sentence says where the vendor went and how to load it.
+
+    Args:
+        name: The shim name that did not resolve.
+
+    Returns:
+        The message, or ``None`` when *name* is not a moved vendor's shim.
+    """
+    row = moved_vendor(name)
+    if row is None:
+        return None
+    return (
+        f"shim {name!r} is no longer built into llm-rosetta: its vendor "
+        f"{row.vendor!r} moved in {row.moved_in} to the shim repository "
+        f"{row.package} ({row.repository}) under the same name. The gateway "
+        "installs it automatically from its 'contrib' shim source; a library "
+        "user loads the vendor's directory from that repository with "
+        "llm_rosetta.api.load_providers_from_dir(<checkout>/providers)"
+    )
+
+
 __all__ = [
+    "CONTRIB_REPOSITORY",
     "KINDS",
     "MIGRATE_HINT",
     "MIGRATION_GUIDE_URL",
     "MODEL_TYPE",
+    "MOVED_VENDORS",
     "PROVIDER_TYPE",
     "RETIRED_MODULES",
     "RETIRED_NAMES",
     "SHIM",
+    "MovedVendor",
     "RetiredModule",
     "RetiredName",
     "check_not_retired",
     "lookup",
+    "moved_probe_vendor",
+    "moved_shim_message",
+    "moved_vendor",
     "replacement_for",
     "retired_key_message",
     "retired_module",

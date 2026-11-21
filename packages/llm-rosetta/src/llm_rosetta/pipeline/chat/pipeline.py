@@ -56,6 +56,22 @@ _EMPTY_TRANSFORMS: tuple[Transform, ...] = ()
 _GOOGLE_GENERATE_PROVIDERS: frozenset[str] = frozenset(["google_generate"])
 
 
+def _check_shim_name(shim_name: str) -> None:
+    """Refuse a shim name that would otherwise resolve to no shim silently.
+
+    A retired spelling names its replacement; a shim whose vendor moved out
+    of core and is not installed names the repository it moved to (#1660).
+
+    Raises:
+        ValueError: For either case.
+    """
+    retired_names.check_not_retired(shim_name, retired_names.SHIM)
+    if resolve_shim(shim_name) is None:
+        moved = retired_names.moved_shim_message(shim_name)
+        if moved is not None:
+            raise ValueError(moved)
+
+
 class ConversionPipeline(PipelineIntrospection):
     """Orchestrates format conversion between LLM API standards.
 
@@ -150,7 +166,7 @@ class ConversionPipeline(PipelineIntrospection):
         # in the retired-names table.
         for shim_name in (source_shim, target_shim):
             if isinstance(shim_name, str) and shim_name not in FORMATS_BY_TYPE["llm"]:
-                retired_names.check_not_retired(shim_name, retired_names.SHIM)
+                _check_shim_name(shim_name)
 
         # ``google_output_format`` is read only when the target is a Google
         # Generate provider (see ``convert_request``), so validate it under the
