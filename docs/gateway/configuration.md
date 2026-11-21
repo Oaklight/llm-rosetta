@@ -176,10 +176,14 @@ stale。不掩盖的只有两类 —— `sha256` 不符，以及 body 不是可�
 **Manifest 源。** `sources` 列出 manifest 源：catalog id（`contrib`、`argonne`）、
 manifest URL，或 `{"url", "fallback", "token_env"}`。`install` 从中选择厂商：`<vendor>`、
 `tag:<标签>`（整体匹配，如 `tag:tier:free`）、`*`，均可加 `<source>:` 前缀。网关为每个厂商
-安装 `requires` 与本 core 匹配的最新版本（`surface` 等于 `SURFACE_VERSION`，`ir` 不高于
-`IR_VERSION`），校验归档的 sha256，且只在出现更新的可安装版本时升级。manifest 在
-`remote_ttl` 内复用；源不可达时保留缓存的 manifest 与上一次成功的安装。若厂商带有 core 的
-shim 名称，或其记录写有 `promoted_to: core@X` 且本 core 已达到 `X`，则不会安装。manifest
+安装 `requires` 与本 core 匹配的最新稳定版本（`surface` 等于 `SURFACE_VERSION`，`ir` 不高于
+`IR_VERSION`；只有在没有可安装的稳定版本时才安装预发布版本），校验归档的 sha256，归档没有
+`shims.yaml` 时只加载发布记录列出的 shim 名称，且只在出现更新的可安装版本时升级。在已应答的
+源中没有匹配结果的条目会记录日志，并报告为 *不在 manifest 中* 的条目。manifest 在
+`remote_ttl` 内复用；源不可达时保留缓存的 manifest 与上一次成功的安装。core 按 shim 优先：
+core 的 shim 名称会被拒绝，该厂商的其他 shim 照常安装。记录写有 `promoted_to: core@X` 时，
+只有本 core 达到 `X` 或更高版本（`X` 的开发版或预发布版早于 `X`）且 core 注册了该记录的 shim，
+才会跳过该厂商。manifest
 安装先于 `paths` 与 `remotes` 加载。见 [Manifest 源](../guide/shims.md#manifest-sources)。
 
 **独立包与预设。** ALCF、AskSage、Argo、免费端点与 Open Design 的 shim 位于 core 之外。

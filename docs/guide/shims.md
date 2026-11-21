@@ -533,17 +533,25 @@ shim、标签、成熟度、归档及其 sha256，以及它需要的 core（`req
 只写 `install` 而不写 `sources` 时读取 `contrib` 与 `argonne`。源也可以是 manifest
 URL，或对象 `{"url": …, "fallback": …, "token_env": …}`。
 
-对每个选中的厂商，网关安装 `requires` 被本 core 满足的最新版本 —— `surface` 等于
-`llm_rosetta.contracts.SURFACE_VERSION`，`ir` 不高于 `IR_VERSION` —— 并为每个被跳过的
-更新版本记录一条 WARNING，写明原因。归档在装入 shim 缓存前先按记录中的 sha256 校验。
-已安装的版本会一直保留，直到出现更新的*可安装*版本；重读 manifest 从不降级。manifest
+对每个选中的厂商，网关安装 `requires` 被本 core 满足的最新**稳定**版本 —— `surface`
+等于 `llm_rosetta.contracts.SURFACE_VERSION`，`ir` 不高于 `IR_VERSION` —— 并为每个被跳过
+的更新的不兼容版本记录一条 WARNING，写明原因。只有在没有可安装的稳定版本时才会安装预发布
+版本（`0.5.0-rc.1`），因此 `dist` 上的一个预发布版本不会让所有网关都升级。版本号格式为
+`MAJOR.MINOR.PATCH`，可带预发布后缀，不允许构建元数据（`+build` 会使 manifest 无效）。
+标签选择器读取厂商最新可安装记录的标签。归档在装入 shim 缓存前先按记录中的 sha256 校验。
+发布记录决定注册哪些 shim：归档中没有 `shims.yaml` 时，只加载记录中列出的 shim 名称，
+其他名称会被拒绝并记录 WARNING。已安装的版本会一直保留，直到出现更新的*可安装*版本；重读
+manifest 从不降级，manifest 不再列出的已安装版本也会保留，并记录一条 WARNING。manifest
 从 jsDelivr（`…@dist/manifest.json`）读取，`raw.githubusercontent.com` 作为备用，并在
 `remote_ttl` 内复用；**重新拉取**会立即重读。源不可达时使用缓存的 manifest 与上一次成功
 的安装；摘要不匹配时绝不安装（保留之前的版本，并标记为过期）。
 
-**core 优先。** 若厂商的 shim 名称已由 core 注册，该厂商不会被安装，日志会写明被忽略的
-源与厂商。记录带有 `promoted_to: core@X` 时，一旦运行中的 core 达到 `X` 或更高版本便不再
-安装，因为 core 已自带该厂商。manifest 安装先于 `paths` 与 `remotes` 加载，因此显式声明的
+**core 优先，按 shim 判定。** core 已注册的 shim 名称不会从源加载，日志会写明源、厂商与
+被忽略的名称；该厂商的其他 shim 照常安装（所有 shim 都已由 core 注册的厂商会被跳过）。
+`promoted_to: core@X` 从将要安装的记录中读取，因此之后不带该字段的版本会撤销晋升。只有当
+运行中的 core 达到 `X` 或更高版本 —— `X` 的开发版或预发布版（`0.14.0.dev35`）早于 `X` ——
+且 core 确实注册了该记录的 shim 时，该声明才生效；声明已到期但不成立时会记录日志，厂商照常
+安装。manifest 安装先于 `paths` 与 `remotes` 加载，因此显式声明的
 源仍会覆盖它。
 
 **旧的预设继续可用。** `shims.presets` 无需修改：`alcf`、`argo`、`asksage` 映射为
@@ -552,7 +560,10 @@ URL，或对象 `{"url": …, "fallback": …, "token_env": …}`。
 情况仍走原来的 remote 路径：显式 `shims.remotes` 条目指向该包的仓库（用当前 URL 或旧 URL
 均可 —— `llm-rosetta-shim-argo` 现为 `-argonne`，`llm-rosetta-shim-free` 现为
 `-contrib`）；以及映射后的源从未应答过（尚未拉取或缓存过 manifest），此时会附带一条
-WARNING。
+WARNING。若源已应答但没有匹配的厂商（分批发布、标签改名），**不会**加载原来的 remote ——
+它带的是为旧版 core 构建的代码 —— 网关会记录一条 WARNING，并把该选择器作为标记为
+*不在 manifest 中* 的源条目报告出来，使这一缺失在日志和 Shims 页面上都可见。任何没有匹配
+结果的 `install` 条目同样如此。
 
 #### 只装包的一部分 { #selection }
 
