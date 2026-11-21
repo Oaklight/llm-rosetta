@@ -45,7 +45,12 @@ class ImportSite:
             dynamic import.
         names: For ``from`` the imported names (``*`` included); for
             ``import`` the imported modules.
-        function_level: The import sits inside a function body.
+        function: The qualified name of the innermost function the import
+            sits in -- ``ClassName.method`` for a method, ``"<lambda>"`` for a
+            lambda body, empty at module scope -- so two imports of one module
+            in two functions, or in a ``ready`` method of two classes, differ
+            here.  A caller can then check that no *new* site appeared in a
+            file it already knows.
         type_checking: The import sits inside an ``if TYPE_CHECKING:`` block.
     """
 
@@ -53,8 +58,13 @@ class ImportSite:
     kind: str
     module: str
     names: tuple[str, ...] = ()
-    function_level: bool = False
+    function: str = ""
     type_checking: bool = False
+
+    @property
+    def function_level(self) -> bool:
+        """The import sits inside a function body."""
+        return bool(self.function)
 
     def targets(self) -> Iterator[str]:
         """Yield every module path the statement may refer to, in match order.
@@ -113,28 +123,44 @@ def _is_type_checking(test: ast.expr) -> bool:
     )
 
 
-def _flag_nodes(tree: ast.AST) -> tuple[set[int], set[int]]:
-    """Return the ids of nodes inside a function and inside ``TYPE_CHECKING``."""
-    in_function: set[int] = set()
+def _flag_nodes(tree: ast.AST) -> tuple[dict[int, str], set[int]]:
+    """Return the innermost enclosing function of every node, and the TYPE_CHECKING ids.
+
+    The function map holds the qualified name of the ``def`` (or
+    ``"<lambda>"``) a node sits in -- ``ClassName.method`` for a method, so two
+    classes that each define ``ready`` are two sites.  A node at module scope
+    is absent.
+    """
+    in_function: dict[int, str] = {}
     in_type_checking: set[int] = set()
 
-    def mark(node: ast.AST, function: bool, checking: bool) -> None:
+    def mark(node: ast.AST, function: str, scope: str, checking: bool) -> None:
         for child in ast.iter_child_nodes(node):
-            child_function = function or isinstance(
-                child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
-            )
+            child_scope = scope
+            if isinstance(child, ast.ClassDef):
+                child_scope = f"{scope}.{child.name}" if scope else child.name
+            if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                child_function = (
+                    f"{child_scope}.{child.name}" if child_scope else child.name
+                )
+            elif isinstance(child, ast.Lambda):
+                child_function = (
+                    f"{child_scope}.<lambda>" if child_scope else "<lambda>"
+                )
+            else:
+                child_function = function
             child_checking = checking or (
                 isinstance(node, ast.If)
                 and _is_type_checking(node.test)
                 and child in node.body
             )
             if child_function:
-                in_function.add(id(child))
+                in_function[id(child)] = child_function
             if child_checking:
                 in_type_checking.add(id(child))
-            mark(child, child_function, child_checking)
+            mark(child, child_function, child_scope, child_checking)
 
-    mark(tree, False, False)
+    mark(tree, "", "", False)
     return in_function, in_type_checking
 
 
@@ -150,7 +176,7 @@ def import_sites(source: str, package: tuple[str, ...]) -> list[ImportSite]:
     in_function, in_type_checking = _flag_nodes(tree)
     sites: list[ImportSite] = []
     for node in ast.walk(tree):
-        function_level = id(node) in in_function
+        function = in_function.get(id(node), "")
         type_checking = id(node) in in_type_checking
         if isinstance(node, ast.ImportFrom):
             names = tuple(alias.name for alias in node.names)
@@ -160,7 +186,7 @@ def import_sites(source: str, package: tuple[str, ...]) -> list[ImportSite]:
                     FROM,
                     absolute_module(package, node),
                     names,
-                    function_level=function_level,
+                    function=function,
                     type_checking=type_checking,
                 )
             )
@@ -172,7 +198,7 @@ def import_sites(source: str, package: tuple[str, ...]) -> list[ImportSite]:
                     IMPORT,
                     "",
                     names,
-                    function_level=function_level,
+                    function=function,
                     type_checking=type_checking,
                 )
             )
@@ -184,7 +210,7 @@ def import_sites(source: str, package: tuple[str, ...]) -> list[ImportSite]:
                         node.lineno,
                         DYNAMIC_NONLITERAL,
                         "",
-                        function_level=function_level,
+                        function=function,
                         type_checking=type_checking,
                     )
                 )
@@ -194,7 +220,7 @@ def import_sites(source: str, package: tuple[str, ...]) -> list[ImportSite]:
                         node.lineno,
                         DYNAMIC,
                         target,
-                        function_level=function_level,
+                        function=function,
                         type_checking=type_checking,
                     )
                 )
