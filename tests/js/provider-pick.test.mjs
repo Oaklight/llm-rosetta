@@ -157,8 +157,8 @@ test('a shim row opens the form as a create, not an edit', () => {
   assert.doesNotMatch(shimsPage, /openProviderModal\(/);
   assert.equal(
     (shimsPage.match(/onclick="startProviderFromShim\(/g) || []).length,
-    2,
-    'both Add buttons (row and vendor header) call the same entry point',
+    3,
+    'every Add button (shim row, package card, manifest vendor card) calls the same entry point',
   );
 });
 

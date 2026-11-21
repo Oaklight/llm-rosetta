@@ -22,12 +22,18 @@ import {
   selectionWrite, shortRef,
 } from '../core/shim-selection.js';
 import { toggleCard } from '../core/disclosure.js';
+import {
+  declareSource, deselectVendor, selectVendor, vendorFacts, vendorMatches, vendorStateKey,
+} from '../core/shim-sources.js';
 
 let _view = 'installed';
 let _shims = [];
 let _packages = [];
 let _shimMeta = {};
 let _loaded = false;
+/** `/admin/api/config/shims/source-catalog`: every manifest source and every
+ *  vendor it publishes (#1660 S9), or `null` when it could not be read. */
+let _sourceCat = null;
 /** Vendors whose rows are open.  Empty means every card starts collapsed; a
  *  filter re-render keeps whatever the operator opened. */
 const _openVendors = new Set();
@@ -124,6 +130,12 @@ async function loadShimsPage() {
       };
     }
     _packages = cat.packages || [];
+    try {
+      const sc = await api.get('/admin/api/config/shims/source-catalog');
+      _sourceCat = sc && Array.isArray(sc.sources) ? sc : null;
+    } catch {
+      _sourceCat = null;
+    }
     // A loaded package whose archive predates its vendor's `logo:` still has
     // no mark in the inventory.  The catalogue names the same files, so fill
     // the gap from there and let a loaded shim's own declaration win.
@@ -293,9 +305,33 @@ function _vendorCard(vendor, rows) {
           <span class="shim-vendor-src-label">${esc(t('shimPage.source'))}</span>
           ${_sourceLink(source, 'shim-repo') || `<span class="shim-vendor-src-path">${esc(t('shimPage.sourceUnknown'))}</span>`}
         </div>` : ''}
+        ${_installedManifestLine(vendor)}
         ${rows.map(_formatRow).join('')}
       </div>
     </article>`;
+}
+
+/** The manifest record a loaded vendor was installed from, with its source. */
+function _installedSourceVendor(vendor) {
+  for (const src of (_sourceCat && _sourceCat.sources) || []) {
+    const v = (src.vendors || []).find((x) => x.vendor === vendor && x.installed);
+    if (v) return { src, v };
+  }
+  return null;
+}
+
+/** One line of facts, each a span, joined the way the pin line joins them. */
+function _factsLine(facts) {
+  if (!facts.length) return '';
+  const parts = facts.map((f) => `<span${f.cls ? ` class="${esc(f.cls)}"` : ''}`
+    + `${f.title ? ` title="${esc(f.title)}"` : ''}>${esc(t(f.key, f.params || {}))}</span>`);
+  return `<p class="shim-card-hash">${parts.join(' · ')}</p>`;
+}
+
+/** A loaded manifest vendor says which source and release it runs. */
+function _installedManifestLine(vendor) {
+  const hit = _installedSourceVendor(vendor);
+  return hit ? _factsLine(vendorFacts(hit.v, hit.src)) : '';
 }
 
 /** Open or close one vendor card in place, so the scroll position holds. */
@@ -434,6 +470,15 @@ function _packagePinLine(p) {
   // the distinct stages so an experimental vendor is not mistaken for stable.
   const stages = [...new Set(Object.values(p.maturity || {}).filter(Boolean))];
   if (stages.length) parts.push(`<span>${esc(stages.join(' / '))}</span>`);
+  // Whether the installed releases' `requires` match this core (#1660 S9).
+  if (p.source) parts.push(`<span>${esc(t('shimSrc.fromSource', {source: p.source}))}</span>`);
+  if (p.requires_ok === true) {
+    parts.push(`<span>${esc(t('shimSrc.requiresOk'))}</span>`);
+  } else if (p.requires_ok === false) {
+    const why = Object.entries(p.requires_problem || {})
+      .filter(([, problem]) => problem).map(([v, problem]) => `${v}: ${problem}`).join('; ');
+    parts.push(`<span class="is-unknown" title="${esc(why)}">${esc(t('shimSrc.requiresBad'))}</span>`);
+  }
   // A selected vendor the source did not install (not in the manifest, core
   // provides it, promoted) is named with the reason instead of vanishing.
   for (const [vendor, why] of Object.entries(p.skipped || {})) {
@@ -749,6 +794,208 @@ export async function removeShimPackage(btn, key) {
   });
 }
 
+// ── Manifest sources: one card per vendor, grouped by source (#1660 S9) ──
+//
+// The package cards are the five legacy preset keys.  A manifest source
+// publishes more vendors than those, and each of them gets a card here: where
+// it comes from, what runs, what the source offers, whether the installed
+// release's `requires` matches this core, and the entry that selects it.
+
+/** Vendor cards stay closed until they are the one being worked on. */
+const _openSrcVendors = new Set();
+
+const _srcVendorKey = (src, v) => `${src.id}:${v.vendor}`;
+
+export function toggleShimSourceVendor(key) {
+  toggleCard({
+    root: '#shimCatalogGrid', card: '.shim-card', attr: 'srcvendor', key,
+    open: _openSrcVendors, head: '.shim-card-head', body: '.shim-card-body',
+  });
+}
+
+/** The maturity and conformance line: what the source says about the vendor. */
+function _maturityLine(v) {
+  const parts = [];
+  if (v.maturity && v.since) parts.push(t('shimSrc.since', {maturity: v.maturity, date: v.since}));
+  else if (v.maturity) parts.push(v.maturity);
+  const c = v.conformance;
+  if (c && c.result) {
+    parts.push(c.date
+      ? t('shimSrc.conformanceOn', {result: c.result, date: c.date})
+      : t('shimSrc.conformance', {result: c.result}));
+  }
+  if (v.promoted_to) parts.push(t('shimSrc.promoted', {target: v.promoted_to}));
+  return parts.length ? `<p class="shim-card-hash">${esc(parts.join(' · '))}</p>` : '';
+}
+
+/** The preset key an entry came from, or '' for a `shims.install` entry. */
+const _presetOf = (v) => ((v.selected_origin || '').startsWith('presets:')
+  ? v.selected_origin.slice('presets:'.length) : '');
+
+/** Which install entry picks the vendor, or that none does. */
+function _selectedLine(v) {
+  if (!v.selected_by) return `<p class="field-hint">${esc(t('shimSrc.notSelected'))}</p>`;
+  const preset = _presetOf(v);
+  return `<p class="field-hint">${esc(preset
+    ? t('shimSrc.viaPreset', {preset})
+    : t('shimSrc.selectedBy', {selector: v.selected_by}))}</p>`;
+}
+
+function _sourceVendorCard(src, v) {
+  const key = _srcVendorKey(src, v);
+  const open = _openSrcVendors.has(key);
+  const bodyId = esc(`shimSrcBody-${key}`);
+  const name = vendorName(v.vendor);
+  const maturity = v.maturity
+    ? `<span class="tag is-square is-maturity is-${esc(v.maturity)}">${esc(v.maturity)}</span>` : '';
+  const state = `<span class="tag is-square is-state is-${esc(v.state)}">${esc(t(vendorStateKey(v)))}</span>`;
+  const version = v.installed || v.installable || v.newest || '';
+  const meta = [version ? `v${version}` : '', plural((v.shims || []).length, 'shimPage.shims', 'shimPage.shimOne')]
+    .filter(Boolean).join(' · ');
+  const tags = (v.tags || []).map((tag) => `<span class="tag is-plain">${esc(tag)}</span>`).join('');
+  const loaded = new Set(v.installed_shims || []);
+  const shims = (v.shims || []).map((s) => {
+    const off = v.installed && !loaded.has(s);
+    const mark = v.installed ? t(loaded.has(s) ? 'shimPage.loadedMark' : 'shimPage.notLoadedMark') : '';
+    return `<div class="shim-preset-shim${off ? ' off' : ''}" role="listitem">`
+      + `<span class="shim-preset-name">${esc(s)}</span>`
+      + `<span class="shim-preset-state">${esc(mark)}</span></div>`;
+  }).join('');
+  const add = (v.installed_shims || [])[0]
+    ? `<button type="button" class="btn btn-sm" onclick="startProviderFromShim(${jsArg(v.installed_shims[0])})">${esc(t('shimPage.addProvider'))}</button>`
+    : '';
+  const action = v.selected_by
+    ? `<button type="button" class="btn btn-sm" onclick="deselectShimSourceVendor(this, ${jsArg(src.id)}, ${jsArg(v.vendor)})">${esc(t('shimSrc.deselect'))}</button>`
+    : `<button type="button" class="btn btn-sm btn-primary"${v.installable ? '' : ' disabled'} onclick="selectShimSourceVendor(this, ${jsArg(src.id)}, ${jsArg(v.vendor)})">${esc(t('shimSrc.select'))}</button>`;
+  return `
+    <article class="shim-card shim-src-card${open ? ' is-open' : ''}" data-srcvendor="${esc(key)}">
+      <button type="button" class="shim-card-head" aria-expanded="${open}" aria-controls="${bodyId}"
+              onclick="toggleShimSourceVendor(${jsArg(key)})">
+        <span class="shim-vendor-logo">${_logoHtml(v.logo || _vendorMeta(v.vendor).logo, v.vendor)}</span>
+        <span class="shim-vendor-title">
+          <span class="shim-vendor-name" title="${esc(name)}">${esc(name)}</span>
+          ${maturity}${state}
+        </span>
+        <span class="shim-vendor-meta" title="${esc(meta)}">${esc(meta)}</span>
+        <svg class="shim-vendor-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="shim-card-body" id="${bodyId}"${open ? '' : ' hidden'}>
+        ${_factsLine(vendorFacts(v, src))}
+        ${_maturityLine(v)}
+        ${tags ? `<div class="shim-chips">${tags}</div>` : ''}
+        <div class="shim-card-shims" role="list" aria-label="${esc(t('shimSrc.shimList'))}">${shims}</div>
+        ${_selectedLine(v)}
+        ${v.installed ? '' : `<p class="shim-trust" role="note">${esc(t('shimPage.trustWarning'))}</p>`}
+        <div class="shim-card-actions"><span class="shim-card-buttons">${action}${add}</span></div>
+      </div>
+    </article>`;
+}
+
+/** One source's section head: its name, where it is read from, and its state. */
+function _sourceHead(src, shown) {
+  const states = [];
+  if (!src.configured) states.push(`<span class="tag is-square is-plain">${esc(t('shimSrc.sourceImplied'))}</span>`);
+  if (!src.ok) states.push(`<span class="tag is-square is-warn">${esc(t('shimSrc.sourceUnreachable'))}</span>`);
+  else if (src.stale) states.push(`<span class="tag is-square is-warn">${esc(t('shimSrc.sourceStale'))}</span>`);
+  const link = _sourceLink(src.repo || src.url, 'shim-repo');
+  return `<div class="shim-section-head shim-source-head">`
+    + `<span>${esc(src.label || src.id)}</span>${states.join('')}`
+    + `<span class="shim-vendor-meta">${esc(plural(shown, 'shimPage.vendors', 'shimPage.vendorOne'))}</span>`
+    + `${link ? `<span class="shim-source-link">${link}</span>` : ''}</div>`;
+}
+
+/** Every source, each with the vendor cards that pass the filters. */
+function _sourceSections(f) {
+  const sources = (_sourceCat && _sourceCat.sources) || [];
+  let vendors = 0;
+  const html = sources.map((src) => {
+    const shown = (src.vendors || []).filter((v) => vendorMatches(v, src, f.q)
+      && (!f.tier || (v.tags || []).includes(`tier:${f.tier}`)));
+    vendors += shown.length;
+    if (!shown.length && src.ok && (f.q || f.tier)) return '';
+    const body = !src.ok
+      ? `<p class="shim-source-error" title="${esc(src.error || '')}">${esc(t('shimSrc.sourceError', {error: src.error || ''}))}</p>`
+      : `<div class="shim-grid shim-grid-inline">${shown.map((v) => _sourceVendorCard(src, v)).join('')}</div>`;
+    return _sourceHead(src, shown.length) + body;
+  }).join('');
+  return { html, vendors, sources: sources.length };
+}
+
+/** The source record and vendor a card names. */
+function _sourceVendor(sourceId, vendor) {
+  const src = ((_sourceCat && _sourceCat.sources) || []).find((s) => s.id === sourceId);
+  const v = src && (src.vendors || []).find((x) => x.vendor === vendor);
+  return { src, v };
+}
+
+/** Write a `shims` body, reload the sources, and repaint the page. */
+async function _writeSources(body) {
+  await _mustWrite(() => api.put('/admin/api/config/shims', body));
+  const r = await _mustWrite(() => api.post('/admin/api/config/shims/reload', {}));
+  S.configData = await api.get('/admin/api/config');
+  window.resetShimManifestEditor?.();
+  await loadShimsPage();
+  return r;
+}
+
+/**
+ * Select one vendor of a source: add `<source>:<vendor>` to `shims.install`,
+ * and the source to `shims.sources` when the declared list does not name it
+ * (a config with no `sources` gets the defaults written out plus the
+ * source), then reload, which installs it.
+ */
+export async function selectShimSourceVendor(btn, sourceId, vendor) {
+  const { src, v } = _sourceVendor(sourceId, vendor);
+  if (!src || !v) return;
+  const section = (S.configData && S.configData.shims) || {};
+  const install = selectVendor(section.install || [], sourceId, vendor, v.tags || []);
+  const body = { install };
+  const declared = declareSource(section, src.entry ?? (src.key || src.url));
+  if (declared.changed) body.sources = declared.sources;
+  await withBusyButton(btn, async () => {
+    try {
+      _openSrcVendors.add(_srcVendorKey(src, v));
+      const r = await _writeSources(body);
+      const failures = (r && r.status && r.status.failure_count) || 0;
+      showToast(failures
+        ? t('shimPage.installFailed', {key: vendor, count: failures})
+        : t('shimSrc.selectDone', {vendor}), failures ? 'error' : undefined);
+    } catch (e) {
+      showToast(String(e.message || e), 'error');
+    }
+  });
+}
+
+/**
+ * Deselect one vendor: drop the `<source>:<vendor>` entries of this source.
+ * An unqualified entry (shared by every source), a tag or `*` entry, or a
+ * preset that would still select it refuses the removal and is named; the
+ * config is not touched (`deselectVendor`).
+ */
+export async function deselectShimSourceVendor(btn, sourceId, vendor) {
+  const { src, v } = _sourceVendor(sourceId, vendor);
+  if (!src || !v) return;
+  const section = (S.configData && S.configData.shims) || {};
+  const presets = v.selected_presets || (_presetOf(v) ? [_presetOf(v)] : []);
+  const { install, refuse } = deselectVendor(section.install || [], sourceId, vendor,
+    v.tags || [], presets);
+  if (refuse) {
+    showToast(t(refuse.key, refuse.params), 'error');
+    return;
+  }
+  await withBusyButton(btn, async () => {
+    try {
+      const r = await _writeSources({ install });
+      const warnings = (r && r.provider_warnings) || [];
+      showToast(warnings.length
+        ? t('toast.providersAutoDisabled', {providers: warnings.map((x) => x.provider).join(', ')})
+        : t('shimSrc.deselectDone', {vendor}), warnings.length ? 'error' : undefined);
+    } catch (e) {
+      showToast(String(e.message || e), 'error');
+    }
+  });
+}
+
 function renderShimsPage() {
   const seg = document.getElementById('shimPageSeg');
   if (seg) {
@@ -816,10 +1063,22 @@ function renderShimsPage() {
   } else if (_view === 'available') {
     const f = _filters();
     const packages = _packages.filter((p) => _matchesPackage(p, f));
-    if (count) count.textContent = _loaded ? t('shimPage.packages', {n: packages.length}) : '';
-    catalog.innerHTML = packages.length
-      ? packages.map(_packageCard).join('')
-      : '<div class="shim-empty">' + esc(t('shimPage.noPackages')) + '</div>';
+    // Every vendor of every manifest source first, grouped by source; the
+    // legacy preset packages follow under their own head.
+    const sections = _sourceSections(f);
+    const packagesHtml = packages.length
+      ? `<div class="shim-section-head"><span>${esc(t('shimSrc.legacyPackages'))}</span>`
+        + `<span class="shim-vendor-meta">${esc(plural(packages.length, 'shimPage.packages', 'shimPage.packageOne'))}</span></div>`
+        + `<div class="shim-grid shim-grid-inline">${packages.map(_packageCard).join('')}</div>`
+      : '';
+    if (count) {
+      count.textContent = !_loaded ? ''
+        : t('shimSrc.count', {vendors: plural(sections.vendors, 'shimPage.vendors', 'shimPage.vendorOne'),
+                              packages: plural(packages.length, 'shimPage.packages', 'shimPage.packageOne')});
+    }
+    const listHtml = sections.html + packagesHtml;
+    catalog.innerHTML = listHtml
+      || '<div class="shim-empty">' + esc(t('shimPage.noPackages')) + '</div>';
   } else if (count) {
     count.textContent = '';
   }
@@ -868,6 +1127,7 @@ Object.assign(window, {
   toggleShimPackage, upgradeShimPackage,
   installShimPackage, updateShimPackage, removeShimPackage, shimToggleEnabled,
   openShimRefForm, closeShimRefForm, installShimAtRef,
+  toggleShimSourceVendor, selectShimSourceVendor, deselectShimSourceVendor,
   // Repainted on a language change: the per-shim rows carry translated marks.
   repaintShimCatalog: () => { if (_view === 'available') renderShimsPage(); },
 });
