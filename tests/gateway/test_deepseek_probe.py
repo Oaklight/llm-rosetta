@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.shims.providers.deepseek.quota import DeepSeekBalanceProbe
+from llm_rosetta.shims.builtin.deepseek.quota import DeepSeekBalanceProbe
 
 
 class TestDeepSeekBalanceProbe:

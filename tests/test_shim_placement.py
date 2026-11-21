@@ -30,13 +30,13 @@ from pathlib import Path
 import pytest
 
 from llm_rosetta.contracts.quota import PROBE_ROLE_API_KEY, probe_credential_role
-from llm_rosetta.shims import providers as providers_pkg
+from llm_rosetta.shims import builtin as providers_pkg
 from llm_rosetta.shims._loader import load_providers
 
 PROVIDERS = Path(providers_pkg.__file__).parent
 
 #: The core vendor directories: every non-underscore directory under
-#: ``shims/providers`` (``__pycache__`` is not a vendor).
+#: ``shims/builtin`` (``__pycache__`` is not a vendor).
 VENDORS = sorted(
     p for p in PROVIDERS.iterdir() if p.is_dir() and not p.name.startswith("_")
 )

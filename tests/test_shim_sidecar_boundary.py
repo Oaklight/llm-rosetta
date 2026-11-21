@@ -1,6 +1,6 @@
 """An in-core shim reaches ``llm_rosetta`` only through the contracts (#1657, C5).
 
-Every ``.py`` file under ``shims/providers/<vendor>/`` (the sidecars:
+Every ``.py`` file under ``shims/builtin/<vendor>/`` (the sidecars:
 ``transforms.py``, ``auth.py``, ``quota.py`` and their helpers) may import
 ``llm_rosetta`` only through ``llm_rosetta.contracts`` and its submodules, plus
 relative imports inside its own vendor directory.  Not ``llm_rosetta.api``
@@ -8,7 +8,7 @@ either: sidecars execute while ``import llm_rosetta`` is still running, and the
 api module needs the finished package.  Not another vendor's directory: each
 vendor directory has to stand alone so it can move out of core.
 
-The loader (``shims/_loader/``) and the ``shims/providers/__init__.py`` marker are
+The loader (``shims/_loader/``) and the ``shims/builtin/__init__.py`` marker are
 internal and out of scope.  The scaffold templates, and what the scaffolder
 writes, must follow the same rule, because they are what a new shim starts
 from.
@@ -31,7 +31,7 @@ from _import_scan import (  # noqa: E402
 )
 
 _CORE = Path(__file__).parents[1] / "packages/llm-rosetta/src/llm_rosetta"
-_PROVIDERS = _CORE / "shims" / "providers"
+_PROVIDERS = _CORE / "shims" / "builtin"
 _TEMPLATE = _CORE / "shims" / "_shim_template"
 _CONTRACTS = "llm_rosetta.contracts"
 
@@ -42,7 +42,7 @@ def _allowed(module: str, own_vendor: str | None) -> bool:
     if module == _CONTRACTS or module.startswith(_CONTRACTS + "."):
         return True
     if own_vendor is not None:
-        home = "llm_rosetta.shims.providers." + own_vendor
+        home = "llm_rosetta.shims.builtin." + own_vendor
         return module == home or module.startswith(home + ".")
     return False
 
@@ -103,7 +103,7 @@ def test_there_are_sidecars_to_check():
 )
 def test_a_sidecar_imports_core_only_through_the_contracts(path: Path):
     rel = path.relative_to(_PROVIDERS)
-    package = ("llm_rosetta", "shims", "providers", *rel.parent.parts)
+    package = ("llm_rosetta", "shims", "builtin", *rel.parent.parts)
     assert offenders(path.read_text(encoding="utf-8"), package, rel.parts[0]) == []
 
 
@@ -136,7 +136,7 @@ def test_the_scaffolded_vendor_imports_core_only_through_the_contracts(tmp_path)
 
 
 def test_the_rule():
-    acme = ("llm_rosetta", "shims", "providers", "acme")
+    acme = ("llm_rosetta", "shims", "builtin", "acme")
 
     def check(source: str) -> list[str]:
         return offenders(source, acme, "acme")
@@ -151,13 +151,13 @@ def test_the_rule():
     # The 0.13.0 forwarders are compat for outside users, not for shims.
     assert check("from llm_rosetta.routing import X") == ["1 llm_rosetta.routing"]
     assert check("import llm_rosetta.capabilities") == ["1 llm_rosetta.capabilities"]
-    cross = "1 llm_rosetta.shims.providers.openai.quota"
-    assert check("from llm_rosetta.shims.providers.openai.quota import X") == [cross]
+    cross = "1 llm_rosetta.shims.builtin.openai.quota"
+    assert check("from llm_rosetta.shims.builtin.openai.quota import X") == [cross]
     assert check("from ..openai.quota import X") == [cross]
 
 
 def test_a_contract_package_is_imported_as_a_package_only():
-    acme = ("llm_rosetta", "shims", "providers", "acme")
+    acme = ("llm_rosetta", "shims", "builtin", "acme")
     assert (
         offenders("from llm_rosetta.contracts.usage import UsageReport", acme, "acme")
         == []

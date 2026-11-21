@@ -17,7 +17,7 @@ from llm_rosetta_gateway.quota.models import (
 from llm_rosetta_gateway.quota.probes import resolve_probe
 from llm_rosetta_gateway.quota.state import QuotaState
 from llm_rosetta_gateway.transport.provider_info import KeyRing
-from llm_rosetta.shims.providers.deepseek.quota import DeepSeekBalanceProbe
+from llm_rosetta.shims.builtin.deepseek.quota import DeepSeekBalanceProbe
 from _moved_vendors import load_providers_with_moved, moved_vendor_module
 
 # Both probes moved to contrib with their vendors (#1660); the frozen copies

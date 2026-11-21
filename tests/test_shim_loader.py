@@ -1771,7 +1771,7 @@ class TestBuiltinVendorManifests:
 
     @staticmethod
     def _vendors() -> list[Path]:
-        from llm_rosetta.shims import providers as providers_mod
+        from llm_rosetta.shims import builtin as providers_mod
 
         root = providers_mod._PROVIDERS_DIR
         return [
@@ -1965,7 +1965,7 @@ class TestModelTypeDirectories:
         assert shim.format == "chat_completions"
 
     def test_every_builtin_sits_under_its_model_type(self):
-        import llm_rosetta.shims.providers as providers_mod
+        import llm_rosetta.shims.builtin as providers_mod
         from llm_rosetta._vendor.yaml import load as yaml_load
 
         root = Path(providers_mod.__file__).parent

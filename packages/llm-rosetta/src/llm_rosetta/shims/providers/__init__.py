@@ -1,29 +1,20 @@
-"""The bundled vendor data, and the deprecated 0.13.0 loader path.
+"""Deprecated: the 0.13.0 shim loader path.  Import :mod:`llm_rosetta.api`.
 
-Each ``<vendor>/`` directory below holds ``provider.yaml`` files and their
-sidecars (``transforms.py``, ``quota.py``, ``auth.py``).  The code that reads
-them is :mod:`llm_rosetta.shims._loader`; this package exists so the sidecars
-load under a real package name and so the loader can find this directory.
-
-Deprecated: in 0.13.0 this module held the shim loader itself, and shim
-packages imported ``load_providers``, ``get_model_list_transform`` and the
-rest from here.  Those names still resolve, as the same objects, and each
-access warns with its replacement: :mod:`llm_rosetta.api` for hosts,
-:mod:`llm_rosetta.shims` for ``load_providers_from_dir``,
-:mod:`llm_rosetta.contracts.shim` for the data classes.  The forwarding is
-removed in 0.15.0.
+In 0.13.0 this module held the shim loader, and shim packages imported
+``load_providers``, ``get_model_list_transform`` and the rest from here.  The
+loader is now the internal :mod:`llm_rosetta.shims._loader` and the bundled
+vendor data lives in :mod:`llm_rosetta.shims.builtin`.  The names 0.13.0
+exported still resolve here, as the same objects, and each access warns with
+its replacement: :mod:`llm_rosetta.api` for hosts, :mod:`llm_rosetta.shims`
+for ``load_providers_from_dir``, :mod:`llm_rosetta.contracts.shim` for the
+data classes.  This module is removed in 0.15.0.
 """
 
 from __future__ import annotations
 
 import importlib
 import warnings
-from pathlib import Path
 from typing import Any
-
-#: The built-in providers root.  :mod:`llm_rosetta.shims._loader` imports it;
-#: rebind it there to redirect the scan.
-_PROVIDERS_DIR = Path(__file__).parent
 
 # Deprecated 0.13.0 path, removed in 0.15.0.  Each name 0.13.0's
 # llm_rosetta.shims.providers exported -> (the module that holds it now, the

@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 import llm_rosetta.api as api
+from llm_rosetta.shims import builtin as providers
 from llm_rosetta.shims import ProviderShim, ReasoningCapability
 from llm_rosetta.shims.provider_shim import get_shim, register_shim
 from llm_rosetta.shims._loader import _CONNECTION_KEYS, _IDENTITY_KEYS
@@ -284,8 +285,6 @@ def test_builtin_providers_dir_is_the_root_load_providers_scans():
     root = api.builtin_providers_dir()
     assert root.is_dir()
     assert (root / "openai").is_dir()
-    from llm_rosetta.shims import providers
-
     assert root == providers._PROVIDERS_DIR
 
 

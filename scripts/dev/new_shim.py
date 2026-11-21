@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BUILTIN_ROOT = REPO_ROOT / "packages/llm-rosetta/src/llm_rosetta/shims/providers"
+BUILTIN_ROOT = REPO_ROOT / "packages/llm-rosetta/src/llm_rosetta/shims/builtin"
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -284,7 +284,7 @@ def _load_transforms(
     # undoes what this load added, and those packages count as added.
     before = frozenset(sys.modules)
     if _builtin:
-        prefix = "llm_rosetta.shims.providers"
+        prefix = "llm_rosetta.shims.builtin"
         module_name = (
             f"{prefix}.{group}.{provider_dir.name}.transforms"
             if group is not None

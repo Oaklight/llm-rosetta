@@ -134,8 +134,8 @@ declare the differences.
 | `QuotaProbe` | `contracts/quota.py` | Allowance-probe contract a shim ships in `quota.py` |
 | `Transform` types and primitives | `contracts/transform.py` | `NamedTransform`, `strip_fields`, `hoist_late_system_messages`, ... (implementations in `ir/primitives/`) |
 | Loader | `shims/_loader/` | Reads a shim tree: directory walk, `provider.yaml` parsing, sidecars, vendor manifests, `provider.schema.json` (internal) |
-| Built-in shims | `shims/providers/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type |
-| Vendor manifest | `shims/providers/<vendor>/provider.yaml` | Optional per-vendor defaults every leaf inherits: `connection:` (the credential) plus the vendor's own `logo` / `group` / `group_label`; `auth.py` sits beside it |
+| Built-in shims | `shims/builtin/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type |
+| Vendor manifest | `shims/builtin/<vendor>/provider.yaml` | Optional per-vendor defaults every leaf inherits: `connection:` (the credential) plus the vendor's own `logo` / `group` / `group_label`; `auth.py` sits beside it |
 | Tree contract | `shims/_shim_template/` | The path rules (`<vendor>[/<lane>]/<type>[/<format>]/provider.yaml`), the file allow-list, and the skeleton `shims new` renders; `shims check` reports a tree that departs from it, `shims migrate --write` moves one onto it |
 | External shim sources | `llm_rosetta_gateway/shims/` | Directory/archive loaders, standalone catalog (with its free / paid / subscription tier), scheduled removals |
 
@@ -243,7 +243,7 @@ Core modules (`packages/llm-rosetta/src/llm_rosetta/`):
 | `ir/` | IR logic: `primitives/`, `tools/`, `passes/` |
 | `types/` | Typed IR dataclasses in `types/ir/`; provider shapes for reference in `types/messages/`, `types/openai/`, `types/google/` |
 | `contracts/` | The extension contracts: `shim.py`, `transform.py`, `auth.py`, `quota.py`, `routing.py`, `usage/` |
-| `shims/` | `provider_shim.py` (the registry), `_loader/` (the code that reads a shim tree), and `providers/` (one manifest per vendor/model-type/format; its `__init__` also forwards the 0.13.0 loader names, deprecated, until 0.15.0) |
+| `shims/` | `provider_shim.py` (the registry), `_loader/` (the code that reads a shim tree), `builtin/` (the bundled vendor data: one manifest per vendor/model-type/format), and `providers/` (the 0.13.0 loader path: forwards its names, deprecated, until 0.15.0) |
 | `pipeline/` | Chat and typed conversion pipelines |
 | `fidelity/` | Fidelity baseline and checker |
 | `profiling/` | The profiler |
@@ -520,8 +520,8 @@ gate — missing any item means the converter is not fully integrated.
    model-type descriptor format lists and chat routes.  The registry's
    import-time check refuses a catalog entry with no converter binding.
    Add the name to the `ProviderType` literal in `auto_detect.py`.
-5. **Provider shim** — create `shims/providers/<vendor>/llm/<format>/provider.yaml`
-   (chat) or `shims/providers/<vendor>/<type>/provider.yaml` (embeddings, rerank,
+5. **Provider shim** — create `shims/builtin/<vendor>/llm/<format>/provider.yaml`
+   (chat) or `shims/builtin/<vendor>/<type>/provider.yaml` (embeddings, rerank,
    decision) with `model_type: <type>` and `format: <format>`.  The loader
    validates the `(model_type, format)` pair against the converter registry and
    the directory name against `model_type`; `base:` was removed in 0.14.0 and the
@@ -544,7 +544,7 @@ gate — missing any item means the converter is not fully integrated.
 
 - Converter output mismatch → check IR types in `types/ir/`, then the
   converter's `*_ops.py` modules
-- Shim/transform issue → check `shims/providers/`, `contracts/transform.py` and `ir/primitives/`
+- Shim/transform issue → check `shims/builtin/`, `contracts/transform.py` and `ir/primitives/`
 - Gateway config issue → check `config/` resolution order
   (`loader` → `core` → `parse`/`typed`/`settings`, then `resolve`)
   (shim → type → name fallback)
