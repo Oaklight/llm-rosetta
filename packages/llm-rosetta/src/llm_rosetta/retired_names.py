@@ -22,6 +22,17 @@ Retiring a name
 Add one :class:`RetiredName` row.  Never edit a row's meaning and never reuse
 a retired name for something new: a row says what the name *used to* mean.
 A test rejects a chain (a replacement that is itself retired).
+
+Removed import paths
+--------------------
+
+:data:`RETIRED_MODULES` is a sibling table: a module path that an earlier
+release (or the 0.14.0 development line) let user code import, and what to
+import instead.  It is data only.  Nothing here hooks the import system; the
+reader is ``llm-rosetta-migrate --scan``, which reports an import of a listed
+path only when that path does not resolve in the installed core, so a path
+that still exists is never reported.  Add one :class:`RetiredModule` row when
+a module path is removed or moved.
 """
 
 from __future__ import annotations
@@ -184,6 +195,86 @@ RETIRED_NAMES: tuple[RetiredName, ...] = (
     RetiredName(name="decision", replacement="decisions", kind=MODEL_TYPE),
 )
 
+
+@dataclass(frozen=True)
+class RetiredModule:
+    """One removed import path.
+
+    Attributes:
+        path: The dotted module path user code imported.  A submodule of it
+            (``<path>.converter``) is covered by the same row.
+        replacement: The module to import instead, or ``None`` when there is
+            no public replacement.  Never itself a retired path.
+        note: What to do instead, for a row with no replacement.
+    """
+
+    path: str
+    replacement: str | None
+    note: str = ""
+
+
+_CONVERTERS = "llm_rosetta.converters"
+_HELPERS = f"{_CONVERTERS}.base.helpers"
+_TOOLS = f"{_CONVERTERS}.base.tools"
+
+RETIRED_MODULES: tuple[RetiredModule, ...] = (
+    # -- compat converter packages (#1640) -----------------------------------
+    RetiredModule(f"{_CONVERTERS}.openai_chat", f"{_CONVERTERS}.llm.chat_completions"),
+    RetiredModule(
+        f"{_CONVERTERS}.openai_responses", f"{_CONVERTERS}.llm.open_responses"
+    ),
+    RetiredModule(f"{_CONVERTERS}.anthropic", f"{_CONVERTERS}.llm.messages"),
+    RetiredModule(f"{_CONVERTERS}.google_genai", f"{_CONVERTERS}.llm.google_generate"),
+    RetiredModule(
+        f"{_CONVERTERS}.google_generate", f"{_CONVERTERS}.llm.google_generate"
+    ),
+    RetiredModule(
+        f"{_CONVERTERS}.google_interactions",
+        f"{_CONVERTERS}.llm.google_interactions",
+    ),
+    RetiredModule(f"{_CONVERTERS}.embedding", f"{_CONVERTERS}.embeddings"),
+    # -- helper modules and facades (#1647, #1648) ---------------------------
+    RetiredModule(
+        f"{_HELPERS}.cache_breakpoints", "llm_rosetta.ir.primitives.cache_breakpoints"
+    ),
+    RetiredModule(f"{_HELPERS}.image_limit", "llm_rosetta.ir.primitives.image_limit"),
+    RetiredModule(
+        f"{_HELPERS}.system_message_hoist",
+        "llm_rosetta.ir.primitives.system_message_hoist",
+    ),
+    RetiredModule(f"{_HELPERS}.tool_group", "llm_rosetta.ir.primitives.tool_group"),
+    RetiredModule(f"{_HELPERS}.truncate", "llm_rosetta.ir.primitives.truncate"),
+    RetiredModule(f"{_TOOLS}.call_unwind", "llm_rosetta.ir.primitives.call_unwind"),
+    RetiredModule(f"{_TOOLS}.allowed_tools", "llm_rosetta.ir.tools.allowed_tools"),
+    RetiredModule(f"{_TOOLS}.batch", "llm_rosetta.ir.tools.batch"),
+    RetiredModule(f"{_TOOLS}.call_id", "llm_rosetta.ir.tools.call_id"),
+    RetiredModule(f"{_TOOLS}.error_marker", "llm_rosetta.ir.tools.error_marker"),
+    RetiredModule(f"{_TOOLS}.intrinsic", "llm_rosetta.ir.tools.intrinsic"),
+    RetiredModule(f"{_TOOLS}.orphan_fix", "llm_rosetta.ir.tools.orphan_fix"),
+    RetiredModule(f"{_TOOLS}.strict_mode", "llm_rosetta.ir.tools.strict_mode"),
+    # -- name aliases and shim declarations (#1656) --------------------------
+    RetiredModule(
+        "llm_rosetta.provider_names",
+        None,
+        note=(
+            "pass the canonical name; the retired spellings and their "
+            "replacements are in llm_rosetta.retired_names.RETIRED_NAMES"
+        ),
+    ),
+    RetiredModule("llm_rosetta.shims.transforms", "llm_rosetta.contracts.transform"),
+    # -- extension contracts that moved to llm_rosetta.contracts (#1657) -----
+    RetiredModule("llm_rosetta.transforms", "llm_rosetta.contracts.transform"),
+    RetiredModule(
+        "llm_rosetta.capabilities",
+        None,
+        note="the capability passes are internal and not part of the public surface",
+    ),
+    RetiredModule("llm_rosetta.shims.auth_exchange", "llm_rosetta.contracts.auth"),
+    RetiredModule("llm_rosetta.shims.quota_probe", "llm_rosetta.contracts.quota"),
+    RetiredModule("llm_rosetta.routing", "llm_rosetta.contracts.routing"),
+    RetiredModule("llm_rosetta.observability.usage", "llm_rosetta.contracts.usage"),
+)
+
 _BY_KIND: dict[tuple[str, str], RetiredName] = {
     (row.kind, row.name): row for row in RETIRED_NAMES
 }
@@ -252,6 +343,46 @@ def retired_key_message(old: str, new: str) -> str:
     )
 
 
+def retired_module(path: str) -> RetiredModule | None:
+    """Return the row that covers module *path*, or ``None``.
+
+    A row covers its own path and every submodule of it; the longest
+    matching row wins.
+
+    Args:
+        path: A dotted module path, as written in an import statement.
+
+    Returns:
+        The matching row, or ``None`` when *path* was never retired.
+    """
+    best: RetiredModule | None = None
+    for row in RETIRED_MODULES:
+        if path == row.path or path.startswith(row.path + "."):
+            if best is None or len(row.path) > len(best.path):
+                best = row
+    return best
+
+
+def retired_module_message(path: str) -> str | None:
+    """Return the sentence that says what to import instead of *path*.
+
+    Args:
+        path: A dotted module path, as written in an import statement.
+
+    Returns:
+        The message, or ``None`` when *path* is not covered by a row.
+    """
+    row = retired_module(path)
+    if row is None:
+        return None
+    message = f"{row.path!r} was removed in {RENAMED_IN}"
+    if row.replacement is not None:
+        message += f"; import {row.replacement!r} instead"
+    else:
+        message += f" and has no public replacement ({row.note})"
+    return f"{message}; see the migration guide"
+
+
 def check_not_retired(name: object, *kinds: str) -> None:
     """Raise if *name* is retired under any of *kinds*.
 
@@ -277,12 +408,16 @@ __all__ = [
     "MIGRATE_HINT",
     "MODEL_TYPE",
     "PROVIDER_TYPE",
+    "RETIRED_MODULES",
     "RETIRED_NAMES",
     "SHIM",
+    "RetiredModule",
     "RetiredName",
     "check_not_retired",
     "lookup",
     "replacement_for",
     "retired_key_message",
+    "retired_module",
+    "retired_module_message",
     "retired_name_message",
 ]

@@ -18,7 +18,7 @@ says so.
 
 Exit codes: ``0`` nothing to do, or everything mapped (a ``note``, an item the
 tool leaves on purpose, does not count); ``1`` something was reported that needs
-a person (an unmapped item, or a ``--scan`` mention); ``2`` the command could
+a person (an unmapped item, or a ``--scan`` mention or import); ``2`` the command could
 not run (unreadable file, parse error, database held by a running gateway);
 ``3`` ``--check`` found pending rewrites.
 
@@ -30,7 +30,9 @@ in one transaction after a backup, and refuses while a process holds the file.
 from __future__ import annotations
 
 import argparse
+import ast
 import difflib
+import importlib.util
 import json
 import os
 import re
@@ -82,7 +84,9 @@ class Item:
             that must be added alongside a rewrite), ``unmapped`` (needs a
             person; never changed), ``pending`` (a load-time migration only
             the gateway can run; counts for ``--check``), ``mention`` (a ``--scan`` hit: advisory,
-            a textual mention that may or may not be a use) or ``note`` (left
+            a textual mention that may or may not be a use), ``import`` (a
+            ``--scan`` hit: a Python import of a module path that was removed
+            and does not resolve in the installed core) or ``note`` (left
             on purpose; informational, never counted in the exit code).
         file: The file the item is about.
         where: A dotted path inside a config, or ``table.column`` in a database.
@@ -112,6 +116,8 @@ class Item:
             return f"{place}: UNMAPPED {self.old!r}: {self.detail}"
         if self.action == "mention":
             return f"{place}: mentions {self.old!r} (advisory): {self.detail}"
+        if self.action == "import":
+            return f"{place}: imports removed module {self.old!r}: {self.detail}"
         if self.action == "note":
             return f"{place}: NOTE {self.old!r} left as it is: {self.detail}"
         change = f"{self.old!r} -> {self.new!r}" if self.old else f"add {self.new!r}"
@@ -1021,6 +1027,68 @@ def _scan_files(root: Path) -> Iterator[Path]:
                 yield path
 
 
+def _resolves(path: str) -> bool:
+    """Whether module *path* can be imported from the installed packages."""
+    try:
+        return importlib.util.find_spec(path) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _imported_modules(tree: ast.AST) -> Iterator[tuple[int, str]]:
+    """``(line, dotted path)`` for every absolute import in *tree*.
+
+    ``from pkg import name`` yields ``pkg`` and ``pkg.name``: *name* may be a
+    submodule, and a removed submodule of a package that still exists is only
+    visible that way (``from llm_rosetta.converters.base.tools import batch``).
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                yield node.lineno, alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
+            yield node.lineno, node.module
+            for alias in node.names:
+                if alias.name != "*":
+                    yield node.lineno, f"{node.module}.{alias.name}"
+
+
+def _scan_imports(path: Path, text: str, gone: dict[str, bool]) -> list[Item]:
+    """One ``import`` item per import of a removed module path in *text*.
+
+    A path is reported only when its row's path does not resolve in the
+    installed core (*gone* caches the answer per row), so a path that a
+    later change will remove, but that still exists, is never reported.
+    """
+    try:
+        tree = ast.parse(text, filename=str(path))
+    except (SyntaxError, ValueError):
+        return []
+    items: list[Item] = []
+    seen: set[tuple[int, str]] = set()
+    for line, module in _imported_modules(tree):
+        row = retired_names.retired_module(module)
+        if row is None or (line, row.path) in seen:
+            continue
+        if row.path not in gone:
+            gone[row.path] = not _resolves(row.path)
+        if not gone[row.path]:
+            continue
+        seen.add((line, row.path))
+        items.append(
+            Item(
+                "scan",
+                "import",
+                str(path),
+                line=line,
+                old=module,
+                new=row.replacement,
+                detail=retired_names.retired_module_message(module) or "",
+            )
+        )
+    return items
+
+
 def scan_path(root: Path, skip: Iterable[Path] = ()) -> list[Item]:
     """Report every occurrence of a retired name under *root*; edit nothing.
 
@@ -1028,7 +1096,12 @@ def scan_path(root: Path, skip: Iterable[Path] = ()) -> list[Item]:
     ``.json``/``.jsonc`` and ``.yaml``/``.yml`` files, and unquoted as a YAML
     key or value.  A quoted string is a match, not a proof: ``"anthropic"`` may
     be your own variable, so the report names every replacement the table has.
-    Each finding is an advisory textual mention, not a proof of a use.
+    Each such finding is an advisory textual mention, not a proof of a use.
+
+    In ``.py`` files it also reads the import statements: an import of a
+    module path listed in ``retired_names.RETIRED_MODULES`` is an ``import``
+    item that names what to import instead.  It is reported only when the
+    path does not resolve in the installed core.
 
     Args:
         root: A file or a directory.
@@ -1044,13 +1117,17 @@ def scan_path(root: Path, skip: Iterable[Path] = ()) -> list[Item]:
     quoted = re.compile(r"([\x22\x27])(" + alternation + r")\1")
     bare = re.compile(r"(?:^|[\s:\-])(" + alternation + r")\s*(?::|(?:#.*)?$)")
     items: list[Item] = []
+    gone: dict[str, bool] = {}
     for path in _scan_files(root):
         if path.resolve() in skipped:
             continue
         try:
-            lines = path.read_text(encoding="utf-8").splitlines()
+            text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
+        if path.suffix == ".py":
+            items.extend(_scan_imports(path, text, gone))
+        lines = text.splitlines()
         is_yaml = path.suffix in (".yaml", ".yml")
         for number, line in enumerate(lines, 1):
             names = [m.group(2) for m in quoted.finditer(line)]
@@ -1105,7 +1182,10 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         metavar="PATH",
-        help="report retired names in .py/.json/.yaml files under PATH; edits nothing",
+        help=(
+            "report retired names in .py/.json/.yaml files, and imports of removed "
+            "module paths in .py files, under PATH; edits nothing"
+        ),
     )
     parser.add_argument(
         "--write",
@@ -1168,7 +1248,9 @@ def _exit_code(args: argparse.Namespace, report: dict[str, Any]) -> int:
     files = report["configs"] + report["databases"]
     if any("error" in f for f in files):
         return 2
-    if any(item.action in ("unmapped", "mention") for item in report["items"]):
+    if any(
+        item.action in ("unmapped", "mention", "import") for item in report["items"]
+    ):
         return 1
     pending = any(item.action in ("rewrite", "pending") for item in report["items"])
     if args.check and not args.write and pending:
@@ -1191,10 +1273,11 @@ def _print_text(args: argparse.Namespace, report: dict[str, Any]) -> None:
     rewrites = sum(1 for i in report["items"] if i.action == "rewrite")
     unmapped = sum(1 for i in report["items"] if i.action == "unmapped")
     mentions = sum(1 for i in report["items"] if i.action == "mention")
+    imports = sum(1 for i in report["items"] if i.action == "import")
     notes = len(report["notes"])
     print(
         f"{rewrites} rewrite(s), {unmapped} unmapped, {mentions} mention(s), "
-        f"{notes} note(s); exit {report['exit_code']}"
+        f"{imports} removed import(s), {notes} note(s); exit {report['exit_code']}"
     )
 
 
