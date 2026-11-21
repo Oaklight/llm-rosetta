@@ -222,7 +222,7 @@ connection:
 
 shim 包的 `transforms.py`、`auth.py` 与 `quota.py` 只能从 `llm_rosetta.contracts` 导入；见 [shim 可以导入什么](shims.md#what-a-shim-may-import)。
 
-shim 包要和 core 一起升级。为更早的 0.14 开发版构建的 shim 包会导入已经不存在的 `llm_rosetta.transforms` 或 `llm_rosetta.shims.auth_exchange`；加载器会跳过这个包，并记录一条 WARNING，写明缺失的模块并提示升级 shim 包，网关则在没有这些 shim 的情况下运行。已发布的包（`llm-rosetta-shim-alcf`、`-argo`、`-asksage`、`-free`、`-opendesign`）会为 0.14.0 发布新版本，依赖下限是 `llm-rosetta>=0.14.0.dev35`；请和 core 同一步升级（`pip install -U llm-rosetta llm-rosetta-gateway llm-rosetta-shim-<name>`）。
+shim 包要和 core 一起升级。shim 包（`alcf`、`argo`、`asksage`、`free`、`opendesign`）不在 PyPI 上：网关通过 `shims.presets` 从它们的 GitHub 仓库安装（见 [shim 指南](shims.md)）。为更早的 0.14 开发版构建的副本会导入已经不存在的 `llm_rosetta.transforms` 或 `llm_rosetta.shims.auth_exchange`；加载器会跳过这个包，并记录一条 WARNING，写明缺失的模块并提示升级 shim 包，网关则在没有这些 shim 的情况下运行。升级 core 后，请在管理面板中该包的卡片上更新它，或刷新 preset。
 
 `llm-rosetta-migrate --scan`（PR [#1658](https://github.com/Oaklight/llm-rosetta/pull/1658)）把对本表中已移除路径的导入报告为 `import` 条目，并写出替代路径。只有在已安装的 core 中无法解析的路径才会被报告。`llm_rosetta.routing` 与 `llm_rosetta.capabilities` 作为转发模块仍能解析，因此扫描不报告它们，由它们的 `DeprecationWarning` 提示。要找出所有旧路径（包括转发模块）：
 
