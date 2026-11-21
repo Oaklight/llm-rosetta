@@ -659,6 +659,102 @@ selector as a source row marked *not in the manifest*, so the loss is visible
 in the log and on the Shims page. The same holds for any `install` entry that
 matches nothing.
 
+Which vendors live in core and which in a source, and how a vendor moves
+between the two, is described in [Shim Placement and Maturity](shim-placement.md).
+
+#### Adding a source { #adding-a-source }
+
+A source is any repository that publishes a manifest in the
+`llm_rosetta.contracts.shim_manifest` format: `dist/manifest.json`, with each
+vendor archive at the relative path its record names. Three spellings are
+accepted in `shims.sources`:
+
+```jsonc
+"shims": {
+  "sources": [
+    "contrib",                                              // a catalogue id
+    "https://shims.example.org/dist/manifest.json",         // a manifest URL
+    {                                                       // a URL with options
+      "url": "https://cdn.example.org/acme@dist/manifest.json",
+      "fallback": "https://raw.example.org/acme/dist/manifest.json",
+      "token_env": "ACME_SHIMS_TOKEN"
+    }
+  ],
+  "install": ["contrib:opendesign", "acme:*", "tag:tier:free"]
+}
+```
+
+- A catalogue id (`contrib`, `argonne`) expands to the jsDelivr URL of the
+  repository's `dist` branch, with `raw.githubusercontent.com` as the
+  fallback.
+- A URL must be HTTPS. The archives are resolved against the directory that
+  holds the manifest, first on the URL that served it, then on the other one.
+- `token_env` names an environment variable whose value is sent as a bearer
+  token, and only to the primary URL's origin.
+- The selector prefix of a URL source is the manifest's own `source` field
+  (`acme` above), not the URL.
+- Declaring `sources` replaces the defaults. To keep reading `contrib` and
+  `argonne`, list them too.
+
+`install` entries use one grammar for every source:
+
+| Entry | Selects |
+|-------|---------|
+| `<vendor>` | that vendor, in every source |
+| `tag:<tag>` | every vendor whose installable record carries the tag; the tag is matched whole |
+| `*` | every vendor |
+| `<source>:` + one of the above | the same, in that source only |
+
+Tags are free-form and written by the source. The two curated sources use
+`tier:free`, `tier:subscription`, `auth:oauth`, `auth:device`,
+`auth:account`, `auth:token-exchange`, `org:argonne`,
+`access:institutional` and `network:ssh-tunnel`. The vendor cards on the
+Shims page list each vendor's tags.
+
+A source is code execution at the trust level of whoever publishes it: an
+installed vendor may ship `auth.py`, `quota.py` and `transforms.py`, which run
+inside the gateway process. Add only sources you trust.
+
+#### Managing sources from the admin panel { #panel }
+
+**Shims → Available** opens with one section per source the gateway reads,
+then the legacy preset packages. A source the config only implies (the
+defaults, or the source of a mapped preset) is tagged *default*. A source that
+did not answer is tagged *unreachable* and shows the error; one served from
+the cache after a failed fetch is tagged *cached copy*.
+
+Every vendor in a source has a card. Closed, it shows the vendor, its maturity,
+its state (*Installed*, *Selected*, *Skipped*, *Failed* or *Available*) and its
+version. Open, it shows:
+
+- the source, the installed version, a newer installable version, and the
+  newest published version, with the reason when this core cannot run it;
+- whether the installed release's `requires` matches this core;
+- maturity and the date it was reached, the last conformance result and any
+  `promoted_to`;
+- the tags, and the shims the release registers, each marked installed or not;
+- the `install` entry or legacy preset that selects the vendor, the reason a
+  selected vendor was skipped (*not in the manifest*, *core provides …*,
+  *promoted to …*), and the earlier source that provides the same vendor.
+
+**Install** adds `<source>:<vendor>` to `shims.install` and reloads, which
+installs the vendor. When the source was only implied, it is also added to
+`shims.sources`. **Remove** drops the entries that name the vendor. When a tag,
+`*` or preset entry still selects the vendor, the panel names that entry and
+changes nothing, because that entry selects other vendors too.
+
+**Shims → Sources → Manifest sources** edits both keys at once. Each source has
+a block with a checkbox for every vendor (`<source>:*`), one per tag and one per
+vendor. The field under the blocks adds a catalogue id or a manifest URL, and
+*Remove source* drops a source together with the entries qualified with its id.
+A new URL source is read after the first save. The edits stay a draft until
+**Save**, which writes `shims.sources` and `shims.install` through the
+config-save path (under the config lock) and reloads the sources. Only entries
+qualified with a source are rewritten. An unqualified entry (`opendesign`,
+`tag:tier:free`) reads every source, so it is listed as written; edit it in the
+config file. **Re-read manifests** fetches every manifest again. The raw
+*Directories* and *Remotes* fields below the group work as before.
+
 #### Selecting part of a package { #selection }
 
 A package is loaded whole by default. Two optional maps narrow that without

@@ -130,6 +130,7 @@ nav:
       - Providers:
           - Provider Compatibility: guide/compatibility.md
           - Provider Shims: guide/shims.md
+          - Shim Placement and Maturity: guide/shim-placement.md
           - Provider Quota: guide/quota.md
           - Provider Reference:
               - guide/providers/index.md
