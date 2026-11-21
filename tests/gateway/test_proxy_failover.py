@@ -603,7 +603,7 @@ class TestTheRequestLog:
     """
 
     def test_the_logged_provider_becomes_the_one_that_served(self):
-        from llm_rosetta_gateway import lifecycle
+        from llm_rosetta_gateway.proxy import lifecycle
 
         config = _config()
         selection = config.selection_context("m", "chat_completions")
@@ -640,7 +640,7 @@ class TestTheRequestLog:
 
     def _logged_lane(self, config: GatewayConfig, transport: _Transport):
         """Drive one request under a lifecycle context and return it."""
-        from llm_rosetta_gateway import lifecycle
+        from llm_rosetta_gateway.proxy import lifecycle
 
         selection = config.selection_context("m", "chat_completions")
         route, pinfo = config.resolve(selection)
@@ -1208,7 +1208,7 @@ class TestTheRouteWiring:
         from unittest.mock import MagicMock
 
         import llm_rosetta_gateway.app as app_module
-        from llm_rosetta_gateway import lifecycle
+        from llm_rosetta_gateway.proxy import lifecycle
         from llm_rosetta_gateway._vendor.httpserver import StreamingResponse
         from llm_rosetta_gateway.app import _state
 
@@ -1314,7 +1314,7 @@ class TestTheFailurePath:
     """
 
     def test_a_raising_second_attempt_still_moves_the_log(self):
-        from llm_rosetta_gateway import lifecycle
+        from llm_rosetta_gateway.proxy import lifecycle
 
         config = _config()
         selection = config.selection_context("m", "chat_completions")
@@ -1357,7 +1357,7 @@ class TestTheFailurePath:
 
     def test_a_raising_stream_attempt_still_moves_the_log(self):
         """The streaming twin: same failure, same obligation."""
-        from llm_rosetta_gateway import lifecycle
+        from llm_rosetta_gateway.proxy import lifecycle
 
         config = _config()
         selection = config.selection_context("m", "chat_completions")
@@ -1405,7 +1405,7 @@ class TestTheFailurePath:
         `record_failover` runs from a `finally` on the failure path, so an
         exception of its own would otherwise become the error the client sees.
         """
-        from llm_rosetta_gateway import lifecycle
+        from llm_rosetta_gateway.proxy import lifecycle
 
         config = _config()
         selection = config.selection_context("m", "chat_completions")

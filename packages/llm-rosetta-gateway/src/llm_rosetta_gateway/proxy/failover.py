@@ -243,7 +243,7 @@ def record_failover(
     it; the lifecycle row must name the lane whose response the client
     actually received.
     """
-    from ..lifecycle import current_lifecycle
+    from .lifecycle import current_lifecycle
     from ..observability.logging import get_logger
 
     try:

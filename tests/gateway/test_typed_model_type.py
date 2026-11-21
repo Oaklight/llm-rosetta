@@ -256,7 +256,7 @@ class TestFourthType:
         chat route; without it a renamed typed model is indistinguishable from
         an unrenamed one in the request log.
         """
-        from llm_rosetta_gateway import lifecycle
+        from llm_rosetta_gateway.proxy import lifecycle
 
         config = _config_with_upstream()
         handler = TypedHandler(
@@ -309,7 +309,7 @@ class TestFourthType:
         path takes after the call, so without the early one the row for a
         breaker rejection would name the provider and no lane.
         """
-        from llm_rosetta_gateway import lifecycle
+        from llm_rosetta_gateway.proxy import lifecycle
         from llm_rosetta_gateway.middleware.circuit_breaker import CircuitBreakerConfig
 
         config = _config_with_upstream()

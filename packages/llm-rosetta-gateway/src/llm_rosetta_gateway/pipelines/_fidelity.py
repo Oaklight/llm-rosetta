@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from ..fidelity_check import compare_same_format
+from ..proxy.fidelity_check import compare_same_format
 from ..observability.logging import get_logger, log_fidelity_warning
 
 logger = get_logger()

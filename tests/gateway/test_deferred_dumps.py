@@ -17,7 +17,7 @@ import pytest
 
 import llm_rosetta_gateway.app as app_module
 from llm_rosetta_gateway.app import _state
-import llm_rosetta_gateway.lifecycle as lifecycle_module
+import llm_rosetta_gateway.proxy.lifecycle as lifecycle_module
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse
 from llm_rosetta_gateway.maintenance.dumps import DeferredDumpStore
 from llm_rosetta_gateway.ops import OpsContext

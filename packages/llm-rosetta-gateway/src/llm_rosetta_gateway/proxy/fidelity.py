@@ -9,7 +9,7 @@ from llm_rosetta.contracts.routing import ResolvedRoute
 
 from llm_rosetta_gateway.observability.error_dump import dump_error
 
-from ..fidelity_check import compare_same_format
+from .fidelity_check import compare_same_format
 from ..observability.logging import get_logger, log_fidelity_warning
 
 logger = get_logger()

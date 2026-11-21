@@ -32,17 +32,17 @@ from llm_rosetta_gateway.observability.error_dump import dump_error
 from llm_rosetta_gateway.observability.sanitize import scrub_body_text
 from llm_rosetta.contracts.usage import DEFAULT_MODEL_TYPE
 
-from .observability.logging import get_logger
-from .maintenance.dumps import DeferredDumpStore
-from .middleware.circuit_breaker import CircuitBreaker
-from .middleware.error_format import detect_api_format, format_error_response
-from .middleware.headers import get_request_id
-from .middleware.request_context import request_context_var
-from .ops.proxy import record_proxy_request
-from .routing.conversation import note_conversation
+from ..observability.logging import get_logger
+from ..maintenance.dumps import DeferredDumpStore
+from ..middleware.circuit_breaker import CircuitBreaker
+from ..middleware.error_format import detect_api_format, format_error_response
+from ..middleware.headers import get_request_id
+from ..middleware.request_context import request_context_var
+from ..ops.proxy import record_proxy_request
+from ..routing.conversation import note_conversation
 
 if TYPE_CHECKING:
-    from .config import GatewayConfig
+    from ..config import GatewayConfig
 
 logger = get_logger()
 
@@ -454,7 +454,7 @@ async def _handle_unexpected(
     error_phase: str,
 ) -> Response:
     """Log, dump and answer an unhandled exception from a route handler."""
-    from .proxy import error_response_for_source
+    from . import error_response_for_source
 
     ctx.status_code = 500
     ctx.error_detail = str(exc)

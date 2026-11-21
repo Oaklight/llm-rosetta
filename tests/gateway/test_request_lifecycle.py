@@ -18,7 +18,7 @@ import llm_rosetta_gateway.app as app_module
 from llm_rosetta_gateway.app import _state
 from llm_rosetta_gateway._vendor.httpserver import App, JSONResponse
 from llm_rosetta_gateway.config import GatewayConfig
-from llm_rosetta_gateway.lifecycle import begin_typed, finish_typed
+from llm_rosetta_gateway.proxy.lifecycle import begin_typed, finish_typed
 from llm_rosetta_gateway.model_types import (
     ModelTypeDescriptor,
     RouteSpec,

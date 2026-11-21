@@ -164,7 +164,7 @@ class TestStreamingProfilerDefer:
         from unittest.mock import MagicMock
 
         from llm_rosetta_gateway._vendor.httpserver import StreamingResponse
-        from llm_rosetta_gateway.lifecycle import try_stop_profiler
+        from llm_rosetta_gateway.proxy.lifecycle import try_stop_profiler
 
         state = ProfilerState()
         state.enable(requests=2)

@@ -24,7 +24,7 @@ from llm_rosetta.contracts.routing import ResolvedRoute
 
 from ..config import GatewayConfig
 from ..routing import SelectionContext
-from ..lifecycle import current_lifecycle, instrumented_handler
+from ..proxy.lifecycle import current_lifecycle, instrumented_handler
 from ..transport import ProviderInfo
 from ..middleware.error_format import (
     detect_api_format_from_provider,
