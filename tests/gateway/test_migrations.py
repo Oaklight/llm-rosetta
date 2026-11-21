@@ -725,6 +725,56 @@ class TestConfigIOIntegration:
         assert "decision_providers" not in on_disk
         assert "decision_models" not in on_disk
 
+    def test_an_old_document_is_served_in_the_current_spelling(self, tmp_path):
+        """#919 decision 3: the versioned steps still read retired spellings.
+
+        The loader refuses ``embedding`` in a current document, but a v1
+        document that says ``embedding_providers`` / ``embedding_models`` and
+        ``type: "embedding"`` is upgraded by its step first, so the gateway
+        serves it.  The current-spelling legacy sections
+        (``embeddings_providers`` after the rename, and ``rerank_providers``
+        written by a v1+ release) stay readable as sections.
+        """
+        config_path = str(tmp_path / "config.jsonc")
+        v1_config = {
+            "config_version": 1,
+            "providers": {},
+            "models": {"jina-embed": {"provider": "jina", "type": "embedding"}},
+            "embedding_providers": {
+                "jina": {
+                    "api_key": "j-test",
+                    "base_url": "https://api.jina.ai",
+                    "format": "jina",
+                }
+            },
+            "rerank_providers": {
+                "cohere": {
+                    "api_key": "c-test",
+                    "base_url": "https://api.cohere.com",
+                    "format": "cohere",
+                }
+            },
+            "rerank_models": {"rerank-v3": "cohere"},
+        }
+        with open(config_path, "w") as f:
+            json.dump(v1_config, f)
+
+        from llm_rosetta_gateway.config import load_gateway_config
+
+        config = load_gateway_config(config_path)
+
+        assert config.embeddings_providers["jina"]["format"] == "jina"
+        assert config.resolve_embedding("jina-embed").provider_name == "jina"
+        assert config.rerank_providers["cohere"]["format"] == "cohere"
+        assert config.resolve_rerank("rerank-v3").provider_name == "cohere"
+        with open(config_path) as f:
+            on_disk = json.load(f)
+        assert on_disk["config_version"] == CURRENT_VERSION
+        assert "embedding_providers" not in on_disk
+        assert on_disk["embeddings_providers"]["jina"]["format"] == "jina"
+        assert on_disk["models"]["jina-embed"]["type"] == "embeddings"
+        assert on_disk["rerank_providers"]["cohere"]["format"] == "cohere"
+
     def test_load_does_not_write_substituted_env_vars(self, tmp_path, monkeypatch):
         """Critical: load() must not write substituted secrets back to disk."""
         monkeypatch.setenv("TEST_API_KEY", "sk-real-secret-value")
