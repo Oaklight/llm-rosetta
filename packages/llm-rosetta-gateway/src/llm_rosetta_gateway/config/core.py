@@ -221,12 +221,14 @@ class GatewayConfig:
         # Declarative external shim sources, parsed and validated here so the
         # document the panel reads and the one the apply path loads cannot
         # disagree about its shape (#1330).  The signature is computed from
-        # the raw section, because that is what the reload path compares.
+        # the raw document, because that is what the reload path compares.
+        # The whole document is read, not only the section: a provider that
+        # names a vendor that moved out of core installs it (#1660).
         from ..shim_sources import parse_shims_section, shims_signature
 
         raw_shims = raw.get("shims")
-        self.shims = parse_shims_section(raw_shims, config_path)
-        self.shims_signature = shims_signature({"shims": raw_shims})
+        self.shims = parse_shims_section(raw_shims, config_path, document=raw)
+        self.shims_signature = shims_signature(raw)
 
         all_providers: dict[str, dict[str, str]] = raw.get("providers", {})
 

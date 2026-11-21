@@ -353,7 +353,7 @@ def install_from_manifests(
             source_id = spec.key or state.manifest.source
             answered.append((source_id, spec))
             for vendor, selector in _select_vendors(
-                state.manifest, source_id, plan.selectors, claimed, matched
+                state.manifest, source_id, plan.selectors, claimed, matched, root
             ):
                 statuses.append(
                     _install_vendor(
@@ -370,7 +370,9 @@ def install_from_manifests(
                         core_version=core_version,
                     )
                 )
-    statuses.extend(_unmatched_rows(plan.selectors, matched, answered, fell_back))
+    statuses.extend(
+        _unmatched_rows(plan.selectors, matched, answered, fell_back, claimed)
+    )
     return statuses, fallbacks
 
 
@@ -379,6 +381,7 @@ def _unmatched_rows(
     matched: set[str],
     answered: Sequence[tuple[str, ManifestSourceSpec]],
     fell_back: set[str],
+    claimed: Mapping[str, str] | None = None,
 ) -> list[ShimSourceStatus]:
     """Warn about, and report, each selector that matched no vendor.
 
@@ -387,10 +390,18 @@ def _unmatched_rows(
     shims silently.  Its old remote is *not* loaded in that case — the source
     answered, and an old remote carries code this core may not load.  The
     status row (``skipped="not in the manifest"``) is what the panel shows.
+    A vendor the manifest lists but whose every record was invalid is not
+    unmatched: :func:`_install_vendor` reports it as ``no valid release``.
+
+    A selector the gateway added for a vendor that moved out of core
+    (``origin="moved:<vendor>"``) is satisfied when any selector installed
+    that vendor: a declared tag or ``*`` selector may cover it first.
     """
     rows: list[ShimSourceStatus] = []
     for selector in selectors:
         if selector.raw in matched or selector.raw in fell_back:
+            continue
+        if selector.origin.startswith("moved:") and selector.value in (claimed or {}):
             continue
         logger.warning(
             "Shim install %r (%s) matched no vendor in the reachable sources",
@@ -460,20 +471,30 @@ def _select_vendors(
     selectors: Sequence[InstallSelector],
     claimed: dict[str, str],
     matched: set[str],
+    root: Path | None = None,
 ) -> list[tuple[str, InstallSelector]]:
     """The vendors of *manifest* the selectors pick, each with its selector.
 
     The first selector that matches a vendor speaks for it.  A vendor an
     earlier source already provided is not installed twice: the first source
     in ``shims.sources`` order wins, and the other is logged.
+
+    A vendor the manifest lists but whose every record was invalid
+    (``manifest.dropped``) is selected too, its tags read from the install
+    stamp under *root*: :func:`_install_vendor` then keeps the last good
+    install rather than letting the vendor vanish because a record went bad.
     """
     out: list[tuple[str, InstallSelector]] = []
-    for vendor in sorted(manifest.vendors):
-        releases = manifest.vendors[vendor]
+    for vendor in sorted(set(manifest.vendors) | set(manifest.dropped)):
+        releases = manifest.vendors.get(vendor, ())
         # The record that would be installed speaks for the tags: one newer
         # release this core cannot run must not drop the vendor from a tag.
         installable, _ = select_release(releases)
         record = installable or (releases[0] if releases else None)
+        if record is None and root is not None:
+            record = _installed_release(
+                _read_stamp(root / f"{vendor}.stamp.json"), vendor
+            )
         tags = record.tags if record is not None else ()
         selector = next(
             (
@@ -532,7 +553,8 @@ def _install_vendor(
 ) -> ShimSourceStatus:
     """Decide on one vendor and install it when needed."""
     assert state.manifest is not None
-    releases = state.manifest.vendors[vendor]
+    releases = state.manifest.vendors.get(vendor, ())
+    dropped = state.manifest.dropped.get(vendor)
     base = ShimSourceStatus(
         kind="remote",
         location=f"{spec.url}#{vendor}",
@@ -571,6 +593,27 @@ def _install_vendor(
             vendor,
             installed.version,
         )
+
+    if dropped is not None:
+        # Every record of the vendor is invalid: keep the last good install
+        # (stale, like an unreachable source) and never uninstall for it.
+        why = f"no valid release: {dropped}"
+        logger.warning(
+            "Shim source %s: vendor %r has %s; %s",
+            source_id,
+            vendor,
+            why,
+            f"keeping the installed {installed.version}"
+            if usable and installed is not None
+            else "it is not installed",
+        )
+        if usable:
+            assert installed is not None
+            status = _installed_status(
+                base, vendor_dir, installed, stamp, state, selector
+            )
+            return replace(status, stale=True, error=why)
+        return replace(base, skipped=why)
 
     if chosen is None:
         if usable:

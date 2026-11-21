@@ -23,7 +23,7 @@ import json
 import logging
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +47,7 @@ from .shims.manifest_sources import (
     parse_source_entry,
     source_spec_from_catalogue,
 )
+from .shims.moved import MovedReference, moved_references
 from .shims.removals import ShimRemovalAdvisory, detect_shim_removals
 from .shims.sources import (
     DEFAULT_CACHE_DIRNAME,
@@ -71,12 +72,20 @@ def shims_signature(raw: Mapping[str, Any] | None) -> str:
     recomputes it from the document it has just read, so both sides must hash
     the same kind of value.  A parsed section has already anchored its paths
     and expanded its presets, which would make the two disagree.
+
+    *raw* is the whole document: the moved vendors its providers name are
+    part of the hash (see :mod:`.shims.moved`).
     """
     section = raw.get("shims") if isinstance(raw, Mapping) else None
-    if not section:
+    # The vendors that moved out of core are installed for the providers that
+    # name them (#1660), so a provider edit that adds one changes what a
+    # rebuild loads even when the section itself did not change.
+    moved = sorted({ref.vendor for ref in moved_references(raw)})
+    if not section and not moved:
         return ""
+    payload: Any = {"section": section, "moved": moved} if moved else section
     try:
-        blob = json.dumps(section, sort_keys=True, default=str)
+        blob = json.dumps(payload, sort_keys=True, default=str)
     except (TypeError, ValueError):
         blob = repr(section)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
@@ -559,7 +568,15 @@ class ShimSources:
         sources: ``shims.sources`` as written.
         install: ``shims.install`` as written.
         manifests: The manifest sources to read and the vendor selectors,
-            including the ones the legacy presets map to (#1660).
+            including the ones the legacy presets map to (#1660) and the
+            ones the moved vendors add.
+        moved: The places in the document that name a shim or a quota probe
+            of a vendor that moved out of core (#1660), when the document was
+            passed to the parser.
+        auto_install: The moved vendors the parser added a
+            ``<source>:<vendor>`` selector for, because no declared selector
+            named them.  Makes the object truthy: an apply must run even for
+            a document with no ``shims`` section.
     """
 
     presets: tuple[str, ...] = ()
@@ -573,10 +590,61 @@ class ShimSources:
     sources: tuple[Any, ...] = ()
     install: tuple[str, ...] = ()
     manifests: ManifestPlan = ManifestPlan()
+    moved: tuple[MovedReference, ...] = ()
+    auto_install: tuple[str, ...] = ()
 
     def __bool__(self) -> bool:
-        """Whether the config declared this section."""
-        return self.declared
+        """Whether there is anything to apply: a declared section or a moved vendor."""
+        return self.declared or bool(self.auto_install)
+
+
+def _add_moved_installs(
+    sources: ShimSources, refs: list[MovedReference], *, explicit_sources: bool = False
+) -> ShimSources:
+    """Add a ``<source>:<vendor>`` selector for each moved vendor *refs* name.
+
+    A vendor that a declared ``<vendor>`` selector already names (with no
+    qualifier or the right one) is left to it; a tag or ``*`` selector that
+    happens to cover it is not known before the manifest is read, so the
+    added selector stays, and the install path does not report it as
+    unmatched when another selector installed the vendor.
+
+    The catalogue source (``contrib``) is added only when the document has no
+    ``shims.sources`` of its own.  An explicit list is the operator's choice
+    of where to fetch from — a mirror, or no egress at all — so only the
+    selector is added: a declared source that publishes the vendor (a mirror
+    whose manifest calls itself ``contrib``) still serves it, and when none
+    does, the apply's WARNING says the vendor lives in ``contrib``.
+    """
+    if not refs:
+        return sources
+    specs = list(sources.manifests.sources)
+    selectors = list(sources.manifests.selectors)
+    added: list[str] = []
+    for ref in refs:
+        if ref.vendor in added:
+            continue
+        if any(
+            s.kind == "vendor" and s.value == ref.vendor and s.applies_to(ref.source)
+            for s in selectors
+        ):
+            continue
+        catalogue = get_shim_source(ref.source)
+        if catalogue is None:
+            continue
+        spec = source_spec_from_catalogue(catalogue)
+        if not explicit_sources and all(spec.url != other.url for other in specs):
+            specs.append(spec)
+        selectors.append(
+            parse_selector(f"{ref.source}:{ref.vendor}", origin=f"moved:{ref.vendor}")
+        )
+        added.append(ref.vendor)
+    return replace(
+        sources,
+        manifests=ManifestPlan(sources=tuple(specs), selectors=tuple(selectors)),
+        moved=tuple(refs),
+        auto_install=tuple(added),
+    )
 
 
 def parse_shims_section(
@@ -584,6 +652,7 @@ def parse_shims_section(
     config_path: str | None = None,
     *,
     on_unknown: str | None = None,
+    document: Mapping[str, Any] | None = None,
 ) -> ShimSources:
     """Parse and validate a ``shims`` section.
 
@@ -595,16 +664,24 @@ def parse_shims_section(
             does not ship.  ``None`` reads it from ``shims.strict``: a strict
             document raises, a tolerant one skips with a warning (see
             :func:`_resolve_presets`).
+        document: The whole config document.  When given, every vendor that
+            moved out of core and that a provider names is added to the
+            install selection (:func:`_add_moved_installs`), with or without
+            a ``shims`` section.
 
     Returns:
-        The parsed section.  Falsy when the document carried none.
+        The parsed section.  Falsy when the document carried none and needs
+        no moved vendor.
 
     Raises:
         ValueError: If the section or one of its fields has the wrong shape.
     """
     config_dir = os.path.dirname(config_path) if config_path else None
+    refs = moved_references(document) if document is not None else []
     if not section:
-        return ShimSources(cache_root=_cache_root(None, config_dir))
+        return _add_moved_installs(
+            ShimSources(cache_root=_cache_root(None, config_dir)), refs
+        )
     if not isinstance(section, Mapping):
         raise ValueError("config: 'shims' must be an object")
 
@@ -633,7 +710,7 @@ def parse_shims_section(
     )
     _validate_remote_specs(remotes)
     _validate_knobs(section)
-    return ShimSources(
+    parsed = ShimSources(
         sources=tuple(section.get("sources") or ()),
         install=tuple(section.get("install") or ()),
         manifests=manifests,
@@ -645,6 +722,9 @@ def parse_shims_section(
         remote_ttl=_int_setting(section, "remote_ttl", REMOTE_TTL_SECONDS),
         strict=bool(section.get("strict", False)),
         declared=True,
+    )
+    return _add_moved_installs(
+        parsed, refs, explicit_sources=section.get("sources") is not None
     )
 
 
@@ -778,6 +858,7 @@ def apply_shim_sources(
         http_get=http_get,
         proxy=proxy,
         force_refresh=force_refresh,
+        document=raw if isinstance(raw, Mapping) else None,
     )
 
 
@@ -789,6 +870,7 @@ def apply_shim_section(
     http_get: HttpGet | None = None,
     proxy: str | None = None,
     force_refresh: bool = False,
+    document: Mapping[str, Any] | None = None,
 ) -> ShimLoadReport:
     """Apply a parsed ``shims`` section to the registry.
 
@@ -805,6 +887,10 @@ def apply_shim_section(
     carries a preset this build does not ship, rather than reporting success
     for a rule it never applied; ``strict=False`` accepts what the parse
     already skipped.
+
+    A raw *section* is parsed with *document* (the whole config), so the
+    vendors that moved out of core and that a provider names are installed
+    too; a parsed section already carries them.
 
     Raises:
         ValueError: If the section or one of its fields has the wrong shape,
@@ -823,6 +909,7 @@ def apply_shim_section(
             section,
             config_path,
             on_unknown=(None if strict is None else ("raise" if strict else "skip")),
+            document=document,
         )
     if strict is None:
         strict = sources.strict
@@ -849,7 +936,77 @@ def apply_shim_section(
             report.total_shims,
             len(report.failures()),
         )
+    _report_moved(sources, report)
     return report
+
+
+#: Moved vendors whose automatic install was already announced in this process.
+_ANNOUNCED_MOVED: set[str] = set()
+
+
+def _report_moved(sources: ShimSources, report: ShimLoadReport) -> None:
+    """Announce each automatic install once, and warn about what is missing.
+
+    INFO, once per vendor per process: the config names a shim that moved out
+    of core and the gateway installs its vendor without a config edit.
+    WARNING, on every apply that leaves one missing: the moved vendors and the
+    shims or probes the config names that are not registered (a source that
+    could not be reached on a cold cache, or a manifest without the vendor),
+    so the operator sees why those providers are disabled.
+    """
+    if not sources.moved:
+        return
+    from llm_rosetta.api import get_shim, list_shims, retired_names
+
+    for vendor in sources.auto_install:
+        if vendor in _ANNOUNCED_MOVED:
+            continue
+        _ANNOUNCED_MOVED.add(vendor)
+        ref = next(r for r in sources.moved if r.vendor == vendor)
+        logger.info(
+            "Config names %r (%s), whose vendor %r moved from core to the %r "
+            "shim source; installing it from there (shims.install += %r is "
+            "implied, no config edit needed)",
+            ref.name,
+            ref.where,
+            vendor,
+            ref.source,
+            f"{ref.source}:{vendor}",
+        )
+    probes = {p.id for shim in list_shims() for p in shim.quota_probes}
+    missing: list[MovedReference] = []
+    for ref in sources.moved:
+        if retired_names.moved_probe_vendor(ref.name) is not None:
+            if ref.name not in probes:
+                missing.append(ref)
+            continue
+        name = retired_names.replacement_for(ref.name, retired_names.SHIM) or ref.name
+        if get_shim(name) is None:
+            missing.append(ref)
+    if not missing:
+        return
+    vendors = sorted({ref.vendor for ref in missing})
+    homes = sorted({ref.source for ref in missing})
+    declared = {spec.key for spec in sources.manifests.sources}
+    elsewhere = [home for home in homes if home not in declared]
+    failures = "; ".join(
+        f"{status.location}: {status.error}" for status in report.failures()
+    )
+    logger.warning(
+        "Shim vendor(s) %s moved from core to the %s shim source and could not "
+        "be installed; unavailable: %s. Providers that use them are disabled "
+        "until the source answers%s%s",
+        ", ".join(vendors),
+        ", ".join(homes),
+        ", ".join(f"{ref.name!r} ({ref.where})" for ref in missing),
+        f" (source failures: {failures})" if failures else "",
+        (
+            f". The declared shims.sources do not include {', '.join(map(repr, elsewhere))}, "
+            "where they are published; add it, or a mirror that publishes them"
+        )
+        if elsewhere
+        else "",
+    )
 
 
 def _anchor(path: str, config_dir: str | None) -> str:
