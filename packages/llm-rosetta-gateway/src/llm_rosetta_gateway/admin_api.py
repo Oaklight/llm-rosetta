@@ -22,7 +22,7 @@ from .logging import get_logger
 if TYPE_CHECKING:
     from .config import GatewayConfig
 
-__all__ = ["AdminConfigAccess", "AdminContext", "admin_context"]
+__all__ = ["AdminConfigAccess", "AdminContext", "AdminShimSources", "admin_context"]
 
 logger = get_logger()
 
@@ -46,7 +46,23 @@ class AdminConfigAccess(Protocol):
 
 
 @runtime_checkable
-class AdminContext(AdminConfigAccess, Protocol):
+class AdminShimSources(Protocol):
+    """What the manifest shim sources offer (#1660 S9)."""
+
+    def shim_source_catalogue(
+        self, config: Any, report: Any, *, refresh: bool = False
+    ) -> dict[str, Any]:
+        """Every manifest source *config* reads, with every vendor it publishes.
+
+        Returns ``{"core": {surface, ir, version}, "sources": [...],
+        "install": [...]}``.  Reads the manifests through the installer's
+        cache; *refresh* refetches them.  Blocking: call it off the loop.
+        """
+        ...
+
+
+@runtime_checkable
+class AdminContext(AdminConfigAccess, AdminShimSources, Protocol):
     """Everything the admin panel may ask of the running gateway.
 
     Capabilities are added as base classes, one per concern: config,

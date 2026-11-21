@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from . import _state
 
@@ -20,3 +20,11 @@ class GatewayAdminContext:
     def publish_config(self, config: GatewayConfig) -> None:
         """Make *config* the one the route handlers read."""
         _state.set_config(config)
+
+    def shim_source_catalogue(
+        self, config: Any, report: Any, *, refresh: bool = False
+    ) -> dict[str, Any]:
+        """Every manifest source *config* reads, with every vendor it publishes."""
+        from ..shims.source_view import catalogue_payload
+
+        return catalogue_payload(config, report, refresh=refresh)

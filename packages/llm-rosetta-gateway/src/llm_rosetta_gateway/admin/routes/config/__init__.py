@@ -12,6 +12,7 @@ each handler lives in the module for the resource it edits:
 :mod:`.shims`                 shim sources, reload, removal advisories
 :mod:`.shim_files`            loaded shims: inventory, view, edit, delete
 :mod:`.shim_manifests`        vendor manifests: rows, view, edit, blast radius
+:mod:`.shim_source_catalog`   manifest sources and every vendor they publish
 :mod:`.upstream`              upstream model discovery and routing loops
 :mod:`.bulk`                  bulk add: merge a provider into a model entry
 ============================  ============================================
@@ -60,6 +61,7 @@ from .shim_manifests import (
     post_preview_shim_manifest,
     put_shim_manifest,
 )
+from .shim_source_catalog import get_shim_source_catalog
 from .shims import (
     _merge_shim_sources_body,
     _shim_removal_advisories,
@@ -180,6 +182,10 @@ def register_config_routes(app: Any) -> None:
     )
     app.route("/admin/api/config/shims/catalog", methods=["GET"])(
         _guard("providers", get_shim_catalog)
+    )
+    # Registered before ``shims/<name>``, which would read it as a shim name.
+    app.route("/admin/api/config/shims/source-catalog", methods=["GET"])(
+        _guard("providers", get_shim_source_catalog)
     )
     app.route("/admin/api/config/shims/<name>", methods=["GET"])(
         _guard("providers", get_loaded_shim)
