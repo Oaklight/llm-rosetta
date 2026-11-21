@@ -634,7 +634,7 @@ WARNING。若源已应答但没有匹配的厂商（分批发布、标签改名�
 版本和 JSON 路径形式的原因，manifest 的其余部分照常使用，因此新版生产方写出的一条记录不会让
 免费层失去其他提供方；选择只看到有效记录。记录中的 shim 名必须属于该提供方：提供方键本身（裸名
 `xai`、`qwen`、`moonshot`、`zhipu`）、`<vendor>--<name>`，或 `<vendor>_<lane>--<name>`（`alcf`
-下的 `alcf_sophia--chat_completions`）；带其他提供方前缀的名字会让该记录无效。
+下的 `alcf_sophia--chat_completions`）；带其他提供方前缀的名字会让该记录无效；lane 前缀本身是同一 manifest 中另一个提供方键时同样无效（`openai_chatgpt` 也是该 manifest 的提供方时，`openai` 不得发布 `openai_chatgpt--x`）。
 
 **离开 core 的提供方会被自动安装。** 当配置引用了已离开 core 的提供方的 shim 或额度探测
 （[迁移到 0.14](migrating-to-0.14.md#moved-to-contrib)）时，网关会把 `contrib:<vendor>` 加入这里的
@@ -756,10 +756,10 @@ loader 用解析分支得到的 commit 填充 `{ref}` —— 于是预设指向�
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 18 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`
+LLM-Rosetta 内置 21 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`
 下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。core 只保留模型厂商自己的
 API key 通道，以及每种非 chat 格式各一个真实提供方（[Shim 归属](shim-placement.md)）。其余提供方——
-包括 0.14 之前内置的 OpenCode、OpenRouter、MiniMax、Qwen、Volcengine、xAI 与 Zhipu——
+包括 0.14 之前内置的 OpenCode、OpenRouter、Qwen、Volcengine、xAI 与 Zhipu——
 以相同名称从 contrib 源安装，配置引用它们时会自动安装
 （[迁移到 0.14](migrating-to-0.14.md#moved-to-contrib)）。ALCF、AskSage 与 Argo 的 shim 从
 argonne 源安装 —— 参见[独立 Shim 包](#standalone-shim-packages)。
@@ -777,6 +777,9 @@ argonne 源安装 —— 参见[独立 Shim 包](#standalone-shim-packages)。
 | `google--google_interactions` | `google_interactions` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `jina--embedding` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
 | `jina--rerank` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
+| `minimax--chat_completions` | `chat_completions` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`seed`、`stop`；注入 `reasoning_split`；解析 `think` 标签 |
+| `minimax--embedding` | `minimax` | `https://api.minimaxi.com` | `MINIMAX_API_KEY` | — |
+| `minimax--messages` | `messages` | `https://api.minimaxi.com/anthropic` | `MINIMAX_API_KEY` | — |
 | `openai--chat_completions` | `chat_completions` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--embedding` | `openai` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--open_responses` | `open_responses` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |

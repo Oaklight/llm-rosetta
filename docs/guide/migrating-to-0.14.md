@@ -237,7 +237,7 @@ grep -rnE "llm_rosetta\.(transforms|shims\.(auth_exchange|quota_probe)|observabi
 
 ## 迁往 contrib 的 shim 提供方 {#moved-to-contrib}
 
-有 16 个提供方离开 core，迁入
+有 15 个提供方离开 core，迁入
 [contrib shim 仓库](https://github.com/Oaklight/llm-rosetta-shim-contrib)
 （[#1660](https://github.com/Oaklight/llm-rosetta/issues/1660)）；决定谁留在 core 的规则见
 [Shim 归属](shim-placement.md)。它们的 shim 名称没有变，因此这里没有改名，也不需要修改配置：
@@ -248,7 +248,7 @@ grep -rnE "llm_rosetta\.(transforms|shims\.(auth_exchange|quota_probe)|observabi
 | `openai_chatgpt` | `openai_chatgpt--open_responses`（额度探测 `openai_codex`） | OAuth（Sign in with ChatGPT） |
 | `antigravity` | `antigravity--acp` | agent CLI 通道 |
 | `kilo`、`openrouter`、`groq`、`nvidia`、`siliconflow`、`modelscope` | `kilo--chat_completions`；`openrouter--chat_completions`、`--messages`、`--open_responses`、`--rerank`；`groq--chat_completions`；`nvidia--chat_completions`；`siliconflow--chat_completions`、`--embedding`、`--rerank`；`modelscope--chat_completions` | 聚合商与托管端点 |
-| `minimax`、`zhipu`、`zai`、`xai`、`qwen`、`moonshot`、`volcengine` | `minimax--chat_completions`、`--messages`、`--embedding`；`zhipu`、`zhipu--embedding`、`--rerank`；`zai--chat_completions`、`--messages`、`--embedding`、`--rerank`；`xai`；`qwen`；`moonshot`；`volcengine--chat_completions`、`--open_responses`、`--embedding` | 先在 contrib 起步、具备晋升资格的模型厂商 |
+| `zhipu`、`zai`、`xai`、`qwen`、`moonshot`、`volcengine` | `zhipu`、`zhipu--embedding`、`--rerank`；`zai--chat_completions`、`--messages`、`--embedding`、`--rerank`；`xai`；`qwen`；`moonshot`；`volcengine--chat_completions`、`--open_responses`、`--embedding` | 先在 contrib 起步、具备晋升资格的模型厂商 |
 
 **网关。** 配置中引用了上述 shim 之一——提供方的 `type:` / `shim:` / 键名、类型化端点
 （`embeddings_shim`、`embeddings: {shim}` 块）、旧式 `<type>_providers` 条目，或
