@@ -1,7 +1,8 @@
 """The core surface level this gateway needs (#1630).
 
-The gateway reaches ``llm_rosetta`` only through ``llm_rosetta.api`` and four
-contract modules.  ``llm_rosetta.api.SURFACE_VERSION`` rises when a name is
+The gateway reaches ``llm_rosetta`` only through ``llm_rosetta.api`` and
+``llm_rosetta.contracts``.  ``llm_rosetta.api.SURFACE_VERSION`` (the same object
+as ``llm_rosetta.contracts.SURFACE_VERSION``) rises when a name is
 removed or changes meaning, never when one is added; the gateway therefore
 asserts a minimum at startup instead of failing later on a missing name.
 """

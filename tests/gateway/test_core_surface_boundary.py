@@ -2,21 +2,19 @@
 
 The gateway used to import core through whatever module path it found, so a
 core refactor could break it and only re-exports kept it safe.  The surface is
-five module paths.  Everything under ``packages/llm-rosetta-gateway/src``
+two prefixes (#1657).  Everything under ``packages/llm-rosetta-gateway/src``
 (``admin/`` included, ``_vendor/`` excluded) may import ``llm_rosetta`` only
 through them:
 
-* ``llm_rosetta.api`` (the flat host surface; an imported name must be in its
-  ``__all__``);
-* ``llm_rosetta.contracts.auth`` and ``llm_rosetta.contracts.quota``
-  (the contracts external shims already import);
-* ``llm_rosetta.contracts.routing``;
-* ``llm_rosetta.contracts.usage`` as a package, never one of its submodules.
+* ``llm_rosetta.api`` (the flat host surface);
+* ``llm_rosetta.contracts`` and its submodules (the extension contracts), with
+  one exception: ``llm_rosetta.contracts.usage`` is a package whose
+  submodules are internal, so it is reached as a package only.
 
 Where an allowed module defines ``__all__``, an imported name must be in it.
 
-The rule is strict: any import of core from the gateway outside the five
-paths fails, and so does any private name (leading underscore, or a private
+The rule is strict: any import of core from the gateway outside the two
+prefixes fails, and so does any private name (leading underscore, or a private
 module), wherever it is imported from.  There is no allowlist for the gateway
 source; a missing capability becomes a name on ``llm_rosetta.api`` (additive,
 with a test), never an exception here.  The gateway asserts the core's
@@ -43,6 +41,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1]))
 
 from _import_scan import (  # noqa: E402
+    CONTRACT_PACKAGE_ONLY,
     DYNAMIC,
     DYNAMIC_NONLITERAL,
     FROM,
@@ -59,17 +58,15 @@ _TESTS = _ROOT / "tests/gateway"
 _CORE_ROOT = "llm_rosetta"
 _NON_LITERAL = "<non-literal dynamic import>"
 
-#: The five surface paths.  A module equal to one of them, or under one of
-#: them, is allowed, except under a package-only path.
+#: The two surface prefixes.  A module equal to one of them, or under one of
+#: them, is allowed, except a submodule of a package-only path.
 _SURFACE = (
     "llm_rosetta.api",
-    "llm_rosetta.contracts.auth",
-    "llm_rosetta.contracts.quota",
-    "llm_rosetta.contracts.routing",
-    "llm_rosetta.contracts.usage",
+    "llm_rosetta.contracts",
 )
-#: Surface paths whose submodules are not part of the surface.
-_PACKAGE_ONLY = frozenset({"llm_rosetta.contracts.usage"})
+#: Packages inside the surface whose submodules are not part of it (shared
+#: with the shim-sidecar boundary test).
+_PACKAGE_ONLY = CONTRACT_PACKAGE_ONLY
 
 
 @dataclass(frozen=True)
@@ -105,12 +102,9 @@ def _is_core_submodule(module: str, name: str) -> bool:
 
 
 def _is_allowed(module: str) -> bool:
-    for path in _SURFACE:
-        if module == path:
-            return True
-        if module.startswith(path + ".") and path not in _PACKAGE_ONLY:
-            return True
-    return False
+    if any(module.startswith(path + ".") for path in _PACKAGE_ONLY):
+        return False
+    return any(module == path or module.startswith(path + ".") for path in _SURFACE)
 
 
 def _edges_of(file: str, site: ImportSite) -> Iterable[Edge]:
@@ -283,8 +277,10 @@ def test_the_rule_is_strict_for_the_gateway_source():
 def test_the_surface_rule():
     for module in _SURFACE:
         assert _is_allowed(module)
-    assert _is_allowed("llm_rosetta.contracts.routing.strategies")
+    for module in ("auth", "quota", "routing", "shim", "transform", "usage"):
+        assert _is_allowed(f"llm_rosetta.contracts.{module}")
     assert not _is_allowed("llm_rosetta.contracts.usage.report")
+    assert not _is_allowed("llm_rosetta.contractsx")
     assert not _is_allowed("llm_rosetta.observability")
     assert not _is_allowed("llm_rosetta.shims")
     assert not _is_allowed("llm_rosetta")
