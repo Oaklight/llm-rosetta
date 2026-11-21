@@ -26,6 +26,11 @@ FROM = "from"
 DYNAMIC = "dynamic"
 DYNAMIC_NONLITERAL = "dynamic-nonliteral"
 
+#: Contract packages whose submodules are internal (#1657): a host or a shim
+#: imports the package, never one of its submodules.  Shared by the gateway
+#: and the shim-sidecar boundary tests so the rule is stated once.
+CONTRACT_PACKAGE_ONLY = frozenset(("llm_rosetta.contracts.usage",))
+
 
 @dataclass(frozen=True)
 class ImportSite:
