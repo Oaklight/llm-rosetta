@@ -164,7 +164,7 @@ connection:
 | 已移除的名字 | 改用 |
 | --- | --- |
 | `llm_rosetta.shims.provider_shim.resolve_base`（以及 `llm_rosetta.resolve_base`） | `resolve_format` |
-| `llm_rosetta.shims.transforms`（模块） | `llm_rosetta.transforms` |
+| `llm_rosetta.shims.transforms`（模块） | `llm_rosetta.contracts.transform` |
 | `llm_rosetta.ir.tools.fix_orphaned_tool_calls_ir` | `normalize_tool_pairing` |
 | `GoogleInteractionsToolOps.ir_function_call_to_p`、`ir_function_result_to_p` | `ir_tool_call_to_p`、`ir_tool_result_to_p` |
 
@@ -199,9 +199,36 @@ connection:
 
 ## 用量账本中的退役标签（P8） {#ledger-tags}
 
-在 PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656) 中移除。`openai_chat`、`openai_responses`、`anthropic` 与 `google` 不再是 `STANDARD_SHAPES` 或 `ADDITIVE_CACHE_STANDARDS`（`llm_rosetta.observability.usage`）的行。用量词汇表只列当前标准：`chat_completions`、`open_responses`、`messages`、`google_generate`。
+在 PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656) 中移除。`openai_chat`、`openai_responses`、`anthropic` 与 `google` 不再是 `STANDARD_SHAPES` 或 `ADDITIVE_CACHE_STANDARDS`（`llm_rosetta.contracts.usage`）的行。用量词汇表只列当前标准：`chat_completions`、`open_responses`、`messages`、`google_generate`。
 
 以退役标签写入的数据库行不会被误读，也不会让网关无法启动。对这样的行，`shape_for` 返回 `None`，`cache_is_additive` 返回 `False`，因此启动时的总量修复会保持该行总量为旧写入方存下的值。`backfill_total_tokens` 记录一条警告，写出这类行的数量、退役标签和命令 `llm-rosetta-migrate --db`。运行该命令即可改写标签，见[下文](#llm-rosetta-migrate)。
+
+## 扩展契约迁入 `llm_rosetta.contracts` {#contracts-home}
+
+在 PR [#1659](https://github.com/Oaklight/llm-rosetta/pull/1659)（issue [#1657](https://github.com/Oaklight/llm-rosetta/issues/1657)）中变更。宿主或 shim 作者所依赖的模块现在集中在一个包 `llm_rosetta.contracts` 中；见 [core 接口](../api/index.md#the-core-surface)。旧路径中只有 `llm_rosetta.routing`、`llm_rosetta.capabilities` 与 `llm_rosetta.shims.provider_shim` 在 0.13.0 中发布过，也只有这三个保留兼容路径。其余路径只存在于 0.14 开发版，没有转发模块：导入它们会抛 `ModuleNotFoundError`。
+
+| 旧路径 | 新路径 | 旧路径的处理 |
+| --- | --- | --- |
+| `llm_rosetta.transforms`（含 `.body` 与 `.ir`） | `llm_rosetta.contracts.transform` | 已移除 |
+| `_NamedTransform`、`_NamedIRTransform` | `llm_rosetta.contracts.transform.NamedTransform`、`NamedIRTransform` | 已改名；新名字是公开的 |
+| `llm_rosetta.shims.auth_exchange` | `llm_rosetta.contracts.auth` | 已移除 |
+| `llm_rosetta.shims.quota_probe` | `llm_rosetta.contracts.quota` | 已移除 |
+| `llm_rosetta.observability.usage`（及其子模块） | `llm_rosetta.contracts.usage`（只导入包本身） | 已移除。`llm_rosetta.observability` 本身上的用量名字仍可解析，指向 `contracts.usage` 中的对象。 |
+| `llm_rosetta.routing` | `llm_rosetta.contracts.routing` | 0.13.0 兼容转发模块，转发 `ProviderType`、`ResolvedRoute`、`Router`。导入时发出 `DeprecationWarning`，0.15.0 移除。 |
+| `llm_rosetta.capabilities` | `ProviderShim`、`ReasoningCapability`：`llm_rosetta.contracts.shim`。`ConversionContext`：`llm_rosetta.converters.base`。能力 pass 在转换管道内部运行，没有公开路径。 | 0.13.0 兼容转发模块，转发 0.13.0 的十二个名字。导入时发出 `DeprecationWarning`，0.15.0 移除。 |
+| `llm_rosetta.capabilities.description_limit`、`.enforcement`、`.intrinsic_history`、`.tool_names` | 无：这些 pass 是内部实现（`llm_rosetta.ir.passes`） | 已移除 |
+| 从 `llm_rosetta.shims.provider_shim` 导入的 `ProviderShim`、`ConnectionConfig`、`ToolsConfig`、`ReasoningCapability`、`VendorManifest`、`QuotaDeclaration`、`BatchDeclaration`、`SoftErrorPattern`、`TYPE_PARAM_KEYS` 及字面量类型 | `llm_rosetta.contracts.shim` | 已弃用的再导出，是同一批对象，运行时不告警；0.15.0 移除。注册表函数（`register_shim`、`get_shim`、`list_shims` 等）仍在 `llm_rosetta.shims.provider_shim`。 |
+| `llm_rosetta.api` 中的 `SURFACE_VERSION` | `llm_rosetta.contracts.SURFACE_VERSION` | `llm_rosetta.api` 再导出同一个对象；无需修改 |
+
+shim 包的 `transforms.py`、`auth.py` 与 `quota.py` 只能从 `llm_rosetta.contracts` 导入；见 [shim 可以导入什么](shims.md#what-a-shim-may-import)。
+
+`llm-rosetta-migrate --scan`（PR [#1658](https://github.com/Oaklight/llm-rosetta/pull/1658)）把对本表中已移除路径的导入报告为 `import` 条目，并写出替代路径。只有在已安装的 core 中无法解析的路径才会被报告。`llm_rosetta.routing` 与 `llm_rosetta.capabilities` 作为转发模块仍能解析，因此扫描不报告它们，由它们的 `DeprecationWarning` 提示。要找出所有旧路径（包括转发模块）：
+
+```bash
+grep -rnE "llm_rosetta\.(transforms|shims\.(auth_exchange|quota_probe)|observability\.usage|routing|capabilities)\b|\b_Named(IR)?Transform\b" .
+```
+
+本节各行已针对 PR #1659 的 head（commit `cdc6354af3`，版本 `0.14.0.dev35`）核对：每个已移除路径都没有模块 spec，每个转发模块导入时发出 `DeprecationWarning`，每个新路径都能导入。
 
 ## 在代码中查找旧名字 {#find-old-names}
 
@@ -212,6 +239,7 @@ grep -rnE "converters\.(openai_chat|openai_responses|anthropic|google_genai|goog
 ## 仍然可用的部分 {#still-works}
 
 - **`llm_rosetta.gateway`** 仍可导入。它会告警并转发到 `llm_rosetta_gateway`；其文字只说明它已弃用、将在后续版本移除，不写具体版本。请现在就直接导入 `llm_rosetta_gateway`。`llm_rosetta.observability` finder 与 `llm-rosetta[gateway]` extra 条件相同。
+- **`llm_rosetta.routing` 与 `llm_rosetta.capabilities`** 仍可导入，名字与 0.13.0 完全相同。导入时各发出 `DeprecationWarning`，0.15.0 移除；见[契约表](#contracts-home)。
 - **持久化的内部键**不会改名：`provider_metadata` 标签 `openai_chat`、`google`、`anthropic`，转换器标签，原生工具定义，以及已提交的基准基线，有意保留旧写法。
 - **已退役的提供方、shim 与模型类型名称**（见下节）不再解析。它们会抛错，错误信息写出替代名称。
 
@@ -323,4 +351,4 @@ llm-rosetta-migrate --scan src/                            # 仅提示，不修�
 
 ## core 接口 {#core-surface}
 
-0.14.0 同时也是网关严格 core 接口的发布版本：网关只通过 `llm_rosetta.api` 与四个契约模块导入 core，`llm_rosetta.api.SURFACE_VERSION`（现为 `1`）只在移除时递增。导入其他 `llm_rosetta` 模块的宿主或 shim 作者不在该契约之内。参见 [core 接口](../api/index.md#the-core-surface)。
+0.14.0 同时也是网关严格 core 接口的发布版本：网关只通过 `llm_rosetta.api` 与 `llm_rosetta.contracts` 导入 core，shim 只导入 `llm_rosetta.contracts`，`SURFACE_VERSION`（现为 `1`）只在移除时递增。导入其他 `llm_rosetta` 模块的宿主或 shim 作者不在该契约之内。参见 [core 接口](../api/index.md#the-core-surface)。

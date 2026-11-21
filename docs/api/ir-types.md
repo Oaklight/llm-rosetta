@@ -18,7 +18,7 @@ IR 推理词汇表定义了 LLM-Rosetta 内部使用的固定值集合。Provide
 | `"enabled"` | 显式思考，部分 provider 需要 `budget_tokens` |
 | `"disabled"` | 不思考 |
 
-Provider 映射通过 [`thinking_modes`][llm_rosetta.shims.provider_shim.ReasoningCapability] 按 shim 配置。
+Provider 映射通过 [`thinking_modes`][llm_rosetta.contracts.shim.ReasoningCapability] 按 shim 配置。
 
 ## IREffort
 

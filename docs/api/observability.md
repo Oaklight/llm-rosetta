@@ -9,7 +9,7 @@ title: 可观测性
 - **`llm_rosetta_gateway.observability`**——遥测栈：指标、请求日志、SQLite 持久化、
   操作日志、错误转储、捕获、维护、保留策略、请求头脱敏与按需性能分析。它的
   消费者都是代理服务器，因此随网关发行。
-- **`llm_rosetta.observability.usage`**——用量报告的**语义**：台账、按模型类型的
+- **`llm_rosetta.contracts.usage`**——用量报告的**语义**：台账、按模型类型的
   归一化与滚动窗口报告。`pipeline.chat` 会读取它，因此留在核心里，且不需要存储。
 
 只做转换的库只需导入用量这一半；任何写数据库的东西都从网关导入。下面的模块
@@ -431,8 +431,8 @@ body = decompress_body(compressed)
 
 ## 用量（Usage） {: #usage }
 
-这一半属于核心：它留在 `llm_rosetta.observability`（无存储、无网关）。
-`llm_rosetta.observability.usage` 负责界定"我们搬了多少 token、算在谁头上"。
+这一半属于核心：它位于 `llm_rosetta.contracts.usage`（无存储、无网关；只导入这个包，不导入它的子模块）。
+它负责界定"我们搬了多少 token、算在谁头上"。
 它不涉及 HTTP、配置和凭据：库的使用者不需要这些东西就能记录用量并读取报告；
 网关只是它的一个消费者，额外提供凭据主体（subject）和 SQLite 存储。
 
@@ -453,7 +453,7 @@ body = decompress_body(compressed)
 - **思考 token 从不累加**——它已经包含在输出 token 里。
 - **缓存只在它未被计入输入时才累加。** Messages API 把缓存 token 记在输入
   之*外*（可加），OpenAI 与 Google 记在输入之*内*（是其子集）。谁属于哪一种
-  只在 `llm_rosetta.observability.usage.semantics` 里声明一次；一旦某个转换器
+  只在 `llm_rosetta.contracts.usage.semantics` 里声明一次；一旦某个转换器
   与声明不一致，测试就会失败。
 
 `usage_columns(usage)` 把 IR 的 usage 字典转成上述各列。usage 里没有出现的
@@ -483,7 +483,7 @@ IR 本来就报 `input_tokens`/`output_tokens`，embedding 与 rerank 的 IR 类
 记录用量，然后查询它累计成什么——不需要网关，也不需要数据库：
 
 ```python
-from llm_rosetta.observability import UsageLedger
+from llm_rosetta.contracts.usage import UsageLedger
 
 ledger = UsageLedger()
 ledger.record(resp["usage"], model="gpt-5-nano", subject="batch-7")
@@ -521,7 +521,7 @@ ledger.total("24h")
 ### UsageReport
 
 ```python
-from llm_rosetta.observability import UsageReport
+from llm_rosetta.contracts.usage import UsageReport
 
 report = UsageReport.build(
     groups=await persistence.query_usage_groups(),
@@ -639,4 +639,4 @@ with warnings.catch_warnings():
 ```
 
 新代码：遥测从 `llm_rosetta_gateway.observability` 导入，计量从
-`llm_rosetta.observability.usage` 导入。
+`llm_rosetta.contracts.usage` 导入。

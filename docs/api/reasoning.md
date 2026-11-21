@@ -157,7 +157,7 @@ reasoning:
 
 ## API 参考
 
-::: llm_rosetta.shims.provider_shim.ReasoningCapability
+::: llm_rosetta.contracts.shim.ReasoningCapability
     options:
       show_source: false
       heading_level: 3

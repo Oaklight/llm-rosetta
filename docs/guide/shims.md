@@ -225,7 +225,7 @@ ChatGPT 不行：它有交互式首次登录、每次使用都会轮换的 refre
 
 ```python
 # auth.py
-from llm_rosetta.shims.auth_exchange import BaseAuthExchange
+from llm_rosetta.contracts.auth import BaseAuthExchange
 
 
 class Exchange(BaseAuthExchange):
@@ -373,7 +373,7 @@ connection:
 `transforms.py` 示例：
 
 ```python
-from llm_rosetta.transforms import strip_fields
+from llm_rosetta.contracts.transform import strip_fields
 
 # DeepSeek 不支持 n、logit_bias 和 seed
 post_ir_transforms = (strip_fields("n", "logit_bias", "seed"),)
@@ -381,6 +381,22 @@ pre_ir_transforms = ()
 ```
 
 导入时，`shims/__init__.py` 自动扫描所有提供方目录并注册，然后发现通过 entry point 声明的插件 shim。
+
+### shim 可以导入什么 {#what-a-shim-may-import}
+
+shim 的旁挂模块（`transforms.py`、`auth.py`、`quota.py` 以及它们旁边的辅助模块）和 shim 包的 `register_shims` entry point 只通过 `llm_rosetta.contracts` 及其子模块导入 `llm_rosetta`：
+
+| 需要 | 导入自 |
+| --- | --- |
+| `ProviderShim`、`ConnectionConfig`、`load_providers_from_dir` | `llm_rosetta.contracts.shim` |
+| 变换原语与钩子类型 | `llm_rosetta.contracts.transform` |
+| `auth.py` 的凭据交换 | `llm_rosetta.contracts.auth` |
+| `quota.py` 的额度探测 | `llm_rosetta.contracts.quota` |
+| 旁挂模块的钩子名（`PRE_IR_TRANSFORMS`、`QUOTA_PROBES` 等） | `llm_rosetta.contracts` |
+
+不能导入 `llm_rosetta.api`，也不能导入任何内部模块。加载器在 `import llm_rosetta` 尚未完成时就运行插件 entry point 与旁挂模块。`llm_rosetta.api` 需要完整加载的包，此时无法加载；契约模块可以。契约也是稳定的部分：在一个次版本内只增加名字，而内部模块在任何版本都可能移动。一个厂商目录也不导入其他厂商的目录，这样每个目录都能单独移出 core。
+
+对于内置 shim，`tests/test_shim_sidecar_boundary.py` 对 `shims/providers/<vendor>/` 下的每个 `.py` 文件、脚手架模板以及脚手架生成的文件执行这条规则。层级划分见 [core 接口](../api/index.md#the-core-surface)。
 
 ## Shim 生命周期
 
@@ -430,7 +446,7 @@ callable 扫描本地 YAML 目录并返回注册的 shim：
 ```python
 # my_package/shims/__init__.py
 from pathlib import Path
-from llm_rosetta.shims import load_providers_from_dir
+from llm_rosetta.contracts.shim import load_providers_from_dir
 
 def register_shims():
     return load_providers_from_dir(Path(__file__).parent / "providers")
@@ -978,12 +994,12 @@ response_body_transforms: true
 
 ```python
 # transforms.py
-from llm_rosetta.transforms import harmony_tool_call_safeguard
+from llm_rosetta.contracts.transform import rewrite_harmony_tool_calls
 
-response_body_transforms = (harmony_tool_call_safeguard(),)
+response_body_transforms = (rewrite_harmony_tool_calls(),)
 ```
 
-内置响应变换：`harmony_tool_call_safeguard()` 修复 Harmony/vLLM 端点返回的畸形工具调用 JSON。
+内置响应变换：`rewrite_harmony_tool_calls()` 把部分 vLLM 部署的模型写在消息内容里的原始 harmony 工具调用 token 改写成正规的 `tool_calls` 字段。
 
 ### 应用方式
 
@@ -1068,7 +1084,7 @@ resolve_model_type("embedding")                   # 抛出 ValueError（已退�
 
 ```python
 from llm_rosetta import ConnectionConfig, ProviderShim, register_shim
-from llm_rosetta.transforms import strip_fields
+from llm_rosetta.contracts.transform import strip_fields
 
 my_shim = ProviderShim(
     name="my-provider",
@@ -1112,7 +1128,7 @@ register_shim(my_shim)
 4. 如果提供方有字段级差异，可选添加 `transforms.py`：
 
     ```python
-    from llm_rosetta.transforms import strip_fields
+    from llm_rosetta.contracts.transform import strip_fields
 
     post_ir_transforms = (strip_fields("unsupported_field"),)
     pre_ir_transforms = ()
