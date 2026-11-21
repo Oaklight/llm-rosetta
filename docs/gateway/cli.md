@@ -246,7 +246,7 @@ from llm_rosetta_gateway import create_app, GatewayConfig, load_config
 # Load config and create ASGI app
 raw = load_config("config.jsonc")
 config = GatewayConfig(raw)
-app = create_app(config)
+app = await create_app(config)  # create_app is async since 0.14.0
 
 # Mount in your own ASGI application, or run with any ASGI server
 import uvicorn
