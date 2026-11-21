@@ -306,6 +306,31 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
         ],
         "max_count": 11,
     },
+    # ``api`` re-exports the module object, so its ``__all__`` is the surface a
+    # host reads through ``api.retired_names`` (#919 decision 4, #1630).  Every
+    # attribute the gateway and core use is listed.
+    "llm_rosetta.retired_names": {
+        "items": [
+            "KINDS",
+            "MIGRATE_HINT",
+            "MIGRATION_GUIDE_URL",
+            "MODEL_TYPE",
+            "PROVIDER_TYPE",
+            "RETIRED_MODULES",
+            "RETIRED_NAMES",
+            "SHIM",
+            "RetiredModule",
+            "RetiredName",
+            "check_not_retired",
+            "lookup",
+            "replacement_for",
+            "retired_key_message",
+            "retired_module",
+            "retired_module_message",
+            "retired_name_message",
+        ],
+        "max_count": 17,
+    },
 }
 
 

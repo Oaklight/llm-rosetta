@@ -526,3 +526,132 @@ def test_register_shim_keys_on_the_exact_name() -> None:
     finally:
         ps._SHIM_REGISTRY.clear()
         ps._SHIM_REGISTRY.update(saved)
+
+
+# ---------------------------------------------------------------------------
+# The declared surface covers every use (#919 decision 4, #1630)
+# ---------------------------------------------------------------------------
+
+
+_MODULE = "llm_rosetta.retired_names"
+#: Packages whose attribute ``retired_names`` is the module (``llm_rosetta``
+#: itself and ``llm_rosetta.api``, which re-exports the module object).
+_PARENTS = ("llm_rosetta", "llm_rosetta.api")
+
+
+def _module_bindings(tree) -> tuple[set[str], set[str]]:
+    """Local names bound to the module, and names imported out of it.
+
+    Covers ``from llm_rosetta import retired_names [as x]`` (also from
+    ``llm_rosetta.api`` and the relative ``from . import retired_names``),
+    ``import llm_rosetta.retired_names as x``, and
+    ``from llm_rosetta.retired_names import NAME`` (``NAME`` is a read).
+    """
+    import ast  # noqa: PLC0415
+
+    bound: set[str] = set()
+    imported: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if module == _MODULE or (node.level and module == "retired_names"):
+                imported.update(alias.name for alias in node.names)
+            elif module in _PARENTS or (node.level and not module):
+                bound.update(
+                    alias.asname or alias.name
+                    for alias in node.names
+                    if alias.name == "retired_names"
+                )
+        elif isinstance(node, ast.Import):
+            bound.update(
+                alias.asname
+                for alias in node.names
+                if alias.name == _MODULE and alias.asname
+            )
+    return bound, imported
+
+
+def _is_module(node, bound: set[str]) -> bool:
+    """Whether *node* evaluates to the module: a bound name or ``<x>.retired_names``."""
+    import ast  # noqa: PLC0415
+
+    if isinstance(node, ast.Name):
+        return node.id in bound
+    return isinstance(node, ast.Attribute) and node.attr == "retired_names"
+
+
+def _reads(source: str) -> set[str]:
+    """The ``retired_names`` attributes one source file reads.
+
+    A read is ``<m>.NAME`` or ``getattr(<m>, "NAME")`` where ``<m>`` is a
+    name bound to the module (any ``as`` rename included) or any expression
+    ending in ``.retired_names`` (``llm_rosetta.retired_names``,
+    ``api.retired_names``, ``__import__("llm_rosetta").retired_names``), plus
+    every name of ``from llm_rosetta.retired_names import NAME``.  Not
+    covered: a module object passed through a variable or a container, and
+    ``getattr`` with a non-literal name; those are not statically decidable.
+    """
+    import ast  # noqa: PLC0415
+
+    tree = ast.parse(source)
+    bound, used = _module_bindings(tree)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and _is_module(node.value, bound):
+            used.add(node.attr)
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "getattr"
+            and len(node.args) >= 2
+            and _is_module(node.args[0], bound)
+            and isinstance(node.args[1], ast.Constant)
+            and isinstance(node.args[1].value, str)
+        ):
+            used.add(node.args[1].value)
+    return used
+
+
+def _attribute_uses() -> set[str]:
+    """Every ``retired_names`` attribute read in the two distributions' sources."""
+    from pathlib import Path  # noqa: PLC0415
+
+    root = Path(__file__).resolve().parents[1] / "packages"
+    used: set[str] = set()
+    for path in root.glob("*/src/**/*.py"):
+        if "_vendor" in path.parts:
+            continue
+        used |= _reads(path.read_text(encoding="utf-8"))
+    return used
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "from llm_rosetta import retired_names\nretired_names.X\n",
+        "from llm_rosetta import retired_names as _rn\n_rn.X\n",
+        "from llm_rosetta.api import retired_names as rn\nrn.X\n",
+        "from . import retired_names as rn\nrn.X\n",
+        "import llm_rosetta.retired_names as rn\nrn.X\n",
+        "import llm_rosetta.retired_names\nllm_rosetta.retired_names.X\n",
+        "from llm_rosetta import api\napi.retired_names.X\n",
+        "__import__('llm_rosetta').retired_names.X\n",
+        "from llm_rosetta import retired_names as rn\ngetattr(rn, 'X')\n",
+        "from llm_rosetta.retired_names import X\n",
+    ],
+)
+def test_the_read_scan_resolves_bindings(source: str) -> None:
+    assert "X" in _reads(source)
+
+
+def test_the_read_scan_ignores_other_modules() -> None:
+    assert _reads("from llm_rosetta import formats as rn\nrn.X\n") == set()
+
+
+def test_every_attribute_core_and_the_gateway_read_is_declared() -> None:
+    used = _attribute_uses()
+    assert used, "the scan found no use; it is broken"
+    assert sorted(used - set(retired_names.__all__)) == []
+
+
+def test_the_declared_names_all_exist() -> None:
+    assert all(hasattr(retired_names, name) for name in retired_names.__all__)
