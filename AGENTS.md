@@ -136,7 +136,7 @@ declare the differences.
 | Loader | `shims/_loader/` | Reads a shim tree: directory walk, `provider.yaml` parsing, sidecars, vendor manifests, `provider.schema.json` (internal) |
 | Built-in shims | `shims/builtin/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type |
 | Vendor manifest | `shims/builtin/<vendor>/provider.yaml` | Optional per-vendor defaults every leaf inherits: `connection:` (the credential) plus the vendor's own `logo` / `group` / `group_label`; `auth.py` sits beside it |
-| Tree contract | `shims/_shim_template/` | The path rules (`<vendor>[/<lane>]/<type>[/<format>]/provider.yaml`), the file allow-list, and the skeleton `shims new` renders; `shims check` reports a tree that departs from it, `shims migrate --write` moves one onto it |
+| Tree contract | `devtools/_shim_template/` | The path rules (`<vendor>[/<lane>]/<type>[/<format>]/provider.yaml`), the file allow-list, and the skeleton `shims new` renders; `shims check` reports a tree that departs from it, `shims migrate --write` moves one onto it |
 | External shim sources | `llm_rosetta_gateway/shims/` | Directory/archive loaders, standalone catalog (with its free / paid / subscription tier), scheduled removals |
 
 ### Gateway

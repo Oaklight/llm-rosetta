@@ -227,11 +227,11 @@ def test_the_scan_sees_every_import_form():
         ("llm_rosetta.formats", "FORMAT_SPECS")
     }
     # A submodule imported by name is the submodule, not an attribute.
-    assert modules("from llm_rosetta.shims import scaffold") == {
-        ("llm_rosetta.shims.scaffold", "")
+    assert modules("from llm_rosetta.devtools import scaffold") == {
+        ("llm_rosetta.devtools.scaffold", "")
     }
-    assert modules("import llm_rosetta.shims.scaffold as s") == {
-        ("llm_rosetta.shims.scaffold", "")
+    assert modules("import llm_rosetta.devtools.scaffold as s") == {
+        ("llm_rosetta.devtools.scaffold", "")
     }
     assert modules("from llm_rosetta import __version__") == {
         ("llm_rosetta", "__version__")

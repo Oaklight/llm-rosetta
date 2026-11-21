@@ -15,6 +15,10 @@ import pytest
 from llm_rosetta.shims.provider_shim import _reset_registry
 from llm_rosetta.shims import _loader as providers_module
 from llm_rosetta.shims._loader import load_providers, load_providers_from_dir
+from llm_rosetta.devtools import scaffold
+from llm_rosetta.devtools.scaffold import check_tree
+from llm_rosetta.devtools.scaffold import apply_migration, plan_migration
+from llm_rosetta.devtools.scaffold import run_migrate
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/dev/new_shim.py"
 
@@ -49,7 +53,6 @@ def root(tmp_path: Path) -> Path:
 
 def _fake_repository(monkeypatch, repo: Path) -> None:
     """Make *repo* answer like a GitHub shim package."""
-    from llm_rosetta.shims import scaffold
 
     def fake_git(*args: str, cwd: Path) -> str | None:
         if args[0] == "rev-parse":
@@ -249,7 +252,6 @@ class TestInteractiveMode:
 
     @staticmethod
     def _answers(monkeypatch, answers: list[str]):
-        from llm_rosetta.shims import scaffold
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True, raising=False)
         # The base URL probe and the icon lookup are real HTTP requests; no
@@ -266,7 +268,6 @@ class TestInteractiveMode:
     def test_it_asks_for_every_field_and_checks_the_result(
         self, monkeypatch, root, capsys
     ):
-        from llm_rosetta.shims import scaffold
 
         self._answers(
             monkeypatch,
@@ -298,7 +299,6 @@ class TestInteractiveMode:
         assert "display_name: acme" in leaf.read_text(encoding="utf-8")
 
     def test_answers_given_as_flags_are_not_asked_for_again(self, monkeypatch, root):
-        from llm_rosetta.shims import scaffold
 
         self._answers(
             monkeypatch,
@@ -323,7 +323,6 @@ class TestInteractiveMode:
         assert (root / "acme" / "provider.yaml").is_file()
 
     def test_no_input_requires_a_vendor(self, root, capsys):
-        from llm_rosetta.shims import scaffold
 
         code = scaffold.main(["--no-input", "--root", str(root)])
 
@@ -333,7 +332,6 @@ class TestInteractiveMode:
     def test_a_logo_url_offers_to_save_it_into_the_package(
         self, monkeypatch, root, capsys
     ):
-        from llm_rosetta.shims import scaffold
 
         _fake_repository(monkeypatch, root.parent)
         monkeypatch.setattr(scaffold, "_download_logo", lambda url: (b"<svg/>", ".svg"))
@@ -372,7 +370,6 @@ class TestLogoLocalization:
     """A mark a package ships lives in the repository, not on someone's host."""
 
     def test_it_saves_the_mark_and_returns_the_cdn_url(self, monkeypatch, root):
-        from llm_rosetta.shims import scaffold
 
         _fake_repository(monkeypatch, root.parent)
         monkeypatch.setattr(scaffold, "_download_logo", lambda url: (b"<svg/>", ".svg"))
@@ -384,7 +381,6 @@ class TestLogoLocalization:
         assert note.startswith("saved   ")
 
     def test_an_unchanged_mark_is_not_rewritten(self, monkeypatch, root):
-        from llm_rosetta.shims import scaffold
 
         _fake_repository(monkeypatch, root.parent)
         assets = root.parent / "assets"
@@ -399,7 +395,6 @@ class TestLogoLocalization:
         assert note.startswith("kept existing")
 
     def test_outside_a_repository_the_url_is_kept(self, monkeypatch, root):
-        from llm_rosetta.shims import scaffold
 
         monkeypatch.setattr(scaffold, "_git", lambda *args, cwd: None)
 
@@ -409,7 +404,6 @@ class TestLogoLocalization:
         assert "not inside a git repository" in note
 
     def test_a_download_failure_keeps_the_url(self, monkeypatch, root):
-        from llm_rosetta.shims import scaffold
 
         _fake_repository(monkeypatch, root.parent)
 
@@ -424,7 +418,6 @@ class TestLogoLocalization:
         assert "must use https" in note
 
     def test_the_flag_mode_localizes_without_prompting(self, monkeypatch, root):
-        from llm_rosetta.shims import scaffold
 
         _fake_repository(monkeypatch, root.parent)
         monkeypatch.setattr(scaffold, "_download_logo", lambda url: (b"<svg/>", ".svg"))
@@ -556,14 +549,12 @@ class TestBaseUrlProbe:
 
     @staticmethod
     def _status(monkeypatch, statuses: dict[str, tuple[int | None, str]]):
-        from llm_rosetta.shims import scaffold
 
         monkeypatch.setattr(
             scaffold, "_http_status", lambda url, **_kw: statuses.get(url, (404, ""))
         )
 
     def test_a_models_200_passes(self, monkeypatch):
-        from llm_rosetta.shims import scaffold
 
         self._status(monkeypatch, {"https://api.acme.example/v1/models": (200, "")})
 
@@ -573,7 +564,6 @@ class TestBaseUrlProbe:
         assert "answers 200" in detail
 
     def test_an_authentication_refusal_proves_reachability(self, monkeypatch):
-        from llm_rosetta.shims import scaffold
 
         self._status(monkeypatch, {"https://api.acme.example/v1/models": (401, "")})
 
@@ -583,7 +573,6 @@ class TestBaseUrlProbe:
         assert "without a key" in detail
 
     def test_a_404_asks_for_the_suffix(self, monkeypatch):
-        from llm_rosetta.shims import scaffold
 
         self._status(
             monkeypatch,
@@ -599,7 +588,6 @@ class TestBaseUrlProbe:
         assert "right suffix" in detail
 
     def test_an_unreachable_host_says_why(self, monkeypatch):
-        from llm_rosetta.shims import scaffold
 
         self._status(
             monkeypatch, {"https://api.acme.example/v1/models": (None, "timed out")}
@@ -611,7 +599,6 @@ class TestBaseUrlProbe:
         assert "cannot reach" in detail and "timed out" in detail
 
     def test_a_pasted_models_suffix_is_dropped(self):
-        from llm_rosetta.shims import scaffold
 
         url, note = scaffold.normalize_base_url(" https://api.acme.example/v1/models/ ")
 
@@ -619,7 +606,6 @@ class TestBaseUrlProbe:
         assert "/models suffix" in note
 
     def test_a_clean_url_is_left_alone(self):
-        from llm_rosetta.shims import scaffold
 
         url, note = scaffold.normalize_base_url("https://api.acme.example/v1")
 
@@ -656,7 +642,6 @@ class TestCtrlC:
 
     @staticmethod
     def _interrupting(monkeypatch, answers: list[str], at: set[int]):
-        from llm_rosetta.shims import scaffold
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True, raising=False)
         monkeypatch.setattr(
@@ -679,7 +664,6 @@ class TestCtrlC:
     def test_the_first_ctrl_c_re_asks_the_same_question(
         self, monkeypatch, root, capsys
     ):
-        from llm_rosetta.shims import scaffold
 
         self._interrupting(
             monkeypatch,
@@ -708,7 +692,6 @@ class TestCtrlC:
         assert (root / "acme" / "llm" / "provider.yaml").is_file()
 
     def test_a_second_ctrl_c_cancels_without_writing(self, monkeypatch, root, capsys):
-        from llm_rosetta.shims import scaffold
 
         self._interrupting(monkeypatch, [], at={1, 2})
 
@@ -815,7 +798,6 @@ class TestExistingTree:
     def test_the_interactive_mode_asks_the_root_first_and_follows_it(
         self, monkeypatch, root, capsys
     ):
-        from llm_rosetta.shims import scaffold
 
         _leaf_file(root, "kilo", name="kilo--chat_completions")
         monkeypatch.setattr("sys.stdin.isatty", lambda: True, raising=False)
@@ -860,7 +842,6 @@ class TestCtrlD:
 
     @staticmethod
     def _input(monkeypatch, *, answers: list[str] | None = None):
-        from llm_rosetta.shims import scaffold
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True, raising=False)
         monkeypatch.setattr(scaffold, "probe_base_url", lambda url: (True, "ok"))
@@ -878,7 +859,6 @@ class TestCtrlD:
     def test_end_of_input_at_the_first_question_cancels(
         self, monkeypatch, root, capsys
     ):
-        from llm_rosetta.shims import scaffold
 
         self._input(monkeypatch)
 
@@ -891,7 +871,6 @@ class TestCtrlD:
         assert not (root / "acme").exists()
 
     def test_end_of_input_mid_questionnaire_cancels(self, monkeypatch, root, capsys):
-        from llm_rosetta.shims import scaffold
 
         self._input(
             monkeypatch,
@@ -916,7 +895,6 @@ class TestLobehubLogo:
 
     @staticmethod
     def _recording_answers(monkeypatch, answers: list[str], icon: str | None):
-        from llm_rosetta.shims import scaffold
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True, raising=False)
         monkeypatch.setattr(scaffold, "probe_base_url", lambda url: (True, "ok"))
@@ -932,7 +910,6 @@ class TestLobehubLogo:
         return prompts
 
     def test_the_candidates_walk_from_the_exact_name_to_the_provider(self):
-        from llm_rosetta.shims import scaffold
 
         candidates = scaffold.lobehub_candidates("opencode_zen_free")
 
@@ -940,12 +917,10 @@ class TestLobehubLogo:
         assert "opencode" in candidates
 
     def test_a_name_that_is_not_a_slug_offers_nothing(self):
-        from llm_rosetta.shims import scaffold
 
         assert scaffold.lobehub_candidates("a/b c") == ()
 
     def test_the_first_icon_that_answers_wins(self, monkeypatch):
-        from llm_rosetta.shims import scaffold
 
         asked: list[tuple[str, str | None]] = []
 
@@ -964,7 +939,6 @@ class TestLobehubLogo:
         assert len(asked) == 2
 
     def test_an_unreachable_cdn_stops_the_search(self, monkeypatch):
-        from llm_rosetta.shims import scaffold
 
         asked: list[str] = []
 
@@ -978,14 +952,12 @@ class TestLobehubLogo:
         assert len(asked) == 1
 
     def test_no_icon_under_any_candidate_is_none(self, monkeypatch):
-        from llm_rosetta.shims import scaffold
 
         monkeypatch.setattr(scaffold, "_http_status", lambda url, **kw: (404, ""))
 
         assert scaffold.find_lobehub_logo("acme") is None
 
     def test_a_jsdelivr_url_is_kept_without_a_copy(self, monkeypatch, root):
-        from llm_rosetta.shims import scaffold
 
         _fake_repository(monkeypatch, root.parent)
 
@@ -1001,7 +973,6 @@ class TestLobehubLogo:
         assert not (root.parent / "assets").exists()
 
     def test_the_fastly_host_counts_as_jsdelivr_too(self):
-        from llm_rosetta.shims import scaffold
 
         assert scaffold.is_jsdelivr("https://fastly.jsdelivr.net/gh/x/y@main/a.svg")
         assert scaffold.is_jsdelivr("https://cdn.jsdelivr.net/npm/x/a.svg")
@@ -1095,7 +1066,6 @@ class TestLobehubLogo:
         assert any(prompt.startswith("Save the mark") for prompt in prompts)
 
     def test_the_flag_mode_takes_the_icon(self, monkeypatch, root, capsys):
-        from llm_rosetta.shims import scaffold
 
         monkeypatch.setattr(scaffold, "find_lobehub_logo", lambda vendor: self.ICON)
 
@@ -1110,7 +1080,6 @@ class TestLobehubLogo:
         assert f"logo: {self.ICON}" in manifest
 
     def test_the_flag_mode_fails_when_there_is_no_icon(self, monkeypatch, root, capsys):
-        from llm_rosetta.shims import scaffold
 
         monkeypatch.setattr(scaffold, "find_lobehub_logo", lambda vendor: None)
 
@@ -1145,7 +1114,6 @@ class TestTemplate:
 
     def test_every_template_renders(self):
         """A placeholder the scaffold does not fill must fail here, not at use."""
-        from llm_rosetta.shims import scaffold
 
         for template in sorted(scaffold.TEMPLATE_DIR.rglob("*.tmpl")):
             rendered = scaffold._render(
@@ -1155,7 +1123,6 @@ class TestTemplate:
 
     def test_the_tree_carries_exactly_the_modules_the_loader_reads(self):
         """The template set and the loader's allow-list are the same list."""
-        from llm_rosetta.shims import scaffold
 
         names = {path.name for path in scaffold.TREE_DIR.rglob("*.tmpl")}
         assert names == {
@@ -1167,7 +1134,6 @@ class TestTemplate:
 
     def test_a_line_with_an_empty_placeholder_is_dropped(self):
         """Optional fields stay on one line in the template."""
-        from llm_rosetta.shims import scaffold
 
         text = "a: {{one}}\nb: {{two}}\nc: x\n"
 
@@ -1245,7 +1211,6 @@ class TestCheckTree:
         return path
 
     def test_a_canonical_tree_has_no_findings(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import check_tree
 
         self._manifest(tmp_path / "acme")
         self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
@@ -1253,7 +1218,6 @@ class TestCheckTree:
         assert check_tree(tmp_path) == []
 
     def test_a_vendor_directory_used_as_a_leaf_is_reported(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import check_tree
 
         self._leaf(tmp_path / "acme", "acme--chat_completions")
 
@@ -1269,7 +1233,6 @@ class TestCheckTree:
         A moved leaf leaves `../token.py` one level short, and nothing fails
         until the first credential exchange.
         """
-        from llm_rosetta.shims.scaffold import check_tree
 
         self._manifest(tmp_path / "acme")
         leaf = tmp_path / "acme" / "llm"
@@ -1297,7 +1260,6 @@ class TestCheckTree:
         The panel renders those entries verbatim; a typo in one would otherwise
         surface as a gateway that will not load the tree at all.
         """
-        from llm_rosetta.shims.scaffold import check_tree
 
         (tmp_path / "acme").mkdir()
         (tmp_path / "acme" / "provider.yaml").write_text(
@@ -1313,7 +1275,6 @@ class TestCheckTree:
         assert str(tmp_path) not in findings[0].message
 
     def test_a_well_formed_fields_block_is_not_a_finding(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import check_tree
 
         (tmp_path / "acme").mkdir()
         (tmp_path / "acme" / "provider.yaml").write_text(
@@ -1332,7 +1293,6 @@ class TestCheckTree:
         exchange — reporting it would send the author looking for a conflict
         that does not exist.
         """
-        from llm_rosetta.shims.scaffold import check_tree
 
         self._manifest(tmp_path / "acme")
         (tmp_path / "acme" / "auth.py").write_text(
@@ -1354,7 +1314,6 @@ class TestCheckTree:
         under <type>/" names a move that would collide with the leaf already
         there, so the finding has to name the flat leaf and send it down.
         """
-        from llm_rosetta.shims.scaffold import check_tree
 
         self._manifest(tmp_path / "acme")
         flat = self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
@@ -1368,7 +1327,6 @@ class TestCheckTree:
         assert "Move this leaf down" in findings[0].message
 
     def test_a_leaf_without_a_type_directory_is_reported(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import check_tree
 
         self._manifest(tmp_path / "acme")
         self._leaf(tmp_path / "acme" / "chat_completions", "acme--chat_completions")
@@ -1378,7 +1336,6 @@ class TestCheckTree:
         assert "no <type>/ directory" in findings[0].message
 
     def test_the_only_lane_at_a_format_level_is_reported(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import check_tree
 
         self._manifest(tmp_path / "acme")
         self._leaf(
@@ -1390,7 +1347,6 @@ class TestCheckTree:
         assert "the only lane of llm" in findings[0].message
 
     def test_two_lanes_at_a_format_level_conform(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import check_tree
 
         self._manifest(tmp_path / "acme")
         self._leaf(
@@ -1407,7 +1363,6 @@ class TestCheckTree:
         assert check_tree(tmp_path) == []
 
     def test_a_vendor_level_transforms_file_is_reported(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import check_tree
 
         self._manifest(tmp_path / "acme")
         self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
@@ -1418,7 +1373,6 @@ class TestCheckTree:
         assert "vendor-level one is never read" in findings[0].message
 
     def test_a_second_exchange_below_the_vendor_is_reported(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import check_tree
 
         self._manifest(tmp_path / "acme")
         self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
@@ -1430,7 +1384,6 @@ class TestCheckTree:
         assert "already ships its exchange" in findings[0].message
 
     def test_a_manifest_entry_with_no_leaf_is_reported(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import check_tree
 
         self._manifest(tmp_path / "acme")
         self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
@@ -1444,7 +1397,6 @@ class TestCheckTree:
         assert "holds no provider.yaml" in findings[0].message
 
     def test_a_private_helper_module_is_not_reported(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import check_tree
 
         self._manifest(tmp_path / "acme")
         self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
@@ -1477,7 +1429,6 @@ class TestMigrate:
     def test_a_vendor_used_as_a_leaf_gets_a_manifest_and_a_type_level(
         self, tmp_path: Path
     ):
-        from llm_rosetta.shims.scaffold import apply_migration, plan_migration
 
         self._leaf(tmp_path / "acme", "acme--chat_completions")
 
@@ -1492,7 +1443,6 @@ class TestMigrate:
     def test_a_format_directory_under_the_vendor_moves_under_its_type(
         self, tmp_path: Path
     ):
-        from llm_rosetta.shims.scaffold import apply_migration, plan_migration
 
         self._manifest(tmp_path / "acme")
         for fmt in ("chat_completions", "messages"):
@@ -1506,7 +1456,6 @@ class TestMigrate:
         assert (tmp_path / "acme" / "llm" / "messages" / "provider.yaml").is_file()
 
     def test_a_lane_gets_its_type_directory_below_it(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import apply_migration, plan_migration
 
         self._manifest(tmp_path / "alcf")
         for cluster in ("metis", "minerva"):
@@ -1524,7 +1473,6 @@ class TestMigrate:
         assert not (tmp_path / "alcf" / "metis" / "llm" / "llm").exists()
 
     def test_the_only_lane_at_a_format_level_moves_up(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import apply_migration, plan_migration
 
         self._manifest(tmp_path / "acme")
         self._leaf(
@@ -1537,7 +1485,6 @@ class TestMigrate:
         assert not (tmp_path / "acme" / "llm" / "chat_completions").exists()
 
     def test_a_dry_run_moves_nothing(self, tmp_path: Path, capsys):
-        from llm_rosetta.shims.scaffold import run_migrate
 
         self._leaf(tmp_path / "acme", "acme--chat_completions")
 
@@ -1550,7 +1497,6 @@ class TestMigrate:
         assert not (tmp_path / "acme" / "llm").exists()
 
     def test_the_manifest_paths_are_rewritten(self, tmp_path: Path):
-        from llm_rosetta.shims.scaffold import apply_migration, plan_migration
 
         self._manifest(tmp_path / "acme")
         self._leaf(tmp_path / "acme" / "chat_completions", "acme--chat_completions")
@@ -1573,7 +1519,6 @@ class TestMigrate:
         A package that declares the core floor it needs would otherwise lose it
         the moment someone runs `shims migrate --write`.
         """
-        from llm_rosetta.shims.scaffold import apply_migration, plan_migration
 
         self._manifest(tmp_path / "acme")
         self._leaf(tmp_path / "acme" / "chat_completions", "acme--chat_completions")
@@ -1591,7 +1536,6 @@ class TestMigrate:
 
     def test_a_manifest_it_cannot_render_is_left_alone(self, tmp_path: Path):
         """A lossy rewrite is worse than a path the operator fixes by hand."""
-        from llm_rosetta.shims.scaffold import apply_migration, plan_migration
 
         self._manifest(tmp_path / "acme")
         self._leaf(tmp_path / "acme" / "chat_completions", "acme--chat_completions")
@@ -1613,11 +1557,6 @@ class TestMigrate:
         sibling lane, so moving it wholesale would drag the sibling one level
         deeper — a tree this migration's own `check` then rejects.
         """
-        from llm_rosetta.shims.scaffold import (
-            apply_migration,
-            check_tree,
-            plan_migration,
-        )
 
         self._manifest(tmp_path / "acme")
         lane = tmp_path / "acme" / "llm"
@@ -1639,11 +1578,6 @@ class TestMigrate:
         Dragging the sibling would leave the second move with no source, so the
         migration would fail halfway through.
         """
-        from llm_rosetta.shims.scaffold import (
-            apply_migration,
-            check_tree,
-            plan_migration,
-        )
 
         self._leaf(tmp_path / "acme", "acme--chat_completions")
         self._leaf(tmp_path / "acme" / "messages", "acme--messages", fmt="messages")
@@ -1660,7 +1594,6 @@ class TestMigrate:
         assert check_tree(tmp_path) == []
 
     def test_a_conforming_tree_has_nothing_to_do(self, tmp_path: Path, capsys):
-        from llm_rosetta.shims.scaffold import run_migrate
 
         self._manifest(tmp_path / "acme")
         self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")

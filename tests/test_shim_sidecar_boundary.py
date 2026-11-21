@@ -21,6 +21,8 @@ from pathlib import Path
 
 import pytest
 
+from llm_rosetta.devtools import scaffold
+
 sys.path.insert(0, str(Path(__file__).parent))
 
 from _import_scan import (  # noqa: E402
@@ -32,7 +34,7 @@ from _import_scan import (  # noqa: E402
 
 _CORE = Path(__file__).parents[1] / "packages/llm-rosetta/src/llm_rosetta"
 _PROVIDERS = _CORE / "shims" / "builtin"
-_TEMPLATE = _CORE / "shims" / "_shim_template"
+_TEMPLATE = _CORE / "devtools" / "_shim_template"
 _CONTRACTS = "llm_rosetta.contracts"
 
 
@@ -119,8 +121,6 @@ def test_a_template_imports_core_only_through_the_contracts(path: Path):
 
 
 def test_the_scaffolded_vendor_imports_core_only_through_the_contracts(tmp_path):
-    from llm_rosetta.shims import scaffold
-
     root = tmp_path / "providers"
     root.mkdir()
     argv = ["acme", "--root", str(root), "--base-url", "https://example.invalid/v1"]

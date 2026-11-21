@@ -101,10 +101,10 @@ from llm_rosetta.shims._loader import (
 # The four scaffold names are renamed at the import line, so each object keeps
 # its internal name: ``run_scaffold.__name__`` is ``"run"``, and
 # ``add_scaffold_arguments.__name__`` is ``"add_arguments"``.
-from llm_rosetta.shims.scaffold import add_arguments as add_scaffold_arguments
-from llm_rosetta.shims.scaffold import run as run_scaffold
-from llm_rosetta.shims.scaffold import run_check as run_scaffold_check
-from llm_rosetta.shims.scaffold import run_migrate as run_scaffold_migrate
+from llm_rosetta.devtools.scaffold import add_arguments as add_scaffold_arguments
+from llm_rosetta.devtools.scaffold import run as run_scaffold
+from llm_rosetta.devtools.scaffold import run_check as run_scaffold_check
+from llm_rosetta.devtools.scaffold import run_migrate as run_scaffold_migrate
 from llm_rosetta.contracts.transform import flatten_system_content
 from llm_rosetta.types.ir import is_image_part, is_tool_result_part
 

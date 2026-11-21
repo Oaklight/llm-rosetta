@@ -9,42 +9,4 @@
 # file again, so master never carries an exemption for a def that later edits
 # could hide behind.
 
-# #1660 M1: the shim loader moves to shims/_loader.  Function-local imports
-# that cannot be hoisted (an import cycle, or a test that patches the module
-# attribute) and patch-target strings follow the new module path.
-packages/llm-rosetta/src/llm_rosetta/contracts/shim.py::load_providers_from_dir  #1660 M1: lazy import path shims.providers -> shims._loader (import cycle)
-packages/llm-rosetta/src/llm_rosetta/shims/provider_shim.py::staging_registry  #1660 M1: lazy import path .providers -> ._loader (import cycle)
-packages/llm-rosetta/src/llm_rosetta/shims/provider_shim.py::_clear_registry_caches  #1660 M1: lazy import path shims.providers -> shims._loader (import cycle)
-packages/llm-rosetta/src/llm_rosetta/shims/provider_shim.py::snapshot_registry  #1660 M1: lazy import path .providers -> ._loader (import cycle)
-packages/llm-rosetta/src/llm_rosetta/shims/provider_shim.py::restore_registry  #1660 M1: lazy import path .providers -> ._loader (import cycle)
-packages/llm-rosetta/src/llm_rosetta/shims/scaffold.py::_check  #1660 M1: lazy import path shims.providers -> shims._loader (tests patch the loader attribute)
-packages/llm-rosetta/src/llm_rosetta/shims/scaffold.py::_field_problems  #1660 M1: lazy import path shims.providers -> shims._loader
-packages/llm-rosetta/src/llm_rosetta/_tiers.py::COMPAT  #1660 M1: llm_rosetta.shims.providers joins the compat tier (0.13.0 path, forwards until 0.15.0)
-tests/test_no_deprecation_bounds.py::KEPT_DEPRECATIONS  #1660 M1: the shims.providers forwarder is a kept deprecation
-tests/gateway/test_core_surface_boundary.py::test_private_names_and_modules_are_private  #1660 M1: the private-module example names shims._loader
-tests/test_contracts.py::test_the_loader_reads_the_names_from_contracts  #1660 M1: the loader files are read from shims/_loader
-tests/test_shim_loader.py::TestPluginEntryPoints.test_invokes_entry_points  #1660 M1: patch target llm_rosetta.shims._loader.entry_points
-tests/test_shim_loader.py::TestPluginEntryPoints.test_collects_returned_shims  #1660 M1: patch target llm_rosetta.shims._loader.entry_points
-tests/test_shim_loader.py::TestPluginEntryPoints.test_handles_plugin_errors_gracefully  #1660 M1: patch target llm_rosetta.shims._loader.entry_points
-tests/test_shim_loader.py::_snapshot_rows  #1660 M1: lazy import path (a test patches plugin_source on the loader)
-
-# #1660 M2: the vendor data moves from shims/providers to shims/builtin.
-packages/llm-rosetta/src/llm_rosetta/shims/_loader/__init__.py::load_providers  #1660 M2: docstring names builtin/
-packages/llm-rosetta/src/llm_rosetta/shims/_loader/__init__.py::builtin_providers_dir  #1660 M2: docstring names builtin/
-packages/llm-rosetta/src/llm_rosetta/shims/_loader/_sidecars.py::_load_transforms  #1660 M2: built-in transforms load under their real package llm_rosetta.shims.builtin
-scripts/dev/new_shim.py::BUILTIN_ROOT  #1660 M2: the built-in tree is shims/builtin
-tests/test_intrinsic_tool_declaration.py::TestShimEmitConsistency.test_openai_chatgpt_responses  #1660 M2: docstring names shims/builtin/
-tests/test_shim_loader.py::TestBuiltinVendorManifests._vendors  #1660 M2: import shims.builtin (the module name providers_mod is taken at module level)
-tests/test_shim_loader.py::TestModelTypeDirectories.test_every_builtin_sits_under_its_model_type  #1660 M2: import shims.builtin (the module name providers_mod is taken at module level)
-tests/test_shim_sidecar_boundary.py::_PROVIDERS  #1660 M2: the built-in tree is shims/builtin
-tests/test_shim_sidecar_boundary.py::_allowed  #1660 M2: a sidecar's home package is llm_rosetta.shims.builtin.<vendor>
-tests/test_shim_sidecar_boundary.py::test_a_sidecar_imports_core_only_through_the_contracts  #1660 M2: package tuple names builtin
-tests/test_shim_sidecar_boundary.py::test_the_rule  #1660 M2: example module path names builtin
-tests/test_shim_sidecar_boundary.py::test_a_contract_package_is_imported_as_a_package_only  #1660 M2: package tuple names builtin
-
-# #1660 M3: the scaffolder and the shim template move to devtools.
-packages/llm-rosetta/src/llm_rosetta/shims/_loader/__init__.py::load_providers_from_dir  #1660 M3: docstring names devtools/_shim_template
-packages/llm-rosetta/src/llm_rosetta/devtools/scaffold.py::run_check  #1660 M3: the printed pointer names devtools/_shim_template
-scripts/dev/new_shim.py::main  #1660 M3: lazy import path shims.scaffold -> devtools.scaffold (kept lazy in a script)
-tests/gateway/test_core_surface_boundary.py::test_the_scan_sees_every_import_form  #1660 M3: the example submodule is llm_rosetta.devtools.scaffold
-tests/test_shim_sidecar_boundary.py::_TEMPLATE  #1660 M3: the template is devtools/_shim_template
+# (no entries: the #1660 M1-M3 stack that needed them is complete)
