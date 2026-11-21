@@ -96,7 +96,7 @@ def test_names_are_the_same_objects_as_their_home():
 
 
 def test_contract_modules_are_not_re_exported():
-    """Each name has one home: the four contract modules keep theirs.
+    """Each name has one home: the auth, quota, routing and usage contracts keep theirs.
 
     ``routing`` also lists ``ProviderType`` and ``SoftErrorPattern``; #1630
     drops them from there once their home here settles.

@@ -1,23 +1,24 @@
 """The small public surface that hosts import from ``llm_rosetta`` (#1630).
 
-The gateway and external shim authors build on core through this module and
-four contract modules.  Everything else under ``llm_rosetta`` is internal and
-may move in any release.
+A host (the gateway) builds on core through this module and
+:mod:`llm_rosetta.contracts`; a shim builds on the contracts alone.
+Everything else under ``llm_rosetta`` is internal and may move in any release
+(``llm_rosetta._tiers`` states each module's tier).
 
-The five allowed import paths are:
+The two allowed import prefixes are:
 
 - ``llm_rosetta.api`` (this module)
-- ``llm_rosetta.contracts.routing``
-- ``llm_rosetta.contracts.usage`` (the package, never its submodules)
-- ``llm_rosetta.contracts.auth``
-- ``llm_rosetta.contracts.quota``
+- ``llm_rosetta.contracts`` and its submodules (``contracts.usage`` as a
+  package, never its submodules)
 
-The four contract modules stay where they are and are not re-exported here, so
-each name has one home.
+The contract modules are not re-exported here wholesale.  A few names a host
+needs beside the registry (the shim data classes, ``flatten_system_content``)
+are re-exported from their contract home, so ``api`` and ``contracts`` hand
+out the same objects.
 
 Stability rule: within one minor release this module only gains names, and
-``SURFACE_VERSION`` stays put; it is bumped on a removal or a changed meaning,
-never on an addition.  A name
+``SURFACE_VERSION`` (defined in :mod:`llm_rosetta.contracts`) stays put; it is
+bumped on a removal or a changed meaning, never on an addition.  A name
 that is renamed or removed keeps a deprecated alias for one minor release.  A
 breaking change needs an entry in ``scripts/dev/public_api_allowlist.json``,
 and ``scripts/dev/public_api_diff.py`` flags it.
