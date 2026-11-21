@@ -290,7 +290,6 @@ class TestAdminPayload:
                 "shims",
                 "free",
                 "tier",
-                "logos",
                 "note",
                 "source",
                 "install",

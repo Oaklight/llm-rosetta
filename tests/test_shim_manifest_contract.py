@@ -368,3 +368,55 @@ class TestRecordLevelParse:
     def test_an_unknown_mode_is_refused(self):
         with pytest.raises(ValueError, match="invalid_records"):
             parse_manifest(_doc(_release("0.1.0")), invalid_records="lenient")
+
+
+class TestDisplayFields:
+    """``label`` / ``logo`` (#1671): optional, per record, never fatal to it."""
+
+    def test_a_record_carries_its_label_and_logo(self):
+        raw = dict(
+            _release("0.1.0"), label="Kilo (Free)", logo="https://cdn.example/k.svg"
+        )
+        record = parse_manifest(_doc(copy.deepcopy(raw))).vendors["acme"][0]
+        assert (record.label, record.logo) == (
+            "Kilo (Free)",
+            "https://cdn.example/k.svg",
+        )
+        assert record.to_dict() == raw
+
+    @pytest.mark.parametrize(
+        ("field", "value", "fragment"),
+        [
+            ("logo", "http://cdn.example/k.svg", "does not match"),
+            ("logo", "javascript:alert(1)", "does not match"),
+            ("logo", "https://cdn.example/" + "a" * 600, "longer than 512"),
+            ("label", "", "shorter than 1"),
+            ("label", "x" * 81, "longer than 80"),
+            ("label", "<b>Kilo</b>", "does not match"),
+            ("label", 7, "expected string"),
+        ],
+    )
+    def test_a_producer_validation_refuses_a_bad_value(self, field, value, fragment):
+        doc = _doc(dict(_release("0.1.0"), **{field: value}))
+        problems = validate_manifest(doc)
+        assert any(field in p and fragment in p for p in problems), problems
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [("logo", "http://insecure.example/k.svg"), ("label", "x" * 81)],
+    )
+    def test_a_consumer_drops_only_the_bad_field(self, field, value):
+        doc = _doc(
+            dict(_release("0.1.0"), label="Acme", logo="https://ok.example/a.svg")
+        )
+        doc["vendors"]["acme"]["versions"][0][field] = value
+
+        manifest = parse_manifest(doc, invalid_records="skip")
+
+        record = manifest.vendors["acme"][0]
+        assert getattr(record, field) is None
+        other = "label" if field == "logo" else "logo"
+        assert getattr(record, other) is not None, "the good field stays"
+        assert record.version == "0.1.0", "the record stays"
+        assert any(f"field {field!r} dropped" in s for s in manifest.skipped)
+        assert manifest.dropped == {}

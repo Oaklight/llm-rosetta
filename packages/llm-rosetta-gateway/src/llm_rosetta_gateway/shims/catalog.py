@@ -28,7 +28,7 @@ source and the ``shims.install`` selector it stands for.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -113,18 +113,6 @@ class ShimSourcePackage:
         return "free" if self.free else "paid"
 
     @property
-    def logos(self) -> dict[str, str]:
-        """The marks of this package's vendors, as its source records them.
-
-        Returns:
-            ``{vendor: url}`` for the vendors :attr:`ShimSource.logos` names.
-        """
-        source = get_shim_source(self.source) if self.source else None
-        if source is None:
-            return {}
-        return {v: source.logos[v] for v in self.vendors if v in source.logos}
-
-    @property
     def remote(self) -> dict[str, Any]:
         """Return the ``shims.remotes`` entry that loads this package.
 
@@ -162,7 +150,6 @@ class ShimSourcePackage:
             "shims": list(self.shims),
             "free": self.free,
             "tier": self.tier,
-            "logos": dict(self.logos),
             "note": self.note,
             "source": self.source,
             "install": self.install,
@@ -529,22 +516,12 @@ class ShimSource:
         label: Human-readable name.
         repo: The repository URL.
         legacy_repos: Earlier names of the repository; GitHub redirects them.
-        logos: The mark of each vendor the source publishes, keyed by the
-            manifest's vendor name.  The manifest carries no mark, and a
-            vendor that is not installed has no ``provider.yaml`` on disk to
-            read one from, so the Available view draws these; a loaded shim's
-            own ``logo:`` still wins in the Installed view.
-        labels: The display name of each vendor, for the same reason: the
-            vendor key (``zai``, ``kilo_free``) is not the vendor's name.
     """
 
     key: str
     label: str
     repo: str
     legacy_repos: tuple[str, ...] = ()
-    # A dict is not hashable, and a frozen dataclass hashes every field.
-    logos: dict[str, str] = field(default_factory=dict, hash=False)
-    labels: dict[str, str] = field(default_factory=dict, hash=False)
 
     @property
     def _owner_repo(self) -> tuple[str, str]:
@@ -586,8 +563,6 @@ class ShimSource:
                     "name": vendor,
                     "package": package.key,
                     "tier": package.tier,
-                    "logo": self.logos.get(vendor),
-                    "label": self.labels.get(vendor),
                 }
                 for package in self.packages
                 for vendor in package.vendors
@@ -595,81 +570,21 @@ class ShimSource:
         }
 
 
-_LOBE = "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/"
-# A mark a source repository hosts itself is addressed by a release tag: the
-# per-vendor repositories these used to live in are archived (#1660).
-_ARGONNE_ASSETS = (
-    "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argonne@v0.4.0/assets/"
-)
-_CONTRIB_ASSETS = (
-    "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-contrib@v0.5.0/assets/"
-)
-
 #: The source repositories that publish a manifest.  ``shims.sources`` names
-#: them by key; a URL names any other source.  The marks and names repeat the
-#: vendor manifests' ``logo:`` / ``group_label:`` (core declared them before
-#: the vendors moved out); LLM7 declares no mark, so its tile shows initials.
+#: them by key; a URL names any other source.  A vendor's mark and name come
+#: from the manifest's release records (``logo`` / ``label``), not from here.
 SHIM_SOURCES: tuple[ShimSource, ...] = (
     ShimSource(
         key="argonne",
         label="Argonne",
         repo="https://github.com/Oaklight/llm-rosetta-shim-argonne",
         legacy_repos=("https://github.com/Oaklight/llm-rosetta-shim-argo",),
-        logos={
-            "alcf": _ARGONNE_ASSETS + "alcf.svg",
-            "argo": _ARGONNE_ASSETS + "argo.svg",
-            "asksage": _ARGONNE_ASSETS + "asksage.webp",
-        },
-        labels={"alcf": "ALCF", "argo": "Argo", "asksage": "AskSage"},
     ),
     ShimSource(
         key="contrib",
         label="Contrib",
         repo="https://github.com/Oaklight/llm-rosetta-shim-contrib",
         legacy_repos=("https://github.com/Oaklight/llm-rosetta-shim-free",),
-        logos={
-            "antigravity": _LOBE + "antigravity.svg",
-            "groq": _LOBE + "groq.svg",
-            "kilo": _LOBE + "kilocode.svg",
-            "kilo_free": _LOBE + "kilocode.svg",
-            "modelscope": _LOBE + "modelscope.svg",
-            "moonshot": _LOBE + "moonshot.svg",
-            "nvidia": _LOBE + "nvidia.svg",
-            "openai_chatgpt": _LOBE + "openai.svg",
-            "opencode": _LOBE + "opencode.svg",
-            "opencode_zen_free": _LOBE + "opencode.svg",
-            "opendesign": _CONTRIB_ASSETS + "opendesign.svg",
-            "openrouter": _LOBE + "openrouter.svg",
-            "ovhcloud": "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ovh.svg",
-            "qwen": _LOBE + "qwen.svg",
-            "siliconflow": _LOBE + "siliconcloud.svg",
-            "volcengine": _LOBE + "volcengine.svg",
-            "xai": _LOBE + "xai.svg",
-            "zai": _LOBE + "zhipu.svg",
-            "zhipu": _LOBE + "zhipu.svg",
-        },
-        labels={
-            "antigravity": "Google (Antigravity)",
-            "groq": "Groq",
-            "kilo": "Kilo",
-            "kilo_free": "Kilo",
-            "llm7": "LLM7.io",
-            "modelscope": "ModelScope",
-            "moonshot": "Moonshot",
-            "nvidia": "NVIDIA",
-            "openai_chatgpt": "OpenAI (ChatGPT plan)",
-            "opencode": "OpenCode",
-            "opencode_zen_free": "OpenCode Zen",
-            "opendesign": "OpenDesign",
-            "openrouter": "OpenRouter",
-            "ovhcloud": "OVHcloud",
-            "qwen": "Qwen",
-            "siliconflow": "SiliconFlow",
-            "volcengine": "Volcengine",
-            "xai": "xAI",
-            "zai": "Z.ai",
-            "zhipu": "Zhipu",
-        },
     ),
 )
 

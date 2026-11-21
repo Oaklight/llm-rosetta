@@ -372,85 +372,134 @@ class TestPackageCard:
         assert _manifest_package_view(statuses, {}) == {}
 
 
-class TestCatalogueMarks:
-    """A vendor that is not installed still shows its mark and its name.
+class TestManifestMarks:
+    """A vendor's name and mark come from its release record (#1671).
 
-    The manifest carries neither, and before #1660 core declared both in the
-    vendor's ``provider.yaml``; after the move an uninstalled vendor drew its
-    initials (``Gr``, ``Za``) and its key (``Zai``) on the Available view.
+    The manifest is the one home: core keeps no per-vendor copy, so a vendor
+    that is not installed is drawn from what its source publishes.
     """
 
-    def test_a_catalogue_source_names_the_mark_and_label_of_its_vendors(self, tmp_path):
-        from llm_rosetta_gateway.shims.catalog import get_shim_source
-        from llm_rosetta_gateway.shims.manifest_sources import (
-            source_spec_from_catalogue,
+    def test_the_card_takes_label_and_logo_from_the_installable_record(self, tmp_path):
+        old = _record("0.1.0", label="Kilo", logo="https://cdn.example/old.svg")
+        new = _record(
+            "0.2.0", label="Kilo (Free)", logo="https://cdn.example/kilocode.svg"
         )
-
-        contrib = get_shim_source("contrib")
-        assert contrib is not None
-        spec = source_spec_from_catalogue(contrib)
-        http = FakeHttp(
-            {
-                spec.url: _manifest(
-                    "contrib",
-                    {
-                        "zai": [_record("0.5.0", shims=["zai--chat_completions"])],
-                        "newcomer": [
-                            _record("0.1.0", shims=["newcomer--chat_completions"])
-                        ],
-                    },
-                )
-            }
-        )
-
-        out = _catalogue(tmp_path, [spec], http)
-
-        by_vendor = {v["vendor"]: v for v in out[0]["vendors"]}
-        assert by_vendor["zai"]["label"] == "Z.ai"
-        assert by_vendor["zai"]["logo"].endswith("/zhipu.svg")
-        # A vendor the catalogue does not know keeps the initials fallback.
-        assert by_vendor["newcomer"]["label"] is None
-        assert by_vendor["newcomer"]["logo"] is None
-
-    def test_a_url_source_carries_no_catalogue_mark(self, tmp_path):
-        zai = [_record("0.5.0", shims=["zai--chat_completions"])]
-        http = FakeHttp({A: _manifest("contrib", {"zai": zai})})
+        http = FakeHttp({A: _manifest("contrib", {"acme": [old, new]})})
 
         out = _catalogue(tmp_path, [ManifestSourceSpec(key=None, url=A)], http)
 
-        assert out[0]["vendors"][0]["logo"] is None
-        assert out[0]["vendors"][0]["label"] is None
+        card = out[0]["vendors"][0]
+        assert card["label"] == "Kilo (Free)"
+        assert card["logo"] == "https://cdn.example/kilocode.svg"
 
-    def test_no_mark_points_at_an_archived_package_repository(self):
-        from llm_rosetta_gateway.shims.catalog import (
-            SHIM_SOURCE_PACKAGES,
-            SHIM_SOURCES,
+    def test_nothing_installable_reads_the_newest_record(self, tmp_path):
+        newest = _record(
+            "0.3.0",
+            surface=SURFACE_VERSION + 1,
+            label="Acme",
+            logo="https://a.example/a.svg",
+        )
+        http = FakeHttp({A: _manifest("contrib", {"acme": [newest]})})
+
+        card = _catalogue(tmp_path, [ManifestSourceSpec(key=None, url=A)], http)[0][
+            "vendors"
+        ][0]
+
+        assert card["installable"] is None
+        assert (card["label"], card["logo"]) == ("Acme", "https://a.example/a.svg")
+
+    def test_a_record_without_them_leaves_the_fallbacks_to_the_panel(self, tmp_path):
+        http = FakeHttp({A: _manifest("contrib", {"acme": [_record("0.1.0")]})})
+
+        card = _catalogue(tmp_path, [ManifestSourceSpec(key=None, url=A)], http)[0][
+            "vendors"
+        ][0]
+
+        assert card["label"] is None and card["logo"] is None
+
+    def test_a_bad_logo_costs_the_field_not_the_vendor(self, tmp_path):
+        bad = _record("0.1.0", label="Acme", logo="http://insecure.example/a.svg")
+        http = FakeHttp({A: _manifest("contrib", {"acme": [bad]})})
+
+        card = _catalogue(tmp_path, [ManifestSourceSpec(key=None, url=A)], http)[0][
+            "vendors"
+        ][0]
+
+        assert card["installable"] == "0.1.0"
+        assert card["logo"] is None and card["label"] == "Acme"
+
+    def test_core_keeps_no_per_vendor_mark(self):
+        from llm_rosetta_gateway.shims.catalog import SHIM_SOURCES, ShimSource
+
+        assert not hasattr(ShimSource, "logos") and not hasattr(ShimSource, "labels")
+        for source in SHIM_SOURCES:
+            for vendor in source.to_dict()["vendors"]:
+                assert "logo" not in vendor and "label" not in vendor
+
+
+class TestPinnedMarks:
+    def test_a_pinned_vendor_is_drawn_from_its_pinned_record(self, tmp_path):
+        old = _record("0.1.0", label="Acme Old", logo="https://a.example/old.svg")
+        new = _record("0.2.0", label="Acme New", logo="https://a.example/new.svg")
+        http = FakeHttp({A: _manifest("contrib", {"acme": [old, new]})})
+        spec = ManifestSourceSpec(key=None, url=A)
+
+        def card(entry):
+            return _catalogue(
+                tmp_path, [spec], http, selectors=[parse_selector(entry)]
+            )[0]["vendors"][0]
+
+        pinned = card("contrib:acme@0.1.0")
+        assert (pinned["label"], pinned["logo"]) == (
+            "Acme Old",
+            "https://a.example/old.svg",
+        )
+        assert card("contrib:acme")["label"] == "Acme New"
+
+    def test_two_pins_show_as_a_pin_problem(self, tmp_path):
+        http = FakeHttp({A: _manifest("contrib", {"acme": [_record("0.1.0")]})})
+
+        card = _catalogue(
+            tmp_path,
+            [ManifestSourceSpec(key=None, url=A)],
+            http,
+            selectors=[
+                parse_selector("contrib:acme@0.1.0"),
+                parse_selector("acme@0.2.0"),
+            ],
+        )[0]["vendors"][0]
+
+        assert "pinned more than once" in card["pin_problem"]
+        assert card["label"] is None
+
+    def test_the_install_row_speaks_for_the_card_not_an_overridden_entry(
+        self, tmp_path
+    ):
+        http = FakeHttp({A: _manifest("alpha", {"acme": [_record("0.1.0")]})})
+        install = ShimSourceStatus(
+            kind="remote",
+            location=A + "#acme",
+            source="alpha",
+            vendor="acme",
+            release=_record("0.1.0"),
+            stale=True,
+            ok=True,
+            error="acme is pinned more than once: alpha:acme@0.1.0, acme@0.2.0",
+        )
+        overridden = ShimSourceStatus(
+            kind="remote",
+            location=A + "#acme@0.2.0",
+            source="alpha",
+            vendor="acme",
+            skipped="pinned more than once (alpha:acme@0.1.0, acme@0.2.0)",
         )
 
-        archived = {
-            "llm-rosetta-shim-alcf",
-            "llm-rosetta-shim-argo@",
-            "llm-rosetta-shim-asksage",
-            "llm-rosetta-shim-opendesign",
-            "llm-rosetta-shim-free",
-        }
-        urls = [u for s in SHIM_SOURCES for u in s.logos.values()]
-        urls += [u for p in SHIM_SOURCE_PACKAGES for u in p.logos.values()]
-        assert urls
-        for url in urls:
-            assert not any(name in url for name in archived), url
+        card = _catalogue(
+            tmp_path,
+            [ManifestSourceSpec(key=None, url=A)],
+            http,
+            statuses=[install, overridden],
+        )[0]["vendors"][0]
 
-    def test_a_package_reads_its_marks_from_its_source(self):
-        from llm_rosetta_gateway.shims.catalog import (
-            get_shim_source,
-            get_source_package,
-        )
-
-        free = get_source_package("free")
-        contrib = get_shim_source("contrib")
-        assert free is not None and contrib is not None
-        assert free.logos == {
-            v: contrib.logos[v] for v in free.vendors if v in contrib.logos
-        }
-        # LLM7 declares no mark of its own.
-        assert "llm7" not in free.logos
+        assert card["installed"] == "0.1.0"
+        assert card["state"] == "installed"
