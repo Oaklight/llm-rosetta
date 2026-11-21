@@ -566,6 +566,11 @@ def _manifest_package_view(
     versions: dict[str, Any] = {}
     maturity: dict[str, Any] = {}
     skipped: dict[str, str] = {}
+    # Whether each installed release's ``requires`` matches this core, and
+    # why not when it does not (#1660 S9): a kept install whose manifest moved
+    # on is the case the card has to show.
+    requires_problem: dict[str, str | None] = {}
+    tags: dict[str, list[str]] = {}
     pin = head = check_error = None
     update = False
     source_ok = True
@@ -576,6 +581,8 @@ def _manifest_package_view(
         if release:
             versions[status.vendor] = release.get("version")
             maturity[status.vendor] = release.get("maturity")
+            requires_problem[status.vendor] = release_requires_problem(release)
+            tags[status.vendor] = list(release.get("tags") or ())
             pin = pin or release.get("version")
         source_ok = source_ok and bool(status.ok)
         verdict = heads.get(repo_key(status.location)) or {}
@@ -591,7 +598,33 @@ def _manifest_package_view(
         "versions": versions,
         "maturity": maturity,
         "skipped": skipped,
+        "requires_problem": requires_problem,
+        "requires_ok": (
+            all(v is None for v in requires_problem.values())
+            if requires_problem
+            else None
+        ),
+        "tags": tags,
     }
+
+
+def release_requires_problem(release: dict[str, Any]) -> str | None:
+    """Why an installed release record's ``requires`` does not fit this core.
+
+    ``None`` when it fits.  The rule is core's own
+    (:func:`llm_rosetta.contracts.shim_manifest.requirement_problem`).
+    """
+    from llm_rosetta.contracts.shim_manifest import (
+        ShimRequirement,
+        requirement_problem,
+    )
+
+    requires = release.get("requires") or {}
+    try:
+        req = ShimRequirement(int(requires["surface"]), int(requires["ir"]))
+    except (KeyError, TypeError, ValueError):
+        return "the installed release names no readable requirement"
+    return requirement_problem(req)
 
 
 async def get_loaded_shim(request: Any, name: str) -> Response:
