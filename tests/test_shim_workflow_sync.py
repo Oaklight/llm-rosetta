@@ -103,7 +103,7 @@ def test_a_missing_copy_warns_until_require_all(capsys):
 
 def test_an_offline_run_reads_saved_copies(tmp_path, capsys):
     """The offline mode must rehearse the same verdict as the network run."""
-    (tmp_path / "argo.yml").write_bytes(MASTER)
+    (tmp_path / "asksage.yml").write_bytes(MASTER)
     (tmp_path / "alcf.yml").write_bytes(
         MASTER.replace(
             b"permissions:\n  contents: write", b"permissions:\n  contents: read"
@@ -114,9 +114,24 @@ def test_an_offline_run_reads_saved_copies(tmp_path, capsys):
 
     out = capsys.readouterr().out
     assert code == 1
-    assert "ok      argo" in out
+    assert "ok      asksage" in out
     assert "problem alcf" in out
-    assert "problem free" in out  # no saved file for it
+    assert "problem opendesign" in out  # no saved file for it
+    # Packages of a manifest source are named and skipped (#1660).
+    assert "skip    argo" in out
+    assert "skip    free" in out
+
+
+def test_manifest_source_packages_are_skipped():
+    """argonne and contrib release a manifest; their packages carry no copy."""
+    from llm_rosetta_gateway.shims.catalog import SHIM_SOURCES
+
+    checked, skipped = check.split_packages(
+        SHIM_SOURCE_PACKAGES, [source.repo for source in SHIM_SOURCES]
+    )
+
+    assert [p.key for p in skipped] == ["argo", "free"]
+    assert [p.key for p in checked] == ["alcf", "asksage", "opendesign"]
 
 
 def test_every_catalogue_package_is_checked(tmp_path):
