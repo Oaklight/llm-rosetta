@@ -163,12 +163,12 @@ supported format and forwards them to any configured upstream provider.
 | `admin_api.py` | The `AdminContext` protocols admin depends on; `create_app` exposes the adapter (`app/admin_context.py`) as `app.admin` |
 | `observability/` | Telemetry: the gateway logger and its formatters (`logging.py`), metrics, request log, SQLite persistence, ops log, error dumps, capture, retention, sanitizing, profiler state; `observability/usage/cli.py` is the `llm-rosetta-usage` console script |
 | `cli/` | The `llm-rosetta-gateway` console script and `python -m llm_rosetta_gateway` (`cli/__init__.py`), and the startup banner |
-| `keystore.py` | The SQLite-backed API key store; stays at the root because argo-proxy imports `KeyContext` from it |
+| `keystore/` | The SQLite-backed API key store (`__init__.py`); its import path is unchanged, so argo-proxy's `KeyContext` import still resolves |
 | `updates.py` | Release check and self-update; stays at the root because it reads the changelog the release workflow writes beside the package root |
 | `surface.py` | The core surface level the gateway asserts at startup (see *Host surface*) |
 | `_vendor/` | Vendored modules (DO NOT EDIT) |
 
-The packages form layers, bottom to top: foundation (observability, transport, shims, `shim_sources.py`, model_types and the root leaves), state (quota, routing, maintenance, keystore, jobs), policy (config, middleware), operations (ops), engine (proxy, pipelines), serving (app, admin, `admin_api.py`), entry (cli and the package entry points). `tests/gateway/test_layers.py` holds the table and fails on a module-level import into a higher layer, a new function-local one, an unplaced package, or a new root module. Place a new package in a layer there; keep the root for entry points and boundaries.
+The packages form layers, bottom to top: foundation (observability, transport, shims, `shim_sources.py`, model_types and the root leaves), state (quota, routing, maintenance, keystore, jobs), policy (config, middleware), operations (ops), engine (proxy, pipelines), serving (app, admin, `admin_api.py`), entry (cli and the package entry points). `tests/gateway/test_layers.py` holds the table and fails on a module-level import into a higher layer, a new function-local one (keyed by file, target and the function it sits in), an unplaced package, or a new root module. Place a new package in a layer there; keep the root for entry points and boundaries.
 
 ### Host surface
 

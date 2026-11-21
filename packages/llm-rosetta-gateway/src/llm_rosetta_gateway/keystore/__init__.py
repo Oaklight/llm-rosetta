@@ -22,7 +22,7 @@ from llm_rosetta_gateway._vendor import aiosqlite
 from llm_rosetta_gateway.observability.maintenance import Registry, StepContext
 from llm_rosetta.contracts.usage import INTERNAL_LABEL, INTERNAL_SUBJECT
 
-from .maintenance.keystore import build_registry
+from ..maintenance.keystore import build_registry
 
 logger = logging.getLogger("llm-rosetta.keystore")
 
@@ -102,7 +102,7 @@ def _quota(raw: str | None) -> str:
     cannot be parsed is no limit, never a request-time error.  A dropped part
     is logged: it is the one change to a limit that would otherwise be silent.
     """
-    from ._vendor.ratelimit import parse_quota
+    from .._vendor.ratelimit import parse_quota
 
     kept: list[str] = []
     for part in str(raw or "").split(","):
