@@ -22,12 +22,8 @@ from llm_rosetta.ir.primitives.tool_group import generated_group_id
 from llm_rosetta.ir.passes import tool_names
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.types.ir.request import IRRequest
-from llm_rosetta.shims.provider_shim import (
-    ProviderShim,
-    ToolsConfig,
-    register_shim,
-    unregister_shim,
-)
+from llm_rosetta.contracts.shim import ProviderShim, ToolsConfig
+from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
 
 
 def _namespace_container(namespace: str, *names: str) -> dict[str, Any]:

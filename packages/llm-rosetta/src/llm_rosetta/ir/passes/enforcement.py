@@ -21,12 +21,8 @@ from ..context import ConversionContext, StreamContext
 from ..primitives.image_limit import strip_images_for_non_vision
 from ..primitives.parts import iter_tool_call_parts
 from llm_rosetta.conversion_warnings import WarningSink, report_drop
-from llm_rosetta.shims.provider_shim import (
-    ProviderShim,
-    ReasoningCapability,
-    match_model_reasoning,
-    resolve_shim,
-)
+from llm_rosetta.contracts.shim import ProviderShim, ReasoningCapability
+from llm_rosetta.shims.provider_shim import match_model_reasoning, resolve_shim
 
 logger = logging.getLogger(__name__)
 

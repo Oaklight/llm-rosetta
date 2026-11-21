@@ -11,7 +11,7 @@ import asyncio
 
 import pytest
 
-from llm_rosetta.shims.provider_shim import SoftErrorPattern
+from llm_rosetta.contracts.shim import SoftErrorPattern
 from llm_rosetta_gateway.proxy import _check_soft_errors, _stream_event_generator
 
 

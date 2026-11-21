@@ -20,9 +20,7 @@ from ...contracts import (
     RESPONSE_BODY_TRANSFORMS,
     TRANSFORMS_MODULE,
 )
-from ..provider_shim import (
-    Transform,
-)
+from llm_rosetta.ir.primitives.body import Transform
 from ._constants import (
     logger,
 )

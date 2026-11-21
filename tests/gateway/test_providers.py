@@ -85,7 +85,7 @@ def keyless_shim():
     own rather than on a vendor's.
     """
     from llm_rosetta.shims import register_shim
-    from llm_rosetta.shims.provider_shim import ConnectionConfig, ProviderShim
+    from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
 
     register_shim(
         ProviderShim(
@@ -299,12 +299,8 @@ class TestShimDeclaredTokenCommand:
 
     @pytest.fixture()
     def vendor_shim(self):
-        from llm_rosetta.shims.provider_shim import (
-            ConnectionConfig,
-            ProviderShim,
-            register_shim,
-            unregister_shim,
-        )
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
 
         register_shim(
             ProviderShim(
@@ -368,12 +364,8 @@ class TestTheCredentialChannel:
 
     @pytest.fixture()
     def vendor_shim(self):
-        from llm_rosetta.shims.provider_shim import (
-            ConnectionConfig,
-            ProviderShim,
-            register_shim,
-            unregister_shim,
-        )
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
 
         register_shim(
             ProviderShim(
@@ -447,12 +439,8 @@ class TestShimAuthExchange:
             AuthContext,
             InteractiveSetupRequired,
         )
-        from llm_rosetta.shims.provider_shim import (
-            ConnectionConfig,
-            ProviderShim,
-            register_shim,
-            unregister_shim,
-        )
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
 
         class Exchange:
             kind = "oauth"
@@ -587,12 +575,8 @@ class TestExchangePerConfiguredProvider:
 
     @pytest.fixture()
     def shim(self):
-        from llm_rosetta.shims.provider_shim import (
-            ConnectionConfig,
-            ProviderShim,
-            register_shim,
-            unregister_shim,
-        )
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
 
         class Exchange:
             kind = "oauth"

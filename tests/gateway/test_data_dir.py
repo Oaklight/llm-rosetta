@@ -316,12 +316,8 @@ class TestTheExchangeRecordDirectory:
 
     @pytest.fixture()
     def shim(self):
-        from llm_rosetta.shims.provider_shim import (
-            ConnectionConfig,
-            ProviderShim,
-            register_shim,
-            unregister_shim,
-        )
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
 
         class Exchange:
             kind = "oauth"

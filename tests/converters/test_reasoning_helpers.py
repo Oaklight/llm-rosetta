@@ -18,7 +18,7 @@ from llm_rosetta.converters.base.helpers.reasoning import (
     apply_reasoning_config,
     normalize_reasoning_input,
 )
-from llm_rosetta.shims.provider_shim import ReasoningCapability
+from llm_rosetta.contracts.shim import ReasoningCapability
 from llm_rosetta.types.ir.reasoning import ReasoningConfig
 
 

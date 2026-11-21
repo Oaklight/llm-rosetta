@@ -24,7 +24,7 @@ from llm_rosetta.capabilities.tool_names import (
 from llm_rosetta.ir.tools.intrinsic import make_intrinsic_tool_call
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
-from llm_rosetta.shims.provider_shim import ProviderShim, ToolsConfig
+from llm_rosetta.contracts.shim import ProviderShim, ToolsConfig
 
 from .conftest import ir_history
 

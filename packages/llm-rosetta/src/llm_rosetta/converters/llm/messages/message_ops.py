@@ -15,7 +15,7 @@ Key Anthropic differences:
 from collections.abc import Sequence
 from typing import Any, cast
 
-from ....shims.provider_shim import ReasoningCapability
+from llm_rosetta.contracts.shim import ReasoningCapability
 from ....types.ir import (
     ContentPart,
     IRInputItem,

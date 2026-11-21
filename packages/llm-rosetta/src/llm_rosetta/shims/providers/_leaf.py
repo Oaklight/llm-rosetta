@@ -9,7 +9,7 @@ from typing import Any
 from llm_rosetta._vendor.yaml import load as yaml_load
 
 from ...contracts import MODEL_LIST_TRANSFORM, QUOTA_MODULE
-from ..provider_shim import (
+from llm_rosetta.contracts.shim import (
     ConnectionConfig,
     ProviderShim,
     QuotaDeclaration,
@@ -17,8 +17,8 @@ from ..provider_shim import (
     SoftErrorPattern,
     ToolsConfig,
     VendorManifest,
-    register_shim,
 )
+from ..provider_shim import register_shim
 from ._fields import _declared_fields, _merged_fields
 from ._manifest import _leaf_connection, _leaf_exchange, _leaf_quota, _merged_connection
 from ._model_list import _model_list_transforms

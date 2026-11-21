@@ -34,7 +34,7 @@ def keyless_shim():
     live outside the repository, so the mechanism gets one of its own.
     """
     from llm_rosetta.shims import register_shim
-    from llm_rosetta.shims.provider_shim import ConnectionConfig, ProviderShim
+    from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
 
     register_shim(
         ProviderShim(

@@ -492,11 +492,8 @@ class TestMintedCredential:
         exchange: Any = None,
         env: str | None = None,
     ) -> None:
-        from llm_rosetta.shims.provider_shim import (
-            ConnectionConfig,
-            ProviderShim,
-            register_shim,
-        )
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims.provider_shim import register_shim
 
         register_shim(
             ProviderShim(

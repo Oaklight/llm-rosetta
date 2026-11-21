@@ -6,12 +6,8 @@ import pytest
 
 from llm_rosetta_gateway.admin.routes import config as admin_config
 from llm_rosetta_gateway.config import GatewayConfig, ProviderIdentity
-from llm_rosetta.shims.provider_shim import (
-    ConnectionConfig,
-    ProviderShim,
-    register_shim,
-    unregister_shim,
-)
+from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
 
 SHIM_NAME = "acme--embedding"
 

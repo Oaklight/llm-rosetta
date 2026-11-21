@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any, Protocol
 
 from llm_rosetta.auto_detect import ProviderType
-from llm_rosetta.shims.provider_shim import SoftErrorPattern
+from llm_rosetta.contracts.shim import SoftErrorPattern
 
 
 @dataclass(slots=True, frozen=True)

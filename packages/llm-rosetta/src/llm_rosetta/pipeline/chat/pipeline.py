@@ -31,7 +31,8 @@ from llm_rosetta.converters.base.context import ConversionContext, ImageFetcher
 from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta import retired_names
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
-from llm_rosetta.shims.provider_shim import ProviderShim, resolve_format, resolve_shim
+from llm_rosetta.contracts.shim import ProviderShim
+from llm_rosetta.shims.provider_shim import resolve_format, resolve_shim
 from llm_rosetta.transforms.body import Transform, apply_transforms
 from .errors import ConversionError
 from .introspection import PipelineIntrospection

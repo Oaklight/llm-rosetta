@@ -7,10 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-from ..provider_shim import (
-    ProviderShim,
-    VendorManifest,
-)
+from llm_rosetta.contracts.shim import ProviderShim, VendorManifest
 from ._leaf import _load_single_provider
 from ._constants import (
     _MAX_LANE_DEPTH,

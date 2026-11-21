@@ -16,11 +16,13 @@ package catalog and scheduled removals — live in
 :mod:`llm_rosetta_gateway.shims`; they need the gateway's HTTP client.
 """
 
-from .provider_shim import (
+from llm_rosetta.contracts.shim import (
     ConnectionConfig,
     ProviderShim,
     ReasoningCapability,
     ToolsConfig,
+)
+from .provider_shim import (
     get_shim,
     list_shims,
     register_shim,

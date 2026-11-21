@@ -11,11 +11,7 @@ dialect.
 from __future__ import annotations
 
 from llm_rosetta.capabilities import backfill_reasoning_replay
-from llm_rosetta.shims.provider_shim import (
-    ProviderShim,
-    ReasoningCapability,
-    ReplayMissing,
-)
+from llm_rosetta.contracts.shim import ProviderShim, ReasoningCapability, ReplayMissing
 
 
 def _cap(policy: ReplayMissing = "fill_empty") -> ReasoningCapability:

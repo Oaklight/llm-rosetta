@@ -280,11 +280,8 @@ class TestTheLegacySectionStaysRefused:
         assert "`providers:`" in reason
 
     def test_an_exchange_shim_in_the_legacy_section_is_refused_too(self) -> None:
-        from llm_rosetta.shims.provider_shim import (
-            ConnectionConfig,
-            ProviderShim,
-            register_shim,
-        )
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims.provider_shim import register_shim
 
         class Exchange:
             kind = "oauth"
@@ -314,11 +311,8 @@ class TestTheLegacySectionStaysRefused:
 
 class TestTheExchangeShim:
     def test_a_provider_entry_with_an_exchange_shim_shares_its_ring(self) -> None:
-        from llm_rosetta.shims.provider_shim import (
-            ConnectionConfig,
-            ProviderShim,
-            register_shim,
-        )
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims.provider_shim import register_shim
 
         class Exchange:
             kind = "oauth"

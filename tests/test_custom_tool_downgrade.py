@@ -20,12 +20,8 @@ from llm_rosetta.capabilities import (
 )
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.pipeline import ConversionPipeline
-from llm_rosetta.shims.provider_shim import (
-    ProviderShim,
-    ToolsConfig,
-    register_shim,
-    unregister_shim,
-)
+from llm_rosetta.contracts.shim import ProviderShim, ToolsConfig
+from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
 
 PATCH_TEXT = "*** Begin Patch\n*** Add File: a.txt\n+hi\n*** End Patch"
 

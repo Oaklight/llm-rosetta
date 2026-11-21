@@ -24,7 +24,7 @@ from llm_rosetta_gateway.admin.routes.config.shim_files import (
     put_loaded_shim,
 )
 from llm_rosetta_gateway.config import JsoncConfigIO
-from llm_rosetta.shims.provider_shim import ProviderShim
+from llm_rosetta.contracts.shim import ProviderShim
 from llm_rosetta_gateway.shims.sources import ShimLoadReport, ShimSourceStatus
 
 

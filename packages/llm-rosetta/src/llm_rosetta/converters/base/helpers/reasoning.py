@@ -21,7 +21,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from llm_rosetta.conversion_warnings import DOWNGRADED, FAILED, report_drop
-from llm_rosetta.shims.provider_shim import ReasoningCapability
+from llm_rosetta.contracts.shim import ReasoningCapability
 from llm_rosetta.types.ir.reasoning import ReasoningConfig
 
 # ── Default reasoning capability configs per base converter type ──────────

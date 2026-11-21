@@ -24,11 +24,8 @@ from llm_rosetta_gateway.shims import (
     resolve_remote,
 )
 from llm_rosetta_gateway.shims import sources as sources_mod
-from llm_rosetta.shims.provider_shim import (
-    ConnectionConfig,
-    ProviderShim,
-    _reset_registry,
-)
+from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+from llm_rosetta.shims.provider_shim import _reset_registry
 
 PROVIDER_YAML = (
     "name: {name}\n"

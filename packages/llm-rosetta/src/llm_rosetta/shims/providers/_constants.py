@@ -6,9 +6,7 @@ import dataclasses
 import logging
 
 
-from ..provider_shim import (
-    ConnectionConfig,
-)
+from llm_rosetta.contracts.shim import ConnectionConfig
 
 
 # The literal keeps log records under the pre-split name: the flat module used
