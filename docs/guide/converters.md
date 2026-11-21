@@ -230,24 +230,27 @@ Only Google Gemini is lenient about both cases. These mismatches commonly occur 
 
 LLM-Rosetta fixes both directions automatically and emits `WARNING`-level logs so you can trace each fix:
 
-- **Orphaned tool_calls** → a synthetic tool result with placeholder content `"[No output available yet]"` is injected.
+- **Orphaned tool_calls** → a synthetic tool result with placeholder content `"[llm-rosetta: no tool output was recorded for this call]"` is injected.
 - **Orphaned tool_results** → the dangling result messages are removed.
 
 **Cross-format conversion**: All converters fix mismatches at the IR level before format conversion.
 
-**Passthrough / direct use**: Import the format-specific function:
+**Passthrough / direct use**: the repair is one IR pass, `normalize_tool_pairing`, and every converter runs it in `request_to_provider`. A same-format round trip through a converter therefore repairs a provider body; the pass can also be called on IR messages:
 
 ```python
-# For OpenAI Chat Completions format
-from llm_rosetta.converters.llm.chat_completions.tool_ops import fix_orphaned_tool_calls
+from llm_rosetta.converters import ChatCompletionsConverter
+from llm_rosetta.ir.tools import normalize_tool_pairing
 
-messages = fix_orphaned_tool_calls(messages)
-messages = fix_orphaned_tool_calls(messages, placeholder="[Skipped by user]")
+converter = ChatCompletionsConverter()
+ir_request = converter.request_from_provider(body)
 
-# For OpenAI Responses format
-from llm_rosetta.converters.llm.open_responses.tool_ops import fix_orphaned_tool_calls
+# The converter repairs the pairing on the way out
+repaired_body, warnings = converter.request_to_provider(ir_request)
 
-items = fix_orphaned_tool_calls(items)
+# Or repair IR messages directly, with your own placeholder
+ir_request["messages"] = normalize_tool_pairing(
+    ir_request["messages"], placeholder="[Skipped by user]"
+)
 ```
 
 ### Assistant Part Order (Chat Completions) { #assistant-part-order-chat-completions }

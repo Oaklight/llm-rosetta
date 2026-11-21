@@ -321,12 +321,12 @@ Argo API sends a preflight chunk with `choices: []` and empty `id`/`model` befor
 
 OpenAI (Chat and Responses) and Anthropic strictly require every `tool_call` to have a matching `tool_result`, and vice versa. Google GenAI is the only provider that tolerates mismatches. During cross-format conversion, ID mismatches, role normalization issues, or incomplete conversation history can produce orphaned tool calls or results.
 
-**Fix**: `fix_orphaned_tool_calls()` (per-converter) and `fix_orphaned_tool_calls_ir()` (IR-level) automatically detect and repair pairing issues:
+**Fix**: one IR-level pass, `normalize_tool_pairing()` (`llm_rosetta.ir.tools`), detects and repairs pairing issues. It replaced the per-converter `fix_orphaned_tool_calls()` and the IR-level `fix_orphaned_tool_calls_ir()`:
 
 - Orphaned tool calls → inject synthetic placeholder results
 - Orphaned tool results → remove from the message list
 
-Applied automatically in `request_to_provider()` for all strict-pairing converters.
+Applied automatically in `request_to_provider()` for every converter.
 
 **Version**: v0.2.4 (#82, #84)
 
