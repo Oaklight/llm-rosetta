@@ -773,6 +773,24 @@ save and not written when the file is created. The gateway never writes
 `<config>.bak`, which belongs to `llm-rosetta-migrate --write` (the
 pre-migration original) and to any copy you make yourself. The editor states
 this under its blocks.
+**One bad record does not take a source down.** The gateway reads a published
+manifest record by record. An invalid top level — not an object, an unknown
+`manifest_version`, a missing required key, `vendors` not an object — fails the
+whole source (the cached manifest is used, or nothing on a cold cache). An
+invalid vendor entry or release record is skipped with one WARNING naming the
+vendor, the version and the JSON-path reason, and the rest of the manifest is
+used, so a record written by a newer producer does not cost the free tier its
+other vendors; selection only ever sees valid records. A record's shim names
+must belong to its vendor: the vendor key itself (the bare `xai`, `qwen`,
+`moonshot` and `zhipu`), `<vendor>--<name>`, or `<vendor>_<lane>--<name>`
+(`alcf_sophia--chat_completions` under `alcf`); a name with another vendor's
+prefix invalidates the record.
+
+**A vendor that moved out of core is installed by itself.** When a config
+names a shim or quota probe of a vendor that left core
+([Migrating to 0.14](migrating-to-0.14.md#moved-to-contrib)), the gateway adds
+`contrib:<vendor>` to this selection, and the `contrib` source when
+`sources` does not list it, with or without a `shims` section.
 
 #### Selecting part of a package { #selection }
 
@@ -942,10 +960,15 @@ remote out, and an explicit remote with the same URL is merged onto its preset
 
 ## Built-in Shims
 
-LLM-Rosetta ships with 49 built-in provider shims, one directory per shim under
+LLM-Rosetta ships with 18 built-in provider shims, one directory per shim under
 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`. `list_shims()` prints the live set; this is
-that set. The ALCF, AskSage, Argo, Open Design and keyless free-endpoint shims
-ship as standalone packages — see
+that set. Core keeps the model makers' own API-key lanes and one real vendor per
+non-chat format ([Shim placement](shim-placement.md)). Every other vendor —
+including OpenCode, OpenRouter, MiniMax, Qwen, Volcengine, xAI and Zhipu, which
+were built in before 0.14 — installs from the contrib source under the same
+name, automatically when a config names it
+([Migrating to 0.14](migrating-to-0.14.md#moved-to-contrib)). The ALCF,
+AskSage and Argo shims install from the argonne source — see
 [Standalone shim packages](#standalone-shim-packages).
 
 | Name | Format | Default Base URL | API Key Env | Transforms |
@@ -959,45 +982,15 @@ ship as standalone packages — see
 | `google--embedding` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `google--google_generate` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `google--google_interactions` | `google_interactions` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
-| `groq--chat_completions` | `chat_completions` | `https://api.groq.com/openai/v1` | `GROQ_API_KEY` | renames `reasoning` → `reasoning_content` |
 | `jina--embedding` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
 | `jina--rerank` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
-| `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | `KILO_API_KEY` | — |
-| `minimax--chat_completions` | `chat_completions` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | strips `logprobs`, `top_logprobs`, `seed`, `stop`; injects `reasoning_split`; parses `think` tags |
-| `minimax--embedding` | `minimax` | `https://api.minimaxi.com` | `MINIMAX_API_KEY` | — |
-| `minimax--messages` | `messages` | `https://api.minimaxi.com/anthropic` | `MINIMAX_API_KEY` | — |
-| `moonshot` | `chat_completions` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | strips `logprobs`, `top_logprobs`, `logit_bias`, `seed` |
-| `modelscope--chat_completions` | `chat_completions` | `https://api-inference.modelscope.cn/v1` | `MODELSCOPE_API_KEY` | — |
-| `nvidia--chat_completions` | `chat_completions` | `https://integrate.api.nvidia.com/v1` | `NVIDIA_API_KEY` | — |
 | `openai--chat_completions` | `chat_completions` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--embedding` | `openai` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--open_responses` | `open_responses` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--openai_decisions` | `openai_decisions` | `https://api.openai.com` | `OPENAI_API_KEY` | — |
-| `opencode--chat_completions` | `chat_completions` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
-| `opencode--messages` | `messages` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
-| `opencode--open_responses` | `open_responses` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
-| `openrouter--chat_completions` | `chat_completions` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | renames `reasoning` → `reasoning_content` |
-| `openrouter--messages` | `messages` | `https://openrouter.ai/api` | `OPENROUTER_API_KEY` | — |
-| `openrouter--open_responses` | `open_responses` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
-| `openrouter--rerank` | `cohere` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
-| `qwen` | `chat_completions` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | strips `frequency_penalty`, `logit_bias` |
-| `siliconflow--chat_completions` | `chat_completions` | `https://api.siliconflow.cn/v1` | `SILICONFLOW_API_KEY` | typed catalogue; keeps active `subType: chat` |
-| `siliconflow--embedding` | `openai` | `https://api.siliconflow.cn/v1` | `SILICONFLOW_API_KEY` | typed catalogue; keeps active `subType: embedding` |
-| `siliconflow--rerank` | `cohere` | `https://api.siliconflow.cn/v1` | `SILICONFLOW_API_KEY` | typed catalogue; keeps active `subType: reranker` |
 | `typesafe--systemone` | `systemone` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | — |
-| `volcengine--chat_completions` | `chat_completions` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | strips `logprobs`, `top_logprobs` |
-| `volcengine--embedding` | `openai` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | — |
-| `volcengine--open_responses` | `open_responses` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | — |
 | `voyage--embedding` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
 | `voyage--rerank` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
-| `xai` | `chat_completions` | `https://api.x.ai/v1` | `XAI_API_KEY` | strips `logit_bias` |
-| `zai--chat_completions` | `chat_completions` | `https://api.z.ai/api/paas/v4` | `ZAI_API_KEY` | clamps `temperature` to [0, 1] |
-| `zai--embedding` | `openai` | `https://api.z.ai/api/paas/v4` | `ZAI_API_KEY` | — |
-| `zai--messages` | `messages` | `https://api.z.ai/api/anthropic` | `ZAI_API_KEY` | — |
-| `zai--rerank` | `cohere` | `https://api.z.ai/api/paas/v4` | `ZAI_API_KEY` | — |
-| `zhipu` | `chat_completions` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | strips `n`, penalties, `logprobs`, `logit_bias`, `seed` |
-| `zhipu--embedding` | `openai` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | — |
-| `zhipu--rerank` | `cohere` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | — |
 
 The column lists field-level transforms. `hoist_late_system_messages()`, which
 rewrites mid-conversation system/developer messages so the prompt-cache prefix

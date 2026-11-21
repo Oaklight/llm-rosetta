@@ -235,6 +235,46 @@ grep -rnE "llm_rosetta\.(transforms|shims\.(auth_exchange|quota_probe)|observabi
 
 These rows were checked against the head of PR #1659 (commit `cdc6354af3`, version `0.14.0.dev35`): each removed path has no module spec, each forwarder imports with a `DeprecationWarning`, and each new path imports.
 
+## Shim vendors that moved to contrib {#moved-to-contrib}
+
+Sixteen vendors left core for the
+[contrib shim repository](https://github.com/Oaklight/llm-rosetta-shim-contrib)
+([#1660](https://github.com/Oaklight/llm-rosetta/issues/1660)); the rule that
+decides what stays is in [Shim placement](shim-placement.md). Their shim names
+did not change, so nothing here is a rename and nothing needs an edit:
+
+| Vendor | Shim names | Why it left core |
+|--------|------------|------------------|
+| `opencode` | `opencode--chat_completions`, `opencode--messages`, `opencode--open_responses` (quota probe `opencode_go`) | subscription lane |
+| `openai_chatgpt` | `openai_chatgpt--open_responses` (quota probe `openai_codex`) | OAuth (Sign in with ChatGPT) |
+| `antigravity` | `antigravity--acp` | agent CLI lane |
+| `kilo`, `openrouter`, `groq`, `nvidia`, `siliconflow`, `modelscope` | `kilo--chat_completions`; `openrouter--chat_completions`, `--messages`, `--open_responses`, `--rerank`; `groq--chat_completions`; `nvidia--chat_completions`; `siliconflow--chat_completions`, `--embedding`, `--rerank`; `modelscope--chat_completions` | aggregators and hosted endpoints |
+| `minimax`, `zhipu`, `zai`, `xai`, `qwen`, `moonshot`, `volcengine` | `minimax--chat_completions`, `--messages`, `--embedding`; `zhipu`, `zhipu--embedding`, `--rerank`; `zai--chat_completions`, `--messages`, `--embedding`, `--rerank`; `xai`; `qwen`; `moonshot`; `volcengine--chat_completions`, `--open_responses`, `--embedding` | model makers that start in contrib and are eligible for promotion |
+
+**Gateway.** A config that names one of these shims — a provider `type:` /
+`shim:` / key, a typed endpoint (`embeddings_shim`, an `embeddings: {shim}`
+block), a legacy `<type>_providers` entry, or `quota.probe: openai_codex` —
+makes the gateway add `contrib:<vendor>` to the
+[install selection](shims.md#manifest-sources) by itself, with or without a
+`shims` section, and log one INFO line per vendor. A disabled provider counts
+too. `quota.probe: openai_codex` on an `openai--*` provider resolves against
+the probe `openai_chatgpt` now ships. When contrib cannot be reached and
+nothing is cached yet, the gateway still starts: it logs a WARNING that names
+the vendors and the shims that are missing, and disables the providers that use
+them with a reason naming the move; they come back on the next load that
+reaches the source. Under `shims.strict: true` that failure stops the load, as
+for any source.
+
+**Library.** `get_converter_for_provider("opencode--chat_completions")` and a
+`ConversionPipeline` whose shim names a moved vendor raise a `ValueError` that
+names `llm-rosetta-shim-contrib`. To use the shim without the gateway, check out
+that repository and call `llm_rosetta.api.load_providers_from_dir(<checkout>/providers)`.
+The table is `llm_rosetta.retired_names.MOVED_VENDORS`.
+
+**`llm-rosetta-migrate`.** `--config` and `--scan` report each moved name as a
+`note` ("now in llm-rosetta-shim-contrib; the gateway installs it
+automatically"), which never counts in the exit code.
+
 ## Find the old names in your code {#find-old-names}
 
 ```bash
