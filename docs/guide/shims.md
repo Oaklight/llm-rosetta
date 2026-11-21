@@ -30,7 +30,7 @@ ProviderShim ("deepseek--chat_completions")
 
 ### Declarative Provider Directory
 
-Built-in shims are defined as a directory structure under `shims/providers/`.
+Built-in shims are defined as a directory structure under `shims/builtin/`.
 One shape covers every vendor; the three rules below are what the loader
 accepts.
 
@@ -64,25 +64,23 @@ accepts.
 The built-in tree, in that shape:
 
 ```text
-packages/llm-rosetta/src/llm_rosetta/shims/providers/
+packages/llm-rosetta/src/llm_rosetta/shims/builtin/
 ├── __init__.py
 ├── anthropic/
 │   └── llm/provider.yaml        # one lane: the type directory holds the leaf
-├── openai/
+├── deepseek/
 │   ├── provider.yaml            # vendor manifest: the shared credential
 │   ├── quota.py                 # vendor-level probe, every type shares it
+│   └── llm/
+│       ├── chat_completions/    # provider.yaml + transforms.py
+│       └── open_responses/      # provider.yaml + transforms.py
+├── openai/
+│   ├── provider.yaml            # vendor manifest: the shared credential
 │   ├── llm/
 │   │   ├── chat_completions/    # provider.yaml + transforms.py
-│   │   └── open_responses/      # provider.yaml
+│   │   └── open_responses/      # provider.yaml + transforms.py
 │   ├── embeddings/provider.yaml
 │   └── decisions/provider.yaml
-├── openai_chatgpt/
-│   ├── provider.yaml            # vendor manifest: comments only
-│   ├── auth.py                  # vendor-level credential exchange
-│   └── llm/open_responses/provider.yaml
-├── antigravity/
-│   ├── provider.yaml            # vendor manifest: keyless, the agent owns the token
-│   └── llm/acp/provider.yaml    # transport: acp, argv ["agy", "acp"]
 └── ...
 ```
 
@@ -103,7 +101,7 @@ right and applies them with `--write`; it moves directories and rewrites
 `shims.yaml` paths, but not relative imports, which the package's own tests
 will catch. `shims new` scaffolds from the same template. The full contract,
 with the scaffold's output and its placeholder list, is in
-`llm_rosetta/shims/_shim_template/README_en.md`.
+`llm_rosetta/devtools/_shim_template/README_en.md`.
 
 Each leaf directory contains:
 
@@ -465,7 +463,7 @@ A shim's sidecars (`transforms.py`, `auth.py`, `quota.py` and any helper module 
 
 Not `llm_rosetta.api`, and no internal module. The loader runs plugin entry points and sidecars while `import llm_rosetta` is still in progress. `llm_rosetta.api` needs the finished package, so it cannot load at that point; the contract modules can. The contracts are also the stable part: within a minor release they only gain names, and an internal module may move in any release. A vendor directory does not import another vendor's directory either, so that each one can move out of core on its own.
 
-For the built-in shims, `tests/test_shim_sidecar_boundary.py` enforces the rule over every `.py` file under `shims/providers/<vendor>/`, over the scaffold templates and over what the scaffolder writes. See [The core surface](../api/index.md#the-core-surface) for the tiers.
+For the built-in shims, `tests/test_shim_sidecar_boundary.py` enforces the rule over every `.py` file under `shims/builtin/<vendor>/`, over the scaffold templates and over what the scaffolder writes. See [The core surface](../api/index.md#the-core-surface) for the tiers.
 
 ## Shim Lifecycle
 
@@ -990,7 +988,7 @@ remote out, and an explicit remote with the same URL is merged onto its preset
 ## Built-in Shims
 
 LLM-Rosetta ships with 21 built-in provider shims, one directory per shim under
-`packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`. `list_shims()` prints the live set; this is
+`packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<model-type>/`. `list_shims()` prints the live set; this is
 that set. Core keeps the model makers' own API-key lanes and one real vendor per
 non-chat format ([Shim placement](shim-placement.md)). Every other vendor —
 including OpenCode, OpenRouter, Qwen, Volcengine, xAI and Zhipu, which
@@ -1503,7 +1501,7 @@ After registration the shim name works everywhere — `get_converter_for_provide
 
 To add a new provider to the built-in registry:
 
-1. Create the leaf at `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<type>/provider.yaml`, where `<type>` is the format's model type (`llm`, `embeddings`, `rerank`, `decisions`). A `<format>/` level appears below it only when the type holds a second lane, so a vendor serving `chat_completions` and `messages` keeps both under `llm/`; a vendor with several named instances puts a lane directory above the type (`<vendor>/<lane>/<type>/`). `llm-rosetta-gateway shims new` writes this shape, and `shims check` reports a tree that departs from it.
+1. Create the leaf at `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<type>/provider.yaml`, where `<type>` is the format's model type (`llm`, `embeddings`, `rerank`, `decisions`). A `<format>/` level appears below it only when the type holds a second lane, so a vendor serving `chat_completions` and `messages` keeps both under `llm/`; a vendor with several named instances puts a lane directory above the type (`<vendor>/<lane>/<type>/`). `llm-rosetta-gateway shims new` writes this shape, and `shims check` reports a tree that departs from it.
 2. If the vendor's leaves share connection facts — the credential, usually — add `<vendor>/provider.yaml` with no `name`: it is the vendor manifest, and every leaf inherits it.
 
     ```yaml

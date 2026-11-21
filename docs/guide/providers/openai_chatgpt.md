@@ -23,8 +23,9 @@ refuses.
 | `openai_chatgpt--open_responses` | `open_responses` | `https://api.openai.com/v1` | none — signed in |
 
 There is deliberately no `api_key_env`: the credential is minted by the vendor's
-own `auth.py` (`shims/providers/openai_chatgpt/auth.py`, beside the vendor
-manifest). An `api_key` beside an exchange that does not consume one is
+own `auth.py` (`src/llm_rosetta_shim_contrib/providers/openai_chatgpt/auth.py`
+in [llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib),
+beside the vendor manifest; the vendor left core in [#1664](https://github.com/Oaklight/llm-rosetta/pull/1664)). An `api_key` beside an exchange that does not consume one is
 rejected at config load, because the two are alternative sources for one
 credential.
 

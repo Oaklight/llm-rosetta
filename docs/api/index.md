@@ -58,7 +58,7 @@ A shim must not import `llm_rosetta.api`. Plugin entry points and sidecars run w
 
 The gateway reaches core only through two prefixes: `llm_rosetta.api` and `llm_rosetta.contracts` (for `contracts.usage`, the package only). The rule is strict and has no allowlist: a gateway source file that imports any other core module, or a private (`_`-prefixed) core name, fails `tests/gateway/test_core_surface_boundary.py`. The compat forwarders `llm_rosetta.routing` and `llm_rosetta.capabilities` are refused as well.
 
-Shims follow the same rule with one prefix. `tests/test_shim_sidecar_boundary.py` fails when a `.py` file under `shims/providers/<vendor>/`, a scaffold template or the scaffolder's output imports core other than through `llm_rosetta.contracts`, or imports another vendor's directory.
+Shims follow the same rule with one prefix. `tests/test_shim_sidecar_boundary.py` fails when a `.py` file under `shims/builtin/<vendor>/`, a scaffold template or the scaffolder's output imports core other than through `llm_rosetta.contracts`, or imports another vendor's directory.
 
 ### The version constants {#version-constants}
 

@@ -176,7 +176,7 @@ canonical path, a vendor directory used as a leaf, a type directory that mixes t
 leaf and format levels, more than one lane directory above a type directory, a
 vendor-level `transforms.py`, `auth.py` declared at both the vendor and the leaf,
 a file outside the allow-list, and a missing `provider.yaml`.  The contract itself
-is in `llm_rosetta/shims/_shim_template/README_en.md`.
+is in `llm_rosetta/devtools/_shim_template/README_en.md`.
 
 ### `shims migrate [--root DIR] [--write]`
 
