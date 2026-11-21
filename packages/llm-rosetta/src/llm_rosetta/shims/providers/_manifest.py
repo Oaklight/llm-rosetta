@@ -400,6 +400,14 @@ def merge_connection(
     This is the loader's merge: the leaf wins per field, and ``headers``
     merges per key.  Neither argument is modified.
 
+    The argument order is the reverse of the loader's private
+    ``_merged_connection(leaf, manifest)``: the manifest comes first here, so
+    the call reads in the order the values are layered.  The private function
+    also returns the directory a relative ``token_command`` argument resolves
+    against (the manifest's when the command came from there).  This function
+    deliberately does not: its manifest has no file, so a directory would be
+    invented, and a host that edits manifest text resolves no command.
+
     Args:
         manifest_connection: The ``connection:`` values the manifest declares.
         leaf: The values the shim declares itself, as :func:`leaf_connection`
