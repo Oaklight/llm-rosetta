@@ -254,9 +254,13 @@ grep -rnE "llm_rosetta\.(transforms|shims\.(auth_exchange|quota_probe)|observabi
 （`embeddings_shim`、`embeddings: {shim}` 块）、旧式 `<type>_providers` 条目，或
 `quota.probe: openai_codex`——网关会自行把 `contrib:<vendor>` 加入
 [安装选择](shims.md#manifest-sources)，有无 `shims` 段都一样，并为每个提供方记录一行 INFO
-日志。已禁用的提供方同样计入。`openai--*` 提供方上的 `quota.probe: openai_codex` 会解析到
+日志。只有当配置没有声明 `shims.sources` 时才会同时加入 `contrib` 源；显式列表（镜像、
+不允许外网）下，提供方必须来自已声明的源。已禁用的提供方同样计入。`openai--*` 提供方上的 `quota.probe: openai_codex` 会解析到
 `openai_chatgpt` 现在携带的探测。当 contrib 不可达且本地尚无缓存时，网关照常启动：它记录一条
-WARNING，列出缺失的提供方与 shim，并禁用使用它们的提供方，原因中写明迁移；下次加载能访问源时，
+WARNING，列出缺失的提供方与 shim，并禁用使用它们的提供方，原因写明实际情况：shim 被
+`shims.disabled` 关闭（从该列表移除后恢复）、提供方未被安装（附原因，例如 *not in the
+manifest* 或 *no valid release*），或安装失败；只经由类型化端点（`embeddings_shim:
+siliconflow--embedding`）丢失的提供方，会以同样的措辞禁用该端点；下次加载能访问源时，
 这些提供方会自动恢复。在 `shims.strict: true` 下，这一失败与任何源失败一样会中止加载。
 
 **库。** `get_converter_for_provider("opencode--chat_completions")` 以及 shim 指向已迁移提供方的
@@ -264,7 +268,9 @@ WARNING，列出缺失的提供方与 shim，并禁用使用它们的提供方�
 shim 时，检出该仓库并调用 `llm_rosetta.api.load_providers_from_dir(<checkout>/providers)`。
 这张表是 `llm_rosetta.retired_names.MOVED_VENDORS`。
 
-**`llm-rosetta-migrate`。** `--config` 与 `--scan` 把每个已迁移的名字报告为 `note`
+**`llm-rosetta-migrate`。** `--config` 与 `--scan` 把每个已迁移的名字报告为 `note`——`--scan`
+还会找出探测 id `openai_codex` 与 `opencode_go`，以及作为完整 `type`/`shim` 值、提供方键名或
+`install` 条目出现的裸名 `xai`、`qwen`、`zhipu`、`moonshot`——
 （"now in llm-rosetta-shim-contrib; the gateway installs it automatically"），不计入退出码。
 
 ## 在代码中查找旧名字 {#find-old-names}

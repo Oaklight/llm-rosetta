@@ -565,6 +565,23 @@ WARNING。若源已应答但没有匹配的厂商（分批发布、标签改名�
 *不在 manifest 中* 的源条目报告出来，使这一缺失在日志和 Shims 页面上都可见。任何没有匹配
 结果的 `install` 条目同样如此。
 
+**一条坏记录不会拖垮整个源。** 网关逐条读取已发布的 manifest。顶层无效——不是对象、未知的
+`manifest_version`、缺少必需键、`vendors` 不是对象——会让整个源失败（使用缓存的 manifest；
+冷缓存时则什么也没有）。无效的提供方条目或发布记录会被跳过，并记录一条 WARNING，写明提供方、
+版本和 JSON 路径形式的原因，manifest 的其余部分照常使用，因此新版生产方写出的一条记录不会让
+免费层失去其他提供方；选择只看到有效记录。记录中的 shim 名必须属于该提供方：提供方键本身（裸名
+`xai`、`qwen`、`moonshot`、`zhipu`）、`<vendor>--<name>`，或 `<vendor>_<lane>--<name>`（`alcf`
+下的 `alcf_sophia--chat_completions`）；带其他提供方前缀的名字会让该记录无效；lane 前缀本身是同一 manifest 中另一个提供方键时同样无效（`openai_chatgpt` 也是该 manifest 的提供方时，`openai` 不得发布 `openai_chatgpt--x`）。被选中的提供方若所有记录都无效，会报告为
+*no valid release: <第一条原因>*；若它已有一个可用的安装，则保留该安装并以同一原因标记为
+stale——记录变坏绝不会卸载一个正常工作的提供方。
+
+**离开 core 的提供方会被自动安装。** 当配置引用了已离开 core 的提供方的 shim 或额度探测
+（[迁移到 0.14](migrating-to-0.14.md#moved-to-contrib)）时，网关会把 `contrib:<vendor>` 加入这里的
+选择，有无 `shims` 段都一样。只有当配置没有声明 `shims.sources` 时，才会同时加入 `contrib`
+源。显式的 `sources` 列表是运维对拉取来源的选择（镜像，或不允许外网），因此只加入选择器：
+manifest 自称 `contrib` 的已声明源（即镜像）仍能提供该提供方；没有任何已声明源提供它时，
+启动 WARNING 会指出它发布在 `contrib`。
+
 哪些厂商放在核心、哪些放在源，以及厂商如何在两处之间迁移，见 [Shim 归属与成熟度](shim-placement.md)。
 
 #### 添加源 { #adding-a-source }
@@ -628,18 +645,6 @@ WARNING。若源已应答但没有匹配的厂商（分批发布、标签改名�
 **适配模块 → 来源 → 清单来源**同时编辑这两个键。每个源有一个区块，含“全部厂商”（`<source>:*`）、每个标签和每个厂商的复选框。区块下方的输入框用于添加目录 id 或 manifest URL；*移除来源*会删掉该源以及带有其 id 前缀的条目。新的 URL 源在第一次保存后才会读取。修改在点击**保存**之前只是草稿；保存时通过配置保存路径（在配置锁内）写入 `shims.sources` 和 `shims.install`，并重载来源。只重建被编辑的源带前缀的条目；其他条目（包括重复项）保持原样。不带前缀的条目（`opendesign`、`tag:tier:free`）读取所有源，所以按原样列出；请在配置文件中修改它。来源列表只要与声明的列表不同就会写入，因此只是隐含默认源的配置会把默认源写出。**重新读取清单**会重新拉取每个 manifest。该区块下方的原始*本地目录*和*远程源*字段照旧工作。
 
 在面板中保存会把配置文件重写为普通 JSON，注释不会保留。被替换的文件以 `<config>.prev` 保存在同一目录：这是上一次网关写入之前的文件，只保留一份，每次保存都会替换，新建文件时不写。网关从不写 `<config>.bak`，那个名字属于 `llm-rosetta-migrate --write`（迁移前的原始文件）以及你自己做的备份。编辑器在区块下方会提示这一点。
-**一条坏记录不会拖垮整个源。** 网关逐条读取已发布的 manifest。顶层无效——不是对象、未知的
-`manifest_version`、缺少必需键、`vendors` 不是对象——会让整个源失败（使用缓存的 manifest；
-冷缓存时则什么也没有）。无效的提供方条目或发布记录会被跳过，并记录一条 WARNING，写明提供方、
-版本和 JSON 路径形式的原因，manifest 的其余部分照常使用，因此新版生产方写出的一条记录不会让
-免费层失去其他提供方；选择只看到有效记录。记录中的 shim 名必须属于该提供方：提供方键本身（裸名
-`xai`、`qwen`、`moonshot`、`zhipu`）、`<vendor>--<name>`，或 `<vendor>_<lane>--<name>`（`alcf`
-下的 `alcf_sophia--chat_completions`）；带其他提供方前缀的名字会让该记录无效；lane 前缀本身是同一 manifest 中另一个提供方键时同样无效（`openai_chatgpt` 也是该 manifest 的提供方时，`openai` 不得发布 `openai_chatgpt--x`）。
-
-**离开 core 的提供方会被自动安装。** 当配置引用了已离开 core 的提供方的 shim 或额度探测
-（[迁移到 0.14](migrating-to-0.14.md#moved-to-contrib)）时，网关会把 `contrib:<vendor>` 加入这里的
-选择；`sources` 未列出 `contrib` 时也会加上该源，有无 `shims` 段都一样。
-
 #### 只装包的一部分 { #selection }
 
 默认整个包装载。两个可选映射可以收窄它，按 preset 键书写，不需要改动包本身：
