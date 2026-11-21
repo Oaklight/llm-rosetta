@@ -11,6 +11,7 @@ from typing import Any
 
 from llm_rosetta._vendor.yaml import load as yaml_load
 
+from ...contracts import AUTH_MODULE
 from ..provider_shim import (
     VendorManifest,
 )
@@ -62,7 +63,7 @@ def _vendor_manifest(vendor_dir: Path) -> VendorManifest | None:
     has_leaf = any(
         child.resolve() != path.resolve() for child in vendor_dir.rglob("provider.yaml")
     )
-    if not has_leaf and not (vendor_dir / "auth.py").exists():
+    if not has_leaf and not (vendor_dir / AUTH_MODULE).exists():
         # Nothing below it to inherit: let the leaf loader report the missing
         # identity with its own (skip-and-warn) behaviour, rather than turning
         # one malformed third-party directory into a failed scan.
@@ -99,7 +100,7 @@ def _vendor_manifest(vendor_dir: Path) -> VendorManifest | None:
         vendor=vendor_dir.name,
         path=path,
         connection=dict(connection or {}),
-        auth=_load_auth_exchange(vendor_dir / "auth.py"),
+        auth=_load_auth_exchange(vendor_dir / AUTH_MODULE),
         fields=_declared_fields(cfg.get("fields"), path),
         quota=dict(quota or {}),
         **vendor_fields,
@@ -188,7 +189,7 @@ def _leaf_exchange(provider_dir: Path, manifest: VendorManifest | None) -> Any |
     Raises:
         ValueError: The leaf and the vendor both declare an exchange.
     """
-    exchange = _load_auth_exchange(provider_dir / "auth.py")
+    exchange = _load_auth_exchange(provider_dir / AUTH_MODULE)
     if manifest is None or manifest.auth is None:
         return exchange
     if exchange is not None:

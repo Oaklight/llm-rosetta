@@ -40,6 +40,7 @@ from llm_rosetta import (
     retired_names,
 )
 from llm_rosetta.capabilities import ToolNameMap
+from llm_rosetta.contracts import SURFACE_VERSION
 from llm_rosetta.converters import get_converter_class
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.base.helpers import strip_internal_metadata
@@ -105,11 +106,6 @@ from llm_rosetta.shims.scaffold import run_migrate as run_scaffold_migrate
 from llm_rosetta.transforms import flatten_system_content
 from llm_rosetta.types.ir import is_image_part, is_tool_result_part
 
-#: The surface's compatibility level.  It rises only when a name is removed or
-#: changes meaning, never when one is added, so a host asserts a *minimum*: a
-#: gateway built for level N runs on any core at level N or above.  A host that
-#: needs a name added in a later minor pins that minor instead.
-SURFACE_VERSION = 1
 
 __all__ = [
     # Chat conversion
