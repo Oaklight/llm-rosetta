@@ -28,7 +28,7 @@ The core states the tier of each public module once, in `llm_rosetta/_tiers.py`.
 | Compat | `llm_rosetta.gateway`, `llm_rosetta.observability`, `llm_rosetta.shims.provider_shim` (its data-class re-exports), `llm_rosetta.routing`, `llm_rosetta.capabilities`, `llm_rosetta.types.ir.extensions` | Deprecated paths kept importable for a release that shipped them. Each names its replacement and, where set, its removal version. |
 | Internal | every other module | May move in any release. |
 
-`tests/test_tiers.py` checks that every module of the first three tiers imports. `scripts/dev/public_api_diff.py` takes its list of compared core modules from the same file, and reads each compared tree's own copy: a base release is measured by the modules it declared, so a module dropped from the table is reported as removed. A tree without the file (v0.13.0) is measured with the script's list.
+`tests/test_tiers.py` checks that every module of the first three tiers imports. `scripts/dev/public_api_diff.py` takes its list of compared core modules from the same file, and reads each compared tree's own copy: against a base that ships `_tiers.py` (from 0.14.0 on), the base is measured by the modules it declared, so a module dropped from the table is reported as removed. The 0.13.0 base has no such file and is measured with the script's list; for it, a test keeps a frozen list of the modules v0.13.0 shipped as public and requires each to stay in a tier. The diff compares module-level names and constructor signatures only: an attribute removed from a class, such as the three `ProviderShim` properties of 0.14.0, is outside it and recorded in `REMOVED_ATTRIBUTES` in `tests/test_no_deprecation_bounds.py`.
 
 ### Who imports what {#who-imports-what}
 
