@@ -11,6 +11,15 @@ from pathlib import Path
 from typing import Any
 
 
+from ...contracts import (
+    AUTH_EXCHANGE,
+    IR_TRANSFORMS,
+    POST_IR_TRANSFORMS,
+    PRE_IR_TRANSFORMS,
+    QUOTA_PROBES,
+    RESPONSE_BODY_TRANSFORMS,
+    TRANSFORMS_MODULE,
+)
 from ..provider_shim import (
     Transform,
 )
@@ -142,7 +151,7 @@ def _load_quota_probes(path: Path) -> tuple[Any, ...]:
     except BaseException:
         sys.modules.pop(module_name, None)
         raise
-    probes = getattr(mod, "PROBES", ())
+    probes = getattr(mod, QUOTA_PROBES, ())
     if isinstance(probes, dict):
         probes = tuple(probes.values())
     return tuple(probes)
@@ -185,12 +194,12 @@ def _load_auth_exchange(path: Path) -> Any | None:
     except BaseException:
         sys.modules.pop(module_name, None)
         raise
-    exchange = getattr(mod, "EXCHANGE", None)
+    exchange = getattr(mod, AUTH_EXCHANGE, None)
     if exchange is None:
         return None
     if not callable(getattr(exchange, "credential", None)):
         raise ValueError(
-            f"{path}: EXCHANGE must implement credential(); "
+            f"{path}: {AUTH_EXCHANGE} must implement credential(); "
             "see llm_rosetta.shims.auth_exchange.AuthExchange"
         )
     return exchange
@@ -219,7 +228,7 @@ def _load_transforms(
             transforms use a separate module namespace to avoid collisions
             with built-in modules in ``sys.modules``.
     """
-    tf_path = provider_dir / "transforms.py"
+    tf_path = provider_dir / TRANSFORMS_MODULE
     if not tf_path.exists():
         return (), (), (), (), None
     # Snapshot before the synthetic packages are registered: the rollback only
@@ -286,19 +295,19 @@ def _read_transform_exports(mod: Any, tf_path: Path) -> tuple:
             tuple of transforms.
     """
     for removed, replacement in (
-        ("from_transforms", "pre_ir_transforms"),
-        ("to_transforms", "post_ir_transforms"),
+        ("from_transforms", PRE_IR_TRANSFORMS),
+        ("to_transforms", POST_IR_TRANSFORMS),
     ):
         if hasattr(mod, removed):
             raise TypeError(
                 f"{tf_path}: {removed} was removed in 0.14.0; "
                 f"rename it to {replacement}"
             )
-    pre = _declared_transforms(mod, "pre_ir_transforms", tf_path) or ()
-    post = _declared_transforms(mod, "post_ir_transforms", tf_path) or ()
+    pre = _declared_transforms(mod, PRE_IR_TRANSFORMS, tf_path) or ()
+    post = _declared_transforms(mod, POST_IR_TRANSFORMS, tf_path) or ()
     return (
         pre,
         post,
-        _declared_transforms(mod, "ir_transforms", tf_path) or (),
-        _declared_transforms(mod, "response_body_transforms", tf_path) or (),
+        _declared_transforms(mod, IR_TRANSFORMS, tf_path) or (),
+        _declared_transforms(mod, RESPONSE_BODY_TRANSFORMS, tf_path) or (),
     )

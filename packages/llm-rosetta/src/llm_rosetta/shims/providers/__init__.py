@@ -81,6 +81,7 @@ from llm_rosetta.formats.batch import (  # noqa: F401
 )
 from llm_rosetta.types.ir.constraints import Range, RequestConstraints  # noqa: F401
 
+from ...contracts import QUOTA_MODULE
 from ..provider_shim import ProviderShim, register_shim  # noqa: F401
 
 # These names keep the import surface this module had before the loader was
@@ -304,7 +305,7 @@ def load_providers_from_dir(
         # its leaf providers.
         group_probes: tuple[Any, ...] = ()
         try:
-            group_probes = _load_quota_probes(d / "quota.py")
+            group_probes = _load_quota_probes(d / QUOTA_MODULE)
         except Exception as exc:
             if on_error == "raise":
                 raise

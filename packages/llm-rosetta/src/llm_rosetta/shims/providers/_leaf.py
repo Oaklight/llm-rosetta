@@ -8,6 +8,7 @@ from typing import Any
 
 from llm_rosetta._vendor.yaml import load as yaml_load
 
+from ...contracts import MODEL_LIST_TRANSFORM, QUOTA_MODULE
 from ..provider_shim import (
     ConnectionConfig,
     ProviderShim,
@@ -112,7 +113,7 @@ def _load_single_provider(
     # A leaf-level quota.py complements the group's: the group module carries
     # a vendor's shared lanes, a leaf module a one-off.  Both are attached to
     # every shim in the leaf so a config can select either by probe id.
-    leaf_quota_probes = _load_quota_probes(provider_dir / "quota.py")
+    leaf_quota_probes = _load_quota_probes(provider_dir / QUOTA_MODULE)
     all_quota_probes = tuple(quota_probes) + leaf_quota_probes
 
     # A credential exchange that does not fit in an argv.  It is the module
@@ -272,7 +273,7 @@ def _load_single_provider(
     # Register convention-based model_list_transform if the transforms
     # module exports one (e.g. shims that slug-ify display names).
     if transforms_mod is not None:
-        mlt = getattr(transforms_mod, "model_list_transform", None)
+        mlt = getattr(transforms_mod, MODEL_LIST_TRANSFORM, None)
         if mlt is not None:
             _model_list_transforms[shim.name] = mlt
 

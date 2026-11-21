@@ -200,6 +200,9 @@ from .stream import (
 # 工具类型 Tool types
 from .tools import ToolCallConfig, ToolChoice, ToolDefinition, ToolRef
 
+# 版本 IR data model version
+from .version import IR_VERSION
+
 # 类型守卫 Type guards (advanced/internal — import from .type_guards directly)
 from .type_guards import (  # noqa: F401
     TYPE_CLASS_MAP,
@@ -246,6 +249,8 @@ from llm_rosetta.types.ir import extensions_experimental as experimental  # noqa
 # ============================================================================
 
 __all__ = [
+    # ========== 版本 Version ==========
+    "IR_VERSION",
     # ========== 内容部分类型 Content part types ==========
     "ContentPart",
     "TextPart",

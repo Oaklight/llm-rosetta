@@ -38,6 +38,8 @@ from typing import Any
 from urllib.parse import urlsplit
 from urllib.request import urlopen
 
+from llm_rosetta.contracts import AUTH_MODULE, QUOTA_MODULE, TRANSFORMS_MODULE
+
 MODEL_TYPES = ("llm", "embeddings", "rerank", "decisions")
 
 #: Largest mark this scaffolder will save.
@@ -79,7 +81,7 @@ PACKAGE_DIR = TEMPLATE_DIR / "package"
 _PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 
 #: The leaf modules a template may ship beside ``provider.yaml``.
-LEAF_MODULES = ("transforms.py", "auth.py", "quota.py")
+LEAF_MODULES = (TRANSFORMS_MODULE, AUTH_MODULE, QUOTA_MODULE)
 
 
 def _render(text: str, values: dict[str, str]) -> str:
