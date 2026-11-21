@@ -167,6 +167,7 @@ from ._sidecars import (  # noqa: F401
     _read_transform_exports,
     _register_plugin_chain,
     _rollback_plugin_load,
+    describe_load_failure,
 )
 from ._walk import (  # noqa: F401
     _lane_holds_shims,
@@ -286,7 +287,9 @@ def load_providers_from_dir(
             except Exception as exc:
                 if on_error == "raise":
                     raise
-                logger.warning("Skipping vendor directory %s: %s", d, exc)
+                logger.warning(
+                    "Skipping vendor directory %s: %s", d, describe_load_failure(d, exc)
+                )
                 continue
             if manifest is None:
                 shim = _load_provider_tolerant(
@@ -424,9 +427,16 @@ def _load_plugin_shims() -> list[ProviderShim]:
                 if shim.name not in known:
                     _PLUGIN_SOURCES.setdefault(shim.name, label)
             logger.info("Loaded plugin shims from entry point: %s", ep.name)
-        except Exception:
+        except Exception as exc:
+            # The entry point runs during ``import llm_rosetta``; a raise here
+            # cannot propagate, so the warning names the plugin and the error.
             logger.warning(
-                "Failed to load plugin shim entry point: %s", ep.name, exc_info=True
+                "Failed to load plugin shim entry point: %s (%s: %s); its shims "
+                "are not registered",
+                ep.name,
+                type(exc).__name__,
+                exc,
+                exc_info=True,
             )
 
     return registered

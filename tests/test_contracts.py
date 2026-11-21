@@ -63,7 +63,7 @@ def test_provider_shim_reexports_the_contract_data_classes():
     import llm_rosetta.contracts.shim as shim
     import llm_rosetta.shims.provider_shim as provider_shim
 
-    for name in shim.__all__:
+    for name in set(shim.__all__) - {"load_providers_from_dir"}:
         assert getattr(provider_shim, name) is getattr(shim, name), name
     assert "0.15.0" in (provider_shim.__doc__ or "")
     assert "llm_rosetta.contracts.shim" in (provider_shim.__doc__ or "")

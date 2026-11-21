@@ -1,0 +1,5 @@
+name: c1657acme
+model_type: llm
+format: chat_completions
+connection:
+  base_url: https://example.invalid/v1

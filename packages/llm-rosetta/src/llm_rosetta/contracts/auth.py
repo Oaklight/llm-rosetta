@@ -435,3 +435,18 @@ async def credential_for(
     if role == DEFAULT_CREDENTIAL_ROLE:
         return await exchange.credential(ctx)
     raise AuthExchangeError(f"this shim serves no {role!r} credential")
+
+
+__all__ = [
+    "DEFAULT_CREDENTIAL_ROLE",
+    "FIELD_KEY_PATTERN",
+    "FIELD_KEY_RE",
+    "FIELD_LIMIT",
+    "FIELD_TEXT_LIMIT",
+    "AuthContext",
+    "AuthExchange",
+    "AuthExchangeError",
+    "BaseAuthExchange",
+    "InteractiveSetupRequired",
+    "credential_for",
+]
