@@ -61,7 +61,11 @@ report prints the exact entry, and the ``@``-prefixed spelling
 ``decorator-census:@property`` is accepted too); the census is a global count,
 so that entry is not tied to a file.  A bare ``qualified.name`` (the older format)
 is rejected with an error, because it would excuse a same-named def in every
-file.  An allowed item is reported but does not fail the run.
+file.  An allowed item is reported but does not fail the run.  An entry excuses
+every change in its def, so an allowed ``moved-with-diff`` item is labelled
+``[imports/strings only]`` when the two sides differ only in import statements
+and string constants (the edits a move makes), and
+``[differs beyond imports and strings]`` otherwise.
 
 Exit status: 0 clean, 1 a ``missing`` / ``moved-with-diff`` item is not
 allowed, 2 usage or parse error.  Standard library only, Python >= 3.10.
@@ -704,12 +708,50 @@ def _allow_note(report: Report, *names: str) -> str:
     return f" (allowed by {tag}: {report.allowed[tag]})" if tag else ""
 
 
+class _BlankPaths(ast.NodeTransformer):
+    """Drop import statements and blank every string constant."""
+
+    def visit_Import(self, node: ast.Import) -> None:
+        return None
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        return None
+
+    def visit_Constant(self, node: ast.Constant) -> ast.AST:
+        if isinstance(node.value, str):
+            return ast.Constant("")
+        return node
+
+
+def paths_only(base: Item, head: Item) -> bool:
+    """Tell whether two items differ only in imports and string constants.
+
+    An allow entry excuses the whole def; this says whether what it excuses
+    is the kind of edit a move makes (an import path, a patch target, a path
+    string, a docstring) or something more.
+    """
+    blank = _BlankPaths()
+    db = ast.dump(blank.visit(copy.deepcopy(base.node)))
+    dh = ast.dump(blank.visit(copy.deepcopy(head.node)))
+    return db == dh
+
+
+def _diff_kind(report: Report, b: Item, h: Item) -> str:
+    """For an allowed diff, say whether it is confined to imports and strings."""
+    if not report.is_allowed(b.key, h.key):
+        return ""
+    if paths_only(b, h):
+        return " [imports/strings only]"
+    return " [differs beyond imports and strings]"
+
+
 def render_text(report: Report) -> str:
     """Render the report as plain text."""
     out = ["move check: " + ", ".join(f"{k}={v}" for k, v in _counts(report))]
     for b, h in report.moved_with_diff:
         note = _allow_note(report, b.key, h.key)
-        out.append(f"\nMOVED-WITH-DIFF{note}: {b.label} -> {h.label}")
+        kind = _diff_kind(report, b, h)
+        out.append(f"\nMOVED-WITH-DIFF{note}: {b.label} -> {h.label}{kind}")
         out += ["  " + line for line in compact_diff(b, h)]
     for m in report.missing:
         out.append(f"\nMISSING{_allow_note(report, m.key)}: {m.label}")
@@ -748,7 +790,8 @@ def render_markdown(report: Report) -> str:
     out += [f"| {k} | {v} |" for k, v in _counts(report)]
     for b, h in report.moved_with_diff:
         note = _allow_note(report, b.key, h.key)
-        out += ["", f"**moved-with-diff**{note}: `{b.label}` -> `{h.label}`"]
+        kind = _diff_kind(report, b, h)
+        out += ["", f"**moved-with-diff**{note}: `{b.label}` -> `{h.label}`{kind}"]
         out += ["", "```diff", *compact_diff(b, h), "```"]
     if report.missing:
         out += ["", "**missing**"]

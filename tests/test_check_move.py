@@ -505,3 +505,51 @@ def test_unknown_census_decorator_is_reported_unused(make_repo, tmp_path, capsys
         "allow entry matches nothing failing: decorator-census:nosuch"
         in capsys.readouterr().out
     )
+
+
+def test_allowed_diff_is_labelled_by_what_it_changes(make_repo, tmp_path, capsys):
+    # An entry excuses the whole def, so the report says whether the excused
+    # change is a moved import path and a path string, or more than that.
+    before = {
+        "a.py": """\
+            def load():
+                from pkg.old import thing
+
+                return thing("pkg/old/data")
+
+
+            def sign(a, b):
+                return a + b
+            """
+    }
+    after = {
+        "a.py": """\
+            def load():
+                from pkg.new import thing
+
+                return thing("pkg/new/data")
+
+
+            def sign(a, b):
+                return a - b
+            """
+    }
+    repo = make_repo(before, after)
+    allow = tmp_path / "allow.txt"
+    allow.write_text("a.py::load  moved\na.py::sign  intentional\n")
+    assert _run(repo, "--allow", str(allow)) == 0
+    out = capsys.readouterr().out
+    assert "a.py:load -> a.py:load [imports/strings only]" in out
+    assert "a.py:sign -> a.py:sign [differs beyond imports and strings]" in out
+    assert _run(repo, "--allow", str(allow), "--markdown") == 0
+    md = capsys.readouterr().out
+    assert "`a.py:load` -> `a.py:load` [imports/strings only]" in md
+
+
+def test_unallowed_diff_carries_no_label(make_repo, capsys):
+    repo = make_repo(
+        {"a.py": "def f():\n    return 'old'\n"},
+        {"a.py": "def f():\n    return 'new'\n"},
+    )
+    assert _run(repo) == 1
+    assert "imports/strings" not in capsys.readouterr().out
