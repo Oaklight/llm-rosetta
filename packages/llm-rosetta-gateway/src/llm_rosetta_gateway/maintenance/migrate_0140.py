@@ -22,6 +22,11 @@ a person (an unmapped item, or a ``--scan`` mention or import); ``2`` the comman
 not run (unreadable file, parse error, database held by a running gateway);
 ``3`` ``--check`` found pending rewrites.
 
+A shim whose vendor moved out of core to a shim source repository keeps its
+name (:data:`llm_rosetta.retired_names.MOVED_VENDORS`), so nothing is rewritten
+for it: ``--config`` and ``--scan`` report it as a ``note`` (the gateway
+installs the vendor by itself), which never counts in the exit code.
+
 Configs are edited as text (:mod:`.jsonc_spans`): comments, key order and
 formatting outside the rewritten names are untouched.  The database step runs
 in one transaction after a backup, and refuses while a process holds the file.
@@ -228,6 +233,20 @@ class _ConfigPlanner:
             )
         )
 
+    def _note_moved(self, node: Node, where: str, name: str, row: Any) -> None:
+        """Report a moved vendor's shim or probe; the name stays as written."""
+        self.items.append(
+            Item(
+                "config",
+                "note",
+                self.file,
+                where,
+                line_of(self.text, node.start),
+                name,
+                detail=_moved_detail(row),
+            )
+        )
+
     def _unmapped(self, node: Node, where: str, old: str, detail: str) -> None:
         self.items.append(
             Item(
@@ -248,11 +267,16 @@ class _ConfigPlanner:
         if node.kind != "str":
             return
         row = retired_names.lookup(node.value, retired_names.SHIM)
+        moved = retired_names.moved_vendor(node.value)
         if row is None:
+            if moved is not None:
+                self._note_moved(node, where, str(node.value), moved)
             return
         self._rewrite(node, row.replacement, where)
         if row.preset:
             self.presets.setdefault(row.preset, row.name)
+        if moved is not None:
+            self._note_moved(node, where, row.replacement, moved)
 
     def _shim_list(self, node: Node, where: str) -> None:
         if node.kind != "arr":
@@ -372,9 +396,22 @@ class _ConfigPlanner:
                 self._type(member.value, here)
             elif key == "format" and in_section:
                 self._format(member.value, here)
+            elif key == "quota" and member.value.kind == "obj":
+                self._quota(member.value, here)
             else:
                 self._endpoint_member(entry, member, here, "entry")
                 self._face(entry, member, here)
+
+    def _quota(self, quota: Node, where: str) -> None:
+        """A ``quota.probe`` that names a probe which moved with its vendor."""
+        probe = quota.member("probe")
+        if probe is None or probe.value.kind != "str":
+            return
+        moved = retired_names.moved_probe_vendor(probe.value.value)
+        if moved is not None:
+            self._note_moved(
+                probe.value, f"{where}.probe", str(probe.value.value), moved
+            )
 
     def _bare_key(self, name: str, entry: Node, where: str) -> None:
         """A provider named after a retired name, with no shim/type of its own.
@@ -384,6 +421,10 @@ class _ConfigPlanner:
         """
         shim = retired_names.lookup(name, retired_names.SHIM)
         ptype = retired_names.lookup(name, retired_names.PROVIDER_TYPE)
+        moved = retired_names.moved_vendor(name)
+        if moved is not None and shim is None and ptype is None:
+            self._note_moved(entry, where, name, moved)
+            return
         if shim is not None:
             fix = json.dumps(dict(shim=shim.replacement))[1:-1]
         elif ptype is not None:
@@ -577,6 +618,14 @@ class _ConfigPlanner:
                 "retired name in a place this tool does not rewrite; "
                 f"its replacement is {_replacement(child.value)!r}",
             )
+
+
+def _moved_detail(row: Any) -> str:
+    """The note for a name whose vendor moved out of core."""
+    return (
+        f"now in {row.package} (vendor {row.vendor!r}, moved in {row.moved_in}); "
+        "the gateway installs it automatically, no edit needed"
+    )
 
 
 def _replacement(name: str) -> str | None:
@@ -1117,6 +1166,84 @@ def _scan_imports(path: Path, text: str, gone: dict[str, bool]) -> list[Item]:
     return items
 
 
+class _MovedScan:
+    """Finds the names of vendors that moved to contrib, for ``--scan`` notes.
+
+    Three kinds of name, matched with different care:
+
+    * ``<vendor>--<format>`` shim names and quota probe ids (``openai_codex``,
+      ``opencode_go``) are distinctive, so any quoted string equal to one is
+      reported;
+    * a bare moved shim name (``xai``, ``qwen``, ``zhipu``, ``moonshot``) is an
+      ordinary word in code, so it is reported only where it is a whole string
+      value in a structured position: the value of ``type``, ``shim`` or a
+      ``<type>_shim`` key, a mapping key (a provider named after the shim), or
+      an item of an ``install`` array (``"xai"``, ``"contrib:xai"``), in JSON,
+      JSONC or YAML.
+    """
+
+    def __init__(self) -> None:
+        self.rows: dict[str, Any] = {}
+        bare: list[str] = []
+        for row in retired_names.MOVED_VENDORS:
+            for name in row.shims:
+                self.rows[name] = row
+                if "--" not in name:
+                    bare.append(name)
+            for probe in row.probes:
+                self.rows[probe] = row
+        distinctive = sorted(
+            (n for n in self.rows if n not in bare), key=len, reverse=True
+        )
+        words = "|".join(re.escape(n) for n in sorted(bare, key=len, reverse=True))
+        self.quoted = re.compile(
+            r"([\x22\x27])(" + "|".join(map(re.escape, distinctive)) + r")\1"
+        )
+        slot = r"(?:type|shim|[a-z_]+_shim)"
+        self.json_slot = re.compile(
+            r"\x22" + slot + r"\x22\s*:\s*\x22(" + words + r")\x22"
+        )
+        self.json_key = re.compile(r"\x22(" + words + r")\x22\s*:\s*\{")
+        self.yaml_slot = re.compile(
+            r"^\s*" + slot + r"\s*:\s*([\x22\x27]?)(" + words + r")\1\s*(?:#.*)?$"
+        )
+        self.yaml_key = re.compile(r"^\s*(" + words + r")\s*:\s*(?:#.*)?$")
+        self.install = re.compile(r"\x22install\x22\s*:\s*\[([^\]]*)\]")
+        self.install_item = re.compile(r"\x22(?:[a-z0-9_-]+:)?(" + words + r")\x22")
+
+    def items(self, path: Path, text: str) -> list[Item]:
+        """One ``note`` per moved name in *text*."""
+        found: list[tuple[int, str]] = []
+        is_yaml = path.suffix in (".yaml", ".yml")
+        structured = is_yaml or path.suffix in (".json", ".jsonc")
+        for number, line in enumerate(text.splitlines(), 1):
+            found += [(number, m.group(2)) for m in self.quoted.finditer(line)]
+            if not structured:
+                continue
+            if is_yaml:
+                found += [(number, m.group(2)) for m in self.yaml_slot.finditer(line)]
+                found += [(number, m.group(1)) for m in self.yaml_key.finditer(line)]
+            else:
+                found += [(number, m.group(1)) for m in self.json_slot.finditer(line)]
+                found += [(number, m.group(1)) for m in self.json_key.finditer(line)]
+        if structured and not is_yaml:
+            for block in self.install.finditer(text):
+                for item in self.install_item.finditer(block.group(1)):
+                    number = text.count("\n", 0, block.start(1) + item.start()) + 1
+                    found.append((number, item.group(1)))
+        return [
+            Item(
+                "scan",
+                "note",
+                str(path),
+                line=number,
+                old=name,
+                detail=_moved_detail(self.rows[name]),
+            )
+            for number, name in sorted(set(found))
+        ]
+
+
 def scan_path(root: Path, skip: Iterable[Path] = ()) -> list[Item]:
     """Report every occurrence of a retired name under *root*; edit nothing.
 
@@ -1125,6 +1252,10 @@ def scan_path(root: Path, skip: Iterable[Path] = ()) -> list[Item]:
     key or value.  A quoted string is a match, not a proof: ``"anthropic"`` may
     be your own variable, so the report names every replacement the table has.
     Each such finding is an advisory textual mention, not a proof of a use.
+
+    A quoted shim name of a vendor that moved out of core
+    (``"opencode--chat_completions"``) is a ``note``: the name is still
+    valid, so it is reported for information and never counts.
 
     In ``.py`` files it also reads the import statements: an import of a
     module path listed in ``retired_names.RETIRED_MODULES`` is an ``import``
@@ -1144,6 +1275,7 @@ def scan_path(root: Path, skip: Iterable[Path] = ()) -> list[Item]:
     alternation = "|".join(re.escape(n) for n in sorted(vocab, key=len, reverse=True))
     quoted = re.compile(r"([\x22\x27])(" + alternation + r")\1")
     bare = re.compile(r"(?:^|[\s:\-])(" + alternation + r")\s*(?::|(?:#.*)?$)")
+    moved = _MovedScan()
     items: list[Item] = []
     gone: dict[str, bool] = {}
     for path in _scan_files(root):
@@ -1155,6 +1287,7 @@ def scan_path(root: Path, skip: Iterable[Path] = ()) -> list[Item]:
             continue
         if path.suffix == ".py":
             items.extend(_scan_imports(path, text, gone))
+        items.extend(moved.items(path, text))
         lines = text.splitlines()
         is_yaml = path.suffix in (".yaml", ".yml")
         for number, line in enumerate(lines, 1):
@@ -1245,7 +1378,7 @@ def _run_configs(args: argparse.Namespace, report: dict[str, Any]) -> None:
             entry["error"] = f"{name}: {exc}"
             continue
         result = migrate_config_text(text, name)
-        report["items"].extend(result.items)
+        _file_items(report, result.items)
         entry["changed"] = result.changed
         if result.error:
             entry["error"] = result.error
@@ -1257,6 +1390,12 @@ def _run_configs(args: argparse.Namespace, report: dict[str, Any]) -> None:
                     entry["backup"] = _write_config(path, result, bom)
                 except OSError as exc:
                     entry["error"] = str(exc)
+
+
+def _file_items(report: dict[str, Any], items: Iterable[Item]) -> None:
+    """Put each item in ``notes`` or ``items``; a note never counts."""
+    for item in items:
+        report["notes" if item.action == "note" else "items"].append(item)
 
 
 def _run_dbs(args: argparse.Namespace, report: dict[str, Any]) -> None:
@@ -1333,7 +1472,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     _run_configs(args, report)
     _run_dbs(args, report)
     for name in args.scan:
-        report["items"].extend(scan_path(Path(name), skip=map(Path, args.config)))
+        _file_items(report, scan_path(Path(name), skip=map(Path, args.config)))
     report["exit_code"] = _exit_code(args, report)
     if args.json:
         out = dict(
