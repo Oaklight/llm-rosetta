@@ -164,7 +164,7 @@ Other removals in the same step:
 | Removed name | Use instead |
 | --- | --- |
 | `llm_rosetta.shims.provider_shim.resolve_base` (and `llm_rosetta.resolve_base`) | `resolve_format` |
-| `llm_rosetta.shims.transforms` (module) | `llm_rosetta.transforms` |
+| `llm_rosetta.shims.transforms` (module) | `llm_rosetta.contracts.transform` |
 | `llm_rosetta.ir.tools.fix_orphaned_tool_calls_ir` | `normalize_tool_pairing` |
 | `GoogleInteractionsToolOps.ir_function_call_to_p`, `ir_function_result_to_p` | `ir_tool_call_to_p`, `ir_tool_result_to_p` |
 
@@ -199,9 +199,36 @@ The versioned `config_version` migrations still upgrade a document older than th
 
 ## Retired tags in the usage ledger (P8) {#ledger-tags}
 
-Removed in PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656). `openai_chat`, `openai_responses`, `anthropic` and `google` are no longer rows of `STANDARD_SHAPES` or `ADDITIVE_CACHE_STANDARDS` (`llm_rosetta.observability.usage`). The usage vocabulary names the current standards only: `chat_completions`, `open_responses`, `messages`, `google_generate`.
+Removed in PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656). `openai_chat`, `openai_responses`, `anthropic` and `google` are no longer rows of `STANDARD_SHAPES` or `ADDITIVE_CACHE_STANDARDS` (`llm_rosetta.contracts.usage`). The usage vocabulary names the current standards only: `chat_completions`, `open_responses`, `messages`, `google_generate`.
 
 A database row written under a retired tag is not misread and does not stop the gateway. `shape_for` answers `None` and `cache_is_additive` answers `False` for it, so the startup total repair leaves the row's total as the old writer stored it. `backfill_total_tokens` logs one warning with the count of such rows, the retired tags and the command `llm-rosetta-migrate --db`. Run that command to rewrite the tags; see [below](#llm-rosetta-migrate).
+
+## The extension contracts move to `llm_rosetta.contracts` {#contracts-home}
+
+Changed in PR [#1659](https://github.com/Oaklight/llm-rosetta/pull/1659) (issue [#1657](https://github.com/Oaklight/llm-rosetta/issues/1657)). The modules a host or a shim author builds on now live in one package, `llm_rosetta.contracts`; see [The core surface](../api/index.md#the-core-surface). Of the old paths, only `llm_rosetta.routing`, `llm_rosetta.capabilities` and `llm_rosetta.shims.provider_shim` shipped in 0.13.0, and only those three keep a compat path. The other paths existed only in 0.14 development releases and have no forwarder: importing one raises `ModuleNotFoundError`.
+
+| Old path | New path | What happens to the old path |
+| --- | --- | --- |
+| `llm_rosetta.transforms` (with `.body` and `.ir`) | `llm_rosetta.contracts.transform` | Removed |
+| `_NamedTransform`, `_NamedIRTransform` | `llm_rosetta.contracts.transform.NamedTransform`, `NamedIRTransform` | Renamed; the new names are public |
+| `llm_rosetta.shims.auth_exchange` | `llm_rosetta.contracts.auth` | Removed |
+| `llm_rosetta.shims.quota_probe` | `llm_rosetta.contracts.quota` | Removed |
+| `llm_rosetta.observability.usage` (and its submodules) | `llm_rosetta.contracts.usage` (the package only) | Removed. The usage names on `llm_rosetta.observability` itself still resolve, to the `contracts.usage` objects. |
+| `llm_rosetta.routing` | `llm_rosetta.contracts.routing` | 0.13.0-compat forwarder of `ProviderType`, `ResolvedRoute`, `Router`. It emits a `DeprecationWarning` on import and is removed in 0.15.0. |
+| `llm_rosetta.capabilities` | `ProviderShim`, `ReasoningCapability`: `llm_rosetta.contracts.shim`. `ConversionContext`: `llm_rosetta.converters.base`. The capability passes run inside the conversion pipeline and have no public home. | 0.13.0-compat forwarder of the twelve 0.13.0 names. It emits a `DeprecationWarning` on import and is removed in 0.15.0. |
+| `llm_rosetta.capabilities.description_limit`, `.enforcement`, `.intrinsic_history`, `.tool_names` | None: the passes are internal (`llm_rosetta.ir.passes`) | Removed |
+| `ProviderShim`, `ConnectionConfig`, `ToolsConfig`, `ReasoningCapability`, `VendorManifest`, `QuotaDeclaration`, `BatchDeclaration`, `SoftErrorPattern`, `TYPE_PARAM_KEYS` and the literal types, imported from `llm_rosetta.shims.provider_shim` | `llm_rosetta.contracts.shim` | Deprecated re-exports of the same objects, with no runtime warning; removed in 0.15.0. The registry functions (`register_shim`, `get_shim`, `list_shims`, …) stay in `llm_rosetta.shims.provider_shim`. |
+| `SURFACE_VERSION` in `llm_rosetta.api` | `llm_rosetta.contracts.SURFACE_VERSION` | `llm_rosetta.api` re-exports the same object; nothing to change |
+
+A shim package's `transforms.py`, `auth.py` and `quota.py` must import from `llm_rosetta.contracts` only; see [What a shim may import](shims.md#what-a-shim-may-import).
+
+`llm-rosetta-migrate --scan` (PR [#1658](https://github.com/Oaklight/llm-rosetta/pull/1658)) reports an import of a removed path in this table as an `import` item that names the replacement. It reports a path only when the path does not resolve in the installed core. `llm_rosetta.routing` and `llm_rosetta.capabilities` still resolve as forwarders, so the scan does not report them; their `DeprecationWarning` does. To find every old path, including the forwarders:
+
+```bash
+grep -rnE "llm_rosetta\.(transforms|shims\.(auth_exchange|quota_probe)|observability\.usage|routing|capabilities)\b|\b_Named(IR)?Transform\b" .
+```
+
+These rows were checked against the head of PR #1659 (commit `cdc6354af3`, version `0.14.0.dev35`): each removed path has no module spec, each forwarder imports with a `DeprecationWarning`, and each new path imports.
 
 ## Find the old names in your code {#find-old-names}
 
@@ -212,6 +239,7 @@ grep -rnE "converters\.(openai_chat|openai_responses|anthropic|google_genai|goog
 ## What still works {#still-works}
 
 - **`llm_rosetta.gateway`** is still importable. It warns and forwards to `llm_rosetta_gateway`; its text says it is deprecated and removed in a later release, with no version. Import `llm_rosetta_gateway` directly now. The `llm_rosetta.observability` finder and the `llm-rosetta[gateway]` extra stay on the same terms.
+- **`llm_rosetta.routing` and `llm_rosetta.capabilities`** still import, with exactly their 0.13.0 names. Each emits a `DeprecationWarning` on import and is removed in 0.15.0; see [the contracts table](#contracts-home).
 - **Persisted internal keys** are not renamed: the `provider_metadata` tags `openai_chat`, `google` and `anthropic`, the converter tag, native tool definitions and the committed benchmark baselines keep their old spellings on purpose.
 - **Retired provider, shim and model-type names** (next section) no longer resolve at all. They raise, and the error names the replacement.
 
@@ -323,4 +351,4 @@ Persisted internal keys stay as they are by decision: the `provider_metadata` ta
 
 ## The core surface {#core-surface}
 
-0.14.0 is also the release of the gateway's strict core surface: the gateway imports core only through `llm_rosetta.api` and four contract modules, and `llm_rosetta.api.SURFACE_VERSION` (now `1`) rises on removals only. A host or shim author who imports other `llm_rosetta` modules is outside that contract. See [The core surface](../api/index.md#the-core-surface).
+0.14.0 is also the release of the gateway's strict core surface: the gateway imports core only through `llm_rosetta.api` and `llm_rosetta.contracts`, a shim imports only `llm_rosetta.contracts`, and `SURFACE_VERSION` (now `1`) rises on removals only. A host or shim author who imports other `llm_rosetta` modules is outside that contract. See [The core surface](../api/index.md#the-core-surface).

@@ -22,7 +22,7 @@ The layer is split so that each fact lives where it is maintained:
 The gateway package (`llm_rosetta_gateway.quota`) owns the **runtime**: the
 per-credential state, probe execution and the admin surface. The **contract and
 resolution** — the `QuotaProbe` interface, the window and in-band signal types,
-`resolve_probe` — live in `llm_rosetta.shims.quota_probe`, because a shim's
+`resolve_probe` — live in `llm_rosetta.contracts.quota`, because a shim's
 `quota.py` implements it and the translation core must never import the
 gateway. It contains no vendor code. A shim **ships its probe** as `quota.py` at the
 vendor level — beside the `llm/`, `embeddings/`, … directories, shared by every

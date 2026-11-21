@@ -6,7 +6,7 @@ title: Shims
 
 ## Provider Shim
 
-::: llm_rosetta.shims.provider_shim.ProviderShim
+::: llm_rosetta.contracts.shim.ProviderShim
 
 ::: llm_rosetta.shims.provider_shim.register_shim
 
@@ -18,15 +18,15 @@ title: Shims
 
 ## Credential Exchange
 
-::: llm_rosetta.shims.auth_exchange.AuthExchange
+::: llm_rosetta.contracts.auth.AuthExchange
 
-::: llm_rosetta.shims.auth_exchange.AuthContext
+::: llm_rosetta.contracts.auth.AuthContext
 
-::: llm_rosetta.shims.auth_exchange.BaseAuthExchange
+::: llm_rosetta.contracts.auth.BaseAuthExchange
 
-::: llm_rosetta.shims.auth_exchange.AuthExchangeError
+::: llm_rosetta.contracts.auth.AuthExchangeError
 
-::: llm_rosetta.shims.auth_exchange.InteractiveSetupRequired
+::: llm_rosetta.contracts.auth.InteractiveSetupRequired
 
 ## External Shim Sources
 
@@ -40,14 +40,20 @@ title: Shims
 
 ## Transforms
 
-::: llm_rosetta.transforms.Transform
+::: llm_rosetta.contracts.transform.Transform
 
-::: llm_rosetta.transforms.apply_transforms
+::: llm_rosetta.contracts.transform.NamedTransform
 
-::: llm_rosetta.transforms.strip_fields
+::: llm_rosetta.contracts.transform.IRTransform
 
-::: llm_rosetta.transforms.rename_field
+::: llm_rosetta.contracts.transform.NamedIRTransform
 
-::: llm_rosetta.transforms.set_defaults
+::: llm_rosetta.contracts.transform.apply_transforms
 
-::: llm_rosetta.transforms.force_fields
+::: llm_rosetta.contracts.transform.strip_fields
+
+::: llm_rosetta.contracts.transform.rename_field
+
+::: llm_rosetta.contracts.transform.set_defaults
+
+::: llm_rosetta.contracts.transform.force_fields

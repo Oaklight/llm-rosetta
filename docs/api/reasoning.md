@@ -157,7 +157,7 @@ This is how a vendor that fronts several model families declares a requirement f
 
 ## API Reference
 
-::: llm_rosetta.shims.provider_shim.ReasoningCapability
+::: llm_rosetta.contracts.shim.ReasoningCapability
     options:
       show_source: false
       heading_level: 3

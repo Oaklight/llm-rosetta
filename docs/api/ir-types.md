@@ -18,7 +18,7 @@ Controls whether the model performs explicit reasoning.
 | `"enabled"` | Explicit thinking, requires `budget_tokens` on some providers |
 | `"disabled"` | No thinking |
 
-Provider mappings are configured per-shim via [`thinking_modes`][llm_rosetta.shims.provider_shim.ReasoningCapability].
+Provider mappings are configured per-shim via [`thinking_modes`][llm_rosetta.contracts.shim.ReasoningCapability].
 
 ## IREffort
 

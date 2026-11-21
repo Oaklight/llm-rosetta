@@ -10,7 +10,7 @@ The observability layer has two halves, in two distributions (epic #1127):
   request logging, SQLite persistence, the ops log, error dumps, capture,
   maintenance, retention, header sanitizing and on-demand profiling.  Every
   consumer is a proxy server, so it ships with the gateway.
-- **`llm_rosetta.observability.usage`** — what a usage report *means*: the
+- **`llm_rosetta.contracts.usage`** — what a usage report *means*: the
   ledger, the per-model-type normalization and the rolling-window report.
   `pipeline.chat` reads it, so it stays in the core and needs no store.
 
@@ -444,8 +444,8 @@ body = decompress_body(compressed)
 
 ## Usage
 
-This half is the core's: it stays in `llm_rosetta.observability` (no store, no
-gateway).  `llm_rosetta.observability.usage` owns what "how many tokens did we move, and
+This half is the core's: it lives in `llm_rosetta.contracts.usage` (no store, no
+gateway; import the package, not its submodules).  It owns what "how many tokens did we move, and
 for whom" means.  It has no HTTP, no configuration and no credentials: a
 library user records usage and reads a report without any of that, and the
 gateway is one consumer of it, supplying credential subjects and SQLite
@@ -470,7 +470,7 @@ obvious:
 - **Cache is added only where it is not already inside the prompt.**  The
   Messages API reports its cache tokens *beside* the input (additive); OpenAI
   and Google report theirs *inside* it (a subset).  Which is which is declared
-  once, in `llm_rosetta.observability.usage.semantics`, and a test fails if a
+  once, in `llm_rosetta.contracts.usage.semantics`, and a test fails if a
   converter ever disagrees with the declaration.
 
 `usage_columns(usage)` turns an IR usage dict into those columns.  A counter
@@ -506,7 +506,7 @@ written before the column existed means.  The gateway's daily table
 Record usage, then ask what it came to — no gateway, no database:
 
 ```python
-from llm_rosetta.observability import UsageLedger
+from llm_rosetta.contracts.usage import UsageLedger
 
 ledger = UsageLedger()
 ledger.record(resp["usage"], model="gpt-5-nano", subject="batch-7")
@@ -550,7 +550,7 @@ Two behaviours are worth knowing before relying on them:
 ### UsageReport
 
 ```python
-from llm_rosetta.observability import UsageReport
+from llm_rosetta.contracts.usage import UsageReport
 
 report = UsageReport.build(
     groups=await persistence.query_usage_groups(),
@@ -685,4 +685,4 @@ with warnings.catch_warnings():
 ```
 
 New code imports from `llm_rosetta_gateway.observability` for telemetry, and
-from `llm_rosetta.observability.usage` for metering.
+from `llm_rosetta.contracts.usage` for metering.

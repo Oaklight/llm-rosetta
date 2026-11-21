@@ -268,7 +268,7 @@ exports `EXCHANGE`:
 
 ```python
 # auth.py
-from llm_rosetta.shims.auth_exchange import BaseAuthExchange
+from llm_rosetta.contracts.auth import BaseAuthExchange
 
 
 class Exchange(BaseAuthExchange):
@@ -442,7 +442,7 @@ connection:
 Example `transforms.py`:
 
 ```python
-from llm_rosetta.transforms import strip_fields
+from llm_rosetta.contracts.transform import strip_fields
 
 # DeepSeek does not support n, logit_bias, or seed
 post_ir_transforms = (strip_fields("n", "logit_bias", "seed"),)
@@ -450,6 +450,22 @@ pre_ir_transforms = ()
 ```
 
 At import time, `shims/__init__.py` scans all provider directories and registers them automatically, then discovers any plugin shims via entry points.
+
+### What a shim may import {#what-a-shim-may-import}
+
+A shim's sidecars (`transforms.py`, `auth.py`, `quota.py` and any helper module beside them) and the `register_shims` entry point of a shim package import `llm_rosetta` only through `llm_rosetta.contracts` and its submodules:
+
+| Need | Import from |
+| --- | --- |
+| `ProviderShim`, `ConnectionConfig`, `load_providers_from_dir` | `llm_rosetta.contracts.shim` |
+| Transform primitives and the hook types | `llm_rosetta.contracts.transform` |
+| The credential exchange of `auth.py` | `llm_rosetta.contracts.auth` |
+| The allowance probe of `quota.py` | `llm_rosetta.contracts.quota` |
+| The sidecar hook names (`PRE_IR_TRANSFORMS`, `QUOTA_PROBES`, …) | `llm_rosetta.contracts` |
+
+Not `llm_rosetta.api`, and no internal module. The loader runs plugin entry points and sidecars while `import llm_rosetta` is still in progress. `llm_rosetta.api` needs the finished package, so it cannot load at that point; the contract modules can. The contracts are also the stable part: within a minor release they only gain names, and an internal module may move in any release. A vendor directory does not import another vendor's directory either, so that each one can move out of core on its own.
+
+For the built-in shims, `tests/test_shim_sidecar_boundary.py` enforces the rule over every `.py` file under `shims/providers/<vendor>/`, over the scaffold templates and over what the scaffolder writes. See [The core surface](../api/index.md#the-core-surface) for the tiers.
 
 ## Shim Lifecycle
 
@@ -499,7 +515,7 @@ The callable scans a local YAML directory and returns the registered shims:
 ```python
 # my_package/shims/__init__.py
 from pathlib import Path
-from llm_rosetta.shims import load_providers_from_dir
+from llm_rosetta.contracts.shim import load_providers_from_dir
 
 def register_shims():
     return load_providers_from_dir(Path(__file__).parent / "providers")
@@ -1153,12 +1169,12 @@ response_body_transforms: true
 
 ```python
 # transforms.py
-from llm_rosetta.transforms import harmony_tool_call_safeguard
+from llm_rosetta.contracts.transform import rewrite_harmony_tool_calls
 
-response_body_transforms = (harmony_tool_call_safeguard(),)
+response_body_transforms = (rewrite_harmony_tool_calls(),)
 ```
 
-Built-in response transform: `harmony_tool_call_safeguard()` fixes malformed tool call JSON from Harmony/vLLM endpoints.
+Built-in response transform: `rewrite_harmony_tool_calls()` rewrites the raw harmony tool-call token that some vLLM-served models emit in the message content into a proper `tool_calls` field.
 
 ### How Transforms Apply
 
@@ -1243,7 +1259,7 @@ Register a custom provider shim for any OpenAI-compatible service:
 
 ```python
 from llm_rosetta import ConnectionConfig, ProviderShim, register_shim
-from llm_rosetta.transforms import strip_fields
+from llm_rosetta.contracts.transform import strip_fields
 
 my_shim = ProviderShim(
     name="my-provider",
@@ -1287,7 +1303,7 @@ To add a new provider to the built-in registry:
 4. Optionally add a `transforms.py` if the provider has field-level quirks:
 
     ```python
-    from llm_rosetta.transforms import strip_fields
+    from llm_rosetta.contracts.transform import strip_fields
 
     post_ir_transforms = (strip_fields("unsupported_field"),)
     pre_ir_transforms = ()
