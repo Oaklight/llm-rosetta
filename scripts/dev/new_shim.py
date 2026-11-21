@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repository wrapper around :mod:`llm_rosetta.shims.scaffold`.
+"""Repository wrapper around :mod:`llm_rosetta.devtools.scaffold`.
 
 The command is installed as ``llm-rosetta-gateway shims new``; this copy exists
 so a checkout can scaffold into the built-in tree — which is not writable in an
@@ -18,7 +18,7 @@ BUILTIN_ROOT = REPO_ROOT / "packages/llm-rosetta/src/llm_rosetta/shims/builtin"
 
 def main(argv: list[str] | None = None) -> int:
     """Run the scaffolder against the built-in tree by default."""
-    from llm_rosetta.shims.scaffold import main as scaffold_main
+    from llm_rosetta.devtools.scaffold import main as scaffold_main
 
     arguments = sys.argv[1:] if argv is None else argv
     return scaffold_main(arguments, default_root=str(BUILTIN_ROOT))

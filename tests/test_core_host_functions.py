@@ -10,6 +10,7 @@ from llm_rosetta.shims import ProviderShim, ReasoningCapability
 from llm_rosetta.shims.provider_shim import get_shim, register_shim
 from llm_rosetta.shims._loader import _CONNECTION_KEYS, _IDENTITY_KEYS
 from llm_rosetta.shims._loader import _model_list_transforms
+from llm_rosetta.devtools import scaffold
 
 
 # ---------------------------------------------------------------- spec_for
@@ -295,8 +296,6 @@ def test_plugin_source_is_none_for_a_directory_shim():
 
 def test_the_scaffold_entry_points_are_the_scaffold_module_s():
     import argparse
-
-    from llm_rosetta.shims import scaffold
 
     assert api.run_scaffold is scaffold.run
     assert api.run_scaffold_check is scaffold.run_check

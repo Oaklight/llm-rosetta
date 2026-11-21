@@ -1712,7 +1712,7 @@ def run_check(root: Path) -> int:
         return 0
     for finding in findings:
         print(f"problem {finding.render(root)}")
-    print(f"\n{len(findings)} finding(s); see shims/_shim_template/README_en.md")
+    print(f"\n{len(findings)} finding(s); see devtools/_shim_template/README_en.md")
     return 1
 
 
