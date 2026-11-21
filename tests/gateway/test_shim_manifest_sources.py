@@ -49,13 +49,18 @@ class _Capture(logging.Handler):
     def __init__(self) -> None:
         super().__init__(logging.DEBUG)
         self.messages: list[str] = []
+        self.records: list[logging.LogRecord] = []
 
     def emit(self, record: logging.LogRecord) -> None:
         self.messages.append(record.getMessage())
+        self.records.append(record)
+
+    def at(self, level: int) -> list[str]:
+        return [r.getMessage() for r in self.records if r.levelno == level]
 
 
 @pytest.fixture
-def logs():
+def log_handler():
     handler = _Capture()
     names = ["llm_rosetta_gateway.shims.sources", "llm-rosetta-gateway"]
     levels = {}
@@ -65,12 +70,17 @@ def logs():
         logger.setLevel(logging.DEBUG)
         logger.addHandler(handler)
     try:
-        yield handler.messages
+        yield handler
     finally:
         for name in names:
             logger = logging.getLogger(name)
             logger.removeHandler(handler)
             logger.setLevel(levels[name])
+
+
+@pytest.fixture
+def logs(log_handler):
+    return log_handler.messages
 
 
 def _archive(vendor: str, shims: list[str], marker: str = "v") -> bytes:
@@ -127,6 +137,7 @@ class FakeHttp:
         self.files: dict[str, bytes] = {}
         self.calls: list[str] = []
         self.down = False
+        self.generated_at = "2026-11-21T00:00:00Z"
 
     def publish(self, vendor: str, version: str, shims: list[str], **kw: Any) -> None:
         data = kw.pop("data", None) or _archive(vendor, shims, marker=version)
@@ -139,7 +150,7 @@ class FakeHttp:
             "manifest_version": 1,
             "source": self.source,
             "repo": f"https://github.com/Oaklight/llm-rosetta-shim-{self.source}",
-            "generated_at": "2026-11-21T00:00:00Z",
+            "generated_at": self.generated_at,
             "vendors": {v: {"versions": r} for v, r in self.vendors.items()},
         }
 
@@ -154,7 +165,9 @@ class FakeHttp:
         raise ConnectionError(f"no route: {url}")
 
 
-def _apply(tmp_path: Path, section: dict[str, Any], http: FakeHttp, **kw: Any):
+def _apply(
+    tmp_path: Path, section: dict[str, Any], http: FakeHttp | TwoLegs, **kw: Any
+):
     raw = {"shims": section}
     return apply_shim_sources(raw, str(tmp_path / "config.jsonc"), http_get=http, **kw)
 
@@ -814,3 +827,133 @@ class TestRecordLevelManifest:
 
         assert _vendor_status(report, "acme").stale
         assert get_shim("acme--chat_completions") is not None
+
+
+MIRROR_DIST = "https://mirror.example/dist/"
+MIRROR = MIRROR_DIST + "manifest.json"
+OLD = "2026-11-21T11:59:00Z"
+NEW = "2026-11-21T16:19:00Z"
+
+
+class TwoLegs:
+    """A primary and a fallback URL, each serving its own manifest copy."""
+
+    def __init__(self, dist: str = DIST, mirror_dist: str = MIRROR_DIST) -> None:
+        self.primary = FakeHttp(dist=dist)
+        self.mirror = FakeHttp(dist=mirror_dist)
+        self.mirror_dist = mirror_dist
+        self.calls: list[str] = []
+
+    def publish(self, vendor: str, version: str, shims: list[str], **kw: Any) -> None:
+        """Publish to both legs (the same archive bytes)."""
+        data = _archive(vendor, shims, marker=version)
+        self.primary.publish(vendor, version, shims, data=data, **kw)
+        self.mirror.publish(vendor, version, shims, data=data, **kw)
+
+    def manifest_calls(self) -> list[str]:
+        return [c for c in self.calls if c.endswith("manifest.json")]
+
+    def __call__(self, url: str, **kw: Any) -> bytes:
+        self.calls.append(url)
+        leg = self.mirror if url.startswith(self.mirror_dist) else self.primary
+        return leg(url, **kw)
+
+
+def _legs_section(*install: str) -> dict[str, Any]:
+    return {
+        "sources": [{"url": MANIFEST, "fallback": MIRROR}],
+        "install": list(install),
+    }
+
+
+def _cached_generated_at(tmp_path: Path) -> str:
+    (doc,) = tmp_path.rglob("manifests/*/manifest.json")
+    return json.loads(doc.read_text())["generated_at"]
+
+
+class TestFreshnessGuard:
+    """A manifest URL that answers with an old copy (#1660, the CDN lag)."""
+
+    def test_a_manifest_older_than_the_cache_never_replaces_it(
+        self, tmp_path, log_handler
+    ):
+        legs = TwoLegs()
+        legs.publish("acme", "0.1.0", ["acme--chat_completions"])
+        legs.primary.generated_at = legs.mirror.generated_at = NEW
+        _apply(tmp_path, _legs_section("acme"), legs)
+        legs.primary.generated_at = legs.mirror.generated_at = OLD
+
+        report = _apply(tmp_path, _legs_section("acme"), legs, force_refresh=True)
+
+        status = _vendor_status(report, "acme")
+        assert status.ok and status.stale and status.error
+        assert f"generated_at {OLD}" in status.error
+        assert f"generated_at {NEW}" in status.error
+        assert _cached_generated_at(tmp_path) == NEW
+        assert get_shim("acme--chat_completions") is not None
+        assert any(
+            "keeping the cached manifest" in m for m in log_handler.at(logging.WARNING)
+        )
+
+    def test_a_single_url_source_never_goes_backwards_either(self, tmp_path):
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+        http.generated_at = NEW
+        _apply(tmp_path, _url_section("acme"), http)
+        http.generated_at = OLD
+        http.calls.clear()
+
+        report = _apply(tmp_path, _url_section("acme"), http, force_refresh=True)
+
+        assert http.calls == [MANIFEST]
+        assert _vendor_status(report, "acme").stale
+        assert _cached_generated_at(tmp_path) == NEW
+
+    def test_a_kept_cache_is_rechecked_until_a_fresh_one_arrives(self, tmp_path):
+        """The never-backwards branch makes the next apply ask again."""
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+        http.generated_at = NEW
+        _apply(tmp_path, _url_section("acme"), http)
+        http.generated_at = OLD
+        _apply(tmp_path, _url_section("acme"), http, force_refresh=True)
+        http.calls.clear()
+
+        report = _apply(tmp_path, _url_section("acme"), http)
+
+        assert http.calls == [MANIFEST]
+        assert _vendor_status(report, "acme").stale
+        http.generated_at = NEW
+        http.calls.clear()
+
+        report = _apply(tmp_path, _url_section("acme"), http)
+
+        assert http.calls == [MANIFEST]
+        assert not _vendor_status(report, "acme").stale
+        http.calls.clear()
+        _apply(tmp_path, _url_section("acme"), http)
+        assert http.calls == []
+
+
+@pytest.mark.parametrize(
+    ("earlier", "later"),
+    [
+        ("2026-11-21T11:59:00Z", "2026-11-21T16:19:00Z"),
+        ("2026-11-21T16:19:00.123456789Z", "2026-11-21T16:19:00.2Z"),
+        ("2026-11-21T20:00:00+08:00", "2026-11-21T12:30:00Z"),
+        ("2026-11-21T12:00:00-00:30", "2026-11-21T12:31:00z"),
+    ],
+)
+def test_generated_at_compares_as_time(earlier, later):
+    from llm_rosetta.contracts.shim_manifest import SourceManifest
+    from llm_rosetta_gateway.shims.manifest_sources import _older
+
+    def manifest(when: str) -> SourceManifest:
+        return SourceManifest(
+            manifest_version=1, source="s", repo="r", generated_at=when, vendors={}
+        )
+
+    assert _older(manifest(earlier), manifest(later))
+    assert not _older(manifest(later), manifest(earlier))
+    assert not _older(manifest(earlier), manifest(earlier))
+    assert not _older(manifest("not a time"), manifest(later))
