@@ -114,7 +114,7 @@ They are reached through `EmbeddingConversionPipeline` /
 `RerankConversionPipeline` (or `get_embedding_converter(format)`), not through
 `auto_detect.detect_provider()`: the gateway's model-type descriptors own
 source detection for embedding, rerank and decision routes
-(`source_formats.py`), and an embedding body cannot be attributed to
+(`model_types/source_formats.py`), and an embedding body cannot be attributed to
 a vendor from its model name.  The decision detector also reads the route
 (`/v1/decisions` vs `/v1/systemone`), so a provider's default path follows
 the format it declares.
@@ -147,24 +147,28 @@ supported format and forwards them to any configured upstream provider.
 | Module | Purpose |
 |--------|---------|
 | `app/` | Route handlers (`routes_llm.py`, `routes_models.py`, `routes_health.py`, `routes_typed.py`, plus the relayed `routes_compact.py` and `routes_count_tokens.py`), app factory, tasks |
-| `proxy/` | Core proxy engine: errors, metadata, fidelity, preflight, engine, streaming |
-| `config/` | Config package: JSONC loading, locking, parsing, resolution |
+| `proxy/` | Core proxy engine: the request stages both paths share (`prepare.py`), the non-streaming path (`engine.py`) and streaming, errors, failover, metadata, fidelity (and the same-format check in `fidelity_check.py`), preflight, and the instrumented request lifecycle every proxy route runs through (`lifecycle.py`) |
+| `config/` | Config package: JSONC loading, locking, parsing, resolution; `providers.py` is the provider registry and factory that resolve shim config into runtime `ProviderInfo` (key rotation, auth headers) |
 | `pipelines/` | Typed request handlers (embeddings, rerank, decision) behind `handle_typed_request` |
-| `model_types.py` | The model-type registry: descriptors, routes, formats, config keys |
-| `source_formats.py` | Source detection for typed routes (embedding, rerank, decision) |
-| `providers.py` | Provider info, auth headers, key rotation |
+| `model_types/` | The model-type registry (`__init__.py`): descriptors, routes, formats, config keys; `source_formats.py` holds the source detectors its typed-route descriptors carry (embedding, rerank, decision) |
 | `shims/`, `shim_sources.py` | External shim sources, catalog, scheduled removals; the `shims` config section |
 | `routing/` | Candidate selection: the route container plus the pluggable strategies (weighted round-robin, affinity) |
 | `jobs/` | Background jobs: the envelope (`model.py`), store, queue, worker, handlers |
-| `quota/` | Provider quota probing and quota-aware credential rotation |
+| `quota/` | Provider quota probing and quota-aware credential rotation: `service.py` runs the probes (callers import every quota function from it), `allowance.py` answers what routing and admin read, `signals.py` records what live requests report |
 | `maintenance/` | Maintenance steps: backfills, config, dumps, keystore, migrations, startup, the retired-name guard (`names.py`); `migrate_0140.py` is the `llm-rosetta-migrate` console script |
 | `middleware/` | Auth, rate limiting, error format, hop limit, headers |
-| `transport/` | Upstream transports: `http` (HTTP/SSE), `acp` (a local agent CLI over stdio JSON-RPC); a provider picks one with `connection.transport` |
+| `transport/` | Upstream transports: `http` (HTTP/SSE), `acp` (a local agent CLI over stdio JSON-RPC; its body/event codec is `acp_chunks.py`); a provider picks one with `connection.transport` |
 | `ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
 | `admin/` | Admin panel and its routes, over the observability layer; reaches the gateway through `admin_api.py` (see *Admin boundary*) |
 | `admin_api.py` | The `AdminContext` protocols admin depends on; `create_app` exposes the adapter (`app/admin_context.py`) as `app.admin` |
-| `observability/` | Telemetry: metrics, request log, SQLite persistence, ops log, error dumps, capture, retention, sanitizing, profiler state; `observability/usage/cli.py` is the `llm-rosetta-usage` console script |
+| `observability/` | Telemetry: the gateway logger and its formatters (`logging.py`), metrics, request log, SQLite persistence, ops log, error dumps, capture, retention, sanitizing, profiler state; `observability/usage/cli.py` is the `llm-rosetta-usage` console script |
+| `cli/` | The `llm-rosetta-gateway` console script and `python -m llm_rosetta_gateway` (`cli/__init__.py`), and the startup banner |
+| `keystore.py` | The SQLite-backed API key store; stays at the root because argo-proxy imports `KeyContext` from it |
+| `updates.py` | Release check and self-update; stays at the root because it reads the changelog the release workflow writes beside the package root |
+| `surface.py` | The core surface level the gateway asserts at startup (see *Host surface*) |
 | `_vendor/` | Vendored modules (DO NOT EDIT) |
+
+The packages form layers, bottom to top: foundation (observability, transport, shims, `shim_sources.py`, model_types and the root leaves), state (quota, routing, maintenance, keystore, jobs), policy (config, middleware), operations (ops), engine (proxy, pipelines), serving (app, admin, `admin_api.py`), entry (cli and the package entry points). `tests/gateway/test_layers.py` holds the table and fails on a module-level import into a higher layer, a new function-local one, an unplaced package, or a new root module. Place a new package in a layer there; keep the root for entry points and boundaries.
 
 ### Host surface
 
@@ -574,7 +578,7 @@ declarative — steps 1–3 are the core work, the rest is wiring.
    pipeline, its resolver, its detector and any request/response
    hooks, and nothing else.  `handle_<name>(request, config)` stays the
    public entry point.
-2. **Register descriptor** — in `model_types.py`, add a
+2. **Register descriptor** — in `model_types/__init__.py`, add a
    `_<name>_pipeline()` lazy import wrapper and a
    `_register_<name>()` function that calls `register_model_type()`
    with a `ModelTypeDescriptor`.  Required fields: `name`, `routes`,
