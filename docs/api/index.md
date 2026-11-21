@@ -25,10 +25,10 @@ core 在 `llm_rosetta/_tiers.py` 中一次性写明每个公开模块的层级�
 | --- | --- | --- |
 | 用户 API | `llm_rosetta`、`auto_detect`、`converters`（含 `converters.base`、`converters.registry` 与各格式包）、`fidelity`、`pipeline`、`retired_names`、`shims`、`tool_ops`、`types`、`types.ir` | 库 API：转换请求与响应、转换器类、IR 类型、管道。破坏性变更遵循弃用策略。 |
 | 扩展接口 | `llm_rosetta.api`、`llm_rosetta.contracts` 及其子模块 | 宿主或 shim 作者构建所依赖的接口。在一个次版本内只增加名字。 |
-| 兼容 | `llm_rosetta.gateway`、`llm_rosetta.observability`、`llm_rosetta.shims.provider_shim`（其中对数据类的再导出）、`llm_rosetta.routing`、`llm_rosetta.capabilities` | 为曾经发布过它们的版本保留的已弃用路径。每个都写明替代路径，已定移除版本的也写明版本。 |
+| 兼容 | `llm_rosetta.gateway`、`llm_rosetta.observability`、`llm_rosetta.shims.provider_shim`（其中对数据类的再导出）、`llm_rosetta.routing`、`llm_rosetta.capabilities`、`llm_rosetta.types.ir.extensions` | 为曾经发布过它们的版本保留的已弃用路径。每个都写明替代路径，已定移除版本的也写明版本。 |
 | 内部 | 其余所有模块 | 任何版本都可能移动。 |
 
-`tests/test_tiers.py` 检查前三个层级的每个模块都能导入。`scripts/dev/public_api_diff.py` 从同一个文件读取要比较的 core 模块列表。
+`tests/test_tiers.py` 检查前三个层级的每个模块都能导入。`scripts/dev/public_api_diff.py` 从同一个文件读取要比较的 core 模块列表，并读取每棵被比较的树自己的那份：base 正式版按它自己声明的模块测量，因此从层级表删掉的模块会被报告为已移除。没有该文件的树（v0.13.0）用脚本自带的列表测量。
 
 ### 谁导入什么 {#who-imports-what}
 
@@ -37,7 +37,7 @@ core 在 `llm_rosetta/_tiers.py` 中一次性写明每个公开模块的层级�
 
 shim 不得导入 `llm_rosetta.api`。插件 entry point 与旁挂模块在 `import llm_rosetta` 尚未完成时就会运行，而 `api` 需要完整加载的包。见 [shim 可以导入什么](../guide/shims.md#what-a-shim-may-import)。
 
-`llm_rosetta.api` 有一份字面量、分组的 `__all__`，共 62 个名字：聊天转换、类型化管道、格式目录与模型类型词汇表、提供方与 shim 名称、shim 注册表（读侧与写侧）与加载器、清单词汇表与叶子合并、脚手架入口、保真度与性能分析，以及宿主要检查的 IR 类型。core 自己从不导入 `llm_rosetta.api`：依赖方向是从宿主指向 core。
+`llm_rosetta.api` 有一份字面量、分组的 `__all__`，共 63 个名字：聊天转换、类型化管道、格式目录与模型类型词汇表、提供方与 shim 名称、shim 注册表（读侧与写侧）与加载器、清单词汇表与叶子合并、脚手架入口、保真度与性能分析，以及宿主要检查的 IR 类型。core 自己从不导入 `llm_rosetta.api`：依赖方向是从宿主指向 core。
 
 ### 契约模块 {#contract-modules}
 
@@ -63,10 +63,10 @@ shim 遵循同一规则，只有一个前缀。`shims/providers/<vendor>/` 下�
 
 | 常量 | 定义位置 | 值 | 何时递增 | 由谁读取 |
 | --- | --- | --- | --- | --- |
-| `SURFACE_VERSION` | `llm_rosetta.contracts`；`llm_rosetta.api` 再导出同一个对象 | `1` | 扩展接口中的名字被移除或含义改变。新增名字不会使它递增。 | 网关，启动时 |
+| `SURFACE_VERSION` | `llm_rosetta.contracts`；`llm_rosetta.api` 再导出同一个对象 | `1` | 扩展接口中的名字被移除或含义改变。新增名字不会使它递增。 | 网关，启动时；`scripts/dev/public_api_diff.py` |
 | `IR_VERSION` | `llm_rosetta.types.ir.version`；由 `llm_rosetta.types.ir` 与 `llm_rosetta.contracts` 再导出 | `1` | IR 类型的变更使旧级别写出的 IR 值在新级别下无法读取。新增可选字段不会使它递增。 | 目前没有代码读取它 |
 
-由于 `SURFACE_VERSION` 只在移除或含义改变时递增，接口在一个次版本内只增不减，宿主断言的是最低级别。0.14.0 是该接口的发布版本。网关声明自己能运行的最低级别（`llm_rosetta_gateway.surface.REQUIRED_SURFACE_VERSION`），`create_app` 在启动时断言它：core 过旧时网关以 `RuntimeError` 停止，信息写出两个级别，而不是在第一次请求时报缺少属性。早于该常量的 core 视为级别 0。网关对 core 的版本约束保持为 `llm-rosetta>=X.Y.0.dev0,<X.(Y+1)`。
+由于 `SURFACE_VERSION` 只在移除或含义改变时递增，接口在一个次版本内只增不减，宿主断言的是最低级别。0.14.0 是该接口的发布版本。网关声明自己能运行的最低级别（`llm_rosetta_gateway.surface.REQUIRED_SURFACE_VERSION`），`create_app` 在启动时断言它：core 过旧时网关以 `RuntimeError` 停止，信息写出两个级别，而不是在第一次请求时报缺少属性。早于该常量的 core 视为级别 0。`scripts/dev/public_api_diff.py` 强制执行递增：相对上一个正式版，扩展层模块中的破坏性变更（即使已在 allowlist 中确认）会使检查失败，除非 head 的 `SURFACE_VERSION` 高于该正式版（没有该常量的正式版视为 0）。网关对 core 的版本约束保持为 `llm-rosetta>=X.Y.0.dev0,<X.(Y+1)`。
 
 ### 随严格规则新增的名字
 
@@ -74,7 +74,7 @@ shim 遵循同一规则，只有一个前缀。`shims/providers/<vendor>/` 下�
 | --- | --- |
 | `plugin_source`、`builtin_providers_dir` | 管理面板的 shim 文件路由 |
 | `add_scaffold_arguments`、`run_scaffold`、`run_scaffold_check`、`run_scaffold_migrate` | 网关的 `shims new`、`shims check` 与 `shims migrate` 命令 |
-| `leaf_connection`、`manifest_vocabulary`、`merge_connection` | 厂商清单词汇表，以及把清单的连接配置合并进叶子 |
+| `leaf_connection`、`manifest_vocabulary`、`merge_connection`、`ManifestVocabulary` | 厂商清单词汇表及其类型，以及把清单的连接配置合并进叶子 |
 | `SURFACE_VERSION` | 上文所述的接口级别 |
 
-`manifest_vocabulary()` 返回 `ManifestVocabulary`；该类型本身不从 `api` 导出，因为调用方只读它的属性，没有地方需要标注它。已移除的名字列在 [迁移到 0.14](../guide/migrating-to-0.14.md) 中。
+`manifest_vocabulary()` 返回 `ManifestVocabulary`，`api` 导出该类型，宿主可以用它做标注。`merge_connection(manifest_connection, leaf)` 先接收清单，参数顺序与加载器的私有合并函数相反，并且只返回合并后的映射：相对 `token_command` 据以解析的目录不返回，因为传入的清单没有对应文件。已移除的名字列在 [迁移到 0.14](../guide/migrating-to-0.14.md) 中。

@@ -107,11 +107,13 @@ title: 迁移到 0.14
 
 这些名字已从 `llm_rosetta`、`llm_rosetta.api` 与 `llm_rosetta.fidelity` 中移除。会抛错的边界有：`get_converter_for_provider`、`ConversionPipeline`、`convert`、`convert_response`、embedding 转换器、`ProviderShim`、`provider.yaml` 的 format，以及网关配置。
 
-网关在加载配置时不再改写退役名称，因此仍写着退役名称的配置无法启动。错误信息写出文件与键名，并以迁移命令结尾，例如：
+网关在加载配置时不再改写退役名称，因此仍写着退役名称的配置无法启动。错误信息写出文件与键名，安装了网关时以迁移命令结尾，例如：
 
 ```text
-llm-rosetta-gateway: error: config.jsonc: providers.p.type: 'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta-migrate --config <path>' (add --write to apply), see the migration guide
+llm-rosetta-gateway: error: config.jsonc: providers.p.type: 'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta-migrate --config <path>' (add --write to apply), see the migration guide (https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/)
 ```
+
+`llm-rosetta-migrate` 随网关发行版提供。在只装了 core 的环境中（没有 `llm-rosetta-gateway` 的库），退役名称错误改以 `see the migration guide (<url>)` 结尾，因为那里没有该命令可运行。该句子是 `llm_rosetta.retired_names.MIGRATE_HINT`。
 
 进程以退出码 1 结束，不打印 traceback。在代码里，该异常是 `RetiredConfigName`（`ValueError` 的子类），消息格式为 `<配置文件>: <json 路径>: <retired-names 消息>`。
 
@@ -168,9 +170,9 @@ connection:
 | `llm_rosetta.ir.tools.fix_orphaned_tool_calls_ir` | `normalize_tool_pairing` |
 | `GoogleInteractionsToolOps.ir_function_call_to_p`、`ir_function_result_to_p` | `ir_tool_call_to_p`、`ir_tool_result_to_p` |
 
-`ProviderShim` 的三个只读属性为现有读取方（网关与 shim 包中）保留，不发出警告。新代码请读取它们的替代项：
+`ProviderShim` 的三个只读属性曾为读取方保留，PR [#1661](https://github.com/Oaklight/llm-rosetta/pull/1661) 将其移除。读取其中任何一个都会抛 `AttributeError` 并写出替代项：
 
-| 保留的属性 | 改用 |
+| 已移除的属性 | 改用 |
 | --- | --- |
 | `ProviderShim.base` | `ProviderShim.format` |
 | `ProviderShim.default_path` | `ProviderShim.connection.default_path` |
@@ -216,6 +218,7 @@ connection:
 | `llm_rosetta.observability.usage`（及其子模块） | `llm_rosetta.contracts.usage`（只导入包本身） | 已移除。`llm_rosetta.observability` 本身上的用量名字仍可解析，指向 `contracts.usage` 中的对象。 |
 | `llm_rosetta.routing` | `llm_rosetta.contracts.routing` | 0.13.0 兼容转发模块，转发 `ProviderType`、`ResolvedRoute`、`Router`。导入时发出 `DeprecationWarning`，0.15.0 移除。 |
 | `llm_rosetta.capabilities` | `ProviderShim`、`ReasoningCapability`：`llm_rosetta.contracts.shim`。`ConversionContext`：`llm_rosetta.converters.base`。能力 pass 在转换管道内部运行，没有公开路径。 | 0.13.0 兼容转发模块，转发 0.13.0 的十二个名字。导入时发出 `DeprecationWarning`，0.15.0 移除。 |
+| `llm_rosetta.types.ir.extensions` | `llm_rosetta.types.ir.extensions_experimental` | 0.13.0 兼容转发模块，转发十个 0.13.0 名字（它在 0.13.0 中已被弃用）。导入时发出 `DeprecationWarning`，在 0.15.0 移除。 |
 | `llm_rosetta.capabilities.description_limit`、`.enforcement`、`.intrinsic_history`、`.tool_names` | 无：这些 pass 是内部实现（`llm_rosetta.ir.passes`） | 已移除 |
 | 从 `llm_rosetta.shims.provider_shim` 导入的 `ProviderShim`、`ConnectionConfig`、`ToolsConfig`、`ReasoningCapability`、`VendorManifest`、`QuotaDeclaration`、`BatchDeclaration`、`SoftErrorPattern`、`TYPE_PARAM_KEYS` 及字面量类型 | `llm_rosetta.contracts.shim` | 已弃用的再导出，是同一批对象，运行时不告警；0.15.0 移除。注册表函数（`register_shim`、`get_shim`、`list_shims` 等）仍在 `llm_rosetta.shims.provider_shim`。 |
 | `llm_rosetta.api` 中的 `SURFACE_VERSION` | `llm_rosetta.contracts.SURFACE_VERSION` | `llm_rosetta.api` 再导出同一个对象；无需修改 |
@@ -250,7 +253,7 @@ grep -rnE "converters\.(openai_chat|openai_responses|anthropic|google_genai|goog
 `llm_rosetta.retired_names.RETIRED_NAMES` 列出 31 个早先版本改过名的名字，每一行说明该名字变成了什么。这张表是错误表，不是别名表：每一行都会抛 `ValueError`，不做任何翻译，例如：
 
 ```text
-'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta-migrate --config <path>' (add --write to apply), see the migration guide
+'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta-migrate --config <path>' (add --write to apply), see the migration guide (https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/)
 ```
 
 对于已迁入独立包的 shim，消息还会写出需要声明的 `shims.presets` 键。每条退役名称错误都以迁移命令结尾（`retired_names.MIGRATE_HINT`），网关的配置检查也一样。

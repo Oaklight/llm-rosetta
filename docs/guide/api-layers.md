@@ -35,7 +35,7 @@ from llm_rosetta.types.ir import Message, IRRequest, IRResponse, TextPart
 | 类型守卫 | `is_text_part`、`is_tool_call_part`、`is_stream_start_event`、`is_message` 等 | `llm_rosetta.types.ir.type_guards`、`llm_rosetta.types.ir.messages` |
 | 消息工厂函数 | `create_system_message`、`create_user_message`、`create_assistant_message`、`create_tool_message` | `llm_rosetta.types.ir.messages` |
 | 内容辅助函数 | `extract_text_content`、`extract_all_text`、`extract_tool_calls`、`create_tool_result_message` | `llm_rosetta.types.ir.helpers` |
-| 扩展项守卫 | `is_extension_item` | `llm_rosetta.types.ir.extensions` |
+| 扩展项守卫 | `is_extension_item` | `llm_rosetta.types.ir.extensions_experimental` |
 
 ```python
 # 高级：从子模块导入
