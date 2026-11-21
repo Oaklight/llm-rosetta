@@ -7,7 +7,7 @@ from, and which single value counts as "the total".
 A column does not carry the same IR field name for every model type.  Chat asks
 the provider for ``prompt_tokens``; the decision IR reports ``input_tokens``
 already.  So the field map is declared per model type, and the four types are
-the registry's own vocabulary (``gateway/model_types.py``); this package cannot
+the registry's own vocabulary (``gateway.model_types``); this package cannot
 import the registry, so the names are restated here and a test pins them
 together.
 

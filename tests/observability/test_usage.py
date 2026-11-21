@@ -239,7 +239,7 @@ class TestEachModelTypeNormalizesFromItsOwnIR:
 class TestTheModelTypesAreTheRegistrys:
     """The column's values are the gateway registry's canonical names.
 
-    ``gateway/model_types.py`` owns the vocabulary and this package may not
+    ``gateway.model_types`` owns the vocabulary and this package may not
     import it, so the names are restated in ``normalize`` and pinned here —
     both as literals, which say what the vocabulary is, and against the live
     registry, which fails on a rename on either side.

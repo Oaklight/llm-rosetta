@@ -11,7 +11,7 @@ format (declared on the provider config) are the same.  The request flow is
 the shared one in :mod:`pipelines.typed`; this module supplies the decision
 hooks.
 
-Registered via the model type registry in ``model_types.py``.
+Registered via the model type registry in ``model_types``.
 
 Every request that reaches an upstream is recorded in the usage ledger with
 ``model_type="decisions"``.
