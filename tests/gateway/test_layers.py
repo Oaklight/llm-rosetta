@@ -24,9 +24,13 @@ Guards:
 * a module-level import never reaches a higher layer, and the module-level
   package graph has no cycle;
 * a function-local import reaches a higher layer only where
-  ``LAZY_UPWARD`` names it.  The entries are the ones the tree had when the
-  layers were drawn; the list may only shrink, so a new one fails, and so does
-  an entry that no longer occurs.
+  ``LAZY_UPWARD`` names it, by file, target unit and the enclosing function's
+  qualified name, **with a count**.  The entries are the ones the tree had
+  when the layers were drawn; the set may only shrink, so a new key fails, and
+  so does a key that no longer occurs or one that now occurs more often than
+  the freeze says.  A second such import in a function already named is a
+  count change, and a same-named method in another class is a different key,
+  so neither passes.
 
 What admin may import is guarded separately, file by file, by
 ``tests/gateway/test_admin_import_boundary.py``; this test only places admin
@@ -44,6 +48,7 @@ Print the current graph's function-local upward imports with
 from __future__ import annotations
 
 import functools
+from collections import Counter
 from pathlib import Path
 
 from _import_scan import DYNAMIC_NONLITERAL, FROM, ImportSite, import_sites
@@ -88,18 +93,28 @@ ROOT_MODULES: dict[str, str] = {
     "package root, so a move changes that lookup",
 }
 
-#: Function-local imports that reach a higher layer, as ``(file, layer unit)``
-#: with *file* relative to the gateway package.  Shrink only.
-LAZY_UPWARD: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("jobs/handlers/data.py", "ops"),
-        ("maintenance/migrate_0140.py", "config"),
-        ("maintenance/migrations.py", "config"),
-        ("maintenance/names.py", "config"),
-        ("model_types/__init__.py", "pipelines"),
-        ("transport/provider_info.py", "routing"),
-    }
-)
+#: Function-local imports that reach a higher layer, as ``(file, layer unit,
+#: qualified function)`` with *file* relative to the gateway package, mapped to
+#: how many such imports the function holds.  The function is the one the
+#: import sits in (``ClassName.method`` for a method), so a second one in
+#: another function, or a same-named method in another class, is a different
+#: entry, and a second import in the same function changes its count.  Shrink
+#: only.
+LAZY_UPWARD: dict[tuple[str, str, str], int] = {
+    ("jobs/handlers/data.py", "ops", "data_handlers"): 1,
+    ("maintenance/migrate_0140.py", "config", "_ConfigPlanner._version"): 1,
+    ("maintenance/migrate_0140.py", "config", "_write_config"): 1,
+    ("maintenance/migrate_0140.py", "config", "main"): 1,
+    ("maintenance/migrations.py", "config", "_migrate_v3_to_v4"): 1,
+    ("maintenance/migrations.py", "config", "_migrate_v4_to_v5"): 1,
+    ("maintenance/migrations.py", "config", "_serving_providers"): 1,
+    ("maintenance/names.py", "config", "legacy_name_error"): 1,
+    ("model_types/__init__.py", "pipelines", "_decision_pipeline"): 1,
+    ("model_types/__init__.py", "pipelines", "_embedding_pipeline"): 1,
+    ("model_types/__init__.py", "pipelines", "_rerank_pipeline"): 1,
+    ("transport/provider_info.py", "routing", "ProviderInfo.ready"): 1,
+}
+
 
 _LAYER_OF: dict[str, int] = {
     unit: rank for rank, (_name, units) in enumerate(LAYERS) for unit in units
@@ -158,8 +173,11 @@ def _site_modules(site: ImportSite) -> list[str]:
     return list(site.targets())
 
 
-def _edges(source: str, path: Path) -> list[tuple[str, bool, int]]:
-    """``(target unit, function-level, line)`` for every counted import."""
+def _edges(source: str, path: Path) -> list[tuple[str, str, int]]:
+    """``(target unit, enclosing function, line)`` for every counted import.
+
+    The function is empty for a module-level import.
+    """
     edges = []
     for site in import_sites(source, _package_parts(path)):
         if site.type_checking or site.kind == DYNAMIC_NONLITERAL:
@@ -167,30 +185,35 @@ def _edges(source: str, path: Path) -> list[tuple[str, bool, int]]:
         for module in _site_modules(site):
             unit = _unit_of_module(module)
             if unit is not None:
-                edges.append((unit, site.function_level, site.lineno))
+                edges.append((unit, site.function, site.lineno))
     return edges
 
 
-def _upward(path: Path, source: str) -> list[tuple[str, str, bool, int]]:
-    """Imports in *path* that reach a higher layer than its own."""
+def _upward(path: Path, source: str) -> list[tuple[str, str, str, int]]:
+    """Imports in *path* that reach a higher layer than its own.
+
+    Each entry is ``(file, target unit, enclosing function, line)``; the
+    function is empty for a module-level import.
+    """
     own = _unit_of_file(path)
     rank = _LAYER_OF.get(own)
     if rank is None:
         return []
     found = []
-    for unit, lazy, line in _edges(source, path):
+    for unit, function, line in _edges(source, path):
         if unit != own and _LAYER_OF.get(unit, -1) > rank:
-            found.append((_rel(path), unit, lazy, line))
+            found.append((_rel(path), unit, function, line))
     return found
 
 
-def _lazy_upward_pairs() -> set[tuple[str, str]]:
-    return {
-        (rel, unit)
+def _lazy_upward_sites() -> Counter[tuple[str, str, str]]:
+    """Count each ``(file, target unit, qualified function)`` function-local import."""
+    return Counter(
+        (rel, unit, function)
         for path in _files()
-        for rel, unit, lazy, _line in _upward(path, path.read_text())
-        if lazy
-    }
+        for rel, unit, function, _line in _upward(path, path.read_text())
+        if function
+    )
 
 
 def test_every_package_and_root_module_has_one_layer():
@@ -213,8 +236,8 @@ def test_module_level_imports_never_reach_a_higher_layer():
     offenders = [
         f"{rel}:{line} -> {unit}"
         for path in _files()
-        for rel, unit, lazy, line in _upward(path, path.read_text())
-        if not lazy
+        for rel, unit, function, line in _upward(path, path.read_text())
+        if not function
     ]
     assert offenders == []
 
@@ -223,8 +246,8 @@ def test_the_module_level_package_graph_has_no_cycle():
     graph: dict[str, set[str]] = {}
     for path in _files():
         own = _unit_of_file(path)
-        for unit, lazy, _line in _edges(path.read_text(), path):
-            if not lazy and unit != own:
+        for unit, function, _line in _edges(path.read_text(), path):
+            if not function and unit != own:
                 graph.setdefault(own, set()).add(unit)
 
     state: dict[str, int] = {}  # 1 = on the stack, 2 = done
@@ -248,26 +271,43 @@ def test_the_module_level_package_graph_has_no_cycle():
 
 
 def test_function_local_upward_imports_only_shrink():
-    current = _lazy_upward_pairs()
-    assert sorted(current - LAZY_UPWARD) == [], (
+    current = _lazy_upward_sites()
+    added = sorted(set(current) - set(LAZY_UPWARD))
+    assert added == [], (
         "a new function-local import into a higher layer; move the code down "
         "or the dependency up instead of reaching across"
     )
-    assert sorted(LAZY_UPWARD - current) == [], "remove these from LAZY_UPWARD"
+    grown = sorted(key for key in current if current[key] > LAZY_UPWARD.get(key, 0))
+    assert grown == [], (
+        "another function-local import into a higher layer in a function "
+        "LAZY_UPWARD already names; raise its count only if the move is agreed"
+    )
+    gone = sorted(set(LAZY_UPWARD) - set(current))
+    assert gone == [], "remove these from LAZY_UPWARD"
+    shrunk = sorted(key for key in current if current[key] < LAZY_UPWARD[key])
+    assert shrunk == [], "lower these counts in LAZY_UPWARD"
 
 
 def test_the_guard_sees_eager_lazy_relative_and_dynamic_imports():
     probe = _ROOT / "observability" / "sanitize.py"
 
-    def up(source: str) -> list[tuple[str, bool]]:
-        return [(unit, lazy) for _r, unit, lazy, _l in _upward(probe, source)]
+    def up(source: str) -> list[tuple[str, str]]:
+        return [(unit, function) for _r, unit, function, _l in _upward(probe, source)]
 
-    assert up("from ..app import create_app") == [("app", False)]
-    assert up("from llm_rosetta_gateway.proxy import engine") == [("proxy", False)]
-    assert up("from .. import config") == [("config", False)]
-    assert up("import llm_rosetta_gateway.cli") == [("cli", False)]
+    assert up("from ..app import create_app") == [("app", "")]
+    assert up("from llm_rosetta_gateway.proxy import engine") == [("proxy", "")]
+    assert up("from .. import config") == [("config", "")]
+    assert up("import llm_rosetta_gateway.cli") == [("cli", "")]
     assert up('import importlib\nimportlib.import_module("llm_rosetta_gateway.ops")')
-    assert up("def f():\n    from ..routing import x\n") == [("routing", True)]
+    assert up("def f():\n    from ..routing import x\n") == [("routing", "f")]
+    # The function is part of the site: two functions are two entries.
+    assert up(
+        "def f():\n    from ..routing import x\ndef g():\n    from ..ops import y\n"
+    ) == [
+        ("routing", "f"),
+        ("ops", "g"),
+    ]
+    assert up("def f():\n    def g():\n        from ..ops import y\n") == [("ops", "g")]
     # Not counted: same unit, lower layer, _vendor, __version__, TYPE_CHECKING.
     assert up("from . import metrics") == []
     assert up("from .._compat import sync_compat") == []
@@ -280,12 +320,12 @@ def test_the_guard_sees_eager_lazy_relative_and_dynamic_imports():
         == []
     )
     # The package root's entry-point names are the entry layer.
-    assert up("from llm_rosetta_gateway import create_app") == [("__init__", False)]
-    assert up("from .. import main") == [("__init__", False)]
+    assert up("from llm_rosetta_gateway import create_app") == [("__init__", "")]
+    assert up("from .. import main") == [("__init__", "")]
 
 
 if __name__ == "__main__":
-    print("LAZY_UPWARD: frozenset[tuple[str, str]] = frozenset(\n    {")
-    for _file, _unit in sorted(_lazy_upward_pairs()):
-        print(f'        ("{_file}", "{_unit}"),')
+    print("LAZY_UPWARD: dict[tuple[str, str, str], int] = {")
+    for (_file, _unit, _function), _count in sorted(_lazy_upward_sites().items()):
+        print(f'        ("{_file}", "{_unit}", "{_function}"): {_count},')
     print("    }\n)")
