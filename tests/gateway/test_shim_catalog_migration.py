@@ -20,7 +20,7 @@ import logging
 import pytest
 
 from llm_rosetta import retired_names
-from llm_rosetta_gateway.providers import build_provider_info
+from llm_rosetta_gateway.config.providers import build_provider_info
 from llm_rosetta_gateway.shims import (
     SHIM_SOURCE_PACKAGES,
     canonical_shim_for,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.providers import default_models_path
+from llm_rosetta_gateway.config.providers import default_models_path
 from llm_rosetta_gateway.transport.provider_info import VERSION_SUFFIXES
 
 from ...config.typed import face_value

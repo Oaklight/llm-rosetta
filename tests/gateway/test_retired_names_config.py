@@ -18,7 +18,7 @@ from llm_rosetta.retired_names import (
 )
 from llm_rosetta_gateway.config.loader import load_gateway_config
 from llm_rosetta_gateway.maintenance.names import legacy_name_error
-from llm_rosetta_gateway.providers import BASE_FORMATS
+from llm_rosetta_gateway.config.providers import BASE_FORMATS
 from llm_rosetta_gateway.shims.catalog import (
     SHIM_SOURCE_PACKAGES,
     canonical_shim_for,

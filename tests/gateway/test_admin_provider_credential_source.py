@@ -293,7 +293,7 @@ def _capture_provider_logs():
     """Collect ``(level, message)`` from the providers logger."""
     import logging
 
-    from llm_rosetta_gateway import providers as prov
+    from llm_rosetta_gateway.config import providers as prov
 
     records: list[tuple[int, str]] = []
 

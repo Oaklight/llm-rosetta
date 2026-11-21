@@ -73,7 +73,7 @@ def test_detection_order_follows_priorities():
 
 
 def test_gateway_tables_cover_the_llm_catalog():
-    from llm_rosetta_gateway.providers import (
+    from llm_rosetta_gateway.config.providers import (
         BASE_FORMATS,
         _BASE_TYPE_HINTS,
         _CUSTOM_TOOLS_BY_TYPE,
@@ -150,7 +150,7 @@ import llm_rosetta.model_vocabulary as vocabulary
 importlib.reload(vocabulary)
 assert "fake_wire" in vocabulary.FORMATS_BY_TYPE["llm"], "format vocabulary"
 
-import llm_rosetta_gateway.providers as providers
+import llm_rosetta_gateway.config.providers as providers
 
 importlib.reload(providers)
 assert (

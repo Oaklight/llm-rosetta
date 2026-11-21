@@ -392,7 +392,7 @@ class TestRefreshLoop:
 
 class TestBuildProviderInfoTokenCommand:
     def test_deferred_token_returns_sentinel(self):
-        from llm_rosetta_gateway.providers import build_provider_info
+        from llm_rosetta_gateway.config.providers import build_provider_info
         from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
 
         cfg: dict[str, Any] = {
@@ -406,7 +406,7 @@ class TestBuildProviderInfoTokenCommand:
         assert pinfo.token_refresh_interval == 3600
 
     def test_custom_refresh_interval(self):
-        from llm_rosetta_gateway.providers import build_provider_info
+        from llm_rosetta_gateway.config.providers import build_provider_info
 
         cfg: dict[str, Any] = {
             "base_url": "https://example.com/v1",
@@ -417,7 +417,7 @@ class TestBuildProviderInfoTokenCommand:
         assert pinfo.token_refresh_interval == 7200
 
     def test_mutual_exclusivity_with_api_key(self):
-        from llm_rosetta_gateway.providers import build_provider_info
+        from llm_rosetta_gateway.config.providers import build_provider_info
 
         cfg: dict[str, Any] = {
             "base_url": "https://example.com/v1",
@@ -428,7 +428,7 @@ class TestBuildProviderInfoTokenCommand:
             build_provider_info("chat_completions", cfg)
 
     def test_string_token_command_rejected(self):
-        from llm_rosetta_gateway.providers import build_provider_info
+        from llm_rosetta_gateway.config.providers import build_provider_info
 
         cfg: dict[str, Any] = {
             "base_url": "https://example.com/v1",
@@ -438,7 +438,7 @@ class TestBuildProviderInfoTokenCommand:
             build_provider_info("chat_completions", cfg)
 
     def test_empty_token_command_rejected(self):
-        from llm_rosetta_gateway.providers import build_provider_info
+        from llm_rosetta_gateway.config.providers import build_provider_info
 
         cfg: dict[str, Any] = {
             "base_url": "https://example.com/v1",
@@ -448,7 +448,7 @@ class TestBuildProviderInfoTokenCommand:
             build_provider_info("chat_completions", cfg)
 
     def test_low_refresh_interval_rejected(self):
-        from llm_rosetta_gateway.providers import build_provider_info
+        from llm_rosetta_gateway.config.providers import build_provider_info
 
         cfg: dict[str, Any] = {
             "base_url": "https://example.com/v1",
@@ -459,7 +459,7 @@ class TestBuildProviderInfoTokenCommand:
             build_provider_info("chat_completions", cfg)
 
     def test_missing_binary_warns_but_builds(self):
-        from llm_rosetta_gateway.providers import build_provider_info
+        from llm_rosetta_gateway.config.providers import build_provider_info
 
         cfg: dict[str, Any] = {
             "base_url": "https://example.com/v1",
@@ -470,7 +470,7 @@ class TestBuildProviderInfoTokenCommand:
         assert pinfo.token_command == ["/nonexistent/binary-xyz"]
 
     def test_without_token_command_unchanged(self):
-        from llm_rosetta_gateway.providers import build_provider_info
+        from llm_rosetta_gateway.config.providers import build_provider_info
 
         cfg: dict[str, Any] = {
             "base_url": "https://example.com/v1",
@@ -486,7 +486,7 @@ class TestTheCredentialChannelEnvironment:
 
     def _pinfo(self, *, env: str | None, key: str):
         from llm_rosetta_gateway.transport.provider_info import ProviderInfo
-        from llm_rosetta_gateway.providers import openai_auth
+        from llm_rosetta_gateway.config.providers import openai_auth
 
         return ProviderInfo(
             name="vendor",

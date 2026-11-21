@@ -28,7 +28,7 @@ from llm_rosetta_gateway.observability.maintenance import Registry
 from llm_rosetta.contracts.routing import ResolvedRoute
 
 from ..model_types import ModelTypeDescriptor
-from ..providers import BASE_FORMATS, build_provider_info
+from .providers import BASE_FORMATS, build_provider_info
 from ..routing import (
     DEFAULT_STRATEGY,
     AnchorStage,

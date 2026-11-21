@@ -43,7 +43,7 @@ def legacy_name_error(providers: dict[str, Any]) -> str | None:
     """
     from llm_rosetta.api import retired_names
 
-    from ..providers import BASE_FORMATS
+    from ..config.providers import BASE_FORMATS
 
     for name, cfg in providers.items():
         if not isinstance(cfg, dict):

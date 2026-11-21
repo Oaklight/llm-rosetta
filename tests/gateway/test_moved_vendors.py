@@ -454,7 +454,7 @@ class TestTheProbeOnlyCase:
         assert get_shim("openai_chatgpt--open_responses") is not None
 
     def test_the_probe_resolves_on_the_provider_that_names_it(self, tmp_path, logs):
-        from llm_rosetta_gateway.providers import build_provider_info
+        from llm_rosetta_gateway.config.providers import build_provider_info
 
         _apply(tmp_path, self.RAW, FakeContrib())
         cfg = self.RAW["providers"]["plan"]
@@ -464,7 +464,7 @@ class TestTheProbeOnlyCase:
         assert [p.id for p in info.quota_probes] == ["openai_codex"]
 
     def test_without_the_vendor_the_probe_is_missing_with_a_warning(self, logs):
-        from llm_rosetta_gateway.providers import build_provider_info
+        from llm_rosetta_gateway.config.providers import build_provider_info
 
         cfg = self.RAW["providers"]["plan"]
         info = build_provider_info(

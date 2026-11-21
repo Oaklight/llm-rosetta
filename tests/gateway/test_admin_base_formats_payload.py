@@ -8,7 +8,7 @@ helper's shape and the custom-tools defaults.
 from __future__ import annotations
 
 from llm_rosetta_gateway.admin.routes import config as admin_config
-from llm_rosetta_gateway.providers import BASE_FORMATS
+from llm_rosetta_gateway.config.providers import BASE_FORMATS
 from llm_rosetta.api import load_providers
 
 _KEYS = {

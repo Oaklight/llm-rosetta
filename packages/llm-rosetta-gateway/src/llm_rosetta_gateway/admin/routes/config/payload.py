@@ -16,7 +16,7 @@ from llm_rosetta.api import (
 
 from ....admin_api import admin_context
 from ....config import GatewayConfig
-from ....providers import (
+from ....config.providers import (
     BASE_FORMATS,
     get_base_type_hints,
     get_default_supports_custom_tools,

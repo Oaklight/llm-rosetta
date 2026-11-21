@@ -10,7 +10,7 @@ from __future__ import annotations
 
 
 from llm_rosetta_gateway.config import GatewayConfig
-from llm_rosetta_gateway.providers import build_provider_info
+from llm_rosetta_gateway.config.providers import build_provider_info
 from llm_rosetta_gateway.transport.provider_info import ProviderInfo
 
 

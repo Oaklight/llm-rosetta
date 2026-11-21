@@ -14,7 +14,7 @@ import os
 import re
 from typing import Any
 
-from .transport.provider_info import (
+from ..transport.provider_info import (
     ProviderInfo,
     anthropic_auth,
     google_auth,
@@ -175,7 +175,7 @@ def _resolve_token_command(
     """
     import shutil
 
-    from .transport.provider_info import TOKEN_PENDING_SENTINEL
+    from ..transport.provider_info import TOKEN_PENDING_SENTINEL
 
     token_command = cfg.get("token_command")
     token_refresh_interval = int(cfg.get("token_refresh_interval", 3600))
@@ -330,7 +330,7 @@ def _acp_state_dir(data_dir: str | None, provider: str) -> str | None:
     """
     if not data_dir:
         return None
-    from .transport.acp_profile import state_dir_for
+    from ..transport.acp_profile import state_dir_for
 
     return state_dir_for(data_dir, provider)
 
@@ -488,7 +488,7 @@ def _resolve_credential(
         # check, which only guards the command path.)
         return "", None, 0, False
     if exchange is not None:
-        from .transport.provider_info import TOKEN_PENDING_SENTINEL
+        from ..transport.provider_info import TOKEN_PENDING_SENTINEL
 
         interval = int(cfg.get("token_refresh_interval") or 3600)
         if interval < 60:
@@ -531,7 +531,7 @@ def _resolve_lane_transport(
     Raises:
         ValueError: The name is not one the gateway ships.
     """
-    from .transport import TRANSPORT_NAMES
+    from ..transport import TRANSPORT_NAMES
 
     lane_transport = str(
         cfg.get("transport")
@@ -677,7 +677,7 @@ def build_provider_info(
     """
     from llm_rosetta.api import get_shim
 
-    from .shims import (
+    from ..shims import (
         find_source_package,
         legacy_shim_migration_advice,
         source_package_advice,

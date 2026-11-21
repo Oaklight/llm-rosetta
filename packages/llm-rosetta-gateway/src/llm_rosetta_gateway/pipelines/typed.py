@@ -142,7 +142,7 @@ async def _credential_retry(
     expired early.  The chat route reacts through
     ``proxy.errors._handle_401``; a typed request never reaches that handler,
     so it reacts here.  The ring is the provider entry's own
-    (:func:`~llm_rosetta_gateway.providers.share_credential`), so this mints
+    (:func:`~llm_rosetta_gateway.config.providers.share_credential`), so this mints
     through the one credential source, and :func:`force_refresh` debounces
     concurrent 401s.
 
