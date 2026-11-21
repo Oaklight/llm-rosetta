@@ -61,7 +61,6 @@ LAYERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "foundation",
         (
-            "_compat",
             "model_types",
             "observability",
             "shim_sources",
@@ -83,7 +82,6 @@ LAYERS: tuple[tuple[str, tuple[str, ...]], ...] = (
 ROOT_MODULES: dict[str, str] = {
     "__init__": "the package: version and lazy public names",
     "__main__": "python -m llm_rosetta_gateway",
-    "_compat": "sync/async compatibility helpers, scheduled for deletion (#1672 G7)",
     "admin_api": "the surface admin depends on; its own boundary",
     "shim_sources": "moves into shims/ with the shim subsystem (#1672 G1)",
     "surface": "the core surface level this gateway needs; its boundary with core",
@@ -308,7 +306,7 @@ def test_the_guard_sees_eager_lazy_relative_and_dynamic_imports():
     assert up("def f():\n    def g():\n        from ..ops import y\n") == [("ops", "g")]
     # Not counted: same unit, lower layer, _vendor, __version__, TYPE_CHECKING.
     assert up("from . import metrics") == []
-    assert up("from .._compat import sync_compat") == []
+    assert up("from ..observability import sanitize") == []
     assert up("from .._vendor import yaml") == []
     assert up("from .. import __version__") == []
     assert (

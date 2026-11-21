@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING
 
-from llm_rosetta_gateway._compat import sync_compat as _sync_compat
 
 if TYPE_CHECKING:
     pass
@@ -148,7 +147,6 @@ async def _periodic_flush(app: App) -> None:
                 logger.warning("Failed to flush metrics: %s", exc)
 
 
-@_sync_compat
 async def _flush_now(app: App) -> None:
     """Final async flush on shutdown."""
     persistence = getattr(app, "persistence", None)

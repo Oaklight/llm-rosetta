@@ -8,7 +8,6 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from llm_rosetta_gateway._compat import sync_compat as _sync_compat
 
 from ._state import set_config
 from .admin_context import GatewayAdminContext
@@ -370,7 +369,6 @@ def _lane_transports(
     return {"acp": AcpTransport(timeout=timeout)}
 
 
-@_sync_compat
 async def create_app(
     config: GatewayConfig,
     config_path: str | None = None,

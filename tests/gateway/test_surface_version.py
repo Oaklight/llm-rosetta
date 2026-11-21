@@ -36,4 +36,4 @@ async def test_create_app_checks_the_surface(monkeypatch):
 
     monkeypatch.setattr(surface, "REQUIRED_SURFACE_VERSION", api.SURFACE_VERSION + 1)
     with pytest.raises(RuntimeError, match="core surface level"):
-        await create_app(object())  # type: ignore[arg-type]
+        await create_app(object())  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]

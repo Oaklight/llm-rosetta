@@ -6,7 +6,6 @@ import logging
 import os
 import re
 from typing import TYPE_CHECKING, Any
-from llm_rosetta_gateway._compat import sync_compat
 
 from llm_rosetta_gateway.observability import (
     DEFAULT_SUCCESS_MAX,
@@ -205,7 +204,6 @@ def apply_admin_theme(app: Any, css: str | None) -> None:
     app.admin_custom_head = "\n".join(part for part in parts if part)
 
 
-@sync_compat
 async def setup_admin(
     app: Any,
     config: GatewayConfig,

@@ -12,25 +12,23 @@ Usage::
     from llm_rosetta_gateway import create_app, GatewayExtensions, load_gateway_config
 
     config = load_gateway_config("config.jsonc")
-    app = create_app(config)
+    app = await create_app(config)
 
 Module map::
 
-    Core proxy          app, proxy, config, providers, routing/
+    Core proxy          app, proxy, config, routing/
     Middleware           middleware/ subpackage:
                            auth, ratelimit, request_context, error_format,
                            circuit_breaker, headers, sanitize, affinity
     Pipelines            pipelines/ subpackage:
                            embeddings, rerank, decision
-    Model types          model_types (registry)
-    Observability        (in llm_rosetta.observability, re-exported by admin/)
-    Infrastructure       keystore, logging, maintenance/
+    Model types          model_types/ package (registry + source detectors)
+    Observability        observability/ (logging, metrics, request log, dumps)
+    State                keystore/ (the API key store), maintenance/
+    Quota                quota/ (probe, allowance, signals)
     Admin UI             admin/ (routes, static assets, JS/CSS)
     Transport            transport/ subpackage
-    CLI / bootstrap      cli, banner, __main__
-
-    Backward-compat shims at old paths (gateway/*.py) re-export from
-    middleware/ and pipelines/ so downstream code keeps working.
+    CLI / bootstrap      cli/ package, __main__
 
     Middleware hook order (registered in create_app):
     request_context → auth → ratelimit → [extension hooks] → handler

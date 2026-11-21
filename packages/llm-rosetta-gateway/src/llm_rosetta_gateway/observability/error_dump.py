@@ -18,15 +18,45 @@ import re
 import uuid
 import zlib
 from copy import deepcopy
-from llm_rosetta_gateway._compat import sync_compat
 from collections.abc import Mapping
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import Any, Protocol
 
 from .sanitize import scrub_credential_patterns
 
-if TYPE_CHECKING:
-    from .persistence import PersistenceManager
+
+class DumpSink(Protocol):
+    """The persistence surface :func:`dump_error` reads.
+
+    :class:`~.persistence.PersistenceManager` implements it directly.  The
+    request-scoped ``DeferredDumpStore`` defers the two writes until the
+    request-log row exists and forwards everything else, so both are accepted
+    where a dump is written.
+    """
+
+    async def insert_dump_body(
+        self, body_hash: str, data: bytes, orig_bytes: int
+    ) -> None: ...
+
+    async def insert_error_dump(
+        self,
+        *,
+        dump_id: str,
+        request_log_id: str | None,
+        timestamp: str,
+        model: str | None,
+        source_provider: str | None,
+        target_provider: str | None,
+        provider_name: str | None,
+        status_code: int | None,
+        error_phase: str | None,
+        body_hash: str | None,
+        response_text: str | None,
+        upstream_url: str | None,
+        converted_body_hash: str | None = None,
+        tool_name_collisions: str | None = None,
+    ) -> None: ...
+
 
 logger = logging.getLogger("llm-rosetta.observability")
 
@@ -124,9 +154,8 @@ def decompress_body(data: bytes) -> dict[str, Any]:
 # ------------------------------------------------------------------
 
 
-@sync_compat
 async def dump_error(
-    persistence: PersistenceManager | None,
+    persistence: DumpSink | None,
     *,
     request_body: dict[str, Any] | None,
     response_text: str | None = None,
@@ -197,7 +226,7 @@ async def dump_error(
 
 
 async def _dump_error_impl(
-    persistence: PersistenceManager,
+    persistence: DumpSink,
     *,
     request_body: dict[str, Any] | None,
     response_text: str | None,
