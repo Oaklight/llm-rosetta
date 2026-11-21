@@ -16,8 +16,8 @@ import { test } from 'node:test';
 
 import {
   DEFAULT_SOURCES, addSource, declareSource, deselectVendor, parseSelector, pickerFor,
-  removeSource, selectVendor, sharedSelectors, shownSources, sourceSelection, sourceTags,
-  vendorFacts, vendorMatches, vendorStateKey, withSourceSelection,
+  notInstalledVendors, removeSource, selectVendor, sharedSelectors, shownSources, sourceSelection,
+  sourceTags, vendorFacts, vendorMatches, vendorStateKey, vendorTier, withSourceSelection,
 } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/shim-sources.js';
 
 const ADMIN = '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js';
@@ -253,7 +253,7 @@ const CATALOGUE = {
 let elements = new Map();
 const requests = [];
 
-function installPage() {
+function installPage({ catalogue = CATALOGUE, config: served = null, packages = [] } = {}) {
   elements = new Map();
   const byId = (id) => {
     if (!elements.has(id)) elements.set(id, element(id));
@@ -277,14 +277,15 @@ function installPage() {
   globalThis.location = { hash: '', pathname: '/', search: '', href: 'http://localhost/' };
   globalThis.history = { replaceState() {}, pushState() {} };
   globalThis.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
-  const config = { shims: { install: ['contrib:opendesign'] }, registered_shims: [], model_types: [] };
+  const config = served
+    || { shims: { install: ['contrib:opendesign'] }, registered_shims: [], model_types: [] };
   globalThis.fetch = async (url, opts = {}) => {
     requests.push({ url, method: opts.method || 'GET', body: opts.body ? JSON.parse(opts.body) : null });
     let body = {};
-    if (url.startsWith('/admin/api/config/shims/source-catalog')) body = CATALOGUE;
+    if (url.startsWith('/admin/api/config/shims/source-catalog')) body = catalogue;
     else if (url === '/admin/api/config') body = config;
     else if (url === '/admin/api/config/shims') body = opts.method === 'PUT' ? { ok: true } : { shims: [] };
-    else if (url === '/admin/api/config/shims/catalog') body = { packages: [] };
+    else if (url === '/admin/api/config/shims/catalog') body = { packages };
     else if (url === '/admin/api/config/shims/reload') body = { ok: true, status: { failure_count: 0 } };
     return { ok: true, status: 200, headers: { get: () => 'application/json' },
       json: async () => body, text: async () => JSON.stringify(body) };
@@ -415,4 +416,186 @@ test('Remove refuses, and writes nothing, while a preset still selects the vendo
   } finally {
     delete vendor.selected_presets;
   }
+});
+
+// ── After the move (#1660): one card per vendor, no package cards ──────
+
+test('a vendor states its tier when it is not paid', () => {
+  assert.equal(vendorTier({ tags: ['tier:free'] }), 'free');
+  assert.equal(vendorTier({ tags: ['auth:device', 'tier:subscription'] }), 'subscription');
+  assert.equal(vendorTier({ tags: ['tier:paid'] }), '');
+  assert.equal(vendorTier({}), '');
+});
+
+test('the search reads the catalogue label, so "z.ai" finds zai', () => {
+  const src = { id: 'contrib', label: 'Contrib' };
+  assert.ok(vendorMatches({ vendor: 'zai', label: 'Z.ai' }, src, 'z.ai'));
+  assert.ok(!vendorMatches({ vendor: 'zai' }, src, 'z.ai'));
+});
+
+/** Two sources that both publish `kilo_free`, one installed vendor and two not. */
+const SEARCHABLE = {
+  sources: [
+    { id: 'contrib', label: 'Contrib', vendors: [
+      { vendor: 'kilo', installed: '0.5.0', tags: ['tier:paid'] },
+      { vendor: 'kilo_free', label: 'Kilo', installed: null, tags: ['tier:free'] },
+      { vendor: 'groq', label: 'Groq', installed: null, tags: [] },
+    ] },
+    { id: 'mirror', label: 'Mirror', vendors: [
+      { vendor: 'kilo_free', installed: null, tags: ['tier:free'] },
+    ] },
+  ],
+};
+const names = (rows) => rows.map(({ src, v }) => `${src.id}:${v.vendor}`);
+
+test('the Installed search adds the source vendors it is not running', () => {
+  // A query is required: without one the section is the whole Available view.
+  assert.deepEqual(notInstalledVendors(SEARCHABLE, {}), []);
+  assert.deepEqual(notInstalledVendors(SEARCHABLE, { q: '  ' }), []);
+  // The installed `kilo` is a row above; the second source's copy of
+  // `kilo_free` is the same vendor and is listed once.
+  assert.deepEqual(names(notInstalledVendors(SEARCHABLE, { q: 'kilo' })), ['contrib:kilo_free']);
+  assert.deepEqual(names(notInstalledVendors(SEARCHABLE, { q: 'groq' })), ['contrib:groq']);
+});
+
+test('the Installed search applies the tier and origin filters to source vendors', () => {
+  assert.deepEqual(names(notInstalledVendors(SEARCHABLE, { q: 'contrib', tier: 'free' })),
+    ['contrib:kilo_free']);
+  // Untagged reads as paid, as a loaded shim with no tier does.
+  assert.deepEqual(names(notInstalledVendors(SEARCHABLE, { q: 'contrib', tier: 'paid' })),
+    ['contrib:groq']);
+  // Every source vendor is external.
+  assert.deepEqual(notInstalledVendors(SEARCHABLE, { q: 'kilo', origin: 'builtin' }), []);
+  assert.deepEqual(notInstalledVendors(SEARCHABLE, { q: 'kilo', origin: 'path' }), []);
+  assert.deepEqual(names(notInstalledVendors(SEARCHABLE, { q: 'kilo', origin: 'remote' })),
+    ['contrib:kilo_free']);
+  assert.deepEqual(notInstalledVendors(null, { q: 'kilo' }), []);
+});
+
+/** The served payloads of a gateway that still declares two legacy presets. */
+function legacyFixture() {
+  const vendor = (over) => ({
+    versions: ['0.4.0'], newest: '0.4.0', installable: '0.4.0', requires_ok: true,
+    maturity: 'beta', conformance: { date: null, result: 'none' }, core_provides: [],
+    ...over,
+  });
+  const catalogue = {
+    core: { surface: 1, ir: 1, version: '0.14.0' },
+    install: [],
+    sources: [{
+      id: 'contrib', key: 'contrib', label: 'Contrib', url: 'https://cdn.example/contrib/manifest.json',
+      repo: 'https://github.com/Oaklight/llm-rosetta-shim-contrib', entry: null, configured: false,
+      ok: true, error: null, stale: false,
+      vendors: [
+        vendor({ vendor: 'kilo', label: 'Kilo', logo: 'https://cdn.example/kilocode.svg',
+          installed: '0.5.0', tags: ['tier:paid'], shims: ['kilo--chat_completions'],
+          installed_shims: ['kilo--chat_completions'], selected_by: 'contrib:kilo',
+          selected_origin: 'moved:kilo', state: 'installed' }),
+        vendor({ vendor: 'kilo_free', label: 'Kilo', logo: 'https://cdn.example/kilocode.svg',
+          installed: '0.4.0', tags: ['tier:free'], shims: ['kilo_free--chat_completions'],
+          installed_shims: ['kilo_free--chat_completions'], selected_by: 'contrib:tag:tier:free',
+          selected_origin: 'presets:free', selected_presets: ['free'], state: 'installed' }),
+        vendor({ vendor: 'groq', label: 'Groq', logo: 'https://cdn.example/groq.svg',
+          installed: null, tags: [], shims: ['groq--chat_completions'], installed_shims: [],
+          selected_by: null, state: 'available' }),
+      ],
+    }],
+  };
+  const packages = [
+    { key: 'free', label: 'Free Endpoints', install: 'contrib:tag:tier:free',
+      source_repo: 'https://github.com/Oaklight/llm-rosetta-shim-contrib', shims: [] },
+    { key: 'alcf', label: 'ALCF', install: 'argonne:alcf',
+      source_repo: 'https://github.com/Oaklight/llm-rosetta-shim-alcf', shims: [] },
+  ];
+  const config = { shims: { presets: ['free', 'alcf'] }, registered_shims: [], model_types: [] };
+  return { catalogue, packages, config };
+}
+
+/** One rendered card, from its article to its close. */
+function cardIn(html, key) {
+  const at = html.indexOf(`data-srcvendor="${key}"`);
+  assert.notEqual(at, -1, `${key} has a card`);
+  return html.slice(at, html.indexOf('</article>', at));
+}
+
+async function renderLegacy(view) {
+  installPage(legacyFixture());
+  const { S } = await import(`${ADMIN}/core/state.js`);
+  const page = await import(`${ADMIN}/tabs/shims-page.js`);
+  S.configData = null;
+  await page.loadShimsPage();
+  page.setShimsView(view);
+  return page;
+}
+
+test('Available lists vendors only: no preset package card, no archived repository', async () => {
+  await renderLegacy('available');
+  const html = elements.get('shimCatalogGrid').innerHTML;
+
+  assert.doesNotMatch(html, /data-package=/, 'a preset is not a card of its own');
+  assert.doesNotMatch(html, /llm-rosetta-shim-alcf/, 'no link to an archived package repository');
+  // The header counts vendors; packages are not a second unit beside them.
+  assert.equal(elements.get('shimsCount').textContent, '3 vendors');
+  // The presets still in the config are named once, with their replacement.
+  assert.match(html, /class="field-hint shim-legacy-note"/);
+  assert.match(html, /free → contrib:tag:tier:free, alcf → argonne:alcf/);
+});
+
+test('two vendors with one name are told apart by their tier', async () => {
+  await renderLegacy('available');
+  const html = elements.get('shimCatalogGrid').innerHTML;
+  const title = (c) => c.slice(c.indexOf('shim-vendor-title'), c.indexOf('shim-vendor-meta'));
+
+  assert.match(title(cardIn(html, 'contrib:kilo')), />Kilo</);
+  assert.match(title(cardIn(html, 'contrib:kilo_free')), />Kilo</);
+  assert.match(title(cardIn(html, 'contrib:kilo_free')), /class="tag is-square is-free">Free</);
+  assert.doesNotMatch(title(cardIn(html, 'contrib:kilo')), /is-free/);
+  // The catalogue's mark, not the initials tile, for a vendor not installed.
+  assert.match(cardIn(html, 'contrib:groq'),
+    /src="\/admin\/api\/logo\?src=https%3A%2F%2Fcdn\.example%2Fgroq\.svg"/);
+});
+
+test('a vendor a provider pulled in says so, and offers no Remove', async () => {
+  await renderLegacy('available');
+  const html = elements.get('shimCatalogGrid').innerHTML;
+  const kilo = cardIn(html, 'contrib:kilo');
+
+  assert.match(kilo, /Installed because a provider uses it/);
+  assert.doesNotMatch(kilo, /Selected by contrib:kilo/, 'no config entry says contrib:kilo');
+  assert.doesNotMatch(kilo, /deselectShimSourceVendor/);
+  // A preset-selected vendor keeps its Remove, whose refusal names the preset.
+  const free = cardIn(html, 'contrib:kilo_free');
+  assert.match(free, /via preset free/);
+  assert.match(free, /deselectShimSourceVendor/);
+});
+
+test('an Installed search shows the source vendors that are not installed', async () => {
+  installPage(legacyFixture());
+  const { S } = await import(`${ADMIN}/core/state.js`);
+  const page = await import(`${ADMIN}/tabs/shims-page.js`);
+  S.configData = null;
+  await page.loadShimsPage();
+  elements.get('shimPageSearch').value = 'groq';
+  page.setShimsView('installed');
+  const html = elements.get('shimGrid').innerHTML;
+
+  assert.match(html, /data-srcvendor="contrib:groq"/);
+  assert.doesNotMatch(html, /data-package=/);
+  assert.match(elements.get('shimsCount').textContent, /1 more available/);
+});
+
+test('a mark that fails to load tries the catalogue copy before the initials', async () => {
+  installPage();
+  const page = await import(`${ADMIN}/tabs/shims-page.js`);
+
+  const both = page.logoHtml('https://old.example/argo.png', 'argo', 'https://cdn.example/argo.svg');
+  assert.match(both, /src="\/admin\/api\/logo\?src=https%3A%2F%2Fold\.example%2Fargo\.png"/);
+  assert.match(both, /data-alt="\/admin\/api\/logo\?src=https%3A%2F%2Fcdn\.example%2Fargo\.svg"/);
+  assert.match(both, /onerror="if\(this\.dataset\.alt\)/);
+  // No own mark: the catalogue copy is the first candidate, with nothing after.
+  const only = page.logoHtml(null, 'groq', 'https://cdn.example/groq.svg');
+  assert.match(only, /src="\/admin\/api\/logo\?src=https%3A%2F%2Fcdn\.example%2Fgroq\.svg"/);
+  assert.doesNotMatch(only, /data-alt=/);
+  // Neither: the initials tile.
+  assert.match(page.logoHtml(null, 'groq'), /^<span class="shim-logo-fallback"[^>]*>Gr<\/span>$/);
 });
