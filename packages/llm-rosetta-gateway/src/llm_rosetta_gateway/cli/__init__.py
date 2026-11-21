@@ -14,14 +14,14 @@ import asyncio
 
 from llm_rosetta.api import __version__ as _core_version
 
-from . import __version__ as _gateway_version
-from .shims import ShimSourceError
+from .. import __version__ as _gateway_version
+from ..shims import ShimSourceError
 
 if TYPE_CHECKING:
-    from .shims import ShimLoadReport
+    from ..shims import ShimLoadReport
 
 from .banner import print_banner, print_shim_sources
-from .config import (
+from ..config import (
     PATHS_TO_TRY,
     GatewayConfig,
     JsoncConfigIO,
@@ -30,14 +30,14 @@ from .config import (
     load_config_raw,
     write_config,
 )
-from .config.errors import RetiredConfigName
-from .logging import get_logger, setup_logging
-from .providers import (
+from ..config.errors import RetiredConfigName
+from ..logging import get_logger, setup_logging
+from ..providers import (
     get_default_api_key_env,
     get_default_base_url,
     known_provider_types,
 )
-from .shim_sources import apply_shim_sources, describe_shim_sources
+from ..shim_sources import apply_shim_sources, describe_shim_sources
 
 logger = get_logger()
 
@@ -468,7 +468,7 @@ def _cmd_db_export_errors(args: argparse.Namespace) -> None:
 
 def _cmd_shims_preset(args: argparse.Namespace) -> None:
     """Add or remove an explicitly selected standalone shim preset."""
-    from .shims import get_source_package
+    from ..shims import get_source_package
 
     config_path = discover_config(args.config) or PATHS_TO_TRY[0]
     if not os.path.isfile(config_path):
@@ -664,7 +664,7 @@ def _cmd_credential(args: argparse.Namespace) -> None:
         # The contract says the record must not appear in the exception, but a
         # vendor's error body is not under our control and this message is
         # printed.  Scrub what credential shapes we know on the way out.
-        from .observability.sanitize import scrub_credential_patterns
+        from ..observability.sanitize import scrub_credential_patterns
 
         print(f"Sign-in failed: {scrub_credential_patterns(str(exc))}", file=sys.stderr)
         sys.exit(1)
@@ -742,7 +742,7 @@ def _apply_shim_sources_or_exit(
     section raises ``ValueError``; a ``strict`` source failure raises
     ``ShimSourceError`` — either way the process exits.
     """
-    from .shims.moved import moved_references
+    from ..shims.moved import moved_references
 
     if not raw_config.get("shims") and not moved_references(raw_config):
         return None
@@ -834,7 +834,7 @@ def _load_startup_config(
     shim_source_report = _apply_shim_sources_or_exit(raw_config, config_path)
     # Recover only providers whose standalone shim failed to load.  This runs
     # before identity resolution so healthy providers can still serve repairs.
-    from .ops import OpsContext, OpsProviderValidation
+    from ..ops import OpsContext, OpsProviderValidation
 
     recovery = OpsProviderValidation(
         OpsContext(config_io=reader, config_path=config_path),
@@ -860,7 +860,7 @@ def _load_startup_config(
 
 def main() -> None:  # noqa: C901
     """Parse CLI arguments and either run a subcommand or start the server."""
-    from .app import create_app
+    from ..app import create_app
 
     parser = argparse.ArgumentParser(
         prog="llm-rosetta-gateway",
@@ -1157,7 +1157,7 @@ def main() -> None:  # noqa: C901
         )
         await run_gateway(app, host, port, socket=socket_path, ssl_context=ssl_context)
 
-    from .app import run_gateway
+    from ..app import run_gateway
 
     try:
         asyncio.run(_run())
