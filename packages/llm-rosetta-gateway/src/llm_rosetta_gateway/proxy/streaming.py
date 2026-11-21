@@ -57,7 +57,7 @@ from .metadata import (
     ProviderMetadataStore,
     _default_metadata_store,
 )
-from .engine import (
+from .prepare import (
     RequestRefused,
     _inject_stream_flags,
     prepare_request,
