@@ -767,9 +767,12 @@ one, so a config that only implied the defaults gets them written out.
 *Remotes* fields below the group work as before.
 
 A save from the panel rewrites the config file as plain JSON, without its
-comments. The file it replaces is kept beside it as `<config>.bak` (one rolling
-copy, replaced on every save; none is written when the file is created), and
-the editor says so under its blocks.
+comments. The file it replaces is kept beside it as `<config>.prev`: one rolling
+copy of the file as it was before the last gateway write, replaced on every
+save and not written when the file is created. The gateway never writes
+`<config>.bak`, which belongs to `llm-rosetta-migrate --write` (the
+pre-migration original) and to any copy you make yourself. The editor states
+this under its blocks.
 
 #### Selecting part of a package { #selection }
 
