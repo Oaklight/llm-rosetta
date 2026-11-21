@@ -36,8 +36,18 @@ a (possibly mutated) body dict."""
 # ---------------------------------------------------------------------------
 
 
-class _NamedTransform:
-    """Thin wrapper that gives a factory-produced callable a readable repr."""
+class NamedTransform:
+    """A body transform with a readable ``repr``.
+
+    Wrap a shim's own body transform in it so the loader, the admin panel and
+    a test failure show a label instead of ``<function _fn at 0x...>``::
+
+        pre_ir_transforms = (NamedTransform(_rename_reasoning, "rename_reasoning()"),)
+
+    Args:
+        fn: The transform, ``(body) -> body``.
+        repr_str: The label ``repr()`` returns.
+    """
 
     __slots__ = ("_fn", "_repr")
 
@@ -68,7 +78,7 @@ def strip_fields(*keys: str) -> Transform:
             body.pop(k, None)
         return body
 
-    return _NamedTransform(_strip, f"strip_fields({', '.join(repr(k) for k in keys)})")
+    return NamedTransform(_strip, f"strip_fields({', '.join(repr(k) for k in keys)})")
 
 
 def force_fields(**values: Any) -> Transform:
@@ -85,7 +95,7 @@ def force_fields(**values: Any) -> Transform:
         body.update(values)
         return body
 
-    return _NamedTransform(
+    return NamedTransform(
         _force, f"force_fields({', '.join(f'{k}={v!r}' for k, v in values.items())})"
     )
 
@@ -123,7 +133,7 @@ def rename_field(old: str, new: str, *, pattern: str | None = None) -> Transform
     if pattern:
         label += f", pattern={pattern!r}"
     label += ")"
-    return _NamedTransform(_rename, label)
+    return NamedTransform(_rename, label)
 
 
 def set_defaults(**defaults: Any) -> Transform:
@@ -137,7 +147,7 @@ def set_defaults(**defaults: Any) -> Transform:
             body.setdefault(k, v)
         return body
 
-    return _NamedTransform(
+    return NamedTransform(
         _defaults,
         f"set_defaults({', '.join(f'{k}={v!r}' for k, v in defaults.items())})",
     )
@@ -170,7 +180,7 @@ def replace_message_field(field: str, old_value: Any, new_value: Any) -> Transfo
                 msg[field] = new_value
         return body
 
-    return _NamedTransform(
+    return NamedTransform(
         _replace,
         f"replace_message_field({field!r}, {old_value!r}, {new_value!r})",
     )
@@ -197,7 +207,7 @@ def default_message_field(field: str, default: Any) -> Transform:
                 msg[field] = default
         return body
 
-    return _NamedTransform(
+    return NamedTransform(
         _default,
         f"default_message_field({field!r}, {default!r})",
     )
@@ -276,7 +286,7 @@ def backfill_reasoning_content(field: str = "reasoning_content") -> Transform:
             )
         return body
 
-    return _NamedTransform(_backfill, f"backfill_reasoning_content({field!r})")
+    return NamedTransform(_backfill, f"backfill_reasoning_content({field!r})")
 
 
 def strip_fields_for_model(pattern: str, *keys: str) -> Transform:
@@ -302,7 +312,7 @@ def strip_fields_for_model(pattern: str, *keys: str) -> Transform:
             body.pop(k, None)
         return body
 
-    return _NamedTransform(
+    return NamedTransform(
         _strip,
         f"strip_fields_for_model({pattern!r}, {', '.join(repr(k) for k in keys)})",
     )
@@ -367,7 +377,7 @@ def flatten_system_content(pattern: str | None = None) -> Transform:
     if pattern:
         label += f"pattern={pattern!r}"
     label += ")"
-    return _NamedTransform(_flatten, label)
+    return NamedTransform(_flatten, label)
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +413,7 @@ def default_tool_description(default: str = "") -> Transform:
                 func["description"] = default
         return body
 
-    return _NamedTransform(_default, f"default_tool_description({default!r})")
+    return NamedTransform(_default, f"default_tool_description({default!r})")
 
 
 # ---------------------------------------------------------------------------
@@ -484,4 +494,4 @@ def rewrite_harmony_tool_calls() -> Transform:
                 choice["finish_reason"] = "tool_calls"
         return body
 
-    return _NamedTransform(_rewrite, "rewrite_harmony_tool_calls()")
+    return NamedTransform(_rewrite, "rewrite_harmony_tool_calls()")

@@ -33,7 +33,7 @@ from .provider_shim import (
     snapshot_registry,
     unregister_shim,
 )
-from llm_rosetta.transforms import (
+from llm_rosetta.contracts.transform import (
     IRTransform,
     Transform,
     TransformContext,

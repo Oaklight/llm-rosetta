@@ -16,7 +16,7 @@ Most callers can import directly from this package::
 
 from llm_rosetta.ir.primitives.body import (  # noqa: F401
     Transform,
-    _NamedTransform,
+    NamedTransform,
     apply_transforms,
     backfill_reasoning_content,
     default_message_field,
@@ -33,7 +33,7 @@ from llm_rosetta.ir.primitives.body import (  # noqa: F401
 from llm_rosetta.ir.primitives.ir import (  # noqa: F401
     IRTransform,
     TransformContext,
-    _NamedIRTransform,
+    NamedIRTransform,
     apply_ir_transforms,
     auto_cache_breakpoints,
     hoist_late_system_messages,

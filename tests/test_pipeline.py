@@ -1474,10 +1474,10 @@ class TestIntrinsicIrTransforms:
             call_order.append("shim")
             return body
 
-        from llm_rosetta.transforms import _NamedIRTransform
+        from llm_rosetta.transforms import NamedIRTransform
 
-        intrinsic_t = _NamedIRTransform(_intrinsic_fn, "intrinsic()")
-        shim_t = _NamedIRTransform(_shim_fn, "shim()")
+        intrinsic_t = NamedIRTransform(_intrinsic_fn, "intrinsic()")
+        shim_t = NamedIRTransform(_shim_fn, "shim()")
 
         class _FakeConverter:
             _INTRINSIC_IR_TRANSFORMS = (intrinsic_t,)
@@ -1496,15 +1496,15 @@ class TestIntrinsicIrTransforms:
             call_count += 1
             return body
 
-        from llm_rosetta.transforms import _NamedIRTransform
+        from llm_rosetta.transforms import NamedIRTransform
 
-        t = _NamedIRTransform(_counting_fn, "dedup_test()")
+        t = NamedIRTransform(_counting_fn, "dedup_test()")
 
         class _FakeConverter:
             _INTRINSIC_IR_TRANSFORMS = (t,)
 
         # Shim has a transform with the same repr
-        shim_t = _NamedIRTransform(_counting_fn, "dedup_test()")
+        shim_t = NamedIRTransform(_counting_fn, "dedup_test()")
         shim = _make_shim(ir_transforms=(shim_t,))
         ir = _simple_ir_request()
         apply_ir_transforms(ir, shim, converter=_FakeConverter())

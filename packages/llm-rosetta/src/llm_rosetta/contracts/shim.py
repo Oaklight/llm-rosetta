@@ -23,8 +23,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from llm_rosetta import retired_names
-from llm_rosetta.ir.primitives.body import Transform
-from llm_rosetta.ir.primitives.ir import IRTransform
+from llm_rosetta.contracts.transform import IRTransform, Transform
 from llm_rosetta.types.ir.configs import IREffort, IRMode
 from llm_rosetta.types.ir.constraints import RequestConstraints
 

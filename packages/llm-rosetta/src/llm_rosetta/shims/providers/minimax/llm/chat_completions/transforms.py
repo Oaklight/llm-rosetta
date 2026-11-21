@@ -19,8 +19,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from llm_rosetta.transforms import (
-    _NamedTransform,
+from llm_rosetta.contracts.transform import (
+    NamedTransform,
     hoist_late_system_messages,
     strip_fields,
 )
@@ -72,7 +72,7 @@ def _parse_think_tags(body: dict[str, Any]) -> dict[str, Any]:
 
 post_ir_transforms = (
     strip_fields("logprobs", "top_logprobs", "seed", "stop"),
-    _NamedTransform(_inject_reasoning_split, "inject_reasoning_split()"),
+    NamedTransform(_inject_reasoning_split, "inject_reasoning_split()"),
 )
-pre_ir_transforms = (_NamedTransform(_parse_think_tags, "parse_think_tags()"),)
+pre_ir_transforms = (NamedTransform(_parse_think_tags, "parse_think_tags()"),)
 ir_transforms = (hoist_late_system_messages(),)

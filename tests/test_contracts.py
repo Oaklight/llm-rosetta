@@ -90,3 +90,22 @@ def test_core_imports_the_data_classes_from_contracts():
             ):
                 offenders.append(f"{path.relative_to(core)}:{node.lineno}")
     assert offenders == []
+
+
+def test_the_transform_contract_names_the_implementations():
+    import llm_rosetta.contracts.transform as transform
+    import llm_rosetta.ir.primitives as primitives
+
+    for name in transform.__all__:
+        assert getattr(transform, name) is getattr(primitives, name), name
+
+    def keep(body):
+        return body
+
+    def keep_ir(body, context):
+        return body
+
+    named = transform.NamedTransform(keep, "keep")
+    assert repr(named) == "keep"
+    assert named(dict(a=1)) == dict(a=1)
+    assert repr(transform.NamedIRTransform(keep_ir, "keep_ir")) == "keep_ir"

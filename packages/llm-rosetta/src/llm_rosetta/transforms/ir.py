@@ -3,4 +3,4 @@
 from __future__ import annotations
 
 from llm_rosetta.ir.primitives.ir import *  # noqa: F401,F403
-from llm_rosetta.ir.primitives.ir import _NamedIRTransform  # noqa: F401
+from llm_rosetta.ir.primitives.ir import NamedIRTransform  # noqa: F401
