@@ -351,6 +351,32 @@ _ENV_VAR_RE = re.compile(r"\$\{([^}]+)\}")
 _async_locks: dict[tuple[str, int], asyncio.Lock] = {}
 
 
+def _backup_previous(path: str) -> None:
+    """Copy *path* to ``<path>.prev`` (atomically), when *path* exists.
+
+    One rolling copy of the file as it was before the last gateway write:
+    each write replaces the previous ``.prev``.  The name is one no other tool
+    writes — ``llm-rosetta-migrate --write`` and operators keep their own
+    ``<path>.bak``, which a rolling copy must never overwrite.  The copy goes
+    to a temporary file first, so a reader never sees half of it.
+    """
+    import shutil
+    import tempfile
+
+    if not os.path.isfile(path):
+        return
+    dir_ = os.path.dirname(path) or "."
+    fd, tmp = tempfile.mkstemp(dir=dir_, suffix=".prev.tmp")
+    os.close(fd)
+    try:
+        shutil.copy2(path, tmp)
+        os.replace(tmp, path + ".prev")
+    except BaseException:
+        with suppress(OSError):
+            os.unlink(tmp)
+        raise
+
+
 def write_config(path: str, data: dict[str, Any]) -> None:
     """Write a config dict as formatted JSON to *path* atomically.
 
@@ -358,7 +384,10 @@ def write_config(path: str, data: dict[str, Any]) -> None:
     the same directory, flushes to disk, then atomically replaces the
     target via ``os.replace``.  Readers never see a partially-written file.
 
-    Comments in the original JSONC file (if any) are **not** preserved.
+    Comments in the original JSONC file (if any) are **not** preserved, so
+    the file being replaced is kept as one rolling ``<path>.prev`` first (the
+    previous bytes, copied just before the atomic replace).  Nothing is
+    backed up when *path* does not exist yet.
     """
     import tempfile
 
@@ -371,6 +400,7 @@ def write_config(path: str, data: dict[str, Any]) -> None:
             f.write("\n")
             f.flush()
             os.fsync(f.fileno())
+        _backup_previous(path)
         os.replace(tmp, path)
     except BaseException:
         with suppress(OSError):
