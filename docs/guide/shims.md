@@ -784,7 +784,9 @@ other vendors; selection only ever sees valid records. A record's shim names
 must belong to its vendor: the vendor key itself (the bare `xai`, `qwen`,
 `moonshot` and `zhipu`), `<vendor>--<name>`, or `<vendor>_<lane>--<name>`
 (`alcf_sophia--chat_completions` under `alcf`); a name with another vendor's
-prefix invalidates the record.
+prefix invalidates the record, and so does a lane prefix that is itself
+another vendor key of the same manifest (`openai` may not publish
+`openai_chatgpt--x` when `openai_chatgpt` is a vendor there too).
 
 **A vendor that moved out of core is installed by itself.** When a config
 names a shim or quota probe of a vendor that left core
@@ -960,11 +962,11 @@ remote out, and an explicit remote with the same URL is merged onto its preset
 
 ## Built-in Shims
 
-LLM-Rosetta ships with 18 built-in provider shims, one directory per shim under
+LLM-Rosetta ships with 21 built-in provider shims, one directory per shim under
 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`. `list_shims()` prints the live set; this is
 that set. Core keeps the model makers' own API-key lanes and one real vendor per
 non-chat format ([Shim placement](shim-placement.md)). Every other vendor —
-including OpenCode, OpenRouter, MiniMax, Qwen, Volcengine, xAI and Zhipu, which
+including OpenCode, OpenRouter, Qwen, Volcengine, xAI and Zhipu, which
 were built in before 0.14 — installs from the contrib source under the same
 name, automatically when a config names it
 ([Migrating to 0.14](migrating-to-0.14.md#moved-to-contrib)). The ALCF,
@@ -984,6 +986,9 @@ AskSage and Argo shims install from the argonne source — see
 | `google--google_interactions` | `google_interactions` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `jina--embedding` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
 | `jina--rerank` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
+| `minimax--chat_completions` | `chat_completions` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | strips `logprobs`, `top_logprobs`, `seed`, `stop`; injects `reasoning_split`; parses `think` tags |
+| `minimax--embedding` | `minimax` | `https://api.minimaxi.com` | `MINIMAX_API_KEY` | — |
+| `minimax--messages` | `messages` | `https://api.minimaxi.com/anthropic` | `MINIMAX_API_KEY` | — |
 | `openai--chat_completions` | `chat_completions` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--embedding` | `openai` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--open_responses` | `open_responses` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
