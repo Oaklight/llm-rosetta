@@ -28,7 +28,7 @@ core 在 `llm_rosetta/_tiers.py` 中一次性写明每个公开模块的层级�
 | 兼容 | `llm_rosetta.gateway`、`llm_rosetta.observability`、`llm_rosetta.shims.provider_shim`（其中对数据类的再导出）、`llm_rosetta.routing`、`llm_rosetta.capabilities`、`llm_rosetta.types.ir.extensions` | 为曾经发布过它们的版本保留的已弃用路径。每个都写明替代路径，已定移除版本的也写明版本。 |
 | 内部 | 其余所有模块 | 任何版本都可能移动。 |
 
-`tests/test_tiers.py` 检查前三个层级的每个模块都能导入。`scripts/dev/public_api_diff.py` 从同一个文件读取要比较的 core 模块列表，并读取每棵被比较的树自己的那份：base 正式版按它自己声明的模块测量，因此从层级表删掉的模块会被报告为已移除。没有该文件的树（v0.13.0）用脚本自带的列表测量。
+`tests/test_tiers.py` 检查前三个层级的每个模块都能导入。`scripts/dev/public_api_diff.py` 从同一个文件读取要比较的 core 模块列表，并读取每棵被比较的树自己的那份：相对带有 `_tiers.py` 的 base（从 0.14.0 起），base 按它自己声明的模块测量，因此从层级表删掉的模块会被报告为已移除。0.13.0 这个 base 没有该文件，用脚本自带的列表测量；为此，一个测试保存了 v0.13.0 作为公开模块发布的冻结列表，并要求其中每个模块都留在某个层级中。该比较只覆盖模块级名字与构造函数签名：从类上移除的属性（例如 0.14.0 中 `ProviderShim` 的三个属性）不在其范围内，记录在 `tests/test_no_deprecation_bounds.py` 的 `REMOVED_ATTRIBUTES` 中。
 
 ### 谁导入什么 {#who-imports-what}
 
