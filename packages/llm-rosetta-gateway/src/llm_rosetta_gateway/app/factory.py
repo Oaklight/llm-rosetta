@@ -34,7 +34,7 @@ from ..middleware.error_format import (
 from ..keystore import KeyStore
 from ..middleware.request_context import request_context_var, setup_request_context
 from ..ops.rejected import record_read_rejection, record_unrecorded_rejection
-from ..logging import get_logger
+from ..observability.logging import get_logger
 
 from ..proxy import (
     ProviderMetadataStore,

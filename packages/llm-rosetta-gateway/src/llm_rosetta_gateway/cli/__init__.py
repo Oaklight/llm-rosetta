@@ -31,7 +31,7 @@ from ..config import (
     write_config,
 )
 from ..config.errors import RetiredConfigName
-from ..logging import get_logger, setup_logging
+from ..observability.logging import get_logger, setup_logging
 from ..providers import (
     get_default_api_key_env,
     get_default_base_url,

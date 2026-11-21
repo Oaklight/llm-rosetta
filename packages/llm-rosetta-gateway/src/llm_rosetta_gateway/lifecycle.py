@@ -32,7 +32,7 @@ from llm_rosetta_gateway.observability.error_dump import dump_error
 from llm_rosetta_gateway.observability.sanitize import scrub_body_text
 from llm_rosetta.contracts.usage import DEFAULT_MODEL_TYPE
 
-from .logging import get_logger
+from .observability.logging import get_logger
 from .maintenance.dumps import DeferredDumpStore
 from .middleware.circuit_breaker import CircuitBreaker
 from .middleware.error_format import detect_api_format, format_error_response

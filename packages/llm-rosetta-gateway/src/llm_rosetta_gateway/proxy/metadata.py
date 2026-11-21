@@ -10,7 +10,7 @@ from typing import Any
 from llm_rosetta.api import strip_internal_metadata
 
 
-from ..logging import (
+from ..observability.logging import (
     get_logger,
 )
 

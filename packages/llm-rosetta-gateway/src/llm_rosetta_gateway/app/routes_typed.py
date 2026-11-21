@@ -17,7 +17,7 @@ from llm_rosetta_gateway._vendor.httpserver import (
 
 from ..config import GatewayConfig
 from ..lifecycle import instrumented_handler
-from ..logging import get_logger
+from ..observability.logging import get_logger
 
 
 from . import _state

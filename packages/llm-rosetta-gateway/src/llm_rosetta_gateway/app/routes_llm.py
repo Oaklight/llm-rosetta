@@ -34,7 +34,7 @@ from ..middleware.headers import (
     build_upstream_extra_headers,
     get_preflight_tokens_override,
 )
-from ..logging import get_logger
+from ..observability.logging import get_logger
 
 from ..proxy import (
     ProviderMetadataStore,

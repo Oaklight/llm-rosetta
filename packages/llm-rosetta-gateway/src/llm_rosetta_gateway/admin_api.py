@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from .logging import get_logger
+from .observability.logging import get_logger
 
 if TYPE_CHECKING:
     from .config import GatewayConfig

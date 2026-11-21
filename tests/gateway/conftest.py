@@ -302,7 +302,7 @@ def gateway_warnings():
 
     That logger is created with ``propagate = False``, so caplog — which
     listens on the root logger — does not see its records once
-    ``llm_rosetta_gateway.logging`` has been imported.  A handler on the
+    ``llm_rosetta_gateway.observability.logging`` has been imported.  A handler on the
     logger itself is one path under every pytest version.
     """
     logger = logging.getLogger("llm-rosetta-gateway")
