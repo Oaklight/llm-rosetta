@@ -128,10 +128,11 @@ declare the differences.
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| `ProviderShim` / `ModelShim` | `shims/provider_shim.py` | Data classes + registry |
-| `AuthExchange` | `shims/auth_exchange.py` | Credential-exchange contract a shim ships in `auth.py` |
-| `QuotaProbe` | `shims/quota_probe.py` | Allowance-probe contract a shim ships in `quota.py` |
-| `Transform` primitives | `transforms/` | `strip_fields`, `rename_field`, `set_defaults` |
+| `ProviderShim` and the declaration data classes | `contracts/shim.py` | What a shim declares (plus `load_providers_from_dir`, the plugin registration call) |
+| Registry | `shims/provider_shim.py` | `register_shim`, `get_shim`, ...; re-exports the data classes until 0.15.0 |
+| `AuthExchange` | `contracts/auth.py` | Credential-exchange contract a shim ships in `auth.py` |
+| `QuotaProbe` | `contracts/quota.py` | Allowance-probe contract a shim ships in `quota.py` |
+| `Transform` types and primitives | `contracts/transform.py` | `NamedTransform`, `strip_fields`, `hoist_late_system_messages`, ... (implementations in `ir/primitives/`) |
 | Built-in shims | `shims/providers/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type |
 | Vendor manifest | `shims/providers/<vendor>/provider.yaml` | Optional per-vendor defaults every leaf inherits: `connection:` (the credential) plus the vendor's own `logo` / `group` / `group_label`; `auth.py` sits beside it |
 | Tree contract | `shims/_shim_template/` | The path rules (`<vendor>[/<lane>]/<type>[/<format>]/provider.yaml`), the file allow-list, and the skeleton `shims new` renders; `shims check` reports a tree that departs from it, `shims migrate --write` moves one onto it |
@@ -166,11 +167,11 @@ supported format and forwards them to any configured upstream provider.
 
 ### Host surface
 
-`llm_rosetta.api` is the small public surface that the gateway and shim authors import (#1630): re-exports only, a literal `__all__` grouped by capability. The four contract modules `llm_rosetta.shims.auth_exchange`, `llm_rosetta.shims.quota_probe`, `llm_rosetta.routing` and `llm_rosetta.observability.usage` stay where they are and are not re-exported. Within one minor it only gains names; a rename or removal keeps a deprecated alias for one minor. `SURFACE_VERSION` (an int) rises on a removal or a changed meaning, never on an addition; the gateway asserts a minimum of it at startup (`llm_rosetta_gateway/surface.py`). 0.14.0 is the release of the surface: the gateway pin stays `llm-rosetta>=X.Y.0.dev0,<X.(Y+1)` and no bigger version bump is needed. Core must never import `llm_rosetta.api` (`tests/test_core_import_boundary.py`).
+`llm_rosetta.api` is the small public surface that the gateway imports (#1630): re-exports only, a literal `__all__` grouped by capability. The extension contracts live in `llm_rosetta.contracts` (#1657): `shim`, `transform`, `auth`, `quota`, `routing`, `usage`, plus `SURFACE_VERSION`, `IR_VERSION` and the sidecar hook names in its `__init__`. A shim imports only `llm_rosetta.contracts…` (its sidecars run during `import llm_rosetta`, before `api` can load); `llm_rosetta/_tiers.py` states each public module's tier. Within one minor it only gains names; a rename or removal keeps a deprecated alias for one minor. `SURFACE_VERSION` (an int) rises on a removal or a changed meaning, never on an addition; the gateway asserts a minimum of it at startup (`llm_rosetta_gateway/surface.py`). 0.14.0 is the release of the surface: the gateway pin stays `llm-rosetta>=X.Y.0.dev0,<X.(Y+1)` and no bigger version bump is needed. Core must never import `llm_rosetta.api` (`tests/test_core_import_boundary.py`).
 
-The gateway reaches core only through a named surface: `llm_rosetta.api`, `llm_rosetta.shims.auth_exchange`, `llm_rosetta.shims.quota_probe`,
-`llm_rosetta.routing`, and the `llm_rosetta.observability.usage` package (never
-its submodules).  `tests/gateway/test_core_surface_boundary.py` enforces this
+The gateway reaches core only through two prefixes: `llm_rosetta.api` and
+`llm_rosetta.contracts` (the `contracts.usage` package, never its
+submodules).  `tests/gateway/test_core_surface_boundary.py` enforces this
 over every gateway file, `admin/` included.  The rule is strict: there is
 no allowlist for the gateway source, and a private core name is never allowed.
 A missing capability becomes an additive name on `llm_rosetta.api` with a test.
@@ -207,8 +208,8 @@ The logic that operates on IR values lives in `ir/`:
 Nothing in `ir/` may import `converters` (enforced by
 `tests/test_ir_import_boundary.py`); `ConversionContext` / `StreamContext` live
 in `ir/context.py` and `converters/base/context.py` re-exports them. A pass may
-use the shim contract. `llm_rosetta.transforms` and
-`llm_rosetta.capabilities` are facades, and the package-level
+use the shim contract. `llm_rosetta.contracts.transform` re-exports the
+transform types and primitives shims use, and the package-level
 `converters.base.{helpers,tools}` names re-export from `ir/`.
 
 ## Repository layout
@@ -240,13 +241,13 @@ Core modules (`packages/llm-rosetta/src/llm_rosetta/`):
 | `converters/` | One package per `(model_type, format)`; `base/` is the abstract contract; `registry.py` binds formats to classes |
 | `ir/` | IR logic: `primitives/`, `tools/`, `passes/` |
 | `types/` | Typed IR dataclasses in `types/ir/`; provider shapes for reference in `types/messages/`, `types/openai/`, `types/google/` |
-| `shims/` | `provider_shim.py`, `auth_exchange.py`, `quota_probe.py`, and `providers/` (one manifest per vendor/model-type/format) |
+| `contracts/` | The extension contracts: `shim.py`, `transform.py`, `auth.py`, `quota.py`, `routing.py`, `usage/` |
+| `shims/` | `provider_shim.py` (the registry), and `providers/` (one manifest per vendor/model-type/format) |
 | `pipeline/` | Chat and typed conversion pipelines |
 | `fidelity/` | Fidelity baseline and checker |
 | `profiling/` | The profiler |
-| `routing/` | Routing contract types |
-| `observability/usage/` | The meaning of a usage report (no store) |
-| `transforms/`, `capabilities/` | Compatibility facades over `ir/` |
+| `observability/` | Deprecated 0.13 package: alias finder for the telemetry that moved to the gateway |
+| `_tiers.py` | The tier of each public module (user, extension, compat, removed) |
 | `gateway/` | Deprecated forward shim to `llm_rosetta_gateway`; it warns on import and will be removed in a later release |
 | `_vendor/` | Vendored modules (DO NOT EDIT) |
 
@@ -534,7 +535,7 @@ gate — missing any item means the converter is not fully integrated.
 
 - Converter output mismatch → check IR types in `types/ir/`, then the
   converter's `*_ops.py` modules
-- Shim/transform issue → check `shims/providers/` and `transforms/`
+- Shim/transform issue → check `shims/providers/`, `contracts/transform.py` and `ir/primitives/`
 - Gateway config issue → check `config/` resolution order
   (`loader` → `core` → `parse`/`typed`/`settings`, then `resolve`)
   (shim → type → name fallback)
