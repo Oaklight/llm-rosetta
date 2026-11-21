@@ -7,7 +7,9 @@ added to the table without a rewrite fails here.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+import stat
 from pathlib import Path
 
 import pytest
@@ -847,3 +849,106 @@ def test_db_embedding_rewrite_is_idempotent(tmp_path) -> None:
     assert [i for i in again.items if i.action == "rewrite"] == []
     assert _dump(db) == after_first
     assert sorted(p.name for p in tmp_path.iterdir()) == files
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
+def test_db_backup_keeps_the_database_permission_bits(tmp_path) -> None:
+    # The backup holds every row of the database; a 0600 database must not
+    # leave a copy the umask made world-readable beside it.
+    db = tmp_path / "gateway.db"
+    _make_db(db)
+    db.chmod(0o600)
+    old_umask = os.umask(0o022)
+    try:
+        result = mig.migrate_db(db, write=True)
+    finally:
+        os.umask(old_umask)
+    assert result.error is None and result.backup is not None
+    assert stat.S_IMODE(Path(result.backup).stat().st_mode) == 0o600
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits")
+def test_db_backup_mode_is_exact_not_filtered_by_the_umask(tmp_path) -> None:
+    # A group-shared database keeps its group bits in the backup.
+    db = tmp_path / "gateway.db"
+    _make_db(db)
+    db.chmod(0o660)
+    old_umask = os.umask(0o022)
+    try:
+        result = mig.migrate_db(db, write=True)
+    finally:
+        os.umask(old_umask)
+    assert result.backup is not None
+    assert stat.S_IMODE(Path(result.backup).stat().st_mode) == 0o660
+
+
+def test_db_backup_never_overwrites_an_existing_backup(tmp_path, monkeypatch) -> None:
+    db = tmp_path / "gateway.db"
+    _make_db(db)
+    old = tmp_path / "gateway.db.bak"
+    old.write_bytes(b"an older backup")
+    # Freeze the clock so every run lands in the same second.
+    monkeypatch.setattr(mig.time, "strftime", lambda fmt: "20260101T000000")
+    stamped = tmp_path / "gateway.db.bak-20260101T000000"
+    stamped.write_bytes(b"a same-second backup")
+    result = mig.migrate_db(db, write=True)
+    assert result.error is None
+    assert old.read_bytes() == b"an older backup"
+    assert stamped.read_bytes() == b"a same-second backup"
+    assert result.backup is not None
+    assert Path(result.backup).name == "gateway.db.bak-20260101T000000-1"
+
+
+def test_db_backup_that_cannot_be_written_is_an_error_not_a_crash(
+    tmp_path, monkeypatch
+) -> None:
+    db = tmp_path / "gateway.db"
+    _make_db(db)
+    before = db.read_bytes()
+
+    def refuse(*args, **kwargs):
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(mig.os, "open", refuse)
+    result = mig.migrate_db(db, write=True)
+    assert result.error is not None and "could not write the backup" in result.error
+    assert db.read_bytes() == before
+
+
+def test_db_backup_that_fails_midway_leaves_no_file(tmp_path, monkeypatch) -> None:
+    db = tmp_path / "gateway.db"
+    _make_db(db)
+    real_connect = mig.sqlite3.connect
+
+    class Broken:
+        def __init__(self, conn):
+            self._conn = conn
+
+        def backup(self, target):
+            raise mig.sqlite3.OperationalError("disk I/O error")
+
+        def __getattr__(self, name):
+            return getattr(self._conn, name)
+
+    def connect(target, *args, **kwargs):
+        conn = real_connect(target, *args, **kwargs)
+        return Broken(conn) if "mode=ro" in str(target) else conn
+
+    monkeypatch.setattr(mig.sqlite3, "connect", connect)
+    result = mig.migrate_db(db, write=True)
+    assert result.error is not None
+    assert not (tmp_path / "gateway.db.bak").exists()
+
+
+def test_db_backup_refuses_a_name_that_appeared_after_it_was_chosen(
+    tmp_path, monkeypatch
+) -> None:
+    # The race O_EXCL closes: another writer creates the chosen name first.
+    db = tmp_path / "gateway.db"
+    _make_db(db)
+    taken = tmp_path / "gateway.db.bak"
+    taken.write_bytes(b"someone else's backup")
+    monkeypatch.setattr(mig, "_backup_name", lambda path: taken)
+    result = mig.migrate_db(db, write=True)
+    assert result.error is not None
+    assert taken.read_bytes() == b"someone else's backup"
