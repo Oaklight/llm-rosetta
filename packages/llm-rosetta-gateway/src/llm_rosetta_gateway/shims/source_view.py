@@ -293,6 +293,7 @@ def source_catalogue(
                 ttl=ttl,
                 proxy=proxy,
                 force=refresh,
+                selectors=selectors,
             )
         catalogue = get_shim_source(spec.key) if spec.key else None
         entry = _configured_entry(spec, raw_sources)

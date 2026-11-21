@@ -414,6 +414,7 @@ def _map_presets(
                 exclude=tuple(exclude.get(key, ())),
                 origin=f"presets:{key}",
                 fallback_remote=fallback,
+                expected=tuple(package.vendors),
             )
         )
         spec = source_spec_from_catalogue(source)

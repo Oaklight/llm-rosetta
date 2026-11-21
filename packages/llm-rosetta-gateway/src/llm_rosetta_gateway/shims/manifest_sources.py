@@ -19,9 +19,14 @@ When the manifest cannot be fetched the last fetched copy is used, and when a
 download fails the last good install is kept (marked ``stale``), the same
 warm-cache behaviour a plain remote has.  A digest mismatch never installs.
 
-A manifest URL can answer 200 with an old copy (a CDN that has not caught up
-with a publish).  A cached manifest is never replaced by an older one: it is
-kept and marked ``stale`` until a fetch returns one at least as new.
+Freshness guard: a manifest URL can answer 200 with an old copy (a CDN that
+has not caught up with a publish).  When the URL that answered serves a
+manifest whose ``generated_at`` is older than the cached one, or that lacks a
+vendor the selectors expect (an explicit ``<source>:<vendor>``, a mapped
+preset's package vendors, a moved vendor), the other URL is fetched once and
+the manifest with the newer ``generated_at`` is used (the first on a tie).  A
+cached manifest is never replaced by an older one: it is kept and marked
+``stale`` until a fetch returns one at least as new.
 
 Precedence (S3): core wins per shim — a shim name core already registers is
 not loaded from the source, and the ignored names are logged with the source
@@ -110,6 +115,9 @@ class InstallSelector:
             before manifests existed.  Used only while the source has never
             answered (no manifest fetched, none cached), so a gateway is not
             left without the package before its source publishes one.
+        expected: Vendors the source is expected to publish for this
+            selector, for the freshness guard only (a mapped preset's package
+            vendors); what installs is still decided by ``kind``/``value``.
     """
 
     raw: str
@@ -120,6 +128,7 @@ class InstallSelector:
     exclude: tuple[str, ...] = ()
     origin: str = "install"
     fallback_remote: Mapping[str, Any] | None = None
+    expected: tuple[str, ...] = ()
 
     def applies_to(self, source_id: str | None) -> bool:
         """Whether this selector reads the source with *source_id*."""
@@ -345,6 +354,7 @@ def install_from_manifests(
                 ttl=ttl,
                 proxy=proxy,
                 force=force_refresh,
+                selectors=plan.selectors,
             )
             if state.manifest is None:
                 statuses_for, fallback_for = _unanswered_source(spec, state, plan)
@@ -896,6 +906,7 @@ def _load_manifest(
     ttl: int,
     proxy: str | None,
     force: bool,
+    selectors: Sequence[InstallSelector] = (),
 ) -> _ManifestState:
     """Return the source's manifest: cached while fresh, else fetched.
 
@@ -903,10 +914,22 @@ def _load_manifest(
     that is not a valid manifest — falls back to the last fetched copy, marked
     stale.
 
-    Whatever URL served it, a manifest older than the cached one never
-    replaces it: the cached copy is used, marked stale, and the stamp records
-    why, so every later apply refetches (TTL or not) and the mark stays until
-    a fetch returns a manifest at least as new as the cache.
+    A URL that answers is checked for freshness (:func:`_freshness_doubt`):
+    when its manifest is older than the cached one or lacks a vendor the
+    selectors expect, the next URL is fetched once and the newer of the two
+    is used.  Whatever URL served it, a manifest older than the cached one
+    never replaces it: the cached copy is used, marked stale, and the stamp
+    records why, so every later apply refetches (TTL or not) and the mark
+    stays until a fetch returns a manifest at least as new as the cache.
+
+    A cached copy within the TTL that lacks an expected vendor is refetched
+    rather than trusted.  A fetch that still ends without that vendor starts
+    a :data:`VENDOR_RECHECK_SECONDS` cooldown for that set of vendors, so a
+    selector naming a vendor no source publishes costs at most one check per
+    window, not one per apply; *force* ignores the cooldown.
+
+    The URL that served last is tried first while its stamp is within the
+    TTL; after that the primary URL is tried first again.
 
     Args:
         spec: The source.
@@ -915,7 +938,8 @@ def _load_manifest(
         now: Clock.
         ttl: Seconds a fetched manifest is reused without a refetch.
         proxy: Upstream proxy URL.
-        force: Refetch regardless of the cached copy's age.
+        force: Refetch regardless of the cached copy's age or a cooldown.
+        selectors: The install selectors; see :func:`_expected_vendors`.
     """
     doc_path = root / "manifest.json"
     stamp_path = root / "manifest.stamp.json"
@@ -923,26 +947,41 @@ def _load_manifest(
     cached = _read_cached_manifest(doc_path, spec)
     fetched_at = stamp.get("fetched_at")
     known_at = fetched_at if isinstance(fetched_at, (int, float)) else None
-    if (
-        cached is not None
-        and not force
-        and known_at is not None
-        and now() - known_at <= ttl
-        and not stamp.get("stale_reason")
-    ):
-        return _ManifestState(
-            cached, fetched_at=known_at, from_cache=True, leg_url=stamp.get("url")
-        )
+    within_ttl = known_at is not None and now() - known_at <= ttl
+    if cached is not None and not force and within_ttl:
+        missing = _missing_vendors(cached, spec, selectors)
+        if not stamp.get("stale_reason") and (
+            not missing or _cooling(stamp, missing, now())
+        ):
+            return _ManifestState(
+                cached, fetched_at=known_at, from_cache=True, leg_url=stamp.get("url")
+            )
 
     failures: list[str] = []
     all_unreachable = True
-    for url in _manifest_legs(spec, stamp.get("url")):
+    legs = _manifest_legs(spec, stamp.get("url") if within_ttl else None)
+    for index, url in enumerate(legs):
         try:
             document, manifest = _fetch_leg(spec, url, http_get=http_get, proxy=proxy)
         except Exception as exc:  # noqa: BLE001 - every leg failure is reported
             all_unreachable = all_unreachable and _is_unreachable(exc)
             failures.append(f"{url}: {type(exc).__name__}: {exc}")
             continue
+        cooling = not force and _cooling(
+            stamp, _missing_vendors(manifest, spec, selectors), now()
+        )
+        doubt = _freshness_doubt(
+            manifest, cached, spec, selectors, check_missing=not cooling
+        )
+        if doubt and index + 1 < len(legs):
+            url, document, manifest = _second_opinion(
+                spec,
+                (url, document, manifest),
+                legs[index + 1],
+                doubt,
+                http_get=http_get,
+                proxy=proxy,
+            )
         if spec.key and manifest.source != spec.key:
             logger.warning(
                 "Shim source %s: the manifest at %s calls itself %r",
@@ -958,7 +997,13 @@ def _load_manifest(
         tmp.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
         tmp.replace(doc_path)
         when = now()
-        _write_stamp(stamp_path, {"fetched_at": when, "url": url})
+        record: dict[str, Any] = {"fetched_at": when, "url": url}
+        missing = _missing_vendors(manifest, spec, selectors)
+        if missing:
+            record["vendor_check"] = (
+                stamp["vendor_check"] if cooling else {"missing": missing, "at": when}
+            )
+        _write_stamp(stamp_path, record)
         return _ManifestState(manifest, fetched_at=when, leg_url=url)
 
     error = "; ".join(failures)
@@ -980,6 +1025,11 @@ def _load_manifest(
     return _ManifestState(None, error=error, unreachable=all_unreachable)
 
 
+#: Seconds a vendor-presence check that came back empty is not repeated for
+#: the same source and vendors (see :func:`_load_manifest`).
+VENDOR_RECHECK_SECONDS = 600
+
+
 def _read_cached_manifest(
     doc_path: Path, spec: ManifestSourceSpec
 ) -> SourceManifest | None:
@@ -993,6 +1043,17 @@ def _read_cached_manifest(
     except (OSError, ValueError) as exc:
         logger.warning("Shim source %s: cached manifest unusable: %s", spec.label, exc)
         return None
+
+
+def _cooling(stamp: Mapping[str, Any], missing: Sequence[str], when: float) -> bool:
+    """Whether a recent check already found *missing* absent (the cooldown)."""
+    record = stamp.get("vendor_check")
+    if not missing or not isinstance(record, Mapping):
+        return False
+    at, seen = record.get("at"), record.get("missing")
+    if not isinstance(at, (int, float)) or not isinstance(seen, list):
+        return False
+    return set(missing) <= set(seen) and 0 <= when - at < VENDOR_RECHECK_SECONDS
 
 
 def _keep_newer_cache(
@@ -1068,6 +1129,121 @@ def _older(manifest: SourceManifest, than: SourceManifest) -> bool:
     """Whether *manifest* was generated before *than* (an unknown time: no)."""
     mine, theirs = _generated_at(manifest), _generated_at(than)
     return mine is not None and theirs is not None and mine < theirs
+
+
+def _expected_vendors(selectors: Sequence[InstallSelector], source_id: str) -> set[str]:
+    """The vendors the selectors expect this source to publish.
+
+    An explicit ``<source>:<vendor>`` (a moved vendor's auto-install is one)
+    expects its vendor, and a mapped legacy preset expects the vendors its
+    package shipped (:attr:`InstallSelector.expected`), even when it installs
+    by tag.  A plain tag, ``*`` or an unqualified selector expects nothing:
+    another source may serve it, so its absence here proves nothing.
+    """
+    out: set[str] = set()
+    for s in selectors:
+        if s.source != source_id:
+            continue
+        if s.kind == "vendor":
+            out.add(s.value)
+        out.update(s.expected)
+    return out
+
+
+def _missing_vendors(
+    manifest: SourceManifest,
+    spec: ManifestSourceSpec,
+    selectors: Sequence[InstallSelector],
+) -> list[str]:
+    """The expected vendors (:func:`_expected_vendors`) *manifest* lacks.
+
+    A vendor listed only in ``manifest.dropped`` (every record invalid) counts
+    as lacking: an old copy can carry a record a newer producer has fixed.
+    """
+    expected = _expected_vendors(selectors, spec.key or manifest.source)
+    return sorted(expected - set(manifest.vendors))
+
+
+def _freshness_doubt(
+    manifest: SourceManifest,
+    cached: SourceManifest | None,
+    spec: ManifestSourceSpec,
+    selectors: Sequence[InstallSelector],
+    *,
+    check_missing: bool = True,
+) -> str | None:
+    """Why a manifest that answered may be an old copy, or ``None``.
+
+    Args:
+        check_missing: Whether a missing expected vendor counts; ``False``
+            while a recent check already found the same vendors absent.
+    """
+    if cached is not None and _older(manifest, cached):
+        return (
+            f"its generated_at {manifest.generated_at} is older than the cached "
+            f"{cached.generated_at}"
+        )
+    missing = _missing_vendors(manifest, spec, selectors) if check_missing else []
+    if missing:
+        return "it does not list " + ", ".join(missing)
+    return None
+
+
+def _second_opinion(
+    spec: ManifestSourceSpec,
+    first: tuple[str, Any, SourceManifest],
+    other_url: str,
+    doubt: str,
+    *,
+    http_get: HttpGet,
+    proxy: str | None,
+) -> tuple[str, Any, SourceManifest]:
+    """Fetch *other_url* once and return the newer of the two manifests.
+
+    The first manifest wins a tie, an unknown ``generated_at`` and a failed
+    second fetch (logged as a WARNING) — even when it is the copy that lacks
+    the expected vendor: only a newer ``generated_at`` replaces it, because
+    two copies of one generation that disagree say nothing about which is
+    current.
+    """
+    url, _, manifest = first
+    try:
+        other = _fetch_leg(spec, other_url, http_get=http_get, proxy=proxy)
+    except Exception as exc:  # noqa: BLE001 - the first answer still stands
+        logger.warning(
+            "Shim source %s: %s answered but %s; %s failed (%s: %s); using %s",
+            spec.label,
+            url,
+            doubt,
+            other_url,
+            type(exc).__name__,
+            exc,
+            url,
+        )
+        return first
+    if _older(manifest, other[1]):
+        logger.info(
+            "Shim source %s: using %s (generated_at %s): %s answered but %s, "
+            "and served generated_at %s",
+            spec.label,
+            other_url,
+            other[1].generated_at,
+            url,
+            doubt,
+            manifest.generated_at,
+        )
+        return other_url, other[0], other[1]
+    logger.info(
+        "Shim source %s: using %s (generated_at %s): it answered but %s, and "
+        "%s is not newer (generated_at %s)",
+        spec.label,
+        url,
+        manifest.generated_at,
+        doubt,
+        other_url,
+        other[1].generated_at,
+    )
+    return first
 
 
 def _download_release(
