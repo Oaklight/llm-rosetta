@@ -31,6 +31,18 @@ breaking change is either a mistake (keep the old name as a deprecated alias
 until its removal window) or an intentional removal that has to be written
 down.
 
+``contracts.SURFACE_VERSION`` rule: the extension surface (the ``EXTENSION``
+tier: ``llm_rosetta.api`` and ``llm_rosetta.contracts.*``) is what a host or a
+shim builds on, and a host asserts a *minimum* ``SURFACE_VERSION``.  So a
+breaking finding in an extension-tier module — acknowledged in the allowlist
+or not — also needs the head's ``SURFACE_VERSION`` to be above the base's;
+otherwise the check exits 1.  One rise covers every extension break between
+the base release and the head.  A base without the constant (every release up
+to v0.13.0) counts as level 0, so the first level, 1, covers all breaks
+against such a base.  Breaks in the user and compat tiers do not need a rise:
+the constant versions the extension surface only, and a user-tier name that
+``api`` re-exports is caught through ``api`` itself.
+
 Usage::
 
     python scripts/dev/public_api_diff.py                 # latest tag -> HEAD
@@ -157,6 +169,78 @@ def tree_modules(root: Path) -> tuple[str, ...]:
     if duplicates:
         raise SystemExit(f"the tier table of {root} lists {duplicates} twice")
     return modules
+
+
+def read_surface_version(root: Path) -> int:
+    """``contracts.SURFACE_VERSION`` of the tree at *root*, read from source.
+
+    Returns 0 when the tree has no ``llm_rosetta/contracts/__init__.py`` or the
+    module assigns no integer ``SURFACE_VERSION`` (every release up to
+    v0.13.0), so the first declared level is a rise over such a base.
+    """
+    path = _core_root(root) / "llm_rosetta" / "contracts" / "__init__.py"
+    if not path.is_file():
+        return 0
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+        else:
+            continue
+        value = node.value
+        # Only a literal integer counts.  A computed value (``BASE + 1``)
+        # deliberately reads as 0, so an extension break against a base at
+        # level >= 0 fails the check (closed) instead of passing on a level
+        # this reader cannot see.  Do not "fix" this into evaluating it.
+        if (
+            any(isinstance(t, ast.Name) and t.id == "SURFACE_VERSION" for t in targets)
+            and isinstance(value, ast.Constant)
+            and type(value.value) is int
+        ):
+            return value.value
+    return 0
+
+
+def extension_modules(root: Path) -> tuple[str, ...]:
+    """The ``EXTENSION`` tier of the tree at *root*; empty without a table."""
+    tiers = _tree_tiers(root)
+    return tuple(tiers.EXTENSION) if tiers is not None else ()
+
+
+def surface_version_errors(
+    findings: Iterable[dict],
+    extension: Iterable[str],
+    base_version: int,
+    head_version: int,
+) -> list[str]:
+    """Breaking extension findings that no ``SURFACE_VERSION`` rise covers.
+
+    See the module docstring for the rule.  Returns one line per uncovered
+    finding, or an empty list when there is none or the head's level is above
+    the base's.
+    """
+    if head_version > base_version:
+        return []
+    scope = set(extension)
+    return [
+        _describe_finding(finding)
+        for finding in findings
+        if finding["severity"] == "breaking" and finding["module"] in scope
+    ]
+
+
+def surface_version_report(
+    errors: list[str], base_version: int, head_version: int
+) -> str:
+    lines = [
+        f"SURFACE_VERSION NOT RAISED — {len(errors)} extension break(s)",
+        f"  contracts.SURFACE_VERSION is {head_version}; the base has {base_version}.",
+        "  A removal or changed meaning in llm_rosetta.api or llm_rosetta.contracts",
+        "  needs the level raised above the base's:",
+    ]
+    lines.extend(f"  - {line}" for line in errors)
+    return "\n".join(lines)
 
 
 def check_dump_complete(surface: dict, modules: Iterable[str], label: str) -> None:
@@ -760,6 +844,9 @@ def main(argv: list[str] | None = None) -> int:
         head_surface = dump_in_subprocess(head_root)
         check_dump_complete(base_surface, tree_modules(base_root), base_label)
         check_dump_complete(head_surface, tree_modules(head_root), str(head_root))
+        # Read from the base before its temporary worktree is removed.
+        base_version = read_surface_version(base_root)
+        extension = extension_modules(base_root) + extension_modules(head_root)
     finally:
         if cleanup:
             subprocess.run(
@@ -770,15 +857,25 @@ def main(argv: list[str] | None = None) -> int:
             )
 
     findings = compare(base_surface, head_surface)
+    head_version = read_surface_version(head_root)
+    level_errors = surface_version_errors(
+        findings, extension, base_version, head_version
+    )
     if args.json:
         for finding in findings:
             finding["acknowledged"] = finding["key"] in load_allowlist(
                 Path(args.allowlist)
             )
         print(json.dumps(findings, indent=2, sort_keys=True))
+        if level_errors:
+            print(
+                surface_version_report(level_errors, base_version, head_version),
+                file=sys.stderr,
+            )
         return (
             1
-            if any(
+            if level_errors
+            or any(
                 finding["severity"] in ("breaking", "error")
                 and not finding["acknowledged"]
                 for finding in findings
@@ -790,8 +887,13 @@ def main(argv: list[str] | None = None) -> int:
         findings,
         load_allowlist(Path(args.allowlist)),
         base_label,
-        str(Path(args.head).resolve()),
+        str(head_root),
     )
+    if level_errors:
+        text += "\n\n" + surface_version_report(
+            level_errors, base_version, head_version
+        )
+        status = 1
     print(text)
     if args.github_summary:
         summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
