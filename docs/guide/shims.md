@@ -544,7 +544,18 @@ URL，或对象 `{"url": …, "fallback": …, "token_env": …}`。
 manifest 从不降级，manifest 不再列出的已安装版本也会保留，并记录一条 WARNING。manifest
 从 jsDelivr（`…@dist/manifest.json`）读取，`raw.githubusercontent.com` 作为备用，并在
 `remote_ttl` 内复用；**重新拉取**会立即重读。源不可达时使用缓存的 manifest 与上一次成功
-的安装；摘要不匹配时绝不安装（保留之前的版本，并标记为过期）。
+的安装；摘要不匹配时绝不安装（保留之前的版本，并标记为过期）。发布之后 CDN 可能仍返回旧副本，
+因此网关会检查返回内容的 `generated_at` 及其列出的厂商。检查范围包括：显式的
+`<source>:<vendor>` 选择器；映射的旧预设所属包发布过的厂商（`presets: ["free"]` 期望
+`kilo_free`、`llm7`、`opencode_zen_free` 和 `ovhcloud`，尽管它按标签安装）；以及移出
+core 的厂商。普通的标签选择器或 `*` 不受检查；所有记录都无效的厂商视为缺失。返回内容早于
+缓存的 manifest，或缺少上述某个厂商时，网关会再请求另一个 URL 一次，采用 `generated_at`
+较新的 manifest；两者相同时保留第一个返回的副本，即使它正是缺少该厂商的那一份。一条 INFO
+日志写明采用的 URL 与原因。`remote_ttl` 内的缓存 manifest 缺少上述某个厂商时会重新拉取；
+拉取后仍然缺少时，同一组厂商在 10 分钟内不再重复检查（**重新拉取**不受此限制）。上次返回
+内容的 URL 只在其副本仍处于 `remote_ttl` 内时优先尝试，之后重新优先尝试主地址。无论由哪个
+URL 返回，缓存的 manifest 都不会被更旧的副本替换：缓存会保留，源标记为 `stale`，原因中写明
+两个 `generated_at` 值，之后每次应用都会重新拉取，直到拿到至少同样新的 manifest。
 
 **core 优先，按 shim 判定。** core 已注册的 shim 名称不会从源加载，日志会写明源、厂商与
 被忽略的名称；该厂商的其他 shim 照常安装（所有 shim 都已由 core 注册的厂商会被跳过）。
