@@ -42,6 +42,7 @@ from __future__ import annotations
 import argparse
 import ast
 import importlib
+import importlib.util
 import inspect
 import json
 import os
@@ -51,6 +52,7 @@ import sys
 import tempfile
 from collections.abc import Iterable
 from pathlib import Path
+from types import ModuleType
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ALLOWLIST = Path(__file__).with_name("public_api_allowlist.json")
@@ -60,48 +62,55 @@ DEFAULT_ALLOWLIST = Path(__file__).with_name("public_api_allowlist.json")
 #: qualify.
 STABLE_TAG_RE = re.compile(r"v\d+\.\d+\.\d+")
 
-#: Modules whose declared or inferred surface is part of the supported public
-#: API.  A module without ``__all__`` falls back to the names reachable at
-#: module scope (definitions, UPPER_CASE constants and intra-package
-#: re-exports), and the report labels that surface as inferred.  The list is deliberately
-#: explicit: importing every module under the package would execute the gateway
-#: CLI's argv parsing.
-PUBLIC_MODULES = (
-    "llm_rosetta",
-    # The host-facing surface the gateway imports (#1630).
-    "llm_rosetta.api",
-    "llm_rosetta.contracts",
-    "llm_rosetta.converters",
-    "llm_rosetta.converters.base",
-    "llm_rosetta.converters.embeddings",
-    "llm_rosetta.converters.rerank",
-    "llm_rosetta.converters.decisions",
-    "llm_rosetta.converters.registry",
-    "llm_rosetta.converters.llm.chat_completions",
-    "llm_rosetta.converters.llm.messages",
-    "llm_rosetta.converters.llm.open_responses",
-    "llm_rosetta.converters.llm.google_generate",
-    "llm_rosetta.converters.llm.google_interactions",
-    "llm_rosetta.types",
-    "llm_rosetta.types.ir",
-    "llm_rosetta.shims",
-    "llm_rosetta.auto_detect",
-    "llm_rosetta.pipeline",
-    "llm_rosetta.contracts.routing",
-    "llm_rosetta.fidelity",
-    "llm_rosetta.retired_names",
-    "llm_rosetta.tool_ops",
-    "llm_rosetta.observability",
-    "llm_rosetta.contracts.usage",
+#: The core tier table (``llm_rosetta/_tiers.py``) of the tree this script
+#: belongs to.  It is data only and is loaded by file path, so reading it never
+#: imports ``llm_rosetta`` (the base tree is imported in a subprocess).
+TIERS_FILE = REPO_ROOT / "packages/llm-rosetta/src/llm_rosetta/_tiers.py"
+
+
+def _load_tiers(path: Path) -> ModuleType:
+    spec = importlib.util.spec_from_file_location("_llm_rosetta_tiers", path)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"cannot load the tier table {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+_TIERS = _load_tiers(TIERS_FILE)
+
+#: Gateway modules in scope.  The gateway distribution has no tier table; its
+#: host-facing modules are listed here.
+GATEWAY_PUBLIC_MODULES = (
     "llm_rosetta_gateway.observability",
     "llm_rosetta_gateway.observability.metrics",
     "llm_rosetta_gateway.observability.persistence",
     "llm_rosetta_gateway.observability.request_log",
     "llm_rosetta_gateway.observability.ops_log",
     "llm_rosetta_gateway",
-    # Deprecated alias, kept importable for now; it will be removed in a later release.
-    "llm_rosetta.gateway",
 )
+
+#: Modules whose declared or inferred surface is part of the supported public
+#: API: the core's user, extension and compat tiers, then the gateway's.  A
+#: module without ``__all__`` falls back to the names reachable at module scope
+#: (definitions, UPPER_CASE constants and intra-package re-exports), and the
+#: report labels that surface as inferred.  The list is deliberately explicit:
+#: importing every module under the package would execute the gateway CLI's
+#: argv parsing.
+PUBLIC_MODULES: tuple[str, ...] = (
+    *_TIERS.USER,
+    *_TIERS.EXTENSION,
+    *_TIERS.COMPAT,
+    *GATEWAY_PUBLIC_MODULES,
+)
+
+#: Modules a final release shipped and this tree removed on purpose (the
+#: ``REMOVED`` tier).  They are still compared, so the removal of each name is
+#: a breaking finding the allowlist has to acknowledge.
+REMOVED_MODULES: tuple[str, ...] = tuple(_TIERS.REMOVED)
+
+#: Everything the surface dump and the comparison visit.
+COMPARED_MODULES: tuple[str, ...] = PUBLIC_MODULES + REMOVED_MODULES
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +201,7 @@ def dump_surface(root: Path) -> dict:
     gateway_in_tree = any(
         (path / "llm_rosetta_gateway").is_dir() for path in _src_roots(root)
     )
-    for module_name in PUBLIC_MODULES:
+    for module_name in COMPARED_MODULES:
         if module_name.startswith("llm_rosetta_gateway") and not gateway_in_tree:
             result[module_name] = {
                 "status": "absent",
@@ -400,7 +409,7 @@ def _compare_export(module: str, name: str, base: dict, head: dict) -> list[dict
 
 def compare(base: dict, head: dict) -> list[dict]:
     findings: list[dict] = []
-    for module in PUBLIC_MODULES:
+    for module in COMPARED_MODULES:
         base_entry = base.get(module, {"status": "absent"})
         head_entry = head.get(module, {"status": "absent"})
         base_status = base_entry["status"]
