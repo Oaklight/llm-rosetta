@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from llm_rosetta.capabilities import (
+from llm_rosetta.ir.passes import (
     STRICT_TOOL_NAME_PATTERN,
     ToolNameMap,
     build_tool_name_map,

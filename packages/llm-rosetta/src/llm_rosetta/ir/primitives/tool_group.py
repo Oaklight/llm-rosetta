@@ -8,7 +8,7 @@ asks the naming ladder to build a qualified name out of nothing while still
 counting as "came from a container".  Such a group is given an identifier
 derived from the container's own content instead, so the same request always
 produces the same one - the prompt-cache invariant the naming ladder already
-depends on (:func:`~llm_rosetta.capabilities.qualify_tool_names`).
+depends on (:func:`~llm_rosetta.ir.passes.qualify_tool_names`).
 """
 
 from __future__ import annotations

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from llm_rosetta.capabilities import ToolNameMap
+from llm_rosetta.api import ToolNameMap
 from llm_rosetta_gateway.middleware.error_annotate import (
     ToolSchemaLocator,
     annotate_tool_collisions,

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from typing import Any, Literal
 
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
-from llm_rosetta.capabilities import (
+from llm_rosetta.ir.passes import (
     backfill_reasoning_replay,
     dedupe_tool_definitions,
     qualify_tool_names,
@@ -33,7 +33,7 @@ from llm_rosetta import retired_names
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
 from llm_rosetta.contracts.shim import ProviderShim
 from llm_rosetta.shims.provider_shim import resolve_format, resolve_shim
-from llm_rosetta.transforms.body import Transform, apply_transforms
+from llm_rosetta.ir.primitives.body import Transform, apply_transforms
 from .errors import ConversionError
 from .introspection import PipelineIntrospection
 from .ir_transforms import apply_ir_transforms

@@ -12,7 +12,7 @@ request conversion, response conversion, and/or streaming:
     source_response = pipeline.convert_response(upstream_response)
 
 **Low-level** — :func:`apply_ir_transforms` and the functions in
-:mod:`llm_rosetta.capabilities` for finer control over individual stages.
+:mod:`llm_rosetta.ir.passes` for finer control over individual stages.
 
 The pipeline is part of the core library — **no network dependency**.
 It produces a target request body and consumes a target response body;

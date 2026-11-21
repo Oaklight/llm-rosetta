@@ -21,7 +21,7 @@ from typing import cast
 import pytest
 
 from llm_rosetta import convert
-from llm_rosetta.capabilities.tool_names import (
+from llm_rosetta.ir.passes.tool_names import (
     apply_upstream_tool_names,
     build_tool_name_map,
     qualify_tool_names,

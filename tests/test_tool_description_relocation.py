@@ -1,6 +1,6 @@
 """Tests for oversized tool description relocation."""
 
-from llm_rosetta.capabilities import (
+from llm_rosetta.ir.passes import (
     relocate_oversized_tool_descriptions,
 )
 

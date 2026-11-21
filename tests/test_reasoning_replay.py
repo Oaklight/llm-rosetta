@@ -10,7 +10,7 @@ dialect.
 
 from __future__ import annotations
 
-from llm_rosetta.capabilities import backfill_reasoning_replay
+from llm_rosetta.ir.passes import backfill_reasoning_replay
 from llm_rosetta.contracts.shim import ProviderShim, ReasoningCapability, ReplayMissing
 
 

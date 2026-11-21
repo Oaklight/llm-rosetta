@@ -7,7 +7,7 @@ name (``{"type":"function","function":{"name":"web_search"}}``) or explicitly
 (``{"type":"intrinsic","name":"web_search"}``).
 """
 
-from llm_rosetta.capabilities import resolve_intrinsic_tools
+from llm_rosetta.ir.passes import resolve_intrinsic_tools
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter

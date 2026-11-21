@@ -46,7 +46,7 @@ from ...base.helpers.citations import (
 )
 from ...base.helpers.extensions import wire_extensions
 from llm_rosetta.ir.primitives.system_message_hoist import hoist_system_in_converter
-from ....transforms.ir import auto_cache_breakpoints, hoist_late_system_messages
+from ....ir.primitives.ir import auto_cache_breakpoints, hoist_late_system_messages
 from ._constants import (
     ANTHROPIC_REASON_FROM_PROVIDER,
     AnthropicEventType,

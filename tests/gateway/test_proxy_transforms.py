@@ -20,7 +20,7 @@ from llm_rosetta_gateway.transport._base import UpstreamResponse
 from llm_rosetta.contracts.shim import ProviderShim, SoftErrorPattern
 from llm_rosetta.shims.provider_shim import register_shim
 from llm_rosetta.api import restore_registry, snapshot_registry
-from llm_rosetta.transforms import rename_field, strip_fields
+from llm_rosetta.contracts.transform import rename_field, strip_fields
 from llm_rosetta_gateway.routing import SelectionContext
 
 

@@ -17,7 +17,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.capabilities.tool_names import (
+from llm_rosetta.ir.passes.tool_names import (
     apply_upstream_tool_names,
     build_tool_name_map,
 )
@@ -498,7 +498,7 @@ def test_respell_still_renames_a_degraded_history_call():
     replay to ``tool_type == "function"``, so the respell pass sees a client
     call and renames it like any other.
     """
-    from llm_rosetta.capabilities import degrade_intrinsic_history
+    from llm_rosetta.ir.passes import degrade_intrinsic_history
     from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
     ir = {
