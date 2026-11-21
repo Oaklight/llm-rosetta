@@ -19,6 +19,10 @@ When the manifest cannot be fetched the last fetched copy is used, and when a
 download fails the last good install is kept (marked ``stale``), the same
 warm-cache behaviour a plain remote has.  A digest mismatch never installs.
 
+A manifest URL can answer 200 with an old copy (a CDN that has not caught up
+with a publish).  A cached manifest is never replaced by an older one: it is
+kept and marked ``stale`` until a fetch returns one at least as new.
+
 Precedence (S3): core wins per shim — a shim name core already registers is
 not loaded from the source, and the ignored names are logged with the source
 and vendor; the vendor's other shims still install.  A vendor whose installable
@@ -45,6 +49,7 @@ import shutil
 import uuid
 from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Literal
@@ -282,6 +287,7 @@ class _ManifestState:
     leg_url: str | None = None
     error: str | None = None
     unreachable: bool = False
+    stale_reason: str | None = None
 
 
 def install_from_manifests(
@@ -355,21 +361,24 @@ def install_from_manifests(
             for vendor, selector in _select_vendors(
                 state.manifest, source_id, plan.selectors, claimed, matched, root
             ):
-                statuses.append(
-                    _install_vendor(
-                        spec,
-                        source_id,
-                        root,
-                        state,
-                        vendor,
-                        selector,
-                        http_get=http_get,
-                        now=now,
-                        proxy=proxy,
-                        core_names=core_names,
-                        core_version=core_version,
-                    )
+                status = _install_vendor(
+                    spec,
+                    source_id,
+                    root,
+                    state,
+                    vendor,
+                    selector,
+                    http_get=http_get,
+                    now=now,
+                    proxy=proxy,
+                    core_names=core_names,
+                    core_version=core_version,
                 )
+                if state.stale_reason and status.ok and not status.skipped:
+                    status = replace(
+                        status, stale=True, error=status.error or state.stale_reason
+                    )
+                statuses.append(status)
     statuses.extend(
         _unmatched_rows(plan.selectors, matched, answered, fell_back, claimed)
     )
@@ -893,40 +902,43 @@ def _load_manifest(
     A fetch that fails on every URL — unreachable, an HTTP error, or a body
     that is not a valid manifest — falls back to the last fetched copy, marked
     stale.
+
+    Whatever URL served it, a manifest older than the cached one never
+    replaces it: the cached copy is used, marked stale, and the stamp records
+    why, so every later apply refetches (TTL or not) and the mark stays until
+    a fetch returns a manifest at least as new as the cache.
+
+    Args:
+        spec: The source.
+        root: The source's cache directory.
+        http_get: ``(url, *, headers, timeout, proxy) -> bytes``.
+        now: Clock.
+        ttl: Seconds a fetched manifest is reused without a refetch.
+        proxy: Upstream proxy URL.
+        force: Refetch regardless of the cached copy's age.
     """
     doc_path = root / "manifest.json"
     stamp_path = root / "manifest.stamp.json"
     stamp = _read_stamp(stamp_path)
-    cached: SourceManifest | None = None
-    if doc_path.is_file():
-        try:
-            cached = _read_manifest(
-                json.loads(doc_path.read_text(encoding="utf-8")), spec, warn=False
-            )
-        except (OSError, ValueError) as exc:
-            logger.warning(
-                "Shim source %s: cached manifest unusable: %s", spec.label, exc
-            )
+    cached = _read_cached_manifest(doc_path, spec)
     fetched_at = stamp.get("fetched_at")
+    known_at = fetched_at if isinstance(fetched_at, (int, float)) else None
     if (
         cached is not None
         and not force
-        and isinstance(fetched_at, (int, float))
-        and now() - fetched_at <= ttl
+        and known_at is not None
+        and now() - known_at <= ttl
+        and not stamp.get("stale_reason")
     ):
         return _ManifestState(
-            cached, fetched_at=fetched_at, from_cache=True, leg_url=stamp.get("url")
+            cached, fetched_at=known_at, from_cache=True, leg_url=stamp.get("url")
         )
 
     failures: list[str] = []
     all_unreachable = True
     for url in _manifest_legs(spec, stamp.get("url")):
         try:
-            data = http_get(
-                url, headers=_headers_for(spec, url), timeout=HTTP_TIMEOUT, proxy=proxy
-            )
-            document = json.loads(bytes(data).decode("utf-8"))
-            manifest = _read_manifest(document, spec)
+            document, manifest = _fetch_leg(spec, url, http_get=http_get, proxy=proxy)
         except Exception as exc:  # noqa: BLE001 - every leg failure is reported
             all_unreachable = all_unreachable and _is_unreachable(exc)
             failures.append(f"{url}: {type(exc).__name__}: {exc}")
@@ -937,6 +949,10 @@ def _load_manifest(
                 spec.key,
                 url,
                 manifest.source,
+            )
+        if cached is not None and _older(manifest, cached):
+            return _keep_newer_cache(
+                spec, url, manifest, cached, stamp, stamp_path, known_at
             )
         tmp = doc_path.with_name(f"manifest.json.tmp-{uuid.uuid4().hex}")
         tmp.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
@@ -954,7 +970,7 @@ def _load_manifest(
         )
         return _ManifestState(
             cached,
-            fetched_at=fetched_at if isinstance(fetched_at, (int, float)) else None,
+            fetched_at=known_at,
             stale=True,
             from_cache=True,
             leg_url=stamp.get("url"),
@@ -962,6 +978,96 @@ def _load_manifest(
         )
     logger.warning("Shim source %s: manifest unavailable: %s", spec.label, error)
     return _ManifestState(None, error=error, unreachable=all_unreachable)
+
+
+def _read_cached_manifest(
+    doc_path: Path, spec: ManifestSourceSpec
+) -> SourceManifest | None:
+    """The cached manifest, or ``None`` when there is none or it is unusable."""
+    if not doc_path.is_file():
+        return None
+    try:
+        return _read_manifest(
+            json.loads(doc_path.read_text(encoding="utf-8")), spec, warn=False
+        )
+    except (OSError, ValueError) as exc:
+        logger.warning("Shim source %s: cached manifest unusable: %s", spec.label, exc)
+        return None
+
+
+def _keep_newer_cache(
+    spec: ManifestSourceSpec,
+    url: str,
+    manifest: SourceManifest,
+    cached: SourceManifest,
+    stamp: Mapping[str, Any],
+    stamp_path: Path,
+    known_at: float | None,
+) -> _ManifestState:
+    """Keep *cached* over the older *manifest*, and make the next apply ask again.
+
+    The stamp keeps its time and URL but records the reason, which bypasses
+    the TTL: the source stays ``stale`` until a fetch returns a manifest at
+    least as new as the cache.
+    """
+    reason = (
+        f"{url} served a manifest generated_at {manifest.generated_at}, "
+        f"older than the cached one (generated_at {cached.generated_at}); "
+        "keeping the cached manifest"
+    )
+    logger.warning("Shim source %s: %s", spec.label, reason)
+    _write_stamp(stamp_path, {**stamp, "stale_reason": reason})
+    return _ManifestState(
+        cached,
+        fetched_at=known_at,
+        stale=True,
+        from_cache=True,
+        leg_url=stamp.get("url"),
+        error=reason,
+        stale_reason=reason,
+    )
+
+
+def _fetch_leg(
+    spec: ManifestSourceSpec, url: str, *, http_get: HttpGet, proxy: str | None
+) -> tuple[Any, SourceManifest]:
+    """Fetch and parse the manifest at *url*: ``(document, manifest)``."""
+    data = http_get(
+        url, headers=_headers_for(spec, url), timeout=HTTP_TIMEOUT, proxy=proxy
+    )
+    document = json.loads(bytes(data).decode("utf-8"))
+    return document, _read_manifest(document, spec)
+
+
+_RFC3339_RE = re.compile(
+    r"^(\d{4}-\d{2}-\d{2})[Tt ](\d{2}:\d{2}:\d{2})(?:\.(\d+))?"
+    r"(Z|z|[+-]\d{2}:\d{2})$"
+)
+
+
+def _generated_at(manifest: SourceManifest) -> datetime | None:
+    """The manifest's ``generated_at`` as an aware UTC datetime, or ``None``.
+
+    Parsed by hand: ``datetime.fromisoformat`` on Python 3.10 refuses ``Z``
+    and fractions that are not 3 or 6 digits, both of which RFC 3339 allows.
+    """
+    match = _RFC3339_RE.match(str(manifest.generated_at).strip())
+    if match is None:
+        return None
+    day, clock, fraction, offset = match.groups()
+    micros = (fraction or "0")[:6].ljust(6, "0")
+    offset = "+00:00" if offset in ("Z", "z") else offset
+    try:
+        moment = datetime.fromisoformat(f"{day}T{clock}.{micros}{offset}")
+    except ValueError:
+        return None
+    return moment.astimezone(timezone.utc)
+
+
+def _older(manifest: SourceManifest, than: SourceManifest) -> bool:
+    """Whether *manifest* was generated before *than* (an unknown time: no)."""
+    mine, theirs = _generated_at(manifest), _generated_at(than)
+    return mine is not None and theirs is not None and mine < theirs
 
 
 def _download_release(
