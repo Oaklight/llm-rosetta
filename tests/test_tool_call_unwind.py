@@ -1,7 +1,12 @@
 """Tests for Argo parallel tool call unwind utility."""
 
+import copy
+import json
 from typing import Any
 
+import pytest
+
+from llm_rosetta import ChatCompletionsConverter, MessagesConverter
 from llm_rosetta.conversion_warnings import DOWNGRADED, WarningSink, recording_to
 from llm_rosetta.ir.primitives.call_unwind import (
     unwind_parallel_tool_calls_ir,
@@ -414,3 +419,403 @@ class TestUnwindReportsTheReorder:
         assert "message index 1" in sink[0]
         assert "message index 5" in sink[1]
         assert str(sink[0]) != str(sink[1])
+
+
+class TestUnwindBatchedResults:
+    """Results batched in one ``role: tool`` message (#1611).
+
+    Anthropic sends every result of a parallel turn in one ``user`` message;
+    in IR that is one tool message holding several ``tool_result`` parts.
+    The unwind counts results, not messages, and gives each call exactly its
+    own result.
+    """
+
+    @staticmethod
+    def _batched(*results: dict) -> dict:
+        return {"role": "tool", "content": list(results), "batch_id": "0"}
+
+    def test_two_batched_results_are_split_and_paired(self):
+        req = {
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "weather?"}]},
+                {"role": "assistant", "content": [_tc("c1"), _tc("c2", city="LA")]},
+                self._batched(_tr("c1", "Sunny"), _tr("c2", "Cloudy")),
+            ]
+        }
+        before = copy.deepcopy(req)
+
+        result = unwind_parallel_tool_calls_ir(req)
+
+        assert result["messages"] == [
+            before["messages"][0],
+            {"role": "assistant", "content": [_tc("c1")]},
+            {"role": "tool", "content": [_tr("c1", "Sunny")], "batch_id": "0"},
+            {"role": "assistant", "content": [_tc("c2", city="LA")]},
+            {"role": "tool", "content": [_tr("c2", "Cloudy")], "batch_id": "0"},
+        ]
+        assert req == before  # the input is not mutated
+
+    def test_batched_results_in_reverse_order_pair_by_id(self):
+        req = {
+            "messages": [
+                {"role": "assistant", "content": [_tc("c1"), _tc("c2", city="LA")]},
+                self._batched(_tr("c2", "Cloudy"), _tr("c1", "Sunny")),
+            ]
+        }
+
+        msgs = unwind_parallel_tool_calls_ir(req)["messages"]
+
+        assert [m["role"] for m in msgs] == ["assistant", "tool"] * 2
+        assert msgs[1]["content"] == [_tr("c1", "Sunny")]
+        assert msgs[3]["content"] == [_tr("c2", "Cloudy")]
+
+    def test_a_batch_and_a_single_result_together_count_as_three(self):
+        req = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [_tc("c1"), _tc("c2", city="LA"), _tc("c3", city="SF")],
+                },
+                self._batched(_tr("c1", "a"), _tr("c2", "b")),
+                {"role": "tool", "content": [_tr("c3", "c")]},
+            ]
+        }
+
+        msgs = unwind_parallel_tool_calls_ir(req)["messages"]
+
+        assert [m["role"] for m in msgs] == ["assistant", "tool"] * 3
+        assert [m["content"] for m in msgs[1::2]] == [
+            [_tr("c1", "a")],
+            [_tr("c2", "b")],
+            [_tr("c3", "c")],
+        ]
+        # The single-result message is passed through as the same object.
+        assert msgs[5] is req["messages"][2]
+
+    def test_batched_results_fewer_than_calls_skip_reorder(self):
+        sink = WarningSink()
+        req = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [_tc("c1"), _tc("c2", city="LA"), _tc("c3", city="SF")],
+                },
+                self._batched(_tr("c1"), _tr("c2")),
+            ]
+        }
+        with recording_to(sink):
+            result = unwind_parallel_tool_calls_ir(req)
+
+        assert result is req
+        assert len(sink) == 1
+        assert (
+            "3 tool calls but 2 result unit(s) (2 tool_result part(s) "
+            "in 1 tool message(s))" in sink[0]
+        )
+
+    def test_batched_results_more_than_calls_skip_reorder(self):
+        req = {
+            "messages": [
+                {"role": "assistant", "content": [_tc("c1"), _tc("c2", city="LA")]},
+                self._batched(_tr("c1"), _tr("c2"), _tr("c3")),
+            ]
+        }
+        assert unwind_parallel_tool_calls_ir(req) is req
+
+    def test_a_batch_carrying_a_non_result_part_is_left_unchanged(self):
+        """A split cannot say which result a stray part belongs to."""
+        sink = WarningSink()
+        req = {
+            "messages": [
+                {"role": "assistant", "content": [_tc("c1"), _tc("c2", city="LA")]},
+                {
+                    "role": "tool",
+                    "content": [_tr("c1"), {"type": "text", "text": "note"}, _tr("c2")],
+                },
+            ]
+        }
+        with recording_to(sink):
+            result = unwind_parallel_tool_calls_ir(req)
+
+        assert result is req
+        assert len(sink) == 1
+        assert sink[0].code == DOWNGRADED
+        assert "non-result part" in sink[0]
+
+    @pytest.mark.parametrize("content", [None, "done", {"text": "x"}])
+    def test_a_tool_message_without_list_content_is_not_a_batch(self, content):
+        """Non-list content passes through as one message, as before #1611."""
+        odd = {"role": "tool", "content": content}
+        second = {"role": "tool", "content": [_tr("c2", "Cloudy")]}
+        req = {
+            "messages": [
+                {"role": "assistant", "content": [_tc("c1"), _tc("c2", city="LA")]},
+                odd,
+                second,
+            ]
+        }
+
+        msgs = unwind_parallel_tool_calls_ir(req)["messages"]
+
+        assert [m["role"] for m in msgs] == ["assistant", "tool"] * 2
+        assert msgs[1] is odd  # positional pairing, the object untouched
+        assert msgs[3] is second
+
+    def test_a_lone_message_without_list_content_is_a_mismatch(self):
+        sink = WarningSink()
+        req = {
+            "messages": [
+                {"role": "assistant", "content": [_tc("c1"), _tc("c2", city="LA")]},
+                {"role": "tool", "content": None},
+            ]
+        }
+        with recording_to(sink):
+            result = unwind_parallel_tool_calls_ir(req)
+
+        assert result is req
+        assert len(sink) == 1
+
+    def test_the_mismatch_report_says_what_it_counted(self):
+        """Pairing units, results and messages are named apart."""
+        sink = WarningSink()
+        req = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [_tc("c1"), _tc("c2", city="LA"), _tc("c3", city="SF")],
+                },
+                {"role": "tool", "content": "ok"},
+                {"role": "tool", "content": [_tr("c2")]},
+            ]
+        }
+        with recording_to(sink):
+            unwind_parallel_tool_calls_ir(req)
+
+        assert len(sink) == 1
+        assert (
+            "3 tool calls but 2 result unit(s) (1 tool_result part(s) "
+            "in 2 tool message(s))" in sink[0]
+        )
+
+    @pytest.mark.parametrize(
+        "result_ids",
+        [("c1", "c1"), ("cX", "cY"), ("c1", "c3")],
+        ids=["duplicate", "foreign", "one_missing"],
+    )
+    def test_a_batch_whose_ids_do_not_match_the_calls_is_left_unchanged(
+        self, result_ids
+    ):
+        """Counts match after the split, ids do not: no positional guess."""
+        sink = WarningSink()
+        req = {
+            "messages": [
+                {"role": "assistant", "content": [_tc("c1"), _tc("c2", city="LA")]},
+                self._batched(*(_tr(rid) for rid in result_ids)),
+            ]
+        }
+        with recording_to(sink):
+            result = unwind_parallel_tool_calls_ir(req)
+
+        assert result is req
+        assert len(sink) == 1
+        assert sink[0].code == DOWNGRADED
+        assert "result ids do not match the call ids" in sink[0]
+
+    def test_the_id_check_counts_duplicates_not_just_names(self):
+        """Same id set, different multiplicity: still not the calls' answers."""
+        req = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [_tc("c1"), _tc("c1", city="LA"), _tc("c2", city="SF")],
+                },
+                self._batched(_tr("c1"), _tr("c2"), _tr("c2")),
+            ]
+        }
+        assert unwind_parallel_tool_calls_ir(req) is req
+
+    def test_a_reordered_batch_with_the_right_ids_still_unwinds(self):
+        req = {
+            "messages": [
+                {"role": "assistant", "content": [_tc("c1"), _tc("c2", city="LA")]},
+                self._batched(_tr("c2", "Cloudy"), _tr("c1", "Sunny")),
+            ]
+        }
+        sink = WarningSink()
+        with recording_to(sink):
+            msgs = unwind_parallel_tool_calls_ir(req)["messages"]
+
+        assert len(sink) == 0
+        assert [m["content"][0]["tool_call_id"] for m in msgs] == [
+            "c1",
+            "c1",
+            "c2",
+            "c2",
+        ]
+
+    def test_one_result_per_message_output_is_unchanged(self):
+        """The pre-#1611 shape keeps its exact output, objects included."""
+        tool_1 = {"role": "tool", "content": [_tr("c1", "Sunny")], "batch_id": "0"}
+        tool_2 = {"role": "tool", "content": [_tr("c2", "Cloudy")], "batch_id": "0"}
+        req = {
+            "messages": [
+                {"role": "user", "content": [{"type": "text", "text": "weather?"}]},
+                {"role": "assistant", "content": [_tc("c1"), _tc("c2", city="LA")]},
+                tool_2,
+                tool_1,
+            ]
+        }
+
+        msgs = unwind_parallel_tool_calls_ir(req)["messages"]
+
+        assert json.dumps(msgs, sort_keys=True) == json.dumps(
+            [
+                req["messages"][0],
+                {"role": "assistant", "content": [_tc("c1")]},
+                tool_1,
+                {"role": "assistant", "content": [_tc("c2", city="LA")]},
+                tool_2,
+            ],
+            sort_keys=True,
+        )
+        assert msgs[2] is tool_1
+        assert msgs[4] is tool_2
+
+
+# ---------------------------------------------------------------------------
+# Round trips through the converters (#1611)
+# ---------------------------------------------------------------------------
+
+
+def _anthropic_body(tool_results: list[dict]) -> dict:
+    """An Anthropic request whose parallel results follow in ``tool_results``."""
+    return {
+        "model": "m",
+        "max_tokens": 64,
+        "messages": [
+            {"role": "user", "content": "weather in NYC and LA?"},
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "Checking both."},
+                    {
+                        "type": "tool_use",
+                        "id": "t1",
+                        "name": "w",
+                        "input": {"c": "NYC"},
+                    },
+                    {"type": "tool_use", "id": "t2", "name": "w", "input": {"c": "LA"}},
+                ],
+            },
+            *tool_results,
+        ],
+    }
+
+
+_BATCHED = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "tool_result", "tool_use_id": "t1", "content": "Sunny"},
+            {"type": "tool_result", "tool_use_id": "t2", "content": "Cloudy"},
+        ],
+    }
+]
+
+_ONE_PER_MESSAGE = [
+    {
+        "role": "user",
+        "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "Sunny"}],
+    },
+    {
+        "role": "user",
+        "content": [{"type": "tool_result", "tool_use_id": "t2", "content": "Cloudy"}],
+    },
+]
+
+_UNWOUND_ANTHROPIC = [
+    {"role": "user", "content": [{"type": "text", "text": "weather in NYC and LA?"}]},
+    {
+        "role": "assistant",
+        "content": [
+            {"type": "text", "text": "Checking both."},
+            {"type": "tool_use", "id": "t1", "name": "w", "input": {"c": "NYC"}},
+        ],
+    },
+    {
+        "role": "user",
+        "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "Sunny"}],
+    },
+    {
+        "role": "assistant",
+        "content": [
+            {"type": "tool_use", "id": "t2", "name": "w", "input": {"c": "LA"}}
+        ],
+    },
+    {
+        "role": "user",
+        "content": [{"type": "tool_result", "tool_use_id": "t2", "content": "Cloudy"}],
+    },
+]
+
+
+class TestUnwindRoundTrips:
+    """A = Anthropic Messages, B = Chat Completions; the unwind runs on IR."""
+
+    @staticmethod
+    def _unwound_ir(body: dict) -> Any:
+        ir: Any = MessagesConverter().request_from_provider(body)
+        return unwind_parallel_tool_calls_ir(ir)
+
+    def test_batched_results_are_one_tool_message_in_ir(self):
+        """Precondition: the batched shape really is one multi-result message."""
+        ir: Any = MessagesConverter().request_from_provider(_anthropic_body(_BATCHED))
+        tool_msgs = [m for m in ir["messages"] if m.get("role") == "tool"]
+        assert len(tool_msgs) == 1
+        assert len(tool_msgs[0]["content"]) == 2
+
+    @pytest.mark.parametrize(
+        "results", [_BATCHED, _ONE_PER_MESSAGE], ids=["batched", "one_per_message"]
+    )
+    def test_a_ir_a(self, results):
+        body, _ = MessagesConverter().request_to_provider(
+            self._unwound_ir(_anthropic_body(results))
+        )
+        assert body["messages"] == _UNWOUND_ANTHROPIC
+
+    @pytest.mark.parametrize(
+        "results", [_BATCHED, _ONE_PER_MESSAGE], ids=["batched", "one_per_message"]
+    )
+    def test_a_ir_b(self, results):
+        body, _ = ChatCompletionsConverter().request_to_provider(
+            self._unwound_ir(_anthropic_body(results))
+        )
+        msgs = body["messages"]
+        assert [m["role"] for m in msgs] == [
+            "user",
+            "assistant",
+            "tool",
+            "assistant",
+            "tool",
+        ]
+        assert [len(m["tool_calls"]) for m in msgs[1::2]] == [1, 1]
+        assert [m["tool_calls"][0]["id"] for m in msgs[1::2]] == ["t1", "t2"]
+        assert [(m["tool_call_id"], m["content"]) for m in msgs[2::2]] == [
+            ("t1", "Sunny"),
+            ("t2", "Cloudy"),
+        ]
+
+    @pytest.mark.parametrize(
+        "results", [_BATCHED, _ONE_PER_MESSAGE], ids=["batched", "one_per_message"]
+    )
+    def test_a_ir_b_ir_a(self, results):
+        chat_body, _ = ChatCompletionsConverter().request_to_provider(
+            self._unwound_ir(_anthropic_body(results))
+        )
+        ir_again = ChatCompletionsConverter().request_from_provider(chat_body)
+        body, _ = MessagesConverter().request_to_provider(ir_again)
+        assert body["messages"] == _UNWOUND_ANTHROPIC
+
+    def test_the_unwind_is_idempotent_on_its_own_output(self):
+        ir = self._unwound_ir(_anthropic_body(_BATCHED))
+        assert unwind_parallel_tool_calls_ir(ir) is ir
