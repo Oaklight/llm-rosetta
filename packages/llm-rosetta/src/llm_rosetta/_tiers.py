@@ -20,6 +20,12 @@ Tiers:
   every removal an acknowledged entry in
   ``scripts/dev/public_api_allowlist.json`` instead of a silent drop.
 
+Dropping a module from these tables is reported by the public-API diff
+against a base that ships ``_tiers.py``, i.e. from 0.14.0 on: the base is
+measured with its own table.  The 0.13.0 base has no table and is measured
+with the head's list, so it is covered by the frozen module list in
+``tests/test_public_api_diff.py`` (``V0_13_0_PUBLIC_MODULES``) instead.
+
 Every module not listed is **internal** and may move in any release.
 ``tests/test_tiers.py`` checks that every module of the first three tiers
 imports and that no ``REMOVED`` module does.

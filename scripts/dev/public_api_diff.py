@@ -13,7 +13,9 @@ neither is an imported module object.
 Scope limits: only module-level names and the constructor signature of an
 exported class are compared — methods on a class are not.  The module list is
 deliberately explicit, so packages that are not listed (for example
-``llm_rosetta_gateway.admin.*``) are out of scope.
+``llm_rosetta_gateway.admin.*``) are out of scope.  Each tree is measured with
+its own list, read from its ``llm_rosetta/_tiers.py``; a tree without one (a
+release up to v0.13.0) is measured with this script's list.
 
 The two trees are imported in separate subprocesses, so module state cannot
 leak between them.
@@ -109,8 +111,68 @@ PUBLIC_MODULES: tuple[str, ...] = (
 #: a breaking finding the allowlist has to acknowledge.
 REMOVED_MODULES: tuple[str, ...] = tuple(_TIERS.REMOVED)
 
-#: Everything the surface dump and the comparison visit.
+#: Everything the surface dump of this script's own tree visits.  It is also
+#: the fallback list for a tree that has no tier table (every release up to
+#: and including v0.13.0).
 COMPARED_MODULES: tuple[str, ...] = PUBLIC_MODULES + REMOVED_MODULES
+
+
+def _modules_of(tiers: ModuleType) -> tuple[str, ...]:
+    return (
+        *tiers.USER,
+        *tiers.EXTENSION,
+        *tiers.COMPAT,
+        *GATEWAY_PUBLIC_MODULES,
+        *tiers.REMOVED,
+    )
+
+
+def _tree_tiers(root: Path) -> ModuleType | None:
+    """The tier table of the tree at *root*, or ``None`` when it has none."""
+    path = _core_root(root) / "llm_rosetta" / "_tiers.py"
+    return _load_tiers(path) if path.is_file() else None
+
+
+def tree_modules(root: Path) -> tuple[str, ...]:
+    """The modules the surface of the tree at *root* is made of.
+
+    Each tree is read with its **own** tier table, so a base release is
+    measured by what it declared public, not by what the head declares.
+    Otherwise a PR that drops a module from ``_tiers.py`` and deletes the
+    module's allowlist entries in the same change would compare nothing on
+    either side and report nothing (#1659 review).  That holds against a base
+    that ships ``_tiers.py``, i.e. from 0.14.0 on.  A tree without a tier
+    table (v0.13.0 and earlier) falls back to this script's own list, so for
+    the 0.13.0 base a dropped module is caught by the frozen module list in
+    ``tests/test_public_api_diff.py`` instead.
+
+    Raises:
+        SystemExit: The table lists a module twice; the dump is keyed by
+            module name, so a duplicate would make the table and the dump
+            disagree on the module count.
+    """
+    tiers = _tree_tiers(root)
+    modules = COMPARED_MODULES if tiers is None else _modules_of(tiers)
+    duplicates = sorted({name for name in modules if modules.count(name) > 1})
+    if duplicates:
+        raise SystemExit(f"the tier table of {root} lists {duplicates} twice")
+    return modules
+
+
+def check_dump_complete(surface: dict, modules: Iterable[str], label: str) -> None:
+    """Fail unless *surface* holds exactly one entry per module in *modules*.
+
+    The dump runs in a subprocess; this check, in the parent, proves that the
+    comparison covers every module the tier table lists and nothing else.
+    """
+    expected = tuple(modules)
+    if len(surface) != len(expected) or set(surface) != set(expected):
+        missing = sorted(set(expected) - set(surface))
+        extra = sorted(set(surface) - set(expected))
+        raise SystemExit(
+            f"the surface dump of {label} has {len(surface)} modules, its tier"
+            f" table lists {len(expected)} (missing {missing}, extra {extra})"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +278,7 @@ def dump_surface(root: Path) -> dict:
                 f" expected under {gateway_src}"
             )
 
+    modules = tree_modules(root)
     result: dict[str, dict] = {}
     # A tree that predates the split has no ``llm_rosetta_gateway``; importing
     # the name anyway would find this machine's installed copy and measure the
@@ -223,7 +286,7 @@ def dump_surface(root: Path) -> dict:
     gateway_in_tree = any(
         (path / "llm_rosetta_gateway").is_dir() for path in _src_roots(root)
     )
-    for module_name in COMPARED_MODULES:
+    for module_name in modules:
         if module_name.startswith("llm_rosetta_gateway") and not gateway_in_tree:
             result[module_name] = {
                 "status": "absent",
@@ -259,6 +322,7 @@ def dump_surface(root: Path) -> dict:
             "source": source,
             "exports": {name: _describe(getattr(module, name, None)) for name in names},
         }
+    check_dump_complete(result, modules, str(root))
     return result
 
 
@@ -430,8 +494,14 @@ def _compare_export(module: str, name: str, base: dict, head: dict) -> list[dict
 
 
 def compare(base: dict, head: dict) -> list[dict]:
+    """Compare two surface dumps, each keyed by its own tree's module list.
+
+    A module only the base lists is compared against an absent head, so a
+    module the head dropped from its tier table is a breaking finding for
+    each of its names, whether or not the module still imports.
+    """
     findings: list[dict] = []
-    for module in COMPARED_MODULES:
+    for module in [*base, *(name for name in head if name not in base)]:
         base_entry = base.get(module, {"status": "absent"})
         head_entry = head.get(module, {"status": "absent"})
         base_status = base_entry["status"]
@@ -454,9 +524,10 @@ def compare(base: dict, head: dict) -> list[dict]:
             findings.append(_finding("info", module, "<module>", "module-added"))
             continue
         if head_status == "absent":
+            detail = module if module in head else f"{module}, not in the head tiers"
             for name in base_entry.get("exports", {}):
                 findings.append(
-                    _finding("breaking", module, name, "module-removed", detail=module)
+                    _finding("breaking", module, name, "module-removed", detail=detail)
                 )
             continue
         if base_status != head_status:
@@ -683,9 +754,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     base_root, base_label, cleanup = _make_base(args)
+    head_root = Path(args.head).resolve()
     try:
         base_surface = dump_in_subprocess(base_root)
-        head_surface = dump_in_subprocess(Path(args.head).resolve())
+        head_surface = dump_in_subprocess(head_root)
+        check_dump_complete(base_surface, tree_modules(base_root), base_label)
+        check_dump_complete(head_surface, tree_modules(head_root), str(head_root))
     finally:
         if cleanup:
             subprocess.run(
