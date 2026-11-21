@@ -7,20 +7,54 @@ from ....ir.primitives.finish_reason import reason_for_completed_turn
 from ._constants import (
     RESPONSES_INCOMPLETE_REASON_TO_IR,
     RESPONSES_STATUS_TO_REASON,
+    ResponsesEventType,
 )
 
 
-def _response_status_reason(response: dict[str, Any]) -> str:
-    """Map the response status to the IR reason; the parts decide the rest."""
-    status = response.get("status", "completed")
-    if status == "incomplete":
+def _is_incomplete(response: dict[str, Any], terminal_event: str | None) -> bool:
+    """Whether the turn stopped short.
+
+    A ``response.incomplete`` event says so whatever its body's ``status``
+    reads.  Otherwise ``status`` decides; when it is absent, an
+    ``incomplete_details`` object says the turn is incomplete.
+    """
+    if terminal_event == ResponsesEventType.RESPONSE_INCOMPLETE:
+        return True
+    status = response.get("status")
+    if status is None:
+        return response.get("incomplete_details") is not None
+    return status == "incomplete"
+
+
+def _response_status_reason(
+    response: dict[str, Any], terminal_event: str | None = None
+) -> str:
+    """Map the response status to the IR reason; the parts decide the rest.
+
+    An incomplete response stopped short (see :func:`_is_incomplete`).
+    ``incomplete_details.reason`` names why; when it is missing, unknown or
+    not a string the turn is a ``length`` stop — the only documented cause of
+    ``incomplete`` — and never ``stop``, which the parts would upgrade to
+    ``tool_calls`` and send the client to answer a call the model never
+    finished (#1612).
+
+    Args:
+        response: The response body.
+        terminal_event: The stream event that carried it, when there is one.
+    """
+    if _is_incomplete(response, terminal_event):
         details = response.get("incomplete_details")
-        reason = details.get("reason", "") if isinstance(details, dict) else ""
-        return RESPONSES_INCOMPLETE_REASON_TO_IR.get(reason, "stop")
-    return RESPONSES_STATUS_TO_REASON.get(status or "", "stop")
+        reason = details.get("reason") if isinstance(details, dict) else None
+        if not isinstance(reason, str):
+            reason = ""
+        return RESPONSES_INCOMPLETE_REASON_TO_IR.get(reason, "length")
+    status = response.get("status") or "completed"
+    return RESPONSES_STATUS_TO_REASON.get(status, "stop")
 
 
-def _stream_finish_reason(response: dict[str, Any]) -> str:
+def _stream_finish_reason(
+    response: dict[str, Any], terminal_event: str | None = None
+) -> str:
     """Decide the streamed terminal reason from the body the frame carries.
 
     A ``response.completed`` event usually carries the output list, so this
@@ -38,7 +72,7 @@ def _stream_finish_reason(response: dict[str, Any]) -> str:
         for item in response.get("output", [])
     )
     return reason_for_completed_turn(
-        _response_status_reason(response), calls_the_client
+        _response_status_reason(response, terminal_event), calls_the_client
     )
 
 
