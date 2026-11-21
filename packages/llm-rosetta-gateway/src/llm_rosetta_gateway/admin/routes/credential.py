@@ -18,7 +18,7 @@ import json
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.providers import account_token_for
+from llm_rosetta_gateway.config.providers import account_token_for
 from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
 from llm_rosetta_gateway.transport.token_refresh import (
     force_refresh,

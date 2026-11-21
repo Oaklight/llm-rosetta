@@ -9,7 +9,7 @@ from llm_rosetta_gateway._vendor.httpclient import AsyncClient, Response as Http
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.api import get_model_list_transform, get_shim
 
-from ....providers import default_models_path
+from ....config.providers import default_models_path
 from .._shared import (
     _resolve_models_path,
 )

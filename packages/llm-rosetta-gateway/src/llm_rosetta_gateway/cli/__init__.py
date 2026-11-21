@@ -32,7 +32,7 @@ from ..config import (
 )
 from ..config.errors import RetiredConfigName
 from ..observability.logging import get_logger, setup_logging
-from ..providers import (
+from ..config.providers import (
     get_default_api_key_env,
     get_default_base_url,
     known_provider_types,

@@ -518,7 +518,7 @@ class TestMergeRebuild:
 
 class TestTokenCommandValidation:
     def test_missing_binary_warns_but_succeeds(self):
-        from llm_rosetta_gateway.providers import _resolve_token_command
+        from llm_rosetta_gateway.config.providers import _resolve_token_command
 
         api_key, cmd, _ = _resolve_token_command(
             "test-provider",
@@ -531,7 +531,7 @@ class TestTokenCommandValidation:
         assert cmd == ["/nonexistent/binary-xyz", "--arg"]
 
     def test_valid_binary_returns_sentinel(self):
-        from llm_rosetta_gateway.providers import _resolve_token_command
+        from llm_rosetta_gateway.config.providers import _resolve_token_command
 
         api_key, cmd, interval = _resolve_token_command(
             "test-provider",
@@ -544,7 +544,7 @@ class TestTokenCommandValidation:
         assert cmd == ["echo", "test"]
 
     def test_static_api_key_unchanged(self):
-        from llm_rosetta_gateway.providers import _resolve_token_command
+        from llm_rosetta_gateway.config.providers import _resolve_token_command
 
         api_key, cmd, interval = _resolve_token_command(
             "test-provider",
@@ -719,7 +719,7 @@ class TestResolveSkipsUnready:
             "server": {},
         }
         with patch(
-            "llm_rosetta_gateway.providers._resolve_token_command",
+            "llm_rosetta_gateway.config.providers._resolve_token_command",
             return_value=("sk-x", None, 3600),
         ):
             from llm_rosetta_gateway.config import GatewayConfig

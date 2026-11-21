@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta_gateway.providers import build_provider_info
+from llm_rosetta_gateway.config.providers import build_provider_info
 from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
 from _moved_vendors import load_providers_with_moved
 
@@ -59,7 +59,7 @@ class TestVendorNeutralBaseFormats:
         assert info.upstream_url("m") == "https://openrouter.ai/api/v1/responses"
 
     def test_registry_defaults_are_empty(self):
-        from llm_rosetta_gateway.providers import (
+        from llm_rosetta_gateway.config.providers import (
             get_default_api_key_env,
             get_default_base_url,
         )
@@ -68,7 +68,7 @@ class TestVendorNeutralBaseFormats:
         assert get_default_api_key_env("open_responses") == ""
 
     def test_hints_are_ui_placeholders(self):
-        from llm_rosetta_gateway.providers import get_base_type_hints
+        from llm_rosetta_gateway.config.providers import get_base_type_hints
 
         assert get_base_type_hints("open_responses") == {
             "base_url": "https://api.openai.com/v1",

@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from llm_rosetta.shims import get_shim
-from llm_rosetta_gateway.providers import build_provider_info
+from llm_rosetta_gateway.config.providers import build_provider_info
 from llm_rosetta_gateway.transport import TRANSPORT_NAMES
 
 SHIM = "antigravity--acp"

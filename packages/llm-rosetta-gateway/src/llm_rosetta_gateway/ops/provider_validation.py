@@ -269,7 +269,7 @@ def _validate_provider(
         # from the runtime resolution rules.  The one-entry mapping is local
         # and the resolver only canonicalizes that mapping in place.
         from ..config.resolve import resolve_provider_identities
-        from ..providers import build_provider_info
+        from ..config.providers import build_provider_info
 
         identity_map, shim_names = resolve_provider_identities({name: dict(cfg)})
         identity = identity_map[name]

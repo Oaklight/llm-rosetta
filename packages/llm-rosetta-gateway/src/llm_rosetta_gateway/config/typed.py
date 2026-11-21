@@ -473,7 +473,7 @@ def _refuse_unowned_minted_credential(
     or from an exchange (``auth.py``), and a provider entry can name its own
     command.  A ``providers:`` entry shares the LLM lane's key ring, so its
     typed endpoints forward the minted credential
-    (:func:`~llm_rosetta_gateway.providers.share_credential`).
+    (:func:`~llm_rosetta_gateway.config.providers.share_credential`).
 
     The legacy ``<type>_providers`` section has no counterpart in
     ``providers:`` — nothing there mints, seeds or refreshes — so an entry
@@ -543,7 +543,7 @@ def typed_provider_info(
         ValueError: The credential would be minted and there is no owner to
             share it from.
     """
-    from ..providers import _apply_shim_defaults, share_credential
+    from .providers import _apply_shim_defaults, share_credential
     from ..transport.provider_info import google_auth, openai_auth
 
     effective = _apply_shim_defaults(cfg, shim) if shim is not None else cfg

@@ -9,7 +9,7 @@ upstream provider at the transport level:
   ``google_auth``).
 
 Higher-level factory logic (shim resolution, config parsing) stays in
-``gateway.providers``.
+``gateway.config.providers``.
 """
 
 from __future__ import annotations

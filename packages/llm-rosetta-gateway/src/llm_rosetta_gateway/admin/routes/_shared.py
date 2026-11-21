@@ -311,7 +311,7 @@ def _config_preflight_error(data: dict[str, Any]) -> str | None:
     build would resolve server settings the raw text does not.
     """
     from ...config.resolve import resolve_provider_identities
-    from ...providers import build_provider_info
+    from ...config.providers import build_provider_info
 
     providers = data.get("providers") or {}
     enabled = {
