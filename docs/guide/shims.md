@@ -631,7 +631,25 @@ jsDelivr (`…@dist/manifest.json`), with `raw.githubusercontent.com` as the
 fallback, and reused for `remote_ttl`; **Refetch** reads it at once. When the
 source cannot be reached the cached manifest and the last good install are used,
 and a digest mismatch never installs (the previous version stays, marked
-stale).
+stale). A CDN can answer with an old copy after a publish, so the gateway
+checks the answer's `generated_at` and the vendors it lists. The check covers
+an explicit `<source>:<vendor>` selector, the vendors a mapped legacy preset's
+package shipped (`presets: ["free"]` expects `kilo_free`, `llm7`,
+`opencode_zen_free` and `ovhcloud`, though it installs by tag), and a vendor
+that moved out of core; a plain tag or `*` selector is not checked, and a
+vendor whose every record is invalid counts as missing. When the answer is
+older than the cached manifest or lacks one of those vendors, the other URL is
+fetched once and the manifest with the newer `generated_at` is used; on a tie
+the first answer is kept, even when it is the copy that lacks the vendor. One
+INFO line names the URL used and the reason. A cached manifest within
+`remote_ttl` that lacks one of those vendors is refetched; when the fetch still
+finds it absent, the check is not repeated for the same vendors for 10
+minutes (**Refetch** ignores that window). The URL that served last is tried
+first only while its copy is within `remote_ttl`; after that the primary is
+first again. A cached manifest is never replaced by an older one, whatever
+URL served it: it is kept, the source is marked `stale` with both
+`generated_at` values in the reason, and every later apply refetches until a
+manifest at least as new arrives.
 
 **Core wins, per shim.** A shim name core already registers is not loaded
 from the source, and the log names the source, the vendor and the ignored
