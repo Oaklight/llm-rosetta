@@ -5,7 +5,9 @@ a spelling an earlier release accepted for a provider type, a shim or a model
 type.  No spelling is translated any more (the alias tables are gone): a
 name listed here must not fall through to "unknown type" or "no base_url
 configured", so it fails with a message that names its replacement and ends
-with the ``llm-rosetta-migrate`` command.  This module supplies that message.
+with :data:`MIGRATE_HINT`: the ``llm-rosetta-migrate`` command when the
+gateway distribution (which ships it) is installed, else the migration guide.
+This module supplies that message.
 
 The module has no imports from the rest of the package, so the core library
 and the gateway can both read it without a cycle.  Core owns it (rather than
@@ -37,17 +39,51 @@ a module path is removed or moved.
 
 from __future__ import annotations
 
+import importlib.util
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 #: Release that renamed these names, for the message.
 RENAMED_IN = "0.14"
 
-#: The sentence every retired-name error ends with: the command that rewrites a
-#: config or a database, and where the full table of renames is explained.
-MIGRATE_HINT = (
-    "run 'llm-rosetta-migrate --config <path>' (add --write to apply), "
-    "see the migration guide"
+#: The page that lists every rename and removal of 0.14 with its replacement.
+MIGRATION_GUIDE_URL = (
+    "https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/"
 )
+
+
+def _migrate_hint(find_spec: Callable[[str], Any] = importlib.util.find_spec) -> str:
+    """Return the closing sentence of a retired-name error for this install.
+
+    ``llm-rosetta-migrate`` ships with the gateway distribution, so it is
+    named only when ``llm_rosetta_gateway`` is installed.  A core-only user
+    (the SDK) gets the migration guide instead.  The check locates the
+    package without importing it: core must never import the gateway
+    (``tests/test_core_import_boundary.py``).
+
+    Args:
+        find_spec: The spec lookup; a test passes a stub.
+    """
+    try:
+        installed = find_spec("llm_rosetta_gateway") is not None
+    except (ImportError, ValueError):
+        # A finder that refuses the name (a blocked or broken install) means
+        # the command cannot run here either.
+        installed = False
+    if installed:
+        return (
+            "run 'llm-rosetta-migrate --config <path>' (add --write to apply), "
+            f"see the migration guide ({MIGRATION_GUIDE_URL})"
+        )
+    return f"see the migration guide ({MIGRATION_GUIDE_URL})"
+
+
+#: The sentence every retired-name error ends with.  With the gateway
+#: installed it names ``llm-rosetta-migrate``, the command that rewrites a
+#: config or a database; without it, only the migration guide, which explains
+#: the full table of renames.  Fixed when this module is first imported.
+MIGRATE_HINT = _migrate_hint()
 
 PROVIDER_TYPE = "provider_type"
 SHIM = "shim"
@@ -406,6 +442,7 @@ def check_not_retired(name: object, *kinds: str) -> None:
 __all__ = [
     "KINDS",
     "MIGRATE_HINT",
+    "MIGRATION_GUIDE_URL",
     "MODEL_TYPE",
     "PROVIDER_TYPE",
     "RETIRED_MODULES",

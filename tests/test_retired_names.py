@@ -9,6 +9,8 @@ translate while :data:`~llm_rosetta.retired_names.ALIASES_ENABLED` is ``True``.
 from __future__ import annotations
 
 import importlib.util
+import subprocess
+import sys
 import warnings
 
 import pytest
@@ -158,13 +160,90 @@ def test_message_names_the_replacement(row: retired_names.RetiredName) -> None:
 
 
 @pytest.mark.parametrize("row", ROWS)
-def test_message_ends_with_the_migrate_command(row: retired_names.RetiredName) -> None:
+def test_message_ends_with_the_migrate_hint(row: retired_names.RetiredName) -> None:
     message = retired_name_message(row.name, row.kind)
     assert message is not None
-    assert message.endswith(
+    assert message.endswith(retired_names.MIGRATE_HINT)
+
+
+# ---------------------------------------------------------------------------
+# The hint names a command the reader has (#1657, C8)
+# ---------------------------------------------------------------------------
+
+
+def test_hint_names_the_command_when_the_gateway_is_installed() -> None:
+    hint = retired_names._migrate_hint(lambda name: object())
+    assert hint.startswith(
         "run 'llm-rosetta-migrate --config <path>' (add --write to apply), "
-        "see the migration guide"
     )
+    assert retired_names.MIGRATION_GUIDE_URL in hint
+
+
+def test_hint_names_only_the_guide_for_a_core_only_install() -> None:
+    hint = retired_names._migrate_hint(lambda name: None)
+    assert "llm-rosetta-migrate" not in hint
+    assert hint == f"see the migration guide ({retired_names.MIGRATION_GUIDE_URL})"
+
+
+@pytest.mark.parametrize("error", [ModuleNotFoundError, ValueError])
+def test_a_finder_that_refuses_the_gateway_means_core_only(error) -> None:
+    """``find_spec`` can raise; the hint falls back instead of failing import."""
+
+    def refuse(name: str) -> None:
+        raise error(name)
+
+    hint = retired_names._migrate_hint(refuse)
+    assert "llm-rosetta-migrate" not in hint
+
+
+def test_hint_looks_up_the_gateway_distribution() -> None:
+    asked: list[str] = []
+    retired_names._migrate_hint(lambda name: asked.append(name))
+    assert asked == ["llm_rosetta_gateway"]
+
+
+def test_this_install_gets_the_hint_of_its_own_branch() -> None:
+    installed = importlib.util.find_spec("llm_rosetta_gateway") is not None
+    assert ("llm-rosetta-migrate" in retired_names.MIGRATE_HINT) is installed
+
+
+def test_the_guide_url_names_the_migration_guide() -> None:
+    assert retired_names.MIGRATION_GUIDE_URL.endswith("/guide/migrating-to-0.14/")
+
+
+def test_computing_the_hint_does_not_import_the_gateway() -> None:
+    """``find_spec`` locates the package; core must never import it."""
+    code = (
+        "import sys\n"
+        "import llm_rosetta.retired_names as r\n"
+        "assert 'llm-rosetta-migrate' in r.MIGRATE_HINT, r.MIGRATE_HINT\n"
+        "loaded = sorted(m for m in sys.modules if m.startswith('llm_rosetta_gateway'))\n"
+        "assert not loaded, loaded\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_a_core_only_interpreter_gets_the_guide() -> None:
+    """A core-only install, simulated: ``llm_rosetta_gateway`` cannot be found.
+
+    A ``None`` entry in ``sys.modules`` is how the import system marks a
+    module as absent; ``find_spec`` then returns ``None``.
+    """
+    code = (
+        "import sys\n"
+        "sys.modules['llm_rosetta_gateway'] = None\n"
+        "import llm_rosetta.retired_names as r\n"
+        "print(r.MIGRATE_HINT)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+    assert "llm-rosetta-migrate" not in result.stdout
+    assert retired_names.MIGRATION_GUIDE_URL in result.stdout
 
 
 @pytest.mark.parametrize("name", ["openai_chatt", "chat_completions", "", "Embedding"])
