@@ -7,10 +7,8 @@ import json
 import pytest
 from pathlib import Path
 
+from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim, ToolsConfig
 from llm_rosetta.shims.provider_shim import (
-    ConnectionConfig,
-    ProviderShim,
-    ToolsConfig,
     _reset_registry,
     get_shim,
     list_shims,
@@ -87,7 +85,7 @@ class TestGroupedConfig:
     """Test ConnectionConfig / ToolsConfig grouped fields."""
 
     def test_grouped_construction(self):
-        from llm_rosetta.shims.provider_shim import ConnectionConfig, ToolsConfig
+        from llm_rosetta.contracts.shim import ConnectionConfig, ToolsConfig
 
         s = ProviderShim(
             name="test",
@@ -1226,7 +1224,7 @@ class TestFreeSourceShim:
         load_providers()
 
     def test_connection_config_keyless_flag(self):
-        from llm_rosetta.shims.provider_shim import ConnectionConfig
+        from llm_rosetta.contracts.shim import ConnectionConfig
 
         assert ConnectionConfig().keyless is False
         assert ConnectionConfig(keyless=True).keyless is True

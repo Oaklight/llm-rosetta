@@ -9,7 +9,7 @@ from typing import Any
 from llm_rosetta.formats.batch import DECLARABLE_DIALECTS, batch_spec_for
 from llm_rosetta.types.ir.constraints import Range, RequestConstraints
 
-from ..provider_shim import (
+from llm_rosetta.contracts.shim import (
     TYPE_PARAM_KEYS,
     BatchDeclaration,
     ReasoningCapability,

@@ -146,7 +146,7 @@ class TestHistoryIndependentOfShim:
     IR = _ir_with_intrinsic_history("web_search")
 
     def test_definition_dropped_but_history_native(self):
-        from llm_rosetta.shims.provider_shim import ProviderShim, ToolsConfig
+        from llm_rosetta.contracts.shim import ProviderShim, ToolsConfig
 
         # A responses shim that declares NO intrinsic tools.
         bare = ProviderShim(name="x", format="open_responses", tools=ToolsConfig())

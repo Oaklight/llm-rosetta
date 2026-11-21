@@ -55,3 +55,38 @@ def test_the_loader_reads_the_names_from_contracts():
             '"quota.py"',
         ):
             assert literal not in source, f"{loader} restates {literal}"
+
+
+def test_provider_shim_reexports_the_contract_data_classes():
+    # 0.13.0 shipped the data classes in shims.provider_shim; the module keeps
+    # them, as the same objects, until 0.15.0.
+    import llm_rosetta.contracts.shim as shim
+    import llm_rosetta.shims.provider_shim as provider_shim
+
+    for name in shim.__all__:
+        assert getattr(provider_shim, name) is getattr(shim, name), name
+    assert "0.15.0" in (provider_shim.__doc__ or "")
+    assert "llm_rosetta.contracts.shim" in (provider_shim.__doc__ or "")
+    # The registry stays internal: the contract holds values, not state.
+    for name in ("register_shim", "get_shim", "list_shims", "staging_registry"):
+        assert not hasattr(shim, name)
+
+
+def test_core_imports_the_data_classes_from_contracts():
+    import ast
+    from pathlib import Path
+
+    data = set(__import__("llm_rosetta.contracts.shim", fromlist=["x"]).__all__)
+    core = Path(contracts.__file__).parents[1]
+    offenders = []
+    for path in sorted(core.rglob("*.py")):
+        if "_vendor" in path.parts or path.name == "provider_shim.py":
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if (
+                isinstance(node, ast.ImportFrom)
+                and (node.module or "").endswith("provider_shim")
+                and data & {alias.name for alias in node.names}
+            ):
+                offenders.append(f"{path.relative_to(core)}:{node.lineno}")
+    assert offenders == []

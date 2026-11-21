@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from llm_rosetta.shims import list_shims
-from llm_rosetta.shims.provider_shim import BatchDeclaration, ProviderShim
+from llm_rosetta.contracts.shim import BatchDeclaration, ProviderShim
 from llm_rosetta.shims.providers import load_providers_from_dir
 
 

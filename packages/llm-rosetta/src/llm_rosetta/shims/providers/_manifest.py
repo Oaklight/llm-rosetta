@@ -12,9 +12,7 @@ from typing import Any
 from llm_rosetta._vendor.yaml import load as yaml_load
 
 from ...contracts import AUTH_MODULE
-from ..provider_shim import (
-    VendorManifest,
-)
+from llm_rosetta.contracts.shim import VendorManifest
 from ._fields import _declared_fields, _declares_identity
 from ._sidecars import _load_auth_exchange
 from ._constants import (

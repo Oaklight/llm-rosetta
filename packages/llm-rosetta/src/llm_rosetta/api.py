@@ -82,12 +82,8 @@ from llm_rosetta.shims import (
     snapshot_registry,
     unregister_shim,
 )
-from llm_rosetta.shims.provider_shim import (
-    SoftErrorPattern,
-    VendorManifest,
-    match_model_reasoning,
-    staging_registry,
-)
+from llm_rosetta.contracts.shim import SoftErrorPattern, VendorManifest
+from llm_rosetta.shims.provider_shim import match_model_reasoning, staging_registry
 from llm_rosetta.shims.providers import (
     builtin_providers_dir,
     describe_vendor_manifest,

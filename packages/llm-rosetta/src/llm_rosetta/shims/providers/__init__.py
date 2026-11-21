@@ -82,13 +82,14 @@ from llm_rosetta.formats.batch import (  # noqa: F401
 from llm_rosetta.types.ir.constraints import Range, RequestConstraints  # noqa: F401
 
 from ...contracts import QUOTA_MODULE
-from ..provider_shim import ProviderShim, register_shim  # noqa: F401
+from llm_rosetta.contracts.shim import ProviderShim  # noqa: F401
+from ..provider_shim import register_shim  # noqa: F401
 
 # These names keep the import surface this module had before the loader was
 # split into ``_*`` modules: it imported them, so callers could take them from
 # here.  Nothing in this module reads them any more.
 from ...contracts.auth import FIELD_KEY_RE, FIELD_LIMIT, FIELD_TEXT_LIMIT  # noqa: F401
-from ..provider_shim import (  # noqa: F401
+from llm_rosetta.contracts.shim import (  # noqa: F401
     TYPE_PARAM_KEYS,
     BatchDeclaration,
     ConnectionConfig,
@@ -96,9 +97,9 @@ from ..provider_shim import (  # noqa: F401
     ReasoningCapability,
     SoftErrorPattern,
     ToolsConfig,
-    Transform,
     VendorManifest,
 )
+from llm_rosetta.ir.primitives.body import Transform  # noqa: F401
 from ._constants import (  # noqa: F401
     _CONNECTION_KEYS,
     _REMOVED_LEAF_KEYS,

@@ -884,7 +884,7 @@ class TestPluginEntryPoints:
 
     def test_collects_returned_shims(self, monkeypatch):
         """Entry points that return list[ProviderShim] are collected."""
-        from llm_rosetta.shims.provider_shim import ProviderShim
+        from llm_rosetta.contracts.shim import ProviderShim
 
         test_shim = ProviderShim(name="ep-test", format="chat_completions")
 

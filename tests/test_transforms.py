@@ -4,12 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.shims.provider_shim import (
-    ProviderShim,
-    _reset_registry,
-    get_shim,
-    register_shim,
-)
+from llm_rosetta.contracts.shim import ProviderShim
+from llm_rosetta.shims.provider_shim import _reset_registry, get_shim, register_shim
 from llm_rosetta.transforms import (
     apply_transforms,
     default_message_field,

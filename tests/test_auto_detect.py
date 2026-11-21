@@ -672,7 +672,7 @@ class TestDualShimPipeline:
         """Source shim pre_ir_transforms are applied before Source→IR."""
         from llm_rosetta.pipeline import ConversionPipeline
         from llm_rosetta.shims import register_shim, unregister_shim
-        from llm_rosetta.shims.provider_shim import ProviderShim
+        from llm_rosetta.contracts.shim import ProviderShim
         from llm_rosetta.transforms import strip_fields
 
         shim = ProviderShim(
@@ -703,7 +703,7 @@ class TestDualShimPipeline:
         """Both source and target shim transforms are applied."""
         from llm_rosetta.pipeline import ConversionPipeline
         from llm_rosetta.shims import register_shim, unregister_shim
-        from llm_rosetta.shims.provider_shim import ProviderShim
+        from llm_rosetta.contracts.shim import ProviderShim
         from llm_rosetta.transforms import set_defaults, strip_fields
 
         src_shim = ProviderShim(
@@ -741,7 +741,7 @@ class TestDualShimPipeline:
         """Passthrough mode applies both source and target body transforms."""
         from llm_rosetta.pipeline import ConversionPipeline
         from llm_rosetta.shims import register_shim, unregister_shim
-        from llm_rosetta.shims.provider_shim import ProviderShim
+        from llm_rosetta.contracts.shim import ProviderShim
         from llm_rosetta.transforms import set_defaults, strip_fields
 
         src_shim = ProviderShim(

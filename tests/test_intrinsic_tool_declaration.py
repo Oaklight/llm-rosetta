@@ -19,7 +19,7 @@ from llm_rosetta.ir.tools.intrinsic import (
 )
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.shims import resolve_shim
-from llm_rosetta.shims.provider_shim import ProviderShim, ToolsConfig
+from llm_rosetta.contracts.shim import ProviderShim, ToolsConfig
 
 
 def _shim(base, kinds):
