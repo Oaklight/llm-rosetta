@@ -360,7 +360,7 @@ function renderLoadedShims() {
     .filter(g => {
       // A source that failed has nothing to show but is exactly what the
       // operator needs to see, so it survives the filter.
-      if (g.shown.length || (g.status && !g.status.ok)) return true;
+      if (g.shown.length || (g.status && (!g.status.ok || g.status.skipped))) return true;
       // With no filter, a declared source that loaded nothing still gets a
       // head: an empty directory is something the operator has to notice.
       const hiddenBuiltin = g.origin === 'builtin' && !showBuiltin;
@@ -380,7 +380,10 @@ function renderLoadedShims() {
     const failed = st ? !st.ok : false;
     const state = `${failed ? t('shim.status.failed') : t('shim.status.loaded')}`
       + (st && st.stale ? ` \u00b7 ${t('shim.status.stale')}` : '');
-    const note = failed ? (st.error || '') : (st && st.resolved_ref ? String(st.resolved_ref) : '');
+    // A manifest vendor that was selected but not installed says why (#1660).
+    const note = failed ? (st.error || '')
+      : (st && st.skipped ? String(st.skipped)
+        : (st && st.resolved_ref ? String(st.resolved_ref) : ''));
     const where = g.source || t('shim.group.builtin');
     return `<div class="shim-group">
       <div class="shim-group-head">

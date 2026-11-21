@@ -430,6 +430,15 @@ function _packagePinLine(p) {
   } else if (p.check_error) {
     parts.push(`<span class="is-unknown">${esc(p.check_error)}</span>`);
   }
+  // A manifest install (#1660) states each vendor's maturity; the card shows
+  // the distinct stages so an experimental vendor is not mistaken for stable.
+  const stages = [...new Set(Object.values(p.maturity || {}).filter(Boolean))];
+  if (stages.length) parts.push(`<span>${esc(stages.join(' / '))}</span>`);
+  // A selected vendor the source did not install (not in the manifest, core
+  // provides it, promoted) is named with the reason instead of vanishing.
+  for (const [vendor, why] of Object.entries(p.skipped || {})) {
+    parts.push(`<span class="is-unknown">${esc(vendor + ': ' + why)}</span>`);
+  }
   return `<p class="shim-card-hash">${parts.join(' · ')}</p>`;
 }
 
