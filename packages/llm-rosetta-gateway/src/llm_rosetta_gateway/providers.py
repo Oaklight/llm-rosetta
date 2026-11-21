@@ -769,22 +769,11 @@ def build_provider_info(
     )
 
     if not cfg.get("base_url"):
-        message = (
-            f"Provider {provider_type!r} (base type {base_type!r}) has no "
-            "base_url configured; set it in the provider config or via a shim "
-            "connection.base_url."
-        )
-        if missing_package is not None:
-            name = shim_name or provider_type
-            message += (
-                f" Shim {name!r} is not built in: it ships in the standalone "
-                f"package {missing_package.label!r} ({missing_package.repo}). "
-                f"Declare `shims.presets: [{missing_package.key!r}]` (or the "
-                f"equivalent `shims.remotes` entry: {missing_package.remote!r}); "
-                "Settings -> Shim Sources offers both. If the source is already "
-                "declared, check the shim-source status for a load failure."
+        raise ValueError(
+            _missing_base_url_message(
+                provider_type, base_type, shim_name, shim, missing_package
             )
-        raise ValueError(message)
+        )
 
     # The config key, when the caller has one: two providers of the same shim
     # are two accounts, and the exchange must be able to tell them apart.
@@ -886,8 +875,84 @@ def build_provider_info(
         quota_probe_id=quota_probe,
         quota_url=quota_url,
         quota_in_band=quota_in_band,
-        quota_probes=(shim.quota_probes if shim is not None else ()),
+        quota_probes=_quota_probes(shim, quota_cfg.get("probe")),
     )
+
+
+def _missing_base_url_message(
+    provider_type: str,
+    base_type: str,
+    shim_name: str | None,
+    shim: Any,
+    missing_package: Any,
+) -> str:
+    """The error for a provider with no ``base_url`` from its config or its shim.
+
+    A shim that a standalone package provides, or whose vendor moved out of
+    core (#1660), is named with where it comes from: that is the usual reason
+    no shim supplied the URL.
+    """
+    from llm_rosetta.api import retired_names
+
+    message = (
+        f"Provider {provider_type!r} (base type {base_type!r}) has no "
+        "base_url configured; set it in the provider config or via a shim "
+        "connection.base_url."
+    )
+    if missing_package is not None:
+        name = shim_name or provider_type
+        message += (
+            f" Shim {name!r} is not built in: it ships in the standalone "
+            f"package {missing_package.label!r} ({missing_package.repo}). "
+            f"Declare `shims.presets: [{missing_package.key!r}]` (or the "
+            f"equivalent `shims.remotes` entry: {missing_package.remote!r}); "
+            "Settings -> Shim Sources offers both. If the source is already "
+            "declared, check the shim-source status for a load failure."
+        )
+    moved = (
+        retired_names.moved_shim_message(shim_name or provider_type)
+        if shim is None
+        else None
+    )
+    if moved is not None:
+        message += (
+            f" The {moved}. If it is still missing, check the shim-source "
+            "status for the install failure."
+        )
+    return message
+
+
+def _quota_probes(shim: Any, probe_id: Any) -> tuple[Any, ...]:
+    """The probes a provider can resolve ``quota.probe`` against.
+
+    A shim's own ``quota.py`` comes first.  A probe the config names
+    explicitly that the shim does not ship is looked up among the other
+    registered shims: a probe that moved out of core with its vendor
+    (``openai_codex`` now ships with ``openai_chatgpt`` in contrib, #1660)
+    still serves a provider on another shim that names it, once that vendor
+    is installed.  Only an explicit config value reaches this far, so no
+    provider picks up a foreign probe by itself.
+    """
+    own = tuple(shim.quota_probes) if shim is not None else ()
+    if not isinstance(probe_id, str) or any(p.id == probe_id for p in own):
+        return own
+    from llm_rosetta.api import list_shims, retired_names
+
+    for other in list_shims():
+        for probe in other.quota_probes:
+            if probe.id == probe_id:
+                return (*own, probe)
+    moved = retired_names.moved_probe_vendor(probe_id)
+    if moved is not None:
+        logger.warning(
+            "Quota probe %r moved from core to %s with vendor %r and is not "
+            "installed; the gateway installs that vendor automatically, so check "
+            "the shim-source status",
+            probe_id,
+            moved.package,
+            moved.vendor,
+        )
+    return own
 
 
 #: The credential state a second endpoint of one provider reads from the lane

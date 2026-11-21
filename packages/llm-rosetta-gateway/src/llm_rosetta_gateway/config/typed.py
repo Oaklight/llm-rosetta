@@ -697,13 +697,22 @@ def resolve_endpoint_shim(cfg: dict[str, Any], *, type_name: str, shim_key: str)
     Raises:
         ValueError: If ``cfg[shim_key]`` is unknown or serves another type.
     """
-    from llm_rosetta.api import get_shim
+    from llm_rosetta.api import get_shim, retired_names
 
     declared = face_value(cfg, shim_key, type_name)
     if declared:
         shim = get_shim(declared)
         if shim is None:
-            raise ValueError(f"config: {shim_key} names unknown shim '{declared}'")
+            message = f"config: {shim_key} names unknown shim '{declared}'"
+            # A face is the only slot some providers lose a moved vendor
+            # through (#1660): say where it went, as the identity slots do.
+            moved = retired_names.moved_shim_message(declared)
+            if moved is not None:
+                message += (
+                    f"; the {moved}. If it is still missing, check the "
+                    "shim-source status for the install failure"
+                )
+            raise ValueError(message)
         if shim.model_type != type_name:
             raise ValueError(
                 f"config: {shim_key} shim '{declared}' serves "

@@ -752,3 +752,65 @@ class TestRecordLevelManifest:
         assert get_shim("acme--chat_completions") is None
         failed = [s for s in report.sources if not s.ok]
         assert failed and "manifest_version" in (failed[0].error or "")
+
+    def test_a_vendor_with_no_valid_release_says_so(self, tmp_path, logs):
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+        http.publish("beta", "0.1.0", ["beta--chat_completions"])
+        http.vendors["acme"][0]["sha256"] = "not-a-digest"
+
+        report = _apply(tmp_path, _url_section("acme", "beta"), http)
+
+        status = _vendor_status(report, "acme")
+        assert status.skipped == (
+            "no valid release: $.vendors.acme.versions[0].sha256: "
+            "'not-a-digest' does not match ^[0-9a-f]{64}$"
+        )
+        assert get_shim("acme--chat_completions") is None
+        assert _vendor_status(report, "beta").ok
+        assert any("manifest record vendor 'acme'" in m for m in logs)
+        assert any(
+            "vendor 'acme' has no valid release" in m and "not installed" in m
+            for m in logs
+        )
+
+    def test_an_unlisted_vendor_is_still_not_in_the_manifest(self, tmp_path, logs):
+        http = FakeHttp()
+        http.publish("beta", "0.1.0", ["beta--chat_completions"])
+
+        report = _apply(tmp_path, _url_section("acme", "beta"), http)
+
+        assert _vendor_status(report, "acme").skipped == "not in the manifest"
+
+    def test_a_good_install_is_kept_when_every_record_goes_bad(self, tmp_path, logs):
+        """A record that becomes invalid never uninstalls a working vendor."""
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+        _apply(tmp_path, _url_section("acme"), http)
+        assert get_shim("acme--chat_completions") is not None
+
+        http.vendors["acme"][0]["sha256"] = "not-a-digest"
+        report = _apply(tmp_path, _url_section("acme"), http, force_refresh=True)
+
+        status = _vendor_status(report, "acme")
+        assert status.ok and status.stale and status.skipped is None
+        assert status.error == (
+            "no valid release: $.vendors.acme.versions[0].sha256: "
+            "'not-a-digest' does not match ^[0-9a-f]{64}$"
+        )
+        assert status.release["version"] == "0.1.0"
+        assert get_shim("acme--chat_completions") is not None
+        assert any("keeping the installed 0.1.0" in m for m in logs)
+
+    def test_a_kept_install_still_answers_a_tag_selector(self, tmp_path, logs):
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"], tags=["tier:free"])
+        _apply(tmp_path, _url_section("tag:tier:free"), http)
+        http.vendors["acme"][0]["sha256"] = "not-a-digest"
+
+        report = _apply(
+            tmp_path, _url_section("tag:tier:free"), http, force_refresh=True
+        )
+
+        assert _vendor_status(report, "acme").stale
+        assert get_shim("acme--chat_completions") is not None

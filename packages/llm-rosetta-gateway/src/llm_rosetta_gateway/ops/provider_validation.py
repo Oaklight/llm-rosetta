@@ -10,7 +10,7 @@ from llm_rosetta_gateway.observability.ops_log import (
     SOURCE_CONFIG,
     OpsLogEntry,
 )
-from llm_rosetta.api import get_shim
+from llm_rosetta.api import get_shim, retired_names
 
 from ..shims import find_source_package, legacy_shim_migration_advice
 
@@ -75,7 +75,11 @@ class OpsProviderValidation(OpsBase):
             if cfg.get("enabled", True) is False and not auto_disabled:
                 continue
             issue = _validate_provider(
-                provider_name, cfg, self._report, _global_proxy(self._raw)
+                provider_name,
+                cfg,
+                self._report,
+                _global_proxy(self._raw),
+                disabled=_disabled_shims(self._raw),
             )
             if issue is not None:
                 issues.append((provider_name, issue))
@@ -223,14 +227,28 @@ def _global_proxy(raw: dict[str, Any]) -> str | None:
     return server.get("proxy") if isinstance(server, dict) else None
 
 
+def _disabled_shims(raw: dict[str, Any]) -> frozenset[str]:
+    """The names ``shims.disabled`` keeps out of the registry."""
+    section = raw.get("shims")
+    names = section.get("disabled") if isinstance(section, dict) else None
+    if not isinstance(names, list):
+        return frozenset()
+    return frozenset(n for n in names if isinstance(n, str))
+
+
 def _validate_provider(
-    name: str, cfg: dict[str, Any], report: Any, global_proxy: str | None
+    name: str,
+    cfg: dict[str, Any],
+    report: Any,
+    global_proxy: str | None,
+    *,
+    disabled: frozenset[str] = frozenset(),
 ) -> ProviderIssue | None:
     """Validate only fields needed to construct one ``ProviderInfo``."""
     source = cfg.get("shim") or cfg.get("type") or name
     shim_name = source if isinstance(source, str) and source else None
 
-    dependency = _missing_dependency(cfg, report)
+    dependency = _missing_dependency(cfg, report, disabled)
     if dependency is not None:
         shim, reason = dependency
         return ProviderIssue(reason, "missing_external_shim", shim)
@@ -277,22 +295,67 @@ def _validate_provider(
     return None
 
 
-def _missing_dependency(cfg: dict[str, Any], report: Any) -> tuple[str, str] | None:
-    """Return a missing standalone shim dependency, if this config needs one."""
+def _missing_dependency(
+    cfg: dict[str, Any], report: Any, disabled: frozenset[str] = frozenset()
+) -> tuple[str, str] | None:
+    """Return a missing standalone shim dependency, if this config needs one.
+
+    The reason names the actual cause, checked in this order: the operator's
+    own ``shims.disabled`` switch, then what the load report says about the
+    vendor (installed, skipped with a reason, or failed), and only then the
+    source failures.
+    """
     source = cfg.get("shim") or cfg.get("type")
     if not isinstance(source, str) or not source:
         return None
     package = find_source_package(source)
-    if package is None or get_shim(source) is not None:
+    moved = retired_names.moved_vendor(source)
+    if (package is None and moved is None) or get_shim(source) is not None:
         return None
-    failures = []
-    if report is not None:
-        failures = [
-            f"{status.location}: {status.error}" for status in report.failures()
-        ]
-    suffix = f"; source failures: {'; '.join(failures)}" if failures else ""
+    if source in disabled:
+        return source, (
+            f"shim {source!r} is switched off by shims.disabled; the provider "
+            "comes back when the shim is removed from that list"
+        )
+    if moved is not None:
+        return source, _moved_reason(source, moved, report)
+    assert package is not None
     reason = (
         f"required external shim {source!r} is not registered; declare "
-        f"shims.presets: [{package.key!r}] or its remote source{suffix}"
+        f"shims.presets: [{package.key!r}] or its remote source"
+        f"{_failure_suffix(report)}"
     )
     return source, reason
+
+
+def _failure_suffix(report: Any) -> str:
+    """``; source failures: ...`` from the load report, or ``""``."""
+    if report is None:
+        return ""
+    failures = [f"{status.location}: {status.error}" for status in report.failures()]
+    return f"; source failures: {'; '.join(failures)}" if failures else ""
+
+
+def _moved_reason(source: str, moved: Any, report: Any) -> str:
+    """Why a moved vendor's shim is not registered, from its install status."""
+    head = (
+        f"shim {source!r} is not registered: its vendor {moved.vendor!r} moved "
+        f"from core to {moved.package} in {moved.moved_in}"
+    )
+    statuses = [
+        status
+        for status in (report.sources if report is not None else ())
+        if getattr(status, "vendor", None) == moved.vendor
+    ]
+    skipped = next((s.skipped for s in statuses if s.skipped), None)
+    if skipped:
+        return f"{head}, and the gateway did not install it: {skipped}"
+    if any(s.ok for s in statuses):
+        return (
+            f"{head}; the installed vendor does not register this shim (a "
+            "shims include/exclude selection, or a name its release does not list)"
+        )
+    return (
+        f"{head}, and the gateway's automatic install of it did not succeed "
+        f"(the provider comes back once the source answers){_failure_suffix(report)}"
+    )

@@ -737,10 +737,14 @@ def _apply_shim_sources_or_exit(
     Must run before ``GatewayConfig``, whose provider-type resolution reads the
     shim registry.  With no ``shims`` section there is nothing to apply, and
     skipping entirely leaves shims registered in-process via ``register_shim``
-    untouched.  A malformed section raises ``ValueError``; a ``strict`` source
-    failure raises ``ShimSourceError`` — either way the process exits.
+    untouched — unless a provider names a shim whose vendor moved out of core
+    (#1660): the gateway installs that vendor without a section.  A malformed
+    section raises ``ValueError``; a ``strict`` source failure raises
+    ``ShimSourceError`` — either way the process exits.
     """
-    if not raw_config.get("shims"):
+    from .shims.moved import moved_references
+
+    if not raw_config.get("shims") and not moved_references(raw_config):
         return None
     try:
         return apply_shim_sources(raw_config, config_path)
