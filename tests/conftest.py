@@ -77,3 +77,15 @@ def _clear_tool_conversion_caches():
             pytest.fail(msg)  # ty: ignore[invalid-argument-type]
 
     clear_all_caches()
+
+
+@pytest.fixture
+def moved_vendors():
+    """Register the frozen copies of the vendors that moved to contrib (#1660).
+
+    See ``tests/_moved_vendors.py``.  The protocol hook above restores the
+    registry afterwards, so the shims do not outlive the test.
+    """
+    from _moved_vendors import load_moved_vendors
+
+    return load_moved_vendors()

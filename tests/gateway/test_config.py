@@ -12,6 +12,7 @@ from llm_rosetta_gateway.config import (
     async_config_lock,
     config_lock,
 )
+from _moved_vendors import load_providers_with_moved
 
 
 def _minimal_raw(**server_overrides) -> dict:
@@ -193,9 +194,8 @@ class TestShimConnectionDefaults:
     """
 
     def test_shim_base_url_applied(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
         raw = {
             "providers": {
                 "openrouter": {
@@ -241,9 +241,8 @@ class TestShimConnectionDefaults:
             unregister_shim("acme--google_generate")
 
     def test_explicit_base_url_wins_over_shim_default(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
         raw = {
             "providers": {
                 "openrouter": {

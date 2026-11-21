@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import pytest
+
 
 from llm_rosetta_gateway.config import GatewayConfig
+
+# The vendors these tests read moved to contrib (#1660); their frozen copies
+# are registered for every test here.
+pytestmark = pytest.mark.usefixtures("moved_vendors")
 
 
 def _base_config(**overrides):

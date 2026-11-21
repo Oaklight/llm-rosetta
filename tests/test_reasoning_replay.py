@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from llm_rosetta.ir.passes import backfill_reasoning_replay
 from llm_rosetta.contracts.shim import ProviderShim, ReasoningCapability, ReplayMissing
+from _moved_vendors import load_providers_with_moved
 
 
 def _cap(policy: ReplayMissing = "fill_empty") -> ReasoningCapability:
@@ -168,9 +169,8 @@ class TestReplayCapabilityParsing:
 
     def test_deepseek_and_opencode_declare_the_capability(self):
         from llm_rosetta.shims.provider_shim import get_shim, match_model_reasoning
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
         deepseek = get_shim("deepseek--chat_completions")
         assert deepseek is not None and deepseek.reasoning is not None

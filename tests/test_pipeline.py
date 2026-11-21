@@ -25,6 +25,7 @@ from llm_rosetta.contracts.transform import (
     truncate_images as truncate_images_transform,
     unwind_parallel_tool_calls as unwind_transform,
 )
+from _moved_vendors import load_providers_with_moved
 
 
 # ---------------------------------------------------------------------------
@@ -1577,9 +1578,8 @@ class TestDeepSeekReasoningContentBackfill:
 
     @pytest.fixture(autouse=True)
     def _load_shims(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     @staticmethod
     def _source_body():
@@ -1716,9 +1716,8 @@ class TestReasoningReplayForVendorLanes:
 
     @pytest.fixture(autouse=True)
     def _load_shims(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     @staticmethod
     def _source_body(model: str = "deepseek-v4.1-flash"):
@@ -1822,9 +1821,8 @@ class TestUnsignedBlocksPolicy:
 
     @pytest.fixture(autouse=True)
     def _load_shims(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     @staticmethod
     def _source_body():
@@ -1903,9 +1901,8 @@ class TestMessagesShimReasoningDefaults:
 
     @pytest.fixture(autouse=True)
     def _load_shims(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     @staticmethod
     def _body():
@@ -1939,9 +1936,8 @@ class TestShimEffortLadders:
 
     @pytest.fixture(autouse=True)
     def _load_shims(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     @staticmethod
     def _body(effort):
@@ -1987,9 +1983,8 @@ class TestReasoningRenameWiring:
 
     @pytest.fixture(autouse=True)
     def _load_shims(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     @staticmethod
     def _pipeline(shim_name):

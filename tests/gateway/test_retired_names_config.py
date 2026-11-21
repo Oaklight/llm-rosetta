@@ -177,22 +177,30 @@ def test_every_catalogue_legacy_name_is_retired() -> None:
 def test_every_shim_replacement_is_registered_or_packaged() -> None:
     """A retired shim name has to lead somewhere that exists.
 
-    The replacement is either a shim core ships or one a standalone package
-    provides.  A typo on either side shows up here rather than as a silent
-    ``get_shim(...) is None`` at runtime.
+    The replacement is a shim core ships, one a standalone package provides,
+    or one a vendor that moved to contrib ships (#1660) — the gateway installs
+    that vendor by itself.  A typo on any side shows up here rather than as a
+    silent ``get_shim(...) is None`` at runtime.
     """
+    from llm_rosetta.retired_names import moved_vendor
     from llm_rosetta.shims import list_shims
     from llm_rosetta.shims.providers import load_providers
     from llm_rosetta_gateway.shims import find_source_package
 
     load_providers()
     registered = {s.name for s in list_shims()}
+
+    def moved(name: str) -> bool:
+        row = moved_vendor(name)
+        return row is not None and name in row.shims
+
     missing = [
         row.name
         for row in RETIRED_NAMES
         if row.kind == SHIM
         and row.replacement not in registered
         and find_source_package(row.replacement) is None
+        and not moved(row.replacement)
     ]
     assert missing == []
 

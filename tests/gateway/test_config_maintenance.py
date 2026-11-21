@@ -20,7 +20,7 @@ from llm_rosetta_gateway.observability.maintenance import Policy, StepContext
 #: A document as an older release wrote it: version 0.
 _OLD = {
     "providers": {
-        "alcf": {"type": "chat_completions", "shim": "volcengine--chat_completions"}
+        "alcf": {"type": "chat_completions", "shim": "deepseek--chat_completions"}
     },
     "rerank_providers": {"jina": {"api_key": "k", "base_url": "https://x"}},
     "rerank_models": {"rerank-v1": "jina"},
@@ -50,7 +50,7 @@ def test_a_document_with_work_to_do_reports_the_step():
         "the structure migration keeps the ledger"
     )
     assert raw["providers"]["alcf"]["type"] == "chat_completions"
-    assert raw["providers"]["alcf"]["shim"] == "volcengine--chat_completions"
+    assert raw["providers"]["alcf"]["shim"] == "deepseek--chat_completions"
     assert _by_name(registry) == {"config.migrate_structure": 1}
 
 

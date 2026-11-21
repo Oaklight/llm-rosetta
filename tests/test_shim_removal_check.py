@@ -10,10 +10,16 @@ synthetic manifest of a shim that is still built in.
 
 from __future__ import annotations
 
+import pytest
+
 import importlib.util
 from pathlib import Path
 
 from llm_rosetta_gateway.shims import SHIM_REMOVALS, ShimRemoval
+
+# The vendors these tests read moved to contrib (#1660); their frozen copies
+# are registered for every test here.
+pytestmark = pytest.mark.usefixtures("moved_vendors")
 
 _SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "check_shim_removals.py"
 

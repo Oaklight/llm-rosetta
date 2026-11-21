@@ -11,16 +11,15 @@ from __future__ import annotations
 import pytest
 
 from llm_rosetta.shims import get_shim
-from llm_rosetta.shims.providers import load_providers
 from llm_rosetta_gateway.providers import build_provider_info
 from llm_rosetta_gateway.transport import TRANSPORT_NAMES
 
 SHIM = "antigravity--acp"
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _loaded():
-    load_providers()
+@pytest.fixture(autouse=True)
+def _loaded(moved_vendors):
+    """The vendor moved to contrib (#1660): its frozen copy is registered."""
 
 
 def shim():

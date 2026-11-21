@@ -17,6 +17,7 @@ from llm_rosetta.shims.provider_shim import (
     resolve_model_type,
     unregister_shim,
 )
+from _moved_vendors import load_providers_with_moved
 
 
 # ---------------------------------------------------------------------------
@@ -206,9 +207,8 @@ class TestGroupedConfig:
         assert s.tools.multimodal_result is None
 
     def test_builtin_shims_use_grouped(self):
-        from llm_rosetta.shims.providers import load_providers as _load_providers
 
-        _load_providers()
+        load_providers_with_moved()
 
         openai = get_shim("openai--chat_completions")
         assert openai is not None
@@ -407,9 +407,8 @@ class TestBuiltinShims:
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
         """Load provider shims from the YAML directory."""
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     def test_official_providers_registered(self):
         for name in (
@@ -618,11 +617,18 @@ class TestBuiltinShims:
             / "shims"
             / "providers"
         )
+        from _moved_vendors import MOVED_VENDORS_DIR
+
         checked = 0
         # Chat leaves sit one model-type level deeper than the non-chat ones.
-        paths = sorted(root.glob("*/*/provider.yaml")) + sorted(
-            root.glob("*/*/*/provider.yaml")
-        )
+        # The frozen moved vendors (#1660) are walked too: they carry most of
+        # the sections this rule is about.
+        paths = [
+            path
+            for base in (root, MOVED_VENDORS_DIR)
+            for pattern in ("*/*/provider.yaml", "*/*/*/provider.yaml")
+            for path in sorted(base.glob(pattern))
+        ]
         for path in paths:
             data = yaml_load(path.read_text())
             section = data.get("reasoning")
@@ -697,9 +703,8 @@ class TestResponsesProfileTraits:
 
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     def test_openai_declares_the_full_profile(self):
         """The reference profile: ``resp_`` ids and server-side storage."""
@@ -756,9 +761,8 @@ class TestResponsesProfileTraitsBehavior:
 
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     _REQUEST = {"model": "gpt-4o-mini", "input": "hi"}
     _UPSTREAM = {
@@ -831,9 +835,8 @@ class TestResponsesProfileTraitsBehavior:
 class TestShimConverterIntegration:
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     def test_deepseek_resolves_to_openai_chat_converter(self):
         from llm_rosetta.auto_detect import get_converter_for_provider
@@ -895,9 +898,8 @@ class TestGroupedProviders:
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
         """Load provider shims from the YAML directory."""
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     def test_grouped_providers_registered(self):
         """Shims under a group folder register with their YAML name."""
@@ -1240,9 +1242,8 @@ class TestFreeSourceShim:
 
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     def test_connection_config_keyless_flag(self):
         from llm_rosetta.contracts.shim import ConnectionConfig
@@ -1315,9 +1316,8 @@ class TestToolGroupsShimDeclarations:
 
     @pytest.fixture(autouse=True)
     def _load_builtins(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
 
     @pytest.mark.parametrize("shim_name", PASS_THROUGH)
     def test_a_carrying_shim_declares_tool_groups(self, shim_name: str):
@@ -1522,15 +1522,19 @@ class TestToolGroupsShimDeclarations:
         """
         from pathlib import Path
 
+        from _moved_vendors import MOVED_VENDORS_DIR, load_moved_vendors
         from llm_rosetta.shims import providers as builtins_pkg
 
-        builtin_root = Path(builtins_pkg.__file__).parent
+        # The vendors that moved to contrib (#1660) were classified while they
+        # were built in; their frozen copies keep that review honest.
+        load_moved_vendors()
+        roots = (Path(builtins_pkg.__file__).parent, MOVED_VENDORS_DIR)
         shipping = {
             s.name
             for s in list_shims()
             if s.format == "open_responses"
             and s.manifest is not None
-            and builtin_root in Path(s.manifest.path).parents
+            and any(root in Path(s.manifest.path).parents for root in roots)
         }
         classified = set(self.PASS_THROUGH) | set(self.FLATTEN)
         assert shipping <= classified, shipping - classified
@@ -1672,10 +1676,11 @@ class TestRequestConstraintDeclarations:
         carries the same temperature range.  No other vendored lane has been
         measured, and an unmeasured declaration is worse than none.
         """
-        from llm_rosetta.shims.providers import load_providers
 
         declared = {
-            shim.name: shim.request for shim in load_providers() if shim.request
+            shim.name: shim.request
+            for shim in load_providers_with_moved()
+            if shim.request
         }
         assert set(declared) == {"zhipu", "zai--chat_completions"}, sorted(declared)
 
@@ -1691,11 +1696,10 @@ class TestZhipuRequestRanges:
     @staticmethod
     def _convert(target: str, **generation: object):
         from llm_rosetta.pipeline.chat import ConversionPipeline
-        from llm_rosetta.shims.providers import load_providers
 
         # This module's autouse fixture empties the registry, so a shim name
         # only resolves once the built-ins are loaded back.
-        load_providers()
+        load_providers_with_moved()
 
         pipe = ConversionPipeline("chat_completions", target)
         body = pipe.convert_request(

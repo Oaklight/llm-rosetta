@@ -11,6 +11,7 @@ import pytest
 
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.routing import EligibilityStage, SelectionContext
+from _moved_vendors import load_providers_with_moved
 
 
 @pytest.fixture(autouse=True)
@@ -21,9 +22,8 @@ def _load_shims():
     ``openai--open_responses`` shim, so the registry must be populated (other
     test modules reset it and do not always restore the built-ins).
     """
-    from llm_rosetta.shims.providers import load_providers
 
-    load_providers()
+    load_providers_with_moved()
 
 
 @pytest.fixture()

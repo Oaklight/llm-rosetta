@@ -5,13 +5,16 @@ Covers MiniMax, OpenRouter reasoning field normalization transforms.
 
 from __future__ import annotations
 
+from _moved_vendors import moved_vendor_module
 from llm_rosetta.shims.providers.minimax.llm.chat_completions.transforms import (
     _inject_reasoning_split,
     _parse_think_tags,
 )
-from llm_rosetta.shims.providers.openrouter.llm.chat_completions.transforms import (
-    _rename_reasoning_field,
-)
+
+# OpenRouter moved to contrib (#1660); its frozen copy is the fixture.
+_rename_reasoning_field = moved_vendor_module(
+    "openrouter/llm/chat_completions/transforms.py"
+)._rename_reasoning_field
 
 
 # ===========================================================================

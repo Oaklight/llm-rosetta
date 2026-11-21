@@ -132,7 +132,7 @@
           "properties": {
             "probe": {
               "type": "string",
-              "description": "Probe identifier: 'opencode_go' or 'openai_codex'."
+              "description": "Probe identifier, as a quota.py of the shim's vendor declares it (e.g. 'deepseek')."
             },
             "url": {
               "type": "string",

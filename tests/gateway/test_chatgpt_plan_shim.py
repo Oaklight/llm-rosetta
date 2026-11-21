@@ -15,7 +15,7 @@ import pytest
 
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.shims import get_shim
-from llm_rosetta.shims.providers import get_model_list_transform, load_providers
+from llm_rosetta.shims.providers import get_model_list_transform
 from llm_rosetta_gateway.providers import build_provider_info
 
 SHIM = "openai_chatgpt--open_responses"
@@ -118,9 +118,9 @@ MODELS_BODY = {
 }
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _loaded():
-    load_providers()
+@pytest.fixture(autouse=True)
+def _loaded(moved_vendors):
+    """The vendor moved to contrib (#1660): its frozen copy is registered."""
 
 
 def shim():
@@ -232,9 +232,11 @@ class TestTheRequestSurface:
 
     def test_the_declared_list_is_the_documented_one(self):
         """A guard against the strip list drifting from the docs."""
-        from llm_rosetta.shims.providers.openai_chatgpt.llm.transforms import (
-            UNSUPPORTED_FIELDS,
-        )
+        from _moved_vendors import moved_vendor_module
+
+        UNSUPPORTED_FIELDS = moved_vendor_module(
+            "openai_chatgpt/llm/transforms.py"
+        ).UNSUPPORTED_FIELDS
 
         assert set(UNSUPPORTED_FIELDS) == {
             "background",
@@ -678,7 +680,7 @@ class TestDroppedFieldsAreReported:
     def test_a_dropped_field_is_named_in_the_log(self, caplog):
         import logging
 
-        with caplog.at_level(logging.INFO, logger="llm_rosetta.shims.providers"):
+        with caplog.at_level(logging.INFO):
             self._apply({"model": "m", "max_output_tokens": 100, "temperature": 0.2})
 
         assert "max_output_tokens" in caplog.text
@@ -687,7 +689,7 @@ class TestDroppedFieldsAreReported:
     def test_a_clean_request_logs_nothing(self, caplog):
         import logging
 
-        with caplog.at_level(logging.INFO, logger="llm_rosetta.shims.providers"):
+        with caplog.at_level(logging.INFO):
             self._apply({"model": "m", "input": []})
 
         assert "dropped field" not in caplog.text

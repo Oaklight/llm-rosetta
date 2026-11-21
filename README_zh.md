@@ -221,13 +221,16 @@ Kilo Code 的后端，也可以作为 Ollama 前面的转换代理——见
 ### Provider Shim
 
 提供方与基础格式的差异体现在字段名、默认值、鉴权和 URL 路径上。shim 声明这些差异，
-转换器因此保持通用。内置 39 个 shim，覆盖 19 个提供方前缀，包括 Anthropic、Cohere、
-DeepSeek、Google、Jina、MiniMax、Moonshot、OpenAI、OpenRouter、Qwen、Volcengine、
-Voyage、xAI 和 Zhipu。
+转换器因此保持通用。包内只带模型厂商自己的 API key 通道——Anthropic、DeepSeek、
+Google 和 OpenAI——以及作为 embedding、rerank 和 decision 格式各一个真实提供方的
+Cohere、Jina、MiniMax、Voyage 和 TypeSafe。其余提供方（聚合商、免费端点、OAuth 与订阅
+通道，以及 Moonshot、Qwen、Volcengine、xAI、Zhipu 等厂商）发布在
+[contrib shim 仓库](https://github.com/Oaklight/llm-rosetta-shim-contrib)，shim 名不变；
+配置引用它们时，网关会自动安装。
 
-大多数 shim 名采用 `<vendor>--<format>` 形式，例如 `openrouter--open_responses`、
-`deepseek--chat_completions`、`anthropic--messages`。少数单 lane shim 保留裸提供方名——
-`moonshot`、`qwen`、`xai` 和 `zhipu`——它们的 embedding 与 rerank 兄弟节点仍带后缀。
+大多数 shim 名采用 `<vendor>--<format>` 形式，例如 `openai--open_responses`、
+`deepseek--chat_completions`、`anthropic--messages`。少数单 lane 的 contrib shim 保留
+裸提供方名——`moonshot`、`qwen`、`xai` 和 `zhipu`。
 使用裸格式类型的提供方（例如
 `type: open_responses`）不带提供方默认值，必须显式设置 `base_url`；提供方 shim 会提供
 默认 URL 和凭据环境变量。shim 还可以带凭据交换（`auth.py`）和额度探测

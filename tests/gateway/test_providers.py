@@ -6,12 +6,12 @@ import pytest
 
 from llm_rosetta_gateway.providers import build_provider_info
 from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
-from llm_rosetta.shims.providers import load_providers
+from _moved_vendors import load_providers_with_moved
 
 
 class TestBuildProviderInfo:
     def test_chat_shim_uses_bearer_auth(self, monkeypatch):
-        load_providers()
+        load_providers_with_moved()
         monkeypatch.setenv("OPENAI_API_KEY", "pding")
 
         info = build_provider_info("openai--chat_completions", {})
@@ -21,7 +21,7 @@ class TestBuildProviderInfo:
         assert info.credential_source == "static_key"
 
     def test_messages_shim_uses_x_api_key_auth(self, monkeypatch):
-        load_providers()
+        load_providers_with_moved()
         monkeypatch.setenv("ANTHROPIC_API_KEY", "pding")
 
         info = build_provider_info("anthropic--messages", {})
@@ -52,7 +52,7 @@ class TestVendorNeutralBaseFormats:
         assert info.upstream_url("m") == "https://x/v1/responses"
 
     def test_vendor_shim_supplies_base_url(self):
-        load_providers()
+        load_providers_with_moved()
         info = build_provider_info(
             "open_responses", {"api_key": "k"}, shim_name="openrouter--open_responses"
         )
@@ -71,8 +71,8 @@ class TestVendorNeutralBaseFormats:
         from llm_rosetta_gateway.providers import get_base_type_hints
 
         assert get_base_type_hints("open_responses") == {
-            "base_url": "https://openrouter.ai/api/v1",
-            "api_key_env": "OPENROUTER_API_KEY",
+            "base_url": "https://api.openai.com/v1",
+            "api_key_env": "OPENAI_API_KEY",
         }
 
 
@@ -103,7 +103,7 @@ class TestKeylessProvider:
     """A free-source shim sends no auth header, and accepts a key for paid use."""
 
     def test_free_shim_sends_no_auth(self, keyless_shim):
-        load_providers()
+        load_providers_with_moved()
         info = build_provider_info("chat_completions", {}, shim_name=keyless_shim)
 
         assert info.auth_headers() == {}
@@ -112,7 +112,7 @@ class TestKeylessProvider:
         assert info.base_url == "https://keyless.example.com/v1"
 
     def test_free_shim_with_key_sends_bearer(self, keyless_shim):
-        load_providers()
+        load_providers_with_moved()
         info = build_provider_info(
             "chat_completions", {"api_key": "sk-x"}, shim_name=keyless_shim
         )
@@ -121,7 +121,7 @@ class TestKeylessProvider:
         assert info.keyless is False
 
     def test_non_keyless_provider_without_key_still_raises(self):
-        load_providers()
+        load_providers_with_moved()
         info = build_provider_info(
             "chat_completions", {"api_key": "", "base_url": "https://x/v1"}
         )
@@ -132,7 +132,7 @@ class TestKeylessProvider:
     def test_token_command_disables_keyless(self, keyless_shim):
         """A keyless shim driven by token_command is not treated as keyless —
         the command (and its dynamic credential) must not be dropped."""
-        load_providers()
+        load_providers_with_moved()
         info = build_provider_info(
             "chat_completions",
             {"token_command": ["echo", "tok"]},
@@ -151,7 +151,7 @@ class TestKeylessProvider:
         so the documented setup (``export ALCF_API_KEY=...`` next to
         ``token_command``) failed to start.
         """
-        load_providers()
+        load_providers_with_moved()
         monkeypatch.setenv("XAI_API_KEY", "sk-from-the-environment")
 
         info = build_provider_info(
@@ -170,7 +170,7 @@ class TestKeylessProvider:
         empty, and the save therefore stores ``""``.  Rejecting that made every
         saved command provider come back auto-disabled.
         """
-        load_providers()
+        load_providers_with_moved()
 
         info = build_provider_info(
             "chat_completions",
@@ -183,7 +183,7 @@ class TestKeylessProvider:
 
     def test_mutual_exclusion_names_the_shim_the_operator_wrote(self):
         """The error must name a key the config actually contains."""
-        load_providers()
+        load_providers_with_moved()
 
         with pytest.raises(ValueError, match=r"Provider 'xai'"):
             build_provider_info(
@@ -194,7 +194,7 @@ class TestKeylessProvider:
 
     def test_empty_base_url_falls_back_to_shim_default(self, keyless_shim):
         """An empty base_url string must not shadow the shim's default."""
-        load_providers()
+        load_providers_with_moved()
         info = build_provider_info(
             "chat_completions",
             {"api_key": "sk-x", "base_url": ""},
@@ -208,7 +208,7 @@ class TestKeylessProvider:
     ):
         """An unrelated base-type env var must not turn a keyless shim into an
         authed provider — it is not this provider's credential."""
-        load_providers()
+        load_providers_with_moved()
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
 
         info = build_provider_info("chat_completions", {}, shim_name=keyless_shim)
@@ -218,7 +218,7 @@ class TestKeylessProvider:
 
     def test_explicit_empty_api_key_is_not_refilled_from_env(self, monkeypatch):
         """A key the operator cleared ("") stays cleared, even with the env set."""
-        load_providers()
+        load_providers_with_moved()
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
 
         info = build_provider_info(
@@ -235,7 +235,7 @@ class TestKeylessProvider:
         ``chat_completions`` is vendor-neutral: an ``OPENAI_API_KEY`` in the
         environment is not this provider's credential.
         """
-        load_providers()
+        load_providers_with_moved()
         monkeypatch.setenv("OPENAI_API_KEY", "sk-env")
 
         info = build_provider_info("chat_completions", {"base_url": "https://x/v1"})
@@ -248,7 +248,7 @@ class TestSessionHeader:
     """Shim-declared per-conversation session headers."""
 
     def test_opencode_shim_declares_session_header(self, monkeypatch):
-        load_providers()
+        load_providers_with_moved()
         monkeypatch.setenv("OPENCODE_API_KEY", "oc_sk_test")
 
         info = build_provider_info("opencode--chat_completions", {})
@@ -264,7 +264,7 @@ class TestSessionHeader:
         }
 
     def test_opencode_messages_variant_uses_x_api_key(self, monkeypatch):
-        load_providers()
+        load_providers_with_moved()
         monkeypatch.setenv("OPENCODE_API_KEY", "oc_sk_test")
 
         info = build_provider_info("opencode--messages", {})
@@ -276,7 +276,7 @@ class TestSessionHeader:
         assert info.upstream_url("m") == "https://opencode.ai/zen/go/v1/messages"
 
     def test_config_overrides_session_header(self, monkeypatch):
-        load_providers()
+        load_providers_with_moved()
         monkeypatch.setenv("OPENCODE_API_KEY", "oc_sk_test")
 
         info = build_provider_info(
@@ -286,7 +286,7 @@ class TestSessionHeader:
         assert info.session_header == "x-other-session"
 
     def test_provider_without_session_header(self):
-        load_providers()
+        load_providers_with_moved()
         info = build_provider_info("xai", {"api_key": "k"})
 
         assert info.session_header is None
@@ -404,7 +404,7 @@ class TestTheCredentialChannel:
         assert info.token_input == "sk-from-the-environment"
 
     def test_a_command_without_the_channel_still_conflicts(self):
-        load_providers()
+        load_providers_with_moved()
 
         with pytest.raises(ValueError, match="mutually exclusive"):
             build_provider_info(

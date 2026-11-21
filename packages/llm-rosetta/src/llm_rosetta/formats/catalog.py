@@ -71,8 +71,10 @@ FORMAT_SPECS: tuple[FormatSpec, ...] = (
         detect_priority=30,
         auth="openai",
         url_template="{base_url}/responses",
-        base_url_hint="https://openrouter.ai/api/v1",
-        api_key_env_hint="OPENROUTER_API_KEY",
+        # A placeholder only.  The hint names a core vendor's host: the
+        # aggregator it used to name moved to the contrib source (#1660).
+        base_url_hint="https://api.openai.com/v1",
+        api_key_env_hint="OPENAI_API_KEY",
         supports_custom_tools=True,
         sse="open_responses",
         usage_shape="openai_details",

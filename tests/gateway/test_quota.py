@@ -18,8 +18,12 @@ from llm_rosetta_gateway.quota.probes import resolve_probe
 from llm_rosetta_gateway.quota.state import QuotaState
 from llm_rosetta_gateway.transport.provider_info import KeyRing
 from llm_rosetta.shims.providers.deepseek.quota import DeepSeekBalanceProbe
-from llm_rosetta.shims.providers.openai.quota import OpenAICodexProbe
-from llm_rosetta.shims.providers.opencode.quota import OpenCodeGoProbe
+from _moved_vendors import load_providers_with_moved, moved_vendor_module
+
+# Both probes moved to contrib with their vendors (#1660); the frozen copies
+# are the fixtures.
+OpenAICodexProbe = moved_vendor_module("openai_chatgpt/quota.py").OpenAICodexProbe
+OpenCodeGoProbe = moved_vendor_module("opencode/quota.py").OpenCodeGoProbe
 
 # The probes ship with the shims; a test resolves against them directly.
 _PROBES = (OpenCodeGoProbe(), OpenAICodexProbe())
@@ -301,15 +305,18 @@ class TestProbeResolution:
             resolve_probe("https://api.example.com", probes=_PROBES, probe_id="nope")
 
     def test_shims_attach_their_probes(self):
-        from llm_rosetta.api import get_shim, load_providers
+        from llm_rosetta.api import get_shim
 
-        if get_shim("opencode--chat_completions") is None:
-            load_providers()
+        load_providers_with_moved()
         opencode = get_shim("opencode--chat_completions")
+        plan = get_shim("openai_chatgpt--open_responses")
         openai = get_shim("openai--open_responses")
-        assert opencode is not None and openai is not None
+        assert opencode is not None and plan is not None and openai is not None
         assert [p.id for p in opencode.quota_probes] == ["opencode_go"]
-        assert [p.id for p in openai.quota_probes] == ["openai_codex"]
+        assert [p.id for p in plan.quota_probes] == ["openai_codex"]
+        # The Codex probe left core with ``openai_chatgpt`` (#1660): the API-key
+        # vendor ships no probe of its own any more.
+        assert openai.quota_probes == ()
 
     def test_the_pivot_holds_no_vendor_probe(self):
         import llm_rosetta_gateway.quota.probes as pivot
@@ -477,12 +484,10 @@ class TestQuotaIntervals:
         from types import SimpleNamespace
 
         from llm_rosetta_gateway.quota.service import quota_intervals
-        from llm_rosetta.api import get_shim, load_providers
 
         # Other test modules reset the shim registry; load the built-ins so
         # this test reads the declaration it is about.
-        if get_shim("opencode--chat_completions") is None:
-            load_providers()
+        load_providers_with_moved()
 
         config = SimpleNamespace(
             providers={"oc": object(), "plain": object()},
@@ -501,10 +506,8 @@ class TestQuotaIntervals:
         from types import SimpleNamespace
 
         from llm_rosetta_gateway.quota.service import quota_intervals
-        from llm_rosetta.api import get_shim, load_providers
 
-        if get_shim("opencode--chat_completions") is None:
-            load_providers()
+        load_providers_with_moved()
 
         config = SimpleNamespace(
             providers={"oc": object()},
@@ -676,9 +679,8 @@ class TestInBandOnlyLane:
 
     def _config(self, monkeypatch):
         from llm_rosetta_gateway.quota.service import resolve_provider_probe_for_info
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
         pinfo = SimpleNamespace(
             name="openai_chatgpt--open_responses",
             keyless=False,
@@ -698,9 +700,8 @@ class TestInBandOnlyLane:
         """The hand-built provider in the other tests supplies the probe the
         loader might not — this one goes through `load_gateway_config`."""
         from llm_rosetta_gateway.config import load_gateway_config
-        from llm_rosetta.shims.providers import load_providers
 
-        load_providers()
+        load_providers_with_moved()
         config_path = tmp_path / "config.jsonc"
         config_path.write_text(
             json.dumps(
@@ -725,9 +726,10 @@ class TestInBandOnlyLane:
         assert pinfo.quota_unsupported and "in-band" in pinfo.quota_unsupported
 
     def test_the_plan_shim_declares_it_in_band(self):
-        from llm_rosetta.shims.providers import load_providers
 
-        shim = {s.name: s for s in load_providers()}["openai_chatgpt--open_responses"]
+        shim = {s.name: s for s in load_providers_with_moved()}[
+            "openai_chatgpt--open_responses"
+        ]
 
         assert shim.quota is not None
         assert shim.quota.probe == "openai_codex"
