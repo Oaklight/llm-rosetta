@@ -150,7 +150,7 @@ llm-rosetta-gateway shims check --root src/llm_rosetta_shim_acme/providers
 它不装载、不写文件、也不需要配置，因此可以在还没配好网关的包仓库里直接运行。会报告的情形：
 叶子不在规范路径上、把厂商目录当叶子用、类型目录同时混有叶子层和格式层、类型目录之上超过一个
 lane 目录、厂商级 `transforms.py`、厂商与叶子两级都声明了 `auth.py`、文件不在允许清单内、缺少
-`provider.yaml`。约定本身见 `llm_rosetta/shims/_shim_template/README_zh.md`。
+`provider.yaml`。约定本身见 `llm_rosetta/devtools/_shim_template/README_zh.md`。
 
 ### `shims migrate [--root DIR] [--write]`
 

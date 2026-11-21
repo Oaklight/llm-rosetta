@@ -30,7 +30,7 @@ ProviderShim ("deepseek--chat_completions")
 
 ### 声明式提供方目录
 
-内置 shim 以目录结构定义在 `shims/providers/` 下。所有厂商共用同一种形状，下面的三条规则
+内置 shim 以目录结构定义在 `shims/builtin/` 下。所有厂商共用同一种形状，下面的三条规则
 就是 loader 接受的形状。
 
 ```text
@@ -59,25 +59,23 @@ ProviderShim ("deepseek--chat_completions")
 内置树按这个形状排列：
 
 ```text
-packages/llm-rosetta/src/llm_rosetta/shims/providers/
+packages/llm-rosetta/src/llm_rosetta/shims/builtin/
 ├── __init__.py
 ├── anthropic/
 │   └── llm/provider.yaml        # 单条 lane：类型目录直接放叶子
-├── openai/
+├── deepseek/
 │   ├── provider.yaml            # 厂商清单：共用的凭据
 │   ├── quota.py                 # 厂商级探针，该厂商各类共用
+│   └── llm/
+│       ├── chat_completions/    # provider.yaml + transforms.py
+│       └── open_responses/      # provider.yaml + transforms.py
+├── openai/
+│   ├── provider.yaml            # 厂商清单：共用的凭据
 │   ├── llm/
 │   │   ├── chat_completions/    # provider.yaml + transforms.py
-│   │   └── open_responses/      # provider.yaml
+│   │   └── open_responses/      # provider.yaml + transforms.py
 │   ├── embeddings/provider.yaml
 │   └── decisions/provider.yaml
-├── openai_chatgpt/
-│   ├── provider.yaml            # 厂商清单：只有注释
-│   ├── auth.py                  # 厂商级凭据交换
-│   └── llm/open_responses/provider.yaml
-├── antigravity/
-│   ├── provider.yaml            # 厂商清单：无密钥，token 在 agent 手里
-│   └── llm/acp/provider.yaml    # transport: acp，argv ["agy", "acp"]
 └── ...
 ```
 
@@ -91,7 +89,7 @@ loader 会读错的树 —— 叶子不在规范路径上、把厂商目录当�
 格式层、文件不在允许清单内 —— 并以非零退出。`shims migrate --root <目录>` 打印让它归位的
 移动，加 `--write` 才执行；它只移动目录并改写 `shims.yaml` 路径，不重写相对导入，那部分由
 包自己的测试兜住。`shims new` 用同一份模板生成骨架。完整约定、骨架的输出与占位符清单见
-`llm_rosetta/shims/_shim_template/README_zh.md`。
+`llm_rosetta/devtools/_shim_template/README_zh.md`。
 
 每个叶子目录包含：
 
@@ -396,7 +394,7 @@ shim 的旁挂模块（`transforms.py`、`auth.py`、`quota.py` 以及它们旁�
 
 不能导入 `llm_rosetta.api`，也不能导入任何内部模块。加载器在 `import llm_rosetta` 尚未完成时就运行插件 entry point 与旁挂模块。`llm_rosetta.api` 需要完整加载的包，此时无法加载；契约模块可以。契约也是稳定的部分：在一个次版本内只增加名字，而内部模块在任何版本都可能移动。一个厂商目录也不导入其他厂商的目录，这样每个目录都能单独移出 core。
 
-对于内置 shim，`tests/test_shim_sidecar_boundary.py` 对 `shims/providers/<vendor>/` 下的每个 `.py` 文件、脚手架模板以及脚手架生成的文件执行这条规则。层级划分见 [core 接口](../api/index.md#the-core-surface)。
+对于内置 shim，`tests/test_shim_sidecar_boundary.py` 对 `shims/builtin/<vendor>/` 下的每个 `.py` 文件、脚手架模板以及脚手架生成的文件执行这条规则。层级划分见 [core 接口](../api/index.md#the-core-surface)。
 
 ## Shim 生命周期
 
@@ -772,7 +770,7 @@ loader 用解析分支得到的 commit 填充 `{ref}` —— 于是预设指向�
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 21 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`
+LLM-Rosetta 内置 21 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<model-type>/`
 下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。core 只保留模型厂商自己的
 API key 通道，以及每种非 chat 格式各一个真实提供方（[Shim 归属](shim-placement.md)）。其余提供方——
 包括 0.14 之前内置的 OpenCode、OpenRouter、Qwen、Volcengine、xAI 与 Zhipu——
@@ -1235,7 +1233,7 @@ register_shim(my_shim)
 
 要向内置注册表添加新提供方：
 
-1. 把叶子放在 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<type>/provider.yaml`，其中 `<type>` 是格式所属的模型类型（`llm`、`embeddings`、`rerank`、`decisions`）。只有该类型下存在第二条 lane 时才在其下再加 `<format>/` 层，因此同一厂商的 `chat_completions` 与 `messages` 并排放在 `llm/` 里；有多个具名实例的厂商在类型之上再加 lane 目录（`<vendor>/<lane>/<type>/`）。`llm-rosetta-gateway shims new` 写出的就是这个形状，`shims check` 报告偏离它的树。
+1. 把叶子放在 `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<type>/provider.yaml`，其中 `<type>` 是格式所属的模型类型（`llm`、`embeddings`、`rerank`、`decisions`）。只有该类型下存在第二条 lane 时才在其下再加 `<format>/` 层，因此同一厂商的 `chat_completions` 与 `messages` 并排放在 `llm/` 里；有多个具名实例的厂商在类型之上再加 lane 目录（`<vendor>/<lane>/<type>/`）。`llm-rosetta-gateway shims new` 写出的就是这个形状，`shims check` 报告偏离它的树。
 2. 若该厂商的叶子共用连接信息（通常就是凭据），添加不带 `name` 的 `<vendor>/provider.yaml`：它是厂商清单，每个叶子都继承它。
 
     ```yaml

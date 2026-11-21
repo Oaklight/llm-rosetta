@@ -58,7 +58,7 @@ shim 不得导入 `llm_rosetta.api`。插件 entry point 与旁挂模块在 `imp
 
 网关只通过两个前缀访问 core：`llm_rosetta.api` 与 `llm_rosetta.contracts`（`contracts.usage` 只导入包本身）。规则是严格的，没有白名单：网关源码中导入任何其他 core 模块或私有（以 `_` 开头）core 名称，都会使 `tests/gateway/test_core_surface_boundary.py` 失败。兼容转发模块 `llm_rosetta.routing` 与 `llm_rosetta.capabilities` 同样被拒绝。
 
-shim 遵循同一规则，只有一个前缀。`shims/providers/<vendor>/` 下的 `.py` 文件、脚手架模板或脚手架生成的文件，若不经 `llm_rosetta.contracts` 导入 core，或导入其他厂商的目录，`tests/test_shim_sidecar_boundary.py` 就会失败。
+shim 遵循同一规则，只有一个前缀。`shims/builtin/<vendor>/` 下的 `.py` 文件、脚手架模板或脚手架生成的文件，若不经 `llm_rosetta.contracts` 导入 core，或导入其他厂商的目录，`tests/test_shim_sidecar_boundary.py` 就会失败。
 
 ### 版本常量 {#version-constants}
 

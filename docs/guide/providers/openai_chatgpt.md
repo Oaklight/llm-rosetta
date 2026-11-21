@@ -19,8 +19,9 @@ Go/Plus/Pro 套餐额度，而不是 Platform API 计费。它使用与 `openai-
 |:---|:---|:---|:---|
 | `openai_chatgpt--open_responses` | `open_responses` | `https://api.openai.com/v1` | 无 —— 通过登录取得 |
 
-这里刻意没有 `api_key_env`：凭据由厂商自带的 `auth.py`（`shims/providers/openai_chatgpt/auth.py`，
-与厂商清单放在一起）生成。若在声明了交换却 `consumes_key=false` 的提供方旁配置 `api_key`，
+这里刻意没有 `api_key_env`：凭据由厂商自带的 `auth.py`（[llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib)
+中的 `src/llm_rosetta_shim_contrib/providers/openai_chatgpt/auth.py`，与厂商清单放在一起；
+该厂商已在 [#1664](https://github.com/Oaklight/llm-rosetta/pull/1664) 中移出 core）生成。若在声明了交换却 `consumes_key=false` 的提供方旁配置 `api_key`，
 加载配置时会被拒绝 —— 两者是同一个凭据的两种来源。
 
 ## 前置条件
