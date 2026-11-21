@@ -1,9 +1,11 @@
-"""The 0.13.0 flat modules forward for one minor (#1657 compat decision).
+"""The 0.13.0 compat modules forward for one minor (#1657, #919 decisions).
 
 ``llm_rosetta.routing`` and ``llm_rosetta.capabilities`` shipped in 0.13.0 as
-flat modules.  Each now forwards exactly its 0.13.0 public names, as the same
-objects as their current homes, and warns once on import.  Both are removed in
-0.15.0; the gateway and the shims may not import them (the boundary tests).
+flat modules, and ``llm_rosetta.types.ir.extensions`` as a deprecated
+forwarder.  Each now forwards exactly its 0.13.0 public names, as the same
+objects as their current homes, and warns once on import.  All three are
+removed in 0.15.0; the gateway and the shims may not import them (the boundary
+tests).
 """
 
 from __future__ import annotations
@@ -31,6 +33,21 @@ CAPABILITIES_NAMES = [
 ]
 
 
+#: ``llm_rosetta.types.ir.extensions.__all__`` on the v0.13.0 tag.
+EXTENSIONS_NAMES = [
+    "SystemEvent",
+    "BatchMarker",
+    "SessionControl",
+    "ToolChainNode",
+    "ExtensionItem",
+    "is_extension_item",
+    "is_extension_type",
+    "get_extension_type",
+    "isinstance_extension",
+    "EXTENSION_TYPE_MAP",
+]
+
+
 def _fresh_import(name: str):
     sys.modules.pop(name, None)
     with warnings.catch_warnings(record=True) as caught:
@@ -44,6 +61,7 @@ def _fresh_import(name: str):
     [
         ("llm_rosetta.routing", ROUTING_NAMES),
         ("llm_rosetta.capabilities", CAPABILITIES_NAMES),
+        ("llm_rosetta.types.ir.extensions", EXTENSIONS_NAMES),
     ],
 )
 def test_a_forwarder_warns_once_and_names_its_removal(name, names):
@@ -64,6 +82,20 @@ def test_routing_forwards_the_contract_objects():
 
     for name in ROUTING_NAMES:
         assert getattr(module, name) is getattr(home, name), name
+
+
+def test_extensions_forwards_the_experimental_objects():
+    module, _ = _fresh_import("llm_rosetta.types.ir.extensions")
+    import llm_rosetta.types.ir.extensions_experimental as home
+
+    for name in EXTENSIONS_NAMES:
+        assert getattr(module, name) is getattr(home, name), name
+
+
+def test_extensions_is_in_the_compat_tier():
+    from llm_rosetta import _tiers
+
+    assert "llm_rosetta.types.ir.extensions" in _tiers.COMPAT
 
 
 def test_capabilities_forwards_the_current_objects():

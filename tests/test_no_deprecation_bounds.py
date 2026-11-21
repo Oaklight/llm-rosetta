@@ -61,7 +61,7 @@ KEPT_DEPRECATIONS = dict(
         ),
         (
             "llm_rosetta/types/ir/extensions.py",
-            "an IR extension field that readers still produce",
+            "0.13.0 module, forwards to extensions_experimental for one minor",
         ),
         (
             "llm_rosetta_gateway/observability/persistence/manager.py",
@@ -70,14 +70,14 @@ KEPT_DEPRECATIONS = dict(
     ]
 )
 
-#: Forwarding shells that stay.  ``types/ir/extensions.py`` shipped in 0.13.0 as
-#: a deprecated forwarder to ``extensions_experimental`` and is not in the
-#: removal inventory; whether it goes is a maintainer decision.  Shrink only.
+#: Forwarding shells that stay, each for one minor after the 0.13.0 release that
+#: shipped it (decided 2026-11-21 for ``types/ir/extensions.py``, 2026-11-20 for
+#: the other two).  Shrink only.
 KEPT_SHELLS = dict(
     [
         (
             "llm_rosetta/types/ir/extensions.py",
-            "deprecated forwarder to extensions_experimental, outside the inventory",
+            "0.13.0 module kept for one minor (2026-11-21 compat decision)",
         ),
         (
             "llm_rosetta/routing.py",

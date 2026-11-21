@@ -86,6 +86,9 @@ COMPAT: tuple[str, ...] = (
     # 0.13.0 flat module, forwards the passes and the shim types to their
     # current homes; removed in 0.15.0.
     "llm_rosetta.capabilities",
+    # 0.13.0 module (already deprecated then), forwards to
+    # llm_rosetta.types.ir.extensions_experimental; removed in 0.15.0.
+    "llm_rosetta.types.ir.extensions",
 )
 
 REMOVED: tuple[str, ...] = ()
