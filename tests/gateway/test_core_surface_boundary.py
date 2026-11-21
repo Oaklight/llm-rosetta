@@ -281,6 +281,9 @@ def test_the_surface_rule():
         assert _is_allowed(f"llm_rosetta.contracts.{module}")
     assert not _is_allowed("llm_rosetta.contracts.usage.report")
     assert not _is_allowed("llm_rosetta.contractsx")
+    # The 0.13.0 forwarders are compat for outside users, not for the gateway.
+    assert not _is_allowed("llm_rosetta.routing")
+    assert not _is_allowed("llm_rosetta.capabilities")
     assert not _is_allowed("llm_rosetta.observability")
     assert not _is_allowed("llm_rosetta.shims")
     assert not _is_allowed("llm_rosetta")

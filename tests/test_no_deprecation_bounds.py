@@ -44,6 +44,14 @@ KEPT_DEPRECATIONS = dict(
             "the llm_rosetta.observability finder forwards to the gateway (C02)",
         ),
         (
+            "llm_rosetta/routing.py",
+            "0.13.0 flat module, forwards to llm_rosetta.contracts.routing for one minor",
+        ),
+        (
+            "llm_rosetta/capabilities.py",
+            "0.13.0 flat module, forwards to the passes' current homes for one minor",
+        ),
+        (
             "llm_rosetta/pipeline/chat/ir_transforms.py",
             "apply_ir_transforms keeps its older signature for external callers",
         ),
@@ -70,6 +78,14 @@ KEPT_SHELLS = dict(
         (
             "llm_rosetta/types/ir/extensions.py",
             "deprecated forwarder to extensions_experimental, outside the inventory",
+        ),
+        (
+            "llm_rosetta/routing.py",
+            "0.13.0 flat module kept for one minor (#1657 compat decision)",
+        ),
+        (
+            "llm_rosetta/capabilities.py",
+            "0.13.0 flat module kept for one minor (#1657 compat decision)",
         ),
     ]
 )
