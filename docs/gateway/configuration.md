@@ -216,13 +216,19 @@ applies a config dict. `create_app` also applies the section automatically.
 (`contrib`, `argonne`), a manifest URL, or `{"url", "fallback", "token_env"}`.
 `install` selects vendors from them: `<vendor>`, `tag:<tag>` (matched whole,
 e.g. `tag:tier:free`), `*`, each optionally behind `<source>:`. Per vendor the
-gateway installs the newest version whose `requires` matches this core
-(`surface` equal to `SURFACE_VERSION`, `ir` not above `IR_VERSION`), checks the
-archive's sha256, and upgrades only when a newer installable version appears.
+gateway installs the newest stable version whose `requires` matches this core
+(`surface` equal to `SURFACE_VERSION`, `ir` not above `IR_VERSION`; a
+pre-release only when no stable version is installable), checks the archive's
+sha256, loads only the shim names the release record lists when the archive
+has no `shims.yaml`, and upgrades only when a newer installable version
+appears. An entry that matches nothing in a source that answered is logged and
+reported as a *not in the manifest* row.
 The manifest is reused for `remote_ttl`; an unreachable source keeps the cached
-manifest and the last good install. A vendor that ships a core shim name, or
-whose record says `promoted_to: core@X` with this core at `X` or later, is not
-installed. Manifest installs load before `paths` and `remotes`. See
+manifest and the last good install. Core wins per shim: a core shim name is
+refused and the vendor's other shims install. A record saying
+`promoted_to: core@X` skips the vendor only when this core is at `X` or later
+(a dev or pre-release of `X` is before it) and core registers the record's
+shims. Manifest installs load before `paths` and `remotes`. See
 [Manifest sources](../guide/shims.md#manifest-sources).
 
 **Standalone packages and presets.** The ALCF, AskSage, Argo, free-endpoint and

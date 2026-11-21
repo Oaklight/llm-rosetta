@@ -611,23 +611,37 @@ core it needs (`requires: {surface, ir}`). The format is
 `install` without `sources` reads `contrib` and `argonne`. A source may also be
 a manifest URL, or an object `{"url": …, "fallback": …, "token_env": …}`.
 
-For each selected vendor the gateway installs the newest version whose
-`requires` this core satisfies — `surface` equal to
+For each selected vendor the gateway installs the newest **stable** version
+whose `requires` this core satisfies — `surface` equal to
 `llm_rosetta.contracts.SURFACE_VERSION` and `ir` not above `IR_VERSION` — and
-logs a WARNING for each newer version it passed over, with the reason. The
+logs a WARNING for each newer incompatible version it passed over, with the
+reason. A pre-release (`0.5.0-rc.1`) is installed only when no stable version
+is installable, so one pre-release on `dist` does not upgrade every gateway.
+Versions are `MAJOR.MINOR.PATCH` with an optional pre-release and no build
+metadata (`+build` makes the manifest invalid). A tag selector reads the tags
+of the vendor's newest installable record. The
 archive is checked against the record's sha256 before it is installed into the
-shim cache. The installed version is kept until a newer *installable* version
-appears; re-reading the manifest never downgrades it. The manifest is read from
+shim cache. The release record is authoritative for what registers: an
+archive without a `shims.yaml` loads only the shim names its record lists, and
+any other name is refused with a WARNING. The installed version is kept until
+a newer *installable* version appears; re-reading the manifest never
+downgrades it, and an installed version the manifest no longer lists is kept
+with a WARNING. The manifest is read from
 jsDelivr (`…@dist/manifest.json`), with `raw.githubusercontent.com` as the
 fallback, and reused for `remote_ttl`; **Refetch** reads it at once. When the
 source cannot be reached the cached manifest and the last good install are used,
 and a digest mismatch never installs (the previous version stays, marked
 stale).
 
-**Core wins.** A vendor whose shim names core already registers is not
-installed, and the log names the source and vendor it ignored. A record that
-carries `promoted_to: core@X` is not installed once the running core is at `X`
-or later, because core then ships the vendor. A manifest install loads before
+**Core wins, per shim.** A shim name core already registers is not loaded
+from the source, and the log names the source, the vendor and the ignored
+names; the vendor's other shims still install (a vendor all of whose shims core
+registers is skipped). `promoted_to: core@X` is read from the record that
+would be installed, so a later release without it un-promotes the vendor. The
+claim is honoured only when the running core is at `X` or later — a dev or
+pre-release of `X` (`0.14.0.dev35`) is before `X` — and core registers the
+record's shims; a claim that is due but not borne out is logged and the vendor
+installs normally. A manifest install loads before
 `paths` and `remotes`, so an explicit source still overrides it.
 
 **Legacy presets keep working.** `shims.presets` needs no edit: `alcf`,
@@ -638,7 +652,12 @@ cases stay on the old remote path: a package an explicit `shims.remotes` entry
 names (by its current or its old repository URL — `llm-rosetta-shim-argo` is now
 `-argonne` and `llm-rosetta-shim-free` is now `-contrib`), and, with a WARNING,
 a mapped preset whose source has never answered (no manifest fetched or cached
-yet).
+yet). When the source answers but carries no matching vendor (a staged
+publish, a renamed tag), the old remote is **not** loaded — it carries code
+built for an older core — and the gateway logs a WARNING and reports the
+selector as a source row marked *not in the manifest*, so the loss is visible
+in the log and on the Shims page. The same holds for any `install` entry that
+matches nothing.
 
 #### Selecting part of a package { #selection }
 
