@@ -39,35 +39,35 @@
     },
     {
       "key": "llm_rosetta.pipeline::enforce_custom_tools::removed",
-      "reason": "0.14.0 moved the capability passes to llm_rosetta.ir.passes (internal; the llm_rosetta.capabilities facade was removed before release, #1657); pipeline only imported them for internal use. Tracked by #1115."
+      "reason": "pipeline only imported the capability passes for internal use. A 0.13.0 caller reaches them through llm_rosetta.capabilities, a deprecated forwarder that is removed in 0.15.0; after that they have no public home (the pipeline runs them; llm_rosetta.ir.passes is internal). Tracked by #1115 and #1657."
     },
     {
       "key": "llm_rosetta.pipeline::enforce_reasoning::removed",
-      "reason": "0.14.0 moved the capability passes to llm_rosetta.ir.passes (internal; the llm_rosetta.capabilities facade was removed before release, #1657); pipeline only imported them for internal use. Tracked by #1115."
+      "reason": "pipeline only imported the capability passes for internal use. A 0.13.0 caller reaches them through llm_rosetta.capabilities, a deprecated forwarder that is removed in 0.15.0; after that they have no public home (the pipeline runs them; llm_rosetta.ir.passes is internal). Tracked by #1115 and #1657."
     },
     {
       "key": "llm_rosetta.pipeline::enforce_vision::removed",
-      "reason": "0.14.0 moved the capability passes to llm_rosetta.ir.passes (internal; the llm_rosetta.capabilities facade was removed before release, #1657); pipeline only imported them for internal use. Tracked by #1115."
+      "reason": "pipeline only imported the capability passes for internal use. A 0.13.0 caller reaches them through llm_rosetta.capabilities, a deprecated forwarder that is removed in 0.15.0; after that they have no public home (the pipeline runs them; llm_rosetta.ir.passes is internal). Tracked by #1115 and #1657."
     },
     {
       "key": "llm_rosetta.pipeline::get_custom_tool_names::removed",
-      "reason": "0.14.0 moved the capability passes to llm_rosetta.ir.passes (internal; the llm_rosetta.capabilities facade was removed before release, #1657); pipeline only imported them for internal use. Tracked by #1115."
+      "reason": "pipeline only imported the capability passes for internal use. A 0.13.0 caller reaches them through llm_rosetta.capabilities, a deprecated forwarder that is removed in 0.15.0; after that they have no public home (the pipeline runs them; llm_rosetta.ir.passes is internal). Tracked by #1115 and #1657."
     },
     {
       "key": "llm_rosetta.pipeline::relocate_oversized_tool_descriptions::removed",
-      "reason": "0.14.0 moved the capability passes to llm_rosetta.ir.passes (internal; the llm_rosetta.capabilities facade was removed before release, #1657); pipeline only imported them for internal use. Tracked by #1115."
+      "reason": "pipeline only imported the capability passes for internal use. A 0.13.0 caller reaches them through llm_rosetta.capabilities, a deprecated forwarder that is removed in 0.15.0; after that they have no public home (the pipeline runs them; llm_rosetta.ir.passes is internal). Tracked by #1115 and #1657."
     },
     {
       "key": "llm_rosetta.pipeline::restore_custom_tool_calls::removed",
-      "reason": "0.14.0 moved the capability passes to llm_rosetta.ir.passes (internal; the llm_rosetta.capabilities facade was removed before release, #1657); pipeline only imported them for internal use. Tracked by #1115."
+      "reason": "pipeline only imported the capability passes for internal use. A 0.13.0 caller reaches them through llm_rosetta.capabilities, a deprecated forwarder that is removed in 0.15.0; after that they have no public home (the pipeline runs them; llm_rosetta.ir.passes is internal). Tracked by #1115 and #1657."
     },
     {
       "key": "llm_rosetta.pipeline::strip_reasoning_for_non_reasoning::removed",
-      "reason": "0.14.0 moved the capability passes to llm_rosetta.ir.passes (internal; the llm_rosetta.capabilities facade was removed before release, #1657); pipeline only imported them for internal use. Tracked by #1115."
+      "reason": "pipeline only imported the capability passes for internal use. A 0.13.0 caller reaches them through llm_rosetta.capabilities, a deprecated forwarder that is removed in 0.15.0; after that they have no public home (the pipeline runs them; llm_rosetta.ir.passes is internal). Tracked by #1115 and #1657."
     },
     {
       "key": "llm_rosetta.pipeline::unwrap_custom_tool_input::removed",
-      "reason": "0.14.0 moved the capability passes to llm_rosetta.ir.passes (internal; the llm_rosetta.capabilities facade was removed before release, #1657); pipeline only imported them for internal use. Tracked by #1115."
+      "reason": "pipeline only imported the capability passes for internal use. A 0.13.0 caller reaches them through llm_rosetta.capabilities, a deprecated forwarder that is removed in 0.15.0; after that they have no public home (the pipeline runs them; llm_rosetta.ir.passes is internal). Tracked by #1115 and #1657."
     },
     {
       "key": "llm_rosetta.pipeline::ProviderShim::removed",
@@ -180,66 +180,6 @@
     {
       "key": "llm_rosetta.shims.provider_shim::resolve_base::removed",
       "reason": "Removed in 0.14.0 (issue 919, P6): the deprecated alias is gone; use llm_rosetta.shims.resolve_format. Listed once shims.provider_shim joined the compared modules (compat tier, #1657)."
-    },
-    {
-      "key": "llm_rosetta.routing::ProviderType::module-removed",
-      "reason": "0.14.0 moved the routing contract to llm_rosetta.contracts.routing (#1657), which exports the same names (ResolvedRoute, Router, ProviderType, SoftErrorPattern). No forwarder is kept: #1657 decided to move the contract homes before 0.14.0."
-    },
-    {
-      "key": "llm_rosetta.routing::ResolvedRoute::module-removed",
-      "reason": "0.14.0 moved the routing contract to llm_rosetta.contracts.routing (#1657), which exports the same names (ResolvedRoute, Router, ProviderType, SoftErrorPattern). No forwarder is kept: #1657 decided to move the contract homes before 0.14.0."
-    },
-    {
-      "key": "llm_rosetta.routing::Router::module-removed",
-      "reason": "0.14.0 moved the routing contract to llm_rosetta.contracts.routing (#1657), which exports the same names (ResolvedRoute, Router, ProviderType, SoftErrorPattern). No forwarder is kept: #1657 decided to move the contract homes before 0.14.0."
-    },
-    {
-      "key": "llm_rosetta.capabilities::ConversionContext::module-removed",
-      "reason": "0.14.0 removed the llm_rosetta.capabilities module (#1657, decision D3): the capability passes are internal (llm_rosetta.ir.passes) and run inside the pipeline; the shim types it re-exported live in llm_rosetta.contracts.shim, ConversionContext in llm_rosetta.converters.base."
-    },
-    {
-      "key": "llm_rosetta.capabilities::ProviderShim::module-removed",
-      "reason": "0.14.0 removed the llm_rosetta.capabilities module (#1657, decision D3): the capability passes are internal (llm_rosetta.ir.passes) and run inside the pipeline; the shim types it re-exported live in llm_rosetta.contracts.shim, ConversionContext in llm_rosetta.converters.base."
-    },
-    {
-      "key": "llm_rosetta.capabilities::ReasoningCapability::module-removed",
-      "reason": "0.14.0 removed the llm_rosetta.capabilities module (#1657, decision D3): the capability passes are internal (llm_rosetta.ir.passes) and run inside the pipeline; the shim types it re-exported live in llm_rosetta.contracts.shim, ConversionContext in llm_rosetta.converters.base."
-    },
-    {
-      "key": "llm_rosetta.capabilities::enforce_custom_tools::module-removed",
-      "reason": "0.14.0 removed the llm_rosetta.capabilities module (#1657, decision D3): the capability passes are internal (llm_rosetta.ir.passes) and run inside the pipeline; the shim types it re-exported live in llm_rosetta.contracts.shim, ConversionContext in llm_rosetta.converters.base."
-    },
-    {
-      "key": "llm_rosetta.capabilities::enforce_reasoning::module-removed",
-      "reason": "0.14.0 removed the llm_rosetta.capabilities module (#1657, decision D3): the capability passes are internal (llm_rosetta.ir.passes) and run inside the pipeline; the shim types it re-exported live in llm_rosetta.contracts.shim, ConversionContext in llm_rosetta.converters.base."
-    },
-    {
-      "key": "llm_rosetta.capabilities::enforce_vision::module-removed",
-      "reason": "0.14.0 removed the llm_rosetta.capabilities module (#1657, decision D3): the capability passes are internal (llm_rosetta.ir.passes) and run inside the pipeline; the shim types it re-exported live in llm_rosetta.contracts.shim, ConversionContext in llm_rosetta.converters.base."
-    },
-    {
-      "key": "llm_rosetta.capabilities::get_custom_tool_names::module-removed",
-      "reason": "0.14.0 removed the llm_rosetta.capabilities module (#1657, decision D3): the capability passes are internal (llm_rosetta.ir.passes) and run inside the pipeline; the shim types it re-exported live in llm_rosetta.contracts.shim, ConversionContext in llm_rosetta.converters.base."
-    },
-    {
-      "key": "llm_rosetta.capabilities::relocate_oversized_tool_descriptions::module-removed",
-      "reason": "0.14.0 removed the llm_rosetta.capabilities module (#1657, decision D3): the capability passes are internal (llm_rosetta.ir.passes) and run inside the pipeline; the shim types it re-exported live in llm_rosetta.contracts.shim, ConversionContext in llm_rosetta.converters.base."
-    },
-    {
-      "key": "llm_rosetta.capabilities::resolve_shim::module-removed",
-      "reason": "0.14.0 removed the llm_rosetta.capabilities module (#1657, decision D3): the capability passes are internal (llm_rosetta.ir.passes) and run inside the pipeline; the shim types it re-exported live in llm_rosetta.contracts.shim, ConversionContext in llm_rosetta.converters.base."
-    },
-    {
-      "key": "llm_rosetta.capabilities::restore_custom_tool_calls::module-removed",
-      "reason": "0.14.0 removed the llm_rosetta.capabilities module (#1657, decision D3): the capability passes are internal (llm_rosetta.ir.passes) and run inside the pipeline; the shim types it re-exported live in llm_rosetta.contracts.shim, ConversionContext in llm_rosetta.converters.base."
-    },
-    {
-      "key": "llm_rosetta.capabilities::strip_reasoning_for_non_reasoning::module-removed",
-      "reason": "0.14.0 removed the llm_rosetta.capabilities module (#1657, decision D3): the capability passes are internal (llm_rosetta.ir.passes) and run inside the pipeline; the shim types it re-exported live in llm_rosetta.contracts.shim, ConversionContext in llm_rosetta.converters.base."
-    },
-    {
-      "key": "llm_rosetta.capabilities::unwrap_custom_tool_input::module-removed",
-      "reason": "0.14.0 removed the llm_rosetta.capabilities module (#1657, decision D3): the capability passes are internal (llm_rosetta.ir.passes) and run inside the pipeline; the shim types it re-exported live in llm_rosetta.contracts.shim, ConversionContext in llm_rosetta.converters.base."
     }
   ]
 }

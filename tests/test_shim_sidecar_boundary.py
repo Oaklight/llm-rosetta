@@ -146,6 +146,9 @@ def test_the_rule():
     assert check("from llm_rosetta.api import get_shim") == ["1 llm_rosetta.api"]
     assert check("from llm_rosetta import api") == ["1 llm_rosetta"]
     assert check("import llm_rosetta.ir.primitives") == ["1 llm_rosetta.ir.primitives"]
+    # The 0.13.0 forwarders are compat for outside users, not for shims.
+    assert check("from llm_rosetta.routing import X") == ["1 llm_rosetta.routing"]
+    assert check("import llm_rosetta.capabilities") == ["1 llm_rosetta.capabilities"]
     cross = "1 llm_rosetta.shims.providers.openai.quota"
     assert check("from llm_rosetta.shims.providers.openai.quota import X") == [cross]
     assert check("from ..openai.quota import X") == [cross]

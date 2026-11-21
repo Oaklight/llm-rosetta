@@ -112,11 +112,28 @@ def test_old_paths_are_identity_reattachments():
     assert contract_transform is canonical_transform
 
 
-def test_the_removed_facades_stay_removed():
-    """``llm_rosetta.transforms`` and ``llm_rosetta.capabilities`` were removed
-    before 0.14.0 (#1657, D3): shims import ``llm_rosetta.contracts.transform``,
-    core imports ``llm_rosetta.ir``."""
+def test_the_removed_facade_stays_removed():
+    """The ``llm_rosetta.transforms`` facade was removed before 0.14.0 (#1657,
+    D3): shims import ``llm_rosetta.contracts.transform``, core imports
+    ``llm_rosetta.ir``.  ``llm_rosetta.capabilities`` is the 0.13.0 flat
+    module again, a deprecated forwarder (``tests/test_compat_forwarders.py``)."""
     import importlib.util
 
     assert importlib.util.find_spec("llm_rosetta.transforms") is None
-    assert importlib.util.find_spec("llm_rosetta.capabilities") is None
+
+
+def test_core_does_not_import_the_compat_forwarders():
+    """The 0.13.0 forwarders are for outside users; core reads the new homes."""
+    hits = []
+    forwarders = (_IR.parent / "routing.py", _IR.parent / "capabilities.py")
+    for path in sorted(_IR.parent.rglob("*.py")):
+        if "_vendor" in path.parts or path in forwarders:
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module in (
+                "llm_rosetta.routing",
+                "llm_rosetta.capabilities",
+            ):
+                hits.append(f"{path.relative_to(_IR.parent)}:{node.lineno}")
+    assert hits == []
