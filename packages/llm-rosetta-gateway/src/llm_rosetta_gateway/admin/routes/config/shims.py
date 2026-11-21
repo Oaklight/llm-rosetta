@@ -69,6 +69,9 @@ def _validate_shim_sources_body(
         return JSONResponse({"error": "'remotes' must be an array"}, status_code=400)
     if presets is not None and not isinstance(presets, list):
         return JSONResponse({"error": "'presets' must be an array"}, status_code=400)
+    for key in ("sources", "install"):
+        if body.get(key) is not None and not isinstance(body.get(key), list):
+            return JSONResponse({"error": f"'{key}' must be an array"}, status_code=400)
     if disabled is not None and (
         not isinstance(disabled, list) or any(not isinstance(n, str) for n in disabled)
     ):
@@ -98,7 +101,16 @@ def _merge_shim_sources_body(
     knobs clear on a falsy value, and empty sub-keys are dropped so the
     section stays tidy.
     """
-    for key in ("paths", "remotes", "presets", "disabled", "include", "exclude"):
+    for key in (
+        "paths",
+        "remotes",
+        "presets",
+        "sources",
+        "install",
+        "disabled",
+        "include",
+        "exclude",
+    ):
         if body.get(key) is not None:
             section[key] = body[key]
     for key, empty in (
@@ -117,6 +129,8 @@ def _merge_shim_sources_body(
         "paths",
         "remotes",
         "presets",
+        "sources",
+        "install",
         "disabled",
         "include",
         "exclude",
@@ -316,7 +330,7 @@ async def post_shim_package_upgrade(request: Any, key: str) -> Response:
     import asyncio
     import functools
 
-    from ....shims.catalog import get_source_package, repo_key
+    from ....shims.catalog import get_source_package, package_repo_keys, repo_key
     from ....shims.sources import ShimLoadReport
 
     package = get_source_package(key)
@@ -329,12 +343,25 @@ async def post_shim_package_upgrade(request: Any, key: str) -> Response:
             {"error": "the shim load report is not ready", "key": key},
             status_code=409,
         )
+    # A package runs either from its repository (a remote, possibly spelled
+    # with a renamed repository's old URL) or from its manifest source, as
+    # one vendor install per vendor (#1660).
+    repos = package_repo_keys(package)
     source = next(
         (
             status
             for status in getattr(report, "sources", []) or []
             if getattr(status, "kind", "") == "remote"
-            and repo_key(getattr(status, "location", "")) == repo_key(package.repo)
+            and (
+                (
+                    not getattr(status, "vendor", None)
+                    and repo_key(getattr(status, "location", "")) in repos
+                )
+                or (
+                    getattr(status, "vendor", None) in package.vendors
+                    and getattr(status, "source", None) == package.source
+                )
+            )
         ),
         None,
     )
@@ -356,7 +383,11 @@ async def post_shim_package_upgrade(request: Any, key: str) -> Response:
         None, functools.partial(check_remote_updates, report, proxy=proxy)
     )
     entry = next(
-        (e for e in entries if repo_key(e.get("location")) == repo_key(package.repo)),
+        (
+            e
+            for e in entries
+            if repo_key(e.get("location")) == repo_key(source.location)
+        ),
         None,
     )
     if entry is None:

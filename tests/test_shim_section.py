@@ -39,14 +39,20 @@ class TestParseShimsSection:
         assert sources.cache_root is not None
         assert os.path.normpath(sources.cache_root) == str(tmp_path / ".cache")
 
-    def test_a_preset_expands_to_its_catalogue_remote(self):
+    def test_a_preset_maps_to_its_manifest_source(self):
+        """#1660: a legacy preset key is a selector on its manifest source."""
         sources = parse_shims_section({"presets": ["argo"]})
         assert sources.presets == ("argo",)
-        assert sources.remotes
-        assert sources.remotes[0]["url"]
+        assert sources.remotes == ()
+        (selector,) = sources.manifests.selectors
+        assert selector.raw == "argonne:argo"
+        assert selector.origin == "presets:argo"
+        assert selector.fallback_remote and selector.fallback_remote["url"]
+        assert [s.key for s in sources.manifests.sources] == ["argonne"]
 
     def test_an_unknown_preset_is_skipped_unless_strict(self):
         assert parse_shims_section({"presets": ["ghost"]}).remotes == ()
+        assert not parse_shims_section({"presets": ["ghost"]}).manifests
         with pytest.raises(ValueError):
             parse_shims_section({"presets": ["ghost"], "strict": True})
         with pytest.raises(ValueError):

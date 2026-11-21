@@ -136,6 +136,12 @@ from ._legs import (  # noqa: F401
     _same_origin,
     _url_origin,
 )
+from .manifest_sources import (
+    ManifestPlan,
+    check_manifest_updates,
+    install_from_manifests,
+    scan_manifest_status,
+)
 from ._archive import (  # noqa: F401
     _common_root_prefix,
     _extract_archive,
@@ -172,12 +178,17 @@ def rebuild_shims(
     ttl: int = REMOTE_TTL_SECONDS,
     proxy: str | None = None,
     disabled: Sequence[str] = (),
+    manifests: ManifestPlan | None = None,
+    force_refresh: bool = False,
 ) -> ShimLoadReport:
     """Rebuild the shim registry from built-ins, entry points and sources.
 
     The registry is cleared and repopulated in a fixed order — built-ins, then
-    entry-point plugins, then ``extra_dirs`` in order, then ``extra_remotes`` in
-    order — so a later source overrides an earlier one of the same shim name.
+    entry-point plugins, then manifest installs, then ``extra_dirs`` in order,
+    then ``extra_remotes`` in order — so a later source overrides an earlier
+    one of the same shim name.  Manifest installs are the exception to that
+    rule against core: a vendor whose shim names core registers is not
+    loaded (core wins, see :mod:`.manifest_sources`).
     Idempotent: calling twice with the same inputs yields the same registry.
 
     Args:
@@ -196,6 +207,8 @@ def rebuild_shims(
         disabled: Shim names to leave out of the registry once everything has
             loaded.  A name is dropped after its source registers it, so the
             sources stay the one account of what a configuration declares.
+        manifests: The ``shims.sources`` / ``shims.install`` plan.
+        force_refresh: Refetch every manifest regardless of its age.
 
     Returns:
         A :class:`ShimLoadReport` describing each source and the final registry
@@ -222,6 +235,15 @@ def rebuild_shims(
             )
             for spec in extra_remotes
         ]
+        manifest_statuses, fallback_prefetched = _install_manifests(
+            manifests,
+            cache_root=cache_root,
+            http_get=http_get,
+            now=now_fn,
+            ttl=ttl,
+            proxy=proxy,
+            force_refresh=force_refresh,
+        )
 
         # The registry is rebuilt off to the side and swapped in with a single
         # reference assignment (see ``staging_registry``), so a reader on any
@@ -238,6 +260,13 @@ def rebuild_shims(
             for name, shim in out_of_band.items():
                 if name not in known:
                     register_shim(shim)
+
+            # Built-ins and plugins are core: a manifest vendor never
+            # replaces one of their names.
+            for status in manifest_statuses:
+                statuses.append(scan_manifest_status(status, known))
+            for status in fallback_prefetched:
+                statuses.append(_scan_status(status))
 
             for directory in extra_dirs:
                 statuses.append(_load_local_dir(directory))
@@ -310,6 +339,61 @@ def rebuild_shims(
         raise ShimSourceError(f"shim selection matched nothing: {detail}")
 
     return report
+
+
+def _install_manifests(
+    plan: ManifestPlan | None,
+    *,
+    cache_root: str | os.PathLike[str] | None,
+    http_get: HttpGet | None,
+    now: Callable[[], float],
+    ttl: int,
+    proxy: str | None,
+    force_refresh: bool,
+) -> tuple[list[ShimSourceStatus], list[ShimSourceStatus]]:
+    """Run the manifest installs of a rebuild, before the registry is touched.
+
+    The core-name estimate only saves a download: the registry minus what
+    the previous rebuild loaded from sources.  The scan step re-checks
+    against the live core set.
+
+    Returns:
+        ``(vendor statuses, fallback statuses)``: the second list resolves the
+        legacy remotes of mapped presets whose source has never answered.
+    """
+    if not plan:
+        return [], []
+    if cache_root is None:
+        failure = ShimSourceStatus(
+            kind="remote",
+            location=", ".join(s.url for s in plan.sources),
+            ok=False,
+            error="manifest sources require a cache directory",
+        )
+        return [failure], []
+    estimate = {s.name for s in list_shims()} - _source_shims
+    statuses, fallbacks = install_from_manifests(
+        plan,
+        cache_root=cache_root,
+        http_get=http_get or _default_http_get,
+        now=now,
+        ttl=ttl,
+        proxy=proxy,
+        force_refresh=force_refresh,
+        core_names=estimate,
+    )
+    resolved = [
+        _resolve_remote_source(
+            dict(spec, refresh="always") if force_refresh else dict(spec),
+            cache_root=cache_root,
+            http_get=http_get,
+            now=now,
+            ttl=ttl,
+            proxy=proxy,
+        )
+        for spec in fallbacks
+    ]
+    return statuses, resolved
 
 
 def resolve_remote(
@@ -764,6 +848,10 @@ def check_remote_updates(
     head to ask for — and a source that failed to load reports the error
     instead of a verdict.
 
+    A vendor installed from a manifest is compared with the manifest instead:
+    ``current`` and ``head`` are versions, and ``update`` is true only when a
+    newer version is installable on this core.
+
     Args:
         report: The last applied load report.
         http_get: Injectable HTTP getter (tests).
@@ -776,8 +864,10 @@ def check_remote_updates(
     """
     get = http_get or _default_http_get
     out: list[dict[str, Any]] = []
+    installed = [s for s in report.sources if s.vendor and s.ok and s.release]
+    out.extend(check_manifest_updates(installed, http_get=get, proxy=proxy))
     for status in report.sources:
-        if status.kind != "remote":
+        if status.kind != "remote" or status.vendor or status.source:
             continue
         entry: dict[str, Any] = {
             "location": status.location,

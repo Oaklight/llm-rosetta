@@ -46,8 +46,19 @@ def _scan_dir(
     token_env: str | None = None,
     include: tuple[str, ...] = (),
     exclude: tuple[str, ...] = (),
+    refuse: Collection[str] = (),
+    only: Collection[str] | None = None,
 ) -> ShimSourceStatus:
     """Run the loader over *directory* and fold the result into a status.
+
+    *refuse* names shims that must not be registered from this directory
+    whatever the selection says — the names core already provides, for a
+    manifest install (core wins a clash).  A refused name is neither loaded
+    nor counted as declined: the operator did not drop it.
+
+    *only*, when given, is the complete set of names that may register — a
+    manifest install's release record.  Any other name is refused with a
+    WARNING, also without counting as declined.
 
     A source that ships ``shims.yaml`` is loaded exactly as it declares: entries
     the manifest does not list are never read.  A source without one is scanned
@@ -111,7 +122,25 @@ def _scan_dir(
     # matches a shim the selection already dropped — both leave no trace.
     declined: list[str] = []
 
+    refused = frozenset(refuse)
+    allowed = None if only is None else frozenset(only)
+
     def selected(shim_name: str) -> bool:
+        if allowed is not None and shim_name not in allowed:
+            logger.warning(
+                "Shim source %s: %r is not in the release record; refused",
+                location,
+                shim_name,
+            )
+            return False
+        if shim_name in refused:
+            logger.warning(
+                "Shim source %s: %r is a core shim; core wins and this "
+                "source's copy is ignored",
+                location,
+                shim_name,
+            )
+            return False
         keep_it = keep(shim_name)
         if not keep_it:
             declined.append(shim_name)

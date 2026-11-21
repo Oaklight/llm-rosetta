@@ -19,6 +19,11 @@ resolves, including the older spellings of its shims: a config that still says
 preset to declare, instead of only that the shim is unknown.  The retired-names
 table (``llm_rosetta.retired_names``) names the replacement for those spellings;
 the two lists are kept in step by a test here.
+
+Since #1660 the packages are published from two curated source repositories
+(:data:`SHIM_SOURCES`: ``argonne`` and ``contrib``), each with a versioned
+``manifest.json``.  The five package keys stay as aliases: each names its
+source and the ``shims.install`` selector it stands for.
 """
 
 from __future__ import annotations
@@ -70,6 +75,17 @@ class ShimSourcePackage:
             package's publish job writes exactly that directory — so the
             pinned commit and the mirror's bytes describe one tree, and no
             digest has to be kept here by hand.
+        source: The manifest source (:data:`SHIM_SOURCES`) the package now
+            installs from (#1660).  ``shims.presets: [key]`` maps to that
+            source and :attr:`install`, so a config written for the
+            per-package repositories keeps working without an edit.
+        install: The ``shims.install`` selector the preset stands for,
+            qualified by its source (``argonne:alcf``, ``contrib:tag:tier:free``).
+        legacy_repos: Earlier URLs of :attr:`repo` (a renamed repository), so
+            an explicit ``shims.remotes`` entry that still spells one is still
+            recognised as this package.
+        vendors: The vendor directories the package's shims live in, as the
+            source manifest keys them.
     """
 
     key: str
@@ -85,6 +101,10 @@ class ShimSourcePackage:
     ref: str | None = None
     mirror: dict[str, Any] | None = None
     logos: dict[str, str] = field(default_factory=dict)
+    source: str | None = None
+    install: str | None = None
+    legacy_repos: tuple[str, ...] = ()
+    vendors: tuple[str, ...] = ()
 
     @property
     def tier(self) -> str:
@@ -138,6 +158,9 @@ class ShimSourcePackage:
             "tier": self.tier,
             "logos": dict(self.logos),
             "note": self.note,
+            "source": self.source,
+            "install": self.install,
+            "vendors": list(self.vendors),
         }
 
 
@@ -306,6 +329,9 @@ def canonical_shim_for(package: ShimSourcePackage, legacy_name: str) -> str:
 SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
     ShimSourcePackage(
         key="alcf",
+        vendors=("alcf",),
+        source="argonne",
+        install="argonne:alcf",
         label="ALCF",
         repo="https://github.com/Oaklight/llm-rosetta-shim-alcf",
         package="llm_rosetta_shim_alcf",
@@ -340,8 +366,12 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
     ),
     ShimSourcePackage(
         key="argo",
+        vendors=("argo",),
+        source="argonne",
+        install="argonne:argo",
+        legacy_repos=("https://github.com/Oaklight/llm-rosetta-shim-argo",),
         label="Argo",
-        repo="https://github.com/Oaklight/llm-rosetta-shim-argo",
+        repo="https://github.com/Oaklight/llm-rosetta-shim-argonne",
         package="llm_rosetta_shim_argo",
         shims=(
             "argo--chat_completions",
@@ -360,7 +390,7 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         # traced to a path (it is a 24px raster: no font to embed).
         logos={
             "argo": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argo"
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argonne"
                 "@c1925c14f35170aa4f839c7fb8b97de58c2d4bee/assets/argo.svg"
             ),
         },
@@ -371,7 +401,7 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         # than ``"."``: the archive strips its single top-level directory.
         mirror={
             "url_template": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argo"
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argonne"
                 "@dist/{ref}/argo.tar.gz"
             ),
             "path": "providers",
@@ -379,6 +409,10 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
     ),
     ShimSourcePackage(
         key="free",
+        vendors=("kilo_free", "llm7", "opencode_zen_free", "ovhcloud"),
+        source="contrib",
+        install="contrib:tag:tier:free",
+        legacy_repos=("https://github.com/Oaklight/llm-rosetta-shim-free",),
         # Every keyless pool, in one package: four vendors with no contract
         # behind them.  They live outside core so a pool that closes, or
         # tightens its rate limit, can be withdrawn or retuned without a
@@ -386,7 +420,7 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         # that repository shipped a single lane, was renamed, and now ships it
         # beside the others under an unchanged shim name.
         label="Free Endpoints",
-        repo="https://github.com/Oaklight/llm-rosetta-shim-free",
+        repo="https://github.com/Oaklight/llm-rosetta-shim-contrib",
         package="llm_rosetta_shim_free",
         shims=(
             "kilo_free--chat_completions",
@@ -432,7 +466,7 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         # than ``"."``: the archive strips its single top-level directory.
         mirror={
             "url_template": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-free"
+                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-contrib"
                 "@dist/{ref}/free.tar.gz"
             ),
             "path": "providers",
@@ -440,6 +474,9 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
     ),
     ShimSourcePackage(
         key="asksage",
+        vendors=("asksage",),
+        source="argonne",
+        install="argonne:asksage",
         label="AskSage",
         repo="https://github.com/Oaklight/llm-rosetta-shim-asksage",
         package="llm_rosetta_shim_asksage",
@@ -484,6 +521,9 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
     ),
     ShimSourcePackage(
         key="opendesign",
+        vendors=("opendesign",),
+        source="contrib",
+        install="contrib:opendesign",
         label="OpenDesign",
         repo="https://github.com/Oaklight/llm-rosetta-shim-opendesign",
         package="llm_rosetta_shim_opendesign",
@@ -515,3 +555,118 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         },
     ),
 )
+
+
+@dataclass(frozen=True)
+class ShimSource:
+    """A shim source repository that publishes a versioned manifest (#1660).
+
+    Attributes:
+        key: The source id, as ``shims.sources`` and the ``<source>:`` prefix
+            of a ``shims.install`` selector spell it.  It equals the
+            manifest's ``source`` field.
+        label: Human-readable name.
+        repo: The repository URL.
+        legacy_repos: Earlier names of the repository; GitHub redirects them.
+    """
+
+    key: str
+    label: str
+    repo: str
+    legacy_repos: tuple[str, ...] = ()
+
+    @property
+    def _owner_repo(self) -> tuple[str, str]:
+        owner, name = self.repo.rstrip("/").split("/")[-2:]
+        return owner, name
+
+    @property
+    def manifest_url(self) -> str:
+        """The primary manifest URL: the jsDelivr mirror of the ``dist`` branch."""
+        owner, name = self._owner_repo
+        return f"https://cdn.jsdelivr.net/gh/{owner}/{name}@dist/manifest.json"
+
+    @property
+    def fallback_url(self) -> str:
+        """The fallback manifest URL: the raw ``dist`` branch on GitHub."""
+        owner, name = self._owner_repo
+        return f"https://raw.githubusercontent.com/{owner}/{name}/dist/manifest.json"
+
+    @property
+    def packages(self) -> tuple[ShimSourcePackage, ...]:
+        """The catalogue packages (preset aliases) this source now serves."""
+        return tuple(p for p in SHIM_SOURCE_PACKAGES if p.source == self.key)
+
+    @property
+    def vendors(self) -> tuple[str, ...]:
+        """The vendors this catalogue knows the source ships, in package order."""
+        return tuple(v for package in self.packages for v in package.vendors)
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serialisable view."""
+        return {
+            "key": self.key,
+            "label": self.label,
+            "repo": self.repo,
+            "manifest_url": self.manifest_url,
+            "fallback_url": self.fallback_url,
+            "vendors": [
+                {
+                    "name": vendor,
+                    "package": package.key,
+                    "tier": package.tier,
+                    "logo": package.logos.get(vendor),
+                }
+                for package in self.packages
+                for vendor in package.vendors
+            ],
+        }
+
+
+#: The source repositories that publish a manifest.  ``shims.sources`` names
+#: them by key; a URL names any other source.
+SHIM_SOURCES: tuple[ShimSource, ...] = (
+    ShimSource(
+        key="argonne",
+        label="Argonne",
+        repo="https://github.com/Oaklight/llm-rosetta-shim-argonne",
+        legacy_repos=("https://github.com/Oaklight/llm-rosetta-shim-argo",),
+    ),
+    ShimSource(
+        key="contrib",
+        label="Contrib",
+        repo="https://github.com/Oaklight/llm-rosetta-shim-contrib",
+        legacy_repos=("https://github.com/Oaklight/llm-rosetta-shim-free",),
+    ),
+)
+
+#: The sources ``shims.install`` reads when ``shims.sources`` is not declared.
+DEFAULT_SOURCES: tuple[str, ...] = ("contrib", "argonne")
+
+
+def get_shim_source(key: str) -> ShimSource | None:
+    """Return the manifest source with *key*, if any.
+
+    Args:
+        key: A source id, e.g. ``"contrib"``.
+
+    Returns:
+        The source, or ``None`` for an unknown key.
+    """
+    for source in SHIM_SOURCES:
+        if source.key == key:
+            return source
+    return None
+
+
+def package_repo_keys(package: ShimSourcePackage) -> set[str]:
+    """Every normalised URL that names *package*'s repository.
+
+    Args:
+        package: A catalogue package.
+
+    Returns:
+        The current repository and its earlier names, each through
+        :func:`repo_key`.
+    """
+    return {repo_key(package.repo), *(repo_key(u) for u in package.legacy_repos)}

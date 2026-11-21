@@ -863,8 +863,16 @@ class TestMirrorConfig:
         package's publish job writes exactly that directory, so the leg names a
         file that exists instead of a tag nobody moved.
         """
+        from llm_rosetta_gateway.shims import get_source_package
+
         sources = parse_shims_section({"presets": [key]}, str(tmp_path / "c.jsonc"))
-        remote = sources.remotes[0]
+        # The preset installs from its manifest source; the catalogue remote is
+        # the fallback used while that source has never answered.
+        (selector,) = sources.manifests.selectors
+        package = get_source_package(key)
+        assert package is not None
+        remote = package.remote
+        assert selector.fallback_remote == remote
         assert "ref" not in remote
         assert "sha256" not in remote
         assert remote["path"].endswith("/providers")

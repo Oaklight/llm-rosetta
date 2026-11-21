@@ -484,14 +484,24 @@ async def get_shim_catalog(request: Any) -> Response:
     names those shims so the Available view can offer the first of them to the
     Add Provider flow.  ``formats`` is the set of wire formats the package
     covers, taken from the canonical ``<vendor>--<format>`` shim names.
+
+    A package installed from a manifest source (#1660) reads its state from
+    the vendor statuses instead: ``pin`` and ``head`` are versions, and
+    ``versions`` / ``maturity`` / ``skipped`` say what each vendor runs.
     """
-    from ....shims.catalog import SHIM_SOURCE_PACKAGES, repo_key
+    from ....shims.catalog import SHIM_SOURCE_PACKAGES, package_repo_keys, repo_key
 
     report = getattr(request.app, "shim_source_report", None)
     pinned = {
         repo_key(getattr(status, "location", "")): status
         for status in getattr(report, "sources", []) or []
         if getattr(status, "kind", "") == "remote"
+        and not getattr(status, "vendor", None)
+    }
+    by_vendor = {
+        (status.source, status.vendor): status
+        for status in getattr(report, "sources", []) or []
+        if getattr(status, "vendor", None)
     }
     # The update check is a cached answer, never a network call made here: the
     # panel asks for it once per open and this endpoint only reads it back.
@@ -505,8 +515,19 @@ async def get_shim_catalog(request: Any) -> Response:
     for pkg in SHIM_SOURCE_PACKAGES:
         present = [name for name in pkg.shims if name in loaded]
         formats = sorted({name.split("--", 1)[1] for name in pkg.shims if "--" in name})
-        status = pinned.get(repo_key(pkg.repo))
-        verdict = heads.get(repo_key(pkg.repo)) or {}
+        # A renamed repository's old URL still names the package.
+        repo = next(
+            (k for k in sorted(package_repo_keys(pkg)) if k in pinned),
+            repo_key(pkg.repo),
+        )
+        status = pinned.get(repo)
+        verdict = heads.get(repo) or {}
+        vendor_statuses = [
+            by_vendor[(pkg.source, v)]
+            for v in pkg.vendors
+            if (pkg.source, v) in by_vendor
+        ]
+        manifest_view = _manifest_package_view(vendor_statuses, heads)
         packages.append(
             {
                 **pkg.to_dict(),
@@ -522,9 +543,55 @@ async def get_shim_catalog(request: Any) -> Response:
                 "head": verdict.get("head"),
                 "update_available": bool(verdict.get("update")),
                 "check_error": verdict.get("error"),
+                **manifest_view,
             }
         )
     return JSONResponse({"packages": packages})
+
+
+def _manifest_package_view(
+    statuses: list[Any], heads: dict[str, dict[str, Any]]
+) -> dict[str, Any]:
+    """The card fields for a package installed from a manifest source.
+
+    Empty when no vendor of the package came from a manifest, so a package on
+    the legacy remote path keeps its commit pin.  With several vendors (the
+    ``free`` package) the first one that installed speaks for ``pin``; each
+    vendor's version is listed under ``versions``.
+    """
+    from ....shims.catalog import repo_key
+
+    if not statuses:
+        return {}
+    versions: dict[str, Any] = {}
+    maturity: dict[str, Any] = {}
+    skipped: dict[str, str] = {}
+    pin = head = check_error = None
+    update = False
+    source_ok = True
+    for status in statuses:
+        release = status.release or {}
+        if status.skipped:
+            skipped[status.vendor] = status.skipped
+        if release:
+            versions[status.vendor] = release.get("version")
+            maturity[status.vendor] = release.get("maturity")
+            pin = pin or release.get("version")
+        source_ok = source_ok and bool(status.ok)
+        verdict = heads.get(repo_key(status.location)) or {}
+        head = head or verdict.get("head")
+        update = update or bool(verdict.get("update"))
+        check_error = check_error or verdict.get("error")
+    return {
+        "pin": pin,
+        "source_ok": source_ok,
+        "head": head,
+        "update_available": update,
+        "check_error": check_error,
+        "versions": versions,
+        "maturity": maturity,
+        "skipped": skipped,
+    }
 
 
 async def get_loaded_shim(request: Any, name: str) -> Response:

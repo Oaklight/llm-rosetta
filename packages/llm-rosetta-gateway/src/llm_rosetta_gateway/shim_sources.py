@@ -33,6 +33,20 @@ from .shims import (
     get_source_package,
     rebuild_shims,
 )
+from .shims.catalog import (
+    DEFAULT_SOURCES,
+    get_shim_source,
+    package_repo_keys,
+    repo_key,
+)
+from .shims.manifest_sources import (
+    InstallSelector,
+    ManifestPlan,
+    ManifestSourceSpec,
+    parse_selector,
+    parse_source_entry,
+    source_spec_from_catalogue,
+)
 from .shims.removals import ShimRemovalAdvisory, detect_shim_removals
 from .shims.sources import (
     DEFAULT_CACHE_DIRNAME,
@@ -248,6 +262,176 @@ def _remote_url_key(url: Any) -> str:
     return key
 
 
+def _current_repo_url(url: Any) -> Any:
+    """The catalogue's current URL for a renamed package repository.
+
+    ``llm-rosetta-shim-argo`` became ``llm-rosetta-shim-argonne`` and
+    ``llm-rosetta-shim-free`` became ``llm-rosetta-shim-contrib``; an explicit
+    remote that still spells the old name is the same package.
+    """
+    if not isinstance(url, str):
+        return url
+    key = repo_key(url)
+    for package in SHIM_SOURCE_PACKAGES:
+        if key in package_repo_keys(package):
+            return package.repo
+    return url
+
+
+def _pinned_preset_keys(raw_presets: list[Any], raw_remotes: Any) -> set[str]:
+    """Preset keys an explicit ``shims.remotes`` entry pins to its repository.
+
+    An operator who wrote a remote for a package's repository (to pin a
+    ``ref``, say) keeps that package on the remote path: the manifest mapping
+    must not override a pin the operator chose.
+    """
+    if not isinstance(raw_remotes, list):
+        return set()
+    explicit = {
+        repo_key(entry.get("url"))
+        for entry in raw_remotes
+        if isinstance(entry, Mapping) and isinstance(entry.get("url"), str)
+    }
+    pinned: set[str] = set()
+    for key in raw_presets:
+        package = get_source_package(key) if isinstance(key, str) else None
+        if package is not None and package_repo_keys(package) & explicit:
+            pinned.add(key)
+    return pinned
+
+
+def _source_specs(raw_sources: Any, on_unknown: str) -> list[ManifestSourceSpec]:
+    """Parse ``shims.sources``; an unknown id is skipped or refused per *on_unknown*."""
+    if not isinstance(raw_sources, list):
+        raise ValueError("config: 'shims.sources' must be an array")
+    specs: list[ManifestSourceSpec] = []
+    for entry in raw_sources:
+        try:
+            spec = parse_source_entry(entry)
+        except ValueError as exc:
+            if on_unknown == "skip" and isinstance(entry, str) and "://" not in entry:
+                logger.warning("%s; it is skipped", exc)
+                continue
+            raise
+        if all(spec.url != other.url for other in specs):
+            specs.append(spec)
+    return specs
+
+
+def _resolve_manifest_plan(
+    section: Mapping[str, Any],
+    raw_presets: list[Any],
+    *,
+    include: Mapping[str, tuple[str, ...]],
+    exclude: Mapping[str, tuple[str, ...]],
+    on_unknown: str,
+) -> tuple[ManifestPlan, list[Any]]:
+    """Build the manifest plan, and return the presets still loaded as remotes.
+
+    ``shims.install`` selectors read ``shims.sources`` (default
+    :data:`~llm_rosetta_gateway.shims.catalog.DEFAULT_SOURCES` when only
+    ``install`` is declared).  A legacy ``shims.presets`` key whose package
+    names a manifest source becomes one more selector on that source,
+    carrying its ``shims.include`` / ``shims.exclude`` entry and its old
+    remote as the fallback for a source that has never answered — so a
+    config written for the per-package repositories keeps working unedited.
+
+    Returns:
+        ``(plan, legacy_presets)``.
+    """
+    raw_install = section.get("install") or []
+    if not isinstance(raw_install, list):
+        raise ValueError("config: 'shims.install' must be an array")
+    selectors: list[InstallSelector] = [parse_selector(x) for x in raw_install]
+    raw_sources = section.get("sources")
+    if raw_sources is None:
+        raw_sources = list(DEFAULT_SOURCES) if selectors else []
+    specs = _source_specs(raw_sources, on_unknown)
+
+    legacy = _map_presets(
+        raw_presets,
+        _pinned_preset_keys(raw_presets, section.get("remotes")),
+        include=include,
+        exclude=exclude,
+        selectors=selectors,
+        specs=specs,
+    )
+    _check_qualifiers(selectors, specs, on_unknown)
+    return ManifestPlan(sources=tuple(specs), selectors=tuple(selectors)), legacy
+
+
+def _map_presets(
+    raw_presets: list[Any],
+    pinned: set[str],
+    *,
+    include: Mapping[str, tuple[str, ...]],
+    exclude: Mapping[str, tuple[str, ...]],
+    selectors: list[InstallSelector],
+    specs: list[ManifestSourceSpec],
+) -> list[Any]:
+    """Append a selector (and its source) per mapped preset; return the rest.
+
+    Args:
+        raw_presets: The declared ``shims.presets`` keys.
+        pinned: Keys an explicit remote pins to the remote path.
+        include: ``shims.include`` keyed by preset.
+        exclude: ``shims.exclude`` keyed by preset.
+        selectors: The selector list, extended in place.
+        specs: The source list, extended in place.
+
+    Returns:
+        The keys that still load as a remote, in declaration order.
+    """
+    legacy: list[Any] = []
+    mapped: set[str] = set()
+    for key in raw_presets:
+        package = get_source_package(key) if isinstance(key, str) else None
+        source = get_shim_source(package.source) if package and package.source else None
+        if key in mapped:
+            continue
+        if package is None or source is None or key in pinned or not package.install:
+            legacy.append(key)
+            continue
+        mapped.add(key)
+        fallback = dict(package.remote)
+        if include.get(key):
+            fallback["include"] = list(include[key])
+        if exclude.get(key):
+            fallback["exclude"] = list(exclude[key])
+        selectors.append(
+            parse_selector(
+                package.install,
+                include=tuple(include.get(key, ())),
+                exclude=tuple(exclude.get(key, ())),
+                origin=f"presets:{key}",
+                fallback_remote=fallback,
+            )
+        )
+        spec = source_spec_from_catalogue(source)
+        if all(spec.url != other.url for other in specs):
+            specs.append(spec)
+    return legacy
+
+
+def _check_qualifiers(
+    selectors: list[InstallSelector],
+    specs: list[ManifestSourceSpec],
+    on_unknown: str,
+) -> None:
+    """Refuse or warn about a ``<source>:`` qualifier no declared source has."""
+    known = {spec.key for spec in specs}
+    has_url_source = any(spec.key is None for spec in specs)
+    for selector in selectors:
+        if selector.source and selector.source not in known and not has_url_source:
+            message = (
+                f"config: 'shims.install' entry {selector.raw!r} names source "
+                f"{selector.source!r}, which 'shims.sources' does not declare"
+            )
+            if on_unknown == "raise":
+                raise ValueError(message)
+            logger.warning("%s; it matches nothing", message)
+
+
 def _resolve_remotes(
     raw_remotes: Any, remotes: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
@@ -268,7 +452,8 @@ def _resolve_remotes(
         if not isinstance(entry, Mapping):
             raise ValueError("config: 'shims.remotes' entries must be objects")
         spec = dict(entry)
-        key = _remote_url_key(spec.get("url"))
+        # A renamed repository's old URL still names the preset's package.
+        key = _remote_url_key(_current_repo_url(spec.get("url")))
         preset = None
         if key and key in preset_keys:
             preset = next(
@@ -360,8 +545,9 @@ class ShimSources:
 
     Attributes:
         presets: The declared catalogue keys, as written.
-        remotes: The remotes to load: presets expanded, explicit entries
-            merged over a preset with the same URL.
+        remotes: The remotes to load: explicit entries, and the presets that
+            still load as a remote (a package an explicit remote pins, or one
+            with no manifest source), merged over a preset with the same URL.
         paths: Local shim directories, anchored to the config file.
         disabled: Shim names to keep out of the registry.
         cache_root: Where remote archives are cached, anchored the same way.
@@ -370,6 +556,10 @@ class ShimSources:
         declared: Whether the document carried a non-empty ``shims``
             section.  Only this makes the object truthy — a parsed empty
             section still resolves a cache root, which is not a declaration.
+        sources: ``shims.sources`` as written.
+        install: ``shims.install`` as written.
+        manifests: The manifest sources to read and the vendor selectors,
+            including the ones the legacy presets map to (#1660).
     """
 
     presets: tuple[str, ...] = ()
@@ -380,6 +570,9 @@ class ShimSources:
     remote_ttl: int = REMOTE_TTL_SECONDS
     strict: bool = False
     declared: bool = False
+    sources: tuple[Any, ...] = ()
+    install: tuple[str, ...] = ()
+    manifests: ManifestPlan = ManifestPlan()
 
     def __bool__(self) -> bool:
         """Whether the config declared this section."""
@@ -429,15 +622,21 @@ def parse_shims_section(
         section.get("exclude"), where="shims.exclude", on_unknown=mode
     )
     _warn_selection_without_preset(raw_presets, include, exclude)
+    manifests, legacy_presets = _resolve_manifest_plan(
+        section, raw_presets, include=include, exclude=exclude, on_unknown=mode
+    )
     remotes = _resolve_remotes(
         section.get("remotes") or [],
         _resolve_presets(
-            raw_presets, include=include, exclude=exclude, on_unknown=mode
+            legacy_presets, include=include, exclude=exclude, on_unknown=mode
         ),
     )
     _validate_remote_specs(remotes)
     _validate_knobs(section)
     return ShimSources(
+        sources=tuple(section.get("sources") or ()),
+        install=tuple(section.get("install") or ()),
+        manifests=manifests,
         presets=tuple(raw_presets),
         remotes=tuple(remotes),
         paths=tuple(dirs),
@@ -523,14 +722,21 @@ def describe_shim_sources(report: ShimLoadReport | None) -> list[str]:
     for status in report.sources:
         if status.kind != "remote":
             continue
+        where = status.location
+        if status.vendor or status.skipped:
+            version = (status.release or {}).get("version")
+            where = f"{status.name}" + (f" {version}" if version else "")
+            if status.skipped:
+                lines.append(f"{where}: skipped ({status.skipped})")
+                continue
         if not status.ok:
-            lines.append(f"{status.location}: failed")
+            lines.append(f"{where}: failed")
             continue
         leg = status.leg or "primary"
         origin = "cache" if status.from_cache else "network"
         if status.stale:
             origin += ", stale"
-        lines.append(f"{status.location}: loaded via {leg} ({origin})")
+        lines.append(f"{where}: loaded via {leg} ({origin})")
     return lines
 
 
@@ -633,6 +839,8 @@ def apply_shim_section(
         ttl=sources.remote_ttl,
         proxy=proxy,
         disabled=list(sources.disabled),
+        manifests=sources.manifests,
+        force_refresh=force_refresh,
     )
     if report.sources:
         logger.info(
