@@ -107,11 +107,13 @@ Removed in PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656). The al
 
 The names are gone from `llm_rosetta`, `llm_rosetta.api` and `llm_rosetta.fidelity`. The boundaries that raise are `get_converter_for_provider`, `ConversionPipeline`, `convert`, `convert_response`, the embedding converters, `ProviderShim`, `provider.yaml` formats, and the gateway config.
 
-The gateway no longer rewrites a retired name when it loads a config, so a config that still spells one does not start. The error names the file and the key and ends with the migrate command, for example:
+The gateway no longer rewrites a retired name when it loads a config, so a config that still spells one does not start. The error names the file and the key and ends with the migrate command when the gateway is installed, for example:
 
 ```text
-llm-rosetta-gateway: error: config.jsonc: providers.p.type: 'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta-migrate --config <path>' (add --write to apply), see the migration guide
+llm-rosetta-gateway: error: config.jsonc: providers.p.type: 'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta-migrate --config <path>' (add --write to apply), see the migration guide (https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/)
 ```
+
+`llm-rosetta-migrate` ships with the gateway distribution. In a core-only install (the library without `llm-rosetta-gateway`) a retired-name error ends with `see the migration guide (<url>)` instead, because the command is not there to run. The sentence is `llm_rosetta.retired_names.MIGRATE_HINT`.
 
 The process exits 1 and prints no traceback. In code, the exception is `RetiredConfigName`, a `ValueError` whose message is `<config file>: <json path>: <retired-names message>`.
 
@@ -168,9 +170,9 @@ Other removals in the same step:
 | `llm_rosetta.ir.tools.fix_orphaned_tool_calls_ir` | `normalize_tool_pairing` |
 | `GoogleInteractionsToolOps.ir_function_call_to_p`, `ir_function_result_to_p` | `ir_tool_call_to_p`, `ir_tool_result_to_p` |
 
-Three read-only properties of `ProviderShim` are kept for existing readers (in the gateway and in shim packages) and emit no warning. New code reads their replacements:
+Three read-only properties of `ProviderShim` were kept for their readers until PR [#1661](https://github.com/Oaklight/llm-rosetta/pull/1661), which removes them. Reading one raises `AttributeError` naming its replacement:
 
-| Kept property | Use instead |
+| Removed property | Use instead |
 | --- | --- |
 | `ProviderShim.base` | `ProviderShim.format` |
 | `ProviderShim.default_path` | `ProviderShim.connection.default_path` |
@@ -216,6 +218,7 @@ Changed in PR [#1659](https://github.com/Oaklight/llm-rosetta/pull/1659) (issue 
 | `llm_rosetta.observability.usage` (and its submodules) | `llm_rosetta.contracts.usage` (the package only) | Removed. The usage names on `llm_rosetta.observability` itself still resolve, to the `contracts.usage` objects. |
 | `llm_rosetta.routing` | `llm_rosetta.contracts.routing` | 0.13.0-compat forwarder of `ProviderType`, `ResolvedRoute`, `Router`. It emits a `DeprecationWarning` on import and is removed in 0.15.0. |
 | `llm_rosetta.capabilities` | `ProviderShim`, `ReasoningCapability`: `llm_rosetta.contracts.shim`. `ConversionContext`: `llm_rosetta.converters.base`. The capability passes run inside the conversion pipeline and have no public home. | 0.13.0-compat forwarder of the twelve 0.13.0 names. It emits a `DeprecationWarning` on import and is removed in 0.15.0. |
+| `llm_rosetta.types.ir.extensions` | `llm_rosetta.types.ir.extensions_experimental` | 0.13.0-compat forwarder of the ten 0.13.0 names (it was already deprecated in 0.13.0). It emits a `DeprecationWarning` on import and is removed in 0.15.0. |
 | `llm_rosetta.capabilities.description_limit`, `.enforcement`, `.intrinsic_history`, `.tool_names` | None: the passes are internal (`llm_rosetta.ir.passes`) | Removed |
 | `ProviderShim`, `ConnectionConfig`, `ToolsConfig`, `ReasoningCapability`, `VendorManifest`, `QuotaDeclaration`, `BatchDeclaration`, `SoftErrorPattern`, `TYPE_PARAM_KEYS` and the literal types, imported from `llm_rosetta.shims.provider_shim` | `llm_rosetta.contracts.shim` | Deprecated re-exports of the same objects, with no runtime warning; removed in 0.15.0. The registry functions (`register_shim`, `get_shim`, `list_shims`, …) stay in `llm_rosetta.shims.provider_shim`. |
 | `SURFACE_VERSION` in `llm_rosetta.api` | `llm_rosetta.contracts.SURFACE_VERSION` | `llm_rosetta.api` re-exports the same object; nothing to change |
@@ -250,7 +253,7 @@ grep -rnE "converters\.(openai_chat|openai_responses|anthropic|google_genai|goog
 `llm_rosetta.retired_names.RETIRED_NAMES` lists 31 names that earlier releases renamed. Each row says what the name became. The table is an error table, not an alias table: every row raises `ValueError` and nothing is translated, for example:
 
 ```text
-'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta-migrate --config <path>' (add --write to apply), see the migration guide
+'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta-migrate --config <path>' (add --write to apply), see the migration guide (https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/)
 ```
 
 For a shim that moved to a standalone package, the message also names the `shims.presets` key to declare. Every retired-name error ends with the migrate command (`retired_names.MIGRATE_HINT`), including the gateway's config guard.

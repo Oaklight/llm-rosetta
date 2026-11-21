@@ -35,7 +35,7 @@ Useful for power users who need fine-grained control. These may change in minor 
 | Type guards | `is_text_part`, `is_tool_call_part`, `is_stream_start_event`, `is_message`, etc. | `llm_rosetta.types.ir.type_guards`, `llm_rosetta.types.ir.messages` |
 | Message factories | `create_system_message`, `create_user_message`, `create_assistant_message`, `create_tool_message` | `llm_rosetta.types.ir.messages` |
 | Content helpers | `extract_text_content`, `extract_all_text`, `extract_tool_calls`, `create_tool_result_message` | `llm_rosetta.types.ir.helpers` |
-| Extension guards | `is_extension_item` | `llm_rosetta.types.ir.extensions` |
+| Extension guards | `is_extension_item` | `llm_rosetta.types.ir.extensions_experimental` |
 
 ```python
 # Advanced: import from submodules
