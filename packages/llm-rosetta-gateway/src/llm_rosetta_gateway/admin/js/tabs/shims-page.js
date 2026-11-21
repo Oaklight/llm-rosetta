@@ -18,8 +18,8 @@ import { api, esc, showToast, withBusyButton } from '../core/utils.js';
 import { jsArg, logoUrl } from '../core/html.js';
 import { toggleCard } from '../core/disclosure.js';
 import {
-  declareSource, deselectVendor, notInstalledVendors, selectVendor, vendorFacts,
-  vendorMatches, vendorStateKey, vendorTier,
+  declareSource, deselectVendor, followLatest, notInstalledVendors, pinVendor, selectVendor,
+  vendorFacts, vendorMatches, vendorStateKey, vendorTier,
 } from '../core/shim-sources.js';
 
 let _view = 'installed';
@@ -405,14 +405,81 @@ const _presetOf = (v) => ((v.selected_origin || '').startsWith('presets:')
  */
 export const selectedForProvider = (v) => (v.selected_origin || '').startsWith('moved:');
 
-/** Which install entry picks the vendor, or that none does. */
+/** The configured providers that use one of the vendor's loaded shims. */
+function _providersUsing(v) {
+  const names = new Set();
+  for (const name of v.installed_shims || []) {
+    const row = _shims.find((x) => x.name === name);
+    for (const provider of (row && row.used_by) || []) names.add(provider);
+  }
+  return [...names];
+}
+
+/** Which install entry picks the vendor, which one keeps it out, or that none does. */
 function _selectedLine(v) {
+  if (v.excluded_by) {
+    return `<p class="field-hint">${esc(t('shimSrc.excludedBy', {selector: v.excluded_by}))}</p>`;
+  }
   if (!v.selected_by) return `<p class="field-hint">${esc(t('shimSrc.notSelected'))}</p>`;
   const preset = _presetOf(v);
+  const users = _providersUsing(v);
   const line = preset ? t('shimSrc.viaPreset', {preset})
-    : selectedForProvider(v) ? t('shimSrc.viaProvider')
+    : selectedForProvider(v)
+      ? (users.length ? t('shimSrc.viaProviders', {providers: users.join(', ')}) : t('shimSrc.viaProvider'))
       : t('shimSrc.selectedBy', {selector: v.selected_by});
   return `<p class="field-hint">${esc(line)}</p>`;
+}
+
+/**
+ * One shim of a vendor card: its name, whether it is loaded, and — for a
+ * loaded one — the switch.  The vendor is the install unit; the shim is the
+ * enable unit (`shims.disabled`), the same switch the Installed rows carry.
+ */
+function _vendorShimRow(v, name) {
+  const loaded = new Set(v.installed_shims || []);
+  const off = v.installed && !loaded.has(name);
+  const mark = v.installed ? t(loaded.has(name) ? 'shimPage.loadedMark' : 'shimPage.notLoadedMark') : '';
+  const row = loaded.has(name) ? _shims.find((x) => x.name === name) : null;
+  const on = row && row.enabled !== false;
+  const toggle = row
+    ? `<label class="toggle is-sm" title="${esc(t('shimPage.switchHint'))}">`
+      + `<input type="checkbox" role="switch" aria-label="${esc(t('shimSrc.shimSwitch', {name}))}"`
+      + `${on ? ' checked' : ''} onchange="shimToggleEnabled(this, ${jsArg(name)})">`
+      + `<span class="slider"></span></label>`
+    : '';
+  return `<div class="shim-preset-shim${off || (row && !on) ? ' off' : ''}" role="listitem">`
+    + `<span class="shim-preset-name">${esc(name)}</span>`
+    + `<span class="shim-preset-state">${esc(mark)}</span>${toggle}</div>`;
+}
+
+/**
+ * The card's install actions: Install or Remove, and the version pin.
+ *
+ * A vendor the gateway installed for a provider has no Remove (the provider
+ * needs it); everything else does, whatever selects it.  A pinned vendor
+ * offers "Update to" the newest installable release and "Follow latest"; an
+ * unpinned installed one offers "Pin this version".
+ */
+function _vendorActions(src, v) {
+  const id = jsArg(src.id);
+  const vendor = jsArg(v.vendor);
+  const out = [];
+  if (v.excluded_by || !v.selected_by) {
+    out.push(`<button type="button" class="btn btn-sm btn-primary"${v.installable ? '' : ' disabled'} onclick="selectShimSourceVendor(this, ${id}, ${vendor})">${esc(t('shimSrc.select'))}</button>`);
+    return out.join('');
+  }
+  if (!selectedForProvider(v)) {
+    out.push(`<button type="button" class="btn btn-sm" onclick="deselectShimSourceVendor(this, ${id}, ${vendor})">${esc(t('shimSrc.deselect'))}</button>`);
+  }
+  if (v.pinned) {
+    if (v.installable && v.installable !== v.pinned && v.update_available) {
+      out.push(`<button type="button" class="btn btn-sm btn-primary" onclick="pinShimSourceVendor(this, ${id}, ${vendor}, ${jsArg(v.installable)})">${esc(t('shimSrc.updatePin', {version: v.installable}))}</button>`);
+    }
+    out.push(`<button type="button" class="btn btn-sm" onclick="followShimSourceVendor(this, ${id}, ${vendor})">${esc(t('shimSrc.followLatest'))}</button>`);
+  } else if (v.installed) {
+    out.push(`<button type="button" class="btn btn-sm" onclick="pinShimSourceVendor(this, ${id}, ${vendor}, ${jsArg(v.installed)})">${esc(t('shimSrc.pin'))}</button>`);
+  }
+  return out.join('');
 }
 
 function _sourceVendorCard(src, v) {
@@ -431,21 +498,11 @@ function _sourceVendorCard(src, v) {
   const meta = [version ? `v${version}` : '', plural((v.shims || []).length, 'shimPage.shims', 'shimPage.shimOne')]
     .filter(Boolean).join(' · ');
   const tags = (v.tags || []).map((tag) => `<span class="tag is-plain">${esc(tag)}</span>`).join('');
-  const loaded = new Set(v.installed_shims || []);
-  const shims = (v.shims || []).map((s) => {
-    const off = v.installed && !loaded.has(s);
-    const mark = v.installed ? t(loaded.has(s) ? 'shimPage.loadedMark' : 'shimPage.notLoadedMark') : '';
-    return `<div class="shim-preset-shim${off ? ' off' : ''}" role="listitem">`
-      + `<span class="shim-preset-name">${esc(s)}</span>`
-      + `<span class="shim-preset-state">${esc(mark)}</span></div>`;
-  }).join('');
+  const shims = (v.shims || []).map((name) => _vendorShimRow(v, name)).join('');
   const add = (v.installed_shims || [])[0]
     ? `<button type="button" class="btn btn-sm" onclick="startProviderFromShim(${jsArg(v.installed_shims[0])})">${esc(t('shimPage.addProvider'))}</button>`
     : '';
-  const action = selectedForProvider(v) ? ''
-    : v.selected_by
-    ? `<button type="button" class="btn btn-sm" onclick="deselectShimSourceVendor(this, ${jsArg(src.id)}, ${jsArg(v.vendor)})">${esc(t('shimSrc.deselect'))}</button>`
-    : `<button type="button" class="btn btn-sm btn-primary"${v.installable ? '' : ' disabled'} onclick="selectShimSourceVendor(this, ${jsArg(src.id)}, ${jsArg(v.vendor)})">${esc(t('shimSrc.select'))}</button>`;
+  const action = _vendorActions(src, v);
   return `
     <article class="shim-card shim-src-card${open ? ' is-open' : ''}" data-srcvendor="${esc(key)}">
       <button type="button" class="shim-card-head" aria-expanded="${open}" aria-controls="${bodyId}"
@@ -567,29 +624,94 @@ export async function selectShimSourceVendor(btn, sourceId, vendor) {
 }
 
 /**
- * Deselect one vendor: drop the `<source>:<vendor>` entries of this source.
- * An unqualified entry (shared by every source), a tag or `*` entry, or a
- * preset that would still select it refuses the removal and is named; the
- * config is not touched (`deselectVendor`).
+ * Remove one vendor.  Never a refusal (`deselectVendor`): its own entries go,
+ * and when a tag, `*`, a shared entry or a legacy preset would still install
+ * it, `!<source>:<vendor>` is written.  A preset is first rewritten as
+ * `shims.install` entries on the gateway (the same rewrite
+ * `llm-rosetta-migrate --config` applies), and the one toast says so.
  */
 export async function deselectShimSourceVendor(btn, sourceId, vendor) {
   const { src, v } = _sourceVendor(sourceId, vendor);
-  if (!src || !v) return;
+  if (!src || !v || selectedForProvider(v)) return;
   const section = (S.configData && S.configData.shims) || {};
   const presets = v.selected_presets || (_presetOf(v) ? [_presetOf(v)] : []);
-  const { install, refuse } = deselectVendor(section.install || [], sourceId, vendor,
-    v.tags || [], presets);
-  if (refuse) {
-    showToast(t(refuse.key, refuse.params), 'error');
+  let plan = deselectVendor(section.install || [], sourceId, vendor, v.tags || [], presets);
+  if (plan.refuse) {
+    showToast(t(plan.refuse.key, plan.refuse.params), 'error');
     return;
   }
   await withBusyButton(btn, async () => {
     try {
-      const r = await _writeSources({ install });
+      let migrated = [];
+      if (plan.migratePresets) {
+        const m = await _mustWrite(() => api.post('/admin/api/config/shims/presets/migrate', {}));
+        const stuck = presets.filter((k) => (m.unconvertible || {})[k]);
+        if (stuck.length) {
+          // The vendor stays: its preset cannot become install entries.  Any
+          // other preset the rewrite did convert is named too.
+          if ((m.converted || []).length) S.configData = await api.get('/admin/api/config');
+          const lead = (m.converted || []).length
+            ? t('shimSrc.presetsMigrated', {presets: m.converted.join(', ')}) + ' ' : '';
+          showToast(lead + t('shimSrc.presetStuck', {
+            preset: stuck.join(', '), reason: stuck.map((k) => m.unconvertible[k]).join('; '),
+          }), 'error');
+          return;
+        }
+        migrated = m.converted || [];
+        plan = deselectVendor(((m.shims || {}).install) || [], sourceId, vendor, v.tags || [], []);
+      }
+      const r = await _writeSources({ install: plan.install });
       const warnings = (r && r.provider_warnings) || [];
-      showToast(warnings.length
-        ? t('toast.providersAutoDisabled', {providers: warnings.map((x) => x.provider).join(', ')})
-        : t('shimSrc.deselectDone', {vendor}), warnings.length ? 'error' : undefined);
+      const exclusion = `!${sourceId}:${vendor}`;
+      const done = (plan.install.includes(exclusion)
+        ? t('shimSrc.excludeDone', {vendor, selector: exclusion})
+        : t('shimSrc.deselectDone', {vendor}))
+        + (plan.droppedPin ? ' ' + t('shimSrc.pinDropped', {version: plan.droppedPin}) : '');
+      const lead = migrated.length ? t('shimSrc.presetsMigrated', {presets: migrated.join(', ')}) + ' ' : '';
+      // A provider the reload disabled is worth the error colour, but what
+      // the Remove did (the rewrite, the exclusion, a dropped pin) still shows.
+      const warned = warnings.length
+        ? ' ' + t('toast.providersAutoDisabled', {providers: warnings.map((x) => x.provider).join(', ')})
+        : '';
+      showToast(lead + done + warned, warnings.length ? 'error' : undefined);
+    } catch (e) {
+      showToast(String(e.message || e), 'error');
+    }
+  });
+}
+
+/** Hold one vendor at *version* (also "Update to": a newer pin). */
+export async function pinShimSourceVendor(btn, sourceId, vendor, version) {
+  const { src, v } = _sourceVendor(sourceId, vendor);
+  if (!src || !v || !version) return;
+  const section = (S.configData && S.configData.shims) || {};
+  const body = { install: pinVendor(section.install || [], sourceId, vendor, version) };
+  const declared = declareSource(section, src.entry ?? (src.key || src.url));
+  if (declared.changed) body.sources = declared.sources;
+  await withBusyButton(btn, async () => {
+    try {
+      _openSrcVendors.add(_srcVendorKey(src, v));
+      const r = await _writeSources(body);
+      const failures = (r && r.status && r.status.failure_count) || 0;
+      showToast(failures
+        ? t('shimPage.installFailed', {key: vendor, count: failures})
+        : t('shimSrc.pinDone', {vendor, version}), failures ? 'error' : undefined);
+    } catch (e) {
+      showToast(String(e.message || e), 'error');
+    }
+  });
+}
+
+/** Drop a pin: the vendor follows the newest installable release again. */
+export async function followShimSourceVendor(btn, sourceId, vendor) {
+  const { src, v } = _sourceVendor(sourceId, vendor);
+  if (!src || !v) return;
+  const section = (S.configData && S.configData.shims) || {};
+  await withBusyButton(btn, async () => {
+    try {
+      _openSrcVendors.add(_srcVendorKey(src, v));
+      await _writeSources({ install: followLatest(section.install || [], sourceId, vendor) });
+      showToast(t('shimSrc.followDone', {vendor}));
     } catch (e) {
       showToast(String(e.message || e), 'error');
     }
@@ -691,8 +813,9 @@ export async function shimToggleEnabled(input, name) {
     await _mustWrite(() => api.post(`/admin/api/config/shims/${encodeURIComponent(name)}/enabled`, {enabled}));
     // Repaint the row it belongs to, not the page: a full re-render closes
     // and reopens cards under the cursor and loses the operator's place.
-    const row = input.closest('.shim-row');
-    if (row) {
+    const row = input.closest('.shim-row, .shim-preset-shim');
+    if (row && row.classList.contains('shim-preset-shim')) row.classList.toggle('off', !enabled);
+    else if (row) {
       row.classList.toggle('is-off', !enabled);
       const add = row.querySelector('.shim-row-add');
       if (add) {
@@ -717,6 +840,7 @@ export async function shimToggleEnabled(input, name) {
 Object.assign(window, {
   loadShimsPage, renderShimsPage, setShimsView, toggleShimVendor, shimToggleEnabled,
   toggleShimSourceVendor, selectShimSourceVendor, deselectShimSourceVendor,
+  pinShimSourceVendor, followShimSourceVendor,
   // Repainted on a language change: the per-shim rows carry translated marks.
   repaintShimCatalog: () => { if (_view === 'available') renderShimsPage(); },
 });

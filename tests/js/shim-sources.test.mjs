@@ -15,7 +15,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-  DEFAULT_SOURCES, addSource, declareSource, deselectVendor, parseSelector, pickerFor,
+  DEFAULT_SOURCES, addSource, declareSource, deselectVendor, excludedBy, followLatest,
+  parseSelector, pickerFor, pinVendor,
   notInstalledVendors, removeSource, selectVendor, sharedSelectors, shownSources, sourceSelection,
   sourceTags, vendorFacts, vendorMatches, vendorStateKey, vendorTier, withSourceSelection,
 } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/shim-sources.js';
@@ -25,25 +26,57 @@ const ADMIN = '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/
 // ── The selector grammar ───────────────────────────────────────────────
 
 test('the selector grammar matches the gateway', () => {
+  const plain = { negate: false, version: null };
   assert.deepEqual(parseSelector('opendesign'),
-    { raw: 'opendesign', source: null, kind: 'vendor', value: 'opendesign' });
+    { raw: 'opendesign', source: null, kind: 'vendor', value: 'opendesign', ...plain });
   assert.deepEqual(parseSelector('tag:tier:free'),
-    { raw: 'tag:tier:free', source: null, kind: 'tag', value: 'tier:free' });
+    { raw: 'tag:tier:free', source: null, kind: 'tag', value: 'tier:free', ...plain });
   assert.deepEqual(parseSelector('contrib:tag:tier:free'),
-    { raw: 'contrib:tag:tier:free', source: 'contrib', kind: 'tag', value: 'tier:free' });
+    { raw: 'contrib:tag:tier:free', source: 'contrib', kind: 'tag', value: 'tier:free', ...plain });
   assert.deepEqual(parseSelector('argonne:*'),
-    { raw: 'argonne:*', source: 'argonne', kind: 'all', value: '' });
+    { raw: 'argonne:*', source: 'argonne', kind: 'all', value: '', ...plain });
   assert.equal(parseSelector('Bad Vendor'), null);
   assert.equal(parseSelector(''), null);
 });
 
-test('the first entry that picks a vendor speaks for it', () => {
+test('an exclusion and a pin are vendor entries', () => {
+  assert.deepEqual(parseSelector('!contrib:llm7'),
+    { raw: '!contrib:llm7', source: 'contrib', kind: 'vendor', value: 'llm7', negate: true, version: null });
+  assert.deepEqual(parseSelector('!llm7'),
+    { raw: '!llm7', source: null, kind: 'vendor', value: 'llm7', negate: true, version: null });
+  assert.deepEqual(parseSelector('contrib:groq@0.5.0'),
+    { raw: 'contrib:groq@0.5.0', source: 'contrib', kind: 'vendor', value: 'groq', negate: false, version: '0.5.0' });
+  // As the gateway refuses them: only a vendor is excluded or pinned, and an
+  // exclusion carries no version.
+  for (const bad of ['!tag:tier:free', '!contrib:*', 'contrib:tag:tier:free@1', '!contrib:groq@0.5.0', 'groq@x']) {
+    assert.equal(parseSelector(bad), null, bad);
+  }
+});
+
+test('an explicit entry speaks for its vendor, else the first match', () => {
   const install = ['argonne:*', 'tag:tier:free', 'contrib:opendesign'];
 
   assert.equal(pickerFor(install, 'argonne', 'alcf'), 'argonne:*');
   assert.equal(pickerFor(install, 'contrib', 'llm7', ['tier:free']), 'tag:tier:free');
   assert.equal(pickerFor(install, 'contrib', 'opendesign', ['tier:subscription']), 'contrib:opendesign');
   assert.equal(pickerFor(install, 'contrib', 'ovhcloud', []), null);
+  // A pin listed after a tag still holds the vendor.
+  assert.equal(pickerFor(['contrib:tag:tier:free', 'contrib:llm7@0.4.0'], 'contrib', 'llm7', ['tier:free']),
+    'contrib:llm7@0.4.0');
+});
+
+test('an exclusion wins wherever it is listed', () => {
+  for (const install of [
+    ['contrib:tag:tier:free', '!contrib:llm7'],
+    ['!contrib:llm7', 'contrib:tag:tier:free'],
+    ['contrib:llm7', '!llm7'],
+  ]) {
+    assert.equal(pickerFor(install, 'contrib', 'llm7', ['tier:free']), null, install.join(' '));
+  }
+  // It names one vendor of one source.
+  assert.equal(pickerFor(['contrib:tag:tier:free', '!contrib:llm7'], 'contrib', 'ovhcloud', ['tier:free']),
+    'contrib:tag:tier:free');
+  assert.equal(pickerFor(['*', '!contrib:llm7'], 'mirror', 'llm7'), '*');
 });
 
 // ── The editor's writes ────────────────────────────────────────────────
@@ -91,6 +124,14 @@ test('selecting a vendor adds a qualified entry once', () => {
   assert.deepEqual(selectVendor(install, 'contrib', 'llm7', ['tier:free']), install);
 });
 
+test('Install takes the exclusion out, and adds an entry only when nothing else installs it', () => {
+  // Removed from a tag, installed back: the list is what it was.
+  assert.deepEqual(selectVendor(['contrib:tag:tier:free', '!contrib:llm7'], 'contrib', 'llm7', ['tier:free']),
+    ['contrib:tag:tier:free']);
+  // An unqualified exclusion is this vendor's too.
+  assert.deepEqual(selectVendor(['!llm7'], 'contrib', 'llm7', ['tier:free']), ['contrib:llm7']);
+});
+
 test('deselecting removes only this source\'s entry for the vendor', () => {
   const out = deselectVendor(['contrib:llm7', 'other:llm7', 'argonne:alcf'], 'contrib', 'llm7');
 
@@ -98,34 +139,56 @@ test('deselecting removes only this source\'s entry for the vendor', () => {
   assert.deepEqual(out.install, ['other:llm7', 'argonne:alcf']);
 });
 
-test('deselecting refuses while a tag entry still picks the vendor', () => {
-  const before = ['contrib:llm7', 'contrib:tag:tier:free'];
-  const out = deselectVendor(before, 'contrib', 'llm7', ['tier:free']);
+test('a vendor a tag still installs is removed by an exclusion, not refused', () => {
+  const out = deselectVendor(['contrib:llm7', 'contrib:tag:tier:free'], 'contrib', 'llm7', ['tier:free']);
 
-  assert.deepEqual(out.install, before, 'nothing is changed');
-  assert.equal(out.refuse.key, 'shimSrc.stillSelected');
-  assert.equal(out.refuse.params.selector, 'contrib:tag:tier:free');
+  assert.equal(out.refuse, null);
+  assert.equal(out.migratePresets, false);
+  assert.deepEqual(out.install, ['contrib:tag:tier:free', '!contrib:llm7']);
+  assert.equal(pickerFor(out.install, 'contrib', 'llm7', ['tier:free']), null, 'the vendor is out');
 });
 
-test('an unqualified entry is shared by every source, so the card refuses it', () => {
-  // #1663 review: a bare `llm7` reads every source; removing it from one
-  // source's card would also drop the vendor from the others.
-  const before = ['llm7', 'contrib:llm7', 'other:x'];
-  const out = deselectVendor(before, 'contrib', 'llm7');
+test('an unqualified entry is excluded for this source only', () => {
+  // A bare `llm7` reads every source: the card excludes it here and leaves
+  // the entry for the others.
+  const out = deselectVendor(['llm7', 'contrib:llm7', 'other:x'], 'contrib', 'llm7');
 
-  assert.deepEqual(out.install, before);
-  assert.equal(out.refuse.key, 'shimSrc.sharedEntry');
-  assert.equal(out.refuse.params.selector, 'llm7');
+  assert.deepEqual(out.install, ['llm7', 'other:x', '!contrib:llm7']);
+  assert.equal(pickerFor(out.install, 'mirror', 'llm7'), 'llm7');
 });
 
-test('a preset behind an explicit entry refuses the removal', () => {
-  // #1663 review: removing `contrib:opendesign` would report success while
-  // `presets: [opendesign]` keeps installing the vendor.
+test('a preset-selected vendor asks for the preset rewrite, then an exclusion', () => {
   const out = deselectVendor(['contrib:opendesign'], 'contrib', 'opendesign', [], ['opendesign']);
 
-  assert.deepEqual(out.install, ['contrib:opendesign']);
-  assert.equal(out.refuse.key, 'shimSrc.byPreset');
-  assert.equal(out.refuse.params.preset, 'opendesign');
+  assert.equal(out.refuse, null);
+  assert.equal(out.migratePresets, true);
+  assert.deepEqual(out.install, ['!contrib:opendesign']);
+});
+
+test('a pinned vendor\'s entry goes with it', () => {
+  const out = deselectVendor(['contrib:groq@0.5.0', 'argonne:alcf'], 'contrib', 'groq');
+  assert.deepEqual(out.install, ['argonne:alcf']);
+});
+
+test('a pin replaces the vendor\'s own entries where they sat, and Follow latest undoes it', () => {
+  const pinned = pinVendor(['contrib:groq', 'argonne:alcf', '!contrib:groq'], 'contrib', 'groq', '0.5.0');
+  assert.deepEqual(pinned, ['contrib:groq@0.5.0', 'argonne:alcf']);
+  // Update to a newer one rewrites the pin in place.
+  assert.deepEqual(pinVendor(pinned, 'contrib', 'groq', '0.6.0'), ['contrib:groq@0.6.0', 'argonne:alcf']);
+  // A tag-selected vendor gets an explicit pin, which beats the tag.
+  const tagged = pinVendor(['contrib:tag:tier:free'], 'contrib', 'llm7', '0.4.0');
+  assert.deepEqual(tagged, ['contrib:tag:tier:free', 'contrib:llm7@0.4.0']);
+  assert.equal(pickerFor(tagged, 'contrib', 'llm7', ['tier:free']), 'contrib:llm7@0.4.0');
+  assert.deepEqual(followLatest(pinned, 'contrib', 'groq'), ['contrib:groq', 'argonne:alcf']);
+});
+
+test('the editor keeps pins and exclusions of the source it rewrites', () => {
+  const install = ['contrib:groq@0.5.0', 'contrib:tag:tier:free', '!contrib:llm7'];
+  assert.deepEqual(sourceSelection(install, 'contrib'), { all: false, tags: ['tier:free'], vendors: ['groq'] });
+  assert.deepEqual(withSourceSelection(install, 'contrib', { all: false, tags: ['tier:free'], vendors: ['groq', 'zai'] }),
+    ['contrib:tag:tier:free', 'contrib:groq@0.5.0', 'contrib:zai', '!contrib:llm7']);
+  assert.equal(excludedBy(install, 'contrib', 'llm7'), '!contrib:llm7');
+  assert.equal(excludedBy(install, 'contrib', 'groq'), null);
 });
 
 test('nothing to remove is a refusal, not a silent write', () => {
@@ -253,7 +316,9 @@ const CATALOGUE = {
 let elements = new Map();
 const requests = [];
 
-function installPage({ catalogue = CATALOGUE, config: served = null, packages = [] } = {}) {
+function installPage({
+  catalogue = CATALOGUE, config: served = null, packages = [], inventory = [], migrate = null,
+} = {}) {
   elements = new Map();
   const byId = (id) => {
     if (!elements.has(id)) elements.set(id, element(id));
@@ -284,7 +349,8 @@ function installPage({ catalogue = CATALOGUE, config: served = null, packages = 
     let body = {};
     if (url.startsWith('/admin/api/config/shims/source-catalog')) body = catalogue;
     else if (url === '/admin/api/config') body = config;
-    else if (url === '/admin/api/config/shims') body = opts.method === 'PUT' ? { ok: true } : { shims: [] };
+    else if (url === '/admin/api/config/shims') body = opts.method === 'PUT' ? { ok: true } : { shims: inventory };
+    else if (url === '/admin/api/config/shims/presets/migrate') body = migrate || { ok: true, converted: [] };
     else if (url === '/admin/api/config/shims/catalog') body = { packages };
     else if (url === '/admin/api/config/shims/reload') body = { ok: true, status: { failure_count: 0 } };
     return { ok: true, status: 200, headers: { get: () => 'application/json' },
@@ -401,8 +467,13 @@ test('Install on a card of an implied default source writes shims.sources', asyn
   });
 });
 
-test('Remove refuses, and writes nothing, while a preset still selects the vendor', async () => {
-  installPage();
+test('Remove on a preset-selected vendor rewrites the preset, then writes one exclusion', async () => {
+  // The gateway's rewrite turns `presets: [opendesign]` into an install entry;
+  // the card then removes the vendor with `!contrib:opendesign`.
+  installPage({ migrate: {
+    ok: true, converted: ['opendesign'], unconvertible: {},
+    shims: { install: ['contrib:opendesign', 'contrib:opendesign'] },
+  } });
   const { S } = await import(`${ADMIN}/core/state.js`);
   const page = await import(`${ADMIN}/tabs/shims-page.js`);
   S.configData = null;
@@ -412,10 +483,107 @@ test('Remove refuses, and writes nothing, while a preset still selects the vendo
     await page.loadShimsPage();
     requests.length = 0;
     await page.deselectShimSourceVendor(null, 'contrib', 'opendesign');
-    assert.equal(requests.filter((r) => r.method === 'PUT').length, 0);
+    const calls = requests.filter((r) => r.method !== 'GET').map((r) => `${r.method} ${r.url}`);
+    assert.deepEqual(calls, [
+      'POST /admin/api/config/shims/presets/migrate',
+      'PUT /admin/api/config/shims',
+      'POST /admin/api/config/shims/reload',
+    ]);
+    const put = requests.find((r) => r.method === 'PUT');
+    // Its own explicit entries go: nothing else selects it after the rewrite.
+    assert.deepEqual(put.body, { install: [] });
   } finally {
     delete vendor.selected_presets;
   }
+});
+
+test('Remove on a tag-selected vendor writes an exclusion and no refusal', async () => {
+  const fx = legacyFixture();
+  fx.config.shims = { install: ['contrib:tag:tier:free'] };
+  fx.catalogue.sources[0].vendors[1].selected_origin = 'install';
+  fx.catalogue.sources[0].vendors[1].selected_presets = [];
+  installPage(fx);
+  const { S } = await import(`${ADMIN}/core/state.js`);
+  const page = await import(`${ADMIN}/tabs/shims-page.js`);
+  S.configData = null;
+  await page.loadShimsPage();
+  requests.length = 0;
+  await page.deselectShimSourceVendor(null, 'contrib', 'kilo_free');
+
+  assert.equal(requests.filter((r) => r.url.endsWith('/presets/migrate')).length, 0);
+  const put = requests.find((r) => r.method === 'PUT');
+  assert.deepEqual(put.body, { install: ['contrib:tag:tier:free', '!contrib:kilo_free'] });
+});
+
+test('an excluded vendor says so and offers Install; a pinned one offers Update and Follow latest', async () => {
+  const fx = legacyFixture();
+  const [kilo, kiloFree, groq] = fx.catalogue.sources[0].vendors;
+  Object.assign(groq, { excluded_by: '!contrib:groq' });
+  Object.assign(kilo, { selected_origin: 'install', selected_by: 'contrib:kilo@0.4.0', pinned: '0.4.0',
+    installed: '0.4.0', installable: '0.5.0', update_available: true });
+  installPage(fx);
+  const { S } = await import(`${ADMIN}/core/state.js`);
+  const page = await import(`${ADMIN}/tabs/shims-page.js`);
+  S.configData = null;
+  await page.loadShimsPage();
+  page.setShimsView('available');
+  const html = elements.get('shimCatalogGrid').innerHTML;
+
+  const g = cardIn(html, 'contrib:groq');
+  assert.match(g, /!contrib:groq keeps it out/);
+  assert.match(g, /selectShimSourceVendor/);
+  const k = cardIn(html, 'contrib:kilo');
+  assert.match(k, /pinned at 0\.4\.0/);
+  assert.match(k, /pinShimSourceVendor\(this, &quot;contrib&quot;, &quot;kilo&quot;, &quot;0\.5\.0&quot;\)">Update to 0\.5\.0/);
+  assert.match(k, /followShimSourceVendor/);
+  assert.match(k, /deselectShimSourceVendor/, 'a pinned vendor the config names can be removed');
+  // An unpinned installed vendor offers the pin at its installed version.
+  assert.match(cardIn(html, 'contrib:kilo_free'),
+    /pinShimSourceVendor\(this, &quot;contrib&quot;, &quot;kilo_free&quot;, &quot;0\.4\.0&quot;\)">Pin this version/);
+});
+
+test('Pin and Follow latest write the pin, then drop it', async () => {
+  const fx = legacyFixture();
+  fx.config.shims = { install: ['contrib:tag:tier:free'], sources: ['contrib'] };
+  installPage(fx);
+  const { S } = await import(`${ADMIN}/core/state.js`);
+  const page = await import(`${ADMIN}/tabs/shims-page.js`);
+  S.configData = null;
+  await page.loadShimsPage();
+
+  requests.length = 0;
+  await page.pinShimSourceVendor(null, 'contrib', 'kilo_free', '0.4.0');
+  assert.deepEqual(requests.find((r) => r.method === 'PUT').body,
+    { install: ['contrib:tag:tier:free', 'contrib:kilo_free@0.4.0'] });
+
+  fx.config.shims.install = ['contrib:tag:tier:free', 'contrib:kilo_free@0.4.0'];
+  requests.length = 0;
+  await page.followShimSourceVendor(null, 'contrib', 'kilo_free');
+  assert.deepEqual(requests.find((r) => r.method === 'PUT').body,
+    { install: ['contrib:tag:tier:free', 'contrib:kilo_free'] });
+});
+
+test('a vendor card carries one switch per loaded shim, and names the providers that pulled it in', async () => {
+  const fx = legacyFixture();
+  installPage({ ...fx, inventory: [
+    { name: 'kilo--chat_completions', enabled: true, used_by: ['kilo-paid', 'kilo-2'], origin: 'remote' },
+    { name: 'kilo_free--chat_completions', enabled: false, used_by: [], origin: 'remote' },
+  ] });
+  const { S } = await import(`${ADMIN}/core/state.js`);
+  const page = await import(`${ADMIN}/tabs/shims-page.js`);
+  S.configData = null;
+  await page.loadShimsPage();
+  page.setShimsView('available');
+  const html = elements.get('shimCatalogGrid').innerHTML;
+
+  const kilo = cardIn(html, 'contrib:kilo');
+  assert.match(kilo, /Installed for the providers that use it: kilo-paid, kilo-2/);
+  assert.match(kilo, /role="switch" aria-label="Enable kilo--chat_completions" checked onchange="shimToggleEnabled\(this, &quot;kilo--chat_completions&quot;\)"/);
+  const free = cardIn(html, 'contrib:kilo_free');
+  assert.match(free, /aria-label="Enable kilo_free--chat_completions" onchange=/, 'a disabled shim is unchecked');
+  assert.match(free, /class="shim-preset-shim off"/);
+  // Not installed: no switch to show.
+  assert.doesNotMatch(cardIn(html, 'contrib:groq'), /role="switch"/);
 });
 
 // ── After the move (#1660): one card per vendor, no package cards ──────
@@ -598,4 +766,89 @@ test('a mark that fails to load tries the catalogue copy before the initials', a
   assert.doesNotMatch(only, /data-alt=/);
   // Neither: the initials tile.
   assert.match(page.logoHtml(null, 'groq'), /^<span class="shim-logo-fallback"[^>]*>Gr<\/span>$/);
+});
+
+// ── Review round (milo, elena on #1671) ────────────────────────────────
+
+test('Pin replaces an existing pin, qualified or not, instead of adding a second', () => {
+  assert.deepEqual(pinVendor(['contrib:kilo@0.4.0'], 'contrib', 'kilo', '0.5.0'), ['contrib:kilo@0.5.0']);
+  assert.deepEqual(pinVendor(['kilo@0.4.0', 'argonne:alcf'], 'contrib', 'kilo', '0.5.0'),
+    ['contrib:kilo@0.5.0', 'argonne:alcf']);
+  // Pinning twice in a row leaves one pin.
+  const twice = pinVendor(pinVendor(['contrib:tag:tier:free'], 'contrib', 'kilo', '0.4.0'), 'contrib', 'kilo', '0.5.0');
+  assert.deepEqual(twice, ['contrib:tag:tier:free', 'contrib:kilo@0.5.0']);
+  // Another vendor's pin, or an unqualified unpinned entry, is not this vendor's pin.
+  assert.deepEqual(pinVendor(['kilo', 'groq@1.0.0'], 'contrib', 'kilo', '0.5.0'),
+    ['kilo', 'groq@1.0.0', 'contrib:kilo@0.5.0']);
+});
+
+test('Remove reports the pin it drops, and Install does not bring it back', () => {
+  const removed = deselectVendor(['contrib:kilo@0.4.0'], 'contrib', 'kilo');
+  assert.equal(removed.droppedPin, '0.4.0');
+  assert.deepEqual(removed.install, []);
+  assert.deepEqual(selectVendor(removed.install, 'contrib', 'kilo'), ['contrib:kilo']);
+  // Behind a tag: the exclusion is written and the pin is still named.
+  const tagged = deselectVendor(['contrib:tag:tier:free', 'contrib:kilo@0.4.0'], 'contrib', 'kilo', ['tier:free']);
+  assert.equal(tagged.droppedPin, '0.4.0');
+  assert.deepEqual(tagged.install, ['contrib:tag:tier:free', '!contrib:kilo']);
+  assert.equal(deselectVendor(['contrib:kilo'], 'contrib', 'kilo').droppedPin, null);
+});
+
+test('the Remove toast says the pin was dropped', async () => {
+  const fx = legacyFixture();
+  fx.config.shims = { install: ['contrib:kilo_free@0.4.0'] };
+  Object.assign(fx.catalogue.sources[0].vendors[1], {
+    selected_by: 'contrib:kilo_free@0.4.0', selected_origin: 'install', selected_presets: [], pinned: '0.4.0',
+  });
+  installPage(fx);
+  const { S } = await import(`${ADMIN}/core/state.js`);
+  const page = await import(`${ADMIN}/tabs/shims-page.js`);
+  S.configData = null;
+  await page.loadShimsPage();
+  requests.length = 0;
+  await page.deselectShimSourceVendor(null, 'contrib', 'kilo_free');
+  const put = requests.find((r) => r.method === 'PUT');
+  assert.deepEqual(put.body, { install: [] });
+  assert.match(elements.get('toast').textContent, /pin 0\.4\.0 dropped/);
+});
+
+test('a preset that cannot be rewritten refuses the removal with the reason', async () => {
+  installPage({ ...legacyFixture(), migrate: {
+    ok: true, converted: [], shims: { presets: ['free'], include: { free: ['nothing*'] } },
+    unconvertible: { free: 'converts to nothing: no vendor of Free Endpoints keeps a shim' },
+  } });
+  const { S } = await import(`${ADMIN}/core/state.js`);
+  const page = await import(`${ADMIN}/tabs/shims-page.js`);
+  S.configData = null;
+  await page.loadShimsPage();
+  requests.length = 0;
+  await page.deselectShimSourceVendor(null, 'contrib', 'kilo_free');
+  assert.equal(requests.filter((r) => r.method === 'PUT').length, 0, 'nothing is written');
+  assert.match(elements.get('toast').textContent, /The preset free cannot be rewritten \(converts to nothing/);
+});
+test('a Remove that also disables a provider still says what it did', async () => {
+  const fx = legacyFixture();
+  fx.config.shims = { install: ['contrib:kilo_free@0.4.0'] };
+  Object.assign(fx.catalogue.sources[0].vendors[1], {
+    selected_by: 'contrib:kilo_free@0.4.0', selected_origin: 'install', selected_presets: [], pinned: '0.4.0',
+  });
+  installPage(fx);
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url, opts = {}) => {
+    if (url === '/admin/api/config/shims/reload') {
+      const body = { ok: true, status: { failure_count: 0 }, provider_warnings: [{ provider: 'kilo-free' }] };
+      return { ok: true, status: 200, headers: { get: () => 'application/json' },
+        json: async () => body, text: async () => JSON.stringify(body) };
+    }
+    return realFetch(url, opts);
+  };
+  const { S } = await import(`${ADMIN}/core/state.js`);
+  const page = await import(`${ADMIN}/tabs/shims-page.js`);
+  S.configData = null;
+  await page.loadShimsPage();
+  await page.deselectShimSourceVendor(null, 'contrib', 'kilo_free');
+  const text = elements.get('toast').textContent;
+  assert.match(text, /kilo_free removed/);
+  assert.match(text, /pin 0\.4\.0 dropped/);
+  assert.match(text, /kilo-free/);
 });

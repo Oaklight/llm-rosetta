@@ -68,6 +68,7 @@ from .shims import (
     _shim_status_payload,
     _validate_shim_sources_body,
     post_shim_package_upgrade,
+    post_shim_presets_migrate,
     post_shims_check_updates,
     post_shims_reload,
     put_shim_sources,
@@ -111,6 +112,7 @@ __all__ = [
     "get_shim_manifests",
     "post_preview_shim_manifest",
     "post_shim_package_upgrade",
+    "post_shim_presets_migrate",
     "post_shims_check_updates",
     "post_shims_reload",
     "post_shim_enabled",
@@ -204,6 +206,9 @@ def register_config_routes(app: Any) -> None:
     )
     app.route("/admin/api/config/shims/reload", methods=["POST"])(
         _guard("providers", post_shims_reload)
+    )
+    app.route("/admin/api/config/shims/presets/migrate", methods=["POST"])(
+        _guard("providers", post_shim_presets_migrate)
     )
     app.route("/admin/api/config/shims/check-updates", methods=["POST"])(
         _guard("providers", post_shims_check_updates)

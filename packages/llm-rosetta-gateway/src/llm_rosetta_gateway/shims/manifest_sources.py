@@ -91,6 +91,7 @@ MANIFEST_CACHE_DIRNAME = "manifests"
 _SOURCE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 _VENDOR_RE = re.compile(r"^[a-z0-9][a-z0-9_]*$")
 _TAG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*(:[a-z0-9][a-z0-9_.-]*)?$")
+_VERSION_RE = re.compile(r"^[0-9][0-9A-Za-z.+-]*$")
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +108,13 @@ class InstallSelector:
         source: The ``<source>:`` qualifier, or ``None`` for every source.
         kind: ``"all"`` (``*``), ``"tag"`` (``tag:<t>``) or ``"vendor"``.
         value: The tag or the vendor name; ``""`` for ``"all"``.
+        negate: An exclusion (``!<vendor>``, ``!<source>:<vendor>``): the
+            vendor is not installed whatever a tag, ``*``, preset or explicit
+            entry says.  An exclusion always wins, so the order of the list
+            never decides it.
+        version: The pinned release (``<source>:<vendor>@<version>``): that
+            version is installed and nothing newer replaces it.  ``None``
+            follows the newest installable release.
         include: Shim-name patterns to keep from the selected vendors (only a
             legacy preset carries one, from ``shims.include``).
         exclude: Shim-name patterns to drop.
@@ -129,13 +137,22 @@ class InstallSelector:
     origin: str = "install"
     fallback_remote: Mapping[str, Any] | None = None
     expected: tuple[str, ...] = ()
+    negate: bool = False
+    version: str | None = None
+    #: Every pin of the vendor when more than one names it with different
+    #: versions; set by :func:`pick_selector`, never by the parser.
+    pin_conflict: tuple[str, ...] = ()
 
     def applies_to(self, source_id: str | None) -> bool:
         """Whether this selector reads the source with *source_id*."""
         return self.source is None or self.source == source_id
 
     def matches(self, vendor: str, tags: Collection[str]) -> bool:
-        """Whether this selector picks *vendor* (whose newest record has *tags*)."""
+        """Whether this selector names *vendor* (whose newest record has *tags*).
+
+        This is the pattern alone: an exclusion *matches* the vendor it
+        excludes.  Which selector installs a vendor is :func:`pick_selector`.
+        """
         if self.kind == "all":
             return True
         if self.kind == "tag":
@@ -143,12 +160,95 @@ class InstallSelector:
         return self.value == vendor
 
 
+def pick_selector(
+    selectors: Sequence[InstallSelector],
+    source_id: str | None,
+    vendor: str,
+    tags: Collection[str],
+) -> InstallSelector | None:
+    """The selector that installs *vendor* from *source_id*, or ``None``.
+
+    The rule, deterministic and independent of list order where it matters:
+
+    1. an exclusion (``!<vendor>`` / ``!<source>:<vendor>``) that applies
+       wins over everything — the vendor is not installed;
+    2. an explicit positive ``<vendor>`` entry beats a tag or ``*`` entry, and
+       a pinned one beats an unpinned one, so a pin is never shadowed by an
+       entry listed before it;
+    3. two pins of one vendor with different versions are not decided by
+       order: the selector comes back with :attr:`InstallSelector.pin_conflict`
+       naming both, and the installer refuses to choose (WARNING, status row);
+    4. otherwise the first matching entry speaks, as before.
+    """
+    applicable = [
+        s for s in selectors if s.applies_to(source_id) and s.matches(vendor, tags)
+    ]
+    if any(s.negate for s in applicable):
+        return None
+    positive = [s for s in applicable if not s.negate]
+    explicit = [s for s in positive if s.kind == "vendor"]
+    pins = [s for s in explicit if s.version is not None]
+    if len({s.version for s in pins}) > 1:
+        return replace(pins[0], pin_conflict=tuple(s.raw for s in pins))
+    chosen = (pins or explicit or positive or [None])[0]
+    return chosen
+
+
+def _overridden_reason(
+    selectors: Sequence[InstallSelector],
+    source_id: str | None,
+    vendor: str,
+    tags: Collection[str],
+    winner: InstallSelector | None,
+) -> dict[str, str]:
+    """Why each other entry that names *vendor* did not install it.
+
+    An entry an exclusion overrode, or one another entry beat, is still in the
+    manifest; its status row says which entry won instead.
+    """
+    exclusion = excluded_by(selectors, source_id, vendor)
+    out: dict[str, str] = {}
+    for s in selectors:
+        if s.negate or not (s.applies_to(source_id) and s.matches(vendor, tags)):
+            continue
+        if winner is not None and s.raw == winner.raw:
+            continue
+        if exclusion is not None:
+            out[s.raw] = (
+                f"excluded by shims.install ({exclusion.raw!r}); "
+                "removing that entry brings it back"
+            )
+        elif winner is not None and s.raw in winner.pin_conflict:
+            out[s.raw] = f"pinned more than once ({', '.join(winner.pin_conflict)})"
+        elif winner is not None:
+            out[s.raw] = f"already selected by {winner.raw}"
+    return out
+
+
+def excluded_by(
+    selectors: Sequence[InstallSelector], source_id: str | None, vendor: str
+) -> InstallSelector | None:
+    """The exclusion that keeps *vendor* of *source_id* out, if any."""
+    return next(
+        (
+            s
+            for s in selectors
+            if s.negate and s.applies_to(source_id) and s.value == vendor
+        ),
+        None,
+    )
+
+
 def parse_selector(text: Any, **extra: Any) -> InstallSelector:
     """Parse one ``shims.install`` entry.
 
     Accepted spellings: ``<vendor>``, ``tag:<tag>``, ``*``, and each of them
     behind a ``<source>:`` qualifier (``argonne:alcf``, ``contrib:tag:tier:free``,
-    ``argonne:*``).
+    ``argonne:*``).  A vendor entry may also be an exclusion, ``!<vendor>`` or
+    ``!<source>:<vendor>``, or a pin, ``<vendor>@<version>`` or
+    ``<source>:<vendor>@<version>``.  Only a vendor can be excluded or pinned:
+    ``!tag:…``, ``!*`` and a pin on a tag are refused, and so is a pinned
+    exclusion.
 
     Args:
         text: The entry.
@@ -164,11 +264,25 @@ def parse_selector(text: Any, **extra: Any) -> InstallSelector:
         raise ValueError("config: 'shims.install' entries must be non-empty strings")
     raw = text.strip()
     source: str | None = None
-    rest = raw
+    negate = raw.startswith("!")
+    rest = raw[1:].strip() if negate else raw
+    version: str | None = None
+    if "@" in rest:
+        rest, version = rest.split("@", 1)
+        if negate or not _VERSION_RE.match(version):
+            raise ValueError(
+                f"config: 'shims.install' entry {raw!r}: "
+                + ("an exclusion takes no version" if negate else "bad version")
+            )
     if not rest.startswith("tag:") and ":" in rest:
         source, rest = rest.split(":", 1)
         if not _SOURCE_ID_RE.match(source):
             raise ValueError(f"config: 'shims.install' entry {raw!r}: bad source id")
+    if (negate or version) and (rest == "*" or rest.startswith("tag:")):
+        raise ValueError(
+            f"config: 'shims.install' entry {raw!r}: only a vendor can be "
+            + ("excluded" if negate else "pinned")
+        )
     if rest == "*":
         return InstallSelector(raw=raw, source=source, kind="all", value="", **extra)
     if rest.startswith("tag:"):
@@ -181,7 +295,15 @@ def parse_selector(text: Any, **extra: Any) -> InstallSelector:
             f"config: 'shims.install' entry {raw!r} is not a vendor name, "
             "'tag:<tag>', '*' or '<source>:' followed by one of them"
         )
-    return InstallSelector(raw=raw, source=source, kind="vendor", value=rest, **extra)
+    return InstallSelector(
+        raw=raw,
+        source=source,
+        kind="vendor",
+        value=rest,
+        negate=negate,
+        version=version,
+        **extra,
+    )
 
 
 @dataclass(frozen=True)
@@ -340,6 +462,7 @@ def install_from_manifests(
     fallbacks: list[Mapping[str, Any]] = []
     claimed: dict[str, str] = {}
     matched: set[str] = set()
+    overridden: dict[str, str] = {}
     answered: list[tuple[str, ManifestSourceSpec]] = []
     fell_back: set[str] = set()
     for spec in plan.sources:
@@ -369,7 +492,13 @@ def install_from_manifests(
             source_id = spec.key or state.manifest.source
             answered.append((source_id, spec))
             for vendor, selector in _select_vendors(
-                state.manifest, source_id, plan.selectors, claimed, matched, root
+                state.manifest,
+                source_id,
+                plan.selectors,
+                claimed,
+                matched,
+                root,
+                overridden,
             ):
                 status = _install_vendor(
                     spec,
@@ -390,7 +519,9 @@ def install_from_manifests(
                     )
                 statuses.append(status)
     statuses.extend(
-        _unmatched_rows(plan.selectors, matched, answered, fell_back, claimed)
+        _unmatched_rows(
+            plan.selectors, matched, answered, fell_back, claimed, overridden
+        )
     )
     return statuses, fallbacks
 
@@ -401,6 +532,7 @@ def _unmatched_rows(
     answered: Sequence[tuple[str, ManifestSourceSpec]],
     fell_back: set[str],
     claimed: Mapping[str, str] | None = None,
+    overridden: Mapping[str, str] | None = None,
 ) -> list[ShimSourceStatus]:
     """Warn about, and report, each selector that matched no vendor.
 
@@ -418,15 +550,31 @@ def _unmatched_rows(
     """
     rows: list[ShimSourceStatus] = []
     for selector in selectors:
+        if selector.negate:
+            continue
         if selector.raw in matched or selector.raw in fell_back:
             continue
         if selector.origin.startswith("moved:") and selector.value in (claimed or {}):
             continue
-        logger.warning(
-            "Shim install %r (%s) matched no vendor in the reachable sources",
-            selector.raw,
-            selector.origin,
-        )
+        why = (overridden or {}).get(selector.raw)
+        if why and selector.origin.startswith("moved:"):
+            # A configured provider names this vendor's shim, and the
+            # operator's own exclusion keeps it out: say so once, loudly.
+            logger.warning(
+                "Shim install: a configured provider uses vendor %r, but it is "
+                "%s; that provider stays disabled until then",
+                selector.value,
+                why,
+            )
+        elif why:
+            # The vendor is in the manifest: another entry decided it.
+            logger.info("Shim install %r (%s): %s", selector.raw, selector.origin, why)
+        else:
+            logger.warning(
+                "Shim install %r (%s) matched no vendor in the reachable sources",
+                selector.raw,
+                selector.origin,
+            )
         target = next((a for a in answered if selector.applies_to(a[0])), None)
         if target is None:
             continue
@@ -438,7 +586,7 @@ def _unmatched_rows(
                 name=selector.raw if selector.source else f"{source_id}:{selector.raw}",
                 source=source_id,
                 vendor=selector.value if selector.kind == "vendor" else None,
-                skipped="not in the manifest",
+                skipped=why or "not in the manifest",
             )
         )
     return rows
@@ -491,6 +639,7 @@ def _select_vendors(
     claimed: dict[str, str],
     matched: set[str],
     root: Path | None = None,
+    overridden: dict[str, str] | None = None,
 ) -> list[tuple[str, InstallSelector]]:
     """The vendors of *manifest* the selectors pick, each with its selector.
 
@@ -515,15 +664,19 @@ def _select_vendors(
                 _read_stamp(root / f"{vendor}.stamp.json"), vendor
             )
         tags = record.tags if record is not None else ()
-        selector = next(
-            (
-                s
-                for s in selectors
-                if s.applies_to(source_id) and s.matches(vendor, tags)
-            ),
-            None,
-        )
+        selector = pick_selector(selectors, source_id, vendor, tags)
+        if overridden is not None:
+            for raw, why in _overridden_reason(
+                selectors, source_id, vendor, tags, selector
+            ).items():
+                overridden.setdefault(raw, why)
         if selector is None:
+            if excluded_by(selectors, source_id, vendor) is not None:
+                logger.info(
+                    "Shim source %s: vendor %r is excluded by shims.install",
+                    source_id,
+                    vendor,
+                )
             continue
         matched.add(selector.raw)
         if vendor in claimed:
@@ -585,15 +738,9 @@ def _install_vendor(
         exclude=selector.exclude,
     )
 
-    chosen, passed_over = select_release(releases)
-    for release, why in passed_over:
-        logger.warning(
-            "Shim source %s: %s %s is not installable here: %s",
-            source_id,
-            vendor,
-            release.version,
-            why,
-        )
+    chosen, passed_over, pin_problem = _choose_release(
+        releases, selector, source_id, vendor
+    )
 
     if chosen is not None:
         skip = _skip_reason(chosen, selector, source_id, core_names, core_version)
@@ -617,41 +764,27 @@ def _install_vendor(
         # Every record of the vendor is invalid: keep the last good install
         # (stale, like an unreachable source) and never uninstall for it.
         why = f"no valid release: {dropped}"
+        kept = installed if usable else None
         logger.warning(
             "Shim source %s: vendor %r has %s; %s",
             source_id,
             vendor,
             why,
-            f"keeping the installed {installed.version}"
-            if usable and installed is not None
-            else "it is not installed",
+            f"keeping the installed {kept.version}" if kept else "it is not installed",
         )
-        if usable:
-            assert installed is not None
-            status = _installed_status(
-                base, vendor_dir, installed, stamp, state, selector
-            )
-            return replace(status, stale=True, error=why)
-        return replace(base, skipped=why)
+        if kept is None:
+            return replace(base, skipped=why)
+        return _kept_or_failed(base, vendor_dir, kept, stamp, state, selector, why)
 
     if chosen is None:
-        if usable:
-            assert installed is not None
-            return _installed_status(
-                base, vendor_dir, installed, stamp, state, selector
-            )
-        reason = "; ".join(why for _, why in passed_over) or "no release"
-        return replace(
-            base,
-            ok=False,
-            error=f"no version of {vendor} is installable on this core ({reason})",
-        )
+        kept = installed if usable else None
+        if not pin_problem and kept is not None:
+            return _installed_status(base, vendor_dir, kept, stamp, state, selector)
+        error = _no_release_error(vendor, selector, pin_problem, passed_over)
+        return _kept_or_failed(base, vendor_dir, kept, stamp, state, selector, error)
 
-    if usable and installed is not None:
-        if version_key(installed.version) >= version_key(chosen.version):
-            return _installed_status(
-                base, vendor_dir, installed, stamp, state, selector
-            )
+    if usable and installed is not None and _keeps(installed, chosen, selector):
+        return _installed_status(base, vendor_dir, installed, stamp, state, selector)
 
     try:
         archive_url = _download_release(
@@ -714,6 +847,74 @@ def _install_vendor(
     )
 
 
+def _choose_release(
+    releases: Sequence[VendorRelease],
+    selector: InstallSelector,
+    source_id: str,
+    vendor: str,
+) -> tuple[VendorRelease | None, list[tuple[VendorRelease, str]], str | None]:
+    """The release to install: the pinned one, or the newest installable.
+
+    Returns:
+        ``(chosen, passed_over, pin_problem)``; each problem is logged here.
+    """
+    if selector.pin_conflict:
+        logger.warning(
+            "Shim source %s: %s is pinned more than once (%s); keep one",
+            source_id,
+            vendor,
+            ", ".join(selector.pin_conflict),
+        )
+        return None, [], "pinned more than once"
+    if selector.version is not None:
+        chosen, problem = _pinned_release(releases, selector.version)
+        if problem:
+            logger.warning(
+                "Shim source %s: %s is pinned to %s, which %s",
+                source_id,
+                vendor,
+                selector.version,
+                problem,
+            )
+        return chosen, [], problem
+    chosen, passed_over = select_release(releases)
+    for release, why in passed_over:
+        logger.warning(
+            "Shim source %s: %s %s is not installable here: %s",
+            source_id,
+            vendor,
+            release.version,
+            why,
+        )
+    return chosen, list(passed_over), None
+
+
+def _keeps(
+    installed: VendorRelease, chosen: VendorRelease, selector: InstallSelector
+) -> bool:
+    """Whether the installed release stays.
+
+    Unpinned, a gateway never downgrades; pinned, it holds exactly the pinned
+    version, so a pin below the installed one installs it.
+    """
+    if selector.version is not None:
+        return installed.version == chosen.version
+    return version_key(installed.version) >= version_key(chosen.version)
+
+
+def _pinned_release(
+    releases: Sequence[VendorRelease], version: str
+) -> tuple[VendorRelease | None, str | None]:
+    """The release a pin names, or why it cannot be installed here."""
+    release = next((r for r in releases if r.version == version), None)
+    if release is None:
+        return None, "the manifest does not list"
+    problem = requirement_problem(release.requires)
+    if problem:
+        return None, f"is not installable on this core ({problem})"
+    return release, None
+
+
 def _skip_reason(
     chosen: VendorRelease,
     selector: InstallSelector,
@@ -757,6 +958,41 @@ def _skip_reason(
         # one's shims: the vendor is not part of the selection at all.
         return "not selected by include"
     return None
+
+
+def _no_release_error(
+    vendor: str,
+    selector: InstallSelector,
+    pin_problem: str | None,
+    passed_over: Sequence[tuple[VendorRelease, str]],
+) -> str:
+    """Why nothing can be installed.
+
+    A pin naming a release this core cannot take keeps what runs (stale, with
+    this reason) and never falls back to a version the operator did not choose.
+    """
+    if selector.pin_conflict:
+        return f"{vendor} is pinned more than once: {', '.join(selector.pin_conflict)}"
+    if pin_problem:
+        return f"pinned {vendor}@{selector.version} {pin_problem}"
+    reason = "; ".join(why for _, why in passed_over) or "no release"
+    return f"no version of {vendor} is installable on this core ({reason})"
+
+
+def _kept_or_failed(
+    base: ShimSourceStatus,
+    vendor_dir: Path,
+    installed: VendorRelease | None,
+    stamp: Mapping[str, Any],
+    state: _ManifestState,
+    selector: InstallSelector,
+    error: str,
+) -> ShimSourceStatus:
+    """The installed release kept (stale, with *error*), or a failed row."""
+    if installed is None:
+        return replace(base, ok=False, error=error)
+    status = _installed_status(base, vendor_dir, installed, stamp, state, selector)
+    return replace(status, stale=True, error=error)
 
 
 def _installed_status(
@@ -1144,7 +1380,7 @@ def _expected_vendors(selectors: Sequence[InstallSelector], source_id: str) -> s
     for s in selectors:
         if s.source != source_id:
             continue
-        if s.kind == "vendor":
+        if s.kind == "vendor" and not s.negate:
             out.add(s.value)
         out.update(s.expected)
     return out
@@ -1495,7 +1731,9 @@ __all__ = [
     "ManifestSourceSpec",
     "check_manifest_updates",
     "install_from_manifests",
+    "excluded_by",
     "parse_selector",
+    "pick_selector",
     "parse_source_entry",
     "scan_manifest_status",
     "source_spec_from_catalogue",

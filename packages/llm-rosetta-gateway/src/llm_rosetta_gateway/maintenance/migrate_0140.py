@@ -27,6 +27,14 @@ name (:data:`llm_rosetta.retired_names.MOVED_VENDORS`), so nothing is rewritten
 for it: ``--config`` and ``--scan`` report it as a ``note`` (the gateway
 installs the vendor by itself), which never counts in the exit code.
 
+``shims.presets`` keys are spelled as the ``shims.install`` entries they map
+to (#1660): a preset becomes its selector (``free`` → ``contrib:tag:tier:free``),
+an ``include`` becomes one ``<source>:<vendor>`` per kept vendor, an
+``exclude`` becomes ``!<source>:<vendor>`` per dropped vendor, and a shim a
+selection drops from a kept vendor goes to ``shims.disabled``.  A legacy shim
+name that needs a package gets the install entry, not a preset.  A key that
+cannot be converted (unknown, or pinned by an explicit remote) stays.
+
 Configs are edited as text (:mod:`.jsonc_spans`): comments, key order and
 formatting outside the rewritten names are untouched.  The database step runs
 in one transaction after a backup, and refuses while a process holds the file.
@@ -61,6 +69,8 @@ from .jsonc_spans import (
     append_member,
     line_of,
     parse,
+    remove_member,
+    rename_member,
 )
 
 __all__ = ["Item", "main", "migrate_config_text", "migrate_db", "scan_path"]
@@ -459,10 +469,12 @@ class _ConfigPlanner:
                     self._model_type(item, f"{here}.capabilities[{index}]")
 
     def _shims(self, obj: Node) -> None:
-        for key in ("include", "exclude", "disabled"):
-            member = obj.member(key)
-            if member is not None:
-                self._shim_list(member.value, f"shims.{key}")
+        # ``include`` / ``exclude`` belong to the presets: they are rewritten
+        # with them (``_convert_presets``), or name-by-name when no preset
+        # can be converted.
+        member = obj.member("disabled")
+        if member is not None:
+            self._shim_list(member.value, "shims.disabled")
 
     # -- the document -----------------------------------------------------
 
@@ -482,7 +494,7 @@ class _ConfigPlanner:
                 self._shims(value)
             else:
                 self._endpoint_member(root, member, key, "root")
-        self._ensure_presets(root)
+        self._convert_presets(root)
         self._sweep(root)
         self._version(root)
 
@@ -559,51 +571,250 @@ class _ConfigPlanner:
             )
         )
 
-    def _ensure_presets(self, root: Node) -> None:
-        """Declare the ``shims.presets`` a rewritten shim now needs."""
-        if not self.presets:
-            return
-        names = sorted(self.presets)
-        why = ", ".join(f"{self.presets[n]!r} needs {n!r}" for n in names)
+    def _canonical(self, names: Any) -> list[str]:
+        """Shim-name patterns with any retired spelling replaced."""
+        out = []
+        for name in names if isinstance(names, list) else []:
+            row = retired_names.lookup(name, retired_names.SHIM)
+            out.append(row.replacement if row is not None else name)
+        return out
+
+    def _selection(self, shims: Node | None, key: str) -> dict[str, list[str]]:
+        member = shims.member(key) if shims is not None else None
+        if member is None or member.value.kind != "obj":
+            return {}
+        return {
+            str(m.key.value): self._canonical(_plain(m.value))
+            for m in member.value.members
+        }
+
+    def _convert_presets(self, root: Node) -> None:
+        """Spell ``shims.presets`` as explicit ``shims.install`` entries (#1660).
+
+        The declared presets, and the ones a rewritten legacy shim name needs,
+        are replaced by the entries
+        :func:`~llm_rosetta_gateway.shim_sources.presets_as_install` gives:
+        the mapped selector, one ``<source>:<vendor>`` per vendor an
+        ``include`` keeps, ``!<source>:<vendor>`` per vendor an ``exclude``
+        drops, and ``shims.disabled`` for a shim dropped from a kept vendor.
+        A key that cannot be converted stays a preset and is reported.
+        """
+        from ..shim_sources import presets_as_install
+
         shims = root.member("shims")
-        if shims is None:
-            append_member(self.edits, root, "shims", json.dumps(dict(presets=names)))
-        elif shims.value.kind != "obj":
-            self._unmapped(shims.value, "shims", "shims", f"not an object; {why}")
+        obj = shims.value if shims is not None and shims.value.kind == "obj" else None
+        if shims is not None and obj is None:
+            if self.presets:
+                why = ", ".join(
+                    f"{self.presets[n]!r} needs {n!r}" for n in self.presets
+                )
+                self._unmapped(shims.value, "shims", "shims", f"not an object; {why}")
             return
-        else:
-            self._merge_presets(shims.value, names, why)
-        self._report_presets(names)
+        presets_member = obj.member("presets") if obj is not None else None
+        declared: list[str] = []
+        if presets_member is not None:
+            if presets_member.value.kind != "arr":
+                self._unmapped(
+                    presets_member.value, "shims.presets", "presets", "not an array"
+                )
+                return
+            declared = [i.value for i in presets_member.value.items if i.kind == "str"]
+        keys = list(dict.fromkeys([*declared, *sorted(self.presets)]))
+        include = self._selection(obj, "include")
+        exclude = self._selection(obj, "exclude")
+        remotes_member = obj.member("remotes") if obj is not None else None
+        remotes = _plain(remotes_member.value) if remotes_member is not None else None
+        rewrite = presets_as_install(keys, include, exclude, remotes)
+        if not rewrite.converted or self._blocked(obj):
+            self._keep_presets(obj, keys, rewrite)
+            return
+        self._report_conversion(
+            presets_member, keys, include, exclude, remotes, rewrite
+        )
+        if obj is None:
+            append_member(
+                self.edits, root, "shims", json.dumps({"install": rewrite.install})
+            )
+            return
+        self._write_conversion(obj, keys, include, exclude, rewrite)
 
-    def _merge_presets(self, shims: Node, names: list[str], why: str) -> None:
-        """Add *names* to ``shims.presets``; *names* keeps only what was added."""
-        member = shims.member("presets")
-        if member is None:
-            append_member(self.edits, shims, "presets", json.dumps(names))
-            return
-        if member.value.kind != "arr":
-            self._unmapped(member.value, "shims.presets", "presets", why)
-            names.clear()
-            return
-        have = set(i.value for i in member.value.items if i.kind == "str")
-        names[:] = [n for n in names if n not in have]
-        if names:
-            append_item(self.edits, member.value, ", ".join(map(json.dumps, names)))
+    def _blocked(self, obj: Node | None) -> bool:
+        """Whether a key the rewrite writes into is not an array.
 
-    def _report_presets(self, names: list[str]) -> None:
-        for preset in names:
+        The conversion then neither happens nor half-happens: the presets stay,
+        and each offending key is reported for a person to fix.
+        """
+        blocked = False
+        for key in ("install", "disabled", "sources"):
+            member = obj.member(key) if obj is not None else None
+            if member is not None and member.value.kind != "arr":
+                self._unmapped(
+                    member.value,
+                    f"shims.{key}",
+                    key,
+                    "not an array, so shims.presets cannot be rewritten into "
+                    "shims.install entries; fix its type and run again",
+                )
+                blocked = True
+        return blocked
+
+    def _keep_presets(self, obj: Node | None, keys: list[str], rewrite: Any) -> None:
+        """Nothing converts: rewrite selection names in place, as before."""
+        for key in ("include", "exclude"):
+            member = obj.member(key) if obj is not None else None
+            if member is not None and member.value.kind == "obj":
+                for inner in member.value.members:
+                    self._shim_list(inner.value, f"shims.{key}.{inner.key.value}")
+        self._report_unconvertible(obj, rewrite)
+
+    def _report_unconvertible(self, obj: Node | None, rewrite: Any) -> None:
+        anchor = obj.member("presets") if obj is not None else None
+        for key, why in rewrite.unconvertible.items():
+            node = anchor.value if anchor is not None else obj
             self.items.append(
                 Item(
                     "config",
-                    "add",
+                    "note" if "remotes" in why else "unmapped",
                     self.file,
                     "shims.presets",
-                    None,
-                    None,
-                    preset,
-                    detail=f"the standalone package for {self.presets[preset]!r}",
+                    line_of(self.text, node.start) if node is not None else None,
+                    key,
+                    detail=f"left as a preset: {why}",
                 )
             )
+
+    def _report_conversion(
+        self,
+        presets_member: Member | None,
+        keys: list[str],
+        include: dict[str, list[str]],
+        exclude: dict[str, list[str]],
+        remotes: Any,
+        rewrite: Any,
+    ) -> None:
+        from ..shim_sources import presets_as_install
+
+        line = (
+            line_of(self.text, presets_member.value.start) if presets_member else None
+        )
+        for key in rewrite.converted:
+            one = presets_as_install([key], include, exclude, remotes)
+            detail = "legacy preset spelled as shims.install entries"
+            if key in self.presets:
+                detail = f"needed by {self.presets[key]!r}; " + detail
+            if one.disabled:
+                detail += "; shims.disabled += " + ", ".join(one.disabled)
+            self.items.append(
+                Item(
+                    "config",
+                    "rewrite",
+                    self.file,
+                    "shims.presets",
+                    line,
+                    key,
+                    ", ".join(one.install),
+                    detail=detail,
+                )
+            )
+        self._report_unconvertible(None, rewrite)
+
+    def _write_conversion(
+        self,
+        obj: Node,
+        keys: list[str],
+        include: dict[str, list[str]],
+        exclude: dict[str, list[str]],
+        rewrite: Any,
+    ) -> None:
+        """Edit the ``shims`` object: drop what converted, add the entries."""
+        gone = set(rewrite.converted)
+        slots: list[Member] = []
+        remaining = [k for k in keys if k not in gone and k in rewrite.unconvertible]
+        self._settle(obj, "presets", remaining, slots)
+        for key, sel in (("include", include), ("exclude", exclude)):
+            self._settle(
+                obj, key, {k: v for k, v in sel.items() if k not in gone}, slots
+            )
+        changes = self._extend(obj, "install", rewrite.install)
+        changes += self._extend(obj, "disabled", rewrite.disabled)
+        self._declare_sources(obj, rewrite)
+        # A new key takes the slot of a dropped one, so no insertion lands
+        # inside a span that is being removed.
+        for key, value_json in changes:
+            if slots:
+                rename_member(self.edits, slots.pop(0), key, value_json)
+            else:
+                append_member(self.edits, obj, key, value_json)
+        self._remove_slots(obj, slots)
+
+    def _remove_slots(self, obj: Node, slots: list[Member]) -> None:
+        """Drop the freed members; ``presets``' comment travels to ``install``."""
+        gone = {id(m) for m in slots}
+        members = obj.members
+        for index, member in enumerate(members):
+            if id(member) not in gone:
+                continue
+            tail = all(id(m) in gone for m in members[index:])
+            first_of_tail = tail and (index == 0 or id(members[index - 1]) not in gone)
+            previous = members[index - 1] if first_of_tail and index else None
+            comment = remove_member(self.edits, member, previous)
+            install = obj.member("install")
+            if comment and member.key.value == "presets" and install is not None:
+                end = self.text.find("\n", install.value.end)
+                self.edits.insert(len(self.text) if end < 0 else end, "  " + comment)
+
+    def _declare_sources(self, obj: Node, rewrite: Any) -> None:
+        """Add the sources the entries need, unless one is already declared.
+
+        A source counts as declared by its id or by its catalogue manifest URL;
+        an unknown URL may be a mirror of it, so the key is then reported rather
+        than added (a second declaration would fetch the source twice).
+        """
+        from ..shim_sources import sources_to_declare
+
+        member = obj.member("sources")
+        if member is None or member.value.kind != "arr":
+            return
+        add, unsure = sources_to_declare(_plain(member.value), rewrite.sources)
+        for key in add:
+            append_item(self.edits, member.value, json.dumps(key))
+        for key in unsure:
+            self.items.append(
+                Item(
+                    "config",
+                    "note",
+                    self.file,
+                    "shims.sources",
+                    line_of(self.text, member.value.start),
+                    key,
+                    detail=(
+                        "not added: shims.sources declares a manifest URL this tool "
+                        f"does not know, which may already be {key!r}; add it if not"
+                    ),
+                )
+            )
+
+    def _settle(self, obj: Node, key: str, remaining: Any, slots: list[Member]) -> None:
+        """Keep what is left of *key*, or free its slot when nothing is."""
+        member = obj.member(key)
+        if member is None:
+            return
+        if remaining:
+            self.edits.replace_span(member.value, json.dumps(remaining))
+        else:
+            slots.append(member)
+
+    def _extend(self, obj: Node, key: str, values: list[str]) -> list[tuple[str, str]]:
+        """Append *values* to an array member; a missing member is returned."""
+        member = obj.member(key)
+        if member is None:
+            return [(key, json.dumps(values))] if values else []
+        if member.value.kind == "arr":
+            have = {i.value for i in member.value.items if i.kind == "str"}
+            for value in values:
+                if value not in have:
+                    append_item(self.edits, member.value, json.dumps(value))
+        return []
 
     def _sweep(self, root: Node) -> None:
         """Flag a compound retired name in a place no slot above handles."""
@@ -618,6 +829,17 @@ class _ConfigPlanner:
                 "retired name in a place this tool does not rewrite; "
                 f"its replacement is {_replacement(child.value)!r}",
             )
+
+
+def _plain(node: Node) -> Any:
+    """The JSON value of *node* (strings, lists and objects; literals as text)."""
+    if node.kind == "str":
+        return node.value
+    if node.kind == "arr":
+        return [_plain(i) for i in node.items]
+    if node.kind == "obj":
+        return {str(m.key.value): _plain(m.value) for m in node.members}
+    return node.value
 
 
 def _moved_detail(row: Any) -> str:

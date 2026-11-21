@@ -26,6 +26,9 @@ __all__ = [
     "append_member",
     "line_of",
     "parse",
+    "remove_member",
+    "rename_member",
+    "trailing_comment",
 ]
 
 
@@ -272,3 +275,65 @@ def append_item(edits: Edits, arr: Node, item_json: str) -> None:
         edits.insert(arr.start + 1, item_json)
     else:
         edits.insert(arr.items[-1].end, ", " + item_json)
+
+
+def trailing_comment(text: str, member: Member) -> tuple[str | None, int]:
+    """The comment on the rest of *member*'s last line, and where it ends.
+
+    Returns ``(comment, end)``: the ``//`` or same-line ``/* */`` comment that
+    follows the member's value (and its comma), or ``(None, offset after the
+    comma)`` when the line has none.
+    """
+    probe = member.value.end
+    while probe < len(text) and text[probe] in " \t":
+        probe += 1
+    if probe < len(text) and text[probe] == ",":
+        probe += 1
+    after_comma = probe
+    while probe < len(text) and text[probe] in " \t":
+        probe += 1
+    if text.startswith("//", probe):
+        end = text.find("\n", probe)
+        end = len(text) if end < 0 else end
+        return text[probe:end].rstrip(), end
+    if text.startswith("/*", probe):
+        end = text.find("*/", probe)
+        if end >= 0 and "\n" not in text[probe:end]:
+            return text[probe : end + 2], end + 2
+    return None, after_comma
+
+
+def remove_member(
+    edits: Edits, member: Member, previous: Member | None = None
+) -> str | None:
+    """Delete ``"key": value``, the comma after it and its same-line comment.
+
+    The blank run before the key goes too when the member sits on its own line,
+    so the object does not keep an empty line.  Pass *previous* (the member
+    before it) when nothing after it stays: its comma is then removed too, so
+    the object does not end on a trailing comma.
+
+    Returns:
+        The comment that was on the member's line, so the caller can carry it
+        to the key that replaces this one.
+    """
+    text = edits.text
+    start = member.key.start
+    line_start = text.rfind("\n", 0, start) + 1
+    if text[line_start:start].strip() == "" and line_start > 0:
+        start = line_start - 1
+    comment, end = trailing_comment(text, member)
+    edits._edits.append((start, end, ""))
+    if previous is not None:
+        probe = previous.value.end
+        while probe < len(text) and text[probe] in " \t":
+            probe += 1
+        if probe < start and text[probe] == ",":
+            edits._edits.append((probe, probe + 1, ""))
+    return comment
+
+
+def rename_member(edits: Edits, member: Member, key: str, value_json: str) -> None:
+    """Reuse *member*'s slot for ``"key": value_json`` (key and value replaced)."""
+    edits.replace_string(member.key, key)
+    edits.replace_span(member.value, value_json)
