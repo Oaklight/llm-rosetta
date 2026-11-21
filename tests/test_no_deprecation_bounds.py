@@ -247,6 +247,24 @@ REMOVED_SYMBOLS = [
 ]
 
 
+#: Attributes removed from a class in 0.14.0: ``(module, class, attribute)``.
+#: The constructor keywords of the same spellings are refused separately
+#: (``_REMOVED_KWARGS`` in ``llm_rosetta.contracts.shim``).
+REMOVED_ATTRIBUTES = [
+    ("llm_rosetta.contracts.shim", "ProviderShim", "base"),
+    ("llm_rosetta.contracts.shim", "ProviderShim", "default_path"),
+    ("llm_rosetta.contracts.shim", "ProviderShim", "max_tool_description_length"),
+]
+
+
+@pytest.mark.parametrize(("module", "cls", "name"), REMOVED_ATTRIBUTES)
+def test_a_removed_attribute_is_absent(module: str, cls: str, name: str) -> None:
+    owner = getattr(importlib.import_module(module), cls)
+    assert not hasattr(owner, name), f"{module}.{cls}.{name}"
+    instance = owner(name="probe", format="chat_completions")
+    assert not hasattr(instance, name), f"{module}.{cls}().{name}"
+
+
 @pytest.mark.parametrize("module", REMOVED_MODULES)
 def test_a_removed_module_does_not_import(module: str) -> None:
     try:

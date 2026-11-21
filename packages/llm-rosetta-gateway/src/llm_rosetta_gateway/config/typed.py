@@ -455,7 +455,7 @@ def typed_path(
     """The upstream endpoint path an entry resolves to."""
     path = face_value(cfg, keys.path_key, keys.type_name) or ""
     if not path and shim is not None and wire_format == shim.format:
-        path = shim.default_path or ""
+        path = shim.connection.default_path or ""
     if not path:
         path = descriptor.path_for(wire_format) or ""
     return path or keys.default_path

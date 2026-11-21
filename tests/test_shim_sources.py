@@ -172,7 +172,7 @@ class TestRebuild:
         report = rebuild_shims()
         assert "acme--chat_completions" not in _names()
         assert report.total_shims > 0  # built-ins intact
-        assert "chat_completions" in {s.base for s in list_shims()}
+        assert "chat_completions" in {s.format for s in list_shims()}
 
     def test_programmatic_without_config(self, tmp_path: Path):
         """rebuild_shims is usable with no config file at all."""

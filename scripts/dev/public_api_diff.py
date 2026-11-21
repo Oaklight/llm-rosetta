@@ -11,7 +11,10 @@ imported from the standard library or a third party is not surface, and
 neither is an imported module object.
 
 Scope limits: only module-level names and the constructor signature of an
-exported class are compared — methods on a class are not.  The module list is
+exported class are compared — methods and other attributes on a class are not,
+so removing a property such as ``ProviderShim.base`` is invisible here.  Those
+removals are recorded in ``REMOVED_ATTRIBUTES`` in
+``tests/test_no_deprecation_bounds.py`` (and in the migration guide) instead.  The module list is
 deliberately explicit, so packages that are not listed (for example
 ``llm_rosetta_gateway.admin.*``) are out of scope.  Each tree is measured with
 its own list, read from its ``llm_rosetta/_tiers.py``; a tree without one (a

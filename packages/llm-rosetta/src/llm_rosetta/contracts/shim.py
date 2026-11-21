@@ -29,7 +29,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from collections.abc import Callable, Collection
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from llm_rosetta import retired_names
 from llm_rosetta.contracts.transform import IRTransform, Transform
@@ -462,6 +462,14 @@ _REMOVED_KWARGS: dict[str, str] = {
     "multimodal_tool_result": "tools=ToolsConfig(multimodal_result=...)",
 }
 
+#: Read-only attributes an earlier release offered, and what to read instead.
+#: Reading one raises :class:`AttributeError` naming the replacement.
+_REMOVED_ATTRIBUTES: dict[str, str] = {
+    "base": "format",
+    "default_path": "connection.default_path",
+    "max_tool_description_length": "tools.max_description_length",
+}
+
 
 # ---------------------------------------------------------------------------
 # Soft-error detection
@@ -532,8 +540,7 @@ class ProviderShim:
             format and an embedding format.
         format: Wire format within :attr:`model_type` (e.g.
             ``"chat_completions"``, ``"messages"``, ``"openai"``,
-            ``"systemone"``).  The read-only ``base`` property aliases this
-            field.
+            ``"systemone"``).
         logo: URL to the provider's logo image (SVG preferred).
         display_name: This shim's own human-readable label (e.g. ``"cluster_a"``
             on ``"acme_cluster_a--chat_completions"``).  The admin UI renders it
@@ -775,42 +782,20 @@ class ProviderShim:
         for k, v in kwargs.items():
             object.__setattr__(self, k, v)
 
-    # ── Backward-compatible alias (read-only) ───────────────────────
-    #
-    # Three read-only aliases outlive the rest of the legacy surface because
-    # in-repo and standalone-shim-repo code still reads them: ``base``
-    # (the gateway admin payload and the alcf / asksage / opencode-free
-    # tests), ``default_path`` (the gateway's typed-route resolver) and
-    # ``max_tool_description_length`` (the argo test).  Drop each once its last
-    # reader moves to ``format`` / ``connection.default_path`` /
-    # ``tools.max_description_length``.
+    if not TYPE_CHECKING:
+        # Hidden from the type checker, so a misspelt attribute stays a
+        # diagnostic instead of resolving through this hook.
 
-    @property
-    def base(self) -> str:
-        """Read-only alias for :attr:`format`.
-
-        Kept for existing readers; it warns of nothing. New code reads
-        :attr:`format`.
-        """
-        return self.format
-
-    @property
-    def default_path(self) -> str | None:
-        """Read-only alias for ``connection.default_path``.
-
-        Kept for existing readers; it warns of nothing. New code reads
-        ``connection.default_path``.
-        """
-        return self.connection.default_path
-
-    @property
-    def max_tool_description_length(self) -> int | None:
-        """Read-only alias for ``tools.max_description_length``.
-
-        Kept for existing readers; it warns of nothing. New code reads
-        ``tools.max_description_length``.
-        """
-        return self.tools.max_description_length
+        def __getattr__(self, name: str) -> Any:
+            """Name the replacement of a removed read-only attribute."""
+            replacement = _REMOVED_ATTRIBUTES.get(name)
+            if replacement is None:
+                raise AttributeError(
+                    f"{type(self).__name__!r} object has no attribute {name!r}"
+                )
+            raise AttributeError(
+                f"ProviderShim.{name} was removed in 0.14.0; read {replacement}"
+            )
 
 
 def load_providers_from_dir(

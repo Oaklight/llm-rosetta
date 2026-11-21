@@ -76,7 +76,7 @@ class TestShim:
     def test_openrouter_adopter_shim(self):
         shim = get_shim("openrouter--open_responses")
         assert shim is not None
-        assert shim.base == "open_responses"
+        assert shim.format == "open_responses"
         assert shim.connection.base_url == "https://openrouter.ai/api/v1"
         # The spec defines no response-id prefix; OpenRouter's ids pass through.
         assert shim.response_id_prefix == ""
