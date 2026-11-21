@@ -11,10 +11,10 @@ from typing import Any
 from llm_rosetta_gateway._vendor.httpserver import Response, StreamingResponse
 
 from llm_rosetta.api import ProviderType, SoftErrorPattern
-from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.contracts.routing import ResolvedRoute
 
 from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
-from llm_rosetta.observability.usage import usage_columns
+from llm_rosetta.contracts.usage import usage_columns
 
 from ..logging import (
     get_logger,

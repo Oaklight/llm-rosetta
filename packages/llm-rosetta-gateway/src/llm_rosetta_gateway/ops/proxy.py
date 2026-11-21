@@ -17,8 +17,8 @@ from dataclasses import replace as _dc_replace
 from typing import Any, ClassVar
 
 from llm_rosetta_gateway.observability.request_log import RequestLogEntry
-from llm_rosetta.observability.usage import usage_columns
-from llm_rosetta.observability.usage import DEFAULT_MODEL_TYPE
+from llm_rosetta.contracts.usage import usage_columns
+from llm_rosetta.contracts.usage import DEFAULT_MODEL_TYPE
 
 from ..middleware.auth import api_key_context_var
 from ..middleware.request_context import request_context_var

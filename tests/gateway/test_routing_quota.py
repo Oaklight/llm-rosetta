@@ -847,7 +847,7 @@ class TestWhenEveryKeyIsOut:
         ``no_credential`` is the same wrong word the demotion case was.
         """
         from llm_rosetta_gateway.quota.models import QuotaReading
-        from llm_rosetta.shims.quota_probe import QuotaWindow
+        from llm_rosetta.contracts.quota import QuotaWindow
 
         pinfo = self._bound_pinfo()
         reset = datetime.now(timezone.utc) + timedelta(seconds=1800)

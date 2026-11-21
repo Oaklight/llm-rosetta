@@ -87,7 +87,7 @@ from ..provider_shim import ProviderShim, register_shim  # noqa: F401
 # These names keep the import surface this module had before the loader was
 # split into ``_*`` modules: it imported them, so callers could take them from
 # here.  Nothing in this module reads them any more.
-from ..auth_exchange import FIELD_KEY_RE, FIELD_LIMIT, FIELD_TEXT_LIMIT  # noqa: F401
+from ...contracts.auth import FIELD_KEY_RE, FIELD_LIMIT, FIELD_TEXT_LIMIT  # noqa: F401
 from ..provider_shim import (  # noqa: F401
     TYPE_PARAM_KEYS,
     BatchDeclaration,

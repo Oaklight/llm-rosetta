@@ -31,7 +31,7 @@ import time
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
-from llm_rosetta.shims.auth_exchange import (
+from llm_rosetta.contracts.auth import (
     AuthContext,
     InteractiveSetupRequired,
 )

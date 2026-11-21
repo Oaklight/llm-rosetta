@@ -29,14 +29,14 @@ from llm_rosetta_gateway.quota.service import (
     provider_spent,
 )
 from llm_rosetta_gateway.quota.state import QUOTA_STATE
-from llm_rosetta.shims.auth_exchange import (
+from llm_rosetta.contracts.auth import (
     DEFAULT_CREDENTIAL_ROLE,
     AuthContext,
     BaseAuthExchange,
     InteractiveSetupRequired,
     credential_for,
 )
-from llm_rosetta.shims.quota_probe import (
+from llm_rosetta.contracts.quota import (
     PROBE_ROLE_API_KEY,
     ProbeRefused,
     QuotaProbeError,

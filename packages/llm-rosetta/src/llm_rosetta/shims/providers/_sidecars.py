@@ -126,7 +126,7 @@ def _load_quota_probes(path: Path) -> tuple[Any, ...]:
     A shim that serves an upstream allowance ships the probe beside its
     ``provider.yaml`` (group-level for a vendor spanning several formats,
     leaf-level for a one-off).  The module may import the standard library and
-    :mod:`llm_rosetta.shims.quota_probe` at module scope; it must not import
+    :mod:`llm_rosetta.contracts.quota` at module scope; it must not import
     ``gateway`` — the shim layer loads before the gateway, and the core
     boundary forbids it.
 
@@ -164,7 +164,7 @@ def _load_auth_exchange(path: Path) -> Any | None:
     its ``provider.yaml``: the OAuth profile needs an interactive first run, a
     rotating refresh token and a stored record, and only the vendor knows how
     those work.  The module may import the standard library and
-    :mod:`llm_rosetta.shims.auth_exchange` at module scope; it must not import
+    :mod:`llm_rosetta.contracts.auth` at module scope; it must not import
     ``gateway`` — the shim layer loads before the gateway, and the core
     boundary forbids it.
 
@@ -200,7 +200,7 @@ def _load_auth_exchange(path: Path) -> Any | None:
     if not callable(getattr(exchange, "credential", None)):
         raise ValueError(
             f"{path}: {AUTH_EXCHANGE} must implement credential(); "
-            "see llm_rosetta.shims.auth_exchange.AuthExchange"
+            "see llm_rosetta.contracts.auth.AuthExchange"
         )
     return exchange
 

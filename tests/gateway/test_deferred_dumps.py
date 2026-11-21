@@ -24,7 +24,7 @@ from llm_rosetta_gateway.ops import OpsContext
 from llm_rosetta_gateway.observability.error_dump import dump_error
 from llm_rosetta_gateway.observability.persistence import PersistenceManager
 from llm_rosetta_gateway.observability.request_log import RequestLog
-from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.contracts.routing import ResolvedRoute
 from llm_rosetta_gateway.routing import SelectionContext
 
 # ---------------------------------------------------------------------------

@@ -443,7 +443,7 @@ class TestShimAuthExchange:
 
     @pytest.fixture()
     def shims(self):
-        from llm_rosetta.shims.auth_exchange import (
+        from llm_rosetta.contracts.auth import (
             AuthContext,
             InteractiveSetupRequired,
         )

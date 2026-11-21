@@ -53,7 +53,7 @@ from .schema import (  # noqa: F401
     _migration_steps,
     _recorded_version,
 )
-from llm_rosetta.observability.usage import (  # noqa: F401, E402
+from llm_rosetta.contracts.usage import (  # noqa: F401, E402
     ADDITIVE_CACHE_STANDARDS,
     DEFAULT_MODEL_TYPE,
     LEDGER_COLUMNS,

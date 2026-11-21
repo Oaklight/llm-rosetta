@@ -15,7 +15,7 @@ from llm_rosetta_gateway.proxy import (
 )
 from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.pipeline import ConversionPipeline
-from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.contracts.routing import ResolvedRoute
 from llm_rosetta_gateway.transport._base import UpstreamResponse
 from llm_rosetta.shims.provider_shim import (
     ProviderShim,

@@ -51,7 +51,7 @@ class TestDeepSeekBalanceProbe:
         assert self.probe.match("https://opendesign.example.com/v1") is None
 
     def test_the_balance_reading_answers_availability(self):
-        from llm_rosetta.shims.quota_probe import QuotaProbeError
+        from llm_rosetta.contracts.quota import QuotaProbeError
 
         _, windows = self.probe.parse(
             {"is_available": False, "balance_infos": [{"currency": "CNY"}]}

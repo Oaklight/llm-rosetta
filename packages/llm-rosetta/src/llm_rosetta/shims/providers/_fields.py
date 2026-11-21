@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 
-from ..auth_exchange import FIELD_KEY_RE, FIELD_LIMIT, FIELD_TEXT_LIMIT
+from ...contracts.auth import FIELD_KEY_RE, FIELD_LIMIT, FIELD_TEXT_LIMIT
 from ._constants import (
     _IDENTITY_KEYS,
 )
@@ -23,7 +23,7 @@ def _declared_fields(raw: Any, source: Path) -> tuple[dict[str, Any], ...]:
     The declaration is data, so a typo in it is a load-time error rather than a
     field that silently never appears.  The rules are the panel's own
     (``FIELD_KEY_RE``, ``FIELD_LIMIT``, ``FIELD_TEXT_LIMIT`` from
-    :mod:`llm_rosetta.shims.auth_exchange`), because a key the loader accepts
+    :mod:`llm_rosetta.contracts.auth`), because a key the loader accepts
     and the panel drops is exactly the silent failure the block exists to
     prevent: every entry must be a mapping with an identifier ``key`` and a
     ``label``, its descriptive strings must fit, and an unknown key is refused

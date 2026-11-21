@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 
-from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.contracts.routing import ResolvedRoute
 
 from llm_rosetta_gateway.observability.error_dump import dump_error
 

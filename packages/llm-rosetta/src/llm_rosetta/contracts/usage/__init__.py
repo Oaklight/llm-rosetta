@@ -7,25 +7,25 @@ the gateway is one consumer, supplying credential subjects and SQLite storage.
 
 Three pieces, in the order a figure travels:
 
-- :mod:`~llm_rosetta.observability.usage.semantics` — what each provider's usage
+- :mod:`~llm_rosetta.contracts.usage.semantics` — what each provider's usage
   payload means: where its counters sit, and whether its cache counters add to
   the input or sit inside it.  Declared once, read by both the streaming
   extractor and the repair.
-- :mod:`~llm_rosetta.observability.usage.normalize` — the ledger columns, the
+- :mod:`~llm_rosetta.contracts.usage.normalize` — the ledger columns, the
   per-model-type field map that fills them, and
-  :func:`~llm_rosetta.observability.usage.normalize.token_total`, the canonical
+  :func:`~llm_rosetta.contracts.usage.normalize.token_total`, the canonical
   total every view sums.
-- :mod:`~llm_rosetta.observability.usage.report` —
-  :class:`~llm_rosetta.observability.usage.report.UsageReport`: windowed totals
+- :mod:`~llm_rosetta.contracts.usage.report` —
+  :class:`~llm_rosetta.contracts.usage.report.UsageReport`: windowed totals
   per subject and per model type, plus the traffic that no subject owns, kept
   so the parts add up to the whole.
-- :mod:`~llm_rosetta.observability.usage.ledger` —
-  :class:`~llm_rosetta.observability.usage.ledger.UsageLedger`: the same ledger
+- :mod:`~llm_rosetta.contracts.usage.ledger` —
+  :class:`~llm_rosetta.contracts.usage.ledger.UsageLedger`: the same ledger
   with no store behind it, for a process that has no database.
 
 A library user, with no gateway and no database::
 
-    from llm_rosetta.observability.usage import UsageLedger
+    from llm_rosetta.contracts.usage import UsageLedger
 
     ledger = UsageLedger()
     ledger.record(response["usage"], model="gpt-5-nano", subject="batch-7")
@@ -33,7 +33,7 @@ A library user, with no gateway and no database::
 
 Building the report over rows someone else stored is the same call::
 
-    from llm_rosetta.observability.usage import UsageReport
+    from llm_rosetta.contracts.usage import UsageReport
 
     report = UsageReport.build(groups=rows)      # subjects=() -> all unattributed
     report.total("24h")
@@ -41,7 +41,7 @@ Building the report over rows someone else stored is the same call::
 The gateway adds the two things a library user has none of — which subjects may
 be attributed, and where the rows are stored::
 
-    from llm_rosetta.observability.usage import UsageReport
+    from llm_rosetta.contracts.usage import UsageReport
 
     report = UsageReport.build(
         groups=await persistence.query_usage_groups(),

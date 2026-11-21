@@ -12,7 +12,7 @@ import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from llm_rosetta.shims.quota_probe import InBandSignal, QuotaWindow
+from llm_rosetta.contracts.quota import InBandSignal, QuotaWindow
 
 # Reading statuses.  ``ok`` means the probe answered and at least one window
 # was understood; the others say why there is nothing to show.

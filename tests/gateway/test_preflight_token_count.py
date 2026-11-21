@@ -262,7 +262,7 @@ class TestPreflightUsageIntegration:
 class TestPreflightSkipSameFormat:
     def test_skip_when_source_equals_target(self):
         """Preflight should not fire when source == target provider."""
-        from llm_rosetta.routing import ResolvedRoute
+        from llm_rosetta.contracts.routing import ResolvedRoute
 
         route = ResolvedRoute(
             source_provider="messages",

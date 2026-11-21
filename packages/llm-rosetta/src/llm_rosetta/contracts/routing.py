@@ -1,15 +1,20 @@
-"""Routing layer — model/provider/shim resolution contract.
+"""The routing contract: :class:`ResolvedRoute` and the :class:`Router` protocol.
 
 Defines the :class:`ResolvedRoute` data contract and :class:`Router`
 protocol for resolving a model name into a target provider, shim config,
 capabilities, and reasoning overrides.
 
-This module lives in the core library (no network or gateway deps) so
-any consumer (gateway, argo-proxy, CLI tools) can depend on it.
+This is the core-layer contract any consumer (gateway, argo-proxy, CLI
+tools) can depend on: no network and no gateway dependency.  Gateway
+*selection* — stages, strategies and affinity — is a different concern and
+lives in :mod:`llm_rosetta_gateway.routing`.
 
 Transport config (e.g. :class:`~gateway.transport.ProviderInfo`) is
 **not** part of the route — it's transport-specific and returned
 separately by each :class:`Router` implementation.
+
+``ProviderType`` and ``SoftErrorPattern`` appear in the route's fields and
+are re-exported so a router needs one import.
 """
 
 from __future__ import annotations
@@ -90,3 +95,6 @@ class Router(Protocol):
             KeyError: If the model is not in the routing table.
         """
         ...
+
+
+__all__ = ["ProviderType", "ResolvedRoute", "Router", "SoftErrorPattern"]

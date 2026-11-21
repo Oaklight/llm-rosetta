@@ -11,7 +11,7 @@ from typing import Any
 from llm_rosetta_gateway._vendor.httpserver import Response
 
 from llm_rosetta.api import ProviderType, SoftErrorPattern, ToolNameMap, resolve_format
-from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.contracts.routing import ResolvedRoute
 
 from llm_rosetta_gateway.observability.capture import CapturedRequest, CaptureState
 from llm_rosetta_gateway.observability.error_dump import dump_error
@@ -675,7 +675,7 @@ async def decide_on_refusal(
         # is rate limited.  The refusals were counted above, so the provider
         # sinks — or is disabled — for the next request; for this one it has
         # nothing left to give, and another provider may serve.
-        from llm_rosetta.shims.quota_probe import InBandSignal
+        from llm_rosetta.contracts.quota import InBandSignal
 
         refusal = QuotaRefusal.EXHAUSTED
         signal = InBandSignal(cooldown_seconds=None, reason="upstream answered 429")

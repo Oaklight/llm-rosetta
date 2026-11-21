@@ -15,7 +15,7 @@ from ..routing import (
     classify_unavailable,
 )
 from llm_rosetta.api import ProviderType
-from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.contracts.routing import ResolvedRoute
 
 from ..providers import BASE_FORMATS
 from ..transport import ProviderInfo

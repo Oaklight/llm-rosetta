@@ -8,10 +8,10 @@ through them:
 
 * ``llm_rosetta.api`` (the flat host surface; an imported name must be in its
   ``__all__``);
-* ``llm_rosetta.shims.auth_exchange`` and ``llm_rosetta.shims.quota_probe``
+* ``llm_rosetta.contracts.auth`` and ``llm_rosetta.contracts.quota``
   (the contracts external shims already import);
-* ``llm_rosetta.routing``;
-* ``llm_rosetta.observability.usage`` as a package, never one of its submodules.
+* ``llm_rosetta.contracts.routing``;
+* ``llm_rosetta.contracts.usage`` as a package, never one of its submodules.
 
 Where an allowed module defines ``__all__``, an imported name must be in it.
 
@@ -63,13 +63,13 @@ _NON_LITERAL = "<non-literal dynamic import>"
 #: them, is allowed, except under a package-only path.
 _SURFACE = (
     "llm_rosetta.api",
-    "llm_rosetta.shims.auth_exchange",
-    "llm_rosetta.shims.quota_probe",
-    "llm_rosetta.routing",
-    "llm_rosetta.observability.usage",
+    "llm_rosetta.contracts.auth",
+    "llm_rosetta.contracts.quota",
+    "llm_rosetta.contracts.routing",
+    "llm_rosetta.contracts.usage",
 )
 #: Surface paths whose submodules are not part of the surface.
-_PACKAGE_ONLY = frozenset({"llm_rosetta.observability.usage"})
+_PACKAGE_ONLY = frozenset({"llm_rosetta.contracts.usage"})
 
 
 @dataclass(frozen=True)
@@ -233,8 +233,8 @@ def test_the_scan_sees_every_import_form():
         ("llm_rosetta.formats", "FORMAT_SPECS")
     }
     # A submodule imported by name is the submodule, not an attribute.
-    assert modules("from llm_rosetta.shims import quota_probe") == {
-        ("llm_rosetta.shims.quota_probe", "")
+    assert modules("from llm_rosetta.shims import scaffold") == {
+        ("llm_rosetta.shims.scaffold", "")
     }
     assert modules("import llm_rosetta.shims.scaffold as s") == {
         ("llm_rosetta.shims.scaffold", "")
@@ -247,8 +247,8 @@ def test_the_scan_sees_every_import_form():
     ) == {("llm_rosetta.auto_detect", "detect_provider")}
     assert modules(
         "from typing import TYPE_CHECKING\n"
-        "if TYPE_CHECKING:\n    from llm_rosetta.routing import ResolvedRoute"
-    ) == {("llm_rosetta.routing", "ResolvedRoute")}
+        "if TYPE_CHECKING:\n    from llm_rosetta.contracts.routing import ResolvedRoute"
+    ) == {("llm_rosetta.contracts.routing", "ResolvedRoute")}
     assert modules('import importlib\nimportlib.import_module("llm_rosetta.x")') == {
         ("llm_rosetta.x", "")
     }
@@ -283,8 +283,8 @@ def test_the_rule_is_strict_for_the_gateway_source():
 def test_the_surface_rule():
     for module in _SURFACE:
         assert _is_allowed(module)
-    assert _is_allowed("llm_rosetta.routing.strategies")
-    assert not _is_allowed("llm_rosetta.observability.usage.report")
+    assert _is_allowed("llm_rosetta.contracts.routing.strategies")
+    assert not _is_allowed("llm_rosetta.contracts.usage.report")
     assert not _is_allowed("llm_rosetta.observability")
     assert not _is_allowed("llm_rosetta.shims")
     assert not _is_allowed("llm_rosetta")
@@ -304,11 +304,11 @@ def test_private_names_and_modules_are_private():
 def test_an_undeclared_name_on_the_surface_is_reported():
     edges = core_edges(
         "x.py",
-        "from llm_rosetta.routing import ResolvedRoute, NoSuchName",
+        "from llm_rosetta.contracts.routing import ResolvedRoute, NoSuchName",
         ("llm_rosetta_gateway",),
     )
     assert [line.split(" ", 1)[1] for line in undeclared_names(edges)] == [
-        "llm_rosetta.routing.NoSuchName"
+        "llm_rosetta.contracts.routing.NoSuchName"
     ]
     # The flat surface is checked against its own ``__all__`` too.
     api = core_edges("x.py", "from llm_rosetta.api import NoSuchName", ("p",))

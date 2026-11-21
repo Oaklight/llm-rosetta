@@ -25,7 +25,7 @@ from __future__ import annotations
 from llm_rosetta_gateway._vendor import jsonx
 from llm_rosetta.api import ProviderType
 from llm_rosetta_gateway.observability.maintenance import Registry
-from llm_rosetta.routing import ResolvedRoute
+from llm_rosetta.contracts.routing import ResolvedRoute
 
 from ..model_types import ModelTypeDescriptor
 from ..providers import BASE_FORMATS, build_provider_info

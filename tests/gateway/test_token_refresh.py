@@ -555,7 +555,7 @@ class _FakeExchange:
         return self.interactive
 
     async def credential(self, ctx: Any) -> str:
-        from llm_rosetta.shims.auth_exchange import InteractiveSetupRequired
+        from llm_rosetta.contracts.auth import InteractiveSetupRequired
 
         self.calls += 1
         self.contexts.append(ctx)
@@ -568,7 +568,7 @@ class _FakeExchange:
 
 
 def _exchange_pinfo(exchange: _FakeExchange, **kw: Any) -> ProviderInfo:
-    from llm_rosetta.shims.auth_exchange import AuthContext
+    from llm_rosetta.contracts.auth import AuthContext
     from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
 
     return ProviderInfo(

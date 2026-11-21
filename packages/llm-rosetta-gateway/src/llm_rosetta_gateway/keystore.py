@@ -20,7 +20,7 @@ from typing import Any
 
 from llm_rosetta_gateway._vendor import aiosqlite
 from llm_rosetta_gateway.observability.maintenance import Registry, StepContext
-from llm_rosetta.observability.usage import INTERNAL_LABEL, INTERNAL_SUBJECT
+from llm_rosetta.contracts.usage import INTERNAL_LABEL, INTERNAL_SUBJECT
 
 from .maintenance.keystore import build_registry
 

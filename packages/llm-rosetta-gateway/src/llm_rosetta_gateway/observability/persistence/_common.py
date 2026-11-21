@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from typing import Any
 from urllib.parse import quote
 
-from llm_rosetta.observability.usage import ADDITIVE_CACHE_STANDARDS
+from llm_rosetta.contracts.usage import ADDITIVE_CACHE_STANDARDS
 
 from ..retention import RetentionPolicy
 

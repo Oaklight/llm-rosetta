@@ -1,8 +1,10 @@
-"""Usage metering for the translation core.
+"""Deprecated: the 0.13 ``observability`` package, kept as a forwarder.
 
 What the tokens add up to, and for whom, is a property of a conversion:
-:mod:`llm_rosetta.observability.usage` holds the semantics, and the pipeline
-reads them when it normalizes a response's usage block.
+:mod:`llm_rosetta.contracts.usage` holds the semantics (it was
+``llm_rosetta.observability.usage`` during the 0.14 development cycle and
+never shipped there), and the pipeline reads them when it normalizes a
+response's usage block.  The usage names below resolve to that package.
 
 The rest of the old ``observability`` package — metrics, the request log,
 SQLite persistence, the ops log, error dumps, capture, maintenance, profiling,
@@ -15,9 +17,9 @@ The old paths are deprecated and will be removed in a later release; until
 then importing ``llm_rosetta.observability.metrics`` warns and resolves to the *same* module
 object as its gateway counterpart, so a store is never opened twice.
 
-Typical usage::
+New code imports the usage names from their home::
 
-    from llm_rosetta.observability import UsageLedger, token_total
+    from llm_rosetta.contracts.usage import UsageLedger, token_total
 
     ledger = UsageLedger()
     ledger.record(response["usage"], model="gpt-5-nano")
@@ -39,8 +41,7 @@ _ALIAS = "llm_rosetta.observability"
 _TARGET = "llm_rosetta_gateway.observability"
 
 #: Submodules that moved with the telemetry stack.  The alias finder below
-#: matches exactly these names, so ``llm_rosetta.observability.usage`` is still
-#: served from this package.
+#: matches exactly these names and nothing else.
 _MOVED_SUBMODULES = frozenset(
     {
         "capture",
@@ -96,16 +97,16 @@ class _AliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
 if not any(isinstance(finder, _AliasFinder) for finder in sys.meta_path):
     sys.meta_path.insert(0, _AliasFinder())
 
-#: Public name -> module that defines it, for the part that stayed here.
+#: Public name -> module that defines it, for the usage names (now in contracts).
 _LAZY: dict[str, str] = {
-    "LEDGER_COLUMNS": ".usage",
-    "USAGE_WINDOW_LABELS": ".usage",
-    "USAGE_WINDOWS": ".usage",
-    "UsageLedger": ".usage",
-    "UsageReport": ".usage",
-    "cache_is_additive": ".usage",
-    "token_total": ".usage",
-    "usage_columns": ".usage",
+    "LEDGER_COLUMNS": "llm_rosetta.contracts.usage",
+    "USAGE_WINDOW_LABELS": "llm_rosetta.contracts.usage",
+    "USAGE_WINDOWS": "llm_rosetta.contracts.usage",
+    "UsageLedger": "llm_rosetta.contracts.usage",
+    "UsageReport": "llm_rosetta.contracts.usage",
+    "cache_is_additive": "llm_rosetta.contracts.usage",
+    "token_total": "llm_rosetta.contracts.usage",
+    "usage_columns": "llm_rosetta.contracts.usage",
 }
 
 

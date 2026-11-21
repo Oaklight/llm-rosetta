@@ -6,7 +6,7 @@ import json
 from collections.abc import AsyncIterator
 from typing import Any
 
-from llm_rosetta.observability.usage import DEFAULT_MODEL_TYPE
+from llm_rosetta.contracts.usage import DEFAULT_MODEL_TYPE
 
 from ._common import (
     _and,

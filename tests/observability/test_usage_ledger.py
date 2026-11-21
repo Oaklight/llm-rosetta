@@ -15,15 +15,15 @@ from typing import Any
 import pytest
 
 from llm_rosetta_gateway.observability import PersistenceManager
-from llm_rosetta.observability.usage import (
+from llm_rosetta.contracts.usage import (
     LEDGER_COLUMNS,
     USAGE_WINDOW_LABELS,
     UsageLedger,
     UsageReport,
     usage_columns,
 )
-from llm_rosetta.observability.usage.normalize import MODEL_TYPES
-from llm_rosetta.observability.usage.report import NO_SUBJECT_LABEL
+from llm_rosetta.contracts.usage.normalize import MODEL_TYPES
+from llm_rosetta.contracts.usage.report import NO_SUBJECT_LABEL
 
 
 def _stamp(**kwargs) -> tuple[str, float]:

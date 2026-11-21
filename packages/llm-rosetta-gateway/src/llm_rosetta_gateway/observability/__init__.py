@@ -9,7 +9,7 @@ It lives in the gateway distribution because every consumer is a proxy
 server: the translation core neither writes a database nor counts requests.
 What *is* core-side is the meaning of a usage report — what the tokens add
 up to, and for whom — which stays in
-:mod:`llm_rosetta.observability.usage` and is re-exported from here for
+:mod:`llm_rosetta.contracts.usage` and is re-exported from here for
 convenience.
 
 The package root resolves its names lazily (PEP 562): importing a

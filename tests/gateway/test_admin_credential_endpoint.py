@@ -30,7 +30,7 @@ from llm_rosetta_gateway.transport.provider_info import (
     ProviderInfo,
     openai_auth,
 )
-from llm_rosetta.shims.auth_exchange import AuthContext, AuthExchangeError
+from llm_rosetta.contracts.auth import AuthContext, AuthExchangeError
 
 RECORD = {"access_token": "a", "refresh_token": "r", "id_token": "i", "client_id": "c"}
 
@@ -55,7 +55,7 @@ class _Exchange:
         if self.credential_fails:
             raise AuthExchangeError("the token endpoint is unreachable")
         if self._record is None:
-            from llm_rosetta.shims.auth_exchange import InteractiveSetupRequired
+            from llm_rosetta.contracts.auth import InteractiveSetupRequired
 
             raise InteractiveSetupRequired("nothing installed")
         return "minted-token"
@@ -563,7 +563,7 @@ class TestPut:
 
     def test_an_exchange_written_against_the_base_class_says_so_too(self):
         """``BaseAuthExchange.install`` raises; presence is not the question."""
-        from llm_rosetta.shims.auth_exchange import BaseAuthExchange
+        from llm_rosetta.contracts.auth import BaseAuthExchange
 
         class _BaseOnly(BaseAuthExchange):
             async def credential(self, ctx):  # pragma: no cover - never called
@@ -613,7 +613,7 @@ class TestDeleteWithoutRevoke:
 
     @staticmethod
     def _base_only(path):
-        from llm_rosetta.shims.auth_exchange import BaseAuthExchange
+        from llm_rosetta.contracts.auth import BaseAuthExchange
 
         class _BaseOnly(BaseAuthExchange):
             def needs_interactive_setup(self, ctx):

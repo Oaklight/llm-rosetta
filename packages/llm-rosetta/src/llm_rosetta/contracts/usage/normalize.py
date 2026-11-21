@@ -36,7 +36,7 @@ __all__ = [
 #: canonical total; the rest are a breakdown of it, not parts that add up to it
 #: (reasoning rides inside the output, and cache is additive for some standards
 #: and a subset of the input for others — see
-#: :mod:`llm_rosetta.observability.usage.semantics`).
+#: :mod:`llm_rosetta.contracts.usage.semantics`).
 LEDGER_COLUMNS: tuple[str, ...] = (
     "input_tokens",
     "output_tokens",

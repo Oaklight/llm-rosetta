@@ -5,7 +5,7 @@ registry: no relative imports, and nothing may touch the network at import
 time.
 
 Export ``PROBES`` — a tuple of objects implementing
-:class:`llm_rosetta.shims.quota_probe.QuotaProbe`.  The gateway resolves the
+:class:`llm_rosetta.contracts.quota.QuotaProbe`.  The gateway resolves the
 one named by the shim's ``quota.probe`` against this tuple, and owns the HTTP
 call, the cache and the admin surface; this module owns only what the vendor
 answers.

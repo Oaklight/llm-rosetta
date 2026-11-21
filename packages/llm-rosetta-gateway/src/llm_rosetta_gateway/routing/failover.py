@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from llm_rosetta.routing import ResolvedRoute
+    from llm_rosetta.contracts.routing import ResolvedRoute
 
     from ..transport import ProviderInfo
     from .context import SelectionContext
