@@ -28,6 +28,14 @@ from llm_rosetta_gateway.observability.sanitize import scrub_credential_patterns
 # callers import inside the function, so a patch on this module reaches them.
 # The read side lives in .allowance and the in-band signals in .signals; this
 # module re-exports both so those imports and patches keep working.
+#
+# One exception: code that lives in .allowance itself reads these names from
+# its own globals, so a patch on this module does not reach it.
+# ``allowance.routing_facts`` calls ``provider_spent`` that way -- patching
+# ``quota.service.provider_spent`` leaves its result unchanged, and only
+# ``quota.allowance.provider_spent`` flips it.  A test that patches the facade
+# and asserts on the routing snapshot would be green for the wrong reason;
+# patch the defining module instead.
 from ._common import provider_config_key  # noqa: F401
 from .allowance import (  # noqa: F401
     READING_MAX_AGE_SECONDS,

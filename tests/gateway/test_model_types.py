@@ -1,4 +1,4 @@
-"""Tests for the model type registry (gateway/model_types.py)."""
+"""Tests for the model type registry (gateway.model_types)."""
 
 from __future__ import annotations
 
