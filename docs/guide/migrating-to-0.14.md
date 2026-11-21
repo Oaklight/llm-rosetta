@@ -219,6 +219,7 @@ connection:
 | `llm_rosetta.routing` | `llm_rosetta.contracts.routing` | 0.13.0 兼容转发模块，转发 `ProviderType`、`ResolvedRoute`、`Router`。导入时发出 `DeprecationWarning`，0.15.0 移除。 |
 | `llm_rosetta.capabilities` | `ProviderShim`、`ReasoningCapability`：`llm_rosetta.contracts.shim`。`ConversionContext`：`llm_rosetta.converters.base`。能力 pass 在转换管道内部运行，没有公开路径。 | 0.13.0 兼容转发模块，转发 0.13.0 的十二个名字。导入时发出 `DeprecationWarning`，0.15.0 移除。 |
 | `llm_rosetta.types.ir.extensions` | `llm_rosetta.types.ir.extensions_experimental` | 0.13.0 兼容转发模块，转发十个 0.13.0 名字（它在 0.13.0 中已被弃用）。导入时发出 `DeprecationWarning`，在 0.15.0 移除。 |
+| `llm_rosetta.shims.providers`（0.13.0 的 loader） | `load_providers`、`get_model_list_transform`、`register_shim`：`llm_rosetta.api`。`load_providers_from_dir`：`llm_rosetta.shims`。`ProviderShim`、`ReasoningCapability`：`llm_rosetta.contracts.shim`。`register_model_list_transform`、`ModelListTransform`：没有公开位置（由 shim 在 `transforms.py` 中导出 `model_list_transform`）。 | 0.13.0 兼容转发模块，转发八个 0.13.0 名字（PR [#1668](https://github.com/Oaklight/llm-rosetta/pull/1668)）。每个名字第一次被访问时发出 `DeprecationWarning`，导入包本身不发。0.15.0 移除。 |
 | `llm_rosetta.capabilities.description_limit`、`.enforcement`、`.intrinsic_history`、`.tool_names` | 无：这些 pass 是内部实现（`llm_rosetta.ir.passes`） | 已移除 |
 | 从 `llm_rosetta.shims.provider_shim` 导入的 `ProviderShim`、`ConnectionConfig`、`ToolsConfig`、`ReasoningCapability`、`VendorManifest`、`QuotaDeclaration`、`BatchDeclaration`、`SoftErrorPattern`、`TYPE_PARAM_KEYS` 及字面量类型 | `llm_rosetta.contracts.shim` | 已弃用的再导出，是同一批对象，运行时不告警；0.15.0 移除。注册表函数（`register_shim`、`get_shim`、`list_shims` 等）仍在 `llm_rosetta.shims.provider_shim`。 |
 | `llm_rosetta.api` 中的 `SURFACE_VERSION` | `llm_rosetta.contracts.SURFACE_VERSION` | `llm_rosetta.api` 再导出同一个对象；无需修改 |
@@ -283,6 +284,7 @@ grep -rnE "converters\.(openai_chat|openai_responses|anthropic|google_genai|goog
 
 - **`llm_rosetta.gateway`** 仍可导入。它会告警并转发到 `llm_rosetta_gateway`；其文字只说明它已弃用、将在后续版本移除，不写具体版本。请现在就直接导入 `llm_rosetta_gateway`。`llm_rosetta.observability` finder 与 `llm-rosetta[gateway]` extra 条件相同。
 - **`llm_rosetta.routing` 与 `llm_rosetta.capabilities`** 仍可导入，名字与 0.13.0 完全相同。导入时各发出 `DeprecationWarning`，0.15.0 移除；见[契约表](#contracts-home)。
+- **`llm_rosetta.shims.providers`** 仍能给出其 0.13.0 loader 导出的八个名字，返回同一对象。每个名字第一次被访问时发出 `DeprecationWarning` 并写出新位置；该模块在 0.15.0 移除。请改从 `llm_rosetta.api` 导入；见[契约表](#contracts-home)。
 - **持久化的内部键**不会改名：`provider_metadata` 标签 `openai_chat`、`google`、`anthropic`，转换器标签，原生工具定义，以及已提交的基准基线，有意保留旧写法。
 - **已退役的提供方、shim 与模型类型名称**（见下节）不再解析。它们会抛错，错误信息写出替代名称。
 
