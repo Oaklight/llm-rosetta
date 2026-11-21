@@ -60,7 +60,7 @@ from typing import Any
 from llm_rosetta._vendor import httpclient
 from llm_rosetta.contracts.shim import ProviderShim
 from llm_rosetta.shims.provider_shim import list_shims
-from llm_rosetta.shims.providers import load_providers
+from llm_rosetta.shims._loader import load_providers
 
 # Lifecycle/echo fields the OpenAI Responses profile emits on top of the spec.
 OPENAI_LIFECYCLE_FIELDS: tuple[str, ...] = (

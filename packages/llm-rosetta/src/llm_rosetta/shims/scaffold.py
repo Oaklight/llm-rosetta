@@ -903,7 +903,7 @@ def _check(root: Path, leaf: Path, name: str) -> int:
     loader's own complaint is printed and turned into an exit code rather than
     raised: the operator typed flags, not a stack trace.
     """
-    from llm_rosetta.shims.providers import load_providers_from_dir
+    from llm_rosetta.shims._loader import load_providers_from_dir
 
     relative = leaf.relative_to(root).as_posix()
     try:
@@ -1585,7 +1585,7 @@ def _field_problems(root: Path) -> list[Finding]:
     loader's own validator here turns that into a finding that names the file,
     before the tree is installed rather than on the gateway's first read.
     """
-    from llm_rosetta.shims.providers import _declared_fields
+    from llm_rosetta.shims._loader import _declared_fields
 
     findings: list[Finding] = []
     for provider_yaml in sorted(root.rglob("provider.yaml")):

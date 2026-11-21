@@ -13,7 +13,8 @@ from pathlib import Path
 import pytest
 
 from llm_rosetta.shims.provider_shim import _reset_registry
-from llm_rosetta.shims.providers import load_providers, load_providers_from_dir
+from llm_rosetta.shims import _loader as providers_module
+from llm_rosetta.shims._loader import load_providers, load_providers_from_dir
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/dev/new_shim.py"
 
@@ -475,7 +476,6 @@ class TestGatewayCommand:
         assert (root / "acme" / "llm" / "provider.yaml").is_file()
 
     def test_a_failed_load_check_reaches_the_shell(self, monkeypatch, root, tmp_path):
-        from llm_rosetta.shims import providers as providers_module
         from llm_rosetta_gateway import cli
 
         def refuse(*_args, **_kwargs):

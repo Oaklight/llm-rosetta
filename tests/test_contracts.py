@@ -39,7 +39,7 @@ def test_the_loader_reads_the_names_from_contracts():
     # The loader modules import the constants instead of restating the strings.
     from pathlib import Path
 
-    providers = Path(contracts.__file__).parents[1] / "shims" / "providers"
+    providers = Path(contracts.__file__).parents[1] / "shims" / "_loader"
     for loader in ("_sidecars.py", "_leaf.py", "_manifest.py", "__init__.py"):
         source = (providers / loader).read_text(encoding="utf-8")
         for literal in (

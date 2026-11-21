@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.shims.providers import (
+from llm_rosetta.shims._loader import (
     _jina_model_list_transform,
     _cohere_model_list_transform,
     get_model_list_transform,

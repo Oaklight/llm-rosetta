@@ -133,6 +133,7 @@ declare the differences.
 | `AuthExchange` | `contracts/auth.py` | Credential-exchange contract a shim ships in `auth.py` |
 | `QuotaProbe` | `contracts/quota.py` | Allowance-probe contract a shim ships in `quota.py` |
 | `Transform` types and primitives | `contracts/transform.py` | `NamedTransform`, `strip_fields`, `hoist_late_system_messages`, ... (implementations in `ir/primitives/`) |
+| Loader | `shims/_loader/` | Reads a shim tree: directory walk, `provider.yaml` parsing, sidecars, vendor manifests, `provider.schema.json` (internal) |
 | Built-in shims | `shims/providers/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type |
 | Vendor manifest | `shims/providers/<vendor>/provider.yaml` | Optional per-vendor defaults every leaf inherits: `connection:` (the credential) plus the vendor's own `logo` / `group` / `group_label`; `auth.py` sits beside it |
 | Tree contract | `shims/_shim_template/` | The path rules (`<vendor>[/<lane>]/<type>[/<format>]/provider.yaml`), the file allow-list, and the skeleton `shims new` renders; `shims check` reports a tree that departs from it, `shims migrate --write` moves one onto it |
@@ -242,7 +243,7 @@ Core modules (`packages/llm-rosetta/src/llm_rosetta/`):
 | `ir/` | IR logic: `primitives/`, `tools/`, `passes/` |
 | `types/` | Typed IR dataclasses in `types/ir/`; provider shapes for reference in `types/messages/`, `types/openai/`, `types/google/` |
 | `contracts/` | The extension contracts: `shim.py`, `transform.py`, `auth.py`, `quota.py`, `routing.py`, `usage/` |
-| `shims/` | `provider_shim.py` (the registry), and `providers/` (one manifest per vendor/model-type/format) |
+| `shims/` | `provider_shim.py` (the registry), `_loader/` (the code that reads a shim tree), and `providers/` (one manifest per vendor/model-type/format; its `__init__` also forwards the 0.13.0 loader names, deprecated, until 0.15.0) |
 | `pipeline/` | Chat and typed conversion pipelines |
 | `fidelity/` | Fidelity baseline and checker |
 | `profiling/` | The profiler |

@@ -13,6 +13,7 @@ from llm_rosetta_gateway.config import (
     config_lock,
 )
 from _moved_vendors import load_providers_with_moved
+from llm_rosetta.shims import load_providers_from_dir
 
 
 def _minimal_raw(**server_overrides) -> dict:
@@ -214,7 +215,6 @@ class TestShimConnectionDefaults:
 
     def test_shim_custom_auth_header_applied(self, tmp_path):
         from llm_rosetta.shims import unregister_shim
-        from llm_rosetta.shims.providers import load_providers_from_dir
 
         leaf = tmp_path / "acme"
         leaf.mkdir()

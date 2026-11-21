@@ -180,6 +180,10 @@
     {
       "key": "llm_rosetta.shims.provider_shim::resolve_base::removed",
       "reason": "Removed in 0.14.0 (issue 919, P6): the deprecated alias is gone; use llm_rosetta.shims.resolve_format. Listed once shims.provider_shim joined the compared modules (compat tier, #1657)."
+    },
+    {
+      "key": "llm_rosetta.shims.providers::yaml_load::removed",
+      "reason": "Not forwarded (#1660 M1): in 0.13.0 the loader imported the vendored YAML parser (llm_rosetta._vendor.yaml.load) for its own use, and the inferred surface counts that import as a re-export. The compat module forwards the loader names 0.13.0 defined or re-exported from the shim layer; a YAML parser was never part of it."
     }
   ]
 }

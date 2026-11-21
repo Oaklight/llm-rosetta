@@ -44,6 +44,11 @@ KEPT_DEPRECATIONS = dict(
             "the llm_rosetta.observability finder forwards to the gateway (C02)",
         ),
         (
+            "llm_rosetta/shims/providers/__init__.py",
+            "0.13.0 shim loader path, forwards its names to llm_rosetta.shims._loader "
+            "for one minor",
+        ),
+        (
             "llm_rosetta/routing.py",
             "0.13.0 flat module, forwards to llm_rosetta.contracts.routing for one minor",
         ),

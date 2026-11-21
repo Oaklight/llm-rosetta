@@ -28,6 +28,7 @@ from llm_rosetta.retired_names import (
     retired_name_message,
 )
 from llm_rosetta.shims import ProviderShim, get_shim, resolve_model_type
+from llm_rosetta.shims._loader import load_providers_from_dir
 
 BODY = dict(
     model="gpt-4o",
@@ -332,7 +333,6 @@ def test_registry_and_pipelines_reject_a_retired_model_type(
 def test_a_shim_yaml_with_a_retired_model_type_is_rejected(
     row: retired_names.RetiredName, tmp_path
 ) -> None:
-    from llm_rosetta.shims.providers import load_providers_from_dir
 
     leaf = tmp_path / "leaf"
     leaf.mkdir()
@@ -350,7 +350,6 @@ def test_a_shim_yaml_with_a_retired_model_type_is_rejected(
 def test_a_shim_yaml_with_a_retired_type_section_is_rejected(
     old: str, new: str, fmt: str, tmp_path
 ) -> None:
-    from llm_rosetta.shims.providers import load_providers_from_dir
 
     leaf = tmp_path / "leaf"
     leaf.mkdir()

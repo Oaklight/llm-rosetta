@@ -24,6 +24,7 @@ from llm_rosetta_gateway.shims.catalog import (
     canonical_shim_for,
     find_legacy_source_package,
 )
+from llm_rosetta.api import load_providers
 
 URL = "http://upstream.invalid/v1"
 
@@ -184,7 +185,6 @@ def test_every_shim_replacement_is_registered_or_packaged() -> None:
     """
     from llm_rosetta.retired_names import moved_vendor
     from llm_rosetta.shims import list_shims
-    from llm_rosetta.shims.providers import load_providers
     from llm_rosetta_gateway.shims import find_source_package
 
     load_providers()

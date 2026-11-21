@@ -31,7 +31,7 @@ import pytest
 
 from llm_rosetta.contracts.quota import PROBE_ROLE_API_KEY, probe_credential_role
 from llm_rosetta.shims import providers as providers_pkg
-from llm_rosetta.shims.providers import load_providers
+from llm_rosetta.shims._loader import load_providers
 
 PROVIDERS = Path(providers_pkg.__file__).parent
 

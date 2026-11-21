@@ -15,7 +15,7 @@ import pytest
 
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.shims import get_shim
-from llm_rosetta.shims.providers import get_model_list_transform
+from llm_rosetta.api import get_model_list_transform
 from llm_rosetta_gateway.providers import build_provider_info
 
 SHIM = "openai_chatgpt--open_responses"

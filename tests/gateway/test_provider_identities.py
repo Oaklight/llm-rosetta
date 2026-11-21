@@ -8,6 +8,7 @@ from llm_rosetta_gateway.admin.routes import config as admin_config
 from llm_rosetta_gateway.config import GatewayConfig, ProviderIdentity
 from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
 from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
+from llm_rosetta.api import load_providers
 
 SHIM_NAME = "acme--embedding"
 
@@ -180,7 +181,6 @@ class TestProviderIdentities:
             )
 
     def test_provider_named_after_a_chat_shim_keeps_its_identity(self, embeddings_shim):
-        from llm_rosetta.shims.providers import load_providers
 
         load_providers()
         cfg = GatewayConfig(
@@ -304,7 +304,6 @@ class TestEndpointResolution:
         )
 
     def test_mismatched_endpoint_shim_is_rejected(self):
-        from llm_rosetta.shims.providers import load_providers
 
         load_providers()
         with pytest.raises(ValueError, match="serves llm, not embedding"):
@@ -407,7 +406,6 @@ class TestBuiltinEndpointShims:
         ],
     )
     def test_embeddings_shims(self, shim_name, type_name, fmt, url):
-        from llm_rosetta.shims.providers import load_providers
 
         load_providers()
         cfg = GatewayConfig(
@@ -438,7 +436,6 @@ class TestBuiltinEndpointShims:
         ],
     )
     def test_rerank_shims(self, shim_name, fmt, url):
-        from llm_rosetta.shims.providers import load_providers
 
         load_providers()
         cfg = GatewayConfig(

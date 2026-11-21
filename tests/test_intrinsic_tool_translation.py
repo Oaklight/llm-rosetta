@@ -13,6 +13,7 @@ from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.types.ir import IRRequest
+from llm_rosetta.shims._loader import load_providers
 
 
 def _ir_with_intrinsic_history(kind: str = "web_search") -> IRRequest:
@@ -120,7 +121,6 @@ class TestPipelineKeepsIntrinsicHistory:
     }
 
     def test_anthropic_to_responses_history_stays_native(self):
-        from llm_rosetta.shims.providers import load_providers
 
         shims = {s.name: s for s in load_providers()}
         pipe = ConversionPipeline(

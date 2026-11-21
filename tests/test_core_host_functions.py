@@ -7,6 +7,8 @@ import pytest
 import llm_rosetta.api as api
 from llm_rosetta.shims import ProviderShim, ReasoningCapability
 from llm_rosetta.shims.provider_shim import get_shim, register_shim
+from llm_rosetta.shims._loader import _CONNECTION_KEYS, _IDENTITY_KEYS
+from llm_rosetta.shims._loader import _model_list_transforms
 
 
 # ---------------------------------------------------------------- spec_for
@@ -201,7 +203,6 @@ def test_describe_manifest_missing_file(tmp_path):
 
 # --------------------------------------------- manifest text, no file on disk
 def test_manifest_vocabulary_matches_the_loader_and_a_described_manifest(tmp_path):
-    from llm_rosetta.shims.providers import _CONNECTION_KEYS, _IDENTITY_KEYS
 
     vocab = api.manifest_vocabulary()
     assert vocab.connection_keys == _CONNECTION_KEYS
@@ -249,7 +250,6 @@ def test_merge_connection_agrees_with_describe_vendor_manifest(tmp_path):
 # ----------------------------------------------------------- staging_registry
 def test_staging_registry_drops_derived_caches_on_entry():
     from llm_rosetta.auto_detect import _converter_cache
-    from llm_rosetta.shims.providers import _model_list_transforms
 
     _converter_cache["sentinel"] = object()  # type: ignore[assignment]
     _model_list_transforms["sentinel"] = lambda *a: a  # type: ignore[assignment]
@@ -259,7 +259,6 @@ def test_staging_registry_drops_derived_caches_on_entry():
 
 
 def test_staging_registry_failure_keeps_registry_and_transforms():
-    from llm_rosetta.shims.providers import _model_list_transforms
 
     register_shim(_shim(reasoning=_BASE))
 

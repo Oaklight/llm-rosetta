@@ -16,7 +16,7 @@ from llm_rosetta.shims import (
     snapshot_registry,
 )
 from llm_rosetta.contracts.shim import ProviderShim
-from llm_rosetta.shims.providers import (
+from llm_rosetta.shims._loader import (
     _model_list_transforms,
     register_model_list_transform,
 )

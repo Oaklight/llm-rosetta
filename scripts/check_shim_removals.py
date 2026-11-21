@@ -49,7 +49,7 @@ from llm_rosetta_gateway.shims import (  # noqa: E402
     removals_due,
     scan_removal_references,
 )
-from llm_rosetta.shims.providers import load_providers  # noqa: E402
+from llm_rosetta.shims._loader import load_providers  # noqa: E402
 
 #: Where the repository spells shim names.  ``src`` and ``scripts`` are here
 #: because the cleanup a removal owes is not only prose: a leftover

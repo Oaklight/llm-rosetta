@@ -29,6 +29,7 @@ from llm_rosetta_gateway.shims import (
     legacy_shim_migration_advice,
     source_package_advice,
 )
+from llm_rosetta.api import load_providers
 
 ALL_PACKAGES = pytest.mark.parametrize(
     "package", SHIM_SOURCE_PACKAGES, ids=lambda p: p.key
@@ -66,7 +67,6 @@ class TestCatalogueAndAliasTableAgree:
     def test_no_legacy_name_is_still_a_registered_shim(self, package, legacy):
         """A legacy spelling that still resolves needs no migration advice."""
         from llm_rosetta.shims import get_shim, list_shims
-        from llm_rosetta.shims.providers import load_providers
 
         load_providers()
         assert legacy not in {s.name for s in list_shims()}

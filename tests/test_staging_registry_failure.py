@@ -14,7 +14,7 @@ import pytest
 
 import llm_rosetta.api as api
 from llm_rosetta.shims import ProviderShim
-from llm_rosetta.shims.providers import _model_list_transforms
+from llm_rosetta.shims._loader import _model_list_transforms
 
 
 class _StagedBlockFailed(Exception):
