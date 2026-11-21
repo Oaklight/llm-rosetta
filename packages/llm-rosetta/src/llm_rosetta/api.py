@@ -86,6 +86,7 @@ from llm_rosetta.shims import (
 from llm_rosetta.contracts.shim import SoftErrorPattern, VendorManifest
 from llm_rosetta.shims.provider_shim import match_model_reasoning, staging_registry
 from llm_rosetta.shims.providers import (
+    ManifestVocabulary,
     builtin_providers_dir,
     describe_vendor_manifest,
     get_model_list_transform,
@@ -149,6 +150,7 @@ __all__ = [
     "resolve_model_type",
     "resolve_shim",
     # Shim registry, write side and loaders
+    "ManifestVocabulary",
     "builtin_providers_dir",
     "describe_vendor_manifest",
     "leaf_connection",

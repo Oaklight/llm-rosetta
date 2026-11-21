@@ -89,7 +89,8 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
     # trio (``leaf_connection``, ``manifest_vocabulary``, ``merge_connection``)
     # replaces the gateway's last private reaches (#1630); ``plugin_source``,
     # ``builtin_providers_dir`` and the four scaffold entry points replace the
-    # gateway's last non-surface imports.
+    # gateway's last non-surface imports.  ``ManifestVocabulary`` lets a host
+    # annotate what ``manifest_vocabulary()`` returns (#1630).
     "llm_rosetta.api": {
         "items": [
             # Chat conversion
@@ -132,6 +133,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "resolve_model_type",
             "resolve_shim",
             # Shim registry, write side and loaders
+            "ManifestVocabulary",
             "builtin_providers_dir",
             "describe_vendor_manifest",
             "leaf_connection",
@@ -165,7 +167,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "SURFACE_VERSION",
             "__version__",
         ],
-        "max_count": 62,
+        "max_count": 63,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
