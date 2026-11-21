@@ -857,7 +857,9 @@ def _load_manifest(
     cached: SourceManifest | None = None
     if doc_path.is_file():
         try:
-            cached = parse_manifest(json.loads(doc_path.read_text(encoding="utf-8")))
+            cached = _read_manifest(
+                json.loads(doc_path.read_text(encoding="utf-8")), spec, warn=False
+            )
         except (OSError, ValueError) as exc:
             logger.warning(
                 "Shim source %s: cached manifest unusable: %s", spec.label, exc
@@ -881,7 +883,7 @@ def _load_manifest(
                 url, headers=_headers_for(spec, url), timeout=HTTP_TIMEOUT, proxy=proxy
             )
             document = json.loads(bytes(data).decode("utf-8"))
-            manifest = parse_manifest(document)
+            manifest = _read_manifest(document, spec)
         except Exception as exc:  # noqa: BLE001 - every leg failure is reported
             all_unreachable = all_unreachable and _is_unreachable(exc)
             failures.append(f"{url}: {type(exc).__name__}: {exc}")
@@ -1119,6 +1121,31 @@ def check_manifest_updates(
     return out
 
 
+def _read_manifest(
+    document: Any, spec: ManifestSourceSpec, *, warn: bool = True
+) -> SourceManifest:
+    """Parse a published manifest record by record.
+
+    A broken top level fails the source (:class:`ShimManifestInvalid`, a
+    ``ValueError``).  An invalid vendor entry or release record is left out
+    with one WARNING naming the vendor, the version and the JSON-path reason,
+    and the rest of the manifest is used: a record written by a newer
+    producer must not take every other vendor of the source down with it,
+    and selection only ever sees valid records.
+
+    Args:
+        document: The parsed JSON value.
+        spec: The source, for the log line.
+        warn: Whether to log the skipped records; the cached copy and the
+            update check re-read a document whose fetch already logged them.
+    """
+    manifest = parse_manifest(document, invalid_records="skip")
+    if warn:
+        for line in manifest.skipped:
+            logger.warning("Shim source %s: manifest record %s", spec.label, line)
+    return manifest
+
+
 def _fetch_manifest_once(
     spec: ManifestSourceSpec, *, http_get: HttpGet, proxy: str | None
 ) -> SourceManifest | str:
@@ -1129,7 +1156,9 @@ def _fetch_manifest_once(
             data = http_get(
                 url, headers=_headers_for(spec, url), timeout=HTTP_TIMEOUT, proxy=proxy
             )
-            return parse_manifest(json.loads(bytes(data).decode("utf-8")))
+            return _read_manifest(
+                json.loads(bytes(data).decode("utf-8")), spec, warn=False
+            )
         except Exception as exc:  # noqa: BLE001 - a check must not break the page
             failures.append(f"{url}: {type(exc).__name__}: {exc}")
     return "; ".join(failures)

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Oaklight/llm-rosetta/blob/master/packages/llm-rosetta/src/llm_rosetta/contracts/shim_manifest.schema.json",
   "title": "llm-rosetta shim source manifest",
-  "description": "The manifest.json a shim source repository publishes on its dist branch (#1660). One record per released vendor version; a gateway installs the newest record whose 'requires' its core satisfies. Unknown keys are allowed so a producer can add a field without a new manifest_version; a removed field or a changed meaning raises manifest_version.",
+  "description": "The manifest.json a shim source repository publishes on its dist branch (#1660). One record per released vendor version; a gateway installs the newest record whose 'requires' its core satisfies. Unknown keys are allowed so a producer can add a field without a new manifest_version; a removed field or a changed meaning raises manifest_version. A consumer reads the document record by record: an invalid top level (not an object, an unknown manifest_version, a missing required key, 'vendors' not an object) fails the whole source, while an invalid vendor entry or release record is skipped with a warning naming the vendor, the version and the reason, and the rest of the manifest is used.",
   "type": "object",
   "required": ["manifest_version", "source", "repo", "generated_at", "vendors"],
   "properties": {
@@ -71,11 +71,11 @@
         },
         "requires": {"$ref": "#/$defs/requires"},
         "shims": {
-          "description": "The shim names the archive registers.",
+          "description": "The shim names the archive registers. Each is the vendor key itself (a bare shim such as 'xai'), '<vendor>--<name>', or '<vendor>_<lane>--<name>' (a lane of the vendor, such as 'alcf_sophia--chat_completions'); the validator refuses a name that carries another vendor's prefix, including a lane prefix that is itself a vendor key of the same manifest.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_]*--[a-z0-9][a-z0-9_]*$"}
+          "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9_]*(--[a-z0-9][a-z0-9_]*)?$"}
         },
         "tags": {
           "description": "Free-form selection tags: tier:free|paid|subscription, auth:oauth, region:cn, ...",

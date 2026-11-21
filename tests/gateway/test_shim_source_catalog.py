@@ -215,7 +215,11 @@ class TestSourceCatalogue:
         http = FakeHttp(
             {
                 A: _manifest(
-                    "alpha", {"acme": [_record("0.1.0")], "zed": [_record("1.0.0")]}
+                    "alpha",
+                    {
+                        "acme": [_record("0.1.0")],
+                        "zed": [_record("1.0.0", shims=["zed--chat_completions"])],
+                    },
                 ),
                 B: _manifest("beta", {"acme": [_record("0.3.0")]}),
             }

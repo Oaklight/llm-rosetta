@@ -427,17 +427,20 @@ class TestPrecedence:
 
     def test_a_promoted_vendor_is_not_installed_from_the_source(self, tmp_path, logs):
         core_name = _core_name()
+        # A promoted or clashing vendor ships its own names (#1660: a manifest
+        # shim name must belong to its vendor), so the vendor is core's.
+        vendor = core_name.split("--", 1)[0]
         http = FakeHttp()
-        http.publish("acme", "0.1.0", [core_name], promoted_to="core@0.1.0")
+        http.publish(vendor, "0.1.0", [core_name], promoted_to="core@0.1.0")
 
-        report = _apply(tmp_path, _url_section("acme"), http)
+        report = _apply(tmp_path, _url_section(vendor), http)
 
-        status = _vendor_status(report, "acme")
+        status = _vendor_status(report, vendor)
         assert status.skipped == "promoted to core@0.1.0"
         assert describe_shim_sources(report) == [
-            "contrib:acme: skipped (promoted to core@0.1.0)"
+            f"contrib:{vendor}: skipped (promoted to core@0.1.0)"
         ]
-        assert any("acme 0.1.0 says promoted_to core@0.1.0" in m for m in logs)
+        assert any(f"{vendor} 0.1.0 says promoted_to core@0.1.0" in m for m in logs)
         assert not any(c.endswith(".tar.gz") for c in http.calls)
 
     def test_a_promotion_core_does_not_bear_out_installs_with_a_warning(
@@ -457,13 +460,14 @@ class TestPrecedence:
 
     def test_a_later_release_without_the_claim_un_promotes(self, tmp_path):
         core_name = _core_name()
+        vendor = core_name.split("--", 1)[0]
         http = FakeHttp()
-        http.publish("acme", "0.1.0", [core_name], promoted_to="core@0.1.0")
-        http.publish("acme", "0.2.0", ["acme--chat_completions"])
+        http.publish(vendor, "0.1.0", [core_name], promoted_to="core@0.1.0")
+        http.publish(vendor, "0.2.0", [f"{vendor}--fake_lane"])
 
-        report = _apply(tmp_path, _url_section("acme"), http)
+        report = _apply(tmp_path, _url_section(vendor), http)
 
-        status = _vendor_status(report, "acme")
+        status = _vendor_status(report, vendor)
         assert status.skipped is None
         assert status.release["version"] == "0.2.0"
 
@@ -504,15 +508,18 @@ class TestPrecedence:
 
     def test_a_partial_clash_refuses_only_the_core_names(self, tmp_path, logs):
         core_name = _core_name()
+        # A promoted or clashing vendor ships its own names (#1660: a manifest
+        # shim name must belong to its vendor), so the vendor is core's.
+        vendor = core_name.split("--", 1)[0]
         before = get_shim(core_name)
         http = FakeHttp()
-        http.publish("acme", "0.1.0", [core_name, "acme--chat_completions"])
+        http.publish(vendor, "0.1.0", [core_name, f"{vendor}--fake_lane"])
 
-        report = _apply(tmp_path, _url_section("acme"), http)
+        report = _apply(tmp_path, _url_section(vendor), http)
 
-        status = _vendor_status(report, "acme")
+        status = _vendor_status(report, vendor)
         assert status.skipped is None
-        assert status.shim_names == ("acme--chat_completions",)
+        assert status.shim_names == (f"{vendor}--fake_lane",)
         after = get_shim(core_name)
         assert before is not None and after is not None
         assert after.connection.base_url == before.connection.base_url
@@ -705,3 +712,43 @@ class TestConfig:
             {}, {"sources": ["contrib"], "install": ["opencode"]}
         )
         assert merged == {"sources": ["contrib"], "install": ["opencode"]}
+
+
+class TestRecordLevelManifest:
+    """One bad record must not take the whole source down (#1660)."""
+
+    def test_a_bad_record_is_skipped_and_the_good_ones_install(self, tmp_path, logs):
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+        http.publish("beta", "0.1.0", ["beta--chat_completions"])
+        http.publish("acme", "0.2.0", ["acme--chat_completions"])
+        # A newer producer writes a record this core cannot read.
+        http.vendors["acme"][0]["sha256"] = "not-a-digest"
+
+        report = _apply(tmp_path, _url_section("acme", "beta"), http)
+
+        assert _vendor_status(report, "acme").release["version"] == "0.1.0"
+        assert _vendor_status(report, "beta").ok
+        assert get_shim("acme--chat_completions") is not None
+        assert get_shim("beta--chat_completions") is not None
+        skipped = [m for m in logs if "manifest record vendor 'acme'" in m]
+        assert len(skipped) == 1
+        assert "version '0.2.0' skipped" in skipped[0] and "sha256" in skipped[0]
+
+    def test_a_bad_top_level_still_fails_the_source(self, tmp_path, logs):
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+        manifest = http.manifest
+
+        def broken():
+            document = manifest()
+            document["manifest_version"] = 99
+            return document
+
+        setattr(http, "manifest", broken)
+
+        report = _apply(tmp_path, _url_section("acme"), http)
+
+        assert get_shim("acme--chat_completions") is None
+        failed = [s for s in report.sources if not s.ok]
+        assert failed and "manifest_version" in (failed[0].error or "")
