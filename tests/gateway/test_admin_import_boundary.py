@@ -57,7 +57,6 @@ _FORBIDDEN = {
 #: with *file* relative to the gateway package.  Migrate one, delete its entry.
 _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
-        ("admin/__init__.py", "llm_rosetta_gateway._compat"),
         ("admin/__init__.py", "llm_rosetta_gateway.config"),
         ("admin/__init__.py", "llm_rosetta_gateway.jobs"),
         ("admin/__init__.py", "llm_rosetta_gateway.jobs.handlers.data"),
@@ -147,7 +146,6 @@ _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
 #: was allow-listed instead of routed through ``admin_api``.
 _LEGACY_ALLOWLIST_FROZEN: frozenset[tuple[str, str]] = frozenset(
     {
-        ("admin/__init__.py", "llm_rosetta_gateway._compat"),
         ("admin/__init__.py", "llm_rosetta_gateway.config"),
         ("admin/__init__.py", "llm_rosetta_gateway.jobs"),
         ("admin/__init__.py", "llm_rosetta_gateway.jobs.handlers.data"),
