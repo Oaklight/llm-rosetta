@@ -49,6 +49,18 @@ from .._vendor.acp import (
 from .._vendor.jsonrpc import JSONRPCException
 from ..transport._base import UpstreamConnectionError, UpstreamResponse, UpstreamStream
 from ..transport.provider_info import ProviderInfo
+from .acp_chunks import (
+    CHUNK_ERROR,
+    CHUNK_SESSION_START,
+    CHUNK_STOP,
+    _blocks_of,
+    _chunk_of,
+    _error_of,
+    _failure,
+    _field_of,
+    _prompt_text,
+    _stop_reason_of,
+)
 from .acp_ledger import (
     EXTENDS,
     AcpSessionLedger,
@@ -66,16 +78,6 @@ from .acp_profile import (
 )
 
 logger = logging.getLogger("llm-rosetta-gateway")
-
-#: Chunk shapes this transport emits.  The ``acp`` converter reads exactly
-#: these; keeping them in one place is what lets both sides agree without a
-#: shared schema module.
-CHUNK_SESSION_START = "session_start"
-CHUNK_TEXT = "text"
-CHUNK_THOUGHT = "thought"
-CHUNK_USAGE = "usage"
-CHUNK_STOP = "stop"
-CHUNK_ERROR = "error"
 
 #: Default agent argv.  A provider may override it with ``connection.acp_argv``
 #: (a shim declares the command its vendor ships); ``agy acp`` is the
@@ -1330,47 +1332,6 @@ async def _cancel_quietly(client: ACPClient, session_id: str) -> None:
     await _close_quietly(client, session_id)
 
 
-def _blocks_of(body: dict[str, Any]) -> list[dict[str, Any]]:
-    """The prompt blocks this turn sends, system instruction first.
-
-    The converter keeps the system instruction in its own body field, because
-    that is the shape an IR round-trip reads back; an agent needs it inside
-    the prompt, where every other thing it is told lives.  Rendering it as the
-    first block — labelled the way :func:`render_messages` labels a system
-    message — is what stops a chat client's system instruction from vanishing:
-    a lane that silently drops it is the one behaviour a chat lane must not
-    have.
-
-    Because the block is first and never moves, the ledger's digest of "what
-    the agent has seen" covers it on every turn, and a session opened before
-    it changed diverges rather than continuing.
-    """
-    blocks: list[dict[str, Any]] = []
-    system = body.get("system")
-    if isinstance(system, str) and system.strip():
-        blocks.append({"type": "text", "text": f"[System]\n{system}"})
-    blocks.extend(
-        block for block in body.get("prompt") or [] if isinstance(block, dict)
-    )
-    return blocks
-
-
-def _failure(collect: list[dict[str, Any]] | None, message: str) -> dict[str, Any]:
-    """The turn's error chunk, recorded for a caller that collects chunks."""
-    chunk = {"type": CHUNK_ERROR, "message": message}
-    if collect is not None:
-        collect.append(chunk)
-    return chunk
-
-
-def _error_of(updates: list[dict[str, Any]]) -> str | None:
-    """The message of the turn's error chunk, if it produced one."""
-    for chunk in updates:
-        if chunk.get("type") == CHUNK_ERROR:
-            return str(chunk.get("message") or "") or "the ACP turn failed"
-    return None
-
-
 def _start_of(turn: _Turn) -> dict[str, Any]:
     """The ``session_start`` chunk for a turn that is already open."""
     return {
@@ -1420,15 +1381,6 @@ def _default_workspace(provider_info: ProviderInfo) -> str:
     return str(path)
 
 
-def _prompt_text(prompt: list[dict[str, Any]]) -> str:
-    """Join the prompt's text blocks; images travel beside them."""
-    return "\n\n".join(
-        str(block.get("text") or "")
-        for block in prompt
-        if isinstance(block, dict) and block.get("type") == "text"
-    )
-
-
 def _drain_queue(client: ACPClient, session_id: str) -> int:
     """Discard updates an agent replayed while loading a session.
 
@@ -1461,52 +1413,6 @@ def _current_model(config_options: Any) -> str:
             or getattr(option, "category", None) == "model"
         ):
             return str(getattr(option, "current_value", "") or "")
-    return ""
-
-
-def _chunk_of(update: dict[str, Any]) -> dict[str, Any] | None:
-    """Translate one ``session/update`` payload into this transport's chunk.
-
-    ``ACPClient.prompt`` yields the notification's *params*, so the update
-    itself sits under ``"update"``.  Only the update kinds the ``acp``
-    converter understands are returned.  Everything else — tool calls, plans,
-    mode changes, available commands — is dropped for now: the converter has
-    no IR event for them in this phase, and inventing one here would report a
-    capability the lane does not have.
-    """
-    body = update.get("update")
-    if isinstance(body, dict):
-        update = body
-    kind = update.get("sessionUpdate") or update.get("session_update") or ""
-    if kind == "agent_message_chunk":
-        content = update.get("content") or {}
-        if isinstance(content, dict) and content.get("type") == "text":
-            return {"type": CHUNK_TEXT, "text": str(content.get("text") or "")}
-        return None
-    if kind == "agent_thought_chunk":
-        content = update.get("content") or {}
-        if isinstance(content, dict) and content.get("type") == "text":
-            return {"type": CHUNK_THOUGHT, "text": str(content.get("text") or "")}
-        return None
-    if kind == "usage_update":
-        used = update.get("used")
-        if isinstance(used, int):
-            return {"type": CHUNK_USAGE, "used": used, "size": update.get("size")}
-        return None
-    return None
-
-
-def _stop_reason_of(updates: list[dict[str, Any]]) -> str:
-    for chunk in reversed(updates):
-        if chunk.get("type") == CHUNK_STOP:
-            return str(chunk.get("stop_reason") or "end_turn")
-    return "end_turn"
-
-
-def _field_of(updates: list[dict[str, Any]], kind: str, field_name: str) -> str:
-    for chunk in updates:
-        if chunk.get("type") == kind:
-            return str(chunk.get(field_name) or "")
     return ""
 
 
