@@ -565,6 +565,62 @@ WARNING。若源已应答但没有匹配的厂商（分批发布、标签改名�
 *不在 manifest 中* 的源条目报告出来，使这一缺失在日志和 Shims 页面上都可见。任何没有匹配
 结果的 `install` 条目同样如此。
 
+哪些厂商放在核心、哪些放在源，以及厂商如何在两处之间迁移，见 [Shim 归属与成熟度](shim-placement.md)。
+
+#### 添加源 { #adding-a-source }
+
+源是任何以 `llm_rosetta.contracts.shim_manifest` 格式发布 manifest 的仓库：`dist/manifest.json`，每个厂商的归档放在其记录给出的相对路径上。`shims.sources` 接受三种写法：
+
+```jsonc
+"shims": {
+  "sources": [
+    "contrib",                                              // 目录 id
+    "https://shims.example.org/dist/manifest.json",         // manifest URL
+    {                                                       // 带选项的 URL
+      "url": "https://cdn.example.org/acme@dist/manifest.json",
+      "fallback": "https://raw.example.org/acme/dist/manifest.json",
+      "token_env": "ACME_SHIMS_TOKEN"
+    }
+  ],
+  "install": ["contrib:opendesign", "acme:*", "tag:tier:free"]
+}
+```
+
+- 目录 id（`contrib`、`argonne`）展开为该仓库 `dist` 分支的 jsDelivr URL，以 `raw.githubusercontent.com` 作为备用地址。
+- URL 必须是 HTTPS。归档相对于 manifest 所在目录解析，先用提供 manifest 的那个 URL，再用另一个。
+- `token_env` 指定一个环境变量，其值作为 bearer token 发送，且只发给主 URL 的源站。
+- URL 源的选择器前缀是 manifest 自己的 `source` 字段（上例中是 `acme`），不是 URL。
+- 声明 `sources` 会替换默认值。要继续读取 `contrib` 和 `argonne`，需要把它们也列上。
+
+`install` 条目对所有源使用同一种语法：
+
+| 条目 | 选中 |
+|------|------|
+| `<vendor>` | 所有源中的该厂商 |
+| `tag:<tag>` | 可安装记录带有该标签的所有厂商；标签整体匹配 |
+| `*` | 所有厂商 |
+| `<source>:` 加上以上任一项 | 同上，只限该源 |
+
+标签由源自由定义。两个精选源使用 `tier:free`、`tier:subscription`、`auth:oauth`、`auth:device`、`auth:account`、`auth:token-exchange`、`org:argonne`、`access:institutional` 和 `network:ssh-tunnel`。适配模块页的厂商卡片列出每个厂商的标签。
+
+源相当于以发布者的信任级别执行代码：已安装的厂商可以带 `auth.py`、`quota.py` 和 `transforms.py`，它们在网关进程内运行。只添加你信任的源。
+
+#### 在管理面板中管理源 { #panel }
+
+**适配模块 → 可安装**先按网关读取的每个源分组显示，然后是旧的预设包。配置只是隐含的源（默认值，或映射预设的源）标为*默认*。没有响应的源标为*无法访问*并显示错误；拉取失败后改用缓存的源标为*缓存副本*。
+
+源中的每个厂商都有一张卡片。收起时显示厂商、成熟度、状态（*已安装*、*已选择*、*已跳过*、*失败*或*可安装*）和版本。展开后显示：
+
+- 来源、已安装版本、可安装的更新版本，以及最新发布版本（当前核心无法运行时附原因）；
+- 已安装版本的 `requires` 是否与当前核心匹配；
+- 成熟度及其达到日期、最近一次一致性测试结果，以及 `promoted_to`（如有）；
+- 标签，以及该版本注册的 shim，每个都标明是否已安装；
+- 选中该厂商的 `install` 条目或旧预设、选中的厂商被跳过的原因（*not in the manifest*、*core provides …*、*promoted to …*），以及先提供同一厂商的源。
+
+**安装**把 `<source>:<vendor>` 加入 `shims.install` 并重载，从而安装该厂商。如果该源只是隐含的，也会把它加入 `shims.sources`。**移除**删掉点名该厂商的条目。如果仍有标签、`*` 或预设条目选中该厂商，面板会指出那个条目，且不做改动，因为那个条目还选中了其他厂商。
+
+**适配模块 → 来源 → 清单来源**同时编辑这两个键。每个源有一个区块，含“全部厂商”（`<source>:*`）、每个标签和每个厂商的复选框。区块下方的输入框用于添加目录 id 或 manifest URL；*移除来源*会删掉该源以及带有其 id 前缀的条目。新的 URL 源在第一次保存后才会读取。修改在点击**保存**之前只是草稿；保存时通过配置保存路径（在配置锁内）写入 `shims.sources` 和 `shims.install`，并重载来源。只改写带源前缀的条目。不带前缀的条目（`opendesign`、`tag:tier:free`）读取所有源，所以按原样列出；请在配置文件中修改它。**重新读取清单**会重新拉取每个 manifest。该区块下方的原始*本地目录*和*远程源*字段照旧工作。
+
 #### 只装包的一部分 { #selection }
 
 默认整个包装载。两个可选映射可以收窄它，按 preset 键书写，不需要改动包本身：

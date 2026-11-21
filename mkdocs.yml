@@ -130,6 +130,7 @@ nav:
       - 提供方:
           - 提供方兼容性: guide/compatibility.md
           - 提供方 Shim: guide/shims.md
+          - Shim 归属与成熟度: guide/shim-placement.md
           - 提供方额度: guide/quota.md
           - 提供方参考:
               - guide/providers/index.md
