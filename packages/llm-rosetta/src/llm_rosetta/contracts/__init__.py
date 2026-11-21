@@ -40,6 +40,9 @@ from llm_rosetta.types.ir import IR_VERSION
 #: meaning, never when one is added, so a host asserts a *minimum*: a gateway
 #: built for level N runs on any core at level N or above.  A host that needs a
 #: name added in a later minor pins that minor instead.
+#: ``scripts/dev/public_api_diff.py`` enforces the rise: a breaking finding in
+#: this package or in :mod:`llm_rosetta.api` against the last release fails the
+#: check unless this level is above the release's.
 SURFACE_VERSION = 1
 
 # ---------------------------------------------------------------------------

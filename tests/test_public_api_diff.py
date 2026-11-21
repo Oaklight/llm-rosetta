@@ -609,3 +609,129 @@ def test_the_dump_of_this_checkout_covers_its_tier_table():
         + len(api.GATEWAY_PUBLIC_MODULES)
     )
     assert len(surface) == listed
+
+
+# ---------------------------------------------------------------------------
+# An extension break needs a SURFACE_VERSION rise (#1630)
+# ---------------------------------------------------------------------------
+
+EXTENSION = ("llm_rosetta.api", "llm_rosetta.contracts")
+
+
+def _api_removal():
+    """A removed ``llm_rosetta.api`` name, as a fake diff."""
+    return _findings({"gone": _export()}, {}, module="llm_rosetta.api")
+
+
+def test_an_extension_break_without_a_rise_is_an_error():
+    errors = api.surface_version_errors(_api_removal(), EXTENSION, 1, 1)
+    assert errors == ["llm_rosetta.api.gone: removed"]
+
+
+def test_an_acknowledged_extension_break_still_needs_a_rise():
+    findings = _api_removal()
+    allowlist = {"llm_rosetta.api::gone::removed": "planned"}
+    _text, status = api.report(findings, allowlist, "v1", "HEAD")
+    assert status == 0
+    assert api.surface_version_errors(findings, EXTENSION, 1, 1)
+
+
+def test_a_rise_covers_every_extension_break():
+    findings = _api_removal() + _findings(
+        {"Shim": _export("class", _param("old"))},
+        {"Shim": _export("class")},
+        module="llm_rosetta.contracts",
+    )
+    assert api.surface_version_errors(findings, EXTENSION, 1, 2) == []
+
+
+def test_a_lowered_level_is_no_rise():
+    assert api.surface_version_errors(_api_removal(), EXTENSION, 2, 1)
+
+
+def test_a_user_tier_break_needs_no_rise():
+    findings = _findings({"OldName": _export()}, {}, module="llm_rosetta")
+    assert api.surface_version_errors(findings, EXTENSION, 1, 1) == []
+
+
+def test_extension_additions_need_no_rise():
+    findings = _findings({}, {"new": _export()}, module="llm_rosetta.api")
+    assert api.surface_version_errors(findings, EXTENSION, 1, 1) == []
+
+
+def test_todays_state_passes_against_a_base_without_the_constant():
+    """v0.13.0 has no SURFACE_VERSION (level 0); the head declares 1."""
+    findings = _findings({"OldName": _export()}, {}) + _api_removal()
+    assert api.surface_version_errors(findings, EXTENSION, 0, 1) == []
+
+
+def _write_contracts(root: Path, text: str) -> None:
+    contracts = root / "packages/llm-rosetta/src/llm_rosetta/contracts"
+    contracts.mkdir(parents=True)
+    (contracts / "__init__.py").write_text(text, encoding="utf-8")
+
+
+def test_read_surface_version_of_a_tree_without_contracts_is_zero(tmp_path):
+    (tmp_path / "src/llm_rosetta").mkdir(parents=True)
+    assert api.read_surface_version(tmp_path) == 0
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("SURFACE_VERSION = 3\n", 3),
+        ("SURFACE_VERSION: int = 4\n", 4),
+        ("OTHER = 1\n", 0),
+        ("SURFACE_VERSION = True\n", 0),
+    ],
+)
+def test_read_surface_version_reads_the_literal(tmp_path, text, expected):
+    _write_contracts(tmp_path, text)
+    assert api.read_surface_version(tmp_path) == expected
+
+
+def test_read_surface_version_of_this_checkout_matches_the_constant():
+    from llm_rosetta.contracts import SURFACE_VERSION  # noqa: PLC0415
+
+    assert api.read_surface_version(REPO_ROOT) == SURFACE_VERSION
+
+
+def test_extension_modules_of_this_checkout_are_the_extension_tier():
+    from llm_rosetta import _tiers  # noqa: PLC0415
+
+    assert api.extension_modules(REPO_ROOT) == _tiers.EXTENSION
+
+
+def test_main_fails_when_an_extension_break_has_no_rise(tmp_path, monkeypatch):
+    """End to end through ``main``, with the two dumps faked."""
+    base_surface, head_surface = _surfaces(
+        {"gone": _export()}, {}, module="llm_rosetta.api"
+    )
+    for root in ("base", "head"):
+        _write_contracts(tmp_path / root, "SURFACE_VERSION = 1\n")
+        _write_tiers(tmp_path / root, EXTENSION=EXTENSION)
+    dumps = {tmp_path / "base": base_surface, tmp_path / "head": head_surface}
+    monkeypatch.setattr(api, "dump_in_subprocess", lambda root: dumps[root])
+    monkeypatch.setattr(api, "check_dump_complete", lambda *args: None)
+    allowlist = tmp_path / "allowlist.json"
+    allowlist.write_text(
+        json.dumps(
+            {"acknowledged": [{"key": "llm_rosetta.api::gone::removed", "reason": "x"}]}
+        ),
+        encoding="utf-8",
+    )
+    argv = [
+        "--base",
+        str(tmp_path / "base"),
+        "--head",
+        str(tmp_path / "head"),
+        "--allowlist",
+        str(allowlist),
+    ]
+    assert api.main(argv) == 1
+
+    head_core = tmp_path / "head/packages/llm-rosetta/src/llm_rosetta"
+    (head_core / "contracts/__init__.py").write_text(
+        "SURFACE_VERSION = 2\n", encoding="utf-8"
+    )
+    assert api.main(argv) == 0
