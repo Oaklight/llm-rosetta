@@ -15,6 +15,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from _moved_vendors import load_providers_with_moved
+from llm_rosetta.shims import load_providers_from_dir
 
 # The vendors these tests read moved to contrib (#1660); their frozen copies
 # are registered for every test here.
@@ -226,7 +227,6 @@ class TestTheDeclaredSetupFields:
     """
 
     def test_a_shim_declaration_reaches_the_payload(self, monkeypatch, tmp_path):
-        from llm_rosetta.shims.providers import load_providers_from_dir
 
         vendor = tmp_path / "acme"
         (vendor / "llm").mkdir(parents=True)

@@ -10,12 +10,13 @@ from pathlib import Path
 
 import pytest
 
+from llm_rosetta.shims import _loader as providers_mod
 from llm_rosetta.shims.provider_shim import (
     _reset_registry,
     get_shim,
     list_shims,
 )
-from llm_rosetta.shims.providers import (
+from llm_rosetta.shims._loader import (
     _TYPE_DIRS,
     _load_plugin_shims,
     _load_transforms,
@@ -24,6 +25,7 @@ from llm_rosetta.shims.providers import (
 )
 
 from _moved_vendors import load_providers_with_moved
+import llm_rosetta.shims._loader as mod
 
 #: The registry recorded before the model-type layout landed.  It is the old
 #: tree's answer, kept as the expectation the new tree has to reproduce.
@@ -401,7 +403,6 @@ class TestLoadProviders:
             "valid",
             "name: valid\nformat: chat_completions\nmodel_type: llm\n",
         )
-        import llm_rosetta.shims.providers as mod
 
         monkeypatch.setattr(mod, "_PROVIDERS_DIR", tmp_path)
         shims = load_providers()
@@ -416,7 +417,6 @@ class TestLoadProviders:
             "valid",
             "name: valid\nformat: chat_completions\nmodel_type: llm\n",
         )
-        import llm_rosetta.shims.providers as mod
 
         monkeypatch.setattr(mod, "_PROVIDERS_DIR", tmp_path)
         shims = load_providers()
@@ -428,7 +428,6 @@ class TestLoadProviders:
         self._make_provider_dir(
             tmp_path, "good", "name: good\nformat: chat_completions\nmodel_type: llm\n"
         )
-        import llm_rosetta.shims.providers as mod
 
         monkeypatch.setattr(mod, "_PROVIDERS_DIR", tmp_path)
         shims = load_providers()
@@ -805,9 +804,6 @@ class TestLoadProvidersFromDir:
         """_reset_registry drops the synthetic plugin packages from sys.modules."""
         import sys
 
-        from llm_rosetta.shims.provider_shim import _reset_registry
-        from llm_rosetta.shims.providers import load_providers
-
         d = tmp_path / "resettest"
         d.mkdir()
         (d / "provider.yaml").write_text(
@@ -844,9 +840,7 @@ class TestPluginEntryPoints:
                 assert group == "llm_rosetta.shim_providers"
                 return [FakeEP()]
 
-        monkeypatch.setattr(
-            "llm_rosetta.shims.providers.entry_points", lambda: FakeEPs()
-        )
+        monkeypatch.setattr("llm_rosetta.shims._loader.entry_points", lambda: FakeEPs())
         _load_plugin_shims()
         assert calls == ["called"]
 
@@ -869,9 +863,7 @@ class TestPluginEntryPoints:
             def select(self, *, group: str):
                 return [FakeEP()]
 
-        monkeypatch.setattr(
-            "llm_rosetta.shims.providers.entry_points", lambda: FakeEPs()
-        )
+        monkeypatch.setattr("llm_rosetta.shims._loader.entry_points", lambda: FakeEPs())
         result = _load_plugin_shims()
         assert test_shim in result
 
@@ -891,9 +883,7 @@ class TestPluginEntryPoints:
             def select(self, *, group: str):
                 return [BadEP()]
 
-        monkeypatch.setattr(
-            "llm_rosetta.shims.providers.entry_points", lambda: FakeEPs()
-        )
+        monkeypatch.setattr("llm_rosetta.shims._loader.entry_points", lambda: FakeEPs())
         result = _load_plugin_shims()
         assert result == []
 
@@ -1835,7 +1825,7 @@ def _snapshot_rows() -> list[dict]:
     with a plugin installed must not add its rows.
     """
     from llm_rosetta.shims import list_shims
-    from llm_rosetta.shims.providers import plugin_source
+    from llm_rosetta.shims._loader import plugin_source
 
     load_providers()
     return [
@@ -1888,8 +1878,6 @@ class TestBuiltinRegistrySnapshot:
         distribution that registered the shim is what keeps the two runs
         equal; this proves the filter is applied, not merely written.
         """
-        from llm_rosetta.shims import providers as providers_mod
-
         real = providers_mod.plugin_source
         monkeypatch.setattr(
             providers_mod,

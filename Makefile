@@ -223,6 +223,7 @@ NUITKA_FLAGS = \
 	--include-data-dir=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/css=llm_rosetta_gateway/admin/css \
 	--include-data-dir=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js=llm_rosetta_gateway/admin/js \
 	--include-data-dir=packages/llm-rosetta/src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
+	--include-data-files=packages/llm-rosetta/src/llm_rosetta/shims/_loader/provider.schema.json=llm_rosetta/shims/_loader/provider.schema.json \
 	$(NUITKA_NOFOLLOW_FLAGS) \
 	--assume-yes-for-downloads \
 	$(NUITKA_EXTRA_FLAGS)
@@ -268,6 +269,7 @@ build-binary-musl:
 				--include-data-dir=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/css=llm_rosetta_gateway/admin/css \
 				--include-data-dir=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js=llm_rosetta_gateway/admin/js \
 				--include-data-dir=packages/llm-rosetta/src/llm_rosetta/shims/providers=llm_rosetta/shims/providers \
+				--include-data-files=packages/llm-rosetta/src/llm_rosetta/shims/_loader/provider.schema.json=llm_rosetta/shims/_loader/provider.schema.json \
 				$(NUITKA_NOFOLLOW_FLAGS) \
 				--assume-yes-for-downloads \
 				$(NUITKA_EXTRA_FLAGS) \

@@ -1,7 +1,7 @@
 # shim 模板
 
 这个目录是 provider shim 形状的唯一出处。`llm-rosetta-gateway shims new`
-按这里的文件渲染；读取结果的 loader 在 `llm_rosetta/shims/providers/`。这里
+按这里的文件渲染；读取结果的 loader 在 `llm_rosetta/shims/_loader/`。这里
 本身不是 shim：目录名以 `_` 开头，任何扫描都会跳过。
 
 手写 shim 之前先读这份文件。模板和某个 shim 不一致时，以模板为准，那个 shim

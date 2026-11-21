@@ -824,7 +824,7 @@ def load_providers_from_dir(
     Returns:
         The shims this call registered.
     """
-    from llm_rosetta.shims.providers import load_providers_from_dir as _load
+    from llm_rosetta.shims._loader import load_providers_from_dir as _load
 
     return _load(
         providers_dir,

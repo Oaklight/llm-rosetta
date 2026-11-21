@@ -26,6 +26,7 @@ from typing import Any
 import pytest
 
 from llm_rosetta.contracts.auth import AuthContext, InteractiveSetupRequired
+from llm_rosetta.shims._loader import _load_auth_exchange
 
 # The vendor moved to the contrib shim repository (#1660); its frozen copy is
 # the test fixture.
@@ -625,7 +626,6 @@ def test_the_shim_loader_loads_the_shipped_exchange():
     It sits beside ``openai_chatgpt/provider.yaml`` — the vendor manifest — and
     the loader attaches it to every leaf of that vendor.
     """
-    from llm_rosetta.shims.providers import _load_auth_exchange
 
     exchange = _load_auth_exchange(MODULE_PATH)
 

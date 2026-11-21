@@ -31,6 +31,7 @@ from llm_rosetta_gateway.ops import OpsContext, OpsProviderValidation
 from llm_rosetta_gateway.shim_sources import apply_shim_section
 from llm_rosetta_gateway.shims import SHIM_SOURCE_PACKAGES, get_source_package
 from llm_rosetta_gateway.shims import sources as sources_mod
+from llm_rosetta.shims._loader import load_providers
 
 PRESET_KEYS = [package.key for package in SHIM_SOURCE_PACKAGES]
 
@@ -68,7 +69,6 @@ def preset_config(tmp_path_factory) -> str:
 @pytest.fixture(autouse=True)
 def presets(preset_config: str):
     """Give every test the same starting registry, then restore the built-ins."""
-    from llm_rosetta.shims.providers import load_providers
 
     _reset_registry()
     report = apply_shim_section({"presets": PRESET_KEYS}, preset_config)

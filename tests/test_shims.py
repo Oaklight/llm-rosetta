@@ -18,6 +18,9 @@ from llm_rosetta.shims.provider_shim import (
     unregister_shim,
 )
 from _moved_vendors import load_providers_with_moved
+from llm_rosetta.shims._loader import _load_single_provider
+from llm_rosetta.shims._loader import get_model_list_transform
+from llm_rosetta.shims._loader import _parse_request_constraints
 
 
 # ---------------------------------------------------------------------------
@@ -1186,8 +1189,6 @@ class TestShimLoaderFieldCoverage:
         import dataclasses
         import inspect
 
-        from llm_rosetta.shims.providers import _load_single_provider
-
         dc_fields = {f.name for f in dataclasses.fields(ProviderShim)}
 
         source = inspect.getsource(_load_single_provider)
@@ -1273,7 +1274,6 @@ class TestFreeSourceShim:
         assert shim.display_name is None
         assert shim.logo is not None
         # No model-list filter: a paid account sees the whole catalogue.
-        from llm_rosetta.shims.providers import get_model_list_transform
 
         assert get_model_list_transform("kilo--chat_completions") is None
 
@@ -1547,10 +1547,6 @@ class TestRequestConstraintDeclarations:
 
     @staticmethod
     def _parse(cfg):
-        from pathlib import Path
-
-        from llm_rosetta.shims.providers import _parse_request_constraints
-
         return _parse_request_constraints(cfg, Path("vendor/llm/format/provider.yaml"))
 
     def test_an_absent_section_declares_nothing(self):

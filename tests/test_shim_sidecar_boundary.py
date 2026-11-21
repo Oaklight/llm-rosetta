@@ -8,7 +8,7 @@ either: sidecars execute while ``import llm_rosetta`` is still running, and the
 api module needs the finished package.  Not another vendor's directory: each
 vendor directory has to stand alone so it can move out of core.
 
-The loader's own modules (``shims/providers/_*.py`` and its ``__init__``) are
+The loader (``shims/_loader/``) and the ``shims/providers/__init__.py`` marker are
 internal and out of scope.  The scaffold templates, and what the scaffolder
 writes, must follow the same rule, because they are what a new shim starts
 from.

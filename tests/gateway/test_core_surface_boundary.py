@@ -295,7 +295,7 @@ def test_private_names_and_modules_are_private():
         return core_edges("x.py", source, ("llm_rosetta_gateway",))
 
     assert edges("from llm_rosetta._compat import sync_compat")[0].private
-    assert edges("from llm_rosetta.shims.providers import _leaf_connection")[0].private
+    assert edges("from llm_rosetta.shims._loader import _leaf_connection")[0].private
     assert not edges("from llm_rosetta import __version__")[0].private
     assert not edges("from llm_rosetta._vendor import yaml")[0].private
 

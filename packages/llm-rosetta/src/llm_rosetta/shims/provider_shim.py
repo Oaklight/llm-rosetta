@@ -126,7 +126,7 @@ def staging_registry() -> Iterator[dict[str, ProviderShim]]:
     transforms are put back, because they are registered while shims load and
     the live registry still needs them.
     """
-    from .providers import _model_list_transforms
+    from ._loader import _model_list_transforms
 
     kept_transforms = dict(_model_list_transforms)
     _clear_registry_caches()
@@ -306,12 +306,12 @@ def _clear_registry_caches() -> None:
     _converter_cache.clear()
 
     # Clear convention-based model list transforms.
-    from llm_rosetta.shims.providers import _model_list_transforms
+    from llm_rosetta.shims._loader import _model_list_transforms
 
     _model_list_transforms.clear()
 
     # Drop the synthetic packages registered for plugin shim transforms.
-    from llm_rosetta.shims.providers import _clear_plugin_namespaces
+    from llm_rosetta.shims._loader import _clear_plugin_namespaces
 
     _clear_plugin_namespaces()
 
@@ -358,7 +358,7 @@ def snapshot_registry() -> RegistrySnapshot:
         A snapshot whose mappings are copies; mutating them does not touch the
         live state.
     """
-    from .providers import _model_list_transforms
+    from ._loader import _model_list_transforms
 
     return RegistrySnapshot(
         registry=dict(_SHIM_REGISTRY),
@@ -382,7 +382,7 @@ def restore_registry(snapshot: RegistrySnapshot) -> None:
     global _SHIM_REGISTRY
     from llm_rosetta.auto_detect import _converter_cache
 
-    from .providers import _model_list_transforms
+    from ._loader import _model_list_transforms
 
     _SHIM_REGISTRY = dict(snapshot.registry)
     _model_list_transforms.clear()

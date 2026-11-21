@@ -17,6 +17,7 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+from llm_rosetta.shims._loader import load_providers
 
 #: Where the frozen vendor directories live.
 MOVED_VENDORS_DIR = Path(__file__).parent / "fixtures" / "moved_vendors"
@@ -31,7 +32,6 @@ def load_moved_vendors() -> list[Any]:
 
 def load_providers_with_moved() -> list[Any]:
     """Load core's built-ins, then the frozen moved vendors; return both lists."""
-    from llm_rosetta.shims.providers import load_providers
 
     return [*load_providers(), *load_moved_vendors()]
 

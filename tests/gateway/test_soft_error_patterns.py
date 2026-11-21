@@ -13,6 +13,7 @@ import pytest
 
 from llm_rosetta.contracts.shim import SoftErrorPattern
 from llm_rosetta_gateway.proxy import _check_soft_errors, _stream_event_generator
+from llm_rosetta.shims import load_providers_from_dir
 
 
 # ---------------------------------------------------------------------------
@@ -228,7 +229,6 @@ class TestStreamSoftError:
 class TestShimSoftErrorPatternsLoading:
     def test_soft_error_patterns_load_from_yaml(self, tmp_path):
         from llm_rosetta.shims import get_shim, unregister_shim
-        from llm_rosetta.shims.providers import load_providers_from_dir
 
         leaf = tmp_path / "acme"
         leaf.mkdir()

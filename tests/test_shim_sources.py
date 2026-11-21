@@ -26,6 +26,7 @@ from llm_rosetta_gateway.shims import (
 from llm_rosetta_gateway.shims import sources as sources_mod
 from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
 from llm_rosetta.shims.provider_shim import _reset_registry
+import llm_rosetta.shims._loader as providers_mod
 
 PROVIDER_YAML = (
     "name: {name}\n"
@@ -227,7 +228,6 @@ class TestEntryPointTier:
     """Entry-point plugins survive alongside dirs/remotes (precedence tier)."""
 
     def test_plugin_shim_and_dir_shim_coexist(self, tmp_path: Path, monkeypatch):
-        import llm_rosetta.shims.providers as providers_mod
 
         def register_shims():
             register_shim(ProviderShim(name="plugin--x", format="chat_completions"))
@@ -254,7 +254,6 @@ class TestEntryPointTier:
         assert get_shim("acme--chat_completions") is not None
 
     def test_source_can_override_a_plugin_shim(self, tmp_path: Path, monkeypatch):
-        import llm_rosetta.shims.providers as providers_mod
 
         def register_shims():
             register_shim(

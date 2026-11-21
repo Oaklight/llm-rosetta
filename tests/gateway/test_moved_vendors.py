@@ -32,6 +32,7 @@ from llm_rosetta_gateway.shim_sources import (
 )
 from llm_rosetta_gateway.shims.catalog import get_shim_source
 from llm_rosetta_gateway.shims.moved import moved_references, moved_vendor_sources
+from llm_rosetta.api import load_providers
 
 _CONTRIB = get_shim_source("contrib")
 assert _CONTRIB is not None
@@ -163,7 +164,6 @@ def test_every_moved_vendor_has_a_catalogue_source():
 
 
 def test_no_moved_vendor_is_still_built_in():
-    from llm_rosetta.shims.providers import load_providers
 
     assert [
         s.name for s in load_providers() if retired_names.moved_vendor(s.name)

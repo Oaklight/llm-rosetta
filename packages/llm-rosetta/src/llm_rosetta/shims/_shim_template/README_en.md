@@ -2,7 +2,7 @@
 
 This directory is the single source of truth for a provider shim's shape.
 `llm-rosetta-gateway shims new` renders these files; the loader that reads the
-result lives in `llm_rosetta/shims/providers/`. Nothing here is a shim itself:
+result lives in `llm_rosetta/shims/_loader/`. Nothing here is a shim itself:
 the leading `_` keeps the directory out of every scan.
 
 Read this before hand-writing a shim. If the template and a shim disagree, the

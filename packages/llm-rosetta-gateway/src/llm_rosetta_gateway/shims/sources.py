@@ -1,7 +1,7 @@
 """External shim sources — load provider shims from directories and archives.
 
 Built-in shims are registered at import time from the bundled ``providers/``
-directory (see :mod:`llm_rosetta.shims.providers`).  This module adds a second,
+directory (see :mod:`llm_rosetta.shims._loader`).  This module adds a second,
 *declarative* source of shims: extra directories, and remote archives fetched
 into a local cache.  The gateway exposes both through its ``shims`` config
 section; this module is the config-agnostic core.

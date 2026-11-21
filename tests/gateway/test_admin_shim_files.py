@@ -26,6 +26,7 @@ from llm_rosetta_gateway.admin.routes.config.shim_files import (
 from llm_rosetta_gateway.config import JsoncConfigIO
 from llm_rosetta.contracts.shim import ProviderShim
 from llm_rosetta_gateway.shims.sources import ShimLoadReport, ShimSourceStatus
+from llm_rosetta.shims import load_providers_from_dir
 
 
 def _yaml(name: str, display: str = "Demo") -> str:
@@ -121,7 +122,6 @@ class TestYamlProblem:
 
     def test_rejects_the_removed_base_key_like_the_loader(self, tmp_path: Path):
         """The admin editor and the loader refuse a ``base:`` with one message."""
-        from llm_rosetta.shims.providers import load_providers_from_dir
 
         text = "name: demo\nbase: chat_completions\n"
         problem = _yaml_problem(text, "demo")
@@ -183,7 +183,6 @@ async def test_editing_a_type_level_shim_writes_it_back(
 ):
     """The editor writes by path, so a model-type level is just a longer path."""
     from llm_rosetta.shims.provider_shim import unregister_shim
-    from llm_rosetta.shims.providers import load_providers_from_dir
 
     async def _rebuild(_request):
         load_providers_from_dir(typed_source)

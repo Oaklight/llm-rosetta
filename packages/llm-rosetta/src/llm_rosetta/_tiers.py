@@ -81,6 +81,10 @@ COMPAT: tuple[str, ...] = (
     # The shim registry stays here; its re-exports of the data classes in
     # llm_rosetta.contracts.shim are removed in 0.15.0.
     "llm_rosetta.shims.provider_shim",
+    # 0.13.0 held the shim loader here; the names it exported forward to
+    # llm_rosetta.shims._loader (use llm_rosetta.api), warning on access;
+    # removed in 0.15.0.
+    "llm_rosetta.shims.providers",
     # 0.13.0 flat module, forwards to llm_rosetta.contracts.routing; removed
     # in 0.15.0.
     "llm_rosetta.routing",
