@@ -192,8 +192,18 @@ def _resolve_model_reasoning(
     }
 
 
-def _normalize_model_entry(value: Any) -> dict[str, Any]:
-    """Normalize a single model config value to a dict for the admin UI."""
+def _normalize_model_entry(value: Any, name: str | None = None) -> dict[str, Any]:
+    """Normalize a single model config value to a dict for the admin UI.
+
+    Args:
+        value: The entry itself.
+        name: The entry's key in the ``models`` section; a retired type
+            spelling is then reported at ``models.<name>``.
+
+    Raises:
+        RetiredConfigName: If the entry spells its type with a retired name;
+            ``where`` holds the JSON path of the offending value.
+    """
     from ....config.parse import declared_model_type
 
     if isinstance(value, str):
@@ -218,7 +228,9 @@ def _normalize_model_entry(value: Any) -> dict[str, Any]:
     # The derived type, not only an explicit one: the console reads this field
     # and nothing else, so the panel and the pools cannot apply different
     # rules to a legacy capability-only entry.
-    entry["type"] = declared_model_type(value)
+    entry["type"] = declared_model_type(
+        value, f"models.{name}" if name is not None else None
+    )
     # ``upstream_model`` is the lane's own once the entry lists ``providers[]``;
     # the entry-level one is the resolver's fallback for a lane that declares
     # none.  It is reported under its own key — read-only in the panel, never
@@ -464,11 +476,30 @@ async def get_config(request: Any) -> Response:
                 masked["credential_source"] = pinfo.credential_source
         masked_providers[name] = masked
 
+    # ``config.parse`` re-exports the error; admin reaches the gateway only
+    # through the modules its import-boundary test allows.
+    from ....config.parse import RetiredConfigName
+
     # Normalize models to dict format for consistent admin UI
     raw_models = raw.get("models", {})
-    models_normalized = {
-        name: _normalize_model_entry(value) for name, value in raw_models.items()
-    }
+    try:
+        models_normalized = {
+            name: _normalize_model_entry(value, name)
+            for name, value in raw_models.items()
+        }
+    except RetiredConfigName as exc:
+        # The file was edited after the gateway loaded it (the loader refuses a
+        # retired name at startup).  Name the file and the JSON path, as the
+        # loader would, instead of failing the request without a location.
+        located = exc.located(path=config_path)
+        return JSONResponse(
+            {
+                "error": f"Failed to read config: {located}",
+                "path": located.path,
+                "where": located.where,
+            },
+            status_code=500,
+        )
 
     # Merge typed models (embedding, rerank, decision) so the admin UI
     # shows all model types in one unified list.
