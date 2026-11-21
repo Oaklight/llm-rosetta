@@ -309,12 +309,12 @@ Argo API 在实际内容之前发送一个 `choices: []` 且 `id`/`model` 为空
 
 OpenAI（Chat 和 Responses）和 Anthropic 严格要求每个 `tool_call` 都有匹配的 `tool_result`，反之亦然。Google GenAI 是唯一容忍不匹配的提供方。在跨格式转换中，ID 不匹配、角色规范化问题或不完整的对话历史可能产生孤立的工具调用或结果。
 
-**修复**：`fix_orphaned_tool_calls()`（逐转换器）和 `fix_orphaned_tool_calls_ir()`（IR 层级）自动检测和修复配对问题：
+**修复**：一个 IR 层的处理步骤 `normalize_tool_pairing()`（`llm_rosetta.ir.tools`）检测并修复配对问题。它取代了逐转换器的 `fix_orphaned_tool_calls()` 和 IR 层级的 `fix_orphaned_tool_calls_ir()`：
 
 - 孤立工具调用 → 注入合成占位结果
 - 孤立工具结果 → 从消息列表中移除
 
-在所有严格配对转换器的 `request_to_provider()` 中自动应用。
+在每个转换器的 `request_to_provider()` 中自动应用。
 
 **版本**：v0.2.4（#82、#84）
 

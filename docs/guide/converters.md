@@ -229,24 +229,27 @@ LLM-Rosetta 的 `sanitize_schema()`（位于 `converters.base.tools`）会在所
 
 LLM-Rosetta 自动修复两个方向的不匹配，并输出 `WARNING` 级别日志以便追踪每次修复：
 
-- **孤立工具调用** → 注入包含占位内容 `"[No output available yet]"` 的合成工具结果。
+- **孤立工具调用** → 注入包含占位内容 `"[llm-rosetta: no tool output was recorded for this call]"` 的合成工具结果。
 - **孤立工具结果** → 移除悬空的结果消息。
 
 **跨格式转换**：所有转换器都会在 IR 层级修复不匹配。
 
-**直通 / 直接使用**：可以导入对应格式的函数：
+**直通 / 直接使用**：修复是一个 IR 层的处理步骤 `normalize_tool_pairing`，每个转换器都在 `request_to_provider` 中执行它。因此，让 provider 请求体经过同一格式的转换器往返一次，就会得到修复；也可以直接对 IR 消息调用该步骤：
 
 ```python
-# OpenAI Chat Completions 格式
-from llm_rosetta.converters.llm.chat_completions.tool_ops import fix_orphaned_tool_calls
+from llm_rosetta.converters import ChatCompletionsConverter
+from llm_rosetta.ir.tools import normalize_tool_pairing
 
-messages = fix_orphaned_tool_calls(messages)
-messages = fix_orphaned_tool_calls(messages, placeholder="[已跳过]")
+converter = ChatCompletionsConverter()
+ir_request = converter.request_from_provider(body)
 
-# OpenAI Responses 格式
-from llm_rosetta.converters.llm.open_responses.tool_ops import fix_orphaned_tool_calls
+# 转换器在输出时修复配对
+repaired_body, warnings = converter.request_to_provider(ir_request)
 
-items = fix_orphaned_tool_calls(items)
+# 或者直接修复 IR 消息，并使用自定义占位内容
+ir_request["messages"] = normalize_tool_pairing(
+    ir_request["messages"], placeholder="[已跳过]"
+)
 ```
 
 ### 助手部件的顺序（Chat Completions） { #assistant-part-order-chat-completions }
