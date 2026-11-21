@@ -45,9 +45,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from llm_rosetta.transforms import (
+from llm_rosetta.contracts.transform import (
     Transform,
-    _NamedTransform,
+    NamedTransform,
     force_fields,
     hoist_late_system_messages,
 )
@@ -109,7 +109,7 @@ def drop_refused_fields(*keys: str) -> Transform:
             body.pop(k, None)
         return body
 
-    return _NamedTransform(_drop, f"drop_refused_fields({', '.join(keys)})")
+    return NamedTransform(_drop, f"drop_refused_fields({', '.join(keys)})")
 
 
 #: Applied after IR conversion, so the body is already in Responses shape.

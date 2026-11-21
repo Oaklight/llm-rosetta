@@ -8,7 +8,7 @@ References:
     https://api-docs.deepseek.com/api/create-chat-completion
 """
 
-from llm_rosetta.transforms import (
+from llm_rosetta.contracts.transform import (
     hoist_late_system_messages,
     strip_fields,
 )

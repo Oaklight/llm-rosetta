@@ -40,8 +40,10 @@ from llm_rosetta.contracts.shim import (  # deprecated re-exports, removed in 0.
     UnsignedBlocks,
     VendorManifest,
 )
-from llm_rosetta.ir.primitives.body import Transform  # re-exported (0.13.0)
-from llm_rosetta.ir.primitives.ir import IRTransform  # re-exported (0.13.0)
+from llm_rosetta.contracts.transform import (
+    IRTransform,
+    Transform,
+)  # re-exported (0.13.0)
 from llm_rosetta.model_vocabulary import (
     FORMATS_BY_TYPE,
     MODEL_TYPES,

@@ -1,8 +1,8 @@
 """IR primitives: body/IR transforms and the stateless helpers they need.
 
 Everything here depends only on the standard library and
-``llm_rosetta.types.ir``.  The transform factories are re-exported for
-``llm_rosetta.transforms``; the helper implementations live in their own
+``llm_rosetta.types.ir``.  The transform types and factories a shim uses are
+re-exported by :mod:`llm_rosetta.contracts.transform`; the helper implementations live in their own
 submodules so a caller can reach them without the transform surface.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from .body import (  # noqa: F401
     Transform,
-    _NamedTransform,
+    NamedTransform,
     apply_transforms,
     backfill_reasoning_content,
     default_message_field,
@@ -42,7 +42,7 @@ from .image_limit import (  # noqa: F401
 from .ir import (  # noqa: F401
     IRTransform,
     TransformContext,
-    _NamedIRTransform,
+    NamedIRTransform,
     apply_ir_transforms,
     auto_cache_breakpoints,
     hoist_late_system_messages,
@@ -70,6 +70,8 @@ __all__ = [
     "native_record",
     "record_native",
     "IRTransform",
+    "NamedIRTransform",
+    "NamedTransform",
     "ToolGroup",
     "Transform",
     "TransformContext",

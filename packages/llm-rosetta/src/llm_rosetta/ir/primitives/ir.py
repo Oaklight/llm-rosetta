@@ -63,8 +63,13 @@ IRTransform = Callable[[dict[str, Any], TransformContext], dict[str, Any]]
 :class:`TransformContext`, returns the (possibly mutated) IR dict."""
 
 
-class _NamedIRTransform:
-    """Thin wrapper that gives a factory-produced IR transform a readable repr."""
+class NamedIRTransform:
+    """An IR transform with a readable ``repr`` (see :class:`NamedTransform`).
+
+    Args:
+        fn: The transform, ``(ir_request, context) -> ir_request``.
+        repr_str: The label ``repr()`` returns.
+    """
 
     __slots__ = ("_fn", "_repr")
 
@@ -119,7 +124,7 @@ def truncate_images(max_images: int, pattern: str | None = None) -> IRTransform:
     if pattern:
         label += f", pattern={pattern!r}"
     label += ")"
-    return _NamedIRTransform(_truncate, label)
+    return NamedIRTransform(_truncate, label)
 
 
 def unwind_parallel_tool_calls(pattern: str | None = None) -> IRTransform:
@@ -145,7 +150,7 @@ def unwind_parallel_tool_calls(pattern: str | None = None) -> IRTransform:
     if pattern:
         label += f"pattern={pattern!r}"
     label += ")"
-    return _NamedIRTransform(_unwind, label)
+    return NamedIRTransform(_unwind, label)
 
 
 def auto_cache_breakpoints(mode: str = "none_only") -> IRTransform:
@@ -173,7 +178,7 @@ def auto_cache_breakpoints(mode: str = "none_only") -> IRTransform:
     if mode != "none_only":
         label += f"mode={mode!r}"
     label += ")"
-    return _NamedIRTransform(_inject, label)
+    return NamedIRTransform(_inject, label)
 
 
 def hoist_late_system_messages() -> IRTransform:
@@ -195,4 +200,4 @@ def hoist_late_system_messages() -> IRTransform:
             return body
         return hoist_late_system_messages_ir(body, request_id=context.request_id)
 
-    return _NamedIRTransform(_hoist, "hoist_late_system_messages()")
+    return NamedIRTransform(_hoist, "hoist_late_system_messages()")
