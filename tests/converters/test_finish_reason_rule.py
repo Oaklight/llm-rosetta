@@ -693,3 +693,273 @@ def test_an_interactions_stream_status_follows_the_ir_reason():
     event = converter._handle_ir_stream_end_to_p({"type": "stream_end"}, context)
 
     assert event["interaction"]["status"] == "requires_action"
+
+
+# ---------------------------------------------------------------------------
+# An incomplete Responses turn with no reason stopped short (#1612)
+# ---------------------------------------------------------------------------
+
+_FUNCTION_CALL_ITEM = {
+    "type": "function_call",
+    "status": "completed",
+    "call_id": "call_a",
+    "name": "f",
+    "arguments": "{}",
+}
+_TEXT_ITEM = {"type": "message", "content": [{"type": "output_text", "text": "hi"}]}
+
+# Every way a frame can say nothing about why it is incomplete.
+_NO_REASON = [
+    pytest.param({}, id="details_absent"),
+    pytest.param({"incomplete_details": None}, id="details_null"),
+    pytest.param({"incomplete_details": {}}, id="details_empty"),
+    pytest.param({"incomplete_details": {"reason": None}}, id="reason_null"),
+]
+
+
+def _incomplete_response(
+    output: list[dict[str, Any]], details: dict[str, Any]
+) -> dict[str, Any]:
+    return {
+        "id": "resp_1",
+        "object": "response",
+        "created_at": 1,
+        "model": "m",
+        "status": "incomplete",
+        "output": output,
+        **details,
+    }
+
+
+def _responses_incomplete(details: dict[str, Any]) -> dict[str, Any]:
+    """A ``response.incomplete`` terminal frame; ``details`` may omit the reason."""
+    response = {"id": "resp_1", "model": "m", "created_at": 1, "status": "incomplete"}
+    return {"type": "response.incomplete", "response": {**response, **details}}
+
+
+@pytest.mark.parametrize("details", _NO_REASON)
+@pytest.mark.parametrize(
+    "output", [[_FUNCTION_CALL_ITEM], [_TEXT_ITEM]], ids=["call", "text"]
+)
+def test_an_incomplete_response_with_no_reason_is_a_length_stop(output, details):
+    """The JSON leg: the call in the output must not make it a tool turn."""
+    ir = OpenResponsesConverter().response_from_provider(
+        cast(Any, _incomplete_response(output, details))
+    )
+
+    assert ir["choices"][0]["finish_reason"]["reason"] == "length"
+    chat = ChatCompletionsConverter().response_to_provider(ir)
+    assert chat["choices"][0]["finish_reason"] == "length"
+
+
+@pytest.mark.parametrize(
+    ("reason", "expected"),
+    [
+        ("max_output_tokens", "length"),
+        ("content_filter", "content_filter"),
+        # A reason this reader does not know still means the turn stopped short.
+        ("some_future_reason", "length"),
+    ],
+)
+def test_an_incomplete_response_keeps_a_named_reason(reason, expected):
+    ir = OpenResponsesConverter().response_from_provider(
+        cast(
+            Any,
+            _incomplete_response(
+                [_FUNCTION_CALL_ITEM], {"incomplete_details": {"reason": reason}}
+            ),
+        )
+    )
+
+    assert ir["choices"][0]["finish_reason"]["reason"] == expected
+
+
+@pytest.mark.parametrize("details", _NO_REASON)
+def test_an_incomplete_stream_with_no_reason_is_a_length_stop(details):
+    """The stream leg: the call the stream opened must not upgrade it."""
+    ir_events = _run_responses_stream(
+        _responses_call_added(), _responses_incomplete(details)
+    )
+
+    assert _finish_reason(ir_events) == "length"
+    _, stop_reasons = _messages_view(ir_events)
+    assert stop_reasons and stop_reasons[-1] == "max_tokens"
+
+
+def test_an_incomplete_stream_with_no_reason_survives_the_stream_processor():
+    """The serving path: the processor's finalizer must not upgrade it either."""
+    observed: list[Any] = []
+    processor = StreamProcessor(
+        target_converter=OpenResponsesConverter(),
+        source_converter=MessagesConverter(),
+        from_ctx=OpenResponsesConverter.create_stream_context(),
+        to_ctx=MessagesConverter.create_stream_context(),
+        on_ir_event=observed.append,
+    )
+
+    produced: list[dict[str, Any]] = []
+    produced.extend(processor.process_chunk(_responses_call_added()))
+    produced.extend(processor.process_chunk(_responses_incomplete({})))
+    produced.extend(processor.process_chunk(None))
+
+    stop_reasons = [
+        chunk["delta"]["stop_reason"]
+        for chunk in produced
+        if chunk.get("type") == "message_delta"
+    ]
+    assert stop_reasons and stop_reasons[-1] == "max_tokens"
+    assert [event for event in observed if event["type"] == "finish"][-1][
+        "finish_reason"
+    ]["reason"] == "length"
+
+
+# A reason that is not a string (a broken upstream) is an unknown reason.
+_UNHASHABLE_REASONS = [
+    pytest.param(["max_output_tokens"], id="list"),
+    pytest.param({"code": "x"}, id="object"),
+    pytest.param(5, id="number"),
+]
+
+
+@pytest.mark.parametrize("reason", _UNHASHABLE_REASONS)
+def test_a_non_string_reason_reads_as_unknown_in_the_reader(reason):
+    ir = OpenResponsesConverter().response_from_provider(
+        cast(
+            Any,
+            _incomplete_response(
+                [_FUNCTION_CALL_ITEM], {"incomplete_details": {"reason": reason}}
+            ),
+        )
+    )
+
+    assert ir["choices"][0]["finish_reason"]["reason"] == "length"
+
+
+@pytest.mark.parametrize("reason", _UNHASHABLE_REASONS)
+def test_a_non_string_reason_reads_as_unknown_in_the_stream(reason):
+    ir_events = _run_responses_stream(
+        _responses_call_added(),
+        _responses_incomplete({"incomplete_details": {"reason": reason}}),
+    )
+
+    assert _finish_reason(ir_events) == "length"
+
+
+# ---------------------------------------------------------------------------
+# Incomplete without a ``status`` (#1612 review)
+# ---------------------------------------------------------------------------
+
+
+def _statusless(output: list[dict[str, Any]] | None, **extra: Any) -> dict[str, Any]:
+    """A response body that carries no ``status`` field."""
+    body: dict[str, Any] = {"id": "resp_1", "model": "m", "created_at": 1, **extra}
+    if output is not None:
+        body["output"] = output
+    return body
+
+
+@pytest.mark.parametrize(
+    "details",
+    [{}, {"reason": None}, {"reason": "max_output_tokens"}],
+    ids=["empty", "reason_null", "max_output_tokens"],
+)
+def test_a_statusless_body_with_incomplete_details_is_incomplete(details):
+    """``incomplete_details`` says the turn stopped short when ``status`` is absent."""
+    ir = OpenResponsesConverter().response_from_provider(
+        cast(Any, _statusless([_FUNCTION_CALL_ITEM], incomplete_details=details))
+    )
+
+    assert ir["choices"][0]["finish_reason"]["reason"] == "length"
+
+
+def test_a_statusless_body_keeps_a_named_reason():
+    ir = OpenResponsesConverter().response_from_provider(
+        cast(
+            Any,
+            _statusless(
+                [_FUNCTION_CALL_ITEM],
+                incomplete_details={"reason": "content_filter"},
+            ),
+        )
+    )
+
+    assert ir["choices"][0]["finish_reason"]["reason"] == "content_filter"
+
+
+def test_a_statusless_body_without_incomplete_details_is_still_a_tool_turn():
+    """The guard: no status and no details is a completed turn, as before."""
+    ir = OpenResponsesConverter().response_from_provider(
+        cast(Any, _statusless([_FUNCTION_CALL_ITEM], incomplete_details=None))
+    )
+
+    assert ir["choices"][0]["finish_reason"]["reason"] == "tool_calls"
+
+
+# The two stream shapes: an incomplete event whose body has no status, and a
+# completed event whose statusless body carries incomplete_details.
+_STATUSLESS_STREAM_TERMINALS = [
+    pytest.param(
+        {"type": "response.incomplete", "response": _statusless(None)},
+        id="incomplete_event_no_status",
+    ),
+    pytest.param(
+        {
+            "type": "response.incomplete",
+            "response": _statusless(None, status="completed"),
+        },
+        id="incomplete_event_status_completed",
+    ),
+    pytest.param(
+        {
+            "type": "response.completed",
+            "response": _statusless(None, incomplete_details={"reason": None}),
+        },
+        id="completed_event_with_incomplete_details",
+    ),
+]
+
+
+@pytest.mark.parametrize("terminal", _STATUSLESS_STREAM_TERMINALS)
+def test_a_statusless_incomplete_stream_is_a_length_stop(terminal):
+    ir_events = _run_responses_stream(_responses_call_added(), terminal)
+
+    assert _finish_reason(ir_events) == "length"
+    _, stop_reasons = _messages_view(ir_events)
+    assert stop_reasons and stop_reasons[-1] == "max_tokens"
+
+
+@pytest.mark.parametrize("terminal", _STATUSLESS_STREAM_TERMINALS)
+def test_a_statusless_incomplete_stream_survives_the_stream_processor(terminal):
+    observed: list[Any] = []
+    processor = StreamProcessor(
+        target_converter=OpenResponsesConverter(),
+        source_converter=MessagesConverter(),
+        from_ctx=OpenResponsesConverter.create_stream_context(),
+        to_ctx=MessagesConverter.create_stream_context(),
+        on_ir_event=observed.append,
+    )
+
+    produced: list[dict[str, Any]] = []
+    produced.extend(processor.process_chunk(_responses_call_added()))
+    produced.extend(processor.process_chunk(terminal))
+    produced.extend(processor.process_chunk(None))
+
+    stop_reasons = [
+        chunk["delta"]["stop_reason"]
+        for chunk in produced
+        if chunk.get("type") == "message_delta"
+    ]
+    assert stop_reasons and stop_reasons[-1] == "max_tokens"
+    assert [event for event in observed if event["type"] == "finish"][-1][
+        "finish_reason"
+    ]["reason"] == "length"
+
+
+def test_a_statusless_completed_stream_is_still_a_tool_turn():
+    """The guard: a completed event with no status and no details runs the call."""
+    ir_events = _run_responses_stream(
+        _responses_call_added(),
+        {"type": "response.completed", "response": _statusless(None)},
+    )
+
+    assert _finish_reason(ir_events) == "tool_calls"

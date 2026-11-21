@@ -623,7 +623,9 @@ class OpenResponsesStreamFromMixin(OpenResponsesMixinHost):
     ) -> None:
         response = chunk.get("response", chunk)
 
-        reason = _stream_finish_reason(response)
+        # response.incomplete and response.completed share this handler; the
+        # event type is part of the decision, not only the body (#1612).
+        reason = _stream_finish_reason(response, chunk.get("type"))
 
         # Emit UsageEvent before FinishEvent so that downstream
         # converters can store usage in context.pending_usage before
