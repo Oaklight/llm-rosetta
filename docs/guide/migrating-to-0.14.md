@@ -235,6 +235,38 @@ grep -rnE "llm_rosetta\.(transforms|shims\.(auth_exchange|quota_probe)|observabi
 
 本节各行已针对 PR #1659 的 head（commit `cdc6354af3`，版本 `0.14.0.dev35`）核对：每个已移除路径都没有模块 spec，每个转发模块导入时发出 `DeprecationWarning`，每个新路径都能导入。
 
+## 迁往 contrib 的 shim 提供方 {#moved-to-contrib}
+
+有 16 个提供方离开 core，迁入
+[contrib shim 仓库](https://github.com/Oaklight/llm-rosetta-shim-contrib)
+（[#1660](https://github.com/Oaklight/llm-rosetta/issues/1660)）；决定谁留在 core 的规则见
+[Shim 归属](shim-placement.md)。它们的 shim 名称没有变，因此这里没有改名，也不需要修改配置：
+
+| 提供方 | Shim 名称 | 离开 core 的原因 |
+|--------|-----------|------------------|
+| `opencode` | `opencode--chat_completions`、`opencode--messages`、`opencode--open_responses`（额度探测 `opencode_go`） | 订阅通道 |
+| `openai_chatgpt` | `openai_chatgpt--open_responses`（额度探测 `openai_codex`） | OAuth（Sign in with ChatGPT） |
+| `antigravity` | `antigravity--acp` | agent CLI 通道 |
+| `kilo`、`openrouter`、`groq`、`nvidia`、`siliconflow`、`modelscope` | `kilo--chat_completions`；`openrouter--chat_completions`、`--messages`、`--open_responses`、`--rerank`；`groq--chat_completions`；`nvidia--chat_completions`；`siliconflow--chat_completions`、`--embedding`、`--rerank`；`modelscope--chat_completions` | 聚合商与托管端点 |
+| `minimax`、`zhipu`、`zai`、`xai`、`qwen`、`moonshot`、`volcengine` | `minimax--chat_completions`、`--messages`、`--embedding`；`zhipu`、`zhipu--embedding`、`--rerank`；`zai--chat_completions`、`--messages`、`--embedding`、`--rerank`；`xai`；`qwen`；`moonshot`；`volcengine--chat_completions`、`--open_responses`、`--embedding` | 先在 contrib 起步、具备晋升资格的模型厂商 |
+
+**网关。** 配置中引用了上述 shim 之一——提供方的 `type:` / `shim:` / 键名、类型化端点
+（`embeddings_shim`、`embeddings: {shim}` 块）、旧式 `<type>_providers` 条目，或
+`quota.probe: openai_codex`——网关会自行把 `contrib:<vendor>` 加入
+[安装选择](shims.md#manifest-sources)，有无 `shims` 段都一样，并为每个提供方记录一行 INFO
+日志。已禁用的提供方同样计入。`openai--*` 提供方上的 `quota.probe: openai_codex` 会解析到
+`openai_chatgpt` 现在携带的探测。当 contrib 不可达且本地尚无缓存时，网关照常启动：它记录一条
+WARNING，列出缺失的提供方与 shim，并禁用使用它们的提供方，原因中写明迁移；下次加载能访问源时，
+这些提供方会自动恢复。在 `shims.strict: true` 下，这一失败与任何源失败一样会中止加载。
+
+**库。** `get_converter_for_provider("opencode--chat_completions")` 以及 shim 指向已迁移提供方的
+`ConversionPipeline` 会抛出 `ValueError`，其中写明 `llm-rosetta-shim-contrib`。不经网关使用这些
+shim 时，检出该仓库并调用 `llm_rosetta.api.load_providers_from_dir(<checkout>/providers)`。
+这张表是 `llm_rosetta.retired_names.MOVED_VENDORS`。
+
+**`llm-rosetta-migrate`。** `--config` 与 `--scan` 把每个已迁移的名字报告为 `note`
+（"now in llm-rosetta-shim-contrib; the gateway installs it automatically"），不计入退出码。
+
 ## 在代码中查找旧名字 {#find-old-names}
 
 ```bash

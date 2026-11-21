@@ -628,6 +628,17 @@ WARNING。若源已应答但没有匹配的厂商（分批发布、标签改名�
 **适配模块 → 来源 → 清单来源**同时编辑这两个键。每个源有一个区块，含“全部厂商”（`<source>:*`）、每个标签和每个厂商的复选框。区块下方的输入框用于添加目录 id 或 manifest URL；*移除来源*会删掉该源以及带有其 id 前缀的条目。新的 URL 源在第一次保存后才会读取。修改在点击**保存**之前只是草稿；保存时通过配置保存路径（在配置锁内）写入 `shims.sources` 和 `shims.install`，并重载来源。只重建被编辑的源带前缀的条目；其他条目（包括重复项）保持原样。不带前缀的条目（`opendesign`、`tag:tier:free`）读取所有源，所以按原样列出；请在配置文件中修改它。来源列表只要与声明的列表不同就会写入，因此只是隐含默认源的配置会把默认源写出。**重新读取清单**会重新拉取每个 manifest。该区块下方的原始*本地目录*和*远程源*字段照旧工作。
 
 在面板中保存会把配置文件重写为普通 JSON，注释不会保留。被替换的文件以 `<config>.prev` 保存在同一目录：这是上一次网关写入之前的文件，只保留一份，每次保存都会替换，新建文件时不写。网关从不写 `<config>.bak`，那个名字属于 `llm-rosetta-migrate --write`（迁移前的原始文件）以及你自己做的备份。编辑器在区块下方会提示这一点。
+**一条坏记录不会拖垮整个源。** 网关逐条读取已发布的 manifest。顶层无效——不是对象、未知的
+`manifest_version`、缺少必需键、`vendors` 不是对象——会让整个源失败（使用缓存的 manifest；
+冷缓存时则什么也没有）。无效的提供方条目或发布记录会被跳过，并记录一条 WARNING，写明提供方、
+版本和 JSON 路径形式的原因，manifest 的其余部分照常使用，因此新版生产方写出的一条记录不会让
+免费层失去其他提供方；选择只看到有效记录。记录中的 shim 名必须属于该提供方：提供方键本身（裸名
+`xai`、`qwen`、`moonshot`、`zhipu`）、`<vendor>--<name>`，或 `<vendor>_<lane>--<name>`（`alcf`
+下的 `alcf_sophia--chat_completions`）；带其他提供方前缀的名字会让该记录无效。
+
+**离开 core 的提供方会被自动安装。** 当配置引用了已离开 core 的提供方的 shim 或额度探测
+（[迁移到 0.14](migrating-to-0.14.md#moved-to-contrib)）时，网关会把 `contrib:<vendor>` 加入这里的
+选择；`sources` 未列出 `contrib` 时也会加上该源，有无 `shims` 段都一样。
 
 #### 只装包的一部分 { #selection }
 
@@ -745,10 +756,13 @@ loader 用解析分支得到的 commit 填充 `{ref}` —— 于是预设指向�
 
 ## 内置 Shim
 
-LLM-Rosetta 内置 49 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`
-下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。ALCF、AskSage、Argo、
-Open Design 与免费端点的 shim 作为独立包发布 ——
-参见[独立 Shim 包](#standalone-shim-packages)。
+LLM-Rosetta 内置 18 个提供方 shim，每个 shim 对应 `packages/llm-rosetta/src/llm_rosetta/shims/providers/<vendor>/<model-type>/`
+下的一个目录。`list_shims()` 会打印当前实际的集合；下表即是该集合。core 只保留模型厂商自己的
+API key 通道，以及每种非 chat 格式各一个真实提供方（[Shim 归属](shim-placement.md)）。其余提供方——
+包括 0.14 之前内置的 OpenCode、OpenRouter、MiniMax、Qwen、Volcengine、xAI 与 Zhipu——
+以相同名称从 contrib 源安装，配置引用它们时会自动安装
+（[迁移到 0.14](migrating-to-0.14.md#moved-to-contrib)）。ALCF、AskSage 与 Argo 的 shim 从
+argonne 源安装 —— 参见[独立 Shim 包](#standalone-shim-packages)。
 
 | 名称 | 格式 | 默认 Base URL | API Key 环境变量 | 转换规则 |
 |------|------|--------------|-----------------|---------|
@@ -761,45 +775,15 @@ Open Design 与免费端点的 shim 作为独立包发布 ——
 | `google--embedding` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `google--google_generate` | `google_generate` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
 | `google--google_interactions` | `google_interactions` | `https://generativelanguage.googleapis.com` | `GOOGLE_API_KEY` | — |
-| `groq--chat_completions` | `chat_completions` | `https://api.groq.com/openai/v1` | `GROQ_API_KEY` | 重命名 `reasoning` → `reasoning_content` |
 | `jina--embedding` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
 | `jina--rerank` | `jina` | `https://api.jina.ai` | `JINA_API_KEY` | — |
-| `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | `KILO_API_KEY` | — |
-| `minimax--chat_completions` | `chat_completions` | `https://api.minimaxi.com/v1` | `MINIMAX_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`seed`、`stop`；注入 `reasoning_split`；解析 `think` 标签 |
-| `minimax--embedding` | `minimax` | `https://api.minimaxi.com` | `MINIMAX_API_KEY` | — |
-| `minimax--messages` | `messages` | `https://api.minimaxi.com/anthropic` | `MINIMAX_API_KEY` | — |
-| `moonshot` | `chat_completions` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` | 剥离 `logprobs`、`top_logprobs`、`logit_bias`、`seed` |
-| `modelscope--chat_completions` | `chat_completions` | `https://api-inference.modelscope.cn/v1` | `MODELSCOPE_API_KEY` | — |
-| `nvidia--chat_completions` | `chat_completions` | `https://integrate.api.nvidia.com/v1` | `NVIDIA_API_KEY` | — |
 | `openai--chat_completions` | `chat_completions` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--embedding` | `openai` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--open_responses` | `open_responses` | `https://api.openai.com/v1` | `OPENAI_API_KEY` | — |
 | `openai--openai_decisions` | `openai_decisions` | `https://api.openai.com` | `OPENAI_API_KEY` | — |
-| `opencode--chat_completions` | `chat_completions` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
-| `opencode--messages` | `messages` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
-| `opencode--open_responses` | `open_responses` | `https://opencode.ai/zen/go/v1` | `OPENCODE_API_KEY` | — |
-| `openrouter--chat_completions` | `chat_completions` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | 重命名 `reasoning` → `reasoning_content` |
-| `openrouter--messages` | `messages` | `https://openrouter.ai/api` | `OPENROUTER_API_KEY` | — |
-| `openrouter--open_responses` | `open_responses` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
-| `openrouter--rerank` | `cohere` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` | — |
-| `qwen` | `chat_completions` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` | 剥离 `frequency_penalty`、`logit_bias` |
-| `siliconflow--chat_completions` | `chat_completions` | `https://api.siliconflow.cn/v1` | `SILICONFLOW_API_KEY` | 带类型目录；保留启用的 `subType: chat` |
-| `siliconflow--embedding` | `openai` | `https://api.siliconflow.cn/v1` | `SILICONFLOW_API_KEY` | 带类型目录；保留启用的 `subType: embedding` |
-| `siliconflow--rerank` | `cohere` | `https://api.siliconflow.cn/v1` | `SILICONFLOW_API_KEY` | 带类型目录；保留启用的 `subType: reranker` |
 | `typesafe--systemone` | `systemone` | `https://api.typesafe.ai` | `TYPESAFE_API_KEY` | — |
-| `volcengine--chat_completions` | `chat_completions` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | 剥离 `logprobs`、`top_logprobs` |
-| `volcengine--embedding` | `openai` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | — |
-| `volcengine--open_responses` | `open_responses` | `https://ark.cn-beijing.volces.com/api/v3` | `ARK_API_KEY` | — |
 | `voyage--embedding` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
 | `voyage--rerank` | `voyage` | `https://api.voyageai.com` | `VOYAGE_API_KEY` | — |
-| `xai` | `chat_completions` | `https://api.x.ai/v1` | `XAI_API_KEY` | 剥离 `logit_bias` |
-| `zai--chat_completions` | `chat_completions` | `https://api.z.ai/api/paas/v4` | `ZAI_API_KEY` | 将 `temperature` 钳制到 [0, 1] |
-| `zai--embedding` | `openai` | `https://api.z.ai/api/paas/v4` | `ZAI_API_KEY` | — |
-| `zai--messages` | `messages` | `https://api.z.ai/api/anthropic` | `ZAI_API_KEY` | — |
-| `zai--rerank` | `cohere` | `https://api.z.ai/api/paas/v4` | `ZAI_API_KEY` | — |
-| `zhipu` | `chat_completions` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | 剥离 `n`、penalties、`logprobs`、`logit_bias`、`seed` |
-| `zhipu--embedding` | `openai` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | — |
-| `zhipu--rerank` | `cohere` | `https://open.bigmodel.cn/api/paas/v4` | `ZHIPU_API_KEY` | — |
 
 本列给出字段级转换规则。`hoist_late_system_messages()` 会改写对话中途的 system/developer
 消息以保持 prompt cache 前缀稳定，多数 `chat_completions` shim 都声明了它，此处不再重复；
