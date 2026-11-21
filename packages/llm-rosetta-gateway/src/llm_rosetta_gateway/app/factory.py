@@ -336,7 +336,7 @@ def _report_shim_removals(config: GatewayConfig, report: ShimLoadReport | None) 
     through ``create_app``.  The report is only an input: a shim a declared
     source supplies is not going anywhere, so it is not reported.
     """
-    from ..shim_sources import report_shim_removals
+    from ..shims.shim_sources import report_shim_removals
 
     report_shim_removals(config.raw_providers, report)
 
@@ -398,7 +398,7 @@ async def create_app(
     ext = extensions or GatewayExtensions()
 
     if shim_source_report is None and load_shim_sources and config.shims:
-        from ..shim_sources import apply_shim_section
+        from ..shims.shim_sources import apply_shim_section
 
         shim_source_report = apply_shim_section(
             config.shims, config_path, proxy=config.proxy

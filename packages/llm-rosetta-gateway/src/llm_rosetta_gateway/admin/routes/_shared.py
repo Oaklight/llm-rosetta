@@ -418,7 +418,7 @@ async def _reload_gateway_config(
     """
     import asyncio
 
-    from ...shim_sources import apply_shim_sources, shims_signature
+    from ...shims.shim_sources import apply_shim_sources, shims_signature
 
     config_io = _get_config_io(request)
     raw = config_io.load(config_path)

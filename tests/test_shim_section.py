@@ -12,7 +12,7 @@ import os
 import pytest
 
 from llm_rosetta_gateway.config import GatewayConfig
-from llm_rosetta_gateway.shim_sources import (
+from llm_rosetta_gateway.shims.shim_sources import (
     ShimSources,
     apply_shim_section,
     apply_shim_sources,

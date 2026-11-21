@@ -22,7 +22,7 @@ from llm_rosetta_gateway.admin.routes.config import (
     _validate_shim_sources_body,
 )
 from llm_rosetta_gateway.config import GatewayConfig
-from llm_rosetta_gateway.shim_sources import (
+from llm_rosetta_gateway.shims.shim_sources import (
     parse_shims_section,
     report_shim_removals,
     resolve_source_config,

@@ -27,19 +27,19 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
-from .shims import (
+from . import (
     SHIM_SOURCE_PACKAGES,
     ShimLoadReport,
     get_source_package,
     rebuild_shims,
 )
-from .shims.catalog import (
+from .catalog import (
     DEFAULT_SOURCES,
     get_shim_source,
     package_repo_keys,
     repo_key,
 )
-from .shims.manifest_sources import (
+from .manifest_sources import (
     InstallSelector,
     ManifestPlan,
     ManifestSourceSpec,
@@ -47,9 +47,9 @@ from .shims.manifest_sources import (
     parse_source_entry,
     source_spec_from_catalogue,
 )
-from .shims.moved import MovedReference, moved_references
-from .shims.removals import ShimRemovalAdvisory, detect_shim_removals
-from .shims.sources import (
+from .moved import MovedReference, moved_references
+from .removals import ShimRemovalAdvisory, detect_shim_removals
+from .sources import (
     DEFAULT_CACHE_DIRNAME,
     REMOTE_TTL_SECONDS,
     HttpGet,

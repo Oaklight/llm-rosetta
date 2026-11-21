@@ -8,7 +8,11 @@ from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
-from ....shim_sources import apply_shim_sources, resolve_source_config, shims_signature
+from ....shims.shim_sources import (
+    apply_shim_sources,
+    resolve_source_config,
+    shims_signature,
+)
 from .._shared import (
     _get_config_io,
     _install_shim_report,
@@ -28,7 +32,7 @@ def _shim_removal_advisories(request: Any, raw: dict[str, Any]) -> list[dict[str
     app, so a saved shim source clears the advisory on the very next read
     instead of lingering until a restart.
     """
-    from llm_rosetta_gateway.shim_sources import shim_removal_advisories
+    from llm_rosetta_gateway.shims.shim_sources import shim_removal_advisories
 
     report = getattr(request.app, "shim_source_report", None)
     return [
@@ -184,7 +188,7 @@ async def post_shim_presets_migrate(request: Any) -> Response:
     """Rewrite the legacy ``shims.presets`` as explicit ``shims.install`` entries.
 
     The same rewrite ``llm-rosetta-migrate --config`` applies to the file
-    (:func:`~llm_rosetta_gateway.shim_sources.rewrite_presets_section`), run
+    (:func:`~llm_rosetta_gateway.shims.shim_sources.rewrite_presets_section`), run
     on the served document.  The panel calls it before it removes one vendor a
     preset selects, so the removal can be a single ``!<source>:<vendor>``
     entry instead of a refusal.  Nothing is reloaded here: the caller writes
@@ -195,7 +199,7 @@ async def post_shim_presets_migrate(request: Any) -> Response:
         "unconvertible"}``; ``converted`` is empty when there was nothing to
         rewrite (the document is then left untouched).
     """
-    from ....shim_sources import rewrite_presets_section
+    from ....shims.shim_sources import rewrite_presets_section
 
     async with config_mutate(request) as ctx:
         if ctx.error:

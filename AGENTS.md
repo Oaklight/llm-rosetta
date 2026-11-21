@@ -151,7 +151,7 @@ supported format and forwards them to any configured upstream provider.
 | `config/` | Config package: JSONC loading, locking, parsing, resolution; `providers.py` is the provider registry and factory that resolve shim config into runtime `ProviderInfo` (key rotation, auth headers) |
 | `pipelines/` | Typed request handlers (embeddings, rerank, decision) behind `handle_typed_request` |
 | `model_types/` | The model-type registry (`__init__.py`): descriptors, routes, formats, config keys; `source_formats.py` holds the source detectors its typed-route descriptors carry (embedding, rerank, decision) |
-| `shims/`, `shim_sources.py` | External shim sources, catalog, scheduled removals; the `shims` config section |
+| `shims/` | External shim sources (`shim_sources.py`), manifest selection and freshness, catalog, scheduled removals; the `shims` config section |
 | `routing/` | Candidate selection: the route container plus the pluggable strategies (weighted round-robin, affinity) |
 | `jobs/` | Background jobs: the envelope (`model.py`), store, queue, worker, handlers |
 | `quota/` | Provider quota probing and quota-aware credential rotation: `service.py` runs the probes (callers import every quota function from it), `allowance.py` answers what routing and admin read, `signals.py` records what live requests report |
@@ -168,7 +168,7 @@ supported format and forwards them to any configured upstream provider.
 | `surface.py` | The core surface level the gateway asserts at startup (see *Host surface*) |
 | `_vendor/` | Vendored modules (DO NOT EDIT) |
 
-The packages form layers, bottom to top: foundation (observability, transport, shims, `shim_sources.py`, model_types and the root leaves), state (quota, routing, maintenance, keystore, jobs), policy (config, middleware), operations (ops), engine (proxy, pipelines), serving (app, admin, `admin_api.py`), entry (cli and the package entry points). `tests/gateway/test_layers.py` holds the table and fails on a module-level import into a higher layer, a new function-local one (keyed by file, target and the function it sits in), an unplaced package, or a new root module. Place a new package in a layer there; keep the root for entry points and boundaries.
+The packages form layers, bottom to top: foundation (observability, transport, shims, model_types and the root leaves), state (quota, routing, maintenance, keystore, jobs), policy (config, middleware), operations (ops), engine (proxy, pipelines), serving (app, admin, `admin_api.py`), entry (cli and the package entry points). `tests/gateway/test_layers.py` holds the table and fails on a module-level import into a higher layer, a new function-local one (keyed by file, target and the function it sits in), an unplaced package, or a new root module. Place a new package in a layer there; keep the root for entry points and boundaries.
 
 ### Host surface
 

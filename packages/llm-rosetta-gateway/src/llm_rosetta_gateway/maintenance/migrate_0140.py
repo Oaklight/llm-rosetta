@@ -593,13 +593,13 @@ class _ConfigPlanner:
 
         The declared presets, and the ones a rewritten legacy shim name needs,
         are replaced by the entries
-        :func:`~llm_rosetta_gateway.shim_sources.presets_as_install` gives:
+        :func:`~llm_rosetta_gateway.shims.shim_sources.presets_as_install` gives:
         the mapped selector, one ``<source>:<vendor>`` per vendor an
         ``include`` keeps, ``!<source>:<vendor>`` per vendor an ``exclude``
         drops, and ``shims.disabled`` for a shim dropped from a kept vendor.
         A key that cannot be converted stays a preset and is reported.
         """
-        from ..shim_sources import presets_as_install
+        from ..shims.shim_sources import presets_as_install
 
         shims = root.member("shims")
         obj = shims.value if shims is not None and shims.value.kind == "obj" else None
@@ -692,7 +692,7 @@ class _ConfigPlanner:
         remotes: Any,
         rewrite: Any,
     ) -> None:
-        from ..shim_sources import presets_as_install
+        from ..shims.shim_sources import presets_as_install
 
         line = (
             line_of(self.text, presets_member.value.start) if presets_member else None
@@ -770,7 +770,7 @@ class _ConfigPlanner:
         an unknown URL may be a mirror of it, so the key is then reported rather
         than added (a second declaration would fetch the source twice).
         """
-        from ..shim_sources import sources_to_declare
+        from ..shims.shim_sources import sources_to_declare
 
         member = obj.member("sources")
         if member is None or member.value.kind != "arr":

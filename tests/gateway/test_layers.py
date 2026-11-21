@@ -63,7 +63,6 @@ LAYERS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "model_types",
             "observability",
-            "shim_sources",
             "shims",
             "surface",
             "transport",
@@ -83,7 +82,6 @@ ROOT_MODULES: dict[str, str] = {
     "__init__": "the package: version and lazy public names",
     "__main__": "python -m llm_rosetta_gateway",
     "admin_api": "the surface admin depends on; its own boundary",
-    "shim_sources": "moves into shims/ with the shim subsystem (#1672 G1)",
     "surface": "the core surface level this gateway needs; its boundary with core",
     "updates": "reads the changelog the release workflow writes beside the "
     "package root, so a move changes that lookup",

@@ -62,7 +62,7 @@ logger = logging.getLogger("llm-rosetta-gateway")
 
 if TYPE_CHECKING:
     from ..quota.rate_limit import RateLimitPolicy
-    from ..shim_sources import ShimSources
+    from ..shims.shim_sources import ShimSources
 
 
 class GatewayConfig:
@@ -224,7 +224,7 @@ class GatewayConfig:
         # the raw document, because that is what the reload path compares.
         # The whole document is read, not only the section: a provider that
         # names a vendor that moved out of core installs it (#1660).
-        from ..shim_sources import parse_shims_section, shims_signature
+        from ..shims.shim_sources import parse_shims_section, shims_signature
 
         raw_shims = raw.get("shims")
         self.shims = parse_shims_section(raw_shims, config_path, document=raw)

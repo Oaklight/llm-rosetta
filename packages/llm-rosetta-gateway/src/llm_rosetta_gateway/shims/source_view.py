@@ -404,7 +404,7 @@ def catalogue_payload(
     Returns:
         ``{"core", "sources", "install"}``; see :func:`source_catalogue`.
     """
-    from ..shim_sources import _cache_root
+    from .shim_sources import _cache_root
     from .sources import _default_http_get
 
     shims = getattr(config, "shims", None)

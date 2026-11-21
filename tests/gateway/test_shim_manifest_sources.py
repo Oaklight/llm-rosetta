@@ -24,7 +24,7 @@ from llm_rosetta.api import (
     snapshot_registry,
 )
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
-from llm_rosetta_gateway.shim_sources import (
+from llm_rosetta_gateway.shims.shim_sources import (
     apply_shim_sources,
     describe_shim_sources,
     parse_shims_section,
