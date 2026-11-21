@@ -97,6 +97,19 @@
           "description": "Set when the vendor moved into core, e.g. 'core@0.15.0'. A consumer reads it from the record it would install (the newest installable), so a later release without it un-promotes the vendor; the claim is honoured only when the running core is at or above that version (a dev or pre-release of it is before it) and core registers the record's shims.",
           "type": ["string", "null"],
           "pattern": "^core@[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+        },
+        "label": {
+          "description": "Optional display name of the vendor (its provider.yaml group_label), e.g. 'Kilo (Free)'. Per record, so a release can change it; a consumer reads it from the record it would install. A consumer that finds an invalid value drops this field only, with a warning, never the record.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "pattern": "^[^\\u0000-\\u001f<>]+$"
+        },
+        "logo": {
+          "description": "Optional https URL of the vendor's mark (its provider.yaml logo), so a vendor that is not installed is still drawn with it. Per record; a consumer that finds an invalid value drops this field only, with a warning, never the record.",
+          "type": "string",
+          "maxLength": 512,
+          "pattern": "^https://[^\\s\"'<>]+$"
         }
       }
     },

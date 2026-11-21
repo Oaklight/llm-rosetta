@@ -95,6 +95,8 @@ class VendorRelease:
         since: The date the maturity was reached, when stated.
         conformance: The last conformance result, as published.
         promoted_to: ``core@X.Y[.Z]`` once the vendor moved into core.
+        label: The vendor's display name, when the record states one.
+        logo: An https URL of the vendor's mark, when the record states one.
     """
 
     vendor: str
@@ -109,6 +111,8 @@ class VendorRelease:
     since: str | None = None
     conformance: Mapping[str, Any] | None = None
     promoted_to: str | None = None
+    label: str | None = None
+    logo: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return the record in the manifest's own shape."""
@@ -124,6 +128,10 @@ class VendorRelease:
             "since": self.since,
             "conformance": dict(self.conformance) if self.conformance else None,
             "promoted_to": self.promoted_to,
+            # Display fields are optional: absent when the record has none, so
+            # a record written before them round-trips unchanged.
+            **({"label": self.label} if self.label is not None else {}),
+            **({"logo": self.logo} if self.logo is not None else {}),
         }
 
 
@@ -188,6 +196,8 @@ SUPPORTED_KEYWORDS: frozenset[str] = frozenset(
         "const",
         "enum",
         "pattern",
+        "minLength",
+        "maxLength",
         "minimum",
         "minItems",
         "uniqueItems",
@@ -244,6 +254,10 @@ def _check(
     if "enum" in schema and value not in schema["enum"]:
         allowed = ", ".join(repr(x) for x in schema["enum"])
         problems.append(f"{path}: must be one of {allowed}")
+    if isinstance(value, str) and len(value) < schema.get("minLength", 0):
+        problems.append(f"{path}: shorter than {schema['minLength']} characters")
+    if isinstance(value, str) and len(value) > schema.get("maxLength", len(value)):
+        problems.append(f"{path}: longer than {schema['maxLength']} characters")
     if isinstance(value, str) and "pattern" in schema:
         if re.search(schema["pattern"], value) is None:
             problems.append(f"{path}: {value!r} does not match {schema['pattern']}")
@@ -519,6 +533,7 @@ def _valid_releases(
     """The valid release records of one vendor; a version listed twice drops all."""
     good: list[Any] = []
     for index, raw in enumerate(records):
+        raw = _without_bad_display(vendor, index, raw, root, skipped)
         problems = _release_problems(vendor, index, raw, root, others)
         if problems:
             label = raw.get("version") if isinstance(raw, Mapping) else None
@@ -542,6 +557,34 @@ def _valid_releases(
     return good
 
 
+#: Record fields that only change how a vendor is drawn.  A bad value drops
+#: the field, not the record: a mark must never cost an operator a vendor.
+DISPLAY_FIELDS = ("label", "logo")
+
+
+def _without_bad_display(
+    vendor: str, index: int, raw: Any, root: Mapping[str, Any], skipped: list[str]
+) -> Any:
+    """*raw* without a ``label`` / ``logo`` the schema refuses, each one named."""
+    if not isinstance(raw, Mapping):
+        return raw
+    path = f"$.vendors.{vendor}.versions[{index}]"
+    bad = []
+    for key in DISPLAY_FIELDS:
+        if key not in raw:
+            continue
+        problems: list[str] = []
+        spec = root["$defs"]["release"]["properties"][key]
+        _check(raw[key], spec, f"{path}.{key}", root, problems)
+        if problems:
+            bad.append(key)
+            skipped.append(
+                f"vendor {vendor!r} version {raw.get('version')!r} field {key!r} "
+                f"dropped: {'; '.join(problems)}"
+            )
+    return {k: v for k, v in raw.items() if k not in bad} if bad else raw
+
+
 def _release(vendor: str, raw: Mapping[str, Any]) -> VendorRelease:
     requires = raw["requires"]
     return VendorRelease(
@@ -557,6 +600,8 @@ def _release(vendor: str, raw: Mapping[str, Any]) -> VendorRelease:
         since=raw.get("since"),
         conformance=raw.get("conformance"),
         promoted_to=raw.get("promoted_to"),
+        label=raw.get("label"),
+        logo=raw.get("logo"),
     )
 
 

@@ -108,8 +108,6 @@ def vendor_view(
     status: ShimSourceStatus | None,
     core_names: Collection[str] = (),
     claimed_by: str | None = None,
-    logo: str | None = None,
-    label: str | None = None,
 ) -> dict[str, Any]:
     """One vendor card's data.
 
@@ -124,8 +122,6 @@ def vendor_view(
         core_names: The shim names core registers.
         claimed_by: The earlier source that provides the same vendor, when a
             selector picks it there first.
-        logo: The catalogue's mark for the vendor, if any.
-        label: The catalogue's display name for the vendor, if any.
 
     Returns:
         A JSON-safe mapping (see the keys below).
@@ -141,12 +137,24 @@ def vendor_view(
     installed = _release_from_status(status)
     installed_problem = release_requires_problem(installed) if installed else None
     pinned = selector.version if selector is not None else None
-    pin_problem = _pinned_release(ordered, pinned)[1] if pinned else None
+    pin_record, pin_problem = (
+        _pinned_release(ordered, pinned) if pinned else (None, None)
+    )
+    if selector is not None and selector.pin_conflict:
+        pin_record = None
+        pin_problem = "is pinned more than once: " + ", ".join(selector.pin_conflict)
+    # The record the gateway would install speaks for the vendor's name and
+    # mark: the pinned one when a pin holds, else the newest installable
+    # (else the newest).
+    shown = pin_record or record
     exclusion = excluded_by(selectors, source_id, vendor)
     return {
         "vendor": vendor,
-        "logo": logo,
-        "label": label,
+        # The record that would be installed names the vendor and its mark
+        # (the newest when nothing is installable); the panel falls back to
+        # the installed provider.yaml, then the key and initials.
+        "logo": shown.logo if shown is not None else None,
+        "label": shown.label if shown is not None else None,
         "versions": [r.version for r in ordered],
         "newest": newest.version if newest else None,
         "newest_requires": _requires(newest),
@@ -282,9 +290,12 @@ def source_catalogue(
     """
     from .catalog import get_shim_source
 
-    by_vendor = {
-        (s.source, s.vendor): s for s in statuses if getattr(s, "vendor", None)
-    }
+    # The install row of a vendor comes before any row for an entry another
+    # entry overrode (a second pin, an excluded entry); the first one speaks.
+    by_vendor: dict[tuple[Any, Any], ShimSourceStatus] = {}
+    for s in statuses:
+        if getattr(s, "vendor", None):
+            by_vendor.setdefault((s.source, s.vendor), s)
     claimed: dict[str, str] = {}
     out: list[dict[str, Any]] = []
     for spec in specs:
@@ -316,8 +327,6 @@ def source_catalogue(
                 status=by_vendor.get((source_id, vendor)),
                 core_names=core_names,
                 claimed_by=claimed.get(vendor),
-                logo=catalogue.logos.get(vendor) if catalogue else None,
-                label=catalogue.labels.get(vendor) if catalogue else None,
             )
             if view["selected_by"] and vendor not in claimed:
                 claimed[vendor] = source_id

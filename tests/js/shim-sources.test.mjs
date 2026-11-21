@@ -852,3 +852,21 @@ test('a Remove that also disables a provider still says what it did', async () =
   assert.match(text, /pin 0\.4\.0 dropped/);
   assert.match(text, /kilo-free/);
 });
+
+test('a record with no label or logo falls back to the key titled and the initials', async () => {
+  const fx = legacyFixture();
+  const groq = fx.catalogue.sources[0].vendors[2];
+  delete groq.label;
+  delete groq.logo;
+  installPage(fx);
+  const { S } = await import(`${ADMIN}/core/state.js`);
+  const page = await import(`${ADMIN}/tabs/shims-page.js`);
+  S.configData = null;
+  await page.loadShimsPage();
+  page.setShimsView('available');
+  const card = cardIn(elements.get('shimCatalogGrid').innerHTML, 'contrib:groq');
+
+  assert.match(card, /class="shim-vendor-name" title="Groq">Groq</);
+  assert.match(card, /<span class="shim-logo-fallback"[^>]*>Gr<\/span>/);
+  assert.doesNotMatch(card, /<img/);
+});
