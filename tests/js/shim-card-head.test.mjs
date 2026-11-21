@@ -45,13 +45,13 @@ function bodyOf(signature) {
 
 const HEADS = {
   vendor: bodyOf('function _vendorCard('),
-  package: bodyOf('function _packageCard('),
+  source: bodyOf('function _sourceVendorCard('),
 };
 
 test('both heads are the same two-row grid', () => {
   for (const [which, selector] of [
     ['vendor', '.shim-vendor-head'],
-    ['package', '.shim-card-head'],
+    ['source', '.shim-card-head'],
   ]) {
     const body = rule(selector);
     assert.match(body, /display:\s*grid/, `${which} head is a grid, not a flex line`);
@@ -100,12 +100,12 @@ function spanInner(markup, cls) {
 }
 
 test('the badges ride with the name, not beside it', () => {
-  const heads = { vendor: bodyOf('function _vendorCard('), package: bodyOf('function _packageCard(') };
-  assert.match(spanInner(heads.vendor, 'shim-vendor-title'), /\$\{badges\}/,
+  assert.match(spanInner(HEADS.vendor, 'shim-vendor-title'), /\$\{badges\}/,
     'the vendor card draws its badges inside the title row');
-  assert.match(spanInner(heads.package, 'shim-vendor-title'), /\$\{tierTag\}/,
-    'the package card draws its tier inside the title row');
-  for (const [which, body] of Object.entries(heads)) {
+  // The tier is what tells `kilo` from `kilo_free`: both are named "Kilo".
+  assert.match(spanInner(HEADS.source, 'shim-vendor-title'), /\$\{tierTag\}\$\{maturity\}\$\{state\}/,
+    'the source vendor card draws its tier, maturity and state inside the title row');
+  for (const [which, body] of Object.entries(HEADS)) {
     assert.match(spanInner(body, 'shim-vendor-title'), /shim-vendor-name/,
       `${which} card puts the name in the title row`);
   }

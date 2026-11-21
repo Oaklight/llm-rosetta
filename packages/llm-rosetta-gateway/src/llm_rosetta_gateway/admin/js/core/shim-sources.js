@@ -305,7 +305,59 @@ export function sourceTags(src) {
 /** Whether a vendor passes the page's search box. */
 export function vendorMatches(v, src, query) {
   if (!query) return true;
-  const hay = [v.vendor, src.id, src.label, v.maturity, ...(v.tags || []), ...(v.shims || [])]
+  const hay = [v.vendor, v.label, src.id, src.label, v.maturity, ...(v.tags || []), ...(v.shims || [])]
     .filter(Boolean).join(' ').toLowerCase();
   return hay.includes(query);
+}
+
+/**
+ * The tier a source record states in its tags, when it is not the default.
+ *
+ * `kilo` and `kilo_free` are one product, so they share a name and a mark;
+ * the tier is what tells the two cards apart, as the Installed view's free
+ * badge already does.
+ *
+ * @returns {'free'|'subscription'|''} '' for a paid (or untagged) vendor
+ */
+export function vendorTier(v) {
+  const tags = (v && v.tags) || [];
+  if (tags.includes('tier:free')) return 'free';
+  if (tags.includes('tier:subscription')) return 'subscription';
+  return '';
+}
+
+/**
+ * The source vendors a search on the Installed view adds below its rows.
+ *
+ * The Installed view lists what is registered, so a vendor a source offers
+ * but this gateway has not installed was invisible to its search box.  A
+ * query is required — without one this would be the whole Available view —
+ * and the filters read the way they do on the loaded rows: the tier is the
+ * record's `tier:` tag (untagged reads as paid), and every source vendor is
+ * external, so a built-in or local origin filter matches none.  A vendor two
+ * sources publish is listed once, from the first.
+ *
+ * @param {{sources?: object[]}|null} catalogue `/shims/source-catalog`
+ * @param {{q?: string, tier?: string, origin?: string}} filters
+ * @returns {{src: object, v: object}[]}
+ */
+export function notInstalledVendors(catalogue, filters) {
+  const q = ((filters && filters.q) || '').trim().toLowerCase();
+  if (!q) return [];
+  const origin = (filters && filters.origin) || '';
+  if (origin && origin !== 'remote') return [];
+  const tier = (filters && filters.tier) || '';
+  const seen = new Set();
+  const out = [];
+  for (const src of (catalogue && catalogue.sources) || []) {
+    for (const v of src.vendors || []) {
+      if (seen.has(v.vendor)) continue;
+      seen.add(v.vendor);
+      if (v.installed) continue;
+      if (tier && (vendorTier(v) || 'paid') !== tier) continue;
+      if (!vendorMatches(v, src, q)) continue;
+      out.push({ src, v });
+    }
+  }
+  return out;
 }

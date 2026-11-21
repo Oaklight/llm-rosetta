@@ -707,7 +707,8 @@ tr:hover td { background: var(--surface-2); }
 [data-mode="dark"] .pc-logo:not(.pc-logo-empty),
 [data-mode="dark"] .type-picker-logo,
 [data-mode="dark"] .tp-logo:not(.tp-logo-empty),
-[data-mode="dark"] .logo-select-img:not(.logo-select-img-empty) {
+[data-mode="dark"] .logo-select-img:not(.logo-select-img-empty),
+[data-mode="dark"] .shim-logo {
   background:#fff;border-radius:4px;padding:1px;box-sizing:content-box;
 }
 
@@ -2897,15 +2898,20 @@ button.shim-update.unknown { color: var(--tag-warn); }
    three controls that need 580), which wrapped its last select inside itself. */
 #tab-shims > .section > .toolbar {
   grid-column: 1; grid-row: 1; margin: 0;
-  display: grid; grid-template-columns: 260px 150px 150px; align-items: center; gap: 10px;
+  /* One column per control that is showing: the Installed view shows four
+     (search, origin, type, tier), and a fixed three-column template pushed
+     the tier filter onto a row of its own. */
+  display: grid; grid-template-columns: 260px; grid-auto-flow: column; grid-auto-columns: 150px;
+  align-items: center; gap: 10px;
 }
 #tab-shims > .section > .section-header { grid-column: 2; grid-row: 1; margin: 0; justify-content: flex-end; column-gap: 12px; }
 #tab-shims > .section > #shimGrid,
 #tab-shims > .section > #shimCatalogGrid,
 #tab-shims > .section > .shims-sources { grid-column: 1 / -1; }
-/* The two columns need ~965px of content: below that viewport width (the rail
-   takes 232) the header takes the first row and the filters the second. */
-@media (max-width: 1200px) {
+/* The two columns need ~1130px of content with all four filters showing:
+   below that viewport width (the rail takes 232) the header takes the first
+   row and the filters the second. */
+@media (max-width: 1400px) {
   #tab-shims > .section { grid-template-columns: minmax(0, 1fr); }
   #tab-shims > .section > .section-header { grid-column: 1; grid-row: 1; }
   #tab-shims > .section > .toolbar {
@@ -2936,6 +2942,10 @@ button.shim-update.unknown { color: var(--tag-warn); }
 .shims-sources-toggle .toggle { flex: 0 0 auto; }
 
 .shim-grid[hidden], #shimPageToolbar[hidden], .shims-sources[hidden] { display: none; }
+/* The grid rule above names the toolbar by three selectors, which outranks
+   `#shimPageToolbar[hidden]`: the Sources view showed a search box and a tier
+   filter that filtered nothing. */
+#tab-shims > .section > .toolbar[hidden] { display: none; }
 
 .shim-grid {
   display: grid;
@@ -3178,6 +3188,8 @@ button.shim-update.unknown { color: var(--tag-warn); }
   text-transform: uppercase; letter-spacing: 0.04em;
 }
 .shim-grid-inline { grid-column: 1 / -1; }
+/* The legacy-presets note sits above the first source on the Available view. */
+.shim-legacy-note { grid-column: 1 / -1; margin: 0; }
 
 /* ── Manifest sources (#1660 S9) ─────────────────────────────────────── */
 /* A source's section head carries its state and its repository link, so a

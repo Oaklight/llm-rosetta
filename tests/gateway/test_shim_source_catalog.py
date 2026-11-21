@@ -370,3 +370,87 @@ class TestPackageCard:
         )
 
         assert _manifest_package_view(statuses, {}) == {}
+
+
+class TestCatalogueMarks:
+    """A vendor that is not installed still shows its mark and its name.
+
+    The manifest carries neither, and before #1660 core declared both in the
+    vendor's ``provider.yaml``; after the move an uninstalled vendor drew its
+    initials (``Gr``, ``Za``) and its key (``Zai``) on the Available view.
+    """
+
+    def test_a_catalogue_source_names_the_mark_and_label_of_its_vendors(self, tmp_path):
+        from llm_rosetta_gateway.shims.catalog import get_shim_source
+        from llm_rosetta_gateway.shims.manifest_sources import (
+            source_spec_from_catalogue,
+        )
+
+        contrib = get_shim_source("contrib")
+        assert contrib is not None
+        spec = source_spec_from_catalogue(contrib)
+        http = FakeHttp(
+            {
+                spec.url: _manifest(
+                    "contrib",
+                    {
+                        "zai": [_record("0.5.0", shims=["zai--chat_completions"])],
+                        "newcomer": [
+                            _record("0.1.0", shims=["newcomer--chat_completions"])
+                        ],
+                    },
+                )
+            }
+        )
+
+        out = _catalogue(tmp_path, [spec], http)
+
+        by_vendor = {v["vendor"]: v for v in out[0]["vendors"]}
+        assert by_vendor["zai"]["label"] == "Z.ai"
+        assert by_vendor["zai"]["logo"].endswith("/zhipu.svg")
+        # A vendor the catalogue does not know keeps the initials fallback.
+        assert by_vendor["newcomer"]["label"] is None
+        assert by_vendor["newcomer"]["logo"] is None
+
+    def test_a_url_source_carries_no_catalogue_mark(self, tmp_path):
+        zai = [_record("0.5.0", shims=["zai--chat_completions"])]
+        http = FakeHttp({A: _manifest("contrib", {"zai": zai})})
+
+        out = _catalogue(tmp_path, [ManifestSourceSpec(key=None, url=A)], http)
+
+        assert out[0]["vendors"][0]["logo"] is None
+        assert out[0]["vendors"][0]["label"] is None
+
+    def test_no_mark_points_at_an_archived_package_repository(self):
+        from llm_rosetta_gateway.shims.catalog import (
+            SHIM_SOURCE_PACKAGES,
+            SHIM_SOURCES,
+        )
+
+        archived = {
+            "llm-rosetta-shim-alcf",
+            "llm-rosetta-shim-argo@",
+            "llm-rosetta-shim-asksage",
+            "llm-rosetta-shim-opendesign",
+            "llm-rosetta-shim-free",
+        }
+        urls = [u for s in SHIM_SOURCES for u in s.logos.values()]
+        urls += [u for p in SHIM_SOURCE_PACKAGES for u in p.logos.values()]
+        assert urls
+        for url in urls:
+            assert not any(name in url for name in archived), url
+
+    def test_a_package_reads_its_marks_from_its_source(self):
+        from llm_rosetta_gateway.shims.catalog import (
+            get_shim_source,
+            get_source_package,
+        )
+
+        free = get_source_package("free")
+        contrib = get_shim_source("contrib")
+        assert free is not None and contrib is not None
+        assert free.logos == {
+            v: contrib.logos[v] for v in free.vendors if v in contrib.logos
+        }
+        # LLM7 declares no mark of its own.
+        assert "llm7" not in free.logos

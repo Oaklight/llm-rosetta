@@ -64,11 +64,6 @@ class ShimSourcePackage:
             commit and records that in the cache stamp, so a fetch is
             reproducible without a release having to happen first.  Setting it
             opts one package into a fixed tag or commit.
-        logos: The vendor marks the package's leaves declare, keyed by the
-            vendor name (the shim name before ``--``).  The Available view
-            draws them before the package is fetched, when there is no
-            ``provider.yaml`` on disk to read a mark from; a vendor absent here
-            falls back to the initials tile the Installed view uses.
         mirror: The ``shims.remotes[].mirror`` entry.  ``url_template`` is
             commit-addressed (``@dist/{ref}``): with no declared ``ref`` the
             loader substitutes the commit it resolved the branch to, and each
@@ -100,7 +95,6 @@ class ShimSourcePackage:
     note: dict[str, str] | None = None
     ref: str | None = None
     mirror: dict[str, Any] | None = None
-    logos: dict[str, str] = field(default_factory=dict)
     source: str | None = None
     install: str | None = None
     legacy_repos: tuple[str, ...] = ()
@@ -117,6 +111,18 @@ class ShimSourcePackage:
         if self.subscription:
             return "subscription"
         return "free" if self.free else "paid"
+
+    @property
+    def logos(self) -> dict[str, str]:
+        """The marks of this package's vendors, as its source records them.
+
+        Returns:
+            ``{vendor: url}`` for the vendors :attr:`ShimSource.logos` names.
+        """
+        source = get_shim_source(self.source) if self.source else None
+        if source is None:
+            return {}
+        return {v: source.logos[v] for v in self.vendors if v in source.logos}
 
     @property
     def remote(self) -> dict[str, Any]:
@@ -343,14 +349,6 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         # Cluster-qualified in #1035; the unqualified spellings still ship in
         # configs written for the 0.14.0 dev builds.
         legacy_names=("alcf--metis", "alcf--minerva", "alcf--sophia"),
-        # The mark is the vendor manifest's, repeated so Available can draw
-        # it before the package is fetched.
-        logos={
-            "alcf": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf"
-                "@main/assets/alcf.svg"
-            ),
-        },
         # The archive is commit-addressed (``@dist/<commit>``), and the
         # loader fills ``{ref}`` with the commit it resolved the branch to,
         # so the pinned commit and the mirror's bytes name one tree without
@@ -386,14 +384,6 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
             "argo--anthropic",
             "argo--openai_responses",
         ),
-        # The vendor's own wordmark, cut from the banner it publishes and
-        # traced to a path (it is a 24px raster: no font to embed).
-        logos={
-            "argo": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argonne"
-                "@c1925c14f35170aa4f839c7fb8b97de58c2d4bee/assets/argo.svg"
-            ),
-        },
         # The archive is commit-addressed (``@dist/<commit>``), and the
         # loader fills ``{ref}`` with the commit it resolved the branch to,
         # so the pinned commit and the mirror's bytes name one tree without
@@ -430,18 +420,6 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
         ),
         # Keyless, so the picker groups them under free resources.
         free=True,
-        # LLM7 declares no mark of its own, so its tile falls back to initials.
-        logos={
-            "kilo_free": (
-                "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg"
-                "@latest/icons/kilocode.svg"
-            ),
-            "opencode_zen_free": (
-                "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg"
-                "@latest/icons/opencode.svg"
-            ),
-            "ovhcloud": "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ovh.svg",
-        },
         note={
             "en": (
                 "Anonymous free tiers with no contract: Kilo serves only its "
@@ -497,15 +475,6 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
             "asksage--anthropic",
             "asksage--openai_responses",
         ),
-        # The vendor manifest carries the owl; the catalogue repeats it so the
-        # Available card, and a loaded package whose archive predates the
-        # declaration, both draw a mark instead of initials.
-        logos={
-            "asksage": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-asksage"
-                "@main/assets/asksage.png"
-            ),
-        },
         # The archive is commit-addressed (``@dist/<commit>``), and the
         # loader fills ``{ref}`` with the commit it resolved the branch to,
         # so the pinned commit and the mirror's bytes name one tree without
@@ -532,14 +501,6 @@ SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
             "opendesign--messages",
             "opendesign--open_responses",
         ),
-        # The vendor manifest carries the mark, so every lane shows it; the
-        # package needs a core that reads manifest identity (0.14.0.dev31+).
-        logos={
-            "opendesign": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-opendesign"
-                "@main/assets/opendesign.svg"
-            ),
-        },
         # Branch-addressed for the same reason as the rest: no digest to bump.
         # The archive is commit-addressed (``@dist/<commit>``), and the
         # loader fills ``{ref}`` with the commit it resolved the branch to,
@@ -568,12 +529,22 @@ class ShimSource:
         label: Human-readable name.
         repo: The repository URL.
         legacy_repos: Earlier names of the repository; GitHub redirects them.
+        logos: The mark of each vendor the source publishes, keyed by the
+            manifest's vendor name.  The manifest carries no mark, and a
+            vendor that is not installed has no ``provider.yaml`` on disk to
+            read one from, so the Available view draws these; a loaded shim's
+            own ``logo:`` still wins in the Installed view.
+        labels: The display name of each vendor, for the same reason: the
+            vendor key (``zai``, ``kilo_free``) is not the vendor's name.
     """
 
     key: str
     label: str
     repo: str
     legacy_repos: tuple[str, ...] = ()
+    # A dict is not hashable, and a frozen dataclass hashes every field.
+    logos: dict[str, str] = field(default_factory=dict, hash=False)
+    labels: dict[str, str] = field(default_factory=dict, hash=False)
 
     @property
     def _owner_repo(self) -> tuple[str, str]:
@@ -615,7 +586,8 @@ class ShimSource:
                     "name": vendor,
                     "package": package.key,
                     "tier": package.tier,
-                    "logo": package.logos.get(vendor),
+                    "logo": self.logos.get(vendor),
+                    "label": self.labels.get(vendor),
                 }
                 for package in self.packages
                 for vendor in package.vendors
@@ -623,20 +595,81 @@ class ShimSource:
         }
 
 
+_LOBE = "https://cdn.jsdelivr.net/npm/@lobehub/icons-static-svg@latest/icons/"
+# A mark a source repository hosts itself is addressed by a release tag: the
+# per-vendor repositories these used to live in are archived (#1660).
+_ARGONNE_ASSETS = (
+    "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argonne@v0.4.0/assets/"
+)
+_CONTRIB_ASSETS = (
+    "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-contrib@v0.5.0/assets/"
+)
+
 #: The source repositories that publish a manifest.  ``shims.sources`` names
-#: them by key; a URL names any other source.
+#: them by key; a URL names any other source.  The marks and names repeat the
+#: vendor manifests' ``logo:`` / ``group_label:`` (core declared them before
+#: the vendors moved out); LLM7 declares no mark, so its tile shows initials.
 SHIM_SOURCES: tuple[ShimSource, ...] = (
     ShimSource(
         key="argonne",
         label="Argonne",
         repo="https://github.com/Oaklight/llm-rosetta-shim-argonne",
         legacy_repos=("https://github.com/Oaklight/llm-rosetta-shim-argo",),
+        logos={
+            "alcf": _ARGONNE_ASSETS + "alcf.svg",
+            "argo": _ARGONNE_ASSETS + "argo.svg",
+            "asksage": _ARGONNE_ASSETS + "asksage.webp",
+        },
+        labels={"alcf": "ALCF", "argo": "Argo", "asksage": "AskSage"},
     ),
     ShimSource(
         key="contrib",
         label="Contrib",
         repo="https://github.com/Oaklight/llm-rosetta-shim-contrib",
         legacy_repos=("https://github.com/Oaklight/llm-rosetta-shim-free",),
+        logos={
+            "antigravity": _LOBE + "antigravity.svg",
+            "groq": _LOBE + "groq.svg",
+            "kilo": _LOBE + "kilocode.svg",
+            "kilo_free": _LOBE + "kilocode.svg",
+            "modelscope": _LOBE + "modelscope.svg",
+            "moonshot": _LOBE + "moonshot.svg",
+            "nvidia": _LOBE + "nvidia.svg",
+            "openai_chatgpt": _LOBE + "openai.svg",
+            "opencode": _LOBE + "opencode.svg",
+            "opencode_zen_free": _LOBE + "opencode.svg",
+            "opendesign": _CONTRIB_ASSETS + "opendesign.svg",
+            "openrouter": _LOBE + "openrouter.svg",
+            "ovhcloud": "https://cdn.jsdelivr.net/npm/simple-icons@latest/icons/ovh.svg",
+            "qwen": _LOBE + "qwen.svg",
+            "siliconflow": _LOBE + "siliconcloud.svg",
+            "volcengine": _LOBE + "volcengine.svg",
+            "xai": _LOBE + "xai.svg",
+            "zai": _LOBE + "zhipu.svg",
+            "zhipu": _LOBE + "zhipu.svg",
+        },
+        labels={
+            "antigravity": "Google (Antigravity)",
+            "groq": "Groq",
+            "kilo": "Kilo",
+            "kilo_free": "Kilo",
+            "llm7": "LLM7.io",
+            "modelscope": "ModelScope",
+            "moonshot": "Moonshot",
+            "nvidia": "NVIDIA",
+            "openai_chatgpt": "OpenAI (ChatGPT plan)",
+            "opencode": "OpenCode",
+            "opencode_zen_free": "OpenCode Zen",
+            "opendesign": "OpenDesign",
+            "openrouter": "OpenRouter",
+            "ovhcloud": "OVHcloud",
+            "qwen": "Qwen",
+            "siliconflow": "SiliconFlow",
+            "volcengine": "Volcengine",
+            "xai": "xAI",
+            "zai": "Z.ai",
+            "zhipu": "Zhipu",
+        },
     ),
 )
 

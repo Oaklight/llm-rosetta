@@ -108,6 +108,7 @@ def vendor_view(
     core_names: Collection[str] = (),
     claimed_by: str | None = None,
     logo: str | None = None,
+    label: str | None = None,
 ) -> dict[str, Any]:
     """One vendor card's data.
 
@@ -123,6 +124,7 @@ def vendor_view(
         claimed_by: The earlier source that provides the same vendor, when a
             selector picks it there first.
         logo: The catalogue's mark for the vendor, if any.
+        label: The catalogue's display name for the vendor, if any.
 
     Returns:
         A JSON-safe mapping (see the keys below).
@@ -140,6 +142,7 @@ def vendor_view(
     return {
         "vendor": vendor,
         "logo": logo,
+        "label": label,
         "versions": [r.version for r in ordered],
         "newest": newest.version if newest else None,
         "newest_requires": _requires(newest),
@@ -230,15 +233,6 @@ def _configured_entry(
     return None
 
 
-def _catalogue_logos(key: str | None) -> dict[str, str]:
-    from .catalog import get_shim_source
-
-    source = get_shim_source(key) if key else None
-    if source is None:
-        return {}
-    return {v["name"]: v["logo"] for v in source.to_dict()["vendors"] if v.get("logo")}
-
-
 def source_catalogue(
     specs: Sequence[ManifestSourceSpec],
     *,
@@ -299,7 +293,6 @@ def source_catalogue(
         entry = _configured_entry(spec, raw_sources)
         manifest: SourceManifest | None = state.manifest
         source_id = spec.key or (manifest.source if manifest else None) or spec.url
-        logos = _catalogue_logos(spec.key)
         vendors: list[dict[str, Any]] = []
         releases = dict(manifest.vendors) if manifest is not None else {}
         for vendor in sorted(releases):
@@ -311,7 +304,8 @@ def source_catalogue(
                 status=by_vendor.get((source_id, vendor)),
                 core_names=core_names,
                 claimed_by=claimed.get(vendor),
-                logo=logos.get(vendor),
+                logo=catalogue.logos.get(vendor) if catalogue else None,
+                label=catalogue.labels.get(vendor) if catalogue else None,
             )
             if view["selected_by"] and vendor not in claimed:
                 claimed[vendor] = source_id
