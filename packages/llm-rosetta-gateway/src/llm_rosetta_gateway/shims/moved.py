@@ -5,7 +5,7 @@ names, so a config written for the built-in shim (``type:
 opencode--chat_completions``, ``quota.probe: openai_codex``) still names a
 valid shim — it is only no longer built in.  This module finds those names in
 a raw config document and turns them into ``<source>:<vendor>`` install
-selectors, which :mod:`llm_rosetta_gateway.shim_sources` adds to the effective
+selectors, which :mod:`llm_rosetta_gateway.shims.shim_sources` adds to the effective
 ``shims.install`` selection.  The operator edits nothing, and a config with no
 ``shims`` section at all is covered as well.
 

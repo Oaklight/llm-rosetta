@@ -24,8 +24,8 @@ import pytest
 from _moved_vendors import MOVED_VENDORS_DIR
 from llm_rosetta.api import get_shim, retired_names
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
-from llm_rosetta_gateway import shim_sources
-from llm_rosetta_gateway.shim_sources import (
+from llm_rosetta_gateway.shims import shim_sources
+from llm_rosetta_gateway.shims.shim_sources import (
     apply_shim_sources,
     parse_shims_section,
     shims_signature,

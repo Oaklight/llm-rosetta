@@ -37,7 +37,7 @@ from ..config.providers import (
     get_default_base_url,
     known_provider_types,
 )
-from ..shim_sources import apply_shim_sources, describe_shim_sources
+from ..shims.shim_sources import apply_shim_sources, describe_shim_sources
 
 logger = get_logger()
 

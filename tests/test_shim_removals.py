@@ -137,7 +137,7 @@ class TestManifest:
 
     def test_every_remote_round_trips_through_the_source_resolver(self):
         """A preset is only useful if the gateway would accept it."""
-        from llm_rosetta_gateway.shim_sources import resolve_source_config
+        from llm_rosetta_gateway.shims.shim_sources import resolve_source_config
 
         for entry in SAMPLES:
             _dirs, remotes, _cache = resolve_source_config(
@@ -298,7 +298,7 @@ class TestSourceCatalog:
             assert "sha256" not in entry.mirror, entry.key
 
     def test_every_preset_round_trips_through_the_source_resolver(self):
-        from llm_rosetta_gateway.shim_sources import resolve_source_config
+        from llm_rosetta_gateway.shims.shim_sources import resolve_source_config
 
         for entry in SHIM_SOURCE_PACKAGES:
             _dirs, remotes, _cache = resolve_source_config(

@@ -28,7 +28,7 @@ from llm_rosetta.shims import get_shim
 from llm_rosetta.shims.provider_shim import _reset_registry
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.ops import OpsContext, OpsProviderValidation
-from llm_rosetta_gateway.shim_sources import apply_shim_section
+from llm_rosetta_gateway.shims.shim_sources import apply_shim_section
 from llm_rosetta_gateway.shims import SHIM_SOURCE_PACKAGES, get_source_package
 from llm_rosetta_gateway.shims import sources as sources_mod
 from llm_rosetta.shims._loader import load_providers

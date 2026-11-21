@@ -25,7 +25,10 @@ import pytest
 
 from llm_rosetta.contracts import SURFACE_VERSION
 from llm_rosetta_gateway.maintenance.migrate_0140 import migrate_config_text
-from llm_rosetta_gateway.shim_sources import presets_as_install, rewrite_presets_section
+from llm_rosetta_gateway.shims.shim_sources import (
+    presets_as_install,
+    rewrite_presets_section,
+)
 from llm_rosetta_gateway.shims.manifest_sources import (
     excluded_by,
     parse_selector,
@@ -382,7 +385,7 @@ class TestMigrateRewrite:
         assert any(i.action == "unmapped" and i.old == "nope" for i in result.items)
 
     def test_a_migrated_document_parses_as_the_same_selection(self, tmp_path):
-        from llm_rosetta_gateway.shim_sources import parse_shims_section
+        from llm_rosetta_gateway.shims.shim_sources import parse_shims_section
 
         result = migrate_config_text(self.TEXT)
         doc = json.loads(
@@ -641,7 +644,7 @@ class TestExcludedMovedVendor:
     def test_the_row_and_the_log_name_the_exclusion_not_the_publisher(
         self, tmp_path, logs
     ):
-        from llm_rosetta_gateway.shim_sources import apply_shim_sources
+        from llm_rosetta_gateway.shims.shim_sources import apply_shim_sources
 
         http = FakeHttp()
         http.publish("kilo", "0.5.0", ["kilo--chat_completions"])

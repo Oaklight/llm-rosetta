@@ -15,7 +15,7 @@ from llm_rosetta_gateway.admin.routes.config import (
     _validate_shim_sources_body,
 )
 from llm_rosetta_gateway.config import GatewayConfig
-from llm_rosetta_gateway.shim_sources import (
+from llm_rosetta_gateway.shims.shim_sources import (
     apply_shim_section,
     apply_shim_sources,
     describe_shim_sources,
@@ -173,7 +173,7 @@ class TestApplyShimSources:
                 sources=[], total_shims=0, failures=lambda: [], to_dict=lambda: {}
             )
 
-        import llm_rosetta_gateway.shim_sources as mod
+        import llm_rosetta_gateway.shims.shim_sources as mod
 
         monkeypatch.setattr(mod, "rebuild_shims", fake_rebuild)
         apply_shim_section(
@@ -455,7 +455,7 @@ class TestUnknownPreset:
     """A key this build does not ship must not keep the gateway from starting."""
 
     def test_a_skipped_key_leaves_the_rest_of_the_section_alone(self, tmp_path: Path):
-        from llm_rosetta_gateway.shim_sources import apply_shim_section
+        from llm_rosetta_gateway.shims.shim_sources import apply_shim_section
 
         report = apply_shim_section(
             {"presets": ["ghost"], "paths": [str(tmp_path / "none")]},
@@ -464,7 +464,7 @@ class TestUnknownPreset:
         assert [s.kind for s in report.sources] == ["path"]
 
     def test_strict_keeps_the_hard_failure(self, tmp_path: Path):
-        from llm_rosetta_gateway.shim_sources import apply_shim_section
+        from llm_rosetta_gateway.shims.shim_sources import apply_shim_section
 
         with pytest.raises(ValueError, match="unknown shim preset 'ghost'"):
             apply_shim_section(
@@ -511,7 +511,7 @@ class TestReloadWiring:
     def test_the_config_reload_drops_the_cached_verdicts(self, monkeypatch):
         from llm_rosetta_gateway.admin.routes import _shared
         from llm_rosetta_gateway import ops as ops_module
-        from llm_rosetta_gateway import shim_sources as shim_sources_module
+        from llm_rosetta_gateway.shims import shim_sources as shim_sources_module
 
         app = SimpleNamespace(
             shim_source_report="old-report",

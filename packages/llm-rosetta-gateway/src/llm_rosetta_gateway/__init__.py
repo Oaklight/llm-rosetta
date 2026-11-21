@@ -62,7 +62,7 @@ if TYPE_CHECKING:
         load_gateway_config,
     )
     from .proxy import ProviderMetadataStore
-    from .shim_sources import (
+    from .shims.shim_sources import (
         ShimSources,
         apply_shim_section,
         apply_shim_sources,
@@ -79,17 +79,17 @@ _EXPORTS: dict[str, tuple[str, str]] = {
     "GatewayExtensions": (".app", "GatewayExtensions"),
     "JsoncConfigIO": (".config", "JsoncConfigIO"),
     "ProviderMetadataStore": (".proxy", "ProviderMetadataStore"),
-    "ShimSources": (".shim_sources", "ShimSources"),
-    "apply_shim_section": (".shim_sources", "apply_shim_section"),
-    "apply_shim_sources": (".shim_sources", "apply_shim_sources"),
+    "ShimSources": (".shims.shim_sources", "ShimSources"),
+    "apply_shim_section": (".shims.shim_sources", "apply_shim_section"),
+    "apply_shim_sources": (".shims.shim_sources", "apply_shim_sources"),
     "create_app": (".app", "create_app"),
     "discover_config": (".config", "discover_config"),
     "load_config": (".config", "load_config"),
     "load_gateway_config": (".config", "load_gateway_config"),
     "main": (".cli", "main"),
-    "parse_shims_section": (".shim_sources", "parse_shims_section"),
-    "resolve_source_config": (".shim_sources", "resolve_source_config"),
-    "shims_signature": (".shim_sources", "shims_signature"),
+    "parse_shims_section": (".shims.shim_sources", "parse_shims_section"),
+    "resolve_source_config": (".shims.shim_sources", "resolve_source_config"),
+    "shims_signature": (".shims.shim_sources", "shims_signature"),
 }
 
 __all__ = [

@@ -31,7 +31,7 @@ def print_shim_sources(lines: Sequence[str]) -> None:
     """Print the shim-source summary beneath the banner.
 
     The lines come from
-    :func:`llm_rosetta_gateway.shim_sources.describe_shim_sources`; each names
+    :func:`llm_rosetta_gateway.shims.shim_sources.describe_shim_sources`; each names
     the leg a remote source loaded from, so a mirror that took over is visible
     at startup without reading the log.
     """

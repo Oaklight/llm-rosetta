@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from llm_rosetta.contracts.shim_manifest import parse_manifest, validate_manifest
-from llm_rosetta_gateway.shim_sources import parse_shims_section
+from llm_rosetta_gateway.shims.shim_sources import parse_shims_section
 from llm_rosetta_gateway.shims.manifest_sources import _select_vendors
 
 DATA = Path(__file__).resolve().parents[1] / "fixtures" / "shim_manifests"

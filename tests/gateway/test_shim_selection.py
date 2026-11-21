@@ -18,7 +18,7 @@ from llm_rosetta.api import (
     snapshot_registry,
     staging_registry,
 )
-from llm_rosetta_gateway.shim_sources import parse_shims_section
+from llm_rosetta_gateway.shims.shim_sources import parse_shims_section
 from llm_rosetta_gateway.shims import sources as shim_sources
 from llm_rosetta_gateway.shims.manifest import (
     MANIFEST_FILENAME,
