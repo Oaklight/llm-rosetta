@@ -3,10 +3,13 @@
  * edits, and the facts a manifest vendor card shows (#1660 S9).
  *
  * The selector grammar mirrors the gateway's (`shims/manifest_sources.py`):
- * `<vendor>`, `tag:<full tag>`, `*`, each optionally behind `<source>:`.  A
- * selector without a source reads every source; the editor leaves those as
- * written and only rewrites the selectors qualified with the source it is
- * editing, so a hand-written entry is never lost by a save.
+ * `<vendor>`, `tag:<full tag>`, `*`, each optionally behind `<source>:`; a
+ * vendor entry may be an exclusion (`!<vendor>`, `!<source>:<vendor>`) or a
+ * pin (`<source>:<vendor>@<version>`).  An exclusion always wins, and an
+ * explicit vendor entry beats a tag or `*` entry.  A selector without a
+ * source reads every source; the editor leaves those as written and only
+ * rewrites the selectors qualified with the source it is editing, so a
+ * hand-written entry is never lost by a save.
  *
  * No DOM, no state, no imports: the page binds these to its markup, and the
  * tests drive them directly.
@@ -19,31 +22,42 @@ export const DEFAULT_SOURCES = Object.freeze(['contrib', 'argonne']);
  * Parse one `shims.install` entry, or return `null` when it is malformed.
  *
  * @param {string} raw
- * @returns {{raw: string, source: string|null, kind: 'all'|'tag'|'vendor', value: string}|null}
+ * @returns {{raw: string, source: string|null, kind: 'all'|'tag'|'vendor',
+ *            value: string, negate: boolean, version: string|null}|null}
  */
 export function parseSelector(raw) {
   if (typeof raw !== 'string' || !raw.trim()) return null;
   const text = raw.trim();
+  const negate = text.startsWith('!');
+  let rest = negate ? text.slice(1).trim() : text;
+  let version = null;
+  if (rest.includes('@')) {
+    const at = rest.indexOf('@');
+    version = rest.slice(at + 1);
+    rest = rest.slice(0, at);
+    if (negate || !/^[0-9][0-9A-Za-z.+-]*$/.test(version)) return null;
+  }
   let source = null;
-  let rest = text;
   if (!rest.startsWith('tag:') && rest.includes(':')) {
     const at = rest.indexOf(':');
     source = rest.slice(0, at);
     rest = rest.slice(at + 1);
     if (!/^[a-z0-9][a-z0-9_-]*$/.test(source)) return null;
   }
-  if (rest === '*') return { raw: text, source, kind: 'all', value: '' };
+  const base = { raw: text, source, negate: false, version: null };
+  if ((negate || version) && (rest === '*' || rest.startsWith('tag:'))) return null;
+  if (rest === '*') return { ...base, kind: 'all', value: '' };
   if (rest.startsWith('tag:')) {
     const tag = rest.slice(4);
     if (!/^[a-z0-9][a-z0-9_-]*(:[a-z0-9][a-z0-9_.-]*)?$/.test(tag)) return null;
-    return { raw: text, source, kind: 'tag', value: tag };
+    return { ...base, kind: 'tag', value: tag };
   }
   if (!/^[a-z0-9][a-z0-9_]*$/.test(rest)) return null;
-  return { raw: text, source, kind: 'vendor', value: rest };
+  return { ...base, kind: 'vendor', value: rest, negate, version };
 }
 
-/** Whether *sel* picks *vendor* (whose installable record has *tags*) in *sourceId*. */
-export function selectorPicks(sel, sourceId, vendor, tags = []) {
+/** Whether *sel*'s pattern names *vendor* (whose installable record has *tags*) in *sourceId*. */
+function selectorMatches(sel, sourceId, vendor, tags = []) {
   if (!sel) return false;
   if (sel.source !== null && sel.source !== sourceId) return false;
   if (sel.kind === 'all') return true;
@@ -51,13 +65,52 @@ export function selectorPicks(sel, sourceId, vendor, tags = []) {
   return sel.value === vendor;
 }
 
-/** The first install entry that picks *vendor*, as the gateway reads them. */
+/** Whether *sel* installs *vendor* in *sourceId*: an exclusion never does. */
+export function selectorPicks(sel, sourceId, vendor, tags = []) {
+  return !!sel && !sel.negate && selectorMatches(sel, sourceId, vendor, tags);
+}
+
+/**
+ * The install entry that installs *vendor*, by the gateway's rule
+ * (`pick_selector`): an exclusion wins, then an explicit vendor entry, then
+ * the first entry that matches.
+ */
 export function pickerFor(install, sourceId, vendor, tags = []) {
+  const parsed = (install || []).map(parseSelector);
+  if (parsed.some((sel) => sel && sel.negate && selectorMatches(sel, sourceId, vendor, tags))) return null;
+  const hits = parsed.filter((sel) => selectorPicks(sel, sourceId, vendor, tags));
+  const explicit = hits.find((sel) => sel.kind === 'vendor');
+  return (explicit || hits[0] || {}).raw || null;
+}
+
+/** The exclusion entry that keeps *vendor* of *sourceId* out, or `null`. */
+export function excludedBy(install, sourceId, vendor) {
   for (const raw of install || []) {
     const sel = parseSelector(raw);
-    if (selectorPicks(sel, sourceId, vendor, tags)) return raw;
+    if (sel && sel.negate && selectorMatches(sel, sourceId, vendor)) return sel.raw;
   }
   return null;
+}
+
+/** Whether *raw* is this source's own positive entry for *vendor* (pinned or not). */
+function ownEntry(raw, sourceId, vendor) {
+  const sel = parseSelector(raw);
+  return !!sel && !sel.negate && sel.kind === 'vendor' && sel.source === sourceId && sel.value === vendor;
+}
+
+/** Whether *raw* pins *vendor* for *sourceId*: qualified with it, or unqualified. */
+function pinEntry(raw, sourceId, vendor) {
+  const sel = parseSelector(raw);
+  return !!sel && !sel.negate && sel.kind === 'vendor' && !!sel.version
+    && sel.value === vendor && (sel.source === sourceId || sel.source === null);
+}
+
+/** *install* without the exclusions that keep *vendor* of *sourceId* out. */
+function withoutExclusions(install, sourceId, vendor) {
+  return (install || []).filter((raw) => {
+    const sel = parseSelector(raw);
+    return !(sel && sel.negate && selectorMatches(sel, sourceId, vendor));
+  });
 }
 
 /** The text a `shims.sources` entry is known by: its id or its URL. */
@@ -77,7 +130,7 @@ export function sourceSelection(install, sourceId) {
   const out = { all: false, tags: [], vendors: [] };
   for (const raw of install || []) {
     const sel = parseSelector(raw);
-    if (!sel || sel.source !== sourceId) continue;
+    if (!sel || sel.source !== sourceId || sel.negate) continue;
     if (sel.kind === 'all') out.all = true;
     else if (sel.kind === 'tag') out.tags.push(sel.value);
     else out.vendors.push(sel.value);
@@ -99,12 +152,25 @@ export function sharedSelectors(install) {
  * so a save does not reorder a hand-edited list more than it has to.
  */
 export function withSourceSelection(install, sourceId, selection) {
+  // A pin and an exclusion are not checkboxes: a ticked vendor keeps its
+  // pin, and every exclusion of this source stays as written.
+  const pins = {};
+  const exclusions = [];
+  for (const raw of install || []) {
+    const sel = parseSelector(raw);
+    if (!sel || sel.source !== sourceId) continue;
+    if (sel.negate) exclusions.push(sel.raw);
+    else if (sel.kind === 'vendor' && sel.version) pins[sel.value] = sel.version;
+  }
   const wanted = [];
   if (selection.all) wanted.push(`${sourceId}:*`);
   else {
     for (const tag of selection.tags || []) wanted.push(`${sourceId}:tag:${tag}`);
-    for (const vendor of selection.vendors || []) wanted.push(`${sourceId}:${vendor}`);
+    for (const vendor of selection.vendors || []) {
+      wanted.push(pins[vendor] ? `${sourceId}:${vendor}@${pins[vendor]}` : `${sourceId}:${vendor}`);
+    }
   }
+  wanted.push(...exclusions);
   // Only the edited source's entries are rebuilt (and only they are
   // de-duplicated); every other entry stays exactly as written, duplicates
   // included, because the loader accepts them and the operator wrote them.
@@ -124,60 +190,100 @@ export function withSourceSelection(install, sourceId, selection) {
 }
 
 /**
- * Select one vendor from its card: add `<source>:<vendor>` unless an entry
- * already picks it.
+ * Install one vendor from its card.
+ *
+ * The exclusions that keep it out (`!<source>:<vendor>`, `!<vendor>`) go
+ * first; `<source>:<vendor>` is added only when nothing else then installs
+ * it, so removing a tag-selected vendor and installing it back returns the
+ * list to what it was.  A pin is the exception: Remove deletes the vendor's
+ * pinned entry, and Install does not bring the version back — the vendor
+ * follows the newest release until it is pinned again (the Remove toast
+ * says "pin dropped").
  *
  * @returns {string[]} the new `shims.install`
  */
 export function selectVendor(install, sourceId, vendor, tags = []) {
-  const list = [...(install || [])];
+  const list = withoutExclusions(install, sourceId, vendor);
   if (pickerFor(list, sourceId, vendor, tags)) return list;
   return [...list, `${sourceId}:${vendor}`];
 }
 
 /**
- * Deselect one vendor from its card.
+ * Remove one vendor from its card.  Never a refusal: the vendor is the
+ * install unit, so any one of them can go on its own.
  *
- * Only the entries qualified with this source that name the vendor
- * (`<source>:<vendor>`) are removed.  Anything else that would keep the vendor
- * installed refuses the removal and is named instead, with nothing changed:
- *
- * - an unqualified `<vendor>` entry, which every source shares;
- * - a tag or `*` entry (qualified or not), which selects other vendors too;
- * - a legacy preset in *presets* (`shims.presets` keys that map to it);
- * - nothing at all to remove.
+ * This source's own entries for it (`<source>:<vendor>`, pinned or not) are
+ * deleted.  When anything else would still install it — a tag, `*`, an
+ * unqualified entry, or a legacy preset in *presets* — an exclusion
+ * `!<source>:<vendor>` is added instead.  A preset has to become install
+ * entries first (`migratePresets`); the page asks the gateway for that
+ * rewrite, then calls this again on the rewritten list.
  *
  * @param {string[]} install
  * @param {string} sourceId
  * @param {string} vendor
  * @param {string[]} [tags] the vendor's installable tags
  * @param {string[]} [presets] the preset keys that select it
- * @returns {{install: string[], refuse: {key: string, params: object}|null}}
+ * @returns {{install: string[], migratePresets: boolean, droppedPin: string|null,
+ *            refuse: {key: string, params: object}|null}}
  */
 export function deselectVendor(install, sourceId, vendor, tags = [], presets = []) {
   const list = [...(install || [])];
-  // The one kind of entry a card may remove: `<this source>:<vendor>`.
-  const kept = list.filter((raw) => {
-    const sel = parseSelector(raw);
-    return !(sel && sel.source === sourceId && sel.kind === 'vendor' && sel.value === vendor);
-  });
-  // Whatever still picks the vendor after that is named, not rewritten.
-  const stillBy = pickerFor(kept, sourceId, vendor, tags);
-  if (stillBy) {
-    const sel = parseSelector(stillBy);
-    const shared = sel && sel.source === null && sel.kind === 'vendor';
+  const kept = list.filter((raw) => !ownEntry(raw, sourceId, vendor));
+  const pinned = list.map(parseSelector)
+    .find((sel) => sel && ownEntry(sel.raw, sourceId, vendor) && sel.version);
+  const droppedPin = pinned ? pinned.version : null;
+  const still = pickerFor(kept, sourceId, vendor, tags) || (presets || []).length;
+  if (still) {
+    const exclusion = `!${sourceId}:${vendor}`;
     return {
-      install: list,
-      refuse: { key: shared ? 'shimSrc.sharedEntry' : 'shimSrc.stillSelected', params: { vendor, selector: stillBy } },
+      install: kept.includes(exclusion) ? kept : [...kept, exclusion],
+      migratePresets: (presets || []).length > 0,
+      droppedPin,
+      refuse: null,
     };
   }
-  if ((presets || []).length) {
-    return { install: list, refuse: { key: 'shimSrc.byPreset', params: { vendor, preset: presets.join(', ') } } };
-  }
   if (kept.length === list.length) {
-    return { install: list, refuse: { key: 'shimSrc.nothingToRemove', params: { vendor } } };
+    return { install: list, migratePresets: false, droppedPin: null,
+      refuse: { key: 'shimSrc.nothingToRemove', params: { vendor } } };
   }
-  return { install: kept, refuse: null };
+  return { install: kept, migratePresets: false, droppedPin, refuse: null };
+}
+
+/**
+ * Pin one vendor to *version*: this source's entries for it, and any
+ * unqualified pin of it, become one `<source>:<vendor>@<version>` where the
+ * first of them sat, and an exclusion of it goes.  A pin replaces a pin:
+ * two pins of one vendor are refused by the gateway, never order-decided.
+ * An explicit entry beats a tag, so the pin holds even when a tag also
+ * selects the vendor.
+ *
+ * @returns {string[]} the new `shims.install`
+ */
+export function pinVendor(install, sourceId, vendor, version) {
+  const pin = `${sourceId}:${vendor}@${version}`;
+  const out = [];
+  let placed = false;
+  for (const raw of withoutExclusions(install, sourceId, vendor)) {
+    if (ownEntry(raw, sourceId, vendor) || pinEntry(raw, sourceId, vendor)) {
+      if (!placed) { out.push(pin); placed = true; }
+      continue;
+    }
+    out.push(raw);
+  }
+  if (!placed) out.push(pin);
+  return out;
+}
+
+/** Drop a pin: `<source>:<vendor>@<version>` becomes `<source>:<vendor>`. */
+export function followLatest(install, sourceId, vendor) {
+  const out = [];
+  for (const raw of install || []) {
+    if (!ownEntry(raw, sourceId, vendor)) { out.push(raw); continue; }
+    const plain = `${sourceId}:${vendor}`;
+    if (!out.includes(plain)) out.push(plain);
+  }
+  return out;
 }
 
 /**
@@ -259,6 +365,12 @@ export function vendorFacts(v, src) {
   const facts = [{ key: 'shimSrc.fromSource', params: { source: src.label || src.id } }];
   if (v.installed) {
     facts.push({ key: 'shimSrc.installedVersion', params: { version: v.installed } });
+  }
+  if (v.pinned) {
+    facts.push({ key: 'shimSrc.pinnedAt', params: { version: v.pinned } });
+    if (v.pin_problem) {
+      facts.push({ key: 'shimSrc.pinProblem', params: { problem: v.pin_problem }, cls: 'is-unknown' });
+    }
   }
   if (v.update_available && v.installable) {
     facts.push({ key: 'shimSrc.updateTo', params: { version: v.installable }, cls: 'is-moved' });

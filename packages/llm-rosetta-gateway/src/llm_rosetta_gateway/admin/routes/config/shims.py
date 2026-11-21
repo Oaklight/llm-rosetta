@@ -180,6 +180,51 @@ async def put_shim_sources(request: Any) -> Response:
     )
 
 
+async def post_shim_presets_migrate(request: Any) -> Response:
+    """Rewrite the legacy ``shims.presets`` as explicit ``shims.install`` entries.
+
+    The same rewrite ``llm-rosetta-migrate --config`` applies to the file
+    (:func:`~llm_rosetta_gateway.shim_sources.rewrite_presets_section`), run
+    on the served document.  The panel calls it before it removes one vendor a
+    preset selects, so the removal can be a single ``!<source>:<vendor>``
+    entry instead of a refusal.  Nothing is reloaded here: the caller writes
+    its own change next and reloads once.
+
+    Returns:
+        ``{"ok", "shims", "converted", "install", "disabled",
+        "unconvertible"}``; ``converted`` is empty when there was nothing to
+        rewrite (the document is then left untouched).
+    """
+    from ....shim_sources import rewrite_presets_section
+
+    async with config_mutate(request) as ctx:
+        if ctx.error:
+            return ctx.error
+        section = ctx.data.get("shims")
+        if not isinstance(section, dict):
+            section = {}
+        new_section, rewrite = rewrite_presets_section(section)
+        if rewrite.converted:
+            try:
+                resolve_source_config(new_section, _get_config_path(request))
+            except ValueError as exc:
+                return JSONResponse({"error": str(exc)}, status_code=400)
+            ctx.data["shims"] = new_section
+            ctx.commit()
+    if ctx.error:
+        return ctx.error
+    return JSONResponse(
+        {
+            "ok": True,
+            "shims": ctx.data.get("shims", {}),
+            "converted": rewrite.converted,
+            "install": rewrite.install,
+            "disabled": rewrite.disabled,
+            "unconvertible": rewrite.unconvertible,
+        }
+    )
+
+
 async def _refetch_and_reload(
     request: Any, config_path: str
 ) -> tuple[Response | None, Any]:

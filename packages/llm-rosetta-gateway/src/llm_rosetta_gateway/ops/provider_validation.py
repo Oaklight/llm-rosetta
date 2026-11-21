@@ -348,6 +348,9 @@ def _moved_reason(source: str, moved: Any, report: Any) -> str:
         if getattr(status, "vendor", None) == moved.vendor
     ]
     skipped = next((s.skipped for s in statuses if s.skipped), None)
+    if skipped and skipped.startswith("excluded by shims.install"):
+        # The operator's own entry keeps it out; nothing failed upstream.
+        return f"{head}; it is {skipped}"
     if skipped:
         return f"{head}, and the gateway did not install it: {skipped}"
     if any(s.ok for s in statuses):

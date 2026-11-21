@@ -35,8 +35,11 @@ from .manifest_sources import (
     InstallSelector,
     ManifestSourceSpec,
     _load_manifest,
+    _pinned_release,
     _source_root,
+    excluded_by,
     parse_source_entry,
+    pick_selector,
 )
 
 
@@ -74,11 +77,8 @@ def _picker(
     source_id: str,
     selectors: Sequence[InstallSelector],
 ) -> InstallSelector | None:
-    """The first selector that picks *vendor*, as the installer reads them."""
-    return next(
-        (s for s in selectors if s.applies_to(source_id) and s.matches(vendor, tags)),
-        None,
-    )
+    """The selector that installs *vendor*, by the installer's own rule."""
+    return pick_selector(selectors, source_id, vendor, tags)
 
 
 def _presets_picking(
@@ -92,6 +92,7 @@ def _presets_picking(
         s.origin.split(":", 1)[1]
         for s in selectors
         if s.origin.startswith("presets:")
+        and not s.negate
         and s.applies_to(source_id)
         and s.matches(vendor, tags)
     ]
@@ -139,6 +140,9 @@ def vendor_view(
     selector = _picker(vendor, tags, source_id, selectors)
     installed = _release_from_status(status)
     installed_problem = release_requires_problem(installed) if installed else None
+    pinned = selector.version if selector is not None else None
+    pin_problem = _pinned_release(ordered, pinned)[1] if pinned else None
+    exclusion = excluded_by(selectors, source_id, vendor)
     return {
         "vendor": vendor,
         "logo": logo,
@@ -157,6 +161,14 @@ def vendor_view(
         "core_provides": sorted(set(record.shims if record else ()) & set(core_names)),
         "selected_by": selector.raw if selector is not None else None,
         "selected_origin": selector.origin if selector is not None else None,
+        # The version an explicit `<source>:<vendor>@<version>` holds, and why
+        # it cannot be installed when it cannot; `installable` stays the newest
+        # release this core can run, which is what "Update to" offers.
+        "pinned": pinned,
+        "pin_problem": pin_problem,
+        # The `!<vendor>` entry that keeps the vendor out, so the card can say
+        # so and its Install can remove it.
+        "excluded_by": exclusion.raw if exclusion is not None else None,
         # Every legacy preset that selects the vendor, not only the first
         # selector: a preset behind an explicit entry still installs it when
         # the entry is removed, so the panel must refuse that removal.

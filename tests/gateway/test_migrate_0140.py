@@ -13,6 +13,8 @@ import stat
 from pathlib import Path
 
 import pytest
+
+from llm_rosetta_gateway.shims.catalog import get_source_package
 from llm_rosetta.api import FORMATS_BY_TYPE, retired_names
 
 from llm_rosetta_gateway._vendor import jsonx
@@ -89,8 +91,14 @@ def test_every_retired_name_migrates(row: retired_names.RetiredName) -> None:
         assert keys == []
     elif row.kind == retired_names.SHIM:
         assert new["providers"]["p"]["shim"] == row.replacement
-        presets = new.get("shims", dict()).get("presets", [])
-        assert (row.preset in presets) == bool(row.preset)
+        # A preset is spelled as the install entry it maps to (#1660).
+        install = new.get("shims", dict()).get("install", [])
+        assert "presets" not in new.get("shims", dict())
+        if row.preset:
+            package = get_source_package(row.preset)
+            assert package is not None and package.install in install
+        else:
+            assert install == []
     else:
         assert new["providers"]["p"]["type"] == row.replacement
     # A second run finds nothing to do.
@@ -184,7 +192,7 @@ def test_comments_order_and_formatting_survive() -> None:
         assert _brace(comment) in result.new_text
 
 
-def test_preset_is_appended_to_an_existing_list_and_comments_stay() -> None:
+def test_presets_become_install_entries_and_comments_stay() -> None:
     text = _doc(
         "«",
         '  "providers": «',
@@ -197,17 +205,23 @@ def test_preset_is_appended_to_an_existing_list_and_comments_stay() -> None:
         "»",
     )
     result = mig.migrate_config_text(text)
-    assert _brace('"presets": ["asksage", "alcf", "argo"],  @C@ keep') in (
-        result.new_text
-    )
+    # The declared preset and the two a renamed shim needs become install
+    # entries in the slot `presets` held, so the comment stays on its line.
+    assert _brace(
+        '"install": ["argonne:asksage", "argonne:alcf", "argonne:argo"],  @C@ keep'
+    ) in (result.new_text)
     new = _load(result.new_text)
     assert new["providers"]["a"]["shim"] == "argo--chat_completions"
     assert new["providers"]["b"]["shim"] == "alcf_sophia--chat_completions"
-    assert [i.new for i in result.items if i.action == "add"] == ["alcf", "argo"]
+    assert [(i.old, i.new) for i in result.items if i.where == "shims.presets"] == [
+        ("asksage", "argonne:asksage"),
+        ("alcf", "argonne:alcf"),
+        ("argo", "argonne:argo"),
+    ]
     assert not mig.migrate_config_text(result.new_text).changed
 
 
-def test_preset_creates_the_shims_section_when_absent() -> None:
+def test_a_needed_preset_creates_the_shims_section_when_absent() -> None:
     text = _doc(
         "«",
         "  @C@ only a shim",
@@ -218,7 +232,7 @@ def test_preset_creates_the_shims_section_when_absent() -> None:
     )
     result = mig.migrate_config_text(text)
     assert _brace("@C@ only a shim") in result.new_text
-    assert _load(result.new_text)["shims"]["presets"] == ["asksage"]
+    assert _load(result.new_text)["shims"] == {"install": ["argonne:asksage"]}
     assert not mig.migrate_config_text(result.new_text).changed
 
 
@@ -228,8 +242,8 @@ def test_preset_already_declared_is_not_added_twice() -> None:
         shims=dict(presets=["argo"]),
     )
     result = mig.migrate_config_text(json.dumps(config, indent=2))
-    assert _load(result.new_text)["shims"]["presets"] == ["argo"]
-    assert [i for i in result.items if i.action == "add"] == []
+    assert _load(result.new_text)["shims"] == {"install": ["argonne:argo"]}
+    assert [i.old for i in result.items if i.where == "shims.presets"] == ["argo"]
 
 
 def test_shims_lists_and_endpoint_shims_are_rewritten() -> None:
