@@ -209,7 +209,7 @@ from llm_rosetta_gateway import create_app, GatewayConfig, load_config
 # 加载配置并创建 ASGI 应用
 raw = load_config("config.jsonc")
 config = GatewayConfig(raw)
-app = create_app(config)
+app = await create_app(config)  # create_app 自 0.14.0 起是 async 函数
 
 # 挂载到你自己的 ASGI 应用中，或使用任意 ASGI 服务器运行
 import uvicorn
