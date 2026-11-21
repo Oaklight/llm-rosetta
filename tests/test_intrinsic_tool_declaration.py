@@ -509,7 +509,7 @@ class TestShimEmitConsistency:
         """One hosted tool is declared, because the plan route serves one.
 
         The record is in
-        ``packages/llm-rosetta/src/llm_rosetta/shims/providers/``
+        ``packages/llm-rosetta/src/llm_rosetta/shims/builtin/``
         ``openai_chatgpt/llm/provider.yaml``: the plan route
         rejects `code_interpreter`, `file_search`, image generation, computer
         use, hosted MCP and `tool_search` (the shim records the outcome but no

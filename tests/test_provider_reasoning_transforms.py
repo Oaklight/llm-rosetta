@@ -6,7 +6,7 @@ Covers MiniMax, OpenRouter reasoning field normalization transforms.
 from __future__ import annotations
 
 from _moved_vendors import moved_vendor_module
-from llm_rosetta.shims.providers.minimax.llm.chat_completions.transforms import (
+from llm_rosetta.shims.builtin.minimax.llm.chat_completions.transforms import (
     _inject_reasoning_split,
     _parse_think_tags,
 )

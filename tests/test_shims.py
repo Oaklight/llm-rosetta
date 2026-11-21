@@ -18,6 +18,7 @@ from llm_rosetta.shims.provider_shim import (
     unregister_shim,
 )
 from _moved_vendors import load_providers_with_moved
+from llm_rosetta.shims import builtin as builtins_pkg
 from llm_rosetta.shims._loader import _load_single_provider
 from llm_rosetta.shims._loader import get_model_list_transform
 from llm_rosetta.shims._loader import _parse_request_constraints
@@ -1520,10 +1521,7 @@ class TestToolGroupsShimDeclarations:
         External shims are out of scope: they are installed into the
         environment and this repository cannot probe them.
         """
-        from pathlib import Path
-
         from _moved_vendors import MOVED_VENDORS_DIR, load_moved_vendors
-        from llm_rosetta.shims import providers as builtins_pkg
 
         # The vendors that moved to contrib (#1660) were classified while they
         # were built in; their frozen copies keep that review honest.

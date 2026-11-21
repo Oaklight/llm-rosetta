@@ -17,7 +17,7 @@ import pytest
 
 from _moved_vendors import MOVED_VENDORS_DIR
 from llm_rosetta._vendor.yaml import load as vendored_load
-from llm_rosetta.shims import providers as providers_pkg
+from llm_rosetta.shims import builtin as providers_pkg
 
 
 def _load_pyyaml():

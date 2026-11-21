@@ -4,7 +4,7 @@ Shim lifecycle
 --------------
 **Registration** (startup, once):
 
-1. ``load_providers()`` scans the built-in ``providers/`` directory via
+1. ``load_providers()`` scans the bundled ``builtin/`` directory via
    ``load_providers_from_dir()``, registering each shim found.
 2. It then discovers ``llm_rosetta.shim_providers`` entry points and
    calls each plugin callable, which may register additional shims.
@@ -88,7 +88,7 @@ from ..provider_shim import register_shim  # noqa: F401
 #: The built-in providers root, defined beside the vendor data.
 #: :func:`load_providers_from_dir` reads this attribute from this module at
 #: call time, so rebinding it here redirects the scan.
-from ..providers import _PROVIDERS_DIR
+from ..builtin import _PROVIDERS_DIR
 
 # These names keep the import surface this module had before the loader was
 # split into ``_*`` modules: it imported them, so callers could take them from
@@ -333,7 +333,7 @@ def load_providers_from_dir(
 def load_providers() -> list[ProviderShim]:
     """Load built-in provider shims and any plugin shims.
 
-    1. Scans the built-in ``providers/`` directory.
+    1. Scans the bundled ``builtin/`` directory.
     2. Discovers entry points in the ``llm_rosetta.shim_providers`` group
        and calls each one to let plugins register their own shims.
     3. Registers built-in model list transforms for providers without
@@ -367,7 +367,7 @@ def builtin_providers_dir() -> Path:
     """Return the directory the bundled shims are loaded from.
 
     Returns:
-        The built-in ``providers/`` root, the one :func:`load_providers` scans.
+        The bundled ``builtin/`` root, the one :func:`load_providers` scans.
     """
     return _PROVIDERS_DIR
 
