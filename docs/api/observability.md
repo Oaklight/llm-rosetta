@@ -464,7 +464,7 @@ body = decompress_body(compressed)
 ### 模型类型（Model types）
 
 每一行还带一个**模型类型**——`llm`、`embeddings`、`rerank` 或 `decisions`，
-即 `gateway/model_types.py` 注册的那套名字。同一列在不同家族里对应的 IR 字段
+即 `gateway/model_types/` 注册的那套名字。同一列在不同家族里对应的 IR 字段
 并不相同：chat 向厂商要的是 `prompt_tokens` 与 `completion_tokens`，decision
 IR 本来就报 `input_tokens`/`output_tokens`，embedding 与 rerank 的 IR 类型
 没有输出侧，而 rerank 的缓存计数器叫 `cached_tokens`。因此"列 → 字段"的映射
