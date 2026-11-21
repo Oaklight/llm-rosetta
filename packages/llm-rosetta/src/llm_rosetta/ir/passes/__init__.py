@@ -3,8 +3,7 @@
 A pass adapts an IR value to a model's declared capabilities.  Passes may use
 ``ir.primitives`` and ``ir.tools``, the converter *base* contracts
 (``ConversionContext``) and the shim contract; they must not import a
-converter family.  ``llm_rosetta.capabilities`` is the compatibility facade
-over this package.
+converter family.
 """
 
 from __future__ import annotations

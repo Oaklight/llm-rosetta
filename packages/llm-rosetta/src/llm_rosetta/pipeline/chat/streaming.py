@@ -4,14 +4,14 @@ import logging
 from collections.abc import Callable, Iterable, Iterator
 from typing import Any, Protocol, runtime_checkable
 
-from llm_rosetta.capabilities import (
+from llm_rosetta.ir.passes import (
     ToolNameMap,
     restore_client_tool_names,
     CustomToolRestorer,
 )
 from llm_rosetta.conversion_warnings import recording_to
 from llm_rosetta.contracts.usage.semantics import GOOGLE_METADATA, USAGE_SHAPES
-from llm_rosetta.transforms.body import Transform, apply_transforms
+from llm_rosetta.ir.primitives.body import Transform, apply_transforms
 
 logger = logging.getLogger("llm_rosetta.pipeline.chat")
 
@@ -211,7 +211,7 @@ class StreamProcessor:
         to_ctx: StreamContext for IR→source conversion.
         pre_ir_transforms: Shim pre_ir_transforms to apply before conversion.
         custom_tool_names: Names of tools downgraded from custom to
-            function by :func:`~llm_rosetta.capabilities.enforce_custom_tools`.
+            function by :func:`~llm_rosetta.ir.passes.enforce_custom_tools`.
         name_map: Bidirectional map for tools renamed on the request leg
             (namespace flattening, collision qualification).
         on_ir_event: Optional callback for each IR event.

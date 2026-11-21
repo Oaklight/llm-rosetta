@@ -6,7 +6,7 @@ import pytest
 
 from llm_rosetta.contracts.shim import ProviderShim
 from llm_rosetta.shims.provider_shim import _reset_registry, get_shim, register_shim
-from llm_rosetta.transforms import (
+from llm_rosetta.contracts.transform import (
     apply_transforms,
     default_message_field,
     rename_field,
@@ -583,7 +583,7 @@ class TestFlattenSystemContent:
 
     def test_flattens_array_to_string(self):
         """Content array is joined into a plain string."""
-        from llm_rosetta.transforms import flatten_system_content
+        from llm_rosetta.contracts.transform import flatten_system_content
 
         body = {
             "model": "gemini-3.5-flash",
@@ -603,7 +603,7 @@ class TestFlattenSystemContent:
 
     def test_idempotent_string_unchanged(self):
         """Already-string content is left as-is."""
-        from llm_rosetta.transforms import flatten_system_content
+        from llm_rosetta.contracts.transform import flatten_system_content
 
         body = {
             "model": "gpt-4o",
@@ -617,7 +617,7 @@ class TestFlattenSystemContent:
 
     def test_idempotent_double_apply(self):
         """Applying twice produces the same result."""
-        from llm_rosetta.transforms import flatten_system_content
+        from llm_rosetta.contracts.transform import flatten_system_content
 
         body = {
             "model": "test",
@@ -635,7 +635,7 @@ class TestFlattenSystemContent:
 
     def test_no_system_message_noop(self):
         """No system message → no-op."""
-        from llm_rosetta.transforms import flatten_system_content
+        from llm_rosetta.contracts.transform import flatten_system_content
 
         body = {
             "model": "test",
@@ -646,7 +646,7 @@ class TestFlattenSystemContent:
 
     def test_no_messages_noop(self):
         """Missing messages key → no-op."""
-        from llm_rosetta.transforms import flatten_system_content
+        from llm_rosetta.contracts.transform import flatten_system_content
 
         body = {"model": "test"}
         result = flatten_system_content()(body)
@@ -654,7 +654,7 @@ class TestFlattenSystemContent:
 
     def test_pattern_match(self):
         """Only flattens when model matches pattern."""
-        from llm_rosetta.transforms import flatten_system_content
+        from llm_rosetta.contracts.transform import flatten_system_content
 
         body = {
             "model": "gemini25flash",
@@ -670,7 +670,7 @@ class TestFlattenSystemContent:
 
     def test_pattern_no_match(self):
         """Non-matching model → no-op."""
-        from llm_rosetta.transforms import flatten_system_content
+        from llm_rosetta.contracts.transform import flatten_system_content
 
         body = {
             "model": "gpt5nano",
@@ -687,7 +687,7 @@ class TestFlattenSystemContent:
 
     def test_user_messages_untouched(self):
         """Only system messages are flattened, user messages stay as-is."""
-        from llm_rosetta.transforms import flatten_system_content
+        from llm_rosetta.contracts.transform import flatten_system_content
 
         body = {
             "model": "test",
@@ -708,7 +708,7 @@ class TestFlattenSystemContent:
 
     def test_repr(self):
         """Transform has a readable repr."""
-        from llm_rosetta.transforms import flatten_system_content
+        from llm_rosetta.contracts.transform import flatten_system_content
 
         assert repr(flatten_system_content()) == "flatten_system_content()"
         assert (
@@ -721,7 +721,7 @@ class TestDefaultToolDescription:
     """Tests for the default_tool_description transform."""
 
     def test_fills_null_description(self):
-        from llm_rosetta.transforms import default_tool_description
+        from llm_rosetta.contracts.transform import default_tool_description
 
         body = {
             "tools": [
@@ -733,7 +733,7 @@ class TestDefaultToolDescription:
         assert result["tools"][0]["function"]["description"] == ""
 
     def test_fills_missing_description(self):
-        from llm_rosetta.transforms import default_tool_description
+        from llm_rosetta.contracts.transform import default_tool_description
 
         body = {
             "tools": [
@@ -745,7 +745,7 @@ class TestDefaultToolDescription:
         assert result["tools"][0]["function"]["description"] == ""
 
     def test_preserves_existing_description(self):
-        from llm_rosetta.transforms import default_tool_description
+        from llm_rosetta.contracts.transform import default_tool_description
 
         body = {
             "tools": [
@@ -760,14 +760,14 @@ class TestDefaultToolDescription:
         assert result["tools"][0]["function"]["description"] == "Get weather"
 
     def test_no_tools_is_noop(self):
-        from llm_rosetta.transforms import default_tool_description
+        from llm_rosetta.contracts.transform import default_tool_description
 
         body = {"messages": [{"role": "user", "content": "hi"}]}
         result = default_tool_description()(body)
         assert "tools" not in result
 
     def test_custom_default(self):
-        from llm_rosetta.transforms import default_tool_description
+        from llm_rosetta.contracts.transform import default_tool_description
 
         body = {
             "tools": [
@@ -778,7 +778,7 @@ class TestDefaultToolDescription:
         assert result["tools"][0]["function"]["description"] == "n/a"
 
     def test_multiple_tools(self):
-        from llm_rosetta.transforms import default_tool_description
+        from llm_rosetta.contracts.transform import default_tool_description
 
         body = {
             "tools": [
@@ -796,7 +796,7 @@ class TestDefaultToolDescription:
         assert result["tools"][2]["function"]["description"] == ""
 
     def test_repr(self):
-        from llm_rosetta.transforms import default_tool_description
+        from llm_rosetta.contracts.transform import default_tool_description
 
         assert repr(default_tool_description()) == "default_tool_description('')"
         assert (
@@ -808,7 +808,7 @@ class TestRewriteHarmonyToolCalls:
     """Tests for the rewrite_harmony_tool_calls response transform."""
 
     def test_rewrites_nonstreaming_content(self):
-        from llm_rosetta.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.contracts.transform import rewrite_harmony_tool_calls
 
         body = {
             "choices": [
@@ -832,7 +832,7 @@ class TestRewriteHarmonyToolCalls:
         assert result["choices"][0]["finish_reason"] == "tool_calls"
 
     def test_rewrites_streaming_delta(self):
-        from llm_rosetta.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.contracts.transform import rewrite_harmony_tool_calls
 
         chunk = {
             "choices": [
@@ -852,7 +852,7 @@ class TestRewriteHarmonyToolCalls:
         assert result["choices"][0]["finish_reason"] == "tool_calls"
 
     def test_noop_when_tool_calls_present(self):
-        from llm_rosetta.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.contracts.transform import rewrite_harmony_tool_calls
 
         body = {
             "choices": [
@@ -876,7 +876,7 @@ class TestRewriteHarmonyToolCalls:
         assert result["choices"][0]["message"]["tool_calls"][0]["id"] == "call_existing"
 
     def test_noop_without_harmony_token(self):
-        from llm_rosetta.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.contracts.transform import rewrite_harmony_tool_calls
 
         body = {
             "choices": [
@@ -894,13 +894,13 @@ class TestRewriteHarmonyToolCalls:
         assert "tool_calls" not in result["choices"][0]["message"]
 
     def test_noop_empty_body(self):
-        from llm_rosetta.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.contracts.transform import rewrite_harmony_tool_calls
 
         assert rewrite_harmony_tool_calls()({}) == {}
         assert rewrite_harmony_tool_calls()({"choices": []}) == {"choices": []}
 
     def test_malformed_json_in_harmony_token(self):
-        from llm_rosetta.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.contracts.transform import rewrite_harmony_tool_calls
 
         body = {
             "choices": [
@@ -917,7 +917,7 @@ class TestRewriteHarmonyToolCalls:
         assert "tool_calls" not in result["choices"][0]["message"]
 
     def test_call_delimiter_variant(self):
-        from llm_rosetta.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.contracts.transform import rewrite_harmony_tool_calls
 
         body = {
             "choices": [
@@ -934,7 +934,7 @@ class TestRewriteHarmonyToolCalls:
         assert len(result["choices"][0]["message"]["tool_calls"]) == 1
 
     def test_arguments_key_variant(self):
-        from llm_rosetta.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.contracts.transform import rewrite_harmony_tool_calls
 
         body = {
             "choices": [
@@ -952,7 +952,7 @@ class TestRewriteHarmonyToolCalls:
         assert '"x"' in tc["function"]["arguments"]
 
     def test_repr(self):
-        from llm_rosetta.transforms import rewrite_harmony_tool_calls
+        from llm_rosetta.contracts.transform import rewrite_harmony_tool_calls
 
         assert repr(rewrite_harmony_tool_calls()) == "rewrite_harmony_tool_calls()"
 
@@ -982,7 +982,7 @@ class TestBackfillReasoningContent:
         return {"role": "tool", "tool_call_id": "c1", "content": "ok"}
 
     def test_fills_when_history_ends_on_tool(self):
-        from llm_rosetta.transforms import backfill_reasoning_content
+        from llm_rosetta.contracts.transform import backfill_reasoning_content
 
         body = {
             "messages": [
@@ -995,7 +995,7 @@ class TestBackfillReasoningContent:
         assert result["messages"][1]["reasoning_content"] == ""
 
     def test_noop_when_history_ends_on_user(self):
-        from llm_rosetta.transforms import backfill_reasoning_content
+        from llm_rosetta.contracts.transform import backfill_reasoning_content
 
         body = {
             "messages": [
@@ -1008,7 +1008,7 @@ class TestBackfillReasoningContent:
         assert "reasoning_content" not in result["messages"][1]
 
     def test_preserves_existing_value(self):
-        from llm_rosetta.transforms import backfill_reasoning_content
+        from llm_rosetta.contracts.transform import backfill_reasoning_content
 
         body = {
             "messages": [
@@ -1022,7 +1022,7 @@ class TestBackfillReasoningContent:
 
     def test_fills_plain_assistant_turns_too(self):
         """The requirement covers every assistant turn, not only tool calls."""
-        from llm_rosetta.transforms import backfill_reasoning_content
+        from llm_rosetta.contracts.transform import backfill_reasoning_content
 
         plain = {"role": "assistant", "content": "no tools here"}
         body = {
@@ -1039,7 +1039,7 @@ class TestBackfillReasoningContent:
 
     def test_fills_when_trailing_turn_is_an_assistant_answer(self):
         """A history that ends on an assistant answer after a tool round."""
-        from llm_rosetta.transforms import backfill_reasoning_content
+        from llm_rosetta.contracts.transform import backfill_reasoning_content
 
         body = {
             "messages": [
@@ -1055,7 +1055,7 @@ class TestBackfillReasoningContent:
         assert result["messages"][3]["reasoning_content"] == ""
 
     def test_noop_when_ends_on_assistant_without_tools(self):
-        from llm_rosetta.transforms import backfill_reasoning_content
+        from llm_rosetta.contracts.transform import backfill_reasoning_content
 
         body = {
             "messages": [
@@ -1067,7 +1067,7 @@ class TestBackfillReasoningContent:
         assert "reasoning_content" not in result["messages"][1]
 
     def test_fills_ending_on_tool_even_without_tools_parameter(self):
-        from llm_rosetta.transforms import backfill_reasoning_content
+        from llm_rosetta.contracts.transform import backfill_reasoning_content
 
         body = {
             "messages": [
@@ -1080,7 +1080,7 @@ class TestBackfillReasoningContent:
         assert result["messages"][1]["reasoning_content"] == ""
 
     def test_idempotent(self):
-        from llm_rosetta.transforms import backfill_reasoning_content
+        from llm_rosetta.contracts.transform import backfill_reasoning_content
 
         transform = backfill_reasoning_content()
         body = {
@@ -1095,7 +1095,7 @@ class TestBackfillReasoningContent:
         assert once == twice
 
     def test_noop_without_messages(self):
-        from llm_rosetta.transforms import backfill_reasoning_content
+        from llm_rosetta.contracts.transform import backfill_reasoning_content
 
         assert backfill_reasoning_content()({"model": "m"}) == {"model": "m"}
 
@@ -1103,7 +1103,7 @@ class TestBackfillReasoningContent:
         """The drop upstream is silent on the wire; the count goes to the log."""
         import logging
 
-        from llm_rosetta.transforms import backfill_reasoning_content
+        from llm_rosetta.contracts.transform import backfill_reasoning_content
 
         body = {
             "messages": [
@@ -1119,7 +1119,7 @@ class TestBackfillReasoningContent:
     def test_silent_when_nothing_to_backfill(self, caplog):
         import logging
 
-        from llm_rosetta.transforms import backfill_reasoning_content
+        from llm_rosetta.contracts.transform import backfill_reasoning_content
 
         body = {
             "messages": [
@@ -1133,7 +1133,7 @@ class TestBackfillReasoningContent:
         assert "backfilled" not in caplog.text
 
     def test_repr(self):
-        from llm_rosetta.transforms import backfill_reasoning_content
+        from llm_rosetta.contracts.transform import backfill_reasoning_content
 
         assert (
             repr(backfill_reasoning_content())

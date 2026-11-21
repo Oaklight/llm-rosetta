@@ -42,7 +42,7 @@ from ...base.helpers.opaque import (
     inject_google_function_call_signature,
 )
 from llm_rosetta.ir.primitives.native import record_native
-from ....transforms.ir import hoist_late_system_messages
+from ....ir.primitives.ir import hoist_late_system_messages
 from ._constants import (
     GOOGLE_REASON_FROM_PROVIDER,
     validate_google_output_format,

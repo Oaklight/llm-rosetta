@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from llm_rosetta.capabilities import (
+from llm_rosetta.ir.passes import (
     ToolNameMap,
 )
 from llm_rosetta.converters.base.context import ConversionContext, ImageFetcher

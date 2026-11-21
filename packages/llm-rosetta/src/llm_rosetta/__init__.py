@@ -38,7 +38,7 @@ from .converters import (
 from .converters.base.simple_converter import BaseSimpleConverter
 from . import tool_ops
 from .converters.base.context import ConversionContext, StreamContext
-from .transforms import Transform, apply_transforms
+from .ir.primitives.body import Transform, apply_transforms
 from .shims import (
     ConnectionConfig,
     ProviderShim,

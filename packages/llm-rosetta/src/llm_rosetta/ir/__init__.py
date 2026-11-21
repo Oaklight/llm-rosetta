@@ -30,13 +30,13 @@ enforced by ``tests/test_ir_import_boundary.py``.  ``ConversionContext`` and
 re-exports them).  A pass may use the shim contract, because a pass is where a
 target's declared capabilities enter the IR.
 
-``llm_rosetta.transforms`` and ``llm_rosetta.capabilities`` are facades over
-this package, and the modules that used to live under
+:mod:`llm_rosetta.contracts.transform` re-exports the transform types and
+primitives a shim uses, and the modules that used to live under
 ``converters/base/helpers`` and ``converters/base/tools`` re-export from their
 new home rather than keeping a copy.
 
 This ``__init__`` deliberately imports nothing: ``llm_rosetta.shims`` imports
-``llm_rosetta.transforms``, and eager sub-package imports here would pull
+``llm_rosetta.contracts.transform``, and eager sub-package imports here would pull
 ``ir.passes`` (which imports the shim contract) back into that cycle.
 """
 

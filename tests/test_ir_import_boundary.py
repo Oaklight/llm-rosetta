@@ -102,14 +102,21 @@ def test_ir_init_imports_nothing():
 
 
 def test_old_paths_are_identity_reattachments():
-    """The facades re-export the same objects, not copies."""
-    from llm_rosetta.capabilities import enforce_vision as legacy_pass
+    """The re-exports hand out the same objects, not copies."""
+    from llm_rosetta.contracts.transform import strip_fields as contract_transform
     from llm_rosetta.converters.base.tools import sanitize_tool_call_id as legacy_id
-    from llm_rosetta.ir.passes import enforce_vision as canonical_pass
-    from llm_rosetta.ir.tools import sanitize_tool_call_id as canonical_id
-    from llm_rosetta.transforms import strip_fields as legacy_transform
     from llm_rosetta.ir.primitives.body import strip_fields as canonical_transform
+    from llm_rosetta.ir.tools import sanitize_tool_call_id as canonical_id
 
-    assert legacy_pass is canonical_pass
     assert legacy_id is canonical_id
-    assert legacy_transform is canonical_transform
+    assert contract_transform is canonical_transform
+
+
+def test_the_removed_facades_stay_removed():
+    """``llm_rosetta.transforms`` and ``llm_rosetta.capabilities`` were removed
+    before 0.14.0 (#1657, D3): shims import ``llm_rosetta.contracts.transform``,
+    core imports ``llm_rosetta.ir``."""
+    import importlib.util
+
+    assert importlib.util.find_spec("llm_rosetta.transforms") is None
+    assert importlib.util.find_spec("llm_rosetta.capabilities") is None

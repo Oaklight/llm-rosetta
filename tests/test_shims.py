@@ -340,7 +340,7 @@ class TestRemovedDeprecatedSurface:
         with pytest.raises(ModuleNotFoundError):
             importlib.import_module("llm_rosetta.shims.transforms")
         # The replacement the forwarder named keeps working.
-        from llm_rosetta.transforms import strip_fields
+        from llm_rosetta.contracts.transform import strip_fields
 
         assert callable(strip_fields)
 

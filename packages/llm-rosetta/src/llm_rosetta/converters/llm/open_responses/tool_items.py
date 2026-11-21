@@ -729,7 +729,7 @@ def _collect_additional_tools(
     Returns provider-format tool dicts exactly as declared.  Namespace
     containers and name collisions are handled downstream by
     ``p_tool_definition_to_ir`` (namespace flattening) and
-    :func:`~llm_rosetta.capabilities.qualify_tool_names` (collision resolution).
+    :func:`~llm_rosetta.ir.passes.qualify_tool_names` (collision resolution).
 
     Args:
         input_items: The raw Responses ``input`` value.

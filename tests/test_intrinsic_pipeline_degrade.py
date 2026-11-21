@@ -1,7 +1,7 @@
 """Intrinsic history through ``ConversionPipeline`` — phase 4 end-to-end pins.
 
 The pipeline owns one decision for history: whether the *target* can replay an
-intrinsic part at all (:func:`llm_rosetta.capabilities.degrade_intrinsic_history`,
+intrinsic part at all (:func:`llm_rosetta.ir.passes.degrade_intrinsic_history`,
 which asks the target converter's ``intrinsic_renderable``).  A pair the target
 cannot render is rewritten into an ordinary function call plus its result, with
 one warning; a pair it can render is left alone.

@@ -1,4 +1,4 @@
-"""Tests for llm_rosetta.pipeline and llm_rosetta.capabilities.
+"""Tests for llm_rosetta.pipeline and llm_rosetta.ir.passes.
 
 Note: This file imports private helpers (resolve_shim, _apply_config_reasoning_override)
 directly for unit-testing internal logic.  The private one comes from its own module
@@ -10,17 +10,17 @@ from typing import Any, get_args, get_type_hints
 
 import pytest
 
-from llm_rosetta.capabilities import (
+from llm_rosetta.ir.passes import (
     enforce_reasoning,
     strip_reasoning_for_non_reasoning,
 )
-from llm_rosetta.capabilities.enforcement import _apply_config_reasoning_override
+from llm_rosetta.ir.passes.enforcement import _apply_config_reasoning_override
 from llm_rosetta.conversion_warnings import DOWNGRADED, WarningSink
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.pipeline import apply_ir_transforms
 from llm_rosetta.contracts.shim import ProviderShim, ReasoningCapability
 from llm_rosetta.shims.provider_shim import register_shim, resolve_shim, unregister_shim
-from llm_rosetta.transforms import (
+from llm_rosetta.contracts.transform import (
     auto_cache_breakpoints,
     truncate_images as truncate_images_transform,
     unwind_parallel_tool_calls as unwind_transform,
@@ -1453,7 +1453,7 @@ class TestIntrinsicIrTransforms:
         }
 
         class _FakeConverter:
-            from llm_rosetta.transforms import hoist_late_system_messages
+            from llm_rosetta.contracts.transform import hoist_late_system_messages
 
             _INTRINSIC_IR_TRANSFORMS = (hoist_late_system_messages(),)
 
@@ -1474,7 +1474,7 @@ class TestIntrinsicIrTransforms:
             call_order.append("shim")
             return body
 
-        from llm_rosetta.transforms import NamedIRTransform
+        from llm_rosetta.contracts.transform import NamedIRTransform
 
         intrinsic_t = NamedIRTransform(_intrinsic_fn, "intrinsic()")
         shim_t = NamedIRTransform(_shim_fn, "shim()")
@@ -1496,7 +1496,7 @@ class TestIntrinsicIrTransforms:
             call_count += 1
             return body
 
-        from llm_rosetta.transforms import NamedIRTransform
+        from llm_rosetta.contracts.transform import NamedIRTransform
 
         t = NamedIRTransform(_counting_fn, "dedup_test()")
 

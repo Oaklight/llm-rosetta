@@ -11,7 +11,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.capabilities import (
+from llm_rosetta.ir.passes import (
     ToolNameMap,
     apply_upstream_tool_names,
     build_tool_name_map,

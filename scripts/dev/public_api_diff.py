@@ -70,6 +70,7 @@ PUBLIC_MODULES = (
     "llm_rosetta",
     # The host-facing surface the gateway imports (#1630).
     "llm_rosetta.api",
+    "llm_rosetta.contracts",
     "llm_rosetta.converters",
     "llm_rosetta.converters.base",
     "llm_rosetta.converters.embeddings",

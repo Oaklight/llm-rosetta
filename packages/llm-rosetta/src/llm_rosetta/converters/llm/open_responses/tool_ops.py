@@ -198,7 +198,7 @@ class OpenResponsesToolOps(IntrinsicToolOpsMixin, BaseToolOps):
         ``function``, ``mcp`` or ``custom`` — and keeps it.  Notably a Codex
         ``custom`` tool such as ``apply_patch`` is *not* downgraded here; a
         provider that cannot accept one is served later and separately, by
-        :func:`~llm_rosetta.capabilities.downgrade_custom_tools`, which
+        :func:`~llm_rosetta.ir.passes.downgrade_custom_tools`, which
         records itself under ``metadata["_downgraded_from"]``.
 
         Args:

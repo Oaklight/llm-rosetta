@@ -39,7 +39,7 @@ from llm_rosetta import (
     get_converter_for_provider,
     retired_names,
 )
-from llm_rosetta.capabilities import ToolNameMap
+from llm_rosetta.ir.passes.tool_names import ToolNameMap
 from llm_rosetta.contracts import SURFACE_VERSION
 from llm_rosetta.converters import get_converter_class
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
@@ -99,7 +99,7 @@ from llm_rosetta.shims.scaffold import add_arguments as add_scaffold_arguments
 from llm_rosetta.shims.scaffold import run as run_scaffold
 from llm_rosetta.shims.scaffold import run_check as run_scaffold_check
 from llm_rosetta.shims.scaffold import run_migrate as run_scaffold_migrate
-from llm_rosetta.transforms import flatten_system_content
+from llm_rosetta.contracts.transform import flatten_system_content
 from llm_rosetta.types.ir import is_image_part, is_tool_result_part
 
 

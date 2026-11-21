@@ -1,6 +1,6 @@
 """Tests for duplicate tool definition collapsing."""
 
-from llm_rosetta.capabilities import dedupe_tool_definitions
+from llm_rosetta.ir.passes import dedupe_tool_definitions
 
 
 def _tool(name, desc="d"):
