@@ -15,11 +15,13 @@ four, each measured on ``agy`` 1.5.13:
    built-in file, shell, web and task tools are not offered.  Its prompt names
    the client's MCP server, because excluding the default prompt sections also
    removes the server-name hint the model would otherwise get.
-3. ``config/hooks.json``: a ``PreToolUse`` hook for every tool.  It allows only
-   ``call_mcp_tool`` and the read-only MCP resource readers when they address
-   the gateway's own server, and denies everything else.  A hook that exits
-   non-zero, prints invalid JSON or times out also blocks the tool (measured),
-   so it fails closed.
+3. ``config/hooks.json``: a ``PreToolUse`` hook for every tool.  It allows the
+   gateway's MCP server in the two shapes agents use — ``agy`` 1.5.14 and later
+   name each MCP tool directly as ``mcp_<server>_<tool>``, older versions use
+   the ``call_mcp_tool`` meta-tool (and the read-only resource readers) with
+   the server in the arguments — and denies everything else.  A hook that
+   exits non-zero, prints invalid JSON or times out also blocks the tool
+   (measured), so it fails closed.
 4. ``antigravity-cli/settings.json`` with ``toolPermission: strict`` and
    ``permissions.allow: ["mcp(*)"]``: the permission layer lets the MCP call
    reach the hook, which is what narrows it to the gateway's server.  Without
@@ -73,14 +75,17 @@ _MCP_READERS = ("list_resources", "read_resource", "list_prompts", "get_prompt")
 _HOOK_SCRIPT_TEMPLATE = '''"""Allow the gateway's bridged MCP tools; deny every host tool.
 
 The gateway writes this file.  ``agy`` runs it for every ``PreToolUse`` event
-through ``hooks.json``; the model may call the client's MCP server through
-``call_mcp_tool`` and its read-only resource readers, and nothing else.
+through ``hooks.json``.  It allows the client's MCP server and nothing else:
+newer ``agy`` names each MCP tool ``mcp_<server>_<tool>``, older versions use
+``call_mcp_tool`` with the server in its arguments, and the read-only resource
+and prompt readers carry only the server.
 """
 
 import json
 import sys
 
 SERVER = __SERVER__
+PREFIX = "mcp_" + SERVER + "_"
 READERS = __READERS__
 DENY = __DENY__
 
@@ -94,6 +99,9 @@ def main() -> None:
     tool = payload.get("toolCall") or {}
     name = tool.get("name") or ""
     args = tool.get("args") or {}
+    if name.startswith(PREFIX) and len(name) > len(PREFIX):
+        print(json.dumps({"decision": "allow"}))
+        return
     server = args.get("ServerName") or args.get("serverName") or ""
     declared = args.get("ToolName") or args.get("toolName") or ""
     if name == "call_mcp_tool" and server == SERVER and declared:
