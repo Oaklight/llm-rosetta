@@ -100,7 +100,8 @@ proceeds on the session's own default, rather than failing the request.
 | System instruction | sent as one string, when the agent accepts one |
 | Conversation | rendered as labelled text blocks (`[User]`, `[Assistant]`, `[Tool result]`), in order |
 | Images | sent as inline image blocks beside their message's text |
-| Tool declarations, `tool_choice`, `tool_config` | **dropped, and reported** — there is no tool bridge yet |
+| Tool declarations | served to the agent as a loopback MCP server — the model can call them |
+| `tool_choice`, `tool_config` | dropped, and reported |
 | `generation`, `response_format`, `reasoning`, cache settings | dropped, and reported |
 | File and audio parts | dropped, and reported |
 
@@ -110,16 +111,32 @@ proceeds on the session's own default, rather than failing the request.
 | Thought chunks | streamed as reasoning deltas |
 | Usage update | carried as a context-occupancy figure, not a per-turn token bill |
 | Stop reason | mapped to the IR finish reason (`end_turn` → `stop`, `max_tokens` → `length`, …) |
-| Tool calls | not surfaced yet (phase 2) |
+| Tool calls | surfaced as tool-call events; the turn stops with `tool_calls` until the next request carries the result |
 
 Every dropped field is a conversion warning, so a request log says what this
 lane could not carry.
 
+Client tools keep the client in the loop. A request declares a conversation id
+and one or more tools; the agent calls one through the gateway's loopback MCP
+endpoint, the gateway ends that response with the call and
+`stop_reason: "tool_calls"`, and the client sends the result on its next
+request. The gateway answers the pending MCP call and the agent continues the
+same turn. A request that declares tools but no conversation id is refused
+with `400`, because the result could not find its way back. Verified against
+`agy` 1.5.14; 1.5.13 routes the same call through its `call_mcp_tool`
+meta-tool.
+
 ## Limitations
 
-- **No tool calling yet.** A request that declares tools still succeeds, but
-  the model cannot call them. This is the first thing to arrive in the next
-  phase, over an MCP bridge to the agent.
+- **Client tools need a conversation id.** The client's result is matched to
+  the suspended turn by the conversation, so a one-off request that declares
+  tools is refused with `400` rather than losing the call. Declare a session
+  id (see the next bullet) when the request carries tools.
+- **The agent's own tools stay off.** `agy` runs in a gateway-owned profile: a
+  custom agent with no tools, a `PreToolUse` hook that allows only the
+  gateway's loopback MCP server, `toolPermission: strict`, and an ACP client
+  that refuses every built-in tool. A turn in which a built-in tool starts
+  fails with `502` rather than running on the host.
 - **One session per conversation, when the client names it.** A request that
   declares a conversation id (`x-claude-code-session-id`, `x-opencode-session`,
   any `x-<vendor>-session-id` with the shape of an id, or the body's
@@ -139,10 +156,10 @@ lane could not carry.
   `acp.max_sessions` (default 32) and `acp.session_ttl` (seconds, default
   1800) bound what those processes hold, and an idle session is given back by a
   periodic sweep rather than only when the next request arrives.
-- **The agent's own tools are its business.** `agy` may act on the host it
-  runs on. Give it a working directory you are willing to let a model write in
-  — the gateway points it at a scratch directory under the system temp dir
-  (`llm-rosetta-acp/<provider>`) unless the request supplies `cwd`.
+- **The working directory is still the host's.** The agent's built-in tools
+  cannot run, but the session's `cwd` is real. The gateway points it at a
+  scratch directory under the system temp dir (`llm-rosetta-acp/<provider>`)
+  unless the request supplies `cwd`.
 - **Plan windows and limits are Google's**, and are not visible here.
 - **`base_url` is a placeholder.** `http://agy.local` exists because the
   transport contract is shared with the HTTP lanes; nothing dials it.
@@ -155,12 +172,15 @@ lane could not carry.
 | `503` “could not start the ACP agent ['agy', 'acp']” | the command is not on `PATH`, or exits at startup | install `agy` for the gateway process's user, or set `connection.acp_argv` |
 | `502` with the agent's own words | a non-sign-in refusal (a model the agent rejected, an upstream error) | read the message; it is the agent's |
 | An error event mid-stream (`finish_reason: error`) | the agent failed after the turn started | the request log carries the reason |
-| Every turn is slow | the whole history is replayed per request | expected in this phase (see Limitations) |
+| Every turn is slow | the request declares no conversation id, so each turn opens a session and replays the history | declare a session id (see Limitations) |
 
 ## Security
 
 - The gateway never holds, reads or logs a Google token: `agy` stores it where
   it stores it for its own use.
+- The agent runs in a profile the gateway owns and re-writes before every
+  session: its built-in tools cannot run on the host, and client tools reach
+  it only through the gateway's loopback MCP endpoint.
 - The agent is started once per provider and reused across requests; it is
   stopped when the gateway shuts down. One provider is one process, not one
   process per request.
