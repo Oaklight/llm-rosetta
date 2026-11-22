@@ -8,6 +8,7 @@ client source format.
 
 from __future__ import annotations
 
+import json
 from typing import Any, cast
 
 import pytest
@@ -87,8 +88,8 @@ class TestTheTurnBody:
             "mimeType": "image/jpeg",
         }
 
-    def test_tool_declarations_are_reported_not_written(self):
-        """No bridge exists, so the request must not claim the tools."""
+    def test_tool_declarations_are_written_in_mcp_shape(self):
+        """The transport serves these from its loopback MCP endpoint."""
         ir: IRRequest = {
             "model": "m",
             "messages": [{"role": "user", "content": [{"type": "text", "text": "hi"}]}],
@@ -104,8 +105,14 @@ class TestTheTurnBody:
         ctx = _context()
         body, warnings = _converter().request_to_provider(ir, context=ctx)
 
-        assert "tools" not in body
-        assert any("tool" in str(w).lower() for w in warnings)
+        assert body["tools"] == [
+            {
+                "name": "read_file",
+                "description": "read a file",
+                "parameters": {"type": "object", "properties": {}},
+            }
+        ]
+        assert not any("tool" in str(w).lower() for w in warnings)
 
     def test_generation_settings_are_reported_one_by_one(self):
         """A turn carries a prompt and a model; sampling parameters are lost."""
@@ -179,6 +186,67 @@ class TestTheResponse:
         ir = _converter().response_from_provider({"updates": []})
 
         assert ir["choices"][0]["message"]["content"] == [{"type": "text", "text": ""}]
+
+    def test_a_tool_call_makes_a_tool_use_part_and_a_tool_finish(self):
+        provider_response = {
+            "updates": [
+                {
+                    "type": "tool_call",
+                    "tool_call_id": "call_1",
+                    "tool_name": "echo",
+                    "tool_input": {"text": "hi"},
+                },
+                {"type": "stop", "stop_reason": "tool_calls"},
+            ],
+            "stop_reason": "tool_calls",
+            "session_id": "sess-1",
+            "model": "m",
+        }
+        ir = _converter().response_from_provider(provider_response)
+
+        choice = ir["choices"][0]
+        assert choice["message"]["content"] == [
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_1",
+                "tool_name": "echo",
+                "tool_input": {"text": "hi"},
+                "tool_type": "function",
+            }
+        ]
+        assert choice["finish_reason"] == {"reason": "tool_calls"}
+
+
+class TestTheStream:
+    """A transport chunk becomes the stream events a chat client reads."""
+
+    def test_a_tool_call_chunk_becomes_tool_use_events(self):
+        events = _converter().stream_response_from_provider(
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_1",
+                "tool_name": "echo",
+                "tool_input": {"text": "hi"},
+            }
+        )
+
+        assert [event["type"] for event in events] == [
+            "content_block_start",
+            "tool_call_start",
+            "tool_call_delta",
+        ]
+        tool = [cast(dict[str, Any], event) for event in events]
+        assert tool[0]["block_type"] == "tool_use"
+        assert tool[1]["tool_call_id"] == "call_1"
+        assert tool[1]["tool_name"] == "echo"
+        assert json.loads(tool[2]["arguments_delta"]) == {"text": "hi"}
+
+    def test_a_stop_chunk_carries_the_tool_finish_reason(self):
+        events = _converter().stream_response_from_provider(
+            {"type": "stop", "stop_reason": "tool_calls"}
+        )
+
+        assert events == [{"type": "finish", "finish_reason": {"reason": "tool_calls"}}]
 
 
 class TestTargetOnly:
