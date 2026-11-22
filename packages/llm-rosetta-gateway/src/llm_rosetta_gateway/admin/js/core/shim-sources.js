@@ -2,7 +2,7 @@
  * shim-sources.js — the `shims.sources` / `shims.install` rules the panel
  * edits, and the facts a manifest vendor card shows (#1660 S9).
  *
- * The selector grammar mirrors the gateway's (`shims/manifest_sources.py`):
+ * The selector grammar mirrors the gateway's (`shims/manifest_sources/plan.py`):
  * `<vendor>`, `tag:<full tag>`, `*`, each optionally behind `<source>:`; a
  * vendor entry may be an exclusion (`!<vendor>`, `!<source>:<vendor>`) or a
  * pin (`<source>:<vendor>@<version>`).  An exclusion always wins, and an

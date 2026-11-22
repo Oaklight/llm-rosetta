@@ -153,11 +153,16 @@ export function cssValue(v) {
   return '';
 }
 
-/** A URL for an `href` / `src` attribute, or '' when its scheme is not allowed.
+/** A URL for an `href` / `src` attribute, or '' when it is not allowed.
  *
- *  Allowed: `http:`, `https:`, a path or fragment (no scheme), and a
- *  `data:image/` URL.  `javascript:`, `vbscript:` and every other scheme are
- *  dropped, whatever the case or the control characters in front of them.
+ *  Allowed: `http:`, `https:`, a path or fragment (no scheme), and a raster
+ *  `data:image/` URL (png, jpeg, gif, webp; not svg, which can carry script).
+ *  `javascript:`, `vbscript:` and every other scheme are dropped, whatever the
+ *  case or the control characters in front of them.  A protocol-relative
+ *  `//host/x` is dropped too: it is neither a path nor a scheme the caller
+ *  chose.  A value holding a quote, angle bracket or backtick is dropped, so a
+ *  bare `href="${safeUrl(v)}"` cannot end its attribute; `esc()` is still the
+ *  rule at the call sites.
  *
  *  @param {unknown} v
  *  @returns {string}
@@ -166,10 +171,11 @@ export function safeUrl(v) {
   const value = String(v === null || v === undefined ? '' : v);
   // The URL parser drops tabs, newlines and leading C0 / space before the scheme.
   const probe = value.replace(/[\u0000-\u0020]/g, '');
+  if (/["'<>`]/.test(probe) || /^[\\/]{2}/.test(probe)) return '';
   const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(probe);
   if (!scheme) return value;
   const name = scheme[1].toLowerCase();
   if (name === 'http' || name === 'https') return value;
-  if (name === 'data' && /^data:image\//i.test(probe)) return value;
+  if (name === 'data' && /^data:image\/(?:png|jpe?g|gif|webp)[;,]/i.test(probe)) return value;
   return '';
 }

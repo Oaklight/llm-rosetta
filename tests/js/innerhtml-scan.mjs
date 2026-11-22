@@ -206,8 +206,10 @@ function isCallOf(e, name) {
 /** Interpolations that sit in a `style` value or a URL attribute value
  *  (`href` / `src` / `action` / `formaction`) of any template literal, and are
  *  not wrapped by `cssValue()` / `safeUrl()` / `logoUrl()`.  An unquoted value
- *  (`src=${v}`) is always reported.  [{line, attr, expr}]. */
-export function scanValues(src, base = 0, lineOf = null) {
+ *  (`src=${v}`) is always reported.  [{line, attr, expr}].  With `includeSafe`
+ *  the wrapped interpolations are listed as well (`safe: true`), which is what
+ *  the census counts. */
+export function scanValues(src, base = 0, lineOf = null, includeSafe = false) {
   const found = [];
   const lineAt = lineOf || ((i) => src.slice(0, i).split('\n').length);
   let i = 0;
@@ -234,11 +236,13 @@ export function scanValues(src, base = 0, lineOf = null) {
       const open = OPEN_VALUE.exec(text);
       const bare = !open && UNQUOTED_VALUE.exec(text);
       const hit = open || bare;
-      if (hit && (bare || !isSafeValue(hit[1].toLowerCase(), it.expr))) {
-        found.push({ line, attr: hit[1].toLowerCase(), expr: it.expr });
+      if (hit) {
+        const attr = hit[1].toLowerCase();
+        const safe = !bare && isSafeValue(attr, it.expr);
+        if (!safe || includeSafe) found.push({ line, attr, expr: it.expr, safe });
       }
       text += '\u0000';
-      found.push(...scanValues(it.expr, 0, () => line));
+      found.push(...scanValues(it.expr, 0, () => line, includeSafe));
     }
     i = t.end;
   }
