@@ -182,6 +182,9 @@ class AcpToolBridge:
         tool in its arguments; its read-only resource and prompt readers carry
         only the server.  A meta-tool that addresses another server, or a tool
         this request did not declare, is not bridged.
+
+        The bare declared name is accepted on purpose: an agent may report the
+        tool exactly as the request declared it, with the server name implied.
         """
         call_id = tool_call.get("toolCallId") or tool_call.get("tool_call_id")
         if isinstance(call_id, str) and any(
