@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+import os
 from pathlib import Path
 
 import pytest
@@ -176,6 +177,8 @@ class TestThePublicReader:
         the write-back is bookkeeping, so a directory that cannot be written is
         logged and the document is served from memory.
         """
+        if os.geteuid() == 0:
+            pytest.skip("root writes through the mode bits this test needs")
         path = _write(tmp_path / "gateway.jsonc", _V0)
         original = path.read_text()
         tmp_path.chmod(0o555)

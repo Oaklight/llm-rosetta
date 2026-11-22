@@ -125,14 +125,15 @@ test('cssValue keeps colours, var() and lengths, and drops anything that can add
   assert.equal(cssValue(12), '12');
 });
 
-test('safeUrl keeps http(s), paths and image data URLs, and drops script schemes', () => {
+test('safeUrl keeps http(s), paths and raster data URLs, and drops script schemes, quotes and svg', () => {
   for (const ok of ['https://a.example/x?y=1', 'HTTP://a.example', '/admin/logo.svg', './a.svg',
-    '#frag', 'logo.svg', 'data:image/png;base64,AAAA', '']) {
+    '#frag', 'logo.svg', 'data:image/png;base64,AAAA', 'data:image/jpeg;base64,/9j/4AAQ', '']) {
     assert.equal(safeUrl(ok), ok, ok);
   }
   for (const bad of ['javascript:alert(1)', 'JavaScript:alert(1)', ' javascript:alert(1)',
     'java\tscript:alert(1)', '\u0001javascript:alert(1)', 'vbscript:x', 'data:text/html,<b>',
-    'file:///etc/passwd', 'blob:https://a/b']) {
+    'file:///etc/passwd', 'blob:https://a/b', '//evil.example/x', 'data:image/svg+xml;base64,AAAA',
+    'x" onclick="alert(1)', "x' onclick='1", 'a<b', 'a`b']) {
     assert.equal(safeUrl(bad), '', JSON.stringify(bad));
   }
   assert.equal(safeUrl(null), '');

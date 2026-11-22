@@ -17,7 +17,9 @@
  * must be `cssValue(…)` (core/html.js, a strict allow-list: `esc` does not stop
  * `;` or `)`), and one inside `href` / `src` / `action` / `formaction` must be
  * `safeUrl(…)` or `logoUrl(…)`, optionally inside `esc()` (`esc` does not stop
- * a `javascript:` scheme).  `<script>` context is outside it (none today).
+ * a `javascript:` scheme).  Only template literals are scanned: markup built
+ * by string concatenation (`'<div style="' + v + '"'`) is outside it, and so is
+ * `<script>` context (none today).
  * The unquoted attribute value (`title=${v}`) is rejected in html`` templates.
  */
 
@@ -143,6 +145,8 @@ test('scanner: style and URL attribute values need their helper', () => {
   assert.deepEqual(found('x = `<img src="${esc(logoUrl(u))}">`;'), []);
   assert.deepEqual(found('x = `<a href="${safeUrl(a) + b}">`;'), ['href:safeUrl(a) + b']);
   assert.deepEqual(found('x = `<form action="${u}">`;'), ['action:u']);
+  assert.deepEqual(found('x = `<button formaction="${u}">`;'), ['formaction:u']);
+  assert.deepEqual(found('x = `<button formaction="${safeUrl(u)}">`;'), []);
   assert.deepEqual(found('x = `<img src=${safeUrl(u)}>`;'), ['src:safeUrl(u)']);
   // Quoted value closed before the interpolation, another attribute, a data-* name.
   assert.deepEqual(found('x = `<a href="/a" title="${t}">`;'), []);
@@ -167,4 +171,32 @@ test('admin js: style and URL attribute values go through cssValue / safeUrl', (
     [],
     'wrap the value: style needs cssValue(v); href/src/action/formaction need safeUrl(v) or logoUrl(v)',
   );
+});
+
+test('admin js: the style and URL census sees every site it saw when the lint was written', () => {
+  // The lint above can only fail on a finding.  If the scanner stopped
+  // recognising a site (a new spelling, a template form it cannot parse) it
+  // would stay green with nothing seen, so the number of wrapped sites is
+  // pinned per file.  A new site raises a count: add it here.
+  const CENSUS = {
+    'components/logo-picker.js::url': 2,
+    'components/logo-select.js::url': 1,
+    'components/provider-picker.js::url': 1,
+    'components/test-runner.js::url': 1,
+    'components/type-picker.js::url': 1,
+    'core/updates.js::url': 1,
+    'tabs/jobs.js::style': 1,
+    'tabs/models.js::url': 1,
+    'tabs/providers.js::style': 2,
+    'tabs/providers.js::url': 1,
+    'tabs/shims-page.js::style': 2,
+    'tabs/shims-page.js::url': 2,
+  };
+  const items = [];
+  for (const file of adminFiles()) {
+    for (const { attr } of scanValues(readFileSync(file, 'utf8'), 0, null, true)) {
+      items.push({ file: relative(ADMIN_JS, file), expr: attr === 'style' ? 'style' : 'url' });
+    }
+  }
+  assert.deepEqual(keyCounts(items), CENSUS);
 });
