@@ -21,6 +21,7 @@
  */
 
 import { t } from '../core/i18n.js';
+import { safeUrl } from '../core/html.js';
 
 const _VIEW_KEY = 'provider-type-view';
 
@@ -295,7 +296,7 @@ export function createTypePicker(cfg) {
     // On load failure (e.g. a cross-origin logo blocked by CORP) fall back to
     // the same dashed placeholder used for logo-less roots.
     return logo
-      ? `<img class="tp-logo" src="${_esc(logo)}" alt="" loading="lazy" onerror="this.classList.add('tp-logo-empty');this.removeAttribute('src')">`
+      ? `<img class="tp-logo" src="${_esc(safeUrl(logo))}" alt="" loading="lazy" onerror="this.classList.add('tp-logo-empty');this.removeAttribute('src')">`
       : '<span class="tp-logo tp-logo-empty" aria-hidden="true"></span>';
   }
 

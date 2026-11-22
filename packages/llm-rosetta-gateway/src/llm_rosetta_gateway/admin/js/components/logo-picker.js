@@ -143,7 +143,7 @@ function _renderDropdown() {
     html += '<div class="lp-section-label">' + t('logo.popular') + '</div><div class="lp-grid">';
     for (const n of pop) {
       const cls = (n === _selectedName ? ' lp-active' : '') + (idx === _highlightIdx ? ' lp-highlight' : '');
-      html += `<div class="lp-item${cls}" data-icon="${n}" data-idx="${idx}"><img class="lp-thumb" src="${_ICON_SRC(n)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><span class="lp-label">${_esc(n)}</span></div>`;
+      html += `<div class="lp-item${cls}" data-icon="${n}" data-idx="${idx}"><img class="lp-thumb" src="${_esc(logoUrl(_ICON_URL(n)))}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><span class="lp-label">${_esc(n)}</span></div>`;
       idx++;
     }
     html += '</div>';
@@ -152,7 +152,7 @@ function _renderDropdown() {
     html += '<div class="lp-section-label">' + t('logo.other') + '</div><div class="lp-grid">';
     for (const n of capped) {
       const cls = (n === _selectedName ? ' lp-active' : '') + (idx === _highlightIdx ? ' lp-highlight' : '');
-      html += `<div class="lp-item${cls}" data-icon="${n}" data-idx="${idx}"><img class="lp-thumb" src="${_ICON_SRC(n)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><span class="lp-label">${_esc(n)}</span></div>`;
+      html += `<div class="lp-item${cls}" data-icon="${n}" data-idx="${idx}"><img class="lp-thumb" src="${_esc(logoUrl(_ICON_URL(n)))}" alt="" loading="lazy" onerror="this.style.visibility='hidden'"><span class="lp-label">${_esc(n)}</span></div>`;
       idx++;
     }
     html += '</div>';

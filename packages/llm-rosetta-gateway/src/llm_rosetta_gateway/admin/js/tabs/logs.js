@@ -140,9 +140,14 @@ function renderLogs(entries, total) {
       const isExpanded = S.expandedLogRows.has(rowId);
       const expandHint = hasDetail ? ` title="${esc(t('log.expandHint'))}"` : '';
       const clientIp = e.client_ip || '—';
-      const hlBg = S._highlightLogId === e.id ? 'background:color-mix(in srgb, var(--accent) 20%, transparent);' : '';
-      const rowCursor = hasDetail ? 'cursor:pointer;' : '';
-      const styleAttr = (hlBg || rowCursor) ? ` style="${hlBg}${rowCursor}"` : '';
+      // Whole declarations, never an interpolated one: the lint rejects a
+      // `${…}` inside `style="…"` that is not a cssValue().
+      const hl = S._highlightLogId === e.id;
+      const styleAttr = hl && hasDetail
+        ? ' style="background:color-mix(in srgb, var(--accent) 20%, transparent);cursor:pointer"'
+        : hl
+          ? ' style="background:color-mix(in srgb, var(--accent) 20%, transparent)"'
+          : hasDetail ? ' style="cursor:pointer"' : '';
       const rowClick = hasDetail ? ' onclick="toggleLogRow(this.dataset.logId,this)"' : '';
       // An expandable error row is a tab stop; aria-expanded reports the
       // same state the detail row's hidden attribute carries.
