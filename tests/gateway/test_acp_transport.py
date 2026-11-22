@@ -1384,6 +1384,8 @@ class TestAgentToolsAreOff:
             response = await transport.send(provider, "", body)
             bridges = dict(transport._session_bridges)
             urls = dict(transport._session_urls)
+            registrations = dict(transport._mcp._registrations)
+            port = transport._mcp.port
             kinds = _kinds(tmp_path)
         finally:
             await transport.close()
@@ -1391,6 +1393,10 @@ class TestAgentToolsAreOff:
         assert response.status_code == 503
         assert bridges == {}
         assert urls == {}
+        # The URL the agent received is no longer served, and the listener is
+        # gone rather than left bound with an empty registration table.
+        assert registrations == {}
+        assert port == 0
         assert "prompt" not in kinds
         assert "close" in kinds
 
