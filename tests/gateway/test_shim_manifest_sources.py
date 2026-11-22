@@ -31,7 +31,7 @@ from llm_rosetta_gateway.shims.shim_sources import (
 )
 from llm_rosetta_gateway.shims import get_source_package
 from llm_rosetta_gateway.shims.catalog import get_shim_source
-from llm_rosetta_gateway.shims.manifest_sources import parse_selector
+from llm_rosetta_gateway.shims.manifest_sources.plan import parse_selector
 from llm_rosetta_gateway.shims.sources import check_remote_updates
 
 DIST = "https://shims.example/dist/"
@@ -500,7 +500,7 @@ class TestPrecedence:
     def test_a_dev_or_pre_release_has_not_reached_the_promotion(self, core, reached):
         from llm_rosetta.contracts.shim_manifest import parse_manifest
 
-        from llm_rosetta_gateway.shims.manifest_sources import _promotion
+        from llm_rosetta_gateway.shims.manifest_sources.selection import _promotion
 
         http = FakeHttp()
         http.publish("acme", "0.1.0", ["acme--x"], promoted_to="core@0.14.0")
@@ -1058,7 +1058,7 @@ class TestFreshnessGuard:
 )
 def test_generated_at_compares_as_time(earlier, later):
     from llm_rosetta.contracts.shim_manifest import SourceManifest
-    from llm_rosetta_gateway.shims.manifest_sources import _older
+    from llm_rosetta_gateway.shims.manifest_sources.freshness import _older
 
     def manifest(when: str) -> SourceManifest:
         return SourceManifest(
@@ -1098,7 +1098,7 @@ class TestFreshnessGuardEdges:
         self, tmp_path, clock
     ):
         """The missing-vendor recheck has a cooldown."""
-        from llm_rosetta_gateway.shims.manifest_sources import (
+        from llm_rosetta_gateway.shims.manifest_sources.freshness import (
             VENDOR_RECHECK_SECONDS,
         )
 

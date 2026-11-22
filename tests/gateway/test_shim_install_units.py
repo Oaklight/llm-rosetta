@@ -29,7 +29,7 @@ from llm_rosetta_gateway.shims.shim_sources import (
     presets_as_install,
     rewrite_presets_section,
 )
-from llm_rosetta_gateway.shims.manifest_sources import (
+from llm_rosetta_gateway.shims.manifest_sources.plan import (
     excluded_by,
     parse_selector,
     pick_selector,
@@ -246,7 +246,7 @@ class TestInstall:
 
 class TestSourceView:
     def test_the_card_reports_the_pin_and_the_exclusion(self, tmp_path):
-        from llm_rosetta_gateway.shims.manifest_sources import ManifestSourceSpec
+        from llm_rosetta_gateway.shims.manifest_sources.plan import ManifestSourceSpec
         from llm_rosetta_gateway.shims.source_view import source_catalogue
 
         http = FakeHttp()

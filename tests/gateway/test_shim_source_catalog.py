@@ -15,7 +15,7 @@ import pytest
 
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
 from llm_rosetta.contracts.shim_manifest import parse_manifest
-from llm_rosetta_gateway.shims.manifest_sources import (
+from llm_rosetta_gateway.shims.manifest_sources.plan import (
     ManifestSourceSpec,
     parse_selector,
 )
