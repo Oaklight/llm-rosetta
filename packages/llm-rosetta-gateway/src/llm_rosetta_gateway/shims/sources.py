@@ -136,12 +136,9 @@ from ._legs import (  # noqa: F401
     _same_origin,
     _url_origin,
 )
-from .manifest_sources import (
-    ManifestPlan,
-    check_manifest_updates,
-    install_from_manifests,
-    scan_manifest_status,
-)
+from .manifest_sources.install import install_from_manifests
+from .manifest_sources.plan import ManifestPlan
+from .manifest_sources.status import check_manifest_updates, scan_manifest_status
 from ._archive import (  # noqa: F401
     _common_root_prefix,
     _extract_archive,

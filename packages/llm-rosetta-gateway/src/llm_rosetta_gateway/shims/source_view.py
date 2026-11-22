@@ -31,16 +31,16 @@ from llm_rosetta.contracts.shim_manifest import (
 
 from ._cache import _file_lock
 from ._types import HttpGet, ShimSourceStatus
-from .manifest_sources import (
+from .manifest_sources.freshness import _load_manifest
+from .manifest_sources.plan import (
     InstallSelector,
     ManifestSourceSpec,
-    _load_manifest,
-    _pinned_release,
     _source_root,
     excluded_by,
     parse_source_entry,
     pick_selector,
 )
+from .manifest_sources.selection import _pinned_release
 
 
 def _requires(release: VendorRelease | None) -> dict[str, Any] | None:
@@ -360,7 +360,7 @@ def _specs_and_selectors(config: Any) -> tuple[list[Any], list[Any], list[Any]]:
     implied, so the panel can offer their vendors before any is selected.
     """
     from .catalog import DEFAULT_SOURCES, get_shim_source
-    from .manifest_sources import source_spec_from_catalogue
+    from .manifest_sources.plan import source_spec_from_catalogue
 
     shims = getattr(config, "shims", None)
     plan = getattr(shims, "manifests", None)

@@ -39,7 +39,7 @@ from .catalog import (
     package_repo_keys,
     repo_key,
 )
-from .manifest_sources import (
+from .manifest_sources.plan import (
     InstallSelector,
     ManifestPlan,
     ManifestSourceSpec,
