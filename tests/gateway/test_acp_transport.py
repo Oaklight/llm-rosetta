@@ -1852,6 +1852,53 @@ class TestToolChanges:
         )
         assert "resumed with tools: lookup" in text
 
+    async def test_a_result_request_with_reordered_tools_continues(
+        self, monkeypatch, tmp_path
+    ):
+        """An order-only change must not abandon a pending call."""
+        transport = AcpTransport(timeout=10)
+        provider = _provider(
+            monkeypatch, tmp_path, "mcp-change", conversation="conv-order"
+        )
+        first = _turn("[User]\necho hello")
+        first["tools"] = [ECHO_TOOL, LOOKUP_TOOL]
+        try:
+            stream = await transport.send_streaming(provider, "", first)
+            assert stream.status_code == 200
+            chunks = [chunk async for chunk in stream]
+            call = next(chunk for chunk in chunks if chunk["type"] == "tool_call")
+
+            second = _turn(
+                "[User]\necho hello",
+                "[Assistant]\n[called echo]",
+                "[Tool result]\nhello back",
+            )
+            second["tools"] = [LOOKUP_TOOL, ECHO_TOOL]
+            second["tool_results"] = [
+                {
+                    "tool_call_id": call["tool_call_id"],
+                    "result": "hello back",
+                    "is_error": False,
+                }
+            ]
+            response = await transport.send(provider, "", second)
+        finally:
+            await transport.close()
+
+        assert response.status_code == 200
+        assert response.body is not None
+        assert response.body["stop_reason"] == "end_turn"
+        assert transport._suspended == {}
+        # The suspended turn continued: it was not replayed into a new session.
+        assert _kinds(tmp_path).count("new") == 1
+        assert self._tool_lists(tmp_path) == [["echo", "lookup"]]
+        text = "".join(
+            str(update.get("text") or "")
+            for update in response.body["updates"]
+            if update.get("type") == "text"
+        )
+        assert "tool said: hello back" in text
+
 
 class TestAgentLaneConformance:
     """#1629: client tools work; the agent's host tools never do."""
