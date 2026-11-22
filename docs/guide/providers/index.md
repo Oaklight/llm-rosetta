@@ -35,6 +35,6 @@ title: 提供方参考
 | [Antigravity](antigravity.md) | `antigravity--acp` | `acp` | Google Antigravity 套餐，经本机 `agy` CLI 驱动 |
 | [免费端点](free.md) | `kilo_free--*`、`llm7--*`、`opencode_zen_free--*`、`ovhcloud--*` | `chat_completions` | 独立包；无需账号 |
 
-Argo、AskSage、ALCF、Open Design 与免费端点的 shim 作为独立包发布 —— 在使用其名称之前，请通过 `shims.presets`（或 **网关 → Shims → 可安装**）声明对应源。参见[独立 Shim 包](../shims.md#standalone-shim-packages)。
+Argo、AskSage、ALCF、Open Design 与免费端点的 shim 作为独立包发布 —— 在使用其名称之前，请通过 `shims.install`（或 **网关 → Shims → 可安装**）声明对应源。参见[独立 Shim 包](../shims.md#standalone-shim-packages)。
 
 关于 shim 的通用概念和自定义 shim 注册，请参阅[提供方 Shims](../shims.md)。

@@ -470,36 +470,25 @@ def register_shims():
 !!! note
     当插件注册了与内置同名的 shim 时，内置 shim 会被静默覆盖（输出 INFO 日志）。这是有意设计——允许插件定制内置提供方的行为。
 
-### 配置声明的目录与远程源
+### 配置声明的目录 { #config-declared-directories }
 
-一套 shim 也可以**无需安装插件**就被消费。gateway 的顶层 `shims` 配置段会扫描额外目录，
-并把远程归档拉取到本地缓存 —— 这在直接使用官方镜像（既没有 `pip` 也没有 `git`）而 shim
-维护在独立仓库时特别有用：
+一个 shim 目录也可以**无需安装插件**就被消费。gateway 的顶层 `shims` 配置段会扫描额外目录 —— 这在直接使用
+官方镜像（既没有 `pip` 也没有 `git`）而 shim 就放在配置旁边时很有用：
 
 ```jsonc
 "shims": {
-  "presets": ["alcf"],                            // 下方 catalog remote 的简写
-  "paths": ["/config/shims"],                     // 存放 <vendor>/<type>/provider.yaml 的目录（也接受旧的扁平/分组形状）
-  "remotes": [
-    {
-      "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
-      // "ref": "v0.1.0",                          // 仓库打 tag 后再固定；省略则取 HEAD，首次拉取时固化
-      "path": "src/llm_rosetta_shim_alcf/providers",
-      "token_env": "GITHUB_TOKEN"                  // 可选；仅私有 shim 仓库需要
-    }
-  ]
+  "paths": ["/config/shims"]   // 存放 <vendor>/<type>/provider.yaml 的目录（或旧的平铺 / 分组布局）
 }
 ```
 
-`presets` 条目命名源 catalog 中的包（ALCF、Argo、AskSage、免费端点、Open
-Design），并从其 manifest 源安装（见 [Manifest 源](#manifest-sources)）；若有显式 remote
-指向该包的仓库，则改用下方所示的 remote，并合并到 catalog 条目上（显式键优先）。远程源的 `path` 是归档内存放提供方目录的路径（对
-`llm-rosetta-shim-*` 包来说是 `src/<package>/providers`）。完整字段、缓存与刷新行为、优先级和安全提示见
-[Gateway → 外部 Shim 源](../gateway/configuration.md#external-shim-sources)。
-编程方式可用 `llm_rosetta.shims.rebuild_shims()`（无需配置文件）或
+发布在仓库里的 shim 集合改由 manifest 源安装（见 [Manifest 源](#manifest-sources)）。完整字段、缓存行为、
+优先级与安全说明见 [Gateway → 外部 Shim 源](../gateway/configuration.md#external-shim-sources)。
+以编程方式使用时，可调用 `llm_rosetta.shims.rebuild_shims()`（不需要配置文件）或
 `llm_rosetta_gateway.apply_shim_sources(raw, config_path)`。
 
-未知 preset 默认跳过并告警，`shims.strict` 为 `true` 时改为拒绝 —— 因此较新版本写出的配置仍能在较旧版本上启动。配置段形状错误（例如把 `presets` 写成字符串）会在加载配置时被拒绝，而不是等到启动时。
+`shims.install` 中未知的 `<source>:` 限定符默认跳过并告警，`shims.strict` 为 `true` 时改为拒绝 —— 因此较新
+版本写出的配置仍能在较旧版本上启动。配置段形状错误会在加载配置时被拒绝，而不是等到启动时。已移除的键
+（`presets`、`include`、`exclude`、`remotes`）同样会被拒绝；见[已移除的键](#retired-keys)。
 
 ### Manifest 源 { #manifest-sources }
 
@@ -544,8 +533,7 @@ manifest 从不降级，manifest 不再列出的已安装版本也会保留，�
 `remote_ttl` 内复用；**重新拉取**会立即重读。源不可达时使用缓存的 manifest 与上一次成功
 的安装；摘要不匹配时绝不安装（保留之前的版本，并标记为过期）。发布之后 CDN 可能仍返回旧副本，
 因此网关会检查返回内容的 `generated_at` 及其列出的厂商。检查范围包括：显式的
-`<source>:<vendor>` 选择器；映射的旧预设所属包发布过的厂商（`presets: ["free"]` 期望
-`kilo_free`、`llm7`、`opencode_zen_free` 和 `ovhcloud`，尽管它按标签安装）；以及移出
+`<source>:<vendor>` 选择器；以及移出
 core 的厂商。普通的标签选择器或 `*` 不受检查；所有记录都无效的厂商视为缺失。返回内容早于
 缓存的 manifest，或缺少上述某个厂商时，网关会再请求另一个 URL 一次，采用 `generated_at`
 较新的 manifest；两者相同时保留第一个返回的副本，即使它正是缺少该厂商的那一份。一条 INFO
@@ -560,19 +548,9 @@ URL 返回，缓存的 manifest 都不会被更旧的副本替换：缓存会保
 `promoted_to: core@X` 从将要安装的记录中读取，因此之后不带该字段的版本会撤销晋升。只有当
 运行中的 core 达到 `X` 或更高版本 —— `X` 的开发版或预发布版（`0.14.0.dev35`）早于 `X` ——
 且 core 确实注册了该记录的 shim 时，该声明才生效；声明已到期但不成立时会记录日志，厂商照常
-安装。manifest 安装先于 `paths` 与 `remotes` 加载，因此显式声明的
-源仍会覆盖它。
+安装。manifest 安装先于 `paths` 加载，因此本地目录仍会覆盖它。
 
-**旧的预设继续可用。** `shims.presets` 无需修改：`alcf`、`argo`、`asksage` 映射为
-`argonne:<vendor>`，`free` 映射为 `contrib:tag:tier:free`，`opendesign` 映射为
-`contrib:opendesign`；以该预设为键的 `shims.include` / `shims.exclude` 条目随之生效。有两种
-情况仍走原来的 remote 路径：显式 `shims.remotes` 条目指向该包的仓库（用当前 URL 或旧 URL
-均可 —— `llm-rosetta-shim-argo` 现为 `-argonne`，`llm-rosetta-shim-free` 现为
-`-contrib`）；以及映射后的源从未应答过（尚未拉取或缓存过 manifest），此时会附带一条
-WARNING。若源已应答但没有匹配的厂商（分批发布、标签改名），**不会**加载原来的 remote ——
-它带的是为旧版 core 构建的代码 —— 网关会记录一条 WARNING，并把该选择器作为标记为
-*不在 manifest 中* 的源条目报告出来，使这一缺失在日志和 Shims 页面上都可见。任何没有匹配
-结果的 `install` 条目同样如此。要把预设写成显式条目，运行 `llm-rosetta-migrate --config config.jsonc`（试运行）再加 `--write`：每个预设变为其选择器；`include` 变为每个保留厂商一条 `<source>:<vendor>`；`exclude` 变为每个被去掉的厂商一条 `!<source>:<vendor>`；从保留厂商中去掉的单个 shim 写入 `shims.disabled`。改写不触及的注释保持不变，`presets` 行上的注释随条目移到 `install`。只有当声明的 `shims.sources` 中没有条目按 id 或目录 manifest URL 指向该源时，才会把源加进去；未知的 URL 可能是镜像，此时只报告不添加。无法转换的预设（未知、被显式 remote 固定，或其选择转换后为空 —— `include` 不匹配它的任何厂商）保留并报告给人处理（退出码 1）；要写入的 `install`、`disabled` 或 `sources` 不是数组时同样如此。
+**已移除的键。** 0.14.x 的 `shims.presets`、`shims.include`、`shims.exclude` 与 `shims.remotes` 已在 0.15.0 移除；见[已移除的键](#retired-keys)。
 
 **显示字段。** 发布记录可以带 `label`（1–80 个字符，不含控制字符和 `<`/`>`）与 `logo`（不超过 512 个字符的 `https://` URL），由来源的构建脚本从厂商根目录的 `provider.yaml`（`group_label`、`logo`）读取。网关从它会安装的那条记录（固定版本时为固定的那条）读取它们，因此尚未安装的厂商也能显示名称和图标；核心不再保留副本。发布方的校验拒绝无效值；网关只丢弃无效字段并记录 WARNING，保留该记录。旧版网关会忽略这两个键。
 
@@ -639,7 +617,7 @@ manifest 自称 `contrib` 的已声明源（即镜像）仍能提供该提供方
 
 #### 在管理面板中管理源 { #panel }
 
-**适配模块 → 可安装**按网关读取的每个源分组显示；旧版预设没有自己的卡片（被它选中的厂商注明 *来自预设*，配置仍声明的预设由一条说明列出）。配置只是隐含的源（默认值，或映射预设的源）标为*默认*。没有响应的源标为*无法访问*并显示错误；拉取失败后改用缓存的源标为*缓存副本*。
+**适配模块 → 可安装**按网关读取的每个源分组显示；配置只是隐含的源（默认值）标为*默认*。没有响应的源标为*无法访问*并显示错误；拉取失败后改用缓存的源标为*缓存副本*。
 
 源中的每个厂商都有一张卡片。收起时显示厂商、成熟度、状态（*已安装*、*已选择*、*已跳过*、*失败*或*可安装*）和版本。展开后显示：
 
@@ -647,132 +625,44 @@ manifest 自称 `contrib` 的已声明源（即镜像）仍能提供该提供方
 - 已安装版本的 `requires` 是否与当前核心匹配；
 - 成熟度及其达到日期、最近一次一致性测试结果，以及 `promoted_to`（如有）；
 - 标签，以及该版本注册的 shim，每个都标明是否已安装；
-- 选中该厂商的 `install` 条目或旧预设、选中的厂商被跳过的原因（*not in the manifest*、*core provides …*、*promoted to …*），以及先提供同一厂商的源。
+- 选中该厂商的 `install` 条目、选中的厂商被跳过的原因（*not in the manifest*、*core provides …*、*promoted to …*），以及先提供同一厂商的源。
 
 **安装**把 `<source>:<vendor>` 加入 `shims.install` 并重载，从而安装该厂商。如果声明的 `shims.sources` 没有列出该源，也会把该源写进去。没有 `sources` 键的配置会连同默认源一起写出，这样保存后的文件列出它读取的每个源，不依赖内置的默认列表。
 
 **安装** 还会删除该厂商的排除条目，且只有在没有其他条目安装它时才添加条目，因此移除一个由标签选中的厂商再装回，列表会恢复原样（固定版本不会恢复：移除时的提示写明了“固定的版本已取消”）。
 
-**移除** 从不拒绝。它删除本源中该厂商自己的条目（固定或不固定）；若标签、`*`、不带前缀的条目或旧版预设仍会选中它，则写入 `!<source>:<vendor>`。预设会先由网关改写为安装条目（与 `llm-rosetta-migrate` 相同的改写），并由一条提示写明改写了什么；无法改写的预设会附原因拒绝移除。因服务方引用其 shim 而由网关自动安装的厂商会列出这些服务方，且不提供 **移除**。
+**移除** 从不拒绝。它删除本源中该厂商自己的条目（固定或不固定）；若标签、`*`、不带前缀的条目仍会选中它，则写入 `!<source>:<vendor>`。因服务方引用其 shim 而由网关自动安装的厂商会列出这些服务方，且不提供 **移除**。
 
 **固定此版本** 写入 `<source>:<vendor>@<已安装版本>`；已固定的厂商上，**更新到 X** 把固定版本移到最新的可安装版本，**跟随最新版本** 取消固定。新的固定版本替换该厂商之前的固定条目。卡片上每个已加载的 shim 都有自己的启用开关（`shims.disabled`）。
 
-**适配模块 → 来源 → 清单来源**同时编辑这两个键。每个源有一个区块，含“全部厂商”（`<source>:*`）、每个标签和每个厂商的复选框。区块下方的输入框用于添加目录 id 或 manifest URL；*移除来源*会删掉该源以及带有其 id 前缀的条目。新的 URL 源在第一次保存后才会读取。修改在点击**保存**之前只是草稿；保存时通过配置保存路径（在配置锁内）写入 `shims.sources` 和 `shims.install`，并重载来源。只重建被编辑的源带前缀的条目；其他条目（包括重复项）保持原样。不带前缀的条目（`opendesign`、`tag:tier:free`）读取所有源，所以按原样列出；请在配置文件中修改它。来源列表只要与声明的列表不同就会写入，因此只是隐含默认源的配置会把默认源写出。**重新读取清单**会重新拉取每个 manifest。该区块下方的原始*本地目录*和*远程源*字段照旧工作。
+**适配模块 → 来源 → 清单来源**同时编辑这两个键。每个源有一个区块，含“全部厂商”（`<source>:*`）、每个标签和每个厂商的复选框。区块下方的输入框用于添加目录 id 或 manifest URL；*移除来源*会删掉该源以及带有其 id 前缀的条目。新的 URL 源在第一次保存后才会读取。修改在点击**保存**之前只是草稿；保存时通过配置保存路径（在配置锁内）写入 `shims.sources` 和 `shims.install`，并重载来源。只重建被编辑的源带前缀的条目；其他条目（包括重复项）保持原样。不带前缀的条目（`opendesign`、`tag:tier:free`）读取所有源，所以按原样列出；请在配置文件中修改它。来源列表只要与声明的列表不同就会写入，因此只是隐含默认源的配置会把默认源写出。**重新读取清单**会重新拉取每个 manifest。该区块下方的*本地目录*字段编辑 `shims.paths`。
 
 在面板中保存会把配置文件重写为普通 JSON，注释不会保留。被替换的文件以 `<config>.prev` 保存在同一目录：这是上一次网关写入之前的文件，只保留一份，每次保存都会替换，新建文件时不写。网关从不写 `<config>.bak`，那个名字属于 `llm-rosetta-migrate --write`（迁移前的原始文件）以及你自己做的备份。编辑器在区块下方会提示这一点。
-#### 只装包的一部分 { #selection }
+#### 已移除的键 { #retired-keys }
 
-默认整个包装载。两个可选映射可以收窄它，按 preset 键书写，不需要改动包本身：
+0.15.0 移除了 0.14.x 的安装路径。网关只读取 `sources`、`install`、`paths`、`disabled`、`cache_dir`、
+`remote_ttl` 与 `strict`，别的都不读。下列键在**加载配置时即被拒绝**，错误为
+`config: 'shims.<key>' was removed in 0.15.0: <建议>`：
 
-```jsonc
-"shims": {
-  "presets": ["free"],
-  "include": { "free": ["llm7--chat_completions"] },
-  "exclude": { "alcf": ["alcf_sophia--chat_completions"] }
-}
-```
+| 已移除的键 | 替代写法 |
+|-----------|---------|
+| `shims.presets` | `shims.install` 条目：`alcf` → `argonne:alcf`、`argo` → `argonne:argo`、`asksage` → `argonne:asksage`、`free` → `contrib:tag:tier:free`、`opendesign` → `contrib:opendesign` |
+| `shims.include` | `shims.install` 中显式的 `<source>:<vendor>` 条目；保留的厂商里要关的单个 shim 用 `shims.disabled` |
+| `shims.exclude` | `shims.install` 中的 `!<source>:<vendor>` 条目；单个 shim 用 `shims.disabled` |
+| `shims.remotes` | 没有对应写法：显式归档 URL（`ref`、`sha256`、`mirror`、`path`、`token_env`、`refresh`）在 manifest 中没有等价物。请发布一个 manifest 源并写进 `shims.sources`，或让 `shims.paths` 指向本地副本 |
 
-条目是 shim 名字或 `*` 通配（如 `asksage--*`）。空的 `include` 表示「不限制」而不是「什么都不装」；`exclude` 优先于 `include`。显式 `remotes[]` 条目也可以内联 `include` / `exclude`。选择发生在叶子 `provider.yaml` 解析之后、`transforms.py` 导入之前，所以被排除的 shim 既不导入模块也不注册。
+运行 `llm-rosetta-migrate --config config.jsonc`（试运行）再加 `--write`：每个预设变为其选择器；
+`include` 变为每个保留厂商一条 `<source>:<vendor>`；`exclude` 变为每个被丢弃厂商一条
+`!<source>:<vendor>`；从保留厂商中丢掉的单个 shim 进入 `shims.disabled`。被改写的键之外的注释保持不变。
+只有当没有任何条目按 id 或 catalog manifest URL 点名某个源时，才会把它加入已声明的 `shims.sources`；未知 URL
+可能是镜像，所以工具只报告它。`remotes` 条目无法改写：工具会报告它并以退出码 1 结束，交给人决定。
 
-匹配不到任何 shim 的 `include` 会在启动时告警，并列出该源实际装载了什么；只有 `shims.strict` 为 `true` 时才升级为失败。匹配不到该源提供的任何 shim 的 `exclude` 也会告警，但永远不会让加载失败：模式匹配的是 shim 名字，所以从目录树上读到的目录名（`drop`）什么都排除不掉，告警会把这一点说出来。命中项全被 `exclude` 丢掉的 `include` 同样会告警，并在 `shims.strict` 下使加载失败：每个模式都命中了，该源却什么都不加载。这些告警是启动日志；同样的信息会随重载报告（`unmatched`、`unmatched_excludes`、`emptied_includes`、`declined`）按源返回。真正用到被排除 shim 的 provider 会以原有的 unknown-shim 错误失败，失败落在需要它的地方。
-
-选择是按名字的，所以需要知道名字。包可以在其 `path` 所指目录的根部用 `shims.yaml` 声明：
-
-```yaml
-version: 1
-shims:
-  - name: llm7--chat_completions
-    path: providers/llm7
-  - name: ovhcloud--chat_completions
-    path: providers/ovhcloud
-```
-
-清单存在即权威：只装载它列出的条目，未列出的目录根本不会被读取 —— 因此不维护清单的作者只会失去自己新增的 shim。其中的路径相对于扫描根，不能越出，也不含任何 URL，所以它无法把加载器指向另一个来源。清单存在但无法执行时，该源直接失败，而不是退回扫描 —— 退回扫描恰好会解析清单想要限制的那棵树。没有清单的包仍按原来的方式扫描，选择照样按名字生效。
-
-内置 shim 没有清单，`include` / `exclude` 也不作用于它们：wheel 固定了它们的集合，不存在会悄悄改动它的外部作者，也就没有需要清单去划的边界。收窄内置集合用 `shims.disabled` —— 面板里每行的开关 —— 它在启动时把被拒绝的 shim 从注册表中移除。
-
-#### 镜像 { #mirrors }
-
-按 URL 声明的远程源，在宿主够不着的地方会直接死掉：防火墙后的 `github.com`、正在维护的
-forge、在本网络解析不了的 DNS 名。`mirror` 为同一份归档再给一个 URL，只有在主 URL 连不上
-时才会用到：
-
-```jsonc
-"remotes": [
-  {
-    "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
-    "ref": "v0.1.0",
-    "sha256": "0123…abcd",
-    "mirror": {
-      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/{ref}/alcf.tar.gz",
-      "sha256": "89ab…cdef",
-      "path": "providers"
-    }
-  }
-]
-```
-
-它面向两种场景：挡在 forge 前面的公共 CDN —— 独立包发布到 `dist` 分支、由 jsDelivr 提供的
-那份归档 —— 以及 gateway 所在网络里的内部镜像。模板填入的是源上声明的 `ref`，而不是 GitHub
-主 URL 解析出的 commit，所以按发布版本一个目录的镜像，在 forge 的 API 被限流或不可达时
-照样能用；镜像固定**自己**的 `sha256`，因为 CDN 提供的字节不是 forge 的仓库 tarball。主 URL
-有 `sha256` 校验而镜像没有声明时，配置在加载时就会被拒绝：镜像正是路径上的攻击者能够强制的
-入口。
-
-先说规则：**除「源对自己字节的裁决」之外，热缓存覆盖其余所有失败。** 以下情况会改用过期的
-副本并标记 `stale`：所有腿都传输失败、某一侧应答了 HTTP 错误、磁盘写不进去（`ENOSPC`、
-`EPERM`、只读目录）、`token_env` 变量未设置。**不**覆盖的只有两类说明「字节不对」的失败：
-`sha256` 不符，以及 body 不是可安装的归档（本该是归档却给了页面、被截断的归档、不安全的
-成员，或字节超过下载上限 —— 无论两层检查哪一层先发现）。其余失败都由缓存覆盖。没有
-缓存时，上述每一种都让该源失败。
-
-只有在主 URL 连不上时才会去问镜像。唯一的例外是「上次成功的那一侧优先」：镜像一旦接管过，
-之后它会排在主 URL 之前，此时镜像的失败再转回主 URL。下表描述的是新进程刚启动、主 URL 在
-前的那种状态：
-
-| 主 URL 的情况 | 会用镜像吗？ | 有热缓存时 |
-|:---|:---|:---|
-| 连不上（连接被拒、DNS、超时） | **会** —— 这正是镜像存在的唯一场景 | 两侧都拿不到时才用过期缓存 |
-| 应答了 HTTP 错误（`403`、`404`、`5xx`） | 不会 —— 这是源自己的裁决 | 改用过期副本，`stale: true` |
-| 凭据缺失（`token_env` 未设置）导致请求失败 | 不会 | 改用过期副本，`stale: true` |
-| 给出的 body 不是可安装的归档（本该是归档却给了页面、被截断的归档、不安全的成员） | 不会 | 不掩盖；该源失败 |
-| 给出的字节与它的 `sha256` 不符 | 不会 | 不掩盖；该源失败 |
-| 给出的字节超过下载上限 | 不会 | 不掩盖；该源失败 |
-| 写不进磁盘（磁盘满、权限不足） | 不换腿重试 —— 另一侧同样要用这块磁盘 | 改用过期副本，`stale: true` |
-
-镜像是替补，不是权威：镜像自身的失败 —— 传输失败、HTTP 错误、装不进去的 body —— 会转到
-另一侧，而不是替主 URL 下结论，因为一个还没拿到对应版本的 CDN 对 forge 什么也说明不了。
-但**固定了字节**的镜像是运维方的声明：它给的 body 装不进去、或字节不符，都是终局；传输
-失败与 HTTP 错误仍然会转到另一侧。最近一次成功的那一侧会按进程记住，所以一个可用的镜像
-只付出一次连接失败的代价，而不是每次拉取都付；重启后再付一次。启动日志会写明每个源是从
-哪一侧加载的（`loaded via mirror`）；`leg` 与展开后的 `archive_url` 也在管理 API 返回的源
-状态里。
-
-预设不钉 `ref`，因此跟随仓库的分支：每次拉取把分支解析成一个 commit，并把它记进缓存戳。
-shim 的改动因此不必再等一次 release 才能生效。
-
-预设带一个**按 commit 寻址的镜像**：jsDelivr 上 `{ref}` 模板化的 `dist` 归档，以及
-适配该归档布局的 `path: "providers"`（写目录名而不是 `"."`，这样归档再套一层目录也照样能
-加载）。每个包的发布任务在每次推送时构建一个不可变的 `dist/<commit>/<name>.tar.gz` 目录，
-loader 用解析分支得到的 commit 填充 `{ref}` —— 于是预设指向的归档与它记录的 commit 描述同一
-棵树，正是 `ref` 加 `sha256` 固定对曾给出的保证，只是不再经过一个 release。
-
-有一点限制值得知道：地址是一个 commit，而从未解析过该分支的网关（例如 forge 故障期间的空缓存）
-没有 commit 可填。它的第一次拉取仍然会失败；从第二次拉取起镜像才起作用，那时缓存戳里已经带着它
-解析到的 commit。这是有意的：镜像回一个答案、而不是猜一棵树，才是正确的结果，而那里的猜测会安静地
-加载错误的 shim。
-
-地址必须与包实际发布的位置完全一致。镜像回 `404` 是最终结论，而这条腿只在 forge 连不上时
-才会被问到，所以模板一旦指向没人写的目录，失败恰好发生在镜像成为唯一选项的地方。core 仓库
-里的 `scripts/dev/check_shim_workflow.py` 守住另一半：五个包里的发布任务副本必须与主副本
-一致，否则会有某一份悄悄停止写出这个模板所指向的目录。
-
-`mirror` 字段本身没有变化，显式 remote 依然可以带。用内网镜像替换 CDN 只需把 remote 显式
-写出，同一 URL 的显式 remote 会合并到对应预设上（显式键优先）。
+内置 shim 的计划移除机制（公告、`make check-shim-removals` 与 `shim-removal-check` CI 任务）同样已在 0.15.0
+移除；厂商离开 core 走[Shim 归属与成熟度](shim-placement.md)描述的迁移。
 
 !!! warning
     声明的源可能携带在加载时被执行的 `transforms.py` —— 与安装插件包是同一信任级别。
-    请固定 ref，并只添加你信任的源。
+    请只添加你信任的源。
 
 ## 内置 Shim
 
@@ -830,76 +720,30 @@ v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心�
 [OpenCode](providers/opencode.md#public-free-lane)。独立包注册相同的规范 shim
 名称，因此提供方的 `shim` 值无需改动 —— 新增的只是源声明。
 
-**在卡片上安装包。** **网关 → Shims → 可安装** 为每个已知的独立包显示一张卡片，带资源层级
-标签（**免费**、**付费** 或 **订阅**）、shim 数量，悬停显示仓库地址。免费资源排在其余之前，
-工具栏的层级下拉框可把网格收窄到单一层级。在卡片上勾选 shim 并按下 **安装**，会把键加入
-`shims.presets` 并在旁边写入选择；已安装的卡片为每个 shim 标出 *已加载* / *未加载*，
-并提供 **保存选择**、**添加提供方** 与 **移除**。卡片默认收起，标题行带厂商图标，
-因此在展开之前就能认出是哪个包；无密钥池用一块 **FREE** 牌代替四个厂商图标。
+**在卡片上安装厂商。** **网关 → Shims → 可安装** 按 manifest 源分组，每个源发布的厂商各有一张卡片，
+带厂商的成熟度、版本与标签（见[在管理面板中管理源](#panel)）。**安装**会把 `<source>:<vendor>` 加入
+`shims.install`。手工声明各个包：
 
-**升级与保存选择是两件事。** 已安装的卡片会写出源被拉取时的提交（`installed <sha>`）
-与最近一次检查读到的提交（`latest <sha>`）。只有两者不同才出现 **升级**，而且服务端会在
-动手前重新判定：两者一致时到达的调用既不写配置也不重新拉取，所以过期的页面或手工构造的
-请求都无法移动一个已经是最新的源。检查本身与来源视图使用的是同一个，结果缓存五分钟。运行中的 catalog 不认识的键没有卡片，但会保留在
-声明中，启动警告仍会点名它，所以按新 catalog 写的配置不会被悄悄改写。
+| 包 | `shims.install` 条目 |
+|----|---------------------|
+| ALCF | `argonne:alcf` |
+| Argo | `argonne:argo` |
+| AskSage | `argonne:asksage` |
+| 免费端点 | `contrib:tag:tier:free` |
+| Open Design | `contrib:opendesign` |
 
-**检查远程源是否已更新。** 远程源只拉取一次并固定在当时的提交上，之后即使仓库已前进也复用该
-提交。清单会在该源的标题行给出结论：*已是最新*、*可更新 `<旧>` → `<新>`*（点击即重新拉取
-全部远程源），或 *检查失败*（悬停看原因）。**检查更新** 立即重查一次；否则结果缓存五分钟。
+**更新。** 已安装的厂商只有在其 manifest 列出本 core 能运行的更新版本时才会前进。厂商卡片写出已安装版本与最新
+的可安装版本；已固定的厂商用 **更新到 X**，或重新读取 manifest 即可应用。更新检查只看 manifest：网关把每个
+已安装厂商与其源的 manifest 比较，并在该厂商的行上给出结论。
 
-pin 也可能缺失：拉取时若解析不出提交（API 被限流或不可达），stamp 记录的是声明的
-ref 而不是提交，下次 `refresh` 允许的拉取才会重新固定。在那之前徽标显示 *检查失败*，
-提示 "refetch to re-pin"。**Refetch** 会立即重新固定，`refresh: "never"` 不会挡住它——
-显式重拉不是该设置管辖的节奏。
-
-每个包现在都从其 manifest 源安装（见 [Manifest 源](#manifest-sources)），卡片显示已安装
-的版本与各厂商的成熟度。`shims.presets` 仍按键名指定包；若有显式 remote 指向其仓库，则固定
-走下方的分支归档路径：
-
-```jsonc
-"shims": {
-  "presets": ["argo"]
-}
-```
-
-```jsonc
-// 等价的显式 remote
-"shims": {
-  "remotes": [
-    {
-      "url": "https://github.com/Oaklight/llm-rosetta-shim-argonne",
-      "path": "src/llm_rosetta_shim_argo/providers"
-    }
-  ]
-}
-```
-
-预设先于显式 remote 应用，同一 URL 的显式 remote 会合并到对应预设上（显式键优先），
-因此固定 `ref` 时无需重复 `path`。这些仓库都是公开的，预设不带 `token_env`；只有私有 shim
-仓库才需要添加。预设故意不固定 `ref`：它跟随该包发布所用的分支，这样 catalog 与包就不会为
-了一个 release 互相等待。指向 tag 的固定写法仍然有效 —— 用同一个包 URL 加 `ref` 的显式
-remote 会合并到预设上 —— 对不允许移动的部署来说，这才是正确的选择。参见
-[ref 解析](../gateway/configuration.md#external-shim-sources)。
-
-**网关 → Shims → 可安装** 把每个 catalog 包显示为一张卡片，免费资源在前；安装一张卡片
-会把 `presets` 与选择一起写入配置。若配置仍使用这些 shim 却没有声明源，
-启动时会得到一条错误，指明包名、预设与展开后的 remote；源加载成功后错误即消失。
-
-**CI 让 catalog 与已发布的包同步。** `scripts/dev/check_shim_catalog.py` 列出该账号发布的
-`llm-rosetta-shim-*` 与 `llm-rosetta-shims-*` 仓库，与 `SHIM_SOURCE_PACKAGES` 对比，并在
-缺少某个包或它的 `repo` 已迁移时打印可直接粘贴的条目。它随每次推送在 `shim-catalog` CI
-任务中运行（带 token，因此私有仓库也能看到），发现漂移即以非零状态退出，因此已发布的包
-不会在整个发布周期里无人登记。
+**CI 让源列表与已发布的仓库同步。** `scripts/dev/check_shim_catalog.py` 列出该账号发布的
+`llm-rosetta-shim-*` 仓库，与网关已知的 manifest 源（`SHIM_SOURCES`）对比，并在缺少某个仓库或它已迁移时
+打印可直接粘贴的条目。它随每次推送在 `shim-catalog` CI 任务中运行，发现漂移即以非零状态退出。
 
 旧拼写**不再**解析到 shim：`argo--openai_chat`、`argo--anthropic` 和
 `argo--openai_responses` 是内置 shim 的别名，独立包只注册规范名称。仍写旧值的配置会在加载时
-以 retired-names 错误失败，错误信息写出规范 shim 名称、需要声明的 `shims.presets` 项，以及
+以 retired-names 错误失败，错误信息写出规范 shim 名称、需要声明的 `shims.install` 项，以及
 改写配置的 `llm-rosetta-migrate` 命令；参见 [迁移到 0.14](migrating-to-0.14.md#retired-names)。
-
-CI 检查（`scripts/check_shim_removals.py`、`make check-shim-removals`）仍会约束未来的移除：
-它读取 `SHIM_REMOVALS`，若某个 shim 在其 `removed_in` 版本之前消失则失败；而当版本到达该
-版本时，只要该 shim 仍被注册，或仍被示例、Docker 文件、文档或源码引用，同样会失败。目前没有
-任何计划中的内置移除。
 
 ## 推理配置 { #reasoning-configuration }
 
@@ -995,7 +839,7 @@ reasoning:
 
 ```jsonc
 {
-  "shims": { "presets": ["argo"] }
+  "shims": { "install": ["argonne:argo"] }
 }
 ```
 
@@ -1032,7 +876,7 @@ Responses 格式通道，为拒绝 temperature 的 GPT/o 系列模型按模型�
 ```
 
 !!! note
-    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。三个 Argo shim 位于独立的 [`llm-rosetta-shim-argonne`](https://github.com/Oaklight/llm-rosetta-shim-argonne) 源中（原 `llm-rosetta-shim-argo`） —— 声明 `"shims": {"presets": ["argo"]}`，配置中的名称即可继续使用。**网关 → Shims → 可安装** 已将该包作为卡片提供。
+    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。三个 Argo shim 位于独立的 [`llm-rosetta-shim-argonne`](https://github.com/Oaklight/llm-rosetta-shim-argonne) 源中（原 `llm-rosetta-shim-argo`） —— 声明 `"shims": {"install": ["argonne:argo"]}`，配置中的名称即可继续使用。**网关 → Shims → 可安装** 已将该包作为卡片提供。
 
 ## 能力标志
 

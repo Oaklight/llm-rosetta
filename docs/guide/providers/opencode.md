@@ -87,7 +87,7 @@ keyless 的 `/zen/v1` 免费池是一个独立 shim：`opencode_zen_free--chat_c
 
 ```jsonc
 {
-  "shims": { "presets": ["free"] },
+  "shims": { "install": ["contrib:tag:tier:free"] },
   "providers": {
     "zen-free": { "type": "opencode_zen_free--chat_completions" }
   },
@@ -97,7 +97,7 @@ keyless 的 `/zen/v1` 免费池是一个独立 shim：`opencode_zen_free--chat_c
 }
 ```
 
-shim 名称未变，因此原先为 `opencode_zen_free` 预设写的配置，只需把声明改成 `free`
+shim 名称未变，因此原先为 `opencode_zen_free` 预设写的配置，只需把声明改成 `contrib:tag:tier:free`
 即可继续使用。
 
 不需要任何 API key：这条 lane 的“凭据”就是字面量 `public`，shim 以

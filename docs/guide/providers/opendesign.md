@@ -27,11 +27,11 @@ Open Design 在三种 API 上都提供每个模型，因此按客户端使用的
 
 这些 shim 位于
 [`llm-rosetta-shim-opendesign`](https://github.com/Oaklight/llm-rosetta-shim-opendesign)，
-不在核心包内。使用这些名称前需先声明预设：
+不在核心包内。使用这些名称前需先声明厂商：
 
 ```jsonc
 {
-  "shims": { "presets": ["opendesign"] }
+  "shims": { "install": ["contrib:opendesign"] }
 }
 ```
 
@@ -39,7 +39,7 @@ Open Design 在三种 API 上都提供每个模型，因此按客户端使用的
 
 ```jsonc
 {
-  "shims": { "presets": ["opendesign"] },
+  "shims": { "install": ["contrib:opendesign"] },
   "providers": {
     "opendesign": {
       "type": "opendesign--chat_completions",

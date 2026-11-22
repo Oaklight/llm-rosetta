@@ -4,6 +4,9 @@ title: 迁移到 0.14
 
 # 迁移到 0.14
 
+!!! warning "0.15.0 已移除 `shims.presets`"
+    本页记录的是 0.14。其中提到的 `shims.presets`、`shims.include`、`shims.exclude` 与 `shims.remotes` 键自 0.15.0 起不再被读取，配置里带着其中任何一个都会在加载时被拒绝。请改在 `shims.install` 中声明厂商（`argonne:alcf`、`argonne:argo`、`argonne:asksage`、`contrib:tag:tier:free`、`contrib:opendesign`），并运行 `llm-rosetta-migrate --config <path>` 改写文件。见[已移除的键](shims.md#retired-keys)。
+
 0.14.0 移除了 0.13.0 为过渡保留一个版本的已弃用导入路径与类别名（epic [#919](https://github.com/Oaklight/llm-rosetta/issues/919)）。被移除的名字会以普通的 `ImportError`、`ModuleNotFoundError` 或 `AttributeError` 失败；[retired-names](#retired-names) 诊断只覆盖提供方、shim 与模型类型名称，不覆盖 Python 导入路径。本页列出已移除的内容、替代写法，以及仍然可用的部分。要改写网关配置和数据库，请使用 [`llm-rosetta-migrate`](#llm-rosetta-migrate)；[升级流程](#upgrade-recipe)给出了步骤顺序。
 
 截至 [已移除的 helper 模块、网关存根与 `tool_ops` 别名](#removed-shims) 的各行已针对 `origin/master`（commit `756f084169`）核对。从 [已移除的 facade](#removed-facades) 起的各行已针对 PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656) 的 head（commit `0a8c0be374`）核对：每个被移除的名字导入失败或抛出异常，每个替代写法都能导入。

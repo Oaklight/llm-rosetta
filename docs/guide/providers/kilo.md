@@ -36,7 +36,7 @@ Kilo Code 运营一个公共模型网关。我们用两个 shim 分别对接，�
 
 ```jsonc
 {
-  "shims": { "presets": ["free"] },
+  "shims": { "install": ["contrib:tag:tier:free"] },
   "providers": {
     "kilo-free": { "type": "kilo_free--chat_completions" }
   }

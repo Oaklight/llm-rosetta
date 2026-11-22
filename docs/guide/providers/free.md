@@ -22,7 +22,7 @@
 
 ```jsonc
 {
-  "shims": { "presets": ["free"] },
+  "shims": { "install": ["contrib:tag:tier:free"] },
   "providers": {
     "kilo-free": { "type": "kilo_free--chat_completions" },
     "llm7-free": { "type": "llm7--chat_completions" },
@@ -31,8 +31,8 @@
 }
 ```
 
-`free` 取代了此前的 `opencode_zen_free` 预设。OpenCode 的 shim 名称未变，因此针对旧包
-写的配置只需改动预设声明。
+`contrib:tag:tier:free` 条目取代了 0.14.x 的 `free` 预设（以及更早的 `opencode_zen_free` 预设），0.15.0 不再读取预设。OpenCode 的 shim 名称未变，因此针对旧包
+写的配置只需改动声明。
 
 ## 速率限制
 

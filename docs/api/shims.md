@@ -32,7 +32,7 @@ title: Shims
 
 ::: llm_rosetta_gateway.shims.sources.rebuild_shims
 
-::: llm_rosetta_gateway.shims.sources.resolve_remote
+::: llm_rosetta_gateway.shims.sources.check_source_updates
 
 ::: llm_rosetta_gateway.shims.sources.ShimLoadReport
 
