@@ -1264,9 +1264,11 @@ class AcpTransport:
         except BaseException:
             # The session opened but the request never became a turn.  Close
             # it and stop serving its bridge; otherwise both outlive the
-            # request with nothing in the ledger to find them.
+            # request with nothing in the ledger to find them.  Shield the
+            # close: the common way here is a cancelled request, and a plain
+            # await would lose the close to the cancellation in flight.
             self._release_session_resources(agent.provider, agent.slot, session_id)
-            await _close_quietly(agent.client, session_id)
+            await asyncio.shield(_close_quietly(agent.client, session_id))
             raise
 
     async def _text_only(

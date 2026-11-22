@@ -909,12 +909,16 @@ class TestASessionThatNeverOpens:
             resp = await asyncio.wait_for(transport.send(provider, "", body), 5.0)
             bridges = dict(transport._session_bridges)
             urls = dict(transport._session_urls)
+            registrations = dict(transport._mcp._registrations)
         finally:
             await transport.close()
 
         assert resp.status_code == 503
         assert bridges == {}
         assert urls == {}
+        # The URL handed out in ``session/new`` is no longer served: the
+        # unregister on this failure path is what stops an orphan listener.
+        assert registrations == {}
         assert resp.error_text == (
             "ACP agent for provider 'antigravity' did not open a session "
             "within 0.2s; the process was dropped. Check the agent on the "
@@ -1790,6 +1794,39 @@ class TestToolChanges:
         assert _kinds(tmp_path).count("new") == 1
         assert _kinds(tmp_path).count("prompt") == 2
         assert self._tool_lists(tmp_path) == [["echo"], ["echo"]]
+
+    async def test_a_tool_session_without_a_bridge_is_replayed(
+        self, monkeypatch, tmp_path
+    ):
+        """A session that cannot serve its tools must not continue without one."""
+        transport = AcpTransport(timeout=10)
+        provider = _provider(
+            monkeypatch, tmp_path, "mcp-list", conversation="conv-tools"
+        )
+        first = _turn("[User]\nhi")
+        first["tools"] = [ECHO_TOOL]
+        second = _turn("[User]\nhi", "[Assistant]\nhello")
+        second["tools"] = [ECHO_TOOL]
+        try:
+            first_response = await transport.send(provider, "", first)
+            # Simulate a half-resumed session: the ledger entry survives but
+            # the bridge that answers its URL does not.
+            transport._session_bridges.clear()
+            second_response = await transport.send(provider, "", second)
+            bridges = dict(transport._session_bridges)
+        finally:
+            await transport.close()
+
+        assert first_response.status_code == 200
+        assert second_response.status_code == 200
+        assert first_response.body is not None and second_response.body is not None
+        assert second_response.body["session_id"] != first_response.body["session_id"]
+        assert _kinds(tmp_path).count("new") == 2
+        assert _kinds(tmp_path).count("prompt") == 2
+        urls = [entry["url"] for entry in _log(tmp_path) if entry["kind"] == "mcp"]
+        assert len(urls) == 2
+        assert urls[0] != urls[1]
+        assert len(bridges) == 1
 
     async def test_reordering_the_same_tools_reuses_the_session(
         self, monkeypatch, tmp_path
