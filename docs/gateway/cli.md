@@ -241,15 +241,18 @@ When `--config` is not specified, the gateway searches these paths in order:
 The gateway can also be used as a library:
 
 ```python
+import asyncio
+
+import uvicorn
+
 from llm_rosetta_gateway import create_app, GatewayConfig, load_config
 
-# Load config and create ASGI app
+# Load config and create ASGI app.  create_app is async since 0.14.0.
 raw = load_config("config.jsonc")
 config = GatewayConfig(raw)
-app = await create_app(config)  # create_app is async since 0.14.0
+app = asyncio.run(create_app(config))
 
 # Mount in your own ASGI application, or run with any ASGI server
-import uvicorn
 uvicorn.run(app, host="0.0.0.0", port=8765)
 ```
 
