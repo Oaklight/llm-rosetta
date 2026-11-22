@@ -251,6 +251,27 @@ class TestTheProfileOnDisk:
             )
             == "deny"
         )
+        # agy 1.5.14 and later expose each MCP tool under the server prefix
+        # instead of routing it through `call_mcp_tool` (measured live).
+        assert (
+            decide(
+                {
+                    "toolCall": {
+                        "name": "mcp_llm_rosetta_tools_echo",
+                        "args": {"text": "hello", "toolSummary": "Echo text"},
+                    }
+                }
+            )
+            == "allow"
+        )
+        assert (
+            decide({"toolCall": {"name": "mcp_other_tools_echo", "args": {}}}) == "deny"
+        )
+        # A bare prefix names no tool.
+        assert (
+            decide({"toolCall": {"name": "mcp_llm_rosetta_tools_", "args": {}}})
+            == "deny"
+        )
         assert decide({"toolCall": {"name": "run_command", "args": {}}}) == "deny"
         assert (
             decide(
