@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import textwrap
+import urllib.request
 from typing import Any
 
 import pytest
@@ -163,6 +164,58 @@ FAKE_AGENT = textwrap.dedent(
                              "content": {"type": "text",
                                          "text": "tools: "
                                                  + (", ".join(names) or "none")}})
+                send({"jsonrpc": "2.0", "id": req_id,
+                      "result": {"stopReason": "end_turn"}})
+                continue
+            if MODE == "conformance":
+                # #1629's whole contract in one turn: a request tool reaches
+                # the agent over MCP, while a host file read and a host shell
+                # command are refused.
+                listed = mcp_call("tools/list").get("result", {}).get("tools") or []
+                note("mcp-tools", names=[tool.get("name") for tool in listed])
+                call = {"toolCallId": "conf-1",
+                        "name": "mcp_llm_rosetta_tools_echo",
+                        "title": "echo", "kind": "other",
+                        "rawInput": {"text": "hello"}}
+                update(sid, dict(call, sessionUpdate="tool_call",
+                                 status="pending"))
+                options = [
+                    {"optionId": "a1", "name": "Allow", "kind": "allow_once"},
+                    {"optionId": "r1", "name": "Reject", "kind": "reject_once"},
+                ]
+                send({"jsonrpc": "2.0", "id": 910,
+                      "method": "session/request_permission",
+                      "params": {"sessionId": sid, "toolCall": call,
+                                 "options": options}})
+                note("permission_reply", reply=json.loads(sys.stdin.readline()))
+                result = mcp_call("tools/call", {"name": "echo",
+                                                 "arguments": {"text": "hello"}})
+                try:
+                    answer = result["result"]["content"][0]["text"]
+                except Exception:
+                    answer = json.dumps(result)
+                note("mcp-result", text=answer)
+                send({"jsonrpc": "2.0", "id": 911,
+                      "method": "fs/read_text_file",
+                      "params": {"sessionId": sid, "path": "/etc/hostname"}})
+                note("fs_reply", reply=json.loads(sys.stdin.readline()))
+                shell = {"toolCallId": "conf-shell", "name": "shell",
+                         "title": "Run shell command", "kind": "execute",
+                         "rawInput": {"command": "touch shell-side-effect"}}
+                send({"jsonrpc": "2.0", "id": 912,
+                      "method": "session/request_permission",
+                      "params": {"sessionId": sid, "toolCall": shell,
+                                 "options": options}})
+                shell_reply = json.loads(sys.stdin.readline())
+                note("permission_reply", reply=shell_reply)
+                outcome = (shell_reply.get("result") or {}).get("outcome") or {}
+                if outcome.get("optionId") == "a1":
+                    with open(os.path.join(os.path.dirname(LOG),
+                                           "shell-side-effect"), "w") as handle:
+                        handle.write("ran")
+                update(sid, {"sessionUpdate": "agent_message_chunk",
+                             "content": {"type": "text",
+                                         "text": "bridged: " + answer}})
                 send({"jsonrpc": "2.0", "id": req_id,
                       "result": {"stopReason": "end_turn"}})
                 continue
@@ -419,6 +472,24 @@ def _log(tmp_path: Any) -> list[dict[str, Any]]:
 
 def _kinds(tmp_path: Any) -> list[str]:
     return [entry["kind"] for entry in _log(tmp_path)]
+
+
+async def _mcp_tool_names(url: str) -> list[str]:
+    """Ask one session's MCP endpoint which tools it serves."""
+    payload = json.dumps(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}}
+    ).encode()
+
+    def call() -> Any:
+        request = urllib.request.Request(
+            url, data=payload, headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return json.loads(response.read() or b"{}")
+
+    answer = await asyncio.to_thread(call)
+    tools = answer.get("result", {}).get("tools") or []
+    return [tool.get("name") for tool in tools]
 
 
 TURN = {
@@ -1615,6 +1686,37 @@ class TestClientTools:
             assert response.body is not None
             assert response.body["stop_reason"] == "end_turn"
 
+    async def test_two_conversations_get_separate_mcp_endpoints(
+        self, monkeypatch, tmp_path
+    ):
+        """One session's tools must never be visible at another's URL."""
+        transport = AcpTransport(timeout=10)
+        provider = _provider(monkeypatch, tmp_path, "mcp-list")
+        provider_a = provider.with_acp_conversation("conv-a")
+        provider_b = provider.with_acp_conversation("conv-b")
+        first_a = _turn("[User]\nlist")
+        first_a["tools"] = [ECHO_TOOL]
+        first_b = _turn("[User]\nlist")
+        first_b["tools"] = [LOOKUP_TOOL]
+        try:
+            response_a = await transport.send(provider_a, "", first_a)
+            response_b = await transport.send(provider_b, "", first_b)
+            urls = dict(transport._session_urls)
+            assert len(urls) == 2
+            assert len(set(urls.values())) == 2
+            served = sorted(
+                [tuple(await _mcp_tool_names(url)) for url in urls.values()]
+            )
+        finally:
+            await transport.close()
+
+        assert response_a.status_code == 200
+        assert response_b.status_code == 200
+        assert response_a.body is not None and response_b.body is not None
+        # Two sessions served by one process still have distinct endpoints.
+        assert response_a.body["session_id"] != response_b.body["session_id"]
+        assert served == [("echo",), ("lookup",)]
+
 
 class TestToolChanges:
     """A request's tool set is a session fact, not a turn-local setting."""
@@ -1654,6 +1756,22 @@ class TestToolChanges:
         assert _kinds(tmp_path).count("new") == 1
         assert _kinds(tmp_path).count("prompt") == 2
         assert self._tool_lists(tmp_path) == [["echo"], ["echo"]]
+
+    async def test_reordering_the_same_tools_reuses_the_session(
+        self, monkeypatch, tmp_path
+    ):
+        """A tool set is a set: another order is not a new session."""
+        await self._two_turns(
+            monkeypatch, tmp_path, [ECHO_TOOL, LOOKUP_TOOL], [LOOKUP_TOOL, ECHO_TOOL]
+        )
+
+        assert _kinds(tmp_path).count("new") == 1
+        assert _kinds(tmp_path).count("prompt") == 2
+        # The first session keeps the order it opened with.
+        assert self._tool_lists(tmp_path) == [
+            ["echo", "lookup"],
+            ["echo", "lookup"],
+        ]
 
     async def test_a_new_tool_opens_a_new_session(self, monkeypatch, tmp_path):
         await self._two_turns(
@@ -1733,3 +1851,69 @@ class TestToolChanges:
             if update.get("type") == "text"
         )
         assert "resumed with tools: lookup" in text
+
+
+class TestAgentLaneConformance:
+    """#1629: client tools work; the agent's host tools never do."""
+
+    async def test_a_bridged_tool_and_the_two_host_tools(self, monkeypatch, tmp_path):
+        """One turn proves the whole rule, not three unrelated paths."""
+        transport = AcpTransport(timeout=10)
+        provider = _provider(
+            monkeypatch, tmp_path, "conformance", conversation="conv-conformance"
+        )
+        first = _turn("[User]\necho hello")
+        first["tools"] = [ECHO_TOOL]
+        try:
+            stream = await transport.send_streaming(provider, "", first)
+            assert stream.status_code == 200
+            chunks = [chunk async for chunk in stream]
+            call = next(chunk for chunk in chunks if chunk["type"] == "tool_call")
+            assert call["tool_name"] == "echo"
+            assert call["tool_input"] == {"text": "hello"}
+
+            second = _turn(
+                "[User]\necho hello",
+                "[Assistant]\n[called echo]",
+                "[Tool result]\nhello back",
+            )
+            second["tools"] = [ECHO_TOOL]
+            second["tool_results"] = [
+                {
+                    "tool_call_id": call["tool_call_id"],
+                    "result": "hello back",
+                    "is_error": False,
+                }
+            ]
+            response = await transport.send(provider, "", second)
+        finally:
+            await transport.close()
+
+        assert response.status_code == 200
+        assert response.body is not None
+        assert response.body["stop_reason"] == "end_turn"
+        text = "".join(
+            str(update.get("text") or "")
+            for update in response.body["updates"]
+            if update.get("type") == "text"
+        )
+        assert "bridged: hello back" in text
+        replies = [
+            entry["reply"]
+            for entry in _log(tmp_path)
+            if entry["kind"] == "permission_reply"
+        ]
+        # The bridged call was allowed; the host shell was refused.
+        assert replies[0]["result"]["outcome"] == {
+            "outcome": "selected",
+            "optionId": "a1",
+        }
+        assert replies[-1]["result"]["outcome"] == {
+            "outcome": "selected",
+            "optionId": "r1",
+        }
+        fs_reply = next(
+            entry["reply"] for entry in _log(tmp_path) if entry["kind"] == "fs_reply"
+        )
+        assert "error" in fs_reply and "result" not in fs_reply
+        assert not (tmp_path / "shell-side-effect").exists()

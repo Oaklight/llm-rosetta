@@ -1981,11 +1981,21 @@ def _tools_digest(body: dict[str, Any]) -> str:
 
     An agent cannot gain or lose an MCP server inside one session, so a
     request whose tools differ needs a fresh session rather than a reused one.
+    The digest is over the canonical definitions, order aside: the same tools
+    in another order are the same tool set.
     """
     tools = _tool_defs(body)
     if not tools:
         return ""
-    blob = json.dumps(tools, sort_keys=True, ensure_ascii=False, default=str)
+    # Tool order is not part of a tool set: MCP serves a list, and what the
+    # agent can call is the set of definitions.  Sorting the canonical form
+    # keeps a client that reorders the same tools from closing a session that
+    # would have shown the agent the same tools.
+    canonical = sorted(
+        json.dumps(tool, sort_keys=True, ensure_ascii=False, default=str)
+        for tool in tools
+    )
+    blob = "\n".join(canonical)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:32]
 
 
