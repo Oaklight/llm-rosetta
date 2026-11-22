@@ -21,9 +21,8 @@ def pytest_runtest_protocol(item, nextitem):
     two files pass alone and fail together (#1332).
 
     A hook wrapper rather than an autouse fixture: a function-scoped fixture is
-    set up *after* module-scoped ones, so a module that loads preset shims in
-    its own ``sources`` fixture (``tests/integration/test_shim_presets_live.py``)
-    would have its shims captured as the baseline and restored as if they were
+    set up *after* module-scoped ones, so a module that loads installed shims in
+    its own module-scoped fixture would have its shims captured as the baseline and restored as if they were
     built-ins.  The protocol hook runs before any fixture and after every
     finalizer, so the snapshot is always the registry the previous test left.
 

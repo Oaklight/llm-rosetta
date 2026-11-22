@@ -214,40 +214,34 @@ export function selectVendor(install, sourceId, vendor, tags = []) {
  *
  * This source's own entries for it (`<source>:<vendor>`, pinned or not) are
  * deleted.  When anything else would still install it — a tag, `*`, an
- * unqualified entry, or a legacy preset in *presets* — an exclusion
- * `!<source>:<vendor>` is added instead.  A preset has to become install
- * entries first (`migratePresets`); the page asks the gateway for that
- * rewrite, then calls this again on the rewritten list.
+ * unqualified entry — an exclusion `!<source>:<vendor>` is added instead.
  *
  * @param {string[]} install
  * @param {string} sourceId
  * @param {string} vendor
  * @param {string[]} [tags] the vendor's installable tags
- * @param {string[]} [presets] the preset keys that select it
- * @returns {{install: string[], migratePresets: boolean, droppedPin: string|null,
+ * @returns {{install: string[], droppedPin: string|null,
  *            refuse: {key: string, params: object}|null}}
  */
-export function deselectVendor(install, sourceId, vendor, tags = [], presets = []) {
+export function deselectVendor(install, sourceId, vendor, tags = []) {
   const list = [...(install || [])];
   const kept = list.filter((raw) => !ownEntry(raw, sourceId, vendor));
   const pinned = list.map(parseSelector)
     .find((sel) => sel && ownEntry(sel.raw, sourceId, vendor) && sel.version);
   const droppedPin = pinned ? pinned.version : null;
-  const still = pickerFor(kept, sourceId, vendor, tags) || (presets || []).length;
-  if (still) {
+  if (pickerFor(kept, sourceId, vendor, tags)) {
     const exclusion = `!${sourceId}:${vendor}`;
     return {
       install: kept.includes(exclusion) ? kept : [...kept, exclusion],
-      migratePresets: (presets || []).length > 0,
       droppedPin,
       refuse: null,
     };
   }
   if (kept.length === list.length) {
-    return { install: list, migratePresets: false, droppedPin: null,
+    return { install: list, droppedPin: null,
       refuse: { key: 'shimSrc.nothingToRemove', params: { vendor } } };
   }
-  return { install: kept, migratePresets: false, droppedPin, refuse: null };
+  return { install: kept, droppedPin, refuse: null };
 }
 
 /**

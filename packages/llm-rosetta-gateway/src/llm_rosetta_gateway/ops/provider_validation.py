@@ -12,7 +12,8 @@ from llm_rosetta_gateway.observability.ops_log import (
 )
 from llm_rosetta.api import get_shim, retired_names
 
-from ..shims import find_source_package, legacy_shim_migration_advice
+from ..shims import legacy_shim_migration_advice
+from ..shims.catalog import find_standalone
 
 from .base import OpsBase, OpsContext
 
@@ -259,7 +260,7 @@ def _validate_provider(
                 "choose a registered shim or declare its external source."
             )
             # A spelling the catalogue records gets the canonical name and the
-            # preset here as well: the ``shim:`` field does not go through the
+            # ``shims.install`` entry here as well: the ``shim:`` field does not go through the
             # base_url path that carries the same sentence.
             reason += legacy_shim_migration_advice(cfg["shim"])
             return ProviderIssue(reason, "unknown_shim", cfg["shim"])
@@ -308,7 +309,7 @@ def _missing_dependency(
     source = cfg.get("shim") or cfg.get("type")
     if not isinstance(source, str) or not source:
         return None
-    package = find_source_package(source)
+    package = find_standalone(source)
     moved = retired_names.moved_vendor(source)
     if (package is None and moved is None) or get_shim(source) is not None:
         return None
@@ -322,7 +323,7 @@ def _missing_dependency(
     assert package is not None
     reason = (
         f"required external shim {source!r} is not registered; declare "
-        f"shims.presets: [{package.key!r}] or its remote source"
+        f"shims.install: [{package.install!r}]"
         f"{_failure_suffix(report)}"
     )
     return source, reason

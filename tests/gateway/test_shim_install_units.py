@@ -10,22 +10,19 @@ of the tag, ``*`` or legacy preset that selects it:
 - a pin ``<source>:<vendor>@<version>`` holds whatever else selects the vendor;
 
 and the rewrite that spells a legacy ``shims.presets`` key as install entries,
-used by ``llm-rosetta-migrate --config`` and by the panel before it removes
-one vendor a preset selects.
+used by ``llm-rosetta-migrate --config``.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import re
-from types import SimpleNamespace
 
 import pytest
 
 from llm_rosetta.contracts import SURFACE_VERSION
 from llm_rosetta_gateway.maintenance.migrate_0140 import migrate_config_text
-from llm_rosetta_gateway.shims.shim_sources import (
+from llm_rosetta_gateway.maintenance.migrate_presets import (
     presets_as_install,
     rewrite_presets_section,
 )
@@ -297,13 +294,11 @@ class TestPresetRewrite:
         assert out.install == ["argonne:alcf"]
         assert out.disabled == ["alcf_metis--chat_completions"]
 
-    def test_a_preset_pinned_by_a_remote_or_unknown_stays(self):
-        out = presets_as_install(
-            ["argo", "nope"],
-            remotes=[{"url": "https://github.com/Oaklight/llm-rosetta-shim-argonne"}],
-        )
-        assert out.converted == []
-        assert set(out.unconvertible) == {"argo", "nope"}
+    def test_an_unknown_preset_stays(self):
+        out = presets_as_install(["argo", "nope"])
+        assert out.converted == ["argo"]
+        assert out.install == ["argonne:argo"]
+        assert set(out.unconvertible) == {"nope"}
 
     def test_the_section_rewrite_keeps_what_did_not_convert(self):
         section = {
@@ -396,55 +391,6 @@ class TestMigrateRewrite:
 
         raws = [s.raw for s in parsed.manifests.selectors]
         assert raws == ["argonne:alcf", "contrib:tag:tier:free", "!contrib:llm7"]
-        assert not parsed.presets
-
-
-class TestMigrateEndpoint:
-    def test_the_endpoint_rewrites_the_served_document(self, tmp_path, monkeypatch):
-        from contextlib import asynccontextmanager
-
-        from llm_rosetta_gateway.admin.routes.config import shims as routes
-
-        doc = {"shims": {"presets": ["free"], "exclude": {"free": ["llm7--*"]}}}
-        committed: list[dict] = []
-
-        @asynccontextmanager
-        async def fake_mutate(request):
-            ctx = SimpleNamespace(error=None, data=json.loads(json.dumps(doc)))
-            ctx.commit = lambda: committed.append(json.loads(json.dumps(ctx.data)))
-            yield ctx
-
-        monkeypatch.setattr(routes, "config_mutate", fake_mutate)
-        monkeypatch.setattr(
-            routes, "_get_config_path", lambda request: str(tmp_path / "c.jsonc")
-        )
-
-        response = asyncio.run(routes.post_shim_presets_migrate(SimpleNamespace()))
-        body = json.loads(response.body)
-
-        assert body["converted"] == ["free"]
-        assert body["shims"] == {"install": ["contrib:tag:tier:free", "!contrib:llm7"]}
-        assert committed == [{"shims": body["shims"]}]
-
-    def test_nothing_to_rewrite_writes_nothing(self, tmp_path, monkeypatch):
-        from contextlib import asynccontextmanager
-
-        from llm_rosetta_gateway.admin.routes.config import shims as routes
-
-        committed: list[dict] = []
-
-        @asynccontextmanager
-        async def fake_mutate(request):
-            ctx = SimpleNamespace(error=None, data={"shims": {"install": ["x"]}})
-            ctx.commit = lambda: committed.append(ctx.data)
-            yield ctx
-
-        monkeypatch.setattr(routes, "config_mutate", fake_mutate)
-
-        response = asyncio.run(routes.post_shim_presets_migrate(SimpleNamespace()))
-
-        assert json.loads(response.body)["converted"] == []
-        assert committed == []
 
 
 # -- Review round (milo, elena on #1671) -------------------------------------

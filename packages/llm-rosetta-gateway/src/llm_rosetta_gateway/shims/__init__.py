@@ -1,24 +1,22 @@
-"""Gateway-side shim sources — external packages, catalogs and removals.
+"""Gateway-side shim sources — manifest installs, directories and the catalogue.
 
 The built-in identity cards live in :mod:`llm_rosetta.shims`.  This package
-owns what only a gateway needs: loading shims from a directory or a remote
-archive, the catalog of standalone packages offered in Settings, and the
-manifest of built-ins with a scheduled removal.
+owns what only a gateway needs: installing shim vendors from a source's
+manifest, loading a local shim directory, and the catalogue of manifest
+sources offered in Settings.
 
 Nothing here is imported by the translation core, so ``import
 llm_rosetta.shims`` no longer pulls in the HTTP client these modules use.
 """
 
-from .catalog import (
-    SHIM_SOURCE_PACKAGES,
-    ShimSourcePackage,
-    canonical_shim_for,
-    find_legacy_source_package,
-    find_source_package,
-    get_source_package,
-    legacy_shim_migration_advice,
-    source_package_advice,
+from ._types import (
+    ShimArchiveMismatch,
+    ShimArchiveUnusable,
+    ShimLoadReport,
+    ShimSourceError,
+    ShimSourceStatus,
 )
+from .catalog import legacy_shim_migration_advice, source_package_advice
 from .manifest import (
     MANIFEST_FILENAME,
     MANIFEST_VERSION,
@@ -27,54 +25,21 @@ from .manifest import (
     ShimManifestError,
     read_shim_manifest,
 )
-from .removals import (
-    SHIM_REMOVALS,
-    RemovalReference,
-    ShimRemoval,
-    ShimRemovalAdvisory,
-    detect_shim_removals,
-    parse_version,
-    removals_due,
-    scan_removal_references,
-)
-from .sources import (
-    ShimArchiveMismatch,
-    ShimArchiveUnusable,
-    ShimLoadReport,
-    ShimSourceError,
-    ShimSourceStatus,
-    rebuild_shims,
-    resolve_remote,
-)
+from .sources import rebuild_shims
 
 __all__ = [
     "MANIFEST_FILENAME",
     "MANIFEST_VERSION",
-    "SHIM_REMOVALS",
-    "SHIM_SOURCE_PACKAGES",
-    "canonical_shim_for",
-    "find_legacy_source_package",
-    "legacy_shim_migration_advice",
-    "source_package_advice",
-    "RemovalReference",
     "ShimArchiveMismatch",
     "ShimArchiveUnusable",
     "ShimLoadReport",
     "ShimManifest",
     "ShimManifestEntry",
     "ShimManifestError",
-    "ShimRemoval",
-    "ShimRemovalAdvisory",
     "ShimSourceError",
-    "ShimSourcePackage",
     "ShimSourceStatus",
-    "detect_shim_removals",
-    "find_source_package",
-    "get_source_package",
-    "parse_version",
+    "legacy_shim_migration_advice",
     "read_shim_manifest",
     "rebuild_shims",
-    "removals_due",
-    "resolve_remote",
-    "scan_removal_references",
+    "source_package_advice",
 ]

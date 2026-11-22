@@ -81,24 +81,6 @@ def _picker(
     return pick_selector(selectors, source_id, vendor, tags)
 
 
-def _presets_picking(
-    vendor: str,
-    tags: Collection[str],
-    source_id: str,
-    selectors: Sequence[InstallSelector],
-) -> list[str]:
-    """The ``shims.presets`` keys whose mapped selector picks *vendor*."""
-    keys = [
-        s.origin.split(":", 1)[1]
-        for s in selectors
-        if s.origin.startswith("presets:")
-        and not s.negate
-        and s.applies_to(source_id)
-        and s.matches(vendor, tags)
-    ]
-    return list(dict.fromkeys(keys))
-
-
 def vendor_view(
     vendor: str,
     releases: Sequence[VendorRelease],
@@ -115,8 +97,7 @@ def vendor_view(
         vendor: The vendor name.
         releases: Its releases, in any order.
         source_id: The source the manifest belongs to.
-        selectors: The ``shims.install`` selectors in force (mapped presets
-            included).
+        selectors: The ``shims.install`` selectors in force.
         status: The vendor's status row from the last rebuild, when there is
             one.
         core_names: The shim names core registers.
@@ -177,10 +158,6 @@ def vendor_view(
         # The `!<vendor>` entry that keeps the vendor out, so the card can say
         # so and its Install can remove it.
         "excluded_by": exclusion.raw if exclusion is not None else None,
-        # Every legacy preset that selects the vendor, not only the first
-        # selector: a preset behind an explicit entry still installs it when
-        # the entry is removed, so the panel must refuse that removal.
-        "selected_presets": _presets_picking(vendor, tags, source_id, selectors),
         "claimed_by": claimed_by,
         **_status_fields(status, installed, selector),
     }
@@ -272,7 +249,7 @@ def source_catalogue(
     Args:
         specs: The sources to read, in ``shims.sources`` order.
         raw_sources: ``shims.sources`` as written; a spec without an entry
-            there is implied (the defaults, or a mapped legacy preset).
+            there is implied (the defaults).
         selectors: The ``shims.install`` selectors in force.
         statuses: The last rebuild's status rows.
         cache_root: The shim cache directory.

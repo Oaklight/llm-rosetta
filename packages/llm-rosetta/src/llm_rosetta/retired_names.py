@@ -115,14 +115,14 @@ class RetiredName:
             ``shim`` (a shim name) or ``model_type``.  The same spelling can
             be retired under two kinds with different replacements
             (``google``).
-        preset: For a shim that moved to a standalone package, the
-            ``shims.presets`` key that makes the replacement loadable.
+        install: For a shim that lives in a standalone package, the
+            ``shims.install`` selector that makes the replacement loadable.
     """
 
     name: str
     replacement: str
     kind: str
-    preset: str | None = None
+    install: str | None = None
 
 
 RETIRED_NAMES: tuple[RetiredName, ...] = (
@@ -166,13 +166,13 @@ RETIRED_NAMES: tuple[RetiredName, ...] = (
         name="argo--openai_chat",
         replacement="argo--chat_completions",
         kind=SHIM,
-        preset="argo",
+        install="argonne:argo",
     ),
     RetiredName(
         name="argo--openai_responses",
         replacement="argo--open_responses",
         kind=SHIM,
-        preset="argo",
+        install="argonne:argo",
     ),
     RetiredName(
         name="minimax--openai_chat", replacement="minimax--chat_completions", kind=SHIM
@@ -196,7 +196,7 @@ RETIRED_NAMES: tuple[RetiredName, ...] = (
         name="argo--anthropic",
         replacement="argo--messages",
         kind=SHIM,
-        preset="argo",
+        install="argonne:argo",
     ),
     RetiredName(name="minimax--anthropic", replacement="minimax--messages", kind=SHIM),
     RetiredName(
@@ -206,37 +206,37 @@ RETIRED_NAMES: tuple[RetiredName, ...] = (
         name="alcf--metis",
         replacement="alcf_metis--chat_completions",
         kind=SHIM,
-        preset="alcf",
+        install="argonne:alcf",
     ),
     RetiredName(
         name="alcf--minerva",
         replacement="alcf_minerva--chat_completions",
         kind=SHIM,
-        preset="alcf",
+        install="argonne:alcf",
     ),
     RetiredName(
         name="alcf--sophia",
         replacement="alcf_sophia--chat_completions",
         kind=SHIM,
-        preset="alcf",
+        install="argonne:alcf",
     ),
     RetiredName(
         name="asksage--anthropic",
         replacement="asksage--messages",
         kind=SHIM,
-        preset="asksage",
+        install="argonne:asksage",
     ),
     RetiredName(
         name="asksage--openai_chat",
         replacement="asksage--chat_completions",
         kind=SHIM,
-        preset="asksage",
+        install="argonne:asksage",
     ),
     RetiredName(
         name="asksage--openai_responses",
         replacement="asksage--open_responses",
         kind=SHIM,
-        preset="asksage",
+        install="argonne:asksage",
     ),
     # -- model types ---------------------------------------------------------
     RetiredName(name="embedding", replacement="embeddings", kind=MODEL_TYPE),
@@ -365,10 +365,10 @@ def retired_name_message(name: str, kind: str) -> str | None:
         f"{row.name!r} was renamed to {row.replacement!r} in {RENAMED_IN} "
         "and the old spelling is no longer accepted"
     )
-    if row.preset is not None:
+    if row.install is not None:
         message += (
-            f" (the shim is provided by the standalone package {row.preset!r}: "
-            f"declare shims.presets: ['{row.preset}'] and use {row.replacement!r})"
+            " (the shim is provided by a standalone package: "
+            f"declare shims.install: ['{row.install}'] and use {row.replacement!r})"
         )
     else:
         message += f" (use {row.replacement!r})"

@@ -3188,8 +3188,6 @@ button.shim-update.unknown { color: var(--tag-warn); }
   text-transform: uppercase; letter-spacing: 0.04em;
 }
 .shim-grid-inline { grid-column: 1 / -1; }
-/* The legacy-presets note sits above the first source on the Available view. */
-.shim-legacy-note { grid-column: 1 / -1; margin: 0; }
 
 /* ── Manifest sources (#1660 S9) ─────────────────────────────────────── */
 /* A source's section head carries its state and its repository link, so a

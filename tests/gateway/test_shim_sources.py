@@ -19,16 +19,12 @@ from llm_rosetta_gateway.shims.shim_sources import (
     apply_shim_section,
     apply_shim_sources,
     describe_shim_sources,
-    parse_shims_section,
     resolve_disabled,
     resolve_source_config,
     shims_signature,
 )
-from llm_rosetta_gateway.shims.sources import (
-    ShimLoadReport,
-    ShimSourceStatus,
-    check_remote_updates,
-)
+from llm_rosetta_gateway.shims._types import ShimLoadReport, ShimSourceStatus
+from llm_rosetta_gateway.shims.sources import check_source_updates
 from llm_rosetta.api import restore_registry, snapshot_registry, staging_registry
 
 
@@ -79,45 +75,34 @@ class TestShimsSignature:
 class TestResolveSourceConfig:
     def test_relative_paths_anchor_to_config_dir(self, tmp_path: Path):
         cfg = str(tmp_path / "config.jsonc")
-        dirs, remotes, cache = resolve_source_config(
-            {"paths": ["./shims", "../shared"]}, cfg
-        )
+        dirs, cache = resolve_source_config({"paths": ["./shims", "../shared"]}, cfg)
         assert dirs == [
             os.path.join(str(tmp_path), "./shims"),
             os.path.join(str(tmp_path), "../shared"),
         ]
-        assert remotes == []
         assert cache == os.path.join(str(tmp_path), "shims-cache")
 
     def test_absolute_path_preserved(self, tmp_path: Path):
         cfg = str(tmp_path / "config.jsonc")
-        dirs, _, _ = resolve_source_config({"paths": ["/abs/shims"]}, cfg)
+        dirs, _ = resolve_source_config({"paths": ["/abs/shims"]}, cfg)
         assert dirs == ["/abs/shims"]
 
     def test_cache_dir_override_anchored(self, tmp_path: Path):
         cfg = str(tmp_path / "config.jsonc")
-        _, _, cache = resolve_source_config({"cache_dir": "./cc"}, cfg)
+        _, cache = resolve_source_config({"cache_dir": "./cc"}, cfg)
         assert cache == os.path.join(str(tmp_path), "./cc")
 
     def test_no_config_path_uses_home_cache(self):
-        _, _, cache = resolve_source_config({"paths": ["x"]}, None)
+        _, cache = resolve_source_config({"paths": ["x"]}, None)
         assert cache == str(Path("~/.cache/llm-rosetta/shims").expanduser())
-
-    def test_remotes_copied(self, tmp_path: Path):
-        spec = {"url": "https://github.com/a/b"}
-        _, remotes, _ = resolve_source_config(
-            {"remotes": [spec]}, str(tmp_path / "c.jsonc")
-        )
-        assert remotes == [spec]
-        assert remotes[0] is not spec  # defensive copy
 
     @pytest.mark.parametrize(
         "section",
         [
             {"paths": "not-a-list"},
             {"paths": [123]},
-            {"remotes": "nope"},
-            {"remotes": ["not-a-dict"]},
+            {"install": "nope"},
+            {"sources": "nope"},
             {"cache_dir": 5},
         ],
     )
@@ -164,11 +149,11 @@ class TestApplyShimSources:
 
         assert get_shim("acme--chat_completions") is None
 
-    def test_force_refresh_marks_remotes(self, tmp_path: Path, monkeypatch):
-        seen: list[dict] = []
+    def test_force_refresh_reaches_the_rebuild(self, tmp_path: Path, monkeypatch):
+        seen: dict = {}
 
-        def fake_rebuild(dirs, remotes, **kwargs):
-            seen.extend(remotes)
+        def fake_rebuild(dirs, **kwargs):
+            seen.update(kwargs)
             return SimpleNamespace(
                 sources=[], total_shims=0, failures=lambda: [], to_dict=lambda: {}
             )
@@ -176,214 +161,72 @@ class TestApplyShimSources:
         import llm_rosetta_gateway.shims.shim_sources as mod
 
         monkeypatch.setattr(mod, "rebuild_shims", fake_rebuild)
-        apply_shim_section(
-            {"remotes": [{"url": "https://github.com/a/b", "refresh": "never"}]},
-            str(tmp_path / "c.jsonc"),
-            force_refresh=True,
-        )
+        apply_shim_section({}, str(tmp_path / "c.jsonc"), force_refresh=True)
 
-        assert seen and seen[0]["refresh"] == "always"
+        assert seen["force_refresh"] is True
 
 
 class TestMergeShimSourcesBody:
     """The PUT handler's merge, in isolation from the request plumbing."""
 
-    def test_presets_are_persisted(self):
+    def test_install_selectors_are_persisted(self):
         from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
 
-        assert _merge_shim_sources_body({}, {"presets": ["argo"]}) == {
-            "presets": ["argo"]
+        assert _merge_shim_sources_body({}, {"install": ["argonne:argo"]}) == {
+            "install": ["argonne:argo"]
         }
 
-    def test_absent_presets_leave_the_section_alone(self):
+    def test_absent_install_leaves_the_section_alone(self):
         from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
 
-        section = {"presets": ["argo"]}
-        assert _merge_shim_sources_body(section, {"paths": []}) == {"presets": ["argo"]}
+        section = {"install": ["argonne:argo"]}
+        assert _merge_shim_sources_body(section, {"paths": []}) == {
+            "install": ["argonne:argo"]
+        }
 
-    def test_empty_presets_are_dropped(self):
+    def test_empty_install_is_dropped(self):
         from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
 
-        assert _merge_shim_sources_body({"presets": ["argo"]}, {"presets": []}) == {}
+        assert (
+            _merge_shim_sources_body({"install": ["argonne:argo"]}, {"install": []})
+            == {}
+        )
 
-    def test_other_keys_survive_a_presets_update(self):
+    def test_other_keys_survive_an_install_update(self):
         from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
 
         merged = _merge_shim_sources_body(
-            {"paths": ["/a"], "strict": True}, {"presets": ["alcf"]}
+            {"paths": ["/a"], "strict": True}, {"install": ["argonne:alcf"]}
         )
-        assert merged == {"paths": ["/a"], "strict": True, "presets": ["alcf"]}
-
-    def test_a_pinned_selection_lands_on_the_entry(self):
-        """The body **Save selection** sends for a pinned package.
-
-        The panel writes the maps and the entries together, with the entry
-        carrying the selection — a merge that dropped ``remotes`` would leave
-        the package loading at full width while the save reported success.
-        """
-        from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
-
-        section = {
-            "remotes": [
-                {"url": "https://github.com/o/free", "path": "p", "ref": "main"}
-            ]
-        }
-        body = {
-            "include": {},
-            "exclude": {},
-            "remotes": [
-                {
-                    "url": "https://github.com/o/free",
-                    "path": "p",
-                    "ref": "main",
-                    "include": ["kilo_free--chat_completions"],
-                }
-            ],
-        }
-        merged = _merge_shim_sources_body(section, body)
-        assert merged["remotes"][0]["include"] == ["kilo_free--chat_completions"]
-        assert "include" not in merged and "exclude" not in merged
-
-    def test_a_rollback_body_puts_the_keyed_maps_back(self):
-        """The snapshot a failed ref install restores.
-
-        The ref write clears the keyed maps; a restore body that named only
-        ``presets``/``remotes`` would leave the narrowed package loading every
-        shim it ships.
-        """
-        from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
-
-        section = {"presets": ["argo"], "remotes": []}
-        restored = _merge_shim_sources_body(
-            section,
-            {
-                "presets": ["argo"],
-                "remotes": [],
-                "include": {"argo": ["argo--messages"]},
-                "exclude": {},
-            },
-        )
-        assert restored["include"] == {"argo": ["argo--messages"]}
+        assert merged == {"paths": ["/a"], "strict": True, "install": ["argonne:alcf"]}
 
 
-class TestCheckRemoteUpdates:
-    """``check_remote_updates`` answers "is the pinned commit still HEAD?"."""
-
-    SHA = "a" * 40
-    OTHER = "b" * 40
-
-    @staticmethod
-    def _report(*statuses):
-        from llm_rosetta_gateway.shims.sources import ShimLoadReport
-
-        return ShimLoadReport(sources=list(statuses))
-
-    @staticmethod
-    def _remote(location: str, resolved_ref: str | None = None, ref: str | None = None):
-        from llm_rosetta_gateway.shims.sources import ShimSourceStatus
-
-        return ShimSourceStatus(
-            kind="remote", location=location, resolved_ref=resolved_ref, ref=ref
-        )
-
-    @staticmethod
-    def _get(sha: str):
-        import json as _json
-
-        def get(url, **_kwargs):
-            return _json.dumps({"sha": sha}).encode("utf-8")
-
-        return get
+class TestCheckSourceUpdates:
+    """``check_source_updates`` reads installed manifest vendors only."""
 
     def test_local_sources_are_skipped(self):
-        from llm_rosetta_gateway.shims.sources import ShimSourceStatus
-
-        report = self._report(ShimSourceStatus(kind="path", location="/tmp/shims"))
-        assert check_remote_updates(report, http_get=self._get(self.SHA)) == []
-
-    def test_head_matches_pin(self):
-        report = self._report(self._remote("https://github.com/o/r", self.SHA))
-        [entry] = check_remote_updates(report, http_get=self._get(self.SHA))
-        assert entry["head"] == self.SHA
-        assert entry["update"] is False
-        assert entry["error"] is None
-
-    def test_head_moved(self):
-        report = self._report(self._remote("https://github.com/o/r", self.OTHER))
-        [entry] = check_remote_updates(report, http_get=self._get(self.SHA))
-        assert entry["current"] == self.OTHER
-        assert entry["head"] == self.SHA
-        assert entry["update"] is True
-
-    def test_non_github_source_reports_an_error(self):
-        report = self._report(
-            self._remote("https://example.com/shims.tar.gz", self.SHA)
+        report = ShimLoadReport(
+            sources=[ShimSourceStatus(kind="path", location="/tmp/shims")]
         )
-        [entry] = check_remote_updates(report, http_get=self._get(self.SHA))
-        assert entry["error"] == "not a GitHub repository"
-        assert entry["head"] is None
-        assert entry["update"] is False
+        assert check_source_updates(report, http_get=lambda *a, **k: b"{}") == []
 
-    def test_a_failed_source_reports_its_error_not_a_verdict(self):
-        from llm_rosetta_gateway.shims.sources import ShimSourceStatus
-
-        report = self._report(
-            ShimSourceStatus(
-                kind="remote",
-                location="https://github.com/o/r",
-                ok=False,
-                error="fetch failed: 404",
-            )
+    def test_a_failed_vendor_is_not_asked_about(self):
+        report = ShimLoadReport(
+            sources=[
+                ShimSourceStatus(
+                    kind="remote",
+                    location="https://example.test/manifest.json",
+                    vendor="argo",
+                    ok=False,
+                    error="fetch failed: 404",
+                )
+            ]
         )
-        [entry] = check_remote_updates(report, http_get=self._get(self.SHA))
-        assert entry["error"] == "fetch failed: 404"
-        assert entry["update"] is False
-        assert entry["head"] is None
 
-    def test_a_branch_pin_is_not_a_commit(self):
-        report = self._report(self._remote("https://github.com/o/r", "main"))
-        [entry] = check_remote_updates(report, http_get=self._get(self.SHA))
-        assert "not a commit" in entry["error"]
-        assert entry["update"] is False
-        assert entry["head"] is None
+        def refuse(*args, **kwargs):
+            raise AssertionError("a failed vendor must not be looked up")
 
-    def test_the_check_asks_about_the_declared_ref(self):
-        """A branch-pinned source is checked against that branch, not HEAD."""
-        seen: list[str] = []
-
-        def get(url, **_kwargs):
-            seen.append(url)
-            return json.dumps({"sha": self.SHA}).encode()
-
-        report = self._report(
-            self._remote("https://github.com/o/r", "b" * 40, ref="main")
-        )
-        [entry] = check_remote_updates(report, http_get=get)
-        assert seen == ["https://api.github.com/repos/o/r/commits/main"]
-        assert entry["update"] is True
-
-    def test_the_proxy_reaches_the_head_lookup(self):
-        seen = {}
-
-        def get(url, **kwargs):
-            seen["proxy"] = kwargs.get("proxy")
-            return b'{"sha": "' + self.SHA.encode() + b'"}'
-
-        report = self._report(self._remote("https://github.com/o/r", self.SHA))
-        check_remote_updates(report, http_get=get, proxy="http://proxy:1")
-        assert seen["proxy"] == "http://proxy:1"
-
-    def test_resolution_failure_is_captured_per_source(self):
-        def boom(url, **_kwargs):
-            raise OSError("network down")
-
-        report = self._report(
-            self._remote("https://github.com/o/r", self.SHA),
-            self._remote("https://github.com/o/s", self.SHA),
-        )
-        entries = check_remote_updates(report, http_get=boom)
-        assert [e["error"] for e in entries] == ["network down", "network down"]
-        assert all(e["update"] is False for e in entries)
+        assert check_source_updates(report, http_get=refuse) == []
 
 
 class TestReportInstallation:
@@ -404,73 +247,19 @@ class TestReportInstallation:
         assert app.shim_update_check is None
 
 
-class TestCredentialOnTheCheck:
-    """A private shim repository is checked with the credential that fetched it."""
+class TestRetiredKeys:
+    """A key 0.15.0 removed stops the section; the rest is not applied."""
 
-    def test_the_head_lookup_sends_the_declared_token(self, monkeypatch):
-        from llm_rosetta_gateway.shims.sources import ShimLoadReport, ShimSourceStatus
-
-        seen: dict[str, str] = {}
-
-        def get(url, **kwargs):
-            seen.update(kwargs.get("headers") or {})
-            return json.dumps({"sha": "a" * 40}).encode()
-
-        monkeypatch.setenv("SHIM_REPO_TOKEN", "sekret")
-        report = ShimLoadReport(
-            sources=[
-                ShimSourceStatus(
-                    kind="remote",
-                    location="https://github.com/o/private",
-                    resolved_ref="a" * 40,
-                    token_env="SHIM_REPO_TOKEN",
-                )
-            ]
-        )
-        check_remote_updates(report, http_get=get)
-        assert seen["Authorization"] == "Bearer sekret"
-
-    def test_a_missing_token_reports_an_error_not_a_verdict(self, monkeypatch):
-        from llm_rosetta_gateway.shims.sources import ShimLoadReport, ShimSourceStatus
-
-        monkeypatch.delenv("SHIM_REPO_TOKEN", raising=False)
-        report = ShimLoadReport(
-            sources=[
-                ShimSourceStatus(
-                    kind="remote",
-                    location="https://github.com/o/private",
-                    resolved_ref="a" * 40,
-                    token_env="SHIM_REPO_TOKEN",
-                )
-            ]
-        )
-        [entry] = check_remote_updates(
-            report, http_get=lambda url, **kw: b'{"sha": "' + b"a" * 40 + b'"}'
-        )
-        assert "SHIM_REPO_TOKEN" in (entry["error"] or "")
-        assert entry["update"] is False
-
-
-class TestUnknownPreset:
-    """A key this build does not ship must not keep the gateway from starting."""
-
-    def test_a_skipped_key_leaves_the_rest_of_the_section_alone(self, tmp_path: Path):
-        from llm_rosetta_gateway.shims.shim_sources import apply_shim_section
-
-        report = apply_shim_section(
-            {"presets": ["ghost"], "paths": [str(tmp_path / "none")]},
-            str(tmp_path / "config.jsonc"),
-        )
-        assert [s.kind for s in report.sources] == ["path"]
-
-    def test_strict_keeps_the_hard_failure(self, tmp_path: Path):
-        from llm_rosetta_gateway.shims.shim_sources import apply_shim_section
-
-        with pytest.raises(ValueError, match="unknown shim preset 'ghost'"):
+    def test_a_retired_key_is_refused_with_its_replacement(self, tmp_path: Path):
+        with pytest.raises(ValueError, match=r"'shims\.presets'.*0\.15\.0"):
             apply_shim_section(
-                {"presets": ["ghost"], "strict": True},
+                {"presets": ["alcf"], "paths": [str(tmp_path / "none")]},
                 str(tmp_path / "config.jsonc"),
             )
+
+    def test_the_message_names_the_install_replacement(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="shims.install"):
+            apply_shim_section({"presets": ["alcf"]}, str(tmp_path / "config.jsonc"))
 
 
 class TestReloadWiring:
@@ -518,7 +307,7 @@ class TestReloadWiring:
             shim_source_signature="old-signature",
             shim_update_check={"sources": [], "checked_at": 1.0},
             config_io=SimpleNamespace(
-                load=lambda path: {"shims": {"presets": ["alcf"]}}
+                load=lambda path: {"shims": {"install": ["argonne:alcf"]}}
             ),
             ops_ctx=None,
             provider_validation_warnings=[],
@@ -567,16 +356,16 @@ class TestCheckUpdatesRoute:
 
     @staticmethod
     def _report(*statuses):
-        from llm_rosetta_gateway.shims.sources import ShimLoadReport
-
         return ShimLoadReport(sources=list(statuses))
 
     @staticmethod
     def _remote(location: str, resolved_ref: str):
-        from llm_rosetta_gateway.shims.sources import ShimSourceStatus
-
         return ShimSourceStatus(
-            kind="remote", location=location, resolved_ref=resolved_ref
+            kind="remote",
+            location=location,
+            resolved_ref=resolved_ref,
+            vendor="argo",
+            ok=True,
         )
 
     def _call(self, request):
@@ -606,7 +395,7 @@ class TestCheckUpdatesRoute:
 
         from llm_rosetta_gateway.shims import sources as shim_sources
 
-        monkeypatch.setattr(shim_sources, "check_remote_updates", fake)
+        monkeypatch.setattr(shim_sources, "check_source_updates", fake)
         return calls
 
     def test_without_a_report_there_is_nothing_to_check(self):
@@ -658,23 +447,32 @@ class TestAdminHelpers:
 
     def test_validate_accepts_good_body(self, tmp_path: Path):
         cfg = str(tmp_path / "config.jsonc")
-        assert _validate_shim_sources_body({"paths": ["a"], "remotes": []}, cfg) is None
+        assert _validate_shim_sources_body({"paths": ["a"], "install": []}, cfg) is None
 
-    def test_validate_rejects_an_unknown_preset(self, tmp_path: Path):
-        """The admin PUT keeps the hard refusal the startup path relaxed."""
+    @pytest.mark.parametrize("key", ["presets", "include", "exclude", "remotes"])
+    def test_validate_rejects_a_retired_key(self, key, tmp_path: Path):
+        """The admin PUT refuses a key 0.15.0 removed, naming the release."""
         cfg = str(tmp_path / "config.jsonc")
-        response = _validate_shim_sources_body({"presets": ["ghost"]}, cfg)
+        response = _validate_shim_sources_body({key: {"x": ["y"]}}, cfg)
         assert response is not None
         assert response.status_code == 400
+        assert b"0.15.0" in response.body
+
+    @pytest.mark.parametrize("key", ["presets", "include", "exclude", "remotes"])
+    def test_validate_accepts_a_retired_key_that_holds_nothing(
+        self, key, tmp_path: Path
+    ):
+        """A stale panel that sends an empty list is not refused for it."""
+        cfg = str(tmp_path / "config.jsonc")
+        assert _validate_shim_sources_body({key: []}, cfg) is None
 
     @pytest.mark.parametrize(
         "body",
         [
             {"paths": "x"},
             {"paths": [123]},  # element type — resolver rejects, not the route
-            {"remotes": "x"},
-            {"remotes": [{"ref": "v1"}]},
-            {"remotes": ["nope"]},
+            {"install": "x"},
+            {"sources": "x"},
             {"cache_dir": 123},  # type — resolver rejects
             {"remote_ttl": "soon"},  # non-numeric TTL — resolver rejects
         ],
@@ -730,214 +528,43 @@ class TestDisabledShims:
         assert report.sources == []
 
 
-class TestMirrorConfig:
-    """A mirror is a config declaration, judged at parse, not at fetch."""
-
-    def _section(self, **remote):
-        return {"remotes": [{"url": "https://github.com/acme/repo", **remote}]}
-
-    def test_a_template_string_is_accepted(self, tmp_path: Path):
-        sources = parse_shims_section(
-            self._section(mirror="https://m.example/shims@{ref}.tar.gz"),
-            str(tmp_path / "c.jsonc"),
-        )
-        assert sources.remotes[0]["mirror"] == "https://m.example/shims@{ref}.tar.gz"
-
-    def test_an_object_with_a_pin_is_accepted(self, tmp_path: Path):
-        mirror = {"url_template": "https://m.example/x.tar.gz", "sha256": "a" * 64}
-        sources = parse_shims_section(
-            self._section(mirror=mirror), str(tmp_path / "c.jsonc")
-        )
-        assert sources.remotes[0]["mirror"] == mirror
-
-    @pytest.mark.parametrize(
-        "mirror",
-        [
-            5,
-            "",
-            {},
-            {"sha256": "a" * 64},
-            {"url_template": "https://m.example/not-an-archive"},
-            {"url_template": "https://m.example/x.tar.gz", "sha256": "nope"},
-        ],
-    )
-    def test_a_bad_mirror_is_refused_at_parse(self, mirror, tmp_path: Path):
-        with pytest.raises(ValueError) as excinfo:
-            parse_shims_section(self._section(mirror=mirror), str(tmp_path / "c.jsonc"))
-        assert "shims.remotes[0].mirror" in str(excinfo.value)
-
-    def test_an_unpinned_mirror_under_a_pinned_primary_is_refused(self, tmp_path: Path):
-        """The mirror is the leg an attacker can force, so it needs its own pin."""
-        with pytest.raises(ValueError) as excinfo:
-            parse_shims_section(
-                self._section(sha256="1" * 64, mirror="https://m.example/x.tar.gz"),
-                str(tmp_path / "c.jsonc"),
-            )
-        assert "shims.remotes[0].mirror" in str(excinfo.value)
-        assert "sha256" in str(excinfo.value)
-
-    def test_an_unpinned_mirror_without_a_primary_pin_is_accepted(self, tmp_path: Path):
-        sources = parse_shims_section(
-            self._section(mirror="https://m.example/x.tar.gz"),
-            str(tmp_path / "c.jsonc"),
-        )
-        assert sources.remotes[0]["mirror"] == "https://m.example/x.tar.gz"
-
-    @pytest.mark.parametrize("path", ["../escape", "/etc", "a/../../b", "a\\b", 5])
-    def test_a_bad_source_path_is_refused_at_parse(self, path, tmp_path: Path):
-        """The source's own ``path`` is judged at parse, not at the fetch.
-
-        Startup and the admin save share this parser, so refusing here is what
-        keeps a value the loader would reject from being written to disk.
-        """
-        with pytest.raises(ValueError) as excinfo:
-            parse_shims_section(self._section(path=path), str(tmp_path / "c.jsonc"))
-        assert "shims.remotes[0].path" in str(excinfo.value)
-
-    def test_a_relative_source_path_is_kept_as_written(self, tmp_path: Path):
-        """Parse validates; the loader does the rewriting (``a/./b`` → ``a/b``)."""
-        sources = parse_shims_section(
-            self._section(path="a/./b"), str(tmp_path / "c.jsonc")
-        )
-        assert sources.remotes[0]["path"] == "a/./b"
-
-    def test_the_admin_save_path_rejects_a_bad_source_path(self, tmp_path: Path):
-        response = _validate_shim_sources_body(
-            self._section(path="../escape"), str(tmp_path / "c.jsonc")
-        )
-        assert response is not None
-        assert response.status_code == 400
-
-    def test_the_admin_save_path_rejects_bad_mirrors(self, tmp_path: Path):
-        response = _validate_shim_sources_body(
-            self._section(mirror={"url_template": "https://m.example/plain"}),
-            str(tmp_path / "c.jsonc"),
-        )
-        assert response is not None
-        assert response.status_code == 400
-
-        unpinned = _validate_shim_sources_body(
-            self._section(sha256="1" * 64, mirror="https://m.example/x.tar.gz"),
-            str(tmp_path / "c.jsonc"),
-        )
-        assert unpinned is not None
-        assert unpinned.status_code == 400
-
-    def test_a_preset_merge_keeps_the_explicit_mirror(self, tmp_path: Path):
-        preset = {
-            "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
-            "ref": "v0.1.0",
-        }
-        section = {
-            "presets": ["alcf"],
-            "remotes": [
-                {
-                    **preset,
-                    "sha256": "b" * 64,
-                    "mirror": {
-                        "url_template": "https://m.example/alcf.tar.gz",
-                        "sha256": "c" * 64,
-                    },
-                }
-            ],
-        }
-        sources = parse_shims_section(section, str(tmp_path / "c.jsonc"))
-        merged = sources.remotes[0]
-        assert merged["mirror"]["url_template"] == "https://m.example/alcf.tar.gz"
-        assert merged["mirror"]["sha256"] == "c" * 64
-        assert merged["sha256"] == "b" * 64
-        # The preset's own keys survive the merge.
-        assert merged["ref"] == "v0.1.0"
-
-    @pytest.mark.parametrize(
-        "key",
-        ["asksage", "alcf", "argo", "free", "opendesign"],
-    )
-    def test_a_preset_tracks_its_branch_and_names_a_mirror_by_commit(
-        self, key: str, tmp_path: Path
-    ):
-        """No tag and no digest, but a mirror addressed by the resolved commit.
-
-        The loader resolves the branch to a commit, records it in the cache
-        stamp, and fills the mirror's ``{ref}`` with the same commit — and each
-        package's publish job writes exactly that directory, so the leg names a
-        file that exists instead of a tag nobody moved.
-        """
-        from llm_rosetta_gateway.shims import get_source_package
-
-        sources = parse_shims_section({"presets": [key]}, str(tmp_path / "c.jsonc"))
-        # The preset installs from its manifest source; the catalogue remote is
-        # the fallback used while that source has never answered.
-        (selector,) = sources.manifests.selectors
-        package = get_source_package(key)
-        assert package is not None
-        remote = package.remote
-        assert selector.fallback_remote == remote
-        assert "ref" not in remote
-        assert "sha256" not in remote
-        assert remote["path"].endswith("/providers")
-        mirror = remote["mirror"]
-        assert mirror["url_template"].endswith(f"@dist/{{ref}}/{key}.tar.gz")
-        assert "sha256" not in mirror
-        assert mirror["path"] == "providers"
+class TestDescribeShimSources:
+    """The startup banner names how each installed vendor was loaded."""
 
     def test_describe_names_the_leg(self):
         report = ShimLoadReport(
             sources=[
                 ShimSourceStatus(
                     kind="remote",
-                    location="https://github.com/acme/repo",
+                    location="https://example.test/manifest.json",
+                    name="argonne:argo",
+                    vendor="argo",
+                    release={"version": "1.2.0"},
                     ok=True,
-                    leg="mirror",
+                    leg="primary",
                     from_cache=True,
                 ),
                 ShimSourceStatus(
                     kind="remote",
-                    location="https://github.com/acme/other",
-                    ok=True,
-                    leg="primary",
-                ),
-                ShimSourceStatus(
-                    kind="remote",
-                    location="https://github.com/acme/broken",
+                    location="https://example.test/other.json",
+                    name="contrib:llm7",
+                    vendor="llm7",
                     ok=False,
                     error="ShimSourceUnreachable: nope",
                 ),
             ]
         )
         assert describe_shim_sources(report) == [
-            "https://github.com/acme/repo: loaded via mirror (cache)",
-            "https://github.com/acme/other: loaded via primary (network)",
-            "https://github.com/acme/broken: failed",
+            "argonne:argo 1.2.0: loaded via primary (cache)",
+            "contrib:llm7: failed",
         ]
+
+    def test_describe_leaves_local_paths_out(self):
+        report = ShimLoadReport(
+            sources=[ShimSourceStatus(kind="path", location="/tmp/shims", ok=True)]
+        )
+        assert describe_shim_sources(report) == []
 
     def test_describe_is_empty_without_a_section(self):
         assert describe_shim_sources(None) == []
         assert describe_shim_sources(ShimLoadReport()) == []
-
-
-class TestMirrorSlot:
-    """Which ref a mirror's ``{ref}`` is filled with.
-
-    A branch-tracked preset has no declared ref, so the mirror must be
-    addressed by the commit the primary resolved to — otherwise the pinned
-    commit and the mirror's bytes name different trees, which is exactly what
-    the retired ``sha256`` pair used to catch.
-    """
-
-    def test_a_declared_ref_wins(self):
-        from llm_rosetta_gateway.shims.sources import _mirror_slot
-
-        assert _mirror_slot("v0.3.1", "abc123") == "v0.3.1"
-
-    def test_a_branch_tracked_preset_uses_the_resolved_commit(self):
-        from llm_rosetta_gateway.shims.sources import _mirror_slot
-
-        assert _mirror_slot(None, "c1925c14f35170aa4f839c7fb8b97de58c2d4bee") == (
-            "c1925c14f35170aa4f839c7fb8b97de58c2d4bee"
-        )
-
-    def test_no_ref_and_no_commit_leaves_the_placeholder_empty(self):
-        from llm_rosetta_gateway.shims.sources import _mirror_slot
-
-        assert _mirror_slot(None, None) is None

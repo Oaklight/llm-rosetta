@@ -47,8 +47,6 @@ def _get_config(monkeypatch, models: dict) -> tuple[int, dict]:
         lambda request: SimpleNamespace(load_raw=lambda path: raw),
     )
     monkeypatch.setattr(payload, "_shim_status_payload", lambda request: {})
-    monkeypatch.setattr(payload, "_shim_removal_advisories", lambda r, doc: [])
-    monkeypatch.setattr(payload, "_shim_source_presets_payload", lambda: [])
     cfg = GatewayConfig({"providers": {}, "models": {}, "server": {}})
     cfg.credential_visible = False
     cfg.api_keys_db = None

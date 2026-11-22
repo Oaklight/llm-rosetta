@@ -108,8 +108,6 @@ class TestTheConfigPayload:
             ),
         )
         monkeypatch.setattr(payload, "_shim_status_payload", lambda request: {})
-        monkeypatch.setattr(payload, "_shim_removal_advisories", lambda r, raw: [])
-        monkeypatch.setattr(payload, "_shim_source_presets_payload", lambda: [])
         config.credential_visible = False
         config.api_keys_db = None
         # The payload now sends the resolved switch; a real GatewayConfig

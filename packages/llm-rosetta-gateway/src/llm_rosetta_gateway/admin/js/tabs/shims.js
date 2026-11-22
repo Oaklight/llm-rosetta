@@ -1,9 +1,10 @@
 // shims.js — External shim sources (Settings tab).
 //
-// Lets the operator declare extra shim directories, preload a catalogue
-// package by name, and add remote shim archives from the admin UI.  The
-// fields map 1:1 onto the top-level `shims` config section; the status table
-// reports what the gateway loaded; the inventory below is grouped by it.
+// Lets the operator declare extra shim directories and the manifest cache
+// settings from the admin UI; manifest sources are edited by
+// shim-sources-editor.js.  The fields map 1:1 onto the top-level `shims`
+// config section; the status table reports what the gateway loaded; the
+// inventory below is grouped by it.
 import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, esc, copyText, openModal, closeModal } from '../core/utils.js';
@@ -21,16 +22,6 @@ function _status() {
   return (S.configData && S.configData.shim_sources) || { sources: [] };
 }
 
-/** Providers still on a built-in shim with a removal scheduled. */
-function _removals() {
-  return (S.configData && S.configData.shim_removals) || [];
-}
-
-/** The catalogue of standalone shim packages, shown as presets. */
-function _presets() {
-  return (S.configData && S.configData.shim_source_presets) || [];
-}
-
 /** Fill the form from the loaded config and render the status table. */
 function renderShimSources() {
   const pathsEl = document.getElementById('shimPathsInput');
@@ -38,12 +29,6 @@ function renderShimSources() {
   const sec = _section();
   pathsEl.value = Array.isArray(sec.paths) ? sec.paths.join('\n') : '';
   checkShimUpdates(false);
-  const remEl = document.getElementById('shimRemotesInput');
-  if (remEl) {
-    remEl.value = Array.isArray(sec.remotes) && sec.remotes.length
-      ? JSON.stringify(sec.remotes, null, 2)
-      : '';
-  }
   const cacheEl = document.getElementById('shimCacheDirInput');
   if (cacheEl) cacheEl.value = sec.cache_dir || '';
   const ttlEl = document.getElementById('shimTtlInput');
@@ -52,9 +37,8 @@ function renderShimSources() {
   if (strictEl) strictEl.checked = sec.strict === true;
   const err = document.getElementById('shimSourcesError');
   if (err) err.textContent = '';
-  _renderAdvisories();
   // Last: every field above must be filled before the form is compared with
-  // the saved section, or a config with a remote/cache/TTL/strict opens dirty.
+  // the saved section, or a config with a cache/TTL/strict value opens dirty.
   _updateShimDirty();
   loadLoadedShims();
   // The manifest sources and their selection (#1660 S9).
@@ -69,20 +53,8 @@ async function saveShimSources() {
   const paths = (document.getElementById('shimPathsInput').value || '')
     .split('\n').map(s => s.trim()).filter(Boolean);
 
-  let remotes = [];
-  const rawRemotes = (document.getElementById('shimRemotesInput').value || '').trim();
-  if (rawRemotes) {
-    try {
-      remotes = JSON.parse(rawRemotes);
-      if (!Array.isArray(remotes)) throw new Error('not an array');
-    } catch {
-      if (err) err.textContent = t('shim.error.remotesJson');
-      return;
-    }
-  }
-
   try {
-    const body = { paths, remotes };
+    const body = { paths };
     const cacheDir = (document.getElementById('shimCacheDirInput').value || '').trim();
     body.cache_dir = cacheDir;
     const ttlRaw = (document.getElementById('shimTtlInput').value || '').trim();
@@ -90,7 +62,7 @@ async function saveShimSources() {
     body.strict = document.getElementById('shimStrictInput').checked;
     const r = await api.put('/admin/api/config/shims', body);
     // `api.put` resolves with the body even on 400; without this check the
-    // server's refusal (an unknown preset, say) was shown nowhere and the
+    // server's refusal (a bad TTL, say) was shown nowhere and the
     // reload below silently reverted the operator's pick.
     if (r && r.error) throw new Error(r.error);
     await window.loadConfig();
@@ -103,7 +75,7 @@ async function saveShimSources() {
   }
 }
 
-/** Re-apply the declared sources; force a remote refetch on demand. */
+/** Re-apply the declared sources; force a manifest refetch on demand. */
 async function reloadShimSources(forceRefresh) {
   try {
     const r = await api.post('/admin/api/config/shims/reload',
@@ -145,11 +117,6 @@ function _shimFormDirty() {
   const savedPaths = Array.isArray(sec.paths) ? sec.paths : [];
   if (JSON.stringify(paths) !== JSON.stringify(savedPaths)) return true;
 
-  const rawRemotes = (el('shimRemotesInput').value || '').trim();
-  const savedRemotes = Array.isArray(sec.remotes) && sec.remotes.length
-    ? JSON.stringify(sec.remotes, null, 2) : '';
-  if (rawRemotes !== savedRemotes) return true;
-
   if ((el('shimCacheDirInput').value || '').trim() !== (sec.cache_dir || '')) return true;
   const ttl = (el('shimTtlInput').value || '').trim();
   const savedTtl = sec.remote_ttl != null ? String(sec.remote_ttl) : '';
@@ -166,74 +133,6 @@ function _updateShimDirty() {
   const btn = document.getElementById('shimSaveBtn');
   if (btn) btn.disabled = !dirty;
 }
-
-/** List the providers that are still on a shim with a removal scheduled. */
-function _renderAdvisories() {
-  const host = document.getElementById('shimRemovalAdvisories');
-  if (!host) return;
-  const removals = _removals();
-  if (!removals.length) {
-    host.innerHTML = '';
-    return;
-  }
-  const title = `<div style="color:var(--warn,#e67e22);margin-bottom:4px">${esc(t('shim.removal.title'))}</div>`;
-  host.innerHTML = title + removals.map(a => `<div style="display:flex;gap:8px;align-items:center;padding:3px 0;border-top:1px solid var(--hairline)">
-      <span style="flex:1">${esc(t('shim.removal.line', { provider: a.provider, shim: a.shim, version: a.removed_in }))}</span>
-      <button class="btn btn-sm" data-url="${esc(a.remote.url)}" onclick="addShimPresetFromRow(this)">${esc(t('shim.removal.fix'))}</button>
-    </div>`).join('');
-}
-
-/**
- * Append a catalogue source to the remotes textarea.
- *
- * Deliberately only edits the textarea: the operator sees exactly what would be
- * written, and the existing Save stays the one thing that persists (and
- * validates) anything.
- */
-function appendShimPreset(entry) {
-  const remEl = document.getElementById('shimRemotesInput');
-  if (!remEl || !entry || !entry.remote) return;
-  const err = document.getElementById('shimSourcesError');
-  let remotes = [];
-  const raw = (remEl.value || '').trim();
-  if (raw) {
-    try {
-      remotes = JSON.parse(raw);
-      if (!Array.isArray(remotes)) throw new Error('not an array');
-    } catch {
-      if (err) err.textContent = t('shim.error.remotesJson');
-      return;
-    }
-  }
-  if (remotes.some(r => r && r.url === entry.remote.url)) {
-    showToast(t('shim.preset.duplicate'));
-    return;
-  }
-  remotes.push({ ...entry.remote });
-  remEl.value = JSON.stringify(remotes, null, 2);
-  if (err) err.textContent = '';
-  showToast(t('shim.preset.added', { name: entry.label || entry.remote.url }));
-}
-
-/** "Add the replacement source" on one advisory row. */
-function addShimPresetByUrl(url) {
-  const entry = _presets().find(p => p.remote && p.remote.url === url);
-  if (entry) appendShimPreset(entry);
-}
-
-/**
- * The same, for a button that carries its URL in a `data-url` attribute.
- *
- * Reading the attribute keeps the URL out of the `onclick` string, so `esc()`
- * only has to satisfy the HTML parser: a value containing a quote cannot escape
- * into the JavaScript that runs.  The picker passes an index for the same
- * reason, and this is the one place a config-derived string reaches a handler.
- */
-function addShimPresetFromRow(button) {
-  const url = button && button.dataset ? button.dataset.url : null;
-  if (url) addShimPresetByUrl(url);
-}
-
 
 // ── Loaded shims ──────────────────────────────────────────────────────
 //
@@ -302,13 +201,12 @@ function _sourceGroups() {
   return groups;
 }
 
-/** Paint the list for the current filter. */
 /**
- * The update verdict for a remote source's group head.
+ * The update verdict for an installed vendor's group head.
  *
- * A remote is pinned to the commit it was fetched at, so "there is an update"
- * is "the repository's HEAD is no longer that commit".  Nothing is claimed
- * before the check runs, and a failed lookup says so instead of "up to date".
+ * `update` is true when the manifest lists a newer version this core can
+ * install.  Nothing is claimed before the check runs, and a failed lookup says
+ * so instead of "up to date".
  */
 function _updateBadge(group) {
   if (group.origin !== 'remote') return '';
@@ -319,15 +217,15 @@ function _updateBadge(group) {
       title="${esc(u.error)}">${esc(t('shim.update.unknown'))}</span>`;
   }
   if (!u.update) return `<span class="shim-update ok">${esc(t('shim.update.current'))}</span>`;
-  const from = String(u.current || '').slice(0, 7);
-  const to = String(u.head || '').slice(0, 7);
+  const from = String(u.current || '');
+  const to = String(u.head || '');
   return `<button type="button" class="shim-update new" onclick="reloadShimSources(true)"
-    title="${esc(t('shim.update.tip', { from: u.current || '', to: u.head || '' }))}"
+    title="${esc(t('shim.update.tip', { from, to }))}"
     >${esc(t('shim.update.available', { from, to }))}</button>`;
 }
 
 /**
- * Ask the gateway whether any remote source's repository moved past its pin.
+ * Ask the gateway whether any installed vendor has a newer installable version.
  *
  * Cached for five minutes on the server; *force* is the panel's "Check now".
  * A failure leaves the badges as they were rather than showing a verdict that
@@ -752,7 +650,6 @@ async function saveManifestYaml() {
 
 Object.assign(window, {
   renderShimSources, saveShimSources, reloadShimSources, checkShimUpdates,
-  addShimPresetFromRow, appendShimPreset,
   loadLoadedShims, renderLoadedShims, openShimDetail, saveShimYaml,
   copyShimYaml, deleteLoadedShim, toggleShimEnabled,
   openManifestDetail, saveShimModal, previewManifestYaml,
@@ -760,4 +657,4 @@ Object.assign(window, {
   repaintShimUpdateBadges: renderLoadedShims,
 });
 
-export { renderShimSources, saveShimSources, reloadShimSources, appendShimPreset, loadLoadedShims };
+export { renderShimSources, saveShimSources, reloadShimSources, loadLoadedShims };

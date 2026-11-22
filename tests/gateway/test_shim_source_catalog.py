@@ -11,7 +11,6 @@ import json
 from types import SimpleNamespace
 from typing import Any
 
-import pytest
 
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
 from llm_rosetta.contracts.shim_manifest import parse_manifest
@@ -164,22 +163,6 @@ class TestVendorView:
 
         assert view["state"] == "skipped"
         assert view["skipped"] == "not in the manifest"
-
-    def test_every_preset_that_selects_the_vendor_is_listed(self):
-        """A preset behind an explicit entry is still reported (#1663 review)."""
-        preset = parse_selector("x:acme", origin="presets:acme_pkg")
-        tagged = parse_selector("tag:tier:free", origin="presets:free")
-        view = vendor_view(
-            "acme",
-            _releases(_record("0.1.0", tags=["tier:free"])),
-            source_id="x",
-            selectors=[parse_selector("x:acme"), preset, tagged],
-            status=None,
-        )
-
-        assert view["selected_by"] == "x:acme"
-        assert view["selected_origin"] == "install"
-        assert view["selected_presets"] == ["acme_pkg", "free"]
 
     def test_a_shim_core_registers_is_reported(self):
         view = vendor_view(
@@ -335,43 +318,6 @@ class TestEndpoint:
         )
 
 
-class TestPackageCard:
-    def test_the_card_reports_whether_requires_match(self):
-        from llm_rosetta_gateway.admin.routes.config.shim_files import (
-            _manifest_package_view,
-        )
-
-        good = ShimSourceStatus(
-            kind="remote",
-            location=A + "#a",
-            source="x",
-            vendor="a",
-            release=_record("0.1.0", tags=["tier:free"]),
-        )
-        bad = ShimSourceStatus(
-            kind="remote",
-            location=A + "#b",
-            source="x",
-            vendor="b",
-            release=_record("0.1.0", surface=SURFACE_VERSION + 1),
-        )
-
-        view = _manifest_package_view([good, bad], {})
-
-        assert view["requires_problem"]["a"] is None
-        assert "surface" in view["requires_problem"]["b"]
-        assert view["requires_ok"] is False
-        assert view["tags"] == {"a": ["tier:free"], "b": []}
-
-    @pytest.mark.parametrize("statuses", [[]])
-    def test_a_package_with_no_manifest_vendor_adds_nothing(self, statuses):
-        from llm_rosetta_gateway.admin.routes.config.shim_files import (
-            _manifest_package_view,
-        )
-
-        assert _manifest_package_view(statuses, {}) == {}
-
-
 class TestManifestMarks:
     """A vendor's name and mark come from its release record (#1671).
 
@@ -433,8 +379,7 @@ class TestManifestMarks:
 
         assert not hasattr(ShimSource, "logos") and not hasattr(ShimSource, "labels")
         for source in SHIM_SOURCES:
-            for vendor in source.to_dict()["vendors"]:
-                assert "logo" not in vendor and "label" not in vendor
+            assert "vendors" not in source.to_dict()
 
 
 class TestPinnedMarks:

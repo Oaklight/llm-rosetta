@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 from collections.abc import Collection, Mapping, Sequence
-from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
@@ -40,17 +39,14 @@ def _unmatched_rows(
     selectors: Sequence[InstallSelector],
     matched: set[str],
     answered: Sequence[tuple[str, ManifestSourceSpec]],
-    fell_back: set[str],
     claimed: Mapping[str, str] | None = None,
     overridden: Mapping[str, str] | None = None,
 ) -> list[ShimSourceStatus]:
     """Warn about, and report, each selector that matched no vendor.
 
-    A mapped legacy preset is no exception: a source that answers without the
-    vendor (a staged publish, a renamed tag) must not drop the operator's
-    shims silently.  Its old remote is *not* loaded in that case — the source
-    answered, and an old remote carries code this core may not load.  The
-    status row (``skipped="not in the manifest"``) is what the panel shows.
+    A source that answers without the vendor (a staged publish, a renamed tag)
+    must not drop the operator's shims silently; the status row
+    (``skipped="not in the manifest"``) is what the panel shows.
     A vendor the manifest lists but whose every record was invalid is not
     unmatched: :func:`_install_vendor` reports it as ``no valid release``.
 
@@ -62,7 +58,7 @@ def _unmatched_rows(
     for selector in selectors:
         if selector.negate:
             continue
-        if selector.raw in matched or selector.raw in fell_back:
+        if selector.raw in matched:
             continue
         if selector.origin.startswith("moved:") and selector.value in (claimed or {}):
             continue
@@ -161,22 +157,6 @@ def _select_vendors(
         claimed[vendor] = source_id
         out.append((vendor, selector))
     return out
-
-
-def _narrow(
-    patterns: Sequence[str], shims: Sequence[str], selector: InstallSelector
-) -> tuple[str, ...]:
-    """The *patterns* of *selector* this vendor's scan should apply.
-
-    A selector that names one vendor hands its patterns over whole, so a
-    pattern that matches nothing is reported by the scan as before.  A tag or
-    ``*`` selector spans several vendors (the legacy ``free`` preset), so each
-    vendor receives only the patterns that can match one of its own shims;
-    otherwise every other vendor would report them as unmatched.
-    """
-    if selector.kind == "vendor":
-        return tuple(patterns)
-    return tuple(p for p in patterns if any(fnmatch(s, p) for s in shims))
 
 
 def _choose_release(
@@ -281,14 +261,6 @@ def _skip_reason(
             chosen.vendor,
             ", ".join(clash),
         )
-    if (
-        selector.kind != "vendor"
-        and selector.include
-        and not _narrow(selector.include, chosen.shims, selector)
-    ):
-        # A legacy include spans several vendors and names none of this
-        # one's shims: the vendor is not part of the selection at all.
-        return "not selected by include"
     return None
 
 

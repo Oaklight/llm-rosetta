@@ -255,46 +255,6 @@ async def test_inventory_marks_a_declared_shim_editable(tmp_path, local_source):
 
 
 @pytest.mark.asyncio
-async def test_a_shim_the_selection_declines_is_not_in_the_inventory(tmp_path):
-    """Excluded is not installed: the file exists, but nothing ran.
-
-    The Available card shows it unticked; the Installed view lists what runs.
-    A shim stopped by ``shims.disabled`` is the other case — it is installed
-    and switched off, and its switch lives in the inventory — so only the
-    selection takes a row away.
-    """
-    root = tmp_path / "free"
-    for name in ("kilo_free--chat_completions", "llm7--chat_completions"):
-        leaf = root / name.split("--")[0] / "provider.yaml"
-        leaf.parent.mkdir(parents=True)
-        leaf.write_text(_yaml(name), encoding="utf-8")
-
-    request = _request(tmp_path, {"providers": {}, "models": {}}, root)
-    # The report carries the selection the gateway applied when it loaded.
-    request.app.shim_source_report = ShimLoadReport(
-        sources=[
-            ShimSourceStatus(
-                kind="path",
-                location=str(root),
-                ok=True,
-                shim_count=1,
-                shim_names=("llm7--chat_completions",),
-                resolved_dir=str(root),
-                include=("llm7--chat_completions",),
-            )
-        ],
-        total_shims=1,
-        rebuilt_at=999.0,
-    )
-
-    rows = _body(await get_loaded_shims(request))["shims"]
-    names = {r["name"] for r in rows}
-
-    assert "llm7--chat_completions" in names
-    assert "kilo_free--chat_completions" not in names
-
-
-@pytest.mark.asyncio
 async def test_a_declined_shim_keeps_the_vendors_mark(tmp_path):
     """A shim the loader did not register still carries its mark.
 

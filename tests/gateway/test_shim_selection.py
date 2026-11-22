@@ -1,8 +1,9 @@
-"""Tests for declared shim manifests and per-source selection (#1557).
+"""Tests for declared shim manifests and the scan they bound (#1557).
 
-Three layers are pinned separately: the manifest reader (what a package may
-declare), the scan (what a selection actually loads), and the config bridge
-(how ``shims.include`` / ``shims.exclude`` reach the loader).
+Two layers are pinned separately: the manifest reader (what a package may
+declare) and the scan (what a source actually loads).  The ``shims.include`` /
+``shims.exclude`` selection that once narrowed a scan was removed in 0.15.0;
+``tests/test_shim_section.py`` pins its refusal.
 """
 
 from __future__ import annotations
@@ -18,19 +19,13 @@ from llm_rosetta.api import (
     snapshot_registry,
     staging_registry,
 )
-from llm_rosetta_gateway.shims.shim_sources import parse_shims_section
 from llm_rosetta_gateway.shims import sources as shim_sources
 from llm_rosetta_gateway.shims.manifest import (
     MANIFEST_FILENAME,
     ShimManifestError,
     read_shim_manifest,
 )
-from llm_rosetta_gateway.shims.sources import (
-    ShimSourceError,
-    ShimSourceStatus,
-    _scan_dir,
-    rebuild_shims,
-)
+from llm_rosetta_gateway.shims._scan import _scan_dir
 
 
 @pytest.fixture(autouse=True)
@@ -194,204 +189,6 @@ class TestScanSelection:
         assert status.ok
         assert "d--chat_completions" not in status.shim_names
 
-    def test_include_keeps_only_the_named_shims(self, tmp_path: Path):
-        _three_shims(tmp_path)
-        _manifest(tmp_path, MANIFEST)
-
-        status = _scan_dir(
-            tmp_path,
-            kind="path",
-            location="src",
-            include=("b--chat_completions",),
-        )
-
-        assert status.shim_names == ("b--chat_completions",)
-
-    def test_include_accepts_a_glob(self, tmp_path: Path):
-        _three_shims(tmp_path)
-        _manifest(tmp_path, MANIFEST)
-
-        status = _scan_dir(tmp_path, kind="path", location="src", include=("a*", "c*"))
-
-        assert status.shim_names == ("a--chat_completions", "c--chat_completions")
-
-    def test_exclude_wins_over_include(self, tmp_path: Path):
-        _three_shims(tmp_path)
-        _manifest(tmp_path, MANIFEST)
-
-        status = _scan_dir(
-            tmp_path,
-            kind="path",
-            location="src",
-            include=("a*", "b*"),
-            exclude=("b*",),
-        )
-
-        assert status.shim_names == ("a--chat_completions",)
-
-    def test_a_manifest_less_source_filters_by_name(self, tmp_path: Path):
-        """The legacy layout keeps working, and the selection still applies."""
-        _three_shims(tmp_path)
-
-        status = _scan_dir(tmp_path, kind="path", location="src", exclude=("a*", "c*"))
-
-        assert status.shim_names == ("b--chat_completions",)
-        assert status.manifest_shims == ()
-
-    def test_an_unmatched_include_is_reported(self, tmp_path: Path, captured):
-        _three_shims(tmp_path)
-        _manifest(tmp_path, MANIFEST)
-
-        status = _scan_dir(
-            tmp_path, kind="path", location="src", include=("ghost--*", "a*")
-        )
-
-        assert status.unmatched == ("ghost--*",)
-        assert status.shim_names == ("a--chat_completions",)
-        assert any("ghost--*" in message for message in captured)
-
-    def test_an_exclude_that_matches_nothing_is_reported(
-        self, tmp_path: Path, captured
-    ):
-        """The operator's mistake is the directory slug; an exclude matches names."""
-        _leaf(tmp_path, "drop")
-        _leaf(tmp_path, "keep")
-
-        status = _scan_dir(tmp_path, kind="path", location="src", exclude=("drop",))
-
-        assert status.shim_names == (
-            "drop--chat_completions",
-            "keep--chat_completions",
-        )
-        assert status.declined == ()
-        assert status.unmatched_excludes == ("drop",)
-        assert any("exclude 'drop' matched no shim" in message for message in captured)
-
-    def test_an_exclude_that_matches_is_not_reported(self, tmp_path: Path, captured):
-        _leaf(tmp_path, "drop")
-        _leaf(tmp_path, "keep")
-
-        status = _scan_dir(
-            tmp_path,
-            kind="path",
-            location="src",
-            exclude=("drop--chat_completions",),
-        )
-
-        assert status.shim_names == ("keep--chat_completions",)
-        assert status.declined == ("drop--chat_completions",)
-        assert status.unmatched_excludes == ()
-        assert not any(
-            "exclude" in message and "matched no shim" in message
-            for message in captured
-        )
-
-    def test_an_exclude_warns_once_per_unmatched_pattern(
-        self, tmp_path: Path, captured
-    ):
-        _leaf(tmp_path, "keep")
-
-        status = _scan_dir(
-            tmp_path, kind="path", location="src", exclude=("ghost", "phantom")
-        )
-
-        assert status.unmatched_excludes == ("ghost", "phantom")
-        warnings = [
-            message
-            for message in captured
-            if "exclude" in message and "matched no shim" in message
-        ]
-        assert len(warnings) == 2
-
-    def test_an_include_that_matched_a_declined_shim_is_not_unmatched(
-        self, tmp_path: Path, captured
-    ):
-        """The pattern did hit a shim; the exclude is what removed it."""
-        _leaf(tmp_path, "b")
-
-        status = _scan_dir(
-            tmp_path,
-            kind="path",
-            location="src",
-            include=("b--*",),
-            exclude=("b--*",),
-        )
-
-        assert status.shim_names == ()
-        assert status.declined == ("b--chat_completions",)
-        assert status.unmatched == ()
-        assert not any(
-            "include" in message and "matched no shim" in message
-            for message in captured
-        )
-
-    def test_an_include_the_exclude_emptied_is_reported(self, tmp_path: Path, captured):
-        """Every pattern matched, yet the source loads nothing — say so."""
-        _leaf(tmp_path, "b")
-
-        status = _scan_dir(
-            tmp_path,
-            kind="path",
-            location="src",
-            include=("b--*",),
-            exclude=("b--*",),
-        )
-
-        assert status.emptied_includes == ("b--*",)
-        assert any(
-            "include 'b--*' selected only shims the exclude drops" in message
-            for message in captured
-        )
-
-    def test_only_the_include_patterns_the_exclude_emptied_are_named(
-        self, tmp_path: Path, captured
-    ):
-        _leaf(tmp_path, "b")
-
-        status = _scan_dir(
-            tmp_path,
-            kind="path",
-            location="src",
-            include=("ghost", "b--*"),
-            exclude=("b--*",),
-        )
-
-        assert status.unmatched == ("ghost",)
-        assert status.emptied_includes == ("b--*",)
-
-    def test_a_source_that_still_loads_something_is_not_emptied(
-        self, tmp_path: Path, captured
-    ):
-        _leaf(tmp_path, "a")
-        _leaf(tmp_path, "b")
-
-        status = _scan_dir(
-            tmp_path,
-            kind="path",
-            location="src",
-            include=("a--*", "b--*"),
-            exclude=("b--*",),
-        )
-
-        assert status.shim_names == ("a--chat_completions",)
-        assert status.emptied_includes == ()
-
-    def test_a_manifest_source_reports_what_it_declined(self, tmp_path: Path, captured):
-        """A manifest entry the selection dropped is remembered, not rescanned."""
-        _three_shims(tmp_path)
-        _manifest(tmp_path, MANIFEST)
-
-        status = _scan_dir(
-            tmp_path,
-            kind="path",
-            location="src",
-            include=("a--chat_completions",),
-        )
-
-        assert status.shim_names == ("a--chat_completions",)
-        assert status.declined == ("b--chat_completions", "c--chat_completions")
-        assert status.unmatched_excludes == ()
-
     def test_a_broken_manifest_fails_the_source(self, tmp_path: Path):
         _three_shims(tmp_path)
         _manifest(
@@ -417,24 +214,41 @@ class TestScanSelection:
         assert status.shim_names == ("renamed--chat_completions",)
         assert any("declares no shim named" in message for message in captured)
 
-    def test_the_selection_is_echoed_on_the_status(self, tmp_path: Path):
+    def test_a_manifest_less_source_loads_every_leaf(self, tmp_path: Path):
+        """The plain layout keeps working: every leaf the scan finds registers."""
+        _three_shims(tmp_path)
+
+        status = _scan_dir(tmp_path, kind="path", location="src")
+
+        assert status.shim_names == (
+            "a--chat_completions",
+            "b--chat_completions",
+            "c--chat_completions",
+        )
+        assert status.manifest_shims == ()
+
+    def test_a_release_record_refuses_a_name_it_does_not_list(
+        self, tmp_path: Path, captured
+    ):
+        """``only`` is the complete set a manifest install may register."""
         _three_shims(tmp_path)
 
         status = _scan_dir(
-            tmp_path, kind="path", location="src", include=("a*",), exclude=("b*",)
+            tmp_path, kind="path", location="src", only=("a--chat_completions",)
         )
 
-        payload = status.to_dict()
-        assert payload["include"] == ["a*"]
-        assert payload["exclude"] == ["b*"]
-        assert payload["unmatched"] == []
-        assert payload["unmatched_excludes"] == []
-        assert payload["emptied_includes"] == []
-        assert payload["manifest_shims"] == []
-        assert payload["declined"] == [
-            "b--chat_completions",
-            "c--chat_completions",
-        ]
+        assert status.shim_names == ("a--chat_completions",)
+        assert any("not in the release record" in message for message in captured)
+
+    def test_a_refused_name_is_not_registered(self, tmp_path: Path):
+        """``refuse`` names what core already provides; core wins a clash."""
+        _three_shims(tmp_path)
+
+        status = _scan_dir(
+            tmp_path, kind="path", location="src", refuse=("b--chat_completions",)
+        )
+
+        assert status.shim_names == ("a--chat_completions", "c--chat_completions")
 
 
 class TestCoreLoaderSelection:
@@ -475,128 +289,6 @@ class TestCoreLoaderSelection:
             "a--chat_completions",
             "c--chat_completions",
         ]
-
-
-class TestConfigSelection:
-    """``shims.include`` / ``shims.exclude`` reaching the remote spec."""
-
-    def test_the_selection_is_folded_into_the_preset_remote(self):
-        sources = parse_shims_section(
-            {
-                "presets": ["free"],
-                "include": {"free": ["llm7--chat_completions"]},
-                "exclude": {"free": ["kilo_free--chat_completions"]},
-            }
-        )
-
-        (selector,) = sources.manifests.selectors
-        assert selector.include == ("llm7--chat_completions",)
-        assert selector.exclude == ("kilo_free--chat_completions",)
-        remote = selector.fallback_remote
-        assert remote is not None
-        assert remote["include"] == ["llm7--chat_completions"]
-        assert remote["exclude"] == ["kilo_free--chat_completions"]
-
-    def test_an_explicit_remote_may_carry_its_own_selection(self):
-        sources = parse_shims_section(
-            {
-                "remotes": [
-                    {
-                        "url": "https://github.com/acme/pack",
-                        "include": ["x--chat_completions"],
-                    }
-                ]
-            }
-        )
-
-        assert sources.remotes[0]["include"] == ["x--chat_completions"]
-
-    def test_an_explicit_remote_overrides_the_preset_selection(self):
-        sources = parse_shims_section(
-            {
-                "presets": ["free"],
-                "include": {"free": ["llm7--chat_completions"]},
-                "remotes": [
-                    {
-                        "url": "https://github.com/Oaklight/llm-rosetta-shim-free",
-                        "include": ["ovhcloud--chat_completions"],
-                    }
-                ],
-            }
-        )
-
-        assert sources.remotes[0]["include"] == ["ovhcloud--chat_completions"]
-
-    def test_an_unknown_preset_key_is_skipped_unless_strict(self):
-        section = {"presets": ["free"], "include": {"ghost": ["x"]}}
-
-        assert parse_shims_section(section).manifests
-        with pytest.raises(ValueError, match="ghost"):
-            parse_shims_section({**section, "strict": True})
-
-    @pytest.mark.parametrize(
-        "section",
-        [
-            {"presets": ["free"], "include": ["x"]},
-            {"presets": ["free"], "include": {"free": "x"}},
-            {"presets": ["free"], "include": {"free": [1]}},
-            {"presets": ["free"], "include": {"free": [""]}},
-            {"remotes": [{"url": "https://github.com/o/r", "include": "x"}]},
-            {"remotes": [{"url": "https://github.com/o/r", "exclude": [""]}]},
-        ],
-    )
-    def test_bad_shapes_raise(self, section):
-        with pytest.raises(ValueError):
-            parse_shims_section(section)
-
-    def test_a_selection_for_an_undeclared_preset_warns(self, captured):
-        sources = parse_shims_section({"presets": ["argo"], "include": {"free": ["x"]}})
-
-        assert [s.raw for s in sources.manifests.selectors] == ["argonne:argo"]
-        assert any("does not declare" in message for message in captured)
-
-
-class TestStrictUnmatched:
-    """An include that matched nothing stops a strict load, and only that."""
-
-    @staticmethod
-    def _patch(monkeypatch, **fields):
-        monkeypatch.setattr(
-            shim_sources,
-            "_load_local_dir",
-            lambda directory: ShimSourceStatus(
-                kind="path", location=str(directory), **fields
-            ),
-        )
-
-    def test_strict_raises(self, monkeypatch):
-        self._patch(monkeypatch, unmatched=("ghost--*",))
-        with pytest.raises(ShimSourceError, match="matched nothing"):
-            rebuild_shims(["x"], strict=True)
-
-    def test_non_strict_returns_the_report(self, monkeypatch):
-        self._patch(monkeypatch, unmatched=("ghost--*",))
-
-        report = rebuild_shims(["x"])
-
-        assert report.failures() == []
-        assert report.sources[0].unmatched == ("ghost--*",)
-
-    def test_an_unmatched_exclude_does_not_stop_a_strict_load(self, monkeypatch):
-        """Nothing downstream depends on an exclude having hit."""
-        self._patch(monkeypatch, unmatched_excludes=("drop",))
-
-        report = rebuild_shims(["x"], strict=True)
-
-        assert report.failures() == []
-        assert report.sources[0].unmatched_excludes == ("drop",)
-
-    def test_an_include_the_exclude_emptied_stops_a_strict_load(self, monkeypatch):
-        """It matched only shims the exclude drops, so nothing runs."""
-        self._patch(monkeypatch, emptied_includes=("b--*",))
-
-        with pytest.raises(ShimSourceError, match="only shims the exclude drops"):
-            rebuild_shims(["x"], strict=True)
 
 
 class TestCoreFloor:

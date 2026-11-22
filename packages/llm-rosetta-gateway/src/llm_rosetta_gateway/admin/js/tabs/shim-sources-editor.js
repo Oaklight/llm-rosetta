@@ -81,13 +81,11 @@ function _blockHtml(entry) {
   const tags = sourceTags(src).map((tag) => _check(id, 'tag', tag, sel.all || sel.tags.includes(tag),
     `tag:${tag}`, '', sel.all)).join('');
   const vendors = (src.vendors || []).map((v) => {
-    // A vendor no entry selects can still be installed: by a legacy preset,
-    // or by the gateway itself because a provider names one of its shims.
-    const origin = v.selected_origin || '';
-    const preset = origin.startsWith('presets:')
-      ? t('shimSrc.viaPreset', {preset: origin.slice('presets:'.length)})
-      : (origin.startsWith('moved:') ? t('shimSrc.viaProvider') : '');
-    const extra = [v.maturity, v.installable ? `v${v.installable}` : t('shimSrc.noInstallable'), preset]
+    // A vendor no entry selects can still be installed by the gateway itself,
+    // because a provider names one of its shims.
+    const viaProvider = (v.selected_origin || '').startsWith('moved:')
+      ? t('shimSrc.viaProvider') : '';
+    const extra = [v.maturity, v.installable ? `v${v.installable}` : t('shimSrc.noInstallable'), viaProvider]
       .filter(Boolean).join(' · ');
     return _check(id, 'vendor', v.vendor, sel.all || sel.vendors.includes(v.vendor), v.vendor, extra, sel.all);
   }).join('');

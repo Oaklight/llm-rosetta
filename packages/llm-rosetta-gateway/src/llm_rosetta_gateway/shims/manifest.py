@@ -218,7 +218,7 @@ def _normalize_path(value: Any, *, where: str) -> str:
     point — a manifest path and a remote's ``path`` must not be judged by two
     different rules.
     """
-    from .sources import normalize_subpath
+    from ._spec import normalize_subpath
 
     try:
         return normalize_subpath(value, where=where)

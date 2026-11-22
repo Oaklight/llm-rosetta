@@ -74,8 +74,6 @@ class TestTheEndpoint:
             lambda request: SimpleNamespace(load_raw=lambda path: raw),
         )
         monkeypatch.setattr(payload, "_shim_status_payload", lambda request: {})
-        monkeypatch.setattr(payload, "_shim_removal_advisories", lambda r, doc: [])
-        monkeypatch.setattr(payload, "_shim_source_presets_payload", lambda: [])
         cfg = _config({**server, "admin_password": "hunter2"})
         cfg.credential_visible = False
         cfg.api_keys_db = None

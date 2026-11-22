@@ -39,34 +39,46 @@ class TestParseShimsSection:
         assert sources.cache_root is not None
         assert os.path.normpath(sources.cache_root) == str(tmp_path / ".cache")
 
-    def test_a_preset_maps_to_its_manifest_source(self):
-        """#1660: a legacy preset key is a selector on its manifest source."""
-        sources = parse_shims_section({"presets": ["argo"]})
-        assert sources.presets == ("argo",)
-        assert sources.remotes == ()
+    @pytest.mark.parametrize(
+        "key,value",
+        [
+            ("presets", ["alcf"]),
+            ("include", ["argo--chat_completions"]),
+            ("exclude", ["argo--chat_completions"]),
+            ("remotes", [{"url": "https://github.com/Oaklight/x"}]),
+        ],
+    )
+    def test_a_retired_key_is_refused_by_name(self, key, value):
+        with pytest.raises(ValueError, match=rf"'shims\.{key}'.*0\.15\.0"):
+            parse_shims_section({key: value})
+
+    def test_a_retired_key_is_refused_even_when_not_strict(self):
+        with pytest.raises(ValueError, match="0.15.0"):
+            parse_shims_section({"presets": ["alcf"]}, on_unknown="skip")
+
+    def test_a_declared_install_selector_reaches_the_manifest_plan(self):
+        sources = parse_shims_section({"install": ["argonne:argo"]})
         (selector,) = sources.manifests.selectors
         assert selector.raw == "argonne:argo"
-        assert selector.origin == "presets:argo"
-        assert selector.fallback_remote and selector.fallback_remote["url"]
-        assert [s.key for s in sources.manifests.sources] == ["argonne"]
+        # With no ``shims.sources``, the default sources are read.
+        assert [s.key for s in sources.manifests.sources] == ["contrib", "argonne"]
 
-    def test_an_unknown_preset_is_skipped_unless_strict(self):
-        assert parse_shims_section({"presets": ["ghost"]}).remotes == ()
-        assert not parse_shims_section({"presets": ["ghost"]}).manifests
+    def test_an_unknown_source_is_skipped_unless_strict(self):
+        assert not parse_shims_section({"sources": ["ghost"]}).manifests
         with pytest.raises(ValueError):
-            parse_shims_section({"presets": ["ghost"], "strict": True})
+            parse_shims_section({"sources": ["ghost"], "strict": True})
         with pytest.raises(ValueError):
-            parse_shims_section({"presets": ["ghost"]}, on_unknown="raise")
+            parse_shims_section({"sources": ["ghost"]}, on_unknown="raise")
         # An explicit mode wins over the document, in both directions: a
         # strict document can still be read tolerantly.
         tolerant = parse_shims_section(
-            {"presets": ["ghost"], "strict": True}, on_unknown="skip"
+            {"sources": ["ghost"], "strict": True}, on_unknown="skip"
         )
-        assert tolerant.remotes == ()
+        assert not tolerant.manifests
 
-    def test_a_non_array_presets_value_is_rejected(self):
+    def test_a_non_array_install_value_is_rejected(self):
         with pytest.raises(ValueError, match="must be an array"):
-            parse_shims_section({"presets": "argo"})
+            parse_shims_section({"install": "argonne:argo"})
 
     def test_disabled_names_are_kept_in_declaration_order(self):
         sources = parse_shims_section({"disabled": ["b--chat_completions", "a"]})
@@ -74,44 +86,44 @@ class TestParseShimsSection:
 
 
 class TestStrictOverride:
-    def test_an_explicit_strict_refuses_an_unknown_preset(self):
-        with pytest.raises(ValueError, match="unknown shim preset"):
-            apply_shim_section({"presets": ["ghost"]}, None, strict=True)
+    def test_an_explicit_strict_refuses_an_unknown_source(self):
+        with pytest.raises(ValueError):
+            apply_shim_section({"sources": ["ghost"]}, None, strict=True)
 
     def test_an_explicit_strict_on_the_document_also_refuses_it(self):
-        with pytest.raises(ValueError, match="unknown shim preset"):
-            apply_shim_sources({"shims": {"presets": ["ghost"]}}, None, strict=True)
+        with pytest.raises(ValueError):
+            apply_shim_sources({"shims": {"sources": ["ghost"]}}, None, strict=True)
 
     def test_an_explicit_non_strict_skips_it(self):
-        apply_shim_section({"presets": ["ghost"]}, None, strict=False)
-
-    def test_a_parsed_section_cannot_contradict_an_explicit_strict(self):
-        # The loader read the document tolerantly and dropped the key; asking
-        # for strict here must not report success for a rule never applied.
-        sources = parse_shims_section({"presets": ["ghost"]})
-        with pytest.raises(ValueError, match="unknown shim preset"):
-            apply_shim_section(sources, None, strict=True)
+        apply_shim_section({"sources": ["ghost"]}, None, strict=False)
 
     def test_an_explicit_non_strict_accepts_a_parsed_section(self):
-        # Nothing is left to skip: the parse already dropped the key, and the
+        # Nothing is left to skip: the parse already dropped the entry, and the
         # override must not turn that into an error.
-        sources = parse_shims_section({"presets": ["ghost"]})
+        sources = parse_shims_section({"sources": ["ghost"]})
         report = apply_shim_section(sources, None, strict=False)
         assert report.failures() == []
 
 
 class TestLoaderAndApplyAgree:
     def test_the_loader_rejects_the_shape_the_apply_rejects(self):
-        document = {"shims": {"presets": "argo"}}
+        document = {"shims": {"install": "argonne:argo"}}
         with pytest.raises(ValueError) as applied:
             apply_shim_sources(document, None)
-        with pytest.raises(ValueError, match="presets.*must be an array") as loaded:
+        with pytest.raises(ValueError, match="install.*must be an array") as loaded:
             GatewayConfig(document)
         assert str(loaded.value) == str(applied.value)
 
-    def test_an_unknown_preset_does_not_stop_the_loader(self):
-        config = GatewayConfig({"shims": {"presets": ["ghost"]}})
-        assert config.shims.remotes == ()
+    def test_an_unknown_source_does_not_stop_the_loader(self):
+        config = GatewayConfig({"shims": {"sources": ["ghost"]}})
+        assert not config.shims.manifests
+
+    def test_a_retired_key_stops_the_loader_and_the_apply_alike(self):
+        document = {"shims": {"presets": ["alcf"]}}
+        with pytest.raises(ValueError, match="0.15.0"):
+            apply_shim_sources(document, None)
+        with pytest.raises(ValueError, match="0.15.0"):
+            GatewayConfig(document)
 
     def test_the_config_keeps_the_parsed_section(self):
         config = GatewayConfig({"shims": {"paths": ["shims"]}})

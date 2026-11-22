@@ -143,7 +143,7 @@ declare the differences.
 | Built-in shims | `shims/builtin/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type |
 | Vendor manifest | `shims/builtin/<vendor>/provider.yaml` | Optional per-vendor defaults every leaf inherits: `connection:` (the credential) plus the vendor's own `logo` / `group` / `group_label`; `auth.py` sits beside it |
 | Tree contract | `devtools/_shim_template/` | The path rules (`<vendor>[/<lane>]/<type>[/<format>]/provider.yaml`), the file allow-list, and the skeleton `shims new` renders; `shims check` reports a tree that departs from it, `shims migrate --write` moves one onto it |
-| External shim sources | `llm_rosetta_gateway/shims/` | Directory/archive loaders, standalone catalog (with its free / paid / subscription tier), scheduled removals |
+| External shim sources | `llm_rosetta_gateway/shims/` | Manifest installs (`manifest_sources/`: plan, selection, freshness, install, status), directory loader, manifest-source catalogue |
 
 ### Gateway
 
@@ -157,7 +157,7 @@ supported format and forwards them to any configured upstream provider.
 | `config/` | Config package: JSONC loading, locking, parsing, resolution; `providers.py` is the provider registry and factory that resolve shim config into runtime `ProviderInfo` (key rotation, auth headers) |
 | `pipelines/` | Typed request handlers (embeddings, rerank, decision) behind `handle_typed_request` |
 | `model_types/` | The model-type registry (`__init__.py`): descriptors, routes, formats, config keys; `source_formats.py` holds the source detectors its typed-route descriptors carry (embedding, rerank, decision) |
-| `shims/` | External shim sources (`shim_sources.py`), manifest selection and freshness, catalog, scheduled removals; the `shims` config section |
+| `shims/` | External shim sources (`shim_sources.py`), the `manifest_sources/` package (plan, selection, freshness, install, status), manifest-source catalogue; the `shims` config section |
 | `routing/` | Candidate selection: the route container plus the pluggable strategies (weighted round-robin, affinity) |
 | `jobs/` | Background jobs: the envelope (`model.py`), store, queue, worker, handlers |
 | `quota/` | Provider quota probing and quota-aware credential rotation: `service.py` runs the probes (callers import every quota function from it), `allowance.py` answers what routing and admin read, `signals.py` records what live requests report |

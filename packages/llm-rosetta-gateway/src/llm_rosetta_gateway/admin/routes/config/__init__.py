@@ -9,7 +9,7 @@ each handler lives in the module for the resource it edits:
 :mod:`.models`                model create/update/delete/toggle/bulk
 :mod:`.model_providers`       model-to-provider links and weights
 :mod:`.settings`              server settings, rate limits, log format
-:mod:`.shims`                 shim sources, reload, removal advisories
+:mod:`.shims`                 shim sources, reload, update check
 :mod:`.shim_files`            loaded shims: inventory, view, edit, delete
 :mod:`.shim_manifests`        vendor manifests: rows, view, edit, blast radius
 :mod:`.shim_source_catalog`   manifest sources and every vendor they publish
@@ -51,7 +51,6 @@ from .shim_files import (
     delete_loaded_shim,
     get_loaded_shim,
     get_loaded_shims,
-    get_shim_catalog,
     post_shim_enabled,
     put_loaded_shim,
 )
@@ -64,11 +63,8 @@ from .shim_manifests import (
 from .shim_source_catalog import get_shim_source_catalog
 from .shims import (
     _merge_shim_sources_body,
-    _shim_removal_advisories,
     _shim_status_payload,
     _validate_shim_sources_body,
-    post_shim_package_upgrade,
-    post_shim_presets_migrate,
     post_shims_check_updates,
     post_shims_reload,
     put_shim_sources,
@@ -95,7 +91,6 @@ __all__ = [
     "_merge_outcome",
     "_merge_provider_into_model",
     "_merge_shim_sources_body",
-    "_shim_removal_advisories",
     "_shim_status_payload",
     "_validate_shim_sources_body",
     "bulk_add_models",
@@ -111,8 +106,6 @@ __all__ = [
     "get_shim_manifest",
     "get_shim_manifests",
     "post_preview_shim_manifest",
-    "post_shim_package_upgrade",
-    "post_shim_presets_migrate",
     "post_shims_check_updates",
     "post_shims_reload",
     "post_shim_enabled",
@@ -182,9 +175,6 @@ def register_config_routes(app: Any) -> None:
     app.route("/admin/api/config/shims", methods=["GET"])(
         _guard("providers", get_loaded_shims)
     )
-    app.route("/admin/api/config/shims/catalog", methods=["GET"])(
-        _guard("providers", get_shim_catalog)
-    )
     # Registered before ``shims/<name>``, which would read it as a shim name.
     app.route("/admin/api/config/shims/source-catalog", methods=["GET"])(
         _guard("providers", get_shim_source_catalog)
@@ -207,14 +197,8 @@ def register_config_routes(app: Any) -> None:
     app.route("/admin/api/config/shims/reload", methods=["POST"])(
         _guard("providers", post_shims_reload)
     )
-    app.route("/admin/api/config/shims/presets/migrate", methods=["POST"])(
-        _guard("providers", post_shim_presets_migrate)
-    )
     app.route("/admin/api/config/shims/check-updates", methods=["POST"])(
         _guard("providers", post_shims_check_updates)
-    )
-    app.route("/admin/api/config/shims/packages/<key>/upgrade", methods=["POST"])(
-        _guard("providers", post_shim_package_upgrade)
     )
     # Vendor manifests: not shims, so a separate resource.  The path travels in
     # the query or the body rather than in the URL, because a filesystem path

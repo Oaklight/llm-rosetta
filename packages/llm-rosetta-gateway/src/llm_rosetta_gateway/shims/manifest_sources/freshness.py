@@ -287,10 +287,8 @@ def _expected_vendors(selectors: Sequence[InstallSelector], source_id: str) -> s
     """The vendors the selectors expect this source to publish.
 
     An explicit ``<source>:<vendor>`` (a moved vendor's auto-install is one)
-    expects its vendor, and a mapped legacy preset expects the vendors its
-    package shipped (:attr:`InstallSelector.expected`), even when it installs
-    by tag.  A plain tag, ``*`` or an unqualified selector expects nothing:
-    another source may serve it, so its absence here proves nothing.
+    expects its vendor.  A plain tag, ``*`` or an unqualified selector expects
+    nothing: another source may serve it, so its absence here proves nothing.
     """
     out: set[str] = set()
     for s in selectors:
@@ -298,7 +296,6 @@ def _expected_vendors(selectors: Sequence[InstallSelector], source_id: str) -> s
             continue
         if s.kind == "vendor" and not s.negate:
             out.add(s.value)
-        out.update(s.expected)
     return out
 
 

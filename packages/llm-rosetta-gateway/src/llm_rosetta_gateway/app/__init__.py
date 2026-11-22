@@ -51,7 +51,6 @@ from .factory import (  # noqa: F401
     _install_cors,
     _install_rate_limiting,
     _install_lifecycle_hooks,
-    _report_shim_removals,
     create_app,
     run_gateway,
 )
@@ -95,7 +94,6 @@ __all__ = [
     "_install_cors",
     "_install_rate_limiting",
     "_install_lifecycle_hooks",
-    "_report_shim_removals",
     "create_app",
     "run_gateway",
 ]

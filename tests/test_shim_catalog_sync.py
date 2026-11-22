@@ -1,4 +1,4 @@
-"""The account's shim repositories and the catalogue must name the same set."""
+"""The account's shim repositories and the manifest sources must name the same set."""
 
 from __future__ import annotations
 
@@ -22,7 +22,10 @@ spec.loader.exec_module(check)
 sys.path.insert(0, str(ROOT / "packages/llm-rosetta-gateway/src"))
 sys.path.insert(0, str(ROOT / "packages/llm-rosetta/src"))
 
-from llm_rosetta_gateway.shims.catalog import SHIM_SOURCE_PACKAGES  # noqa: E402
+from llm_rosetta_gateway.shims.catalog import (  # noqa: E402
+    SHIM_SOURCES,
+    STANDALONE_VENDORS,
+)
 
 
 def _repo(name: str, owner: str = "Oaklight", **extra) -> dict:
@@ -94,22 +97,33 @@ def test_a_catalogue_entry_whose_repository_is_gone_is_stale():
 def test_the_current_catalogue_matches_its_own_repositories():
     """The published packages are the baseline: this is what CI runs."""
     repos = check.shim_repositories(
-        [_repo(pkg.repo.rsplit("/", 1)[1]) for pkg in SHIM_SOURCE_PACKAGES]
+        [_repo(pkg.repo.rsplit("/", 1)[1]) for pkg in SHIM_SOURCES]
     )
 
-    missing, stale = check.compare_catalog(repos, SHIM_SOURCE_PACKAGES)
+    missing, stale = check.compare_catalog(repos, SHIM_SOURCES)
+
+    assert (missing, stale) == ([], [])
+
+
+def test_a_retired_repository_is_known_not_missing():
+    """An earlier name or an archived stand-alone package is not drift."""
+    legacy = [url for source in SHIM_SOURCES for url in source.legacy_repos]
+    legacy += [url for vendor in STANDALONE_VENDORS for url in vendor.repos]
+    repos = check.shim_repositories([_repo(url.rsplit("/", 1)[1]) for url in legacy])
+
+    missing, stale = check.compare_catalog(repos, [], legacy)
 
     assert (missing, stale) == ([], [])
 
 
 def test_every_catalogue_entry_points_at_a_shim_repository():
     """A typo in a URL would read as "stale" forever; catch it here instead."""
-    for pkg in SHIM_SOURCE_PACKAGES:
+    for pkg in SHIM_SOURCES:
         assert pkg.repo.startswith("https://github.com/"), pkg.key
         assert "llm-rosetta-shim" in pkg.repo, pkg.key
 
 
-def test_the_skeleton_names_the_package_the_repository_holds(capsys):
+def test_the_skeleton_names_the_source_the_repository_holds(capsys):
     code = check.report(
         "Oaklight",
         [
@@ -124,16 +138,16 @@ def test_the_skeleton_names_the_package_the_repository_holds(capsys):
     out = capsys.readouterr().out
     assert code == 1
     assert 'key="acme"' in out
-    assert 'package="llm_rosetta_shim_acme"' in out
+    assert "ShimSource(" in out
 
 
 def test_offline_run_reads_a_saved_listing(tmp_path, capsys):
-    listing = [_repo(pkg.repo.rsplit("/", 1)[1]) for pkg in SHIM_SOURCE_PACKAGES]
+    listing = [_repo(pkg.repo.rsplit("/", 1)[1]) for pkg in SHIM_SOURCES]
     source = tmp_path / "repos.json"
     source.write_text(json.dumps(listing), encoding="utf-8")
 
     assert check.main(["--from-json", str(source)]) == 0
-    assert "match SHIM_SOURCE_PACKAGES" in capsys.readouterr().out
+    assert "match SHIM_SOURCES" in capsys.readouterr().out
 
     listing.append(_repo("llm-rosetta-shim-extra"))
     source.write_text(json.dumps(listing), encoding="utf-8")

@@ -137,9 +137,9 @@ def render_body(current: Verdict, *, run_url: str | None) -> str:
         *current.problems,
         "```",
         "",
-        "Fix: edit `scripts/dev/shim-publish-branch.yml` (the master copy) and "
-        "copy it into each package repository it names, or add the package it "
-        "is missing from.",
+        "Fix: add the missing source or vendor repository to `SHIM_SOURCES` in "
+        "`llm_rosetta_gateway/shims/catalog.py`, or update the repository URL "
+        "the catalogue names.",
         "",
         FINGERPRINT_MARKER.format(value=current.fingerprint),
     ]
