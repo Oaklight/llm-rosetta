@@ -126,12 +126,24 @@ with `400`, because the result could not find its way back. Verified against
 `agy` 1.5.14; 1.5.13 routes the same call through its `call_mcp_tool`
 meta-tool.
 
+The declared tool set is a property of the session, not of one turn. The agent
+fixes its MCP server list when a session opens, so a request whose tools differ
+from that session's — a tool added or removed, a tool disabled, or a refreshed
+schema — closes the session and replays the conversation into a fresh one that
+lists the new set. A tool-result request that also changes the tool set does
+the same: the gateway abandons the suspended call and replays the history
+rather than continuing with the old bridge.
+
 ## Limitations
 
 - **Client tools need a conversation id.** The client's result is matched to
   the suspended turn by the conversation, so a one-off request that declares
   tools is refused with `400` rather than losing the call. Declare a session
   id (see the next bullet) when the request carries tools.
+- **A changed tool set costs a replay.** The agent's MCP list is fixed for a
+  session, so the first request that adds, removes or refreshes a tool opens a
+  new session and sends the conversation again. That is correct but not free;
+  keep a conversation's tool set stable where latency matters.
 - **The agent's own tools stay off.** `agy` runs in a gateway-owned profile: a
   custom agent with no tools, a `PreToolUse` hook that allows only the
   gateway's loopback MCP server, `toolPermission: strict`, and an ACP client
