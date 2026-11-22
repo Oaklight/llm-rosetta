@@ -28,11 +28,11 @@ speaks. The shim signs the request the way the endpoint expects:
 
 The shims ship in
 [`llm-rosetta-shim-opendesign`](https://github.com/Oaklight/llm-rosetta-shim-opendesign),
-not in core. Declare the preset before using the names:
+not in core. Declare the vendor before using the names:
 
 ```jsonc
 {
-  "shims": { "presets": ["opendesign"] }
+  "shims": { "install": ["contrib:opendesign"] }
 }
 ```
 
@@ -40,7 +40,7 @@ not in core. Declare the preset before using the names:
 
 ```jsonc
 {
-  "shims": { "presets": ["opendesign"] },
+  "shims": { "install": ["contrib:opendesign"] },
   "providers": {
     "opendesign": {
       "type": "opendesign--chat_completions",

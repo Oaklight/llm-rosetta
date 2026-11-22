@@ -48,211 +48,108 @@ You can also register custom shims programmatically via `register_shim()`.
 
 ### External Shim Sources
 
-Shims need not live inside the package. The top-level `shims` section points the
-gateway at extra directories and at remote archives it fetches into a local
-cache — so a shim set can be maintained in its own repository and consumed
-without installing anything into the gateway image.
+Shims need not live inside the package. The top-level `shims` section installs
+vendors from manifest sources and scans extra local directories, so a shim set
+can be maintained in its own repository and consumed without installing
+anything into the gateway image.
 
 ```jsonc
 "shims": {
   // Manifest sources (catalogue ids or manifest URLs) and the vendors to
   // install from them: a vendor name, tag:<tag>, *, each optionally behind
-  // "<source>:". install without sources reads contrib and argonne.
+  // "<source>:", or !<source>:<vendor> to exclude one. install without sources
+  // reads contrib and argonne.
   "sources": ["contrib", "argonne"],
   "install": ["opendesign", "tag:tier:free", "argonne:*"],
-
-  // Preload a catalog package by name: alcf | argo | asksage | free | opendesign.
-  // Each maps to its manifest source; an explicit remote for the package's
-  // repository keeps it on that remote instead.
-  "presets": ["alcf"],
-
-  // Optional, keyed by preset: install only part of a package. Entries are shim
-  // names or * patterns; exclude wins over include; an empty include means "no
-  // restriction", so "none" is written as exclude of the whole set.
-  "include": { "alcf": ["alcf_metis--chat_completions"] },
-  "exclude": { "argo": ["argo--messages"] },
 
   // Scanned for <vendor>/<type>/provider.yaml (the built-in shape), or the older
   // <name>/provider.yaml (flat) and <group>/<leaf>/provider.yaml (grouped) shapes.
   // Relative entries are anchored to the directory containing this config file.
   "paths": ["./local-shims", "../shared/rosetta-shims"],
 
-  "remotes": [
-    {
-      "name": "alcf",                                  // optional; derived from the URL
-      "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
-      "ref": "v0.1.0",                                 // optional; see "Ref resolution"
-      "path": "src/llm_rosetta_shim_alcf/providers",   // subpath inside the archive
-      "archive": "auto",                               // auto | tar.gz | zip
-      "sha256": "0123…abcd",                           // optional archive pin
-      "token_env": "GITHUB_TOKEN",                     // optional; private shim repository only
-      "refresh": "auto"                                // auto | always | never
-    }
-  ],
+  // Shim names to switch off (the per-shim switch in the admin panel).
+  "disabled": ["argo--messages"],
 
   "cache_dir": "./shims-cache",   // optional; default <config_dir>/shims-cache
-  "remote_ttl": 86400,            // optional; re-fetch interval for unpinned remotes (seconds)
+  "remote_ttl": 86400,            // optional; manifest freshness (seconds)
   "strict": false                 // optional; true => a failed source aborts startup
 }
 ```
+
+These are the keys the gateway reads: `sources`, `install`, `paths`,
+`disabled`, `cache_dir`, `remote_ttl` and `strict`.
+
+!!! danger "Removed in 0.15.0"
+    `shims.presets`, `shims.include`, `shims.exclude` and `shims.remotes` are no
+    longer read. A config that still carries one is **refused when it loads**,
+    with `config: 'shims.<key>' was removed in 0.15.0: <advice>`. Run
+    `llm-rosetta-migrate --config <path>` (dry run) and `--write` to rewrite
+    `presets`, `include` and `exclude` into the new form; see
+    [Retired keys](../guide/shims.md#retired-keys). A `remotes` entry (an
+    explicit archive URL with `ref`, `sha256`, `mirror`, `path`, `token_env` or
+    `refresh`) has no manifest equivalent and cannot be rewritten: publish a
+    manifest source and list it in `shims.sources`, or point `shims.paths` at a
+    local copy.
 
 **Layout.** A directory under `paths` may group by model type
 (`vendor/embeddings/provider.yaml`, `vendor/llm/chat_completions/provider.yaml`),
 the shape the built-in shims use; the older shapes still load unchanged — a
 `provider.yaml` directly in a child (`my-provider/provider.yaml`) or one group
 level (`vendor/messages/provider.yaml`, `vendor/chat_completions/provider.yaml`).
-
-**Selection.** `include` / `exclude` are optional and keyed by preset; a
-`remotes[]` entry may carry the same two keys inline. They are applied after a
-leaf's `provider.yaml` is parsed and before its `transforms.py` is imported, so
-a declined shim costs neither its module nor its registration. An `include` that
-matches nothing warns at startup and fails only under `strict`. An `exclude`
-that matches nothing the source ships warns too, and never fails a load: the
-patterns match shim names, so a directory name read off the tree
-(`drop`) declines nothing, and the warning is how the operator hears it. An
-`include` whose every hit the `exclude` then drops warns as well, and stops a
-`strict` load, because the source ends up empty while each pattern matched.
-The same facts ride the reload report (`unmatched`, `unmatched_excludes`,
-`emptied_includes`, `declined`) beside each source. A package can declare what
-it ships in a `shims.yaml` at the root of the
-directory its `path` names, and a manifest that
-is present is authoritative — unlisted directories are never read. It is data,
-not code: relative paths only, no URLs, so it cannot redirect the fetch.
-
-**Remote fetches are git-less.** GitHub repository URLs are rewritten to their
-codeload tarball endpoint; any other host works by giving an explicit archive
-URL (optionally containing `{ref}`), so GitLab and self-hosted forges need no
-per-host code path. Only HTTPS is accepted (loopback may use HTTP).
-
-**Mirrors.** A source whose host may be unreachable — `github.com` behind a
-firewall, a forge under maintenance — can declare a second URL for the same
-archive. `mirror` is either a URL template string or an object carrying its own
-pin, credential and scan directory:
-
-```jsonc
-"remotes": [
-  {
-    "url": "https://github.com/Oaklight/llm-rosetta-shim-alcf",
-    "ref": "v0.1.0",
-    "sha256": "0123…abcd",
-    "mirror": {
-      // {ref} is the ref written above, not the commit it resolved to
-      "url_template": "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf@dist/{ref}/alcf.tar.gz",
-      "sha256": "89ab…cdef",
-      "path": "providers",               // optional; directory to scan in this archive
-      "token_env": "MIRROR_TOKEN"        // optional; the mirror's own credential
-    }
-  }
-]
-```
-
-The template must be an archive URL — a GitHub repository URL, a URL containing
-`{ref}`, or one ending in `.tar.gz`, `.tgz`, `.tar` or `.zip`. `{ref}` is filled
-with the `ref` written on the source, **not** with the commit a GitHub primary
-resolved it to: a mirror publishes one directory per release, and its URL must
-not change depending on whether the forge's API answered. A mirror is
-consulted **only when the primary cannot be connected to**; see
-[Shims → Mirrors](../guide/shims.md#mirrors) for the full fallback rules.
-
-`path` is the directory to scan inside *this* archive, and it defaults to the
-source's `path`. It exists because the two legs need not be laid out the same
-way: the archive the standalone packages publish is built from the providers
-directory (`providers/` at its root), while the forge's tarball keeps the
-repository's `src/<package>/providers`. `"."` or `""` means the archive root;
-an absolute path or one with a `..` component is refused when the config loads.
-The [built-in presets](../guide/shims.md#standalone-shim-packages) name
-`providers` there rather than `"."`, so the archive's top-directory strip rule
-never decides whether the preset loads.
-
-The mirror carries its own `sha256` because the bytes a mirror serves need not
-be the primary's — a CDN serves the archive the project committed to its `dist`
-branch, not the forge's repository tarball. **When the source pins `sha256`, the
-mirror must declare its own**, and the config is refused otherwise: an unpinned
-mirror beside a pinned primary would let exactly the path an attacker can force
-(make the primary unreachable, answer as the mirror) serve bytes the pin never
-approved.
-
-**Credentials are per leg.** `token_env` names an environment variable whose
-value the primary's request carries as a bearer token. It is sent only to a leg
-whose origin — scheme, host and port, with a scheme's default port filled in, so
-`https://h` and `https://h:443` are one origin — matches the primary's. A mirror
-on another host therefore never receives the primary's token; a mirror that
-needs a credential declares its own `token_env`. If the named variable is unset,
-that leg's request fails with an error naming the variable rather than falling
-back to an anonymous one.
-
-**Ref resolution.** With `ref` set (a tag, branch, or commit SHA) that ref is
-fetched. With `ref` omitted, `HEAD` is resolved to a concrete commit SHA through
-the host API (GitHub) and recorded in the cache stamp, so later runs reuse the
-same commit; the config file itself is never rewritten. Pin a tag or SHA for
-reproducible deployments.
-
-**Cache and refresh.** Archives are extracted under `cache_dir` (default
-`<config_dir>/shims-cache`, next to the config file). A pinned ref, a `sha256`,
-or `refresh: "never"` is fetched once; `refresh: "always"` always re-fetches;
-the default `auto` re-fetches when the cached copy is older than `remote_ttl`.
-A warm cache covers every failure except the source's verdict on its own
-bytes: a transport failure, an HTTP error, a disk that cannot be written and an
-unset `token_env` are all served from the cache and reported as stale. Two are
-never masked — a `sha256` mismatch, and a body that is not an installable
-archive (a page served in place of the archive, a truncated archive, an unsafe
-member, or more bytes than the download cap allows). With nothing cached
-every failure fails the source. The cache
-means "the source is unreachable or unhappy, use the last good copy", not "the
-bytes are wrong, ignore it"; see [Shims → Mirrors](../guide/shims.md#mirrors).
-
-**Precedence.** On a shim-name collision, later sources win: built-ins, then
-entry-point plugins, then `paths` in order, then `remotes` in order.
-
-**Failure handling.** By default a bad source is logged, reported in the admin
-panel, and skipped — the gateway still starts. Set `shims.strict: true` to abort
-startup instead.
-
-**Programmatic use.** `llm_rosetta.shims.rebuild_shims()` loads directories and
-remotes directly (no config file needed); `llm_rosetta_gateway.apply_shim_sources(raw, config_path)`
-applies a config dict. `create_app` also applies the section automatically.
+A directory may declare what it ships in a `shims.yaml` at its root; a
+manifest that is present is authoritative — unlisted directories are never
+read. It is data, not code: relative paths only, no URLs.
 
 **Manifest sources.** `sources` lists manifest sources: a catalogue id
 (`contrib`, `argonne`), a manifest URL, or `{"url", "fallback", "token_env"}`.
 `install` selects vendors from them: `<vendor>`, `tag:<tag>` (matched whole,
-e.g. `tag:tier:free`), `*`, each optionally behind `<source>:`. Per vendor the
-gateway installs the newest stable version whose `requires` matches this core
-(`surface` equal to `SURFACE_VERSION`, `ir` not above `IR_VERSION`; a
-pre-release only when no stable version is installable), checks the archive's
-sha256, loads only the shim names the release record lists when the archive
-has no `shims.yaml`, and upgrades only when a newer installable version
-appears. An entry that matches nothing in a source that answered is logged and
-reported as a *not in the manifest* row.
-The manifest is reused for `remote_ttl`; an unreachable source keeps the cached
-manifest and the last good install. Core wins per shim: a core shim name is
-refused and the vendor's other shims install. A record saying
-`promoted_to: core@X` skips the vendor only when this core is at `X` or later
-(a dev or pre-release of `X` is before it) and core registers the record's
-shims. Manifest installs load before `paths` and `remotes`. See
+e.g. `tag:tier:free`), `*`, each optionally behind `<source>:`; `!<vendor>` and
+`!<source>:<vendor>` exclude a vendor and `<source>:<vendor>@<version>` pins
+one. Per vendor the gateway installs the newest stable version whose
+`requires` matches this core (`surface` equal to `SURFACE_VERSION`, `ir` not
+above `IR_VERSION`; a pre-release only when no stable version is installable),
+checks the archive's sha256, loads only the shim names the release record
+lists when the archive has no `shims.yaml`, and upgrades only when a newer
+installable version appears. An entry that matches nothing in a source that
+answered is logged and reported as a *not in the manifest* row. The manifest
+is reused for `remote_ttl`; an unreachable source keeps the cached manifest
+and the last good install. Core wins per shim: a core shim name is refused and
+the vendor's other shims install. A record saying `promoted_to: core@X` skips
+the vendor only when this core is at `X` or later (a dev or pre-release of `X`
+is before it) and core registers the record's shims. See
 [Manifest sources](../guide/shims.md#manifest-sources).
 
-**Standalone packages and presets.** The ALCF, AskSage, Argo, free-endpoint and
-Open Design shims ship outside core. `presets` names one of them by key and maps
-to its manifest source with no config edit: `alcf`, `argo`, `asksage` →
-`argonne:<vendor>`; `free` → `contrib:tag:tier:free`; `opendesign` →
-`contrib:opendesign`. An explicit remote for the package's repository — by its
-current URL or by the old name (`llm-rosetta-shim-argo`, `llm-rosetta-shim-free`)
-— keeps the preset on that remote, merged onto the catalog entry (explicit keys
-win), so a pinned `ref` or `sha256` layers on without losing the catalog
-`path`. While a mapped preset's source has never answered, the preset loads its
-old remote, with a warning. The published repositories are public, so
-the presets carry no `token_env`. A
-provider config that still names one of these shims without a declared source
-fails at startup with an error naming the package, the preset and the expanded
-remote. The admin panel's preset catalog (see
-[Admin Panel → Shim Sources](admin-panel.md#shims)) offers the same
-entries with one click.
+**Standalone packages.** The ALCF, AskSage, Argo, free-endpoint and Open
+Design shims ship outside core, in the `argonne` and `contrib` sources. Declare
+a vendor with `shims.install`: `argonne:alcf`, `argonne:argo`,
+`argonne:asksage`, `contrib:tag:tier:free` (the free endpoints) and
+`contrib:opendesign`. A provider config that still names one of these shims
+without a declared source fails at startup with an error naming the vendor and
+the `shims.install` entry to add.
+
+**Cache and refresh.** Manifests and archives are stored under `cache_dir`
+(default `<config_dir>/shims-cache`, next to the config file) and a manifest
+is reused for `remote_ttl` seconds. A warm cache covers every failure except
+the source's verdict on its own bytes: a transport failure, an HTTP error, a
+disk that cannot be written and an unset `token_env` are served from the cache
+and reported as stale. Two are never masked: a `sha256` mismatch, and a body
+that is not an installable archive.
+
+**Precedence.** On a shim-name collision, later sources win: built-ins, then
+entry-point plugins, then manifest installs, then `paths` in order.
+
+**Failure handling.** By default a bad source is logged, reported in the admin
+panel, and skipped — the gateway still starts. Set `shims.strict: true` to abort
+startup instead (an unknown `<source>:` qualifier in `install` is refused too).
+
+**Programmatic use.** `llm_rosetta.shims.rebuild_shims()` loads directories
+directly (no config file needed); `llm_rosetta_gateway.apply_shim_sources(raw, config_path)`
+applies a config dict. `create_app` also applies the section automatically.
 
 !!! warning "Declared sources run code"
     A shim directory may ship a `transforms.py`, which is executed when the shim
-    loads — the same trust level as `pip install`ing a plugin package. Prefer
-    pinning `ref` (and optionally `sha256`), and only add sources you trust.
-    The trust boundary is whoever can edit the config file.
+    loads — the same trust level as `pip install`ing a plugin package. Only add
+    sources you trust. The trust boundary is whoever can edit the config file.
 
 ### Non-LLM Endpoints
 

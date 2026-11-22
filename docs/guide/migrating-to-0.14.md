@@ -4,6 +4,9 @@ title: Migrating to 0.14
 
 # Migrating to 0.14
 
+!!! warning "0.15.0 removed `shims.presets`"
+    This page records 0.14. The `shims.presets`, `shims.include`, `shims.exclude` and `shims.remotes` keys it mentions are no longer read as of 0.15.0, and a config that carries one is refused at load. Declare the vendor in `shims.install` instead (`argonne:alcf`, `argonne:argo`, `argonne:asksage`, `contrib:tag:tier:free`, `contrib:opendesign`) and run `llm-rosetta-migrate --config <path>` to rewrite the file. See [Retired keys](shims.md#retired-keys).
+
 Release 0.14.0 removes the deprecated import paths and class aliases that 0.13.0 kept for one release (epic [#919](https://github.com/Oaklight/llm-rosetta/issues/919)). A removed name fails with a plain `ImportError`, `ModuleNotFoundError` or `AttributeError`; the [retired-names](#retired-names) diagnostic covers provider, shim and model-type names, not Python import paths. This page lists what is gone, what replaces it, and what still works. To rewrite a gateway config and database, use [`llm-rosetta-migrate`](#llm-rosetta-migrate); the [upgrade recipe](#upgrade-recipe) gives the order.
 
 The rows up to [Removed helper modules, gateway stubs and `tool_ops` aliases](#removed-shims) were checked against `origin/master` (commit `756f084169`). The rows from [Removed facades](#removed-facades) on were checked against the head of PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656) (commit `0a8c0be374`): each removed name fails to import or raises, and each replacement imports.

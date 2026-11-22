@@ -8,7 +8,7 @@ Argo is Argonne National Laboratory's internal API gateway, providing access to 
     package. Declare it before using the names below:
 
     ```jsonc
-    { "shims": { "presets": ["argo"] } }
+    { "shims": { "install": ["argonne:argo"] } }
     ```
 
     The package registers the same canonical names, so provider configs do not
@@ -101,7 +101,7 @@ Argo is Argonne National Laboratory's internal API gateway, providing access to 
 
 ## Gateway Configuration
 
-The `presets` declaration above is required — without it these provider entries
+The `shims.install` declaration above is required — without it these provider entries
 fail to load because the shims are not built in.
 
 

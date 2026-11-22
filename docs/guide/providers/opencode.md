@@ -96,7 +96,7 @@ package before using the name:
 
 ```jsonc
 {
-  "shims": { "presets": ["free"] },
+  "shims": { "install": ["contrib:tag:tier:free"] },
   "providers": {
     "zen-free": { "type": "opencode_zen_free--chat_completions" }
   },
@@ -108,7 +108,7 @@ package before using the name:
 
 The shim name is unchanged, so a config written for the earlier
 `opencode_zen_free` preset keeps working after the declaration is switched to
-`free`.
+`contrib:tag:tier:free`.
 
 No API key is required: the lane's credential is the literal word `public`,
 which the shim sends as `Authorization: Bearer public`. The upstream refuses a

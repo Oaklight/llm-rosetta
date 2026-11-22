@@ -103,7 +103,7 @@ When core and a source provide the same shim name:
 - **Between two sources, the first in `shims.sources` order wins** for a vendor
   both publish; the other copy is logged and ignored.
 - **Explicit sources override manifest installs.** A manifest install loads
-  before `shims.paths` and `shims.remotes`.
+  before `shims.paths`.
 
 ## Where today's vendors sit { #placement-today }
 

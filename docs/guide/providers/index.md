@@ -35,6 +35,6 @@ Per-provider guides covering shim configuration, transforms, authentication, and
 | [Antigravity](antigravity.md) | `antigravity--acp` | `acp` | Google Antigravity plan, driven through the local `agy` CLI |
 | [Free Endpoints](free.md) | `kilo_free--*`, `llm7--*`, `opencode_zen_free--*`, `ovhcloud--*` | `chat_completions` | Standalone package; no account needed |
 
-The Argo, AskSage, ALCF, Open Design and Free Endpoints shims ship as standalone packages — declare their source with `shims.presets` (or **Gateway → Shims → Available**) before using their names. See [Standalone shim packages](../shims.md#standalone-shim-packages).
+The Argo, AskSage, ALCF, Open Design and Free Endpoints shims ship as standalone packages — declare them with `shims.install` (or **Gateway → Shims → Available**) before using their names. See [Standalone shim packages](../shims.md#standalone-shim-packages).
 
 For general shim concepts and custom shim registration, see [Provider Shims](../shims.md).

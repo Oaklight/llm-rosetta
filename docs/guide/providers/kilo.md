@@ -39,7 +39,7 @@ or close without notice. Declare the package before using the name:
 
 ```jsonc
 {
-  "shims": { "presets": ["free"] },
+  "shims": { "install": ["contrib:tag:tier:free"] },
   "providers": {
     "kilo-free": { "type": "kilo_free--chat_completions" }
   }

@@ -28,7 +28,7 @@ All four are OpenAI Chat Completions lanes, all are `keyless`, and all carry
 
 ```jsonc
 {
-  "shims": { "presets": ["free"] },
+  "shims": { "install": ["contrib:tag:tier:free"] },
   "providers": {
     "kilo-free": { "type": "kilo_free--chat_completions" },
     "llm7-free": { "type": "llm7--chat_completions" },
@@ -37,8 +37,9 @@ All four are OpenAI Chat Completions lanes, all are `keyless`, and all carry
 }
 ```
 
-`free` replaces the earlier `opencode_zen_free` preset. The OpenCode shim name
-is unchanged, so a config written against that package only needs its preset
+The `contrib:tag:tier:free` entry replaces the 0.14.x `free` preset (and the
+earlier `opencode_zen_free` one), which 0.15.0 no longer reads. The OpenCode
+shim name is unchanged, so a config written against that package only needs its
 declaration switched.
 
 ## Rate limits
