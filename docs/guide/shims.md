@@ -833,7 +833,9 @@ this under its blocks.
 0.15.0 removed the 0.14.x install path. The gateway reads `sources`,
 `install`, `paths`, `disabled`, `cache_dir`, `remote_ttl` and `strict` and
 nothing else. These keys are **refused when the config loads**, with
-`config: 'shims.<key>' was removed in 0.15.0: <advice>`:
+`config: 'shims.<key>' was removed in 0.15.0: <advice>`. One error names every
+retired key the section carries, and a key that holds nothing (`null`, `[]`,
+`{}`) is not a declaration and is accepted:
 
 | Removed key | Replace it with |
 |-------------|-----------------|
