@@ -184,5 +184,8 @@ meta-tool.
 - The agent is started once per provider and reused across requests; it is
   stopped when the gateway shuts down. One provider is one process, not one
   process per request.
-- The process inherits the gateway's environment. If `agy` reads anything
-  sensitive from it, use `acp_argv` with a wrapper that clears it.
+- The process inherits the gateway's environment. A shim's
+  `connection.acp_env` or a provider's `acp_env` adds or overrides named
+  variables without dropping `PATH` or the sign-in store; if `agy` reads
+  anything sensitive from the environment, use `acp_argv` with a wrapper that
+  clears it.
