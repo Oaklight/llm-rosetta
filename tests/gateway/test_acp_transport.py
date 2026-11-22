@@ -181,6 +181,57 @@ FAKE_AGENT = textwrap.dedent(
                 send({"jsonrpc": "2.0", "id": req_id,
                       "result": {"stopReason": "end_turn"}})
                 continue
+            if MODE == "mcp-claude":
+                # Claude Code names the call once, then sends input deltas for
+                # the same call id without a name.
+                cid = "toolu_fake_1"
+                update(sid, {"sessionUpdate": "tool_call_update",
+                             "toolCallId": cid,
+                             "name": "mcp__llm_rosetta_tools__echo",
+                             "title": "llm_rosetta_tools: echo",
+                             "kind": "other", "status": "pending",
+                             "rawInput": {}})
+                update(sid, {"sessionUpdate": "tool_call_update",
+                             "toolCallId": cid,
+                             "rawInput": {"text": "claude"}})
+                send({"jsonrpc": "2.0", "id": 902,
+                      "method": "session/request_permission",
+                      "params": {
+                          "sessionId": sid,
+                          "title": "llm_rosetta_tools: echo",
+                          "subject": {
+                              "type": "tool_call",
+                              "toolCall": {
+                                  "toolCallId": cid,
+                                  "name": "mcp__llm_rosetta_tools__echo",
+                                  "rawInput": {"text": "claude"},
+                                  "title": "llm_rosetta_tools: echo",
+                                  "kind": "other",
+                              },
+                          },
+                          "options": [
+                              {"optionId": "allow-once", "name": "Yes",
+                               "kind": "allow_once"},
+                              {"optionId": "reject", "name": "No",
+                               "kind": "reject_once"},
+                          ],
+                      }})
+                reply = json.loads(sys.stdin.readline())
+                note("permission_reply", reply=reply)
+                result = mcp_call("tools/call", {"name": "echo",
+                                                 "arguments": {"text": "claude"}})
+                try:
+                    answer = result["result"]["content"][0]["text"]
+                except Exception:
+                    answer = json.dumps(result)
+                update(sid, {"sessionUpdate": "tool_call_update",
+                             "toolCallId": cid, "status": "completed"})
+                update(sid, {"sessionUpdate": "agent_message_chunk",
+                             "content": {"type": "text",
+                                         "text": "claude said: " + answer}})
+                send({"jsonrpc": "2.0", "id": req_id,
+                      "result": {"stopReason": "end_turn"}})
+                continue
             if MODE == "mcp-parallel":
                 import threading
                 answers = {}
@@ -1275,6 +1326,67 @@ class TestClientTools:
         assert _kinds(tmp_path).count("new") == 1
         results = [e for e in _log(tmp_path) if e["kind"] == "mcp-result"]
         assert results and results[0]["text"] == "hello back"
+
+    async def test_a_nameless_update_does_not_look_like_a_builtin_tool(
+        self, monkeypatch, tmp_path
+    ):
+        """Claude Code names the call once, then sends input-only updates.
+
+        The second frame has no name; without the call id it reads as a
+        nameless built-in tool and the turn would stop before the MCP call.
+        """
+        transport = AcpTransport(timeout=10)
+        provider = _provider(
+            monkeypatch, tmp_path, "mcp-claude", conversation="conv-claude"
+        )
+        first = _turn("[User]\necho claude")
+        first["tools"] = [ECHO_TOOL]
+        try:
+            stream = await transport.send_streaming(provider, "", first)
+            assert stream.status_code == 200
+            chunks = [chunk async for chunk in stream]
+            assert [chunk["type"] for chunk in chunks] == [
+                "session_start",
+                "tool_call",
+                "stop",
+            ]
+            call = chunks[1]
+            assert call["tool_name"] == "echo"
+            assert call["tool_input"] == {"text": "claude"}
+            replies = [
+                entry for entry in _log(tmp_path) if entry["kind"] == "permission_reply"
+            ]
+            assert replies and replies[-1]["reply"]["result"]["outcome"] == {
+                "outcome": "selected",
+                "optionId": "allow-once",
+            }
+
+            second = _turn("[User]\necho claude")
+            second["tools"] = [ECHO_TOOL]
+            second["prompt"] = first["prompt"] + [
+                {"type": "text", "text": "[Assistant]\n[called echo]"},
+                {"type": "text", "text": "[Tool result]\nclaude back"},
+            ]
+            second["tool_results"] = [
+                {
+                    "tool_call_id": call["tool_call_id"],
+                    "result": "claude back",
+                    "is_error": False,
+                }
+            ]
+            response = await transport.send(provider, "", second)
+        finally:
+            await transport.close()
+
+        assert response.status_code == 200
+        assert response.body is not None
+        assert response.body["stop_reason"] == "end_turn"
+        text = "".join(
+            str(update.get("text") or "")
+            for update in response.body["updates"]
+            if update.get("type") == "text"
+        )
+        assert text == "claude said: claude back"
 
     async def test_parallel_calls_resolved_in_one_request_are_not_asked_again(
         self, monkeypatch, tmp_path

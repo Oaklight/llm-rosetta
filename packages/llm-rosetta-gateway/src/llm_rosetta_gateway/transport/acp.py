@@ -295,6 +295,11 @@ class _TurnRunner:
         self._on_builtin = on_builtin
         self._provider = provider
         self._on_error = on_error or (lambda message: message)
+        #: Tool-call ids this turn has recognised as a client tool.  Agents
+        #: that send the name once and then input deltas without it (Claude
+        #: Code) would otherwise make the later frames look like a nameless
+        #: built-in tool and stop the turn.
+        self._client_calls: set[str] = set()
         self.task = asyncio.create_task(self._run(), name="acp-turn-runner")
 
     async def _run(self) -> None:
@@ -379,12 +384,20 @@ class _TurnRunner:
 
         A tool frame for a client tool the bridge is serving is not a
         built-in one; it is the call the bridge is already turning into a
-        tool-call chunk.
+        tool-call chunk.  The call id is remembered, because some agents send
+        the name once and then send input deltas for the same call without it;
+        a later frame must not look like a nameless built-in tool.
         """
+        call = _tool_of(update)
+        call_id = call.get("toolCallId") or call.get("tool_call_id")
+        if isinstance(call_id, str) and call_id in self._client_calls:
+            return None
         tool = tool_name_of(update)
         if tool is None:
             return None
-        if self._bridge is not None and self._bridge.may_allow(_tool_of(update)):
+        if self._bridge is not None and self._bridge.may_allow(call):
+            if isinstance(call_id, str):
+                self._client_calls.add(call_id)
             return None
         return tool
 
@@ -437,6 +450,25 @@ def _capability(info: Any, name: str) -> Any:
     return getattr(session_caps, name, None)
 
 
+def _permission_tool(params: dict[str, Any]) -> dict[str, Any]:
+    """The tool call a permission request names, in either ACP shape.
+
+    Protocol v1 puts it at ``params.toolCall``; v2 wraps it as
+    ``params.subject`` with ``type: "tool_call"``.  Claude Code sends the v2
+    shape (measured live), so reading only the v1 key would refuse every
+    client tool.
+    """
+    tool = params.get("toolCall")
+    if isinstance(tool, dict) and tool:
+        return tool
+    subject = params.get("subject")
+    if isinstance(subject, dict) and subject.get("type") == "tool_call":
+        tool = subject.get("toolCall")
+        if isinstance(tool, dict):
+            return tool
+    return {}
+
+
 def _agent_request_handler(
     provider: str, bridge_for: Callable[[str], AcpToolBridge | None]
 ) -> Any:
@@ -455,11 +487,11 @@ def _agent_request_handler(
     def handle(method: str, params: dict[str, Any]) -> dict[str, Any]:
         if method != "session/request_permission":
             raise RuntimeError(f"{method} is not available: agent tools are off")
-        tool = params.get("toolCall") or {}
-        title = tool.get("title") if isinstance(tool, dict) else None
+        tool = _permission_tool(params)
+        title = tool.get("title") or params.get("title")
         options = params.get("options") or []
         bridge = bridge_for(str(params.get("sessionId") or ""))
-        if isinstance(tool, dict) and bridge is not None and bridge.may_allow(tool):
+        if bridge is not None and bridge.may_allow(tool):
             logger.info(
                 "ACP provider %r: client tool permission approved (tool: %s)",
                 provider,
