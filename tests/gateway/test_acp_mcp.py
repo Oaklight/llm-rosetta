@@ -101,8 +101,15 @@ class TestTheBridge:
     def test_a_permission_request_matches_a_prefixed_mcp_name(self):
         bridge = AcpToolBridge([ECHO])
         assert bridge.may_allow({"name": "mcp_llm_rosetta_tools_echo"})
+        assert bridge.may_allow({"name": "mcp__llm_rosetta_tools__echo"})
+        assert bridge.may_allow({"title": "llm_rosetta_tools:echo"})
+        assert bridge.may_allow({"title": "llm_rosetta_tools: echo"})
         assert bridge.may_allow({"title": "echo"})
         assert not bridge.may_allow({"name": "search_web"})
+        # A host tool that merely contains the declared name is not bridged.
+        assert not bridge.may_allow({"name": "search_echo"})
+        assert not bridge.may_allow({"name": "mcp_other_tools_echo"})
+        assert not bridge.may_allow({"name": "llm_rosetta_tools_echo_extra"})
 
     async def test_close_fails_a_pending_call(self):
         bridge = AcpToolBridge([ECHO])

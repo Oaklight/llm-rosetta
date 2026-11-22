@@ -138,6 +138,8 @@ FAKE_AGENT = textwrap.dedent(
                  mode=msg["params"].get("modeId"))
             send({"jsonrpc": "2.0", "id": req_id, "result": {}})
         elif method == "session/set_config_option":
+            if MODE == "config-stall":
+                continue
             note(
                 "config",
                 config=msg["params"].get("configId"),
@@ -901,14 +903,18 @@ class TestASessionThatNeverOpens:
     ):
         transport = AcpTransport(timeout=0.2)
         provider = _provider(monkeypatch, tmp_path, "mute-new", conversation="conv-1")
+        body = _turn("[User]\none")
+        body["tools"] = [ECHO_TOOL]
         try:
-            resp = await asyncio.wait_for(
-                transport.send(provider, "", _turn("[User]\none")), 5.0
-            )
+            resp = await asyncio.wait_for(transport.send(provider, "", body), 5.0)
+            bridges = dict(transport._session_bridges)
+            urls = dict(transport._session_urls)
         finally:
             await transport.close()
 
         assert resp.status_code == 503
+        assert bridges == {}
+        assert urls == {}
         assert resp.error_text == (
             "ACP agent for provider 'antigravity' did not open a session "
             "within 0.2s; the process was dropped. Check the agent on the "
@@ -1350,11 +1356,39 @@ class TestAgentToolsAreOff:
             response = await transport.send(
                 _provider(monkeypatch, tmp_path, "mode-refused"), "", TURN
             )
+            kinds = _kinds(tmp_path)
         finally:
             await transport.close()
         assert response.status_code == 502
         assert b"cannot be gated" in response.raw_content
-        assert "prompt" not in _kinds(tmp_path)
+        assert "prompt" not in kinds
+        # The opened session is closed, not left behind for the process to hold.
+        assert "close" in kinds
+
+    async def test_a_failed_model_switch_releases_the_session_and_bridge(
+        self, monkeypatch, tmp_path
+    ):
+        """A session that never becomes a turn must not keep its resources."""
+        transport = AcpTransport(timeout=0.2)
+        provider = _provider(
+            monkeypatch, tmp_path, "config-stall", conversation="conv-config"
+        )
+        body = _turn("[User]\none")
+        body["tools"] = [ECHO_TOOL]
+        body["model"] = "gemini-3.1-flash"
+        try:
+            response = await transport.send(provider, "", body)
+            bridges = dict(transport._session_bridges)
+            urls = dict(transport._session_urls)
+            kinds = _kinds(tmp_path)
+        finally:
+            await transport.close()
+
+        assert response.status_code == 503
+        assert bridges == {}
+        assert urls == {}
+        assert "prompt" not in kinds
+        assert "close" in kinds
 
     def test_the_default_argv_turns_the_agent_auto_approve_off(self):
         from llm_rosetta_gateway.transport.acp import DEFAULT_AGENT_ARGV

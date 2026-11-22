@@ -50,6 +50,22 @@ _MCP_META_TOOLS = frozenset(
     }
 )
 
+#: The ways agents spell one of this server's tools directly.  Keep these
+#: exact: a substring test would let a host tool whose name happens to contain
+#: a declared tool's name (``search_echo`` for a declared ``echo``) through the
+#: permission gate.
+_BRIDGED_NAME_FORMS = (
+    "mcp_{server}_{tool}",
+    "mcp_{server}__{tool}",
+    "mcp__{server}_{tool}",
+    "mcp__{server}__{tool}",
+    "{server}_{tool}",
+    "{server}__{tool}",
+    "{server}:{tool}",
+    "{server}: {tool}",
+    "{server}/{tool}",
+)
+
 #: How long one MCP ``tools/call`` POST may stay open waiting for the client's
 #: tool result.  The session ledger's own TTL usually wins; this bound is what
 #: keeps a wedged HTTP connection from outliving a forgotten session.
@@ -197,13 +213,13 @@ class AcpToolBridge:
             if not isinstance(value, str):
                 continue
             for declared in self._by_name:
-                if (
-                    value == declared
-                    or value.endswith(":" + declared)
-                    or value.endswith("/" + declared)
-                ):
+                if value == declared:
                     return True
-                if f"__{declared}" in value or f"_{declared}" in value:
+                names = {
+                    form.format(server=MCP_SERVER_NAME, tool=declared)
+                    for form in _BRIDGED_NAME_FORMS
+                }
+                if value in names:
                     return True
         return False
 
