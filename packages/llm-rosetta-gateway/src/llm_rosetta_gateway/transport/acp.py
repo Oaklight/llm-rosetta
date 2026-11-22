@@ -208,6 +208,10 @@ class _Turn:
     finished: bool = False
     #: The tools this request declared, served to the agent over MCP.
     bridge: AcpToolBridge | None = None
+    #: A digest of the tools this turn's session was opened with.  The agent's
+    #: MCP server list is fixed for a session, so a request that declares a
+    #: different set needs a fresh session even when it continues this turn.
+    tools_digest: str = ""
     #: The suspended turn this request continues, when it carries a tool
     #: result for one.  Its runner owns the agent's in-flight prompt.
     suspension: _SuspendedTurn | None = None
@@ -976,6 +980,14 @@ class AcpTransport:
             if suspended is None:
                 return None
             if _carries_result_for(body, suspended.bridge.pending_ids()):
+                if suspended.turn.tools_digest != _tools_digest(body):
+                    # The agent's MCP server list is fixed for a session, so
+                    # continuing with the old bridge would expose tools this
+                    # request no longer declares (or hide newly declared
+                    # ones).  The result is part of this request's history, so
+                    # replay it into a fresh session with the new tools.
+                    await self._abandon_suspension(key, suspended)
+                    return None
                 return self._continue_suspended(key, suspended, digests)
             await self._abandon_suspension(key, suspended)
             return None
@@ -1004,6 +1016,7 @@ class AcpTransport:
             held=held,
             digests=digests,
             bridge=suspended.bridge,
+            tools_digest=suspended.turn.tools_digest,
             suspension=suspended,
         )
         suspended.turn = turn
@@ -1054,6 +1067,7 @@ class AcpTransport:
             held=held,
             digests=digests,
             bridge=self._bridge_for(agent.provider, agent.slot, entry.session_id),
+            tools_digest=entry.tools,
         )
 
     async def _resume(
@@ -1206,6 +1220,7 @@ class AcpTransport:
             held=held,
             digests=digests,
             bridge=bridge,
+            tools_digest=_tools_digest(body),
         )
         if key is not None:
             self._ledger.set_limits(
