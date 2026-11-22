@@ -27,14 +27,25 @@ zerodep): the client, the JSON-RPC framing and the session queues.  What
 lives here is the part that is this gateway's own: how a provider's process is
 started, which agent command serves it, when a session is reused or resumed,
 how a refused session is reported, and how the agent's events become chunks.
+
+Client tools take a second path.  A request's tool declarations are served to
+the agent as a loopback MCP endpoint named on ``session/new`` (``acp_mcp``).
+When the agent calls one, the turn *suspends*: the transport hands the API
+client a tool call and ends the response, while the agent's ``session/prompt``
+stays in flight and its MCP call stays unanswered.  The next request that
+carries the matching result answers that MCP call and continues the same
+prompt.  The agent's own built-in tools remain refused.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import hashlib
+import json
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -53,6 +64,7 @@ from .acp_chunks import (
     CHUNK_ERROR,
     CHUNK_SESSION_START,
     CHUNK_STOP,
+    CHUNK_TOOL_CALL,
     _blocks_of,
     _chunk_of,
     _error_of,
@@ -68,6 +80,7 @@ from .acp_ledger import (
     SessionKey,
     block_digests,
 )
+from .acp_mcp import AcpMcpServer, AcpToolBridge, MCP_SERVER_NAME, PendingCall
 from .acp_profile import (
     ensure_profile,
     gemini_dir_of,
@@ -88,17 +101,20 @@ DEFAULT_AGENT_ARGV: tuple[str, ...] = (
     "--dangerously-skip-permissions=false",
 )
 
-#: Phase 1 runs the agent as a plain text model: its own tools (file read,
-#: write, shell, web) are OFF.  The agent is an upstream, not the gateway's
-#: client, and must never run a tool on the gateway host for an API request.
-#: Four layers enforce it (see ``acp_profile``): a gateway-owned agent profile
-#: (``--gemini-dir``) with ``toolPermission: strict``, a custom agent with no
-#: tools, a deny-all ``PreToolUse`` hook, and this client, which refuses every
-#: ``session/request_permission`` and stops a turn at the first tool frame.
-#: Phase 2 will add a controlled tool path (MCP bridge tools named
-#: ``mcp_<server>_<tool>``); flipping this to ``False`` is one half of
-#: re-enabling tools.  An operator-supplied ``acp_argv`` is used as written and
-#: gets none of the profile: it can re-enable host tools, at the operator's own
+#: The agent must never run one of its own tools (file read, write, shell,
+#: web) on the gateway host for an API request.  Four layers enforce it (see
+#: ``acp_profile``): a gateway-owned agent profile (``--gemini-dir``) with
+#: ``toolPermission: strict``, a custom agent with no tools, a deny-all
+#: ``PreToolUse`` hook, and this client, which refuses every
+#: ``session/request_permission`` for a built-in tool and stops a turn at the
+#: first built-in tool frame.
+#:
+#: Client tools are the exception: a tool the API request declared is served
+#: by the gateway's own loopback MCP endpoint, so approving its permission
+#: request runs the *client's* code through the bridge, not a host tool.  The
+#: transport recognises that case by the bridge's pending call and lets it
+#: through.  An operator-supplied ``acp_argv`` is used as written and gets
+#: none of the profile: it can re-enable host tools, at the operator's own
 #: risk; only the client-side refusal and the tool-frame guard remain.
 DENY_AGENT_TOOLS = True
 
@@ -189,6 +205,11 @@ class _Turn:
     #: did not is abandoned: the agent may have recorded half of it, so the
     #: session is closed rather than reused.
     finished: bool = False
+    #: The tools this request declared, served to the agent over MCP.
+    bridge: AcpToolBridge | None = None
+    #: The suspended turn this request continues, when it carries a tool
+    #: result for one.  Its runner owns the agent's in-flight prompt.
+    suspension: _SuspendedTurn | None = None
 
     def release(self) -> None:
         """Give back the locks this turn took, once."""
@@ -201,6 +222,214 @@ class _Turn:
         self.held.clear()
 
 
+@dataclass
+class _SuspendedTurn:
+    """One agent turn paused on a client tool call.
+
+    The agent's ``session/prompt`` is still in flight: its MCP ``tools/call``
+    is waiting, and the runner owns the update iterator that stays open until
+    the next HTTP request supplies the result.
+    """
+
+    turn: _Turn
+    bridge: AcpToolBridge
+    runner: _TurnRunner
+    pending: list[str] = field(default_factory=list)
+    #: The session and process locks the paused turn holds.  A continuation
+    #: adopts them instead of acquiring them again: the same turn is still in
+    #: flight, so a second acquire would deadlock on its own lock.
+    held: list[asyncio.Lock] = field(default_factory=list, repr=False)
+
+    def release(self) -> None:
+        """Give back the locks the suspended turn holds, once."""
+        for lock in reversed(self.held):
+            if lock.locked():
+                lock.release()
+        self.held.clear()
+
+
+class _TurnRunner:
+    """Consume one ``session/prompt`` in the background.
+
+    A turn that stops on a client tool call must hand the API client a tool
+    call and then let the agent wait.  The prompt iterator cannot be owned by
+    the HTTP request that started it, because that request returns while the
+    MCP call is still pending.  This runner reads the iterator and pushes
+    chunks into a queue; whichever request is attached reads from that queue,
+    and the queue survives between requests.
+
+    Args:
+        client: The agent client.
+        session_id: The session the prompt belongs to.
+        text: The prompt text.
+        images: Extra prompt content blocks.
+        bridge: The session's tool bridge.  A ``tools/call`` it records is
+            pushed as a tool-call chunk.
+        on_builtin: Called when the agent starts one of its own tools; returns
+            the message the client receives.
+        provider: The provider name, for messages the client reads.
+        on_error: Turns an agent exception into the client-facing message.
+    """
+
+    def __init__(
+        self,
+        client: ACPClient,
+        session_id: str,
+        text: str,
+        images: list[Any],
+        bridge: AcpToolBridge | None,
+        on_builtin: Callable[[str], Awaitable[str]],
+        provider: str = "",
+        on_error: Callable[[str], str] | None = None,
+    ) -> None:
+        self.queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+        self.stop_reason = ""
+        self.error = ""
+        #: The agent process went away mid-turn (as opposed to refusing it).
+        self.dead = False
+        self._client = client
+        self._session_id = session_id
+        self._text = text
+        self._images = images
+        self._bridge = bridge
+        self._on_builtin = on_builtin
+        self._provider = provider
+        self._on_error = on_error or (lambda message: message)
+        self.task = asyncio.create_task(self._run(), name="acp-turn-runner")
+
+    async def _run(self) -> None:
+        updates = self._client.prompt(
+            self._session_id, self._text, self._images or None
+        ).__aiter__()
+        bridge = self._bridge
+        update_task: asyncio.Task[Any] | None = asyncio.ensure_future(
+            updates.__anext__()
+        )
+        call_task: asyncio.Task[PendingCall] | None = (
+            asyncio.ensure_future(bridge.next_call()) if bridge is not None else None
+        )
+        try:
+            while True:
+                waiters = [
+                    task for task in (update_task, call_task) if task is not None
+                ]
+                if not waiters:
+                    return
+                done, _ = await asyncio.wait(
+                    waiters, return_when=asyncio.FIRST_COMPLETED
+                )
+                if call_task is not None and call_task in done:
+                    await self.queue.put(_tool_call_chunk(call_task.result()))
+                    if bridge is not None:
+                        call_task = asyncio.ensure_future(bridge.next_call())
+                if update_task is not None and update_task in done:
+                    update_task = await self._consume_update(updates, update_task)
+                    if update_task is None:
+                        return
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - one turn, one error chunk
+            await self._fail(str(exc))
+        finally:
+            for task in (update_task, call_task):
+                if task is not None and not task.done():
+                    task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError, Exception):
+                        await task
+            aclose = getattr(updates, "aclose", None)
+            if aclose is not None:
+                try:
+                    await aclose()
+                except Exception:  # noqa: BLE001 - closing must not mask the turn
+                    logger.debug(
+                        "ACP prompt stream did not close cleanly", exc_info=True
+                    )
+
+    async def _consume_update(
+        self,
+        updates: AsyncIterator[dict[str, Any]],
+        task: asyncio.Task[Any],
+    ) -> asyncio.Task[Any] | None:
+        """Handle one agent update; return the task for the next, or ``None``.
+
+        ``None`` means this runner is done: the turn finished, failed, or used
+        a built-in tool.
+        """
+        try:
+            update = task.result()
+        except StopAsyncIteration:
+            await self._finish()
+            return None
+        except Exception as exc:  # noqa: BLE001 - reported to the client
+            await self._fail(str(exc))
+            return None
+        builtin = self._builtin_of(update)
+        if builtin is not None:
+            self.error = await self._on_builtin(builtin)
+            await self.queue.put({"type": CHUNK_ERROR, "message": self.error})
+            await self.queue.put(None)
+            return None
+        chunk = _chunk_of(update)
+        if chunk is not None:
+            await self.queue.put(chunk)
+        return asyncio.ensure_future(updates.__anext__())
+
+    def _builtin_of(self, update: dict[str, Any]) -> str | None:
+        """The name of the agent's own tool in *update*, or ``None``.
+
+        A tool frame for a client tool the bridge is serving is not a
+        built-in one; it is the call the bridge is already turning into a
+        tool-call chunk.
+        """
+        tool = tool_name_of(update)
+        if tool is None:
+            return None
+        if self._bridge is not None and self._bridge.may_allow(_tool_of(update)):
+            return None
+        return tool
+
+    async def _finish(self) -> None:
+        result = self._client.prompt_result(self._session_id)
+        if result is None:
+            self.dead = True
+            await self._fail_raw(
+                f"ACP agent for provider {self._provider!r} ended the turn "
+                f"without reporting a stop; the conversation was closed. The "
+                f"agent process may have exited — check it on the gateway host."
+            )
+            return
+        self.stop_reason = _reason_text(result)
+        await self.queue.put(None)
+
+    async def _fail(self, message: str) -> None:
+        await self._fail_raw(self._on_error(message))
+
+    async def _fail_raw(self, message: str) -> None:
+        self.error = message
+        await self.queue.put({"type": CHUNK_ERROR, "message": message})
+        await self.queue.put(None)
+
+    def cancel(self) -> None:
+        """Stop reading the agent's turn."""
+        self.task.cancel()
+
+
+def _tool_of(update: dict[str, Any]) -> dict[str, Any]:
+    """The ACP tool-call payload inside a ``session/update``."""
+    body = update.get("update")
+    return body if isinstance(body, dict) else update
+
+
+def _tool_call_chunk(call: PendingCall) -> dict[str, Any]:
+    """The transport chunk for one MCP tool call."""
+    return {
+        "type": CHUNK_TOOL_CALL,
+        "tool_call_id": call.call_id,
+        "tool_name": call.tool_name,
+        "tool_input": call.arguments,
+    }
+
+
 def _capability(info: Any, name: str) -> Any:
     """Return one of the agent's advertised session capabilities."""
     caps = getattr(info, "agent_capabilities", None)
@@ -208,16 +437,19 @@ def _capability(info: Any, name: str) -> Any:
     return getattr(session_caps, name, None)
 
 
-def _agent_request_handler(provider: str) -> Any:
+def _agent_request_handler(
+    provider: str, bridge_for: Callable[[str], AcpToolBridge | None]
+) -> Any:
     """Build the handler for requests the agent sends to this client.
 
-    ``session/request_permission`` is answered with a rejection (the
-    ``reject_once`` option when offered, else ``reject_always``, else the
-    protocol's ``cancelled`` outcome), so the agent can only answer in text
-    and the turn goes on.  Any other agent-to-client request (``fs/*``,
-    ``terminal/*``) is refused with an error: none is advertised.  One WARNING
-    line names the provider and the tool title; arguments and contents are
-    never logged.
+    A permission request for a tool the client declared (a bridged MCP call)
+    is approved once.  Every other permission request — the agent's own file,
+    shell and web tools — is refused with ``reject_once`` (or
+    ``reject_always``, or the protocol's ``cancelled`` outcome), so the agent
+    can only use the tools the client offered.  Any other agent-to-client
+    request (``fs/*``, ``terminal/*``) is refused with an error: none is
+    advertised.  One WARNING line names the provider and the tool title;
+    arguments and contents are never logged.
     """
 
     def handle(method: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -226,8 +458,20 @@ def _agent_request_handler(provider: str) -> Any:
         tool = params.get("toolCall") or {}
         title = tool.get("title") if isinstance(tool, dict) else None
         options = params.get("options") or []
+        bridge = bridge_for(str(params.get("sessionId") or ""))
+        if isinstance(tool, dict) and bridge is not None and bridge.may_allow(tool):
+            logger.info(
+                "ACP provider %r: client tool permission approved (tool: %s)",
+                provider,
+                str(title or "bridged tool")[:60],
+            )
+            return _permission_outcome(
+                options,
+                (PermissionOptionKind.ALLOW_ONCE, PermissionOptionKind.ALLOW_ALWAYS),
+            )
         if not DENY_AGENT_TOOLS:
-            # Relaxed (phase 2): approve once what the agent asks.
+            # Relaxed mode for an operator's own agent argv: approve once what
+            # the agent asks.  The default never takes this branch.
             return _permission_outcome(
                 options,
                 (PermissionOptionKind.ALLOW_ONCE, PermissionOptionKind.ALLOW_ALWAYS),
@@ -282,6 +526,11 @@ def _agent_gone(agent: _Agent) -> bool:
     return process is not None and process.returncode is not None
 
 
+#: One ACP session: the provider, the process slot that holds it, and the id
+#: the agent returned.  The id alone is not unique across processes.
+_SessionRef = tuple[str, int, str]
+
+
 class AcpTransport:
     """Transport for providers whose upstream is a local ACP agent."""
 
@@ -302,6 +551,19 @@ class AcpTransport:
         self._agents: dict[str, list[_Agent | None]] = {}
         self._starting: dict[str, asyncio.Lock] = {}
         self._ledger = ledger or AcpSessionLedger()
+        # The loopback MCP endpoints that carry client tools to agents.
+        self._mcp = AcpMcpServer()
+        # Bridge and suspended runner by agent session id, so a permission
+        # request from the agent can be answered without knowing the
+        # conversation key.  The id alone is not unique: two processes of one
+        # provider, or two providers, may both return ``sess-1``.  The key is
+        # therefore ``(provider, process slot, session id)``.
+        self._session_bridges: dict[_SessionRef, AcpToolBridge] = {}
+        self._session_urls: dict[_SessionRef, str] = {}
+        self._suspended: dict[SessionKey, _SuspendedTurn] = {}
+        # Serialises the check-and-take of a suspended turn: two requests for
+        # one conversation must not both decide that they continue it.
+        self._suspend_guards: dict[SessionKey, asyncio.Lock] = {}
 
     @property
     def ledger(self) -> AcpSessionLedger:
@@ -397,7 +659,14 @@ class AcpTransport:
         argv = self._argv(provider_info)
         self._profile(provider_info, argv)
         client = ACPClient(argv)
-        client.set_request_handler(_agent_request_handler(provider_info.config_name))
+        client.set_request_handler(
+            _agent_request_handler(
+                provider_info.config_name,
+                lambda session_id: self._bridge_for(
+                    provider_info.config_name, slot, session_id
+                ),
+            )
+        )
         try:
             await client.start()
             info = await client.initialize(
@@ -474,6 +743,17 @@ class AcpTransport:
             self._ledger.drop_provider(key)
         self._agents.clear()
         self._starting.clear()
+        for suspension in self._suspended.values():
+            suspension.runner.cancel()
+            suspension.bridge.close()
+        self._suspended.clear()
+        for bridge in self._session_bridges.values():
+            bridge.close()
+        self._session_bridges.clear()
+        for url in self._session_urls.values():
+            self._mcp.unregister(url)
+        self._session_urls.clear()
+        await self._mcp.close()
 
     async def aclose_provider(self, provider_name: str) -> None:
         """Stop one provider's agent processes, and forget its sessions.
@@ -494,6 +774,19 @@ class AcpTransport:
             if k.split("#", 1)[0] != provider_name
         }
         self._ledger.drop_provider(provider_name)
+        for key, suspension in list(self._suspended.items()):
+            if key.provider == provider_name:
+                suspension.runner.cancel()
+                suspension.bridge.close()
+                self._suspended.pop(key, None)
+        for ref, bridge in list(self._session_bridges.items()):
+            if ref[0] != provider_name:
+                continue
+            url = self._session_urls.pop(ref, None)
+            if url:
+                self._mcp.unregister(url)
+            bridge.close()
+            self._session_bridges.pop(ref, None)
         for agent in pool:
             if agent is not None:
                 await agent.client.stop()
@@ -549,6 +842,17 @@ class AcpTransport:
         prompt = body.get("prompt")
         if not isinstance(prompt, list) or not prompt:
             raise AcpTurnError("the acp turn carries no prompt", status_code=400)
+        key = self._key(provider_info)
+        if _tool_defs(body) and key is None:
+            # A tool call suspends the turn, and only a declared conversation
+            # id can find that suspension when the result arrives.  A derived
+            # id may name two conversations, so it must never key one.
+            raise AcpTurnError(
+                "this request declares tools, but an ACP lane needs a declared "
+                "conversation id to carry a tool result back to the agent; "
+                "send a session header (for example `x-session-id`) and retry.",
+                status_code=400,
+            )
         # A process that exited between turns still occupies its slot; taking
         # it out first is what makes this request start a fresh one instead of
         # writing into a dead pipe.
@@ -557,10 +861,18 @@ class AcpTransport:
         # reused session alike): the agent can write files, and its own
         # profile is among them.
         self._profile(provider_info, self._argv(provider_info))
-        key = self._key(provider_info)
+        digests = block_digests(_blocks_of(body))
+
+        # A suspended turn still owns the session and process locks.  Taking
+        # it is a check-and-take under a per-conversation guard: a second
+        # request must not race the first to continue or abandon it.
+        if key is not None:
+            taken = await self._take_suspended(key, body, digests)
+            if taken is not None:
+                return taken
+
         entry = self._ledger.get(key) if key is not None else None
         agent = await self._agent(provider_info, self._slot_for(provider_info, entry))
-        digests = block_digests(_blocks_of(body))
         held: list[asyncio.Lock] = []
 
         try:
@@ -601,6 +913,58 @@ class AcpTransport:
                     lock.release()
             raise
 
+    async def _take_suspended(
+        self, key: SessionKey, body: dict[str, Any], digests: tuple[str, ...]
+    ) -> tuple[_Turn, dict[str, Any]] | None:
+        """Continue a suspended turn when this request carries its result.
+
+        A request that does not carry one abandons the suspension: the agent
+        is parked on an MCP call nobody will answer, and the next turn must
+        not wait behind it.
+        """
+        guard = self._suspend_guards.setdefault(key, asyncio.Lock())
+        async with guard:
+            suspended = self._suspended.get(key)
+            if suspended is not None and _suspension_is_dead(suspended):
+                await self._abandon_suspension(key, suspended)
+                suspended = None
+            if suspended is None:
+                return None
+            if _carries_result_for(body, suspended.bridge.pending_ids()):
+                return self._continue_suspended(key, suspended, digests)
+            await self._abandon_suspension(key, suspended)
+            return None
+
+    def _continue_suspended(
+        self,
+        key: SessionKey,
+        suspended: _SuspendedTurn,
+        digests: tuple[str, ...],
+    ) -> tuple[_Turn, dict[str, Any]]:
+        """Adopt a suspended turn for the request that carries its result.
+
+        The paused turn holds the session and process locks through the
+        suspension.  The continuation takes those locks over rather than
+        acquiring them again — the same ``session/prompt`` is still in flight,
+        so a second acquire would wait on itself.
+        """
+        held = suspended.held
+        suspended.held = []
+        suspended.turn.finished = True
+        turn = _Turn(
+            agent=suspended.turn.agent,
+            session_id=suspended.turn.session_id,
+            model=suspended.turn.model,
+            entry=suspended.turn.entry,
+            held=held,
+            digests=digests,
+            bridge=suspended.bridge,
+            suspension=suspended,
+        )
+        suspended.turn = turn
+        self._suspended.pop(key, None)
+        return turn, _start_of(turn)
+
     async def _reuse(
         self,
         provider_info: ProviderInfo,
@@ -614,6 +978,11 @@ class AcpTransport:
         """Continue the recorded session, when the request may ride on it."""
         entry = self._ledger.get(key)
         if entry is None:
+            return None
+        if entry.tools != _tools_digest(body):
+            # The agent cannot gain or lose an MCP server inside one session;
+            # the next turn would still see the old tool list.
+            await self._forget(entry)
             return None
         cwd = _workspace(provider_info, body)
         if entry.cwd != cwd:
@@ -639,6 +1008,7 @@ class AcpTransport:
             entry=entry,
             held=held,
             digests=digests,
+            bridge=self._bridge_for(agent.provider, agent.slot, entry.session_id),
         )
 
     async def _resume(
@@ -658,7 +1028,12 @@ class AcpTransport:
         if agent.can_resume():
             try:
                 await _bounded(
-                    agent.client.resume_session(entry.session_id, cwd, []), deadline
+                    agent.client.resume_session(
+                        entry.session_id,
+                        cwd,
+                        self._mcp_servers_for(agent, entry.session_id),
+                    ),
+                    deadline,
                 )
             except JSONRPCException as exc:
                 logger.info(
@@ -668,13 +1043,24 @@ class AcpTransport:
                     exc,
                 )
                 return None
-            await self._text_only(provider_info, agent, entry.session_id, deadline)
+            await self._text_only(
+                provider_info,
+                agent,
+                entry.session_id,
+                deadline,
+                allow_tools=bool(entry.tools),
+            )
             entry.live = True
             return entry.session_id
         if agent.can_load():
             try:
                 await _bounded(
-                    agent.client.load_session(entry.session_id, cwd, []), deadline
+                    agent.client.load_session(
+                        entry.session_id,
+                        cwd,
+                        self._mcp_servers_for(agent, entry.session_id),
+                    ),
+                    deadline,
                 )
             except JSONRPCException as exc:
                 logger.info(
@@ -692,7 +1078,13 @@ class AcpTransport:
                     replayed,
                     entry.session_id,
                 )
-            await self._text_only(provider_info, agent, entry.session_id, deadline)
+            await self._text_only(
+                provider_info,
+                agent,
+                entry.session_id,
+                deadline,
+                allow_tools=bool(entry.tools),
+            )
             entry.live = True
             return entry.session_id
         logger.info(
@@ -715,9 +1107,30 @@ class AcpTransport:
     ) -> _Turn:
         """Open a new session and send the whole conversation into it."""
         cwd = _workspace(provider_info, body)
+        bridge: AcpToolBridge | None = None
+        mcp_servers: list[dict[str, Any]] = []
+        url = ""
+        tool_defs = _tool_defs(body)
+        if tool_defs:
+            bridge = AcpToolBridge(
+                tool_defs, session_label=key.conversation if key else ""
+            )
+            url = await self._mcp.register(bridge)
+            mcp_servers = [
+                {
+                    "name": MCP_SERVER_NAME,
+                    "type": "http",
+                    "url": url,
+                    "headers": [],
+                }
+            ]
         try:
-            session = await _bounded(agent.client.new_session(cwd, []), deadline)
+            session = await _bounded(
+                agent.client.new_session(cwd, mcp_servers), deadline
+            )
         except JSONRPCException as exc:
+            if bridge is not None:
+                self._mcp.unregister(url)
             message = str(exc)
             raise AcpTurnError(
                 _sign_in_message(provider_info, message),
@@ -725,7 +1138,15 @@ class AcpTransport:
             ) from exc
 
         session_id = getattr(session, "session_id", "") or ""
-        await self._text_only(provider_info, agent, session_id, deadline)
+        if bridge is not None:
+            # The agent received this URL in ``session/new``; it may call it at
+            # any point until the session is closed.
+            ref = (agent.provider, agent.slot, session_id)
+            self._session_bridges[ref] = bridge
+            self._session_urls[ref] = url
+        await self._text_only(
+            provider_info, agent, session_id, deadline, allow_tools=bool(tool_defs)
+        )
         model = _current_model(getattr(session, "config_options", None))
         requested = str(body.get("model") or "")
         if requested and requested != model:
@@ -739,6 +1160,7 @@ class AcpTransport:
             tail_start=0,
             held=held,
             digests=digests,
+            bridge=bridge,
         )
         if key is not None:
             self._ledger.set_limits(
@@ -754,6 +1176,7 @@ class AcpTransport:
                 seen=tuple(digests),
                 agent_slot=agent.slot,
                 live=True,
+                tools=_tools_digest(body),
             )
             turn.entry = entry
             for displaced in self._ledger.put(entry):
@@ -766,6 +1189,8 @@ class AcpTransport:
         agent: _Agent,
         session_id: str,
         deadline: float,
+        *,
+        allow_tools: bool = False,
     ) -> None:
         """Put the session in the mode in which every tool use is asked for.
 
@@ -776,8 +1201,14 @@ class AcpTransport:
         a session whose tools cannot be shown to be gated must not run.  The
         hardened profile asks for everything through ``toolPermission:
         strict`` and needs no mode.
+
+        A request that declares tools cannot use this mode: it would block
+        the very tools the client offered.  Such a lane relies on the client
+        refusing every built-in tool request, and the operator should set the
+        agent's own permission mode to one that keeps host tools behind a
+        prompt.
         """
-        if not DENY_AGENT_TOOLS or self._hardened(provider_info):
+        if not DENY_AGENT_TOOLS or allow_tools or self._hardened(provider_info):
             return
         try:
             await _bounded(
@@ -866,26 +1297,55 @@ class AcpTransport:
             start = _start_of(turn)
         client = turn.agent.client
         session_id = turn.session_id
+        key = self._key(provider_info)
         if collect is not None:
             collect.append(start)
+        runner: _TurnRunner | None = None
         try:
             yield start
 
-            blocks = _blocks_of(body)
-            sending = blocks[turn.tail_start :]
-            text = _prompt_text(sending)
-            images: list[Any] = [b for b in sending if b.get("type") == "image"]
+            if turn.suspension is not None:
+                # The agent is still running the prompt that called a client
+                # tool.  Hand it this request's result; there is no second
+                # prompt to send.
+                self._resolve_results(turn.bridge, body)
+                runner = turn.suspension.runner
+            else:
+                blocks = _blocks_of(body)
+                sending = blocks[turn.tail_start :]
+                text = _prompt_text(sending)
+                images: list[Any] = [b for b in sending if b.get("type") == "image"]
+                runner = _TurnRunner(
+                    client,
+                    session_id,
+                    text,
+                    images,
+                    turn.bridge,
+                    on_builtin=lambda name: self._runner_tool_stop(
+                        turn, provider_info, name
+                    ),
+                    provider=provider_info.config_name,
+                    on_error=lambda message: _sign_in_message(provider_info, message),
+                )
             try:
-                async for update in _prompt_updates(
-                    client, session_id, text, images, deadline
+                async for chunk in self._forward_chunks(
+                    provider_info, turn, runner, deadline, collect, key
                 ):
-                    _guard_tool_frame(update)
-                    chunk = _chunk_of(update)
-                    if chunk is None:
-                        continue
-                    if collect is not None:
-                        collect.append(chunk)
                     yield chunk
+                if turn.finished:
+                    # ``_forward_chunks`` stopped the response at a client
+                    # tool call; the turn is suspended, not abandoned.
+                    return
+                if runner.error:
+                    # The runner already put the client-facing error chunk in
+                    # the stream.  What the agent recorded of the turn is
+                    # unknown, so the session is not reused; a process that
+                    # went away is taken out of its pool.
+                    turn.finished = True
+                    await self._forget(turn.entry)
+                    if runner.dead:
+                        self._drop_agent(turn.agent)
+                    return
                 result = client.prompt_result(session_id)
                 if result is None:
                     # End of iteration is not a completion.  The vendored
@@ -906,6 +1366,8 @@ class AcpTransport:
                     yield _failure(collect, message)
                     return
             except _TurnDeadline:
+                if runner is not None:
+                    runner.cancel()
                 await self._forget(turn.entry)
                 turn.finished = True
                 # A process that let one turn run past its deadline keeps its
@@ -921,24 +1383,11 @@ class AcpTransport:
                 )
                 yield _failure(collect, message)
                 return
-            except _AgentToolUse as exc:
-                yield _failure(
-                    collect, await self._stop_for_tool(turn, provider_info, exc.tool)
-                )
-                return
-            except JSONRPCException as exc:
-                # What the agent recorded of a failed turn is unknown, so the
-                # session cannot be reused: the next turn opens a fresh one.
-                turn.finished = True
-                await self._forget(turn.entry)
-                yield _failure(collect, _sign_in_message(provider_info, str(exc)))
-                await _close_quietly(client, session_id)
-                return
             turn.finished = True
             await self._settle(turn, provider_info)
             stop = {
                 "type": CHUNK_STOP,
-                "stop_reason": getattr(result, "stop_reason", "") or "end_turn",
+                "stop_reason": runner.stop_reason or _reason_text(result),
             }
             if collect is not None:
                 collect.append(stop)
@@ -957,17 +1406,101 @@ class AcpTransport:
                 # given back takes the lane down with it.
                 turn.release()
 
+    async def _forward_chunks(
+        self,
+        provider_info: ProviderInfo,
+        turn: _Turn,
+        runner: _TurnRunner,
+        deadline: float,
+        collect: list[dict[str, Any]] | None,
+        key: SessionKey | None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Relay the runner's chunks, ending the response at a tool call.
+
+        A tool call is the last thing this response carries: the API client
+        has to run it, so the agent's prompt is left suspended and the next
+        request continues it.
+        """
+        async for chunk in _queued_chunks(runner, deadline):
+            if chunk.get("type") != CHUNK_TOOL_CALL:
+                if collect is not None:
+                    collect.append(chunk)
+                yield chunk
+                continue
+            bridge = turn.bridge
+            if key is None or bridge is None:
+                # No conversation to suspend, so the agent's prompt cannot be
+                # continued.  Give the session back before telling the client
+                # why: a one-off session has no ledger entry to close it later.
+                await self._abandon(turn)
+                yield _failure(
+                    collect,
+                    f"ACP agent for provider {provider_info.config_name!r} asked "
+                    f"for a client tool, but this turn has no declared "
+                    f"conversation to resume it on.",
+                )
+                return
+            if chunk.get("tool_call_id") not in bridge.pending_ids():
+                # The client already returned this call's result — a request
+                # may carry the results of a parallel batch — so the agent has
+                # continued past it; there is nothing to pause on.
+                continue
+            if collect is not None:
+                collect.append(chunk)
+            yield chunk
+            self._suspend(key, turn, runner, bridge)
+            stop = {"type": CHUNK_STOP, "stop_reason": "tool_calls"}
+            if collect is not None:
+                collect.append(stop)
+            yield stop
+            return
+
+    def _suspend(
+        self,
+        key: SessionKey,
+        turn: _Turn,
+        runner: _TurnRunner,
+        bridge: AcpToolBridge,
+    ) -> None:
+        """Pause *turn* on a client tool call without giving its locks back.
+
+        The agent's ``session/prompt`` is still in flight.  The locks stay
+        held by the suspension and are adopted by the request that carries
+        the tool result (or released when the suspension is abandoned).
+        """
+        if turn.entry is not None:
+            turn.entry.remember(turn.digests, max_blocks=self._ledger.max_blocks)
+            turn.entry.live = True
+            turn.entry.touch()
+        held = turn.held
+        turn.held = []
+        turn.finished = True
+        suspended = _SuspendedTurn(
+            turn=turn,
+            bridge=bridge,
+            runner=runner,
+            pending=bridge.pending_ids(),
+            held=held,
+        )
+        self._suspended[key] = suspended
+
+    async def _runner_tool_stop(
+        self, turn: _Turn, provider_info: ProviderInfo, tool: str
+    ) -> str:
+        """Stop a turn the runner saw the agent use a built-in tool in."""
+        return await self._stop_for_tool(turn, provider_info, tool)
+
     async def _stop_for_tool(
         self, turn: _Turn, provider_info: ProviderInfo, tool: str
     ) -> str:
         """End a turn in which the agent started one of its own tools.
 
-        Phase 1 allows none, so the turn stops here: cancelled, the session
-        closed (what the tool did before the cancel is unknown, so the session
-        is not reused).  The client is told, in a status it can act on, that
-        the turn did not complete: an empty 200 would read as "the model said
-        nothing".  The log line names the provider and the tool, never
-        arguments or output.
+        Only a tool the client declared may run.  A built-in one stops the
+        turn here: cancelled, the session closed (what the tool did before
+        the cancel is unknown, so the session is not reused).  The client is
+        told, in a status it can act on, that the turn did not complete: an
+        empty 200 would read as "the model said nothing".  The log line names
+        the provider and the tool, never arguments or output.
 
         Returns:
             The message of the error the client receives.
@@ -991,8 +1524,37 @@ class AcpTransport:
     async def _abandon(self, turn: _Turn) -> None:
         """Give back a session whose turn did not finish."""
         turn.finished = True
+        if turn.suspension is not None:
+            turn.suspension.runner.cancel()
+            key = turn.entry.key if turn.entry is not None else None
+            if key is not None and self._suspended.get(key) is turn.suspension:
+                self._suspended.pop(key, None)
+            turn.suspension.held = []
+        # Close the bridge first: an agent parked on a bridged call would not
+        # read the session/close until that call is answered.
+        self._release_session_resources(
+            turn.agent.provider, turn.agent.slot, turn.session_id
+        )
         await self._forget(turn.entry)
         await _close_quietly(turn.agent.client, turn.session_id)
+
+    async def _abandon_suspension(
+        self, key: SessionKey, suspended: _SuspendedTurn
+    ) -> None:
+        """Give back a turn whose tool result never came.
+
+        The agent is parked on an MCP call nobody will answer, so its prompt
+        is cancelled and the session closed: what it recorded of the partial
+        turn is unknown.
+        """
+        if self._suspended.get(key) is suspended:
+            self._suspended.pop(key, None)
+        suspended.turn.finished = True
+        suspended.runner.cancel()
+        suspended.bridge.close()
+        await self._forget(suspended.turn.entry)
+        await _close_quietly(suspended.turn.agent.client, suspended.turn.session_id)
+        suspended.release()
 
     async def _settle(self, turn: _Turn, provider_info: ProviderInfo) -> None:
         """Record what the agent has now seen, or close a one-off session."""
@@ -1000,6 +1562,9 @@ class AcpTransport:
         if entry is None:
             # A request that declared no conversation gets one session for its
             # own, and nothing will ever come back for it.
+            self._release_session_resources(
+                turn.agent.provider, turn.agent.slot, turn.session_id
+            )
             await _close_quietly(turn.agent.client, turn.session_id)
             return
         entry.remember(turn.digests, max_blocks=self._ledger.max_blocks)
@@ -1016,6 +1581,56 @@ class AcpTransport:
                 self._ledger.max_blocks,
             )
 
+    def _resolve_results(
+        self, bridge: AcpToolBridge | None, body: dict[str, Any]
+    ) -> None:
+        """Hand this request's tool results to the bridge's pending calls."""
+        if bridge is None:
+            return
+        for result in body.get("tool_results") or []:
+            if not isinstance(result, dict):
+                continue
+            call_id = result.get("tool_call_id")
+            if not isinstance(call_id, str) or not call_id:
+                continue
+            bridge.resolve(
+                call_id,
+                result.get("result", ""),
+                is_error=bool(result.get("is_error")),
+            )
+
+    def _bridge_for(
+        self, provider: str, slot: int, session_id: str
+    ) -> AcpToolBridge | None:
+        """The tool bridge of one agent process's session, if it has one."""
+        return self._session_bridges.get((provider, slot, session_id))
+
+    def _mcp_servers_for(self, agent: _Agent, session_id: str) -> list[dict[str, Any]]:
+        """The MCP server entry that re-attaches a session's tool bridge."""
+        url = self._session_urls.get((agent.provider, agent.slot, session_id))
+        if not url:
+            return []
+        return [
+            {
+                "name": MCP_SERVER_NAME,
+                "type": "http",
+                "url": url,
+                "headers": [],
+            }
+        ]
+
+    def _release_session_resources(
+        self, provider: str, slot: int, session_id: str
+    ) -> None:
+        """Close a session's tool bridge and stop serving its URL."""
+        ref = (provider, slot, session_id)
+        bridge = self._session_bridges.pop(ref, None)
+        url = self._session_urls.pop(ref, None)
+        if bridge is not None:
+            bridge.close()
+        if url:
+            self._mcp.unregister(url)
+
     async def _forget(self, entry: LedgerEntry | None) -> None:
         """Close a session and forget it, so the next turn starts fresh."""
         if entry is None:
@@ -1026,6 +1641,9 @@ class AcpTransport:
     async def _close_entry(self, entry: LedgerEntry) -> None:
         """Close one recorded session on the process that holds it."""
         entry.live = False
+        self._release_session_resources(
+            entry.key.provider, entry.agent_slot, entry.session_id
+        )
         agent = self._agent_at(entry.key.provider, entry.agent_slot)
         await _close_quietly(agent.client if agent else None, entry.session_id)
 
@@ -1234,67 +1852,95 @@ class _AcpStream(UpstreamStream):
 # -- helpers ---------------------------------------------------------------
 
 
-async def _prompt_updates(
-    client: ACPClient,
-    session_id: str,
-    text: str,
-    images: list[Any],
-    deadline: float,
+async def _queued_chunks(
+    runner: _TurnRunner, deadline: float
 ) -> AsyncIterator[dict[str, Any]]:
-    """Yield the turn's updates, giving up when the deadline passes.
+    """Yield the turn runner's chunks, giving up when the deadline passes.
 
     ACP has no turn timeout, and an agent that stops answering keeps the
     session — and the process lock that serialises the lane — forever.  The
-    wait is per update rather than around the whole loop so the deadline is
-    also a *stall* deadline: a turn that keeps producing is allowed to finish.
+    wait is per chunk rather than around the whole loop so the deadline is
+    also a *stall* deadline: a turn that keeps producing may finish.  While a
+    turn is suspended no request is reading; its runner keeps filling the
+    queue, so a continuation picks the chunks up where the first request
+    stopped.
 
     Raises:
-        _TurnDeadline: No update arrived before *deadline*.
+        _TurnDeadline: No chunk arrived before *deadline*.
     """
-    updates = client.prompt(session_id, text, images or None).__aiter__()
     loop = asyncio.get_running_loop()
-    try:
-        while True:
-            remaining = deadline - loop.time()
-            if remaining <= 0:
-                raise _TurnDeadline
-            try:
-                yield await asyncio.wait_for(updates.__anext__(), remaining)
-            except StopAsyncIteration:
-                return
-            except asyncio.TimeoutError as exc:  # noqa: UP041 - 3.10 spelling
-                raise _TurnDeadline from exc
-    finally:
-        # Leaving early — a deadline, or a caller that stopped reading — must
-        # release the agent's queue, or the vendored client keeps a getter
-        # waiting on a turn nobody will read.
-        aclose = getattr(updates, "aclose", None)
-        if aclose is not None:
-            try:
-                await aclose()
-            except Exception:  # noqa: BLE001 - closing must not mask the turn
-                logger.debug("ACP prompt stream did not close cleanly", exc_info=True)
+    while True:
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            raise _TurnDeadline
+        getter = asyncio.create_task(runner.queue.get())
+        try:
+            done, _ = await asyncio.wait({getter}, timeout=remaining)
+        except BaseException:
+            # The turn was cancelled or closed while waiting.  Cancelling the
+            # getter here, rather than leaving it to the loop's shutdown,
+            # keeps its coroutine from outliving the event loop.
+            getter.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await getter
+            raise
+        if not done:
+            getter.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await getter
+            raise _TurnDeadline
+        chunk = getter.result()
+        if chunk is None:
+            return
+        yield chunk
 
 
 class _TurnDeadline(Exception):
     """The agent stopped answering inside the turn's deadline."""
 
 
-def _guard_tool_frame(update: dict[str, Any]) -> None:
-    """Raise when *update* is a tool frame and tools are not allowed."""
-    if not DENY_AGENT_TOOLS:
-        return
-    tool = tool_name_of(update)
-    if tool is not None:
-        raise _AgentToolUse(tool)
+def _suspension_is_dead(suspended: _SuspendedTurn) -> bool:
+    """Whether the process or bridge behind a suspended turn has gone."""
+    return suspended.bridge.closed or _agent_gone(suspended.turn.agent)
 
 
-class _AgentToolUse(Exception):
-    """The agent reported one of its own tools; phase 1 allows none."""
+def _tool_defs(body: dict[str, Any]) -> list[dict[str, Any]]:
+    """The tool definitions a turn body carries, in MCP shape."""
+    tools = body.get("tools")
+    if not isinstance(tools, list):
+        return []
+    return [
+        tool
+        for tool in tools
+        if isinstance(tool, dict) and isinstance(tool.get("name"), str)
+    ]
 
-    def __init__(self, tool: str) -> None:
-        super().__init__(tool)
-        self.tool = tool
+
+def _tools_digest(body: dict[str, Any]) -> str:
+    """A stable digest of the tools a session was opened with.
+
+    An agent cannot gain or lose an MCP server inside one session, so a
+    request whose tools differ needs a fresh session rather than a reused one.
+    """
+    tools = _tool_defs(body)
+    if not tools:
+        return ""
+    blob = json.dumps(tools, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:32]
+
+
+def _carries_result_for(body: dict[str, Any], pending_ids: list[str]) -> bool:
+    """Whether this request returns a result for one of *pending_ids*."""
+    if not pending_ids:
+        return False
+    wanted = set(pending_ids)
+    for result in body.get("tool_results") or []:
+        if not isinstance(result, dict):
+            continue
+        call_id = result.get("tool_call_id")
+        if isinstance(call_id, str) and call_id in wanted:
+            return True
+    return False
 
 
 async def _bounded(coro: Any, deadline: float) -> Any:
@@ -1414,6 +2060,12 @@ def _current_model(config_options: Any) -> str:
         ):
             return str(getattr(option, "current_value", "") or "")
     return ""
+
+
+def _reason_text(result: Any) -> str:
+    """The wire spelling of a prompt result's stop reason."""
+    reason = getattr(result, "stop_reason", "")
+    return str(getattr(reason, "value", reason) or "end_turn")
 
 
 def _sign_in_message(provider_info: ProviderInfo, message: str) -> str:

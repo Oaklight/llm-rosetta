@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
 
@@ -114,12 +115,19 @@ class TestTheProfileOnDisk:
         root = _root(provider)
         settings = json.loads((root / "antigravity-cli" / "settings.json").read_text())
         assert settings["toolPermission"] == "strict"
+        assert settings["permissions"]["allow"] == ["mcp(*)"]
         hooks = json.loads((root / "config" / "hooks.json").read_text())
-        hook = hooks["gateway-deny"]["PreToolUse"][0]
+        hook = hooks["gateway-client-tools"]["PreToolUse"][0]
         assert hook["matcher"] == "*"
-        assert '"decision":"deny"' in hook["hooks"][0]["command"]
+        command = hook["hooks"][0]["command"]
+        assert "allow_client_tools.py" in command
+        script = root / "config" / "hooks" / "allow_client_tools.py"
+        text = script.read_text()
+        assert "call_mcp_tool" in text and "llm_rosetta_tools" in text
+        assert stat.S_IMODE(os.stat(script).st_mode) == 0o600
         agent = (root / "config" / "agents" / AGENT_NAME / "agent.md").read_text()
         assert "tools: []" in agent and "excludeDefaultComponents: true" in agent
+        assert "llm_rosetta_tools" in agent
         assert stat.S_IMODE(os.stat(root).st_mode) == 0o700
         assert (
             stat.S_IMODE(os.stat(root / "antigravity-cli" / "settings.json").st_mode)
@@ -198,7 +206,63 @@ class TestTheProfileOnDisk:
         settings.write_text('{"modelProvider": "gemini", "toolPermission": "x"}')
         ensure_profile(str(tmp_path))
         data = json.loads(settings.read_text())
-        assert data == {"modelProvider": "gemini", "toolPermission": "strict"}
+        assert data == {
+            "modelProvider": "gemini",
+            "toolPermission": "strict",
+            "permissions": {"allow": ["mcp(*)"]},
+        }
+
+    def test_the_hook_allows_only_the_client_server(self, tmp_path):
+        ensure_profile(str(tmp_path))
+        script = tmp_path / "config" / "hooks" / "allow_client_tools.py"
+
+        def decide(payload):
+            proc = subprocess.run(
+                [sys.executable, str(script)],
+                input=json.dumps(payload),
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            return json.loads(proc.stdout)["decision"]
+
+        assert (
+            decide(
+                {
+                    "toolCall": {
+                        "name": "call_mcp_tool",
+                        "args": {
+                            "ServerName": "llm_rosetta_tools",
+                            "ToolName": "echo",
+                        },
+                    }
+                }
+            )
+            == "allow"
+        )
+        assert (
+            decide(
+                {
+                    "toolCall": {
+                        "name": "call_mcp_tool",
+                        "args": {"ServerName": "other", "ToolName": "echo"},
+                    }
+                }
+            )
+            == "deny"
+        )
+        assert decide({"toolCall": {"name": "run_command", "args": {}}}) == "deny"
+        assert (
+            decide(
+                {
+                    "toolCall": {
+                        "name": "list_resources",
+                        "args": {"ServerName": "llm_rosetta_tools"},
+                    }
+                }
+            )
+            == "allow"
+        )
 
     def test_an_untouched_profile_is_not_rewritten(self, tmp_path):
         assert ensure_profile(str(tmp_path)) == []
@@ -256,11 +320,11 @@ class TestTheGuard:
         assert response.status_code == 502
         assert b"agent tools are disabled" in response.raw_content
 
-    async def test_an_mcp_named_frame_is_blocked_too_in_phase_one(
+    async def test_an_undeclared_mcp_named_frame_is_blocked(
         self, monkeypatch, tmp_path
     ):
-        # Phase 2 names its bridge tools ``mcp_<server>_<tool>`` and will
-        # relax this; phase 1 has no bridge, so any tool frame is refused.
+        # A request with no declared tools has no bridge, so a frame that
+        # merely looks like an MCP tool is still an agent tool and is refused.
         provider = _agy_provider(monkeypatch, tmp_path, "mcp-tool")
         transport = AcpTransport(timeout=5)
         try:
@@ -383,6 +447,7 @@ class TestArgvHelpers:
             "agy",
             "acp",
             PERMISSION_FLAG,
+            "--process-per-session",
             "--gemini-dir",
             "/state/x",
             "--agent",

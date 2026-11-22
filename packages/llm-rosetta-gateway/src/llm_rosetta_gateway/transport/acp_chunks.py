@@ -19,6 +19,7 @@ CHUNK_SESSION_START = "session_start"
 CHUNK_TEXT = "text"
 CHUNK_THOUGHT = "thought"
 CHUNK_USAGE = "usage"
+CHUNK_TOOL_CALL = "tool_call"
 CHUNK_STOP = "stop"
 CHUNK_ERROR = "error"
 
@@ -78,10 +79,10 @@ def _chunk_of(update: dict[str, Any]) -> dict[str, Any] | None:
 
     ``ACPClient.prompt`` yields the notification's *params*, so the update
     itself sits under ``"update"``.  Only the update kinds the ``acp``
-    converter understands are returned.  Everything else — tool calls, plans,
-    mode changes, available commands — is dropped for now: the converter has
-    no IR event for them in this phase, and inventing one here would report a
-    capability the lane does not have.
+    converter understands are returned.  A tool frame is not one of them: a
+    bridged client tool travels as ``CHUNK_TOOL_CALL`` from the MCP bridge,
+    and a built-in tool frame stops the turn in
+    :class:`~.acp._TurnRunner`.
     """
     body = update.get("update")
     if isinstance(body, dict):

@@ -1,16 +1,15 @@
 """ACP tool operations: what this dialect can and cannot say.
 
-Phase 1 of the Antigravity channel carries text, thinking and images.  The
-agent behind ACP owns its own tools, and the client's tools reach it over an
-MCP bridge this dialect does not build yet, so a tool declared on the request
-cannot be honoured.  Refusing it here keeps the loss visible: the pipeline
-reports the warning, and a client is never told its tools are available when
-they are not.
+A client tool reaches an ACP agent through MCP, not through the prompt.  The
+converter writes the declaration in MCP ``tools/list`` shape; the transport
+serves it from a loopback MCP endpoint named on ``session/new`` and turns the
+agent's ``tools/call`` into an IR tool call.  The client's result comes back on
+a later request and is handed to the same pending MCP call.
 
-The provider→IR readers exist because the base class requires them.  They are
-written for the shape ACP uses (a call with ``toolCallId``/``title`` and a
-JSON ``rawInput``), so a later phase that surfaces agent-side calls can read
-them without rewriting this module.
+The agent's own tools are a different thing: the gateway refuses them.  The
+reader methods below understand ACP's ``toolCallId``/``title``/``rawInput``
+shape so an agent-side call can be inspected when it is the thing being
+refused.
 """
 
 from __future__ import annotations
@@ -24,23 +23,28 @@ from ...base.tools.ops import BaseToolOps
 from llm_rosetta.conversion_warnings import DROPPED, report_loss
 
 
-def _drop(warnings: Any, subject: str) -> None:
+def _drop(warnings: Any, subject: str, reason: str) -> None:
     """Report one declaration this lane cannot carry."""
-    report_loss(
-        "ACP lanes cannot declare client tools yet; the declaration was dropped.",
-        code=DROPPED,
-        subject=subject,
-        warnings=warnings,
-    )
+    report_loss(reason, code=DROPPED, subject=subject, warnings=warnings)
 
 
 class AcpToolOps(BaseToolOps):
-    """Tool vocabulary of the ACP lane: none, and says so."""
+    """Tool vocabulary of the ACP lane: MCP declarations, and no choice field."""
 
     @staticmethod
     def ir_tool_definition_to_p(ir_tool: ToolDefinition, **kwargs: Any) -> Any:
-        _drop(kwargs.get("warnings"), f"tools.{ir_tool.get('name', '')}")
-        return None
+        """Write one IR tool as an MCP ``tools/list`` item."""
+        name = ir_tool.get("name")
+        if not isinstance(name, str) or not name:
+            return None
+        parameters = ir_tool.get("parameters")
+        if not isinstance(parameters, dict) or not parameters:
+            parameters = {"type": "object", "properties": {}}
+        return {
+            "name": name,
+            "description": str(ir_tool.get("description") or ""),
+            "parameters": parameters,
+        }
 
     @staticmethod
     def p_tool_definition_to_ir(
@@ -60,7 +64,12 @@ class AcpToolOps(BaseToolOps):
 
     @staticmethod
     def ir_tool_choice_to_p(ir_tool_choice: ToolChoice, **kwargs: Any) -> Any:
-        _drop(kwargs.get("warnings"), "tool_choice")
+        _drop(
+            kwargs.get("warnings"),
+            "tool_choice",
+            "ACP lanes expose tools over MCP and cannot force a choice; "
+            "the setting was dropped.",
+        )
         return None
 
     @staticmethod
@@ -72,11 +81,27 @@ class AcpToolOps(BaseToolOps):
     @staticmethod
     def p_tool_call_to_ir(provider_tool_call: Any, **kwargs: Any) -> ToolCallPart:
         call = provider_tool_call if isinstance(provider_tool_call, dict) else {}
-        raw = call.get("rawInput") or call.get("raw_input") or {}
+        raw = (
+            call.get("rawInput")
+            or call.get("raw_input")
+            or call.get("tool_input")
+            or {}
+        )
+        # A bridged call names the tool in ``name``; a built-in one may only
+        # have a title.  The transport supplies the authoritative name for a
+        # call it captured over MCP, so this reader is for the agent-side shape.
+        name = call.get("name") or call.get("tool_name") or call.get("title") or ""
+        if isinstance(name, str) and name.startswith("mcp"):
+            # ACP clients commonly prefix MCP tools with ``mcp_<server>_``;
+            # the suffix is the declared name, not a second tool.
+            for separator in ("__", "_"):
+                if separator in name:
+                    name = name.rsplit(separator, 1)[-1]
+                    break
         return ToolCallPart(
             type="tool_call",
             tool_call_id=str(call.get("toolCallId") or call.get("tool_call_id") or ""),
-            tool_name=str(call.get("title") or call.get("name") or ""),
+            tool_name=str(name),
             tool_input=raw if isinstance(raw, dict) else {},
             tool_type="function",
         )
@@ -98,7 +123,11 @@ class AcpToolOps(BaseToolOps):
 
     @staticmethod
     def ir_tool_config_to_p(ir_tool_config: ToolCallConfig, **kwargs: Any) -> Any:
-        _drop(kwargs.get("warnings"), "tool_config")
+        _drop(
+            kwargs.get("warnings"),
+            "tool_config",
+            "ACP lanes carry no tool configuration; the setting was dropped.",
+        )
         return None
 
     @staticmethod

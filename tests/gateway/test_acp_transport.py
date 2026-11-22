@@ -36,11 +36,12 @@ from llm_rosetta_gateway.transport.provider_info import ProviderInfo, openai_aut
 #: that fails mid-turn, and one that advertises ``session/resume``.
 FAKE_AGENT = textwrap.dedent(
     """
-    import json, os, sys
+    import json, os, sys, urllib.request
 
     MODE = os.environ.get("FAKE_ACP_MODE", "ok")
     LOG = os.environ.get("FAKE_ACP_LOG", "")
     SESSIONS = [0]
+    MCP_URL = ""
 
     def note(kind, **fields):
         if not LOG:
@@ -55,6 +56,16 @@ FAKE_AGENT = textwrap.dedent(
     def update(session_id, body):
         send({"jsonrpc": "2.0", "method": "session/update",
               "params": {"sessionId": session_id, "update": body}})
+
+    def mcp_call(method, params=None, rpc_id=1):
+        payload = json.dumps({"jsonrpc": "2.0", "id": rpc_id,
+                              "method": method, "params": params or {}})
+        request = urllib.request.Request(
+            MCP_URL, data=payload.encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=30) as response:
+            return json.loads(response.read() or b"{}")
 
     # One line per process, so a test can tell a replaced agent from a reused
     # one: a process that has to be thrown away shows up as a second pid.
@@ -95,6 +106,10 @@ FAKE_AGENT = textwrap.dedent(
             SESSIONS[0] += 1
             sid = "sess-%d" % SESSIONS[0]
             note("new", session=sid)
+            servers = msg["params"].get("mcpServers") or []
+            if servers:
+                MCP_URL = servers[0]["url"]
+                note("mcp", url=MCP_URL)
             send({"jsonrpc": "2.0", "id": req_id, "result": {
                 "sessionId": sid,
                 "configOptions": [{
@@ -134,6 +149,65 @@ FAKE_AGENT = textwrap.dedent(
                 if block.get("type") == "text"
             )
             note("prompt", session=sid, text=text)
+            if MODE == "mcp":
+                listed = mcp_call("tools/list").get("result", {}).get("tools") or []
+                note("mcp-tools", names=[tool.get("name") for tool in listed])
+                call = {"toolCallId": "mcp-1",
+                        "name": "mcp_llm_rosetta_tools_echo",
+                        "title": "echo", "kind": "other",
+                        "rawInput": {"text": "hello"}}
+                update(sid, dict(call, sessionUpdate="tool_call",
+                                 status="pending"))
+                options = [
+                    {"optionId": "a1", "name": "Allow", "kind": "allow_once"},
+                    {"optionId": "r1", "name": "Reject", "kind": "reject_once"},
+                ]
+                send({"jsonrpc": "2.0", "id": 901,
+                      "method": "session/request_permission",
+                      "params": {"sessionId": sid, "toolCall": call,
+                                 "options": options}})
+                reply = json.loads(sys.stdin.readline())
+                note("permission_reply", reply=reply)
+                result = mcp_call("tools/call", {"name": "echo",
+                                                 "arguments": {"text": "hello"}})
+                try:
+                    answer = result["result"]["content"][0]["text"]
+                except Exception:
+                    answer = json.dumps(result)
+                note("mcp-result", text=answer)
+                update(sid, {"sessionUpdate": "agent_message_chunk",
+                             "content": {"type": "text",
+                                         "text": "tool said: " + answer}})
+                send({"jsonrpc": "2.0", "id": req_id,
+                      "result": {"stopReason": "end_turn"}})
+                continue
+            if MODE == "mcp-parallel":
+                import threading
+                answers = {}
+
+                def run_one(text):
+                    result = mcp_call("tools/call", {
+                        "name": "echo", "arguments": {"text": text}})
+                    try:
+                        answers[text] = result["result"]["content"][0]["text"]
+                    except Exception:
+                        answers[text] = json.dumps(result)
+
+                threads = [threading.Thread(target=run_one, args=(value,))
+                           for value in ("one", "two")]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join()
+                note("mcp-parallel", answers=answers)
+                update(sid, {"sessionUpdate": "agent_message_chunk",
+                             "content": {"type": "text",
+                                         "text": "tools said: " + ", ".join(
+                                             answers.get(v, "?")
+                                             for v in ("one", "two"))}})
+                send({"jsonrpc": "2.0", "id": req_id,
+                      "result": {"stopReason": "end_turn"}})
+                continue
             if MODE in ("stalls", "wedged"):
                 continue
             if MODE in ("tool", "mcp-tool"):
@@ -201,6 +275,8 @@ def _provider(
     tmp_path: Any,
     mode: str,
     conversation: str | None = None,
+    *,
+    processes: int = 1,
 ) -> ProviderInfo:
     script = tmp_path / "fake_acp.py"
     script.write_text(FAKE_AGENT, encoding="utf-8")
@@ -216,6 +292,7 @@ def _provider(
         keyless=True,
         transport="acp",
         acp_argv=(sys.executable, str(script)),
+        acp_processes=processes,
     )
     return provider.with_acp_conversation(conversation)
 
@@ -1117,3 +1194,214 @@ class TestAgentToolsAreOff:
         )
         # Written by the operator: used as written, no profile, no flags.
         assert AcpTransport()._argv(provider) == ["agy", "acp"]
+
+
+ECHO_TOOL = {
+    "type": "function",
+    "name": "echo",
+    "description": "echo the text back",
+    "parameters": {
+        "type": "object",
+        "properties": {"text": {"type": "string"}},
+        "required": ["text"],
+    },
+}
+
+
+class TestClientTools:
+    """A request's tools reach the agent, and its call comes back to the client."""
+
+    async def test_a_bridged_call_suspends_and_the_result_resumes(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport(timeout=10)
+        provider = _provider(monkeypatch, tmp_path, "mcp", conversation="conv-tools")
+        first = _turn("[User]\necho hello")
+        first["tools"] = [ECHO_TOOL]
+        first["tool_results"] = []
+        try:
+            stream = await transport.send_streaming(provider, "", first)
+            assert stream.status_code == 200
+            chunks = [chunk async for chunk in stream]
+
+            assert [chunk["type"] for chunk in chunks] == [
+                "session_start",
+                "tool_call",
+                "stop",
+            ]
+            call = chunks[1]
+            assert call["tool_name"] == "echo"
+            assert call["tool_input"] == {"text": "hello"}
+            assert call["tool_call_id"].startswith("call_")
+            assert chunks[2]["stop_reason"] == "tool_calls"
+            assert transport._suspended  # the agent's prompt is still in flight
+
+            tools = [e for e in _log(tmp_path) if e["kind"] == "mcp-tools"]
+            assert tools and tools[0]["names"] == ["echo"]
+            replies = [e for e in _log(tmp_path) if e["kind"] == "permission_reply"]
+            assert replies and replies[0]["reply"]["result"]["outcome"] == {
+                "outcome": "selected",
+                "optionId": "a1",
+            }
+
+            second = _turn("[User]\necho hello")
+            second["tools"] = [ECHO_TOOL]
+            second["prompt"] = first["prompt"] + [
+                {"type": "text", "text": "[Assistant]\n[called echo]"},
+                {"type": "text", "text": "[Tool result]\nhello back"},
+            ]
+            second["tool_results"] = [
+                {
+                    "tool_call_id": call["tool_call_id"],
+                    "result": "hello back",
+                    "is_error": False,
+                }
+            ]
+            response = await transport.send(provider, "", second)
+            assert transport._suspended == {}
+        finally:
+            await transport.close()
+
+        assert response.status_code == 200
+        assert response.body is not None
+        assert response.body["stop_reason"] == "end_turn"
+        text = "".join(
+            str(update.get("text") or "")
+            for update in response.body["updates"]
+            if update.get("type") == "text"
+        )
+        assert text == "tool said: hello back"
+        # The same session continued; the whole conversation was not replayed.
+        assert _kinds(tmp_path).count("new") == 1
+        results = [e for e in _log(tmp_path) if e["kind"] == "mcp-result"]
+        assert results and results[0]["text"] == "hello back"
+
+    async def test_parallel_calls_resolved_in_one_request_are_not_asked_again(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport(timeout=10)
+        provider = _provider(
+            monkeypatch, tmp_path, "mcp-parallel", conversation="conv-parallel"
+        )
+        first = _turn("[User]\necho two things")
+        first["tools"] = [ECHO_TOOL]
+        try:
+            stream = await transport.send_streaming(provider, "", first)
+            assert stream.status_code == 200
+            chunks = [chunk async for chunk in stream]
+            assert [chunk["type"] for chunk in chunks] == [
+                "session_start",
+                "tool_call",
+                "stop",
+            ]
+
+            bridge = next(iter(transport._session_bridges.values()))
+            calls: list[Any] = []
+            for _ in range(400):
+                calls = bridge.pending()
+                if len(calls) == 2:
+                    break
+                await asyncio.sleep(0.005)
+            assert len(calls) == 2
+
+            second = _turn("[User]\necho two things")
+            second["tools"] = [ECHO_TOOL]
+            second["prompt"] = first["prompt"] + [
+                {"type": "text", "text": "[Assistant]\n[called echo twice]"},
+                {"type": "text", "text": "[Tool result]\none"},
+                {"type": "text", "text": "[Tool result]\ntwo"},
+            ]
+            second["tool_results"] = [
+                {
+                    "tool_call_id": call.call_id,
+                    "result": call.arguments["text"],
+                    "is_error": False,
+                }
+                for call in calls
+            ]
+            response = await transport.send(provider, "", second)
+        finally:
+            await transport.close()
+
+        assert response.status_code == 200
+        assert response.body is not None
+        assert response.body["stop_reason"] == "end_turn"
+        # The second call was answered by this request, so it is not handed to
+        # the client a second time.
+        assert not any(
+            update.get("type") == "tool_call" for update in response.body["updates"]
+        )
+        text = "".join(
+            str(update.get("text") or "")
+            for update in response.body["updates"]
+            if update.get("type") == "text"
+        )
+        assert text == "tools said: one, two"
+
+    async def test_a_one_off_request_cannot_declare_tools(self, monkeypatch, tmp_path):
+        transport = AcpTransport(timeout=10)
+        provider = _provider(monkeypatch, tmp_path, "mcp", conversation=None)
+        body = _turn("[User]\necho hello")
+        body["tools"] = [ECHO_TOOL]
+        try:
+            response = await transport.send(provider, "", body)
+        finally:
+            await transport.close()
+        # A suspension is found by conversation id, so a one-off turn could
+        # never carry the client's result back; the request is refused before
+        # an agent starts.
+        assert response.status_code == 400
+        assert "declared conversation id" in response.error_text
+        assert _kinds(tmp_path) == []
+
+    async def test_two_processes_may_return_the_same_session_id(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport(timeout=10)
+        provider = _provider(monkeypatch, tmp_path, "mcp", processes=2)
+        provider_a = provider.with_acp_conversation("conv-a")
+        provider_b = provider.with_acp_conversation("conv-b")
+        first_a = _turn("[User]\necho a")
+        first_a["tools"] = [ECHO_TOOL]
+        first_b = _turn("[User]\necho b")
+        first_b["tools"] = [ECHO_TOOL]
+        try:
+            stream_a = await transport.send_streaming(provider_a, "", first_a)
+            chunks_a = [chunk async for chunk in stream_a]
+            stream_b = await transport.send_streaming(provider_b, "", first_b)
+            chunks_b = [chunk async for chunk in stream_b]
+
+            calls = [
+                chunk for chunk in chunks_a + chunks_b if chunk["type"] == "tool_call"
+            ]
+            assert len(calls) == 2
+            refs = set(transport._session_bridges)
+            # Both agents use the same id, and each session keeps its own
+            # bridge because the process slot is part of the key.
+            assert len(refs) == 2
+            assert {ref[1] for ref in refs} == {0, 1}
+            assert {ref[2] for ref in refs} == {"sess-1"}
+
+            responses = []
+            for provider_x, call in (
+                (provider_a, next(c for c in chunks_a if c["type"] == "tool_call")),
+                (provider_b, next(c for c in chunks_b if c["type"] == "tool_call")),
+            ):
+                follow = _turn("[User]\necho again")
+                follow["tools"] = [ECHO_TOOL]
+                follow["tool_results"] = [
+                    {
+                        "tool_call_id": call["tool_call_id"],
+                        "result": "back",
+                        "is_error": False,
+                    }
+                ]
+                responses.append(await transport.send(provider_x, "", follow))
+            assert transport._suspended == {}
+        finally:
+            await transport.close()
+
+        assert [response.status_code for response in responses] == [200, 200]
+        for response in responses:
+            assert response.body is not None
+            assert response.body["stop_reason"] == "end_turn"

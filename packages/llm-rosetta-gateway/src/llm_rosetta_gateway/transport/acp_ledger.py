@@ -96,6 +96,10 @@ class LedgerEntry:
     seen: tuple[str, ...] = ()
     agent_slot: int = 0
     live: bool = True
+    #: A digest of the tools the session's MCP endpoint was opened with.  An
+    #: agent session cannot gain a new MCP server list in place, so a request
+    #: that declares different tools needs a fresh session.
+    tools: str = ""
     last_used: float = field(default_factory=time.monotonic)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
