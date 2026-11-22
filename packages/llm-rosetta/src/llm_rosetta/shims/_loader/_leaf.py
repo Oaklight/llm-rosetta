@@ -164,6 +164,7 @@ def _load_single_provider(
         stream_required=bool(conn_raw.get("stream_required", False)),
         transport=str(conn_raw.get("transport") or "http"),
         acp_argv=_parse_connection_argv(conn_raw.get("acp_argv"), cfg.get("name", "")),
+        acp_env=conn_raw.get("acp_env"),
         token_command=_parse_connection_token_command(
             conn_raw.get("token_command"),
             command_dir or provider_dir,

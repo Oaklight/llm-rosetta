@@ -224,6 +224,15 @@ class ConnectionConfig:
     declared by the shim because it is a vendor fact.  ``None`` takes the
     transport's own default.
     """
+    acp_env: dict[str, str] | None = None
+    """Environment overrides for the agent an ``acp`` transport starts.
+
+    The gateway layers these over its own environment, so ``PATH`` and the
+    agent's login store keep working.  A vendor declares a variable its CLI
+    needs to expose tools correctly here (Claude Code needs
+    ``ENABLE_TOOL_SEARCH=false`` for direct MCP tool calls).  Only read when
+    ``transport`` is ``"acp"``.
+    """
     token_command: tuple[str, ...] | None = None
     """Command that mints the upstream credential, declared by the shim.
 

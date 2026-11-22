@@ -243,6 +243,7 @@ class ProviderInfo:
         stream_required: bool = False,
         transport: str = "http",
         acp_argv: tuple[str, ...] | None = None,
+        acp_env: dict[str, str] | None = None,
         acp_argv_custom: bool = False,
         acp_state_dir: str | None = None,
         acp_processes: int = 1,
@@ -332,6 +333,10 @@ class ProviderInfo:
         # The agent command an ``acp`` transport starts, when the shim
         # declares one; ``None`` takes the transport's default.
         self.acp_argv = acp_argv
+        # Environment overrides layered over the gateway's own environment
+        # when the agent process starts, so PATH and the agent's login store
+        # survive while a vendor-specific switch takes effect.
+        self.acp_env = dict(acp_env or {})
         # Whether the operator wrote ``acp_argv`` in the provider entry (as
         # opposed to the shim declaring it).  A written argv is used as is; a
         # declared one gets the gateway-owned agent profile.
