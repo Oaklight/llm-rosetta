@@ -204,15 +204,18 @@ implement login()`）。
 网关也可以作为库使用：
 
 ```python
+import asyncio
+
+import uvicorn
+
 from llm_rosetta_gateway import create_app, GatewayConfig, load_config
 
-# 加载配置并创建 ASGI 应用
+# 加载配置并创建 ASGI 应用。create_app 自 0.14.0 起是 async 函数。
 raw = load_config("config.jsonc")
 config = GatewayConfig(raw)
-app = await create_app(config)  # create_app 自 0.14.0 起是 async 函数
+app = asyncio.run(create_app(config))
 
 # 挂载到你自己的 ASGI 应用中，或使用任意 ASGI 服务器运行
-import uvicorn
 uvicorn.run(app, host="0.0.0.0", port=8765)
 ```
 
