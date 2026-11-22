@@ -642,7 +642,8 @@ manifest 自称 `contrib` 的已声明源（即镜像）仍能提供该提供方
 
 0.15.0 移除了 0.14.x 的安装路径。网关只读取 `sources`、`install`、`paths`、`disabled`、`cache_dir`、
 `remote_ttl` 与 `strict`，别的都不读。下列键在**加载配置时即被拒绝**，错误为
-`config: 'shims.<key>' was removed in 0.15.0: <建议>`：
+`config: 'shims.<key>' was removed in 0.15.0: <建议>`。一条错误会列出配置段里所有已移除的键；
+值为空（`null`、`[]`、`{}`）的键不算声明，会被接受：
 
 | 已移除的键 | 替代写法 |
 |-----------|---------|
