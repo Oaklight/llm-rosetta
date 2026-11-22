@@ -42,7 +42,6 @@ _GATEWAY_SIDE = {
     # The loader modules themselves: eager re-imports from ``shims`` would
     # bring them back, and the HTTP client is only reached from inside one.
     "llm_rosetta.shims.sources",
-    "llm_rosetta.shims.removals",
     "llm_rosetta.shims.catalog",
 }
 

@@ -19,11 +19,7 @@ from llm_rosetta.retired_names import (
 from llm_rosetta_gateway.config.loader import load_gateway_config
 from llm_rosetta_gateway.maintenance.names import legacy_name_error
 from llm_rosetta_gateway.config.providers import BASE_FORMATS
-from llm_rosetta_gateway.shims.catalog import (
-    SHIM_SOURCE_PACKAGES,
-    canonical_shim_for,
-    find_legacy_source_package,
-)
+from llm_rosetta_gateway.shims.catalog import find_standalone
 from llm_rosetta.api import load_providers
 
 URL = "http://upstream.invalid/v1"
@@ -93,8 +89,8 @@ def test_loader_rejects_every_retired_name(
             replacement = other.replacement
     assert f"{row.name!r} was renamed to {replacement!r}" in message
     assert message.endswith(retired_names.MIGRATE_HINT)
-    if row.preset:
-        assert f"shims.presets: ['{row.preset}']" in message
+    if row.install:
+        assert f"shims.install: ['{row.install}']" in message
 
 
 def test_every_retired_name_has_a_loader_case() -> None:
@@ -159,20 +155,12 @@ def test_a_base_format_type_is_not_read_as_a_retired_shim(tmp_path: Path) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_presets_match_the_shim_catalogue() -> None:
+def test_installs_match_the_shim_catalogue() -> None:
     for row in RETIRED_NAMES:
         if row.kind != SHIM:
             continue
-        package = find_legacy_source_package(row.name)
-        assert (package.key if package else None) == row.preset, row.name
-        if package is not None:
-            assert canonical_shim_for(package, row.name) == row.replacement
-
-
-def test_every_catalogue_legacy_name_is_retired() -> None:
-    for package in SHIM_SOURCE_PACKAGES:
-        for name in package.legacy_names:
-            assert retired_names.lookup(name, SHIM) is not None, name
+        vendor = find_standalone(row.replacement)
+        assert (vendor.install if vendor else None) == row.install, row.name
 
 
 def test_every_shim_replacement_is_registered_or_packaged() -> None:
@@ -185,7 +173,6 @@ def test_every_shim_replacement_is_registered_or_packaged() -> None:
     """
     from llm_rosetta.retired_names import moved_vendor
     from llm_rosetta.shims import list_shims
-    from llm_rosetta_gateway.shims import find_source_package
 
     load_providers()
     registered = {s.name for s in list_shims()}
@@ -199,7 +186,7 @@ def test_every_shim_replacement_is_registered_or_packaged() -> None:
         for row in RETIRED_NAMES
         if row.kind == SHIM
         and row.replacement not in registered
-        and find_source_package(row.replacement) is None
+        and find_standalone(row.replacement) is None
         and not moved(row.replacement)
     ]
     assert missing == []

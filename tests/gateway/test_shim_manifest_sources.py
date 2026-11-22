@@ -29,10 +29,9 @@ from llm_rosetta_gateway.shims.shim_sources import (
     describe_shim_sources,
     parse_shims_section,
 )
-from llm_rosetta_gateway.shims import get_source_package
 from llm_rosetta_gateway.shims.catalog import get_shim_source
 from llm_rosetta_gateway.shims.manifest_sources.plan import parse_selector
-from llm_rosetta_gateway.shims.sources import check_remote_updates
+from llm_rosetta_gateway.shims.sources import check_source_updates
 
 DIST = "https://shims.example/dist/"
 MANIFEST = DIST + "manifest.json"
@@ -392,6 +391,72 @@ class TestUpgrades:
         assert status.ok and status.stale and status.from_cache
         assert get_shim("acme--chat_completions") is not None
 
+    def test_a_full_disk_keeps_the_last_good_install(self, tmp_path, monkeypatch):
+        """ENOSPC says nothing about the bytes: the old install is still the answer."""
+        from llm_rosetta_gateway.shims.manifest_sources import install
+
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+        _apply(tmp_path, _url_section("acme"), http)
+        http.publish("acme", "0.2.0", ["acme--chat_completions"])
+
+        def full(src, dest):
+            raise OSError(28, "No space left on device")
+
+        monkeypatch.setattr(install, "_atomic_replace", full)
+        report = _apply(tmp_path, _url_section("acme"), http, force_refresh=True)
+
+        status = _vendor_status(report, "acme")
+        assert status.ok and status.stale and status.from_cache
+        assert status.release["version"] == "0.1.0"
+        assert "No space left on device" in (status.error or "")
+        assert get_shim("acme--chat_completions") is not None
+
+    def test_a_cold_full_disk_is_a_plain_source_error(self, tmp_path, monkeypatch):
+        """Nothing to keep: the class stays distinguishable from a bad archive."""
+        from llm_rosetta_gateway.shims.manifest_sources import install
+
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+
+        def full(src, dest):
+            raise OSError(28, "No space left on device")
+
+        monkeypatch.setattr(install, "_atomic_replace", full)
+        report = _apply(tmp_path, _url_section("acme"), http)
+
+        status = _vendor_status(report, "acme")
+        assert status.ok is False
+        assert (status.error or "").startswith("ShimSourceError:")
+        assert "ShimArchiveUnusable" not in (status.error or "")
+        assert "No space left on device" in (status.error or "")
+        assert status.unreachable is False
+        assert get_shim("acme--chat_completions") is None
+
+    def test_a_write_denied_while_extracting_is_the_same_failure(
+        self, tmp_path, monkeypatch
+    ):
+        """EPERM during extraction leaves no half-swapped vendor directory."""
+        from llm_rosetta_gateway.shims.manifest_sources import install
+
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+
+        def denied(*_a, **_kw):
+            raise OSError(1, "Operation not permitted")
+
+        monkeypatch.setattr(install, "_extract_archive", denied)
+        report = _apply(tmp_path, _url_section("acme"), http)
+
+        status = _vendor_status(report, "acme")
+        assert status.ok is False
+        assert (status.error or "").startswith("ShimSourceError:")
+        assert "Operation not permitted" in (status.error or "")
+        vendor_dirs = [
+            p for p in tmp_path.rglob("acme") if p.is_dir() and p.parent.name != ".tmp"
+        ]
+        assert vendor_dirs == []
+
     def test_an_unreachable_source_with_nothing_cached_fails(self, tmp_path):
         http = FakeHttp()
         http.down = True
@@ -410,7 +475,7 @@ class TestUpgrades:
             "acme", "0.3.0", ["acme--chat_completions"], surface=SURFACE_VERSION + 1
         )
 
-        (entry,) = check_remote_updates(report, http_get=http)
+        (entry,) = check_source_updates(report, http_get=http)
 
         assert entry["current"] == "0.1.0"
         assert entry["head"] == "0.2.0"
@@ -575,87 +640,45 @@ class TestPrecedence:
         assert shim.connection.base_url == "https://local.example/v1"
 
 
-class TestLegacyPresets:
-    def _contrib(self) -> FakeHttp:
-        source = get_shim_source("contrib")
-        assert source is not None
-        http = FakeHttp("contrib", dist=source.manifest_url.rsplit("/", 1)[0] + "/")
-        http.publish(
-            "kilo_free", "0.1.0", ["kilo_free--chat_completions"], tags=["tier:free"]
-        )
-        http.publish("llm7", "0.1.0", ["llm7--chat_completions"], tags=["tier:free"])
-        http.publish("opendesign", "0.1.0", ["opendesign--chat_completions"])
-        return http
+class TestRetiredPresets:
+    #: What each refusal tells the operator to do.  ``remotes`` has no migrate
+    #: hint on purpose: the tool cannot map an explicit archive URL.
+    ADVICE = {
+        "presets": "'shims.install'",
+        "include": "'shims.install'",
+        "exclude": "'!<source>:<vendor>'",
+        "remotes": "'shims.paths'",
+    }
 
-    def test_free_maps_to_the_free_tag_on_contrib(self, tmp_path):
-        report = _apply(tmp_path, {"presets": ["free"]}, self._contrib())
+    @pytest.mark.parametrize("key", ["presets", "include", "exclude", "remotes"])
+    def test_a_retired_key_is_refused_with_the_advice(self, key):
+        match = f"'shims.{key}' was removed in 0.15.0: .*{self.ADVICE[key]}"
+        with pytest.raises(ValueError, match=match):
+            parse_shims_section({key: ["free"] if key == "presets" else {"x": ["y"]}})
 
-        assert sorted(s.vendor for s in report.sources) == ["kilo_free", "llm7"]
-        assert get_shim("llm7--chat_completions") is not None
+    def test_remotes_names_both_ways_out_and_no_migrate_hint(self):
+        with pytest.raises(ValueError) as caught:
+            parse_shims_section({"remotes": [{"url": "https://x.example/a.tar.gz"}]})
+        message = str(caught.value)
+        assert "shims.sources" in message and "shims.paths" in message
+        assert "llm-rosetta-migrate" not in message
 
-    def test_opendesign_maps_to_its_vendor_on_contrib(self, tmp_path):
-        report = _apply(tmp_path, {"presets": ["opendesign"]}, self._contrib())
+    def test_every_retired_key_is_named_in_one_error(self):
+        section = {
+            "presets": ["free"],
+            "include": {"free": ["llm7--*"]},
+            "exclude": {"free": ["x--*"]},
+            "remotes": [{"url": "https://x.example/a.tar.gz"}],
+        }
+        with pytest.raises(ValueError) as caught:
+            parse_shims_section(section)
+        for key in section:
+            assert f"'shims.{key}'" in str(caught.value)
 
-        assert [s.name for s in report.sources] == ["contrib:opendesign"]
-
-    def test_a_legacy_include_narrows_each_vendor_of_the_tag(self, tmp_path, logs):
-        section = {"presets": ["free"], "include": {"free": ["llm7--*"]}}
-
-        report = _apply(tmp_path, section, self._contrib(), strict=True)
-
-        loaded = [s for s in report.sources if s.shim_names]
-        assert [s.vendor for s in loaded] == ["llm7"]
-        assert not any("matched no shim" in m for m in logs), logs
-
-    def test_a_mapped_preset_the_answering_source_lacks_is_reported(
-        self, tmp_path, logs
-    ):
-        """No legacy fallback when the source answers; a warning and a row."""
-        http = self._contrib()
-        del http.vendors["opendesign"]
-
-        report = _apply(tmp_path, {"presets": ["opendesign"]}, http)
-
-        (row,) = report.sources
-        assert row.skipped == "not in the manifest"
-        assert (row.name, row.source, row.vendor) == (
-            "contrib:opendesign",
-            "contrib",
-            "opendesign",
-        )
-        assert describe_shim_sources(report) == [
-            "contrib:opendesign: skipped (not in the manifest)"
-        ]
-        assert any(
-            "'contrib:opendesign' (presets:opendesign) matched no vendor" in m
-            for m in logs
-        ), logs
-        # The freshness guard asks the fallback manifest once; the legacy
-        # remote (a GitHub archive) is never fetched.
-        source = get_shim_source("contrib")
-        assert source is not None
-        assert [c for c in http.calls if "github" in c] == [source.fallback_url]
-
-    def test_the_argonne_presets_map_to_their_vendors(self):
-        sources = parse_shims_section({"presets": ["alcf", "argo", "asksage"]})
-        assert [s.raw for s in sources.manifests.selectors] == [
-            "argonne:alcf",
-            "argonne:argo",
-            "argonne:asksage",
-        ]
-
-    def test_a_source_that_never_answered_falls_back_to_the_legacy_remote(
-        self, tmp_path, logs
-    ):
-        http = FakeHttp()
-        http.down = True
-
-        report = _apply(tmp_path, {"presets": ["opendesign"]}, http)
-
-        package = get_source_package("opendesign")
-        assert package is not None
-        assert [s.location for s in report.sources] == [package.remote["url"]]
-        assert any("loads its legacy remote" in m for m in logs), logs
+    @pytest.mark.parametrize("empty", [None, [], {}])
+    @pytest.mark.parametrize("key", ["presets", "include", "exclude", "remotes"])
+    def test_a_key_that_holds_nothing_is_not_a_declaration(self, key, empty):
+        assert parse_shims_section({key: empty}).install == ()
 
 
 class TestConfig:
@@ -1173,8 +1196,8 @@ class TestFreshnessGuardEdges:
         assert legs.manifest_calls()[0] == MANIFEST
 
 
-class TestTagPresetGuard:
-    """A tag-shaped legacy preset expects the vendors its package shipped."""
+class TestTagSelectorGuard:
+    """A tag selector is not checked against a vendor list."""
 
     FREE = ("kilo_free", "llm7", "opencode_zen_free", "ovhcloud")
 
@@ -1201,23 +1224,6 @@ class TestTagPresetGuard:
         legs.primary.generated_at = OLD
         legs.mirror.generated_at = NEW
         return legs
-
-    def test_the_preset_carries_the_package_vendors(self):
-        package = get_source_package("free")
-        assert package is not None
-        (selector,) = parse_shims_section({"presets": ["free"]}).manifests.selectors
-        assert selector.kind == "tag"
-        assert selector.expected == tuple(package.vendors) == self.FREE
-
-    def test_a_stale_copy_missing_a_preset_vendor_yields_to_the_fallback(
-        self, tmp_path
-    ):
-        legs = self._legs()
-
-        report = _apply(tmp_path, {"presets": ["free"]}, legs)
-
-        assert len(legs.manifest_calls()) == 2
-        assert {s.vendor for s in report.sources if s.ok} == set(self.FREE)
 
     def test_a_plain_tag_selector_is_not_checked(self, tmp_path):
         legs = self._legs()

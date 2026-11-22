@@ -1,4 +1,4 @@
-"""Shim sources: declare, reload, and report removal advisories."""
+"""Shim sources: declare, reload and check for updates."""
 
 from __future__ import annotations
 
@@ -25,22 +25,6 @@ from .._shared import (
 logger = logging.getLogger("llm-rosetta-gateway")
 
 
-def _shim_removal_advisories(request: Any, raw: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return the removal advisories for the config as it stands right now.
-
-    Derived per request from the freshly loaded ``raw`` rather than cached on the
-    app, so a saved shim source clears the advisory on the very next read
-    instead of lingering until a restart.
-    """
-    from llm_rosetta_gateway.shims.shim_sources import shim_removal_advisories
-
-    report = getattr(request.app, "shim_source_report", None)
-    return [
-        advisory.to_dict()
-        for advisory in shim_removal_advisories(raw.get("providers"), report)
-    ]
-
-
 def _shim_status_payload(request: Any) -> dict[str, Any]:
     """Return the last shim-source report as a JSON-safe dict."""
     report = getattr(request.app, "shim_source_report", None)
@@ -64,15 +48,9 @@ def _validate_shim_sources_body(
     otherwise the bad section lands on disk and the next startup fails.
     """
     paths = body.get("paths")
-    remotes = body.get("remotes")
-    presets = body.get("presets")
     disabled = body.get("disabled")
     if paths is not None and not isinstance(paths, list):
         return JSONResponse({"error": "'paths' must be an array"}, status_code=400)
-    if remotes is not None and not isinstance(remotes, list):
-        return JSONResponse({"error": "'remotes' must be an array"}, status_code=400)
-    if presets is not None and not isinstance(presets, list):
-        return JSONResponse({"error": "'presets' must be an array"}, status_code=400)
     for key in ("sources", "install"):
         if body.get(key) is not None and not isinstance(body.get(key), list):
             return JSONResponse({"error": f"'{key}' must be an array"}, status_code=400)
@@ -82,12 +60,6 @@ def _validate_shim_sources_body(
         return JSONResponse(
             {"error": "'disabled' must be an array of shim names"}, status_code=400
         )
-    for entry in remotes or []:
-        if not isinstance(entry, dict) or not entry.get("url"):
-            return JSONResponse(
-                {"error": "each remote source needs a non-empty 'url'"},
-                status_code=400,
-            )
     try:
         resolve_source_config(body, config_path)
     except ValueError as exc:
@@ -107,13 +79,9 @@ def _merge_shim_sources_body(
     """
     for key in (
         "paths",
-        "remotes",
-        "presets",
         "sources",
         "install",
         "disabled",
-        "include",
-        "exclude",
     ):
         if body.get(key) is not None:
             section[key] = body[key]
@@ -131,13 +99,9 @@ def _merge_shim_sources_body(
             section[key] = value
     for key in (
         "paths",
-        "remotes",
-        "presets",
         "sources",
         "install",
         "disabled",
-        "include",
-        "exclude",
         "cache_dir",
     ):
         if key in section and not section[key]:
@@ -180,51 +144,6 @@ async def put_shim_sources(request: Any) -> Response:
             "ok": True,
             "shims": ctx.data.get("shims", {}),
             "status": _shim_status_payload(request),
-        }
-    )
-
-
-async def post_shim_presets_migrate(request: Any) -> Response:
-    """Rewrite the legacy ``shims.presets`` as explicit ``shims.install`` entries.
-
-    The same rewrite ``llm-rosetta-migrate --config`` applies to the file
-    (:func:`~llm_rosetta_gateway.shims.shim_sources.rewrite_presets_section`), run
-    on the served document.  The panel calls it before it removes one vendor a
-    preset selects, so the removal can be a single ``!<source>:<vendor>``
-    entry instead of a refusal.  Nothing is reloaded here: the caller writes
-    its own change next and reloads once.
-
-    Returns:
-        ``{"ok", "shims", "converted", "install", "disabled",
-        "unconvertible"}``; ``converted`` is empty when there was nothing to
-        rewrite (the document is then left untouched).
-    """
-    from ....shims.shim_sources import rewrite_presets_section
-
-    async with config_mutate(request) as ctx:
-        if ctx.error:
-            return ctx.error
-        section = ctx.data.get("shims")
-        if not isinstance(section, dict):
-            section = {}
-        new_section, rewrite = rewrite_presets_section(section)
-        if rewrite.converted:
-            try:
-                resolve_source_config(new_section, _get_config_path(request))
-            except ValueError as exc:
-                return JSONResponse({"error": str(exc)}, status_code=400)
-            ctx.data["shims"] = new_section
-            ctx.commit()
-    if ctx.error:
-        return ctx.error
-    return JSONResponse(
-        {
-            "ok": True,
-            "shims": ctx.data.get("shims", {}),
-            "converted": rewrite.converted,
-            "install": rewrite.install,
-            "disabled": rewrite.disabled,
-            "unconvertible": rewrite.unconvertible,
         }
     )
 
@@ -337,7 +256,7 @@ async def post_shims_check_updates(request: Any) -> Response:
         if now - float(checked_at) < UPDATE_CHECK_TTL:
             return JSONResponse(cached)
 
-    from ....shims.sources import check_remote_updates
+    from ....shims.sources import check_source_updates
 
     import asyncio
     import functools
@@ -350,142 +269,11 @@ async def post_shims_check_updates(request: Any) -> Response:
 
     loop = asyncio.get_running_loop()
     entries = await loop.run_in_executor(
-        None, functools.partial(check_remote_updates, report, proxy=proxy)
+        None, functools.partial(check_source_updates, report, proxy=proxy)
     )
     payload = {"sources": entries, "checked_at": now}
     request.app.shim_update_check = payload
     return JSONResponse(payload)
-
-
-async def post_shim_package_upgrade(request: Any, key: str) -> Response:
-    """Move one catalogue package's source to its repository's current head.
-
-    The guard is the server's, not the panel's: the verdict is recomputed here,
-    so a request that arrives while the pin still equals the head — a stale
-    page, or a hand-built call — changes nothing and returns ``changed:
-    false``.  Only an answer that says the head moved re-fetches anything, and
-    the refetch is the same forced one the Sources view runs.
-
-    Args:
-        request: The admin request.
-        key: A ``SHIM_SOURCE_PACKAGES`` key.
-
-    Returns:
-        ``{"ok": True, "changed": False, "pin", "head"}`` when there is nothing
-        to do; the reload result with ``changed: True`` after a refetch; a
-        4xx naming the reason when the package is unknown, not loaded from a
-        remote, or its head cannot be read.
-    """
-    import asyncio
-    import functools
-
-    from ....shims.catalog import get_source_package, package_repo_keys, repo_key
-    from ....shims.sources import ShimLoadReport
-
-    package = get_source_package(key)
-    if package is None:
-        return JSONResponse({"error": f"Unknown shim package {key!r}"}, status_code=404)
-
-    report = getattr(request.app, "shim_source_report", None)
-    if not isinstance(report, ShimLoadReport):
-        return JSONResponse(
-            {"error": "the shim load report is not ready", "key": key},
-            status_code=409,
-        )
-    # A package runs either from its repository (a remote, possibly spelled
-    # with a renamed repository's old URL) or from its manifest source, as
-    # one vendor install per vendor (#1660).
-    repos = package_repo_keys(package)
-    source = next(
-        (
-            status
-            for status in getattr(report, "sources", []) or []
-            if getattr(status, "kind", "") == "remote"
-            and (
-                (
-                    not getattr(status, "vendor", None)
-                    and repo_key(getattr(status, "location", "")) in repos
-                )
-                or (
-                    getattr(status, "vendor", None) in package.vendors
-                    and getattr(status, "source", None) == package.source
-                )
-            )
-        ),
-        None,
-    )
-    if source is None:
-        return JSONResponse(
-            {
-                "error": f"{package.label} is not loaded from a declared remote",
-                "key": key,
-            },
-            status_code=409,
-        )
-
-    from ....shims.sources import check_remote_updates
-
-    config = getattr(request.app, "gateway_config", None)
-    proxy = getattr(config, "proxy", None)
-    loop = asyncio.get_running_loop()
-    entries = await loop.run_in_executor(
-        None, functools.partial(check_remote_updates, report, proxy=proxy)
-    )
-    entry = next(
-        (
-            e
-            for e in entries
-            if repo_key(e.get("location")) == repo_key(source.location)
-        ),
-        None,
-    )
-    if entry is None:
-        return JSONResponse(
-            {"error": f"{package.label} has no remote to check", "key": key},
-            status_code=409,
-        )
-    if entry.get("error"):
-        return JSONResponse(
-            {
-                "error": entry["error"],
-                "key": key,
-                "pin": entry.get("current"),
-                "head": entry.get("head"),
-            },
-            status_code=409,
-        )
-    if not entry.get("update"):
-        # Nothing to do: the pin is the head.  No config write, no refetch.
-        return JSONResponse(
-            {
-                "ok": True,
-                "changed": False,
-                "key": key,
-                "pin": entry.get("current"),
-                "head": entry.get("head"),
-            }
-        )
-
-    failure, new_config = await _refetch_and_reload(request, _get_config_path(request))
-    if failure is not None:
-        return failure
-    # The verdict the panel holds is about the previous pin; drop it so the
-    # next read asks again instead of repeating "update available".
-    request.app.shim_update_check = None
-    return JSONResponse(
-        {
-            "ok": True,
-            "changed": True,
-            "key": key,
-            "pin": entry.get("current"),
-            "head": entry.get("head"),
-            "status": _shim_status_payload(request),
-            "provider_warnings": getattr(
-                request.app, "provider_validation_warnings", []
-            ),
-            "providers": list(new_config.providers.keys()),
-        }
-    )
 
 
 async def reload_config(request: Any) -> Response:

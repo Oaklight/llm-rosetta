@@ -1,29 +1,19 @@
-"""Standalone shim packages, and where the gateway finds them.
+"""Manifest sources, and the shims that stand-alone vendors provide.
 
-A provider shim set that has moved out of core lives in its own repository and
-is consumed through the gateway's top-level ``shims`` section.  An operator
-should not have to remember the repository URL and the directory inside it, so
-this module is the single place that records both: the admin panel turns each
-entry into a one-click preset, and the removal manifest reuses the same remote
-for the shims it schedules to leave core.
+A provider shim set that left core lives in a shim source repository that
+publishes a versioned ``manifest.json`` (:data:`SHIM_SOURCES`: ``argonne`` and
+``contrib``).  The gateway reads those manifests through ``shims.sources`` and
+installs vendors through ``shims.install``; the Available view of the admin
+Shims page lists what a source's manifest publishes.
 
-The catalogue is independent of the removal schedule.  All three packages now
-ship standalone: the panel offers each of them as a preset, and the config's
-``shims.presets`` key resolves the same entries by name, so a provider config
-that still spells ``argo--*`` (or ``alcf--*``, ``asksage--*``) keeps working
-once the operator declares the preset.
-
-It is also the record of *which* package replaces a name that no longer
-resolves, including the older spellings of its shims: a config that still says
-``alcf--sophia`` or ``asksage--openai_chat`` is told the canonical name and the
-preset to declare, instead of only that the shim is unknown.  The retired-names
-table (``llm_rosetta.retired_names``) names the replacement for those spellings;
-the two lists are kept in step by a test here.
-
-Since #1660 the packages are published from two curated source repositories
-(:data:`SHIM_SOURCES`: ``argonne`` and ``contrib``), each with a versioned
-``manifest.json``.  The five package keys stay as aliases: each names its
-source and the ``shims.install`` selector it stands for.
+:data:`STANDALONE_VENDORS` records the five vendor groups that the 0.14.x
+``shims.presets`` keys named.  Two things still read it: the sentence a missing
+standalone shim gets (:func:`source_package_advice`, and
+:func:`legacy_shim_migration_advice` for an older spelling), which names the
+``shims.install`` entry to declare, and ``llm-rosetta-migrate``, which rewrites
+an old ``shims.presets`` key into that entry.  The retired-names table
+(``llm_rosetta.retired_names``) names the replacement of the older spellings;
+a test here keeps the two lists in step.
 """
 
 from __future__ import annotations
@@ -33,128 +23,164 @@ from typing import Any
 
 
 @dataclass(frozen=True)
-class ShimSourcePackage:
-    """A standalone shim package the gateway knows how to declare.
+class StandaloneVendor:
+    """A vendor group a 0.14.x ``shims.presets`` key named.
 
     Attributes:
-        key: Short identifier, e.g. ``"alcf"``.
-        label: Human-readable name for the admin picker.
-        repo: Repository URL (the ``shims.remotes`` entry's ``url``).
-        package: Import package name inside the repository; the shims live
-            under ``src/<package>/providers``.
-        shims: Canonical names of the shims the package provides.
-        legacy_names: Older spellings of those shims, as they appeared before a
-            rename.  They no longer resolve on their own; the canonical name is
-            what a config should say, and the preset is what makes it loadable.
-        token_env: Environment variable holding the forge token, for a private
-            repository or mirror.  The repositories this project publishes are
-            public, so the presets carry no token by default.
-        free: Whether the package serves a keyless free resource.  The panel
-            groups these apart from the paid packages.
-        subscription: Whether the package serves a plan the operator already
-            pays for elsewhere (a ChatGPT plan, say) rather than metered API
-            credit.  A separate axis from ``free``: it still needs a credential,
-            just not a per-request one.  Nothing declares it yet.
-        note: An optional sentence the operator should read before selecting
-            the package, keyed by language code like a shim's ``hint_msg``.
-            It travels with the preset so a warning cannot be left behind in
-            the docs.
-        ref: An optional pin.  ``None`` — the shipped state — tracks the
-            repository's default branch: the loader resolves it to a concrete
-            commit and records that in the cache stamp, so a fetch is
-            reproducible without a release having to happen first.  Setting it
-            opts one package into a fixed tag or commit.
-        mirror: The ``shims.remotes[].mirror`` entry.  ``url_template`` is
-            commit-addressed (``@dist/{ref}``): with no declared ``ref`` the
-            loader substitutes the commit it resolved the branch to, and each
-            package's publish job writes exactly that directory — so the
-            pinned commit and the mirror's bytes describe one tree, and no
-            digest has to be kept here by hand.
-        source: The manifest source (:data:`SHIM_SOURCES`) the package now
-            installs from (#1660).  ``shims.presets: [key]`` maps to that
-            source and :attr:`install`, so a config written for the
-            per-package repositories keeps working without an edit.
-        install: The ``shims.install`` selector the preset stands for,
-            qualified by its source (``argonne:alcf``, ``contrib:tag:tier:free``).
-        legacy_repos: Earlier URLs of :attr:`repo` (a renamed repository), so
-            an explicit ``shims.remotes`` entry that still spells one is still
-            recognised as this package.
-        vendors: The vendor directories the package's shims live in, as the
-            source manifest keys them.
+        key: The retired preset key (``"alcf"``).
+        label: Human-readable name, for a message.
+        source: The manifest source that publishes it.
+        install: The ``shims.install`` selector that installs it.
+        vendors: The vendors the selector installs.
+        shims: Canonical names of the shims those vendors provide.
+        repos: Every repository URL that named the package, the current one
+            first; an explicit ``shims.remotes`` entry on one of them pinned
+            the preset to the remote path.
     """
 
     key: str
     label: str
-    repo: str
-    package: str
+    source: str
+    install: str
+    vendors: tuple[str, ...]
     shims: tuple[str, ...]
-    legacy_names: tuple[str, ...] = ()
-    token_env: str | None = None
-    free: bool = False
-    subscription: bool = False
-    note: dict[str, str] | None = None
-    ref: str | None = None
-    mirror: dict[str, Any] | None = None
-    source: str | None = None
-    install: str | None = None
-    legacy_repos: tuple[str, ...] = ()
-    vendors: tuple[str, ...] = ()
+    repos: tuple[str, ...]
 
     @property
-    def tier(self) -> str:
-        """The resource tier the panel filters and labels on.
+    def repo_keys(self) -> set[str]:
+        """The normalised form of every URL in :attr:`repos`."""
+        return {repo_key(url) for url in self.repos}
 
-        Returns:
-            ``"subscription"`` when the package serves a plan, ``"free"`` when
-            it serves a keyless pool, else ``"paid"``.
-        """
-        if self.subscription:
-            return "subscription"
-        return "free" if self.free else "paid"
 
-    @property
-    def remote(self) -> dict[str, Any]:
-        """Return the ``shims.remotes`` entry that loads this package.
+_GH = "https://github.com/Oaklight/"
 
-        The preset tracks the repository's default branch: no ``ref`` is
-        named, so the loader resolves the branch to a concrete commit and
-        records it in the cache stamp.  That is what keeps a shim change from
-        waiting on a gateway release — the deadlock a hand-maintained tag and
-        digest used to produce.  A package may still pin (:attr:`ref`), and an
-        operator may pin a deployment with ``refresh: never``.
+#: The five groups ``shims.presets`` named in 0.14.x.
+STANDALONE_VENDORS: tuple[StandaloneVendor, ...] = (
+    StandaloneVendor(
+        "alcf",
+        "ALCF",
+        "argonne",
+        "argonne:alcf",
+        ("alcf",),
+        (
+            "alcf_metis--chat_completions",
+            "alcf_minerva--chat_completions",
+            "alcf_sophia--chat_completions",
+        ),
+        (_GH + "llm-rosetta-shim-alcf",),
+    ),
+    StandaloneVendor(
+        "argo",
+        "Argo",
+        "argonne",
+        "argonne:argo",
+        ("argo",),
+        ("argo--chat_completions", "argo--messages", "argo--open_responses"),
+        (_GH + "llm-rosetta-shim-argonne", _GH + "llm-rosetta-shim-argo"),
+    ),
+    StandaloneVendor(
+        "free",
+        "Free Endpoints",
+        "contrib",
+        "contrib:tag:tier:free",
+        ("kilo_free", "llm7", "opencode_zen_free", "ovhcloud"),
+        (
+            "kilo_free--chat_completions",
+            "llm7--chat_completions",
+            "opencode_zen_free--chat_completions",
+            "ovhcloud--chat_completions",
+        ),
+        (_GH + "llm-rosetta-shim-contrib", _GH + "llm-rosetta-shim-free"),
+    ),
+    StandaloneVendor(
+        "asksage",
+        "AskSage",
+        "argonne",
+        "argonne:asksage",
+        ("asksage",),
+        (
+            "asksage--chat_completions",
+            "asksage--messages",
+            "asksage--open_responses",
+            "asksage--google_generate",
+            "asksage--embeddings",
+        ),
+        (_GH + "llm-rosetta-shim-asksage",),
+    ),
+    StandaloneVendor(
+        "opendesign",
+        "OpenDesign",
+        "contrib",
+        "contrib:opendesign",
+        ("opendesign",),
+        (
+            "opendesign--chat_completions",
+            "opendesign--messages",
+            "opendesign--open_responses",
+        ),
+        (_GH + "llm-rosetta-shim-opendesign",),
+    ),
+)
 
-        The mirror's ``url_template`` is commit-addressed (``{ref}`` is the
-        commit the loader resolved): any host that serves the same archive
-        works, so an internal mirror can replace the published CDN without
-        touching the loader.
-        """
-        remote: dict[str, Any] = {
-            "url": self.repo,
-            "path": f"src/{self.package}/providers",
-        }
-        if self.ref:
-            remote["ref"] = self.ref
-        if self.mirror:
-            remote["mirror"] = dict(self.mirror)
-        if self.token_env:
-            remote["token_env"] = self.token_env
-        return remote
 
-    def to_dict(self) -> dict[str, Any]:
-        """Return a JSON-serialisable view (the admin payload shape)."""
-        return {
-            "key": self.key,
-            "label": self.label,
-            "source_repo": self.repo,
-            "remote": self.remote,
-            "shims": list(self.shims),
-            "free": self.free,
-            "tier": self.tier,
-            "note": self.note,
-            "source": self.source,
-            "install": self.install,
-            "vendors": list(self.vendors),
-        }
+def get_standalone(key: str) -> StandaloneVendor | None:
+    """The vendor group the retired preset *key* named, or ``None``."""
+    for vendor in STANDALONE_VENDORS:
+        if vendor.key == key:
+            return vendor
+    return None
+
+
+def find_standalone(shim_name: str) -> StandaloneVendor | None:
+    """The vendor group whose package provides *shim_name*, or ``None``."""
+    for vendor in STANDALONE_VENDORS:
+        if shim_name in vendor.shims:
+            return vendor
+    return None
+
+
+def legacy_shim_migration_advice(shim_name: str | None) -> str:
+    """The sentence to append when a config still spells a renamed shim.
+
+    A shim that moved to a standalone package keeps its name, so a config that
+    names it only needs the install declared; a shim that was *renamed* needs
+    the canonical spelling too.
+
+    Args:
+        shim_name: The shim the provider names, if any.
+
+    Returns:
+        The sentence to append, or ``""`` when the name is not a recorded
+        older spelling of a standalone vendor's shim.
+    """
+    if not shim_name:
+        return ""
+    from llm_rosetta.api import retired_names
+
+    canonical = retired_names.replacement_for(shim_name, retired_names.SHIM)
+    vendor = find_standalone(canonical) if canonical else None
+    if vendor is None:
+        return ""
+    return (
+        f" Use the canonical shim {canonical!r} with "
+        f"shims.install: ['{vendor.install}'] and configure its connection "
+        "defaults."
+    )
+
+
+def source_package_advice(shim_name: str | None) -> str:
+    """The sentence to append when a shim belongs to a standalone package.
+
+    Covers the name that is already canonical, where only the install is
+    missing; :func:`legacy_shim_migration_advice` covers the older spelling.
+    """
+    vendor = find_standalone(shim_name) if shim_name else None
+    if vendor is None:
+        return ""
+    return (
+        f" The standalone package {vendor.label!r} provides it; declare "
+        f"shims.install: ['{vendor.install}']."
+    )
 
 
 def repo_key(url: str | None) -> str:
@@ -176,333 +202,6 @@ def repo_key(url: str | None) -> str:
     if out.endswith(".git"):
         out = out[:-4]
     return out.lower()
-
-
-def get_source_package(key: str) -> ShimSourcePackage | None:
-    """Return the standalone package with *key*, if any.
-
-    This is the lookup ``shims.presets`` uses: a config names a package
-    (``"argo"``) rather than spelling out its repository and path.
-
-    Args:
-        key: A catalogue key, e.g. ``"argo"``.
-
-    Returns:
-        The matching package, or ``None`` for an unknown key.
-    """
-    for package in SHIM_SOURCE_PACKAGES:
-        if package.key == key:
-            return package
-    return None
-
-
-def find_source_package(shim_name: str) -> ShimSourcePackage | None:
-    """Return the standalone package that provides *shim_name*, if any.
-
-    Used where a config names a shim that is no longer registered: the caller
-    can then say which package supplies it and what to declare, instead of
-    reporting an unknown provider type.
-
-    Args:
-        shim_name: A canonical shim name, e.g. ``"alcf_sophia--chat_completions"``.
-
-    Returns:
-        The matching package, or ``None`` when no standalone package provides
-        that name.
-    """
-    for package in SHIM_SOURCE_PACKAGES:
-        if shim_name in package.shims:
-            return package
-    return None
-
-
-def find_legacy_source_package(shim_name: str) -> ShimSourcePackage | None:
-    """Return the package whose shim *shim_name* used to name.
-
-    A config written before a rename spells a shim that no longer resolves;
-    the package that provides the canonical replacement is the one to name in
-    the error, because declaring its preset is the whole fix.
-
-    Args:
-        shim_name: An older spelling, e.g. ``"alcf--sophia"``.
-
-    Returns:
-        The matching package, or ``None`` when no package records that
-        spelling.
-    """
-    for package in SHIM_SOURCE_PACKAGES:
-        if shim_name in package.legacy_names:
-            return package
-    return None
-
-
-def legacy_shim_migration_advice(shim_name: str | None) -> str:
-    """The sentence to append when a config still spells a renamed shim.
-
-    A shim that moved to a standalone package keeps its name, so a config that
-    names it only needs the preset declared; a shim that was *renamed* needs
-    the canonical spelling too.  Both callers — provider validation, and the
-    warning a provider with a base_url gets while it runs on generic defaults
-    — want the same sentence, so it is written once, here.
-
-    Args:
-        shim_name: The shim the provider names, if any.
-
-    Returns:
-        The sentence to append, or ``""`` when the name is not a recorded
-        older spelling.
-    """
-    if not shim_name:
-        return ""
-    package = find_legacy_source_package(shim_name)
-    if package is None:
-        return ""
-    canonical = canonical_shim_for(package, shim_name)
-    if canonical:
-        return (
-            f" Use the canonical shim {canonical!r} with "
-            f"shims.presets: ['{package.key}'] and configure its connection defaults."
-        )
-    return (
-        f" The standalone package {package.label!r} provides this shim; declare "
-        f"shims.presets: ['{package.key}']."
-    )
-
-
-def source_package_advice(shim_name: str | None) -> str:
-    """The sentence to append when a shim belongs to a standalone package.
-
-    Covers the name that is already canonical, where only the preset is
-    missing; :func:`legacy_shim_migration_advice` covers the older spelling.
-    """
-    if not shim_name:
-        return ""
-    package = find_source_package(shim_name)
-    if package is None:
-        return ""
-    return (
-        f" The standalone package {package.label!r} provides it; declare "
-        f"shims.presets: ['{package.key}']."
-    )
-
-
-def canonical_shim_for(package: ShimSourcePackage, legacy_name: str) -> str:
-    """Return the canonical shim of *package* that replaces *legacy_name*.
-
-    Derived rather than hand-listed, so a rename that follows either pattern
-    is answered without a second table: the shim whose name carries the same
-    variant (``alcf--sophia`` → ``alcf_sophia--chat_completions``) or the same
-    base after canonicalisation (``asksage--openai_chat`` →
-    ``asksage--chat_completions``).
-
-    Args:
-        package: The package that records *legacy_name*.
-        legacy_name: The older spelling.
-
-    Returns:
-        The canonical name, or ``""`` when nothing in the package matches it —
-        which a test here treats as a broken catalogue entry.
-    """
-    from llm_rosetta.api import retired_names
-
-    canonical = retired_names.replacement_for(legacy_name, retired_names.SHIM)
-    canonical = canonical or legacy_name
-    if canonical in package.shims:
-        return canonical
-    head, _, variant = legacy_name.partition("--")
-    if variant:
-        for shim in package.shims:
-            if shim.startswith(f"{head}_{variant}--"):
-                return shim
-    return ""
-
-
-#: The standalone packages this project publishes.  Adding an entry here makes
-#: the Settings panel offer it as a preset; it does not imply a removal.
-SHIM_SOURCE_PACKAGES: tuple[ShimSourcePackage, ...] = (
-    ShimSourcePackage(
-        key="alcf",
-        vendors=("alcf",),
-        source="argonne",
-        install="argonne:alcf",
-        label="ALCF",
-        repo="https://github.com/Oaklight/llm-rosetta-shim-alcf",
-        package="llm_rosetta_shim_alcf",
-        shims=(
-            "alcf_metis--chat_completions",
-            "alcf_minerva--chat_completions",
-            "alcf_sophia--chat_completions",
-        ),
-        # Cluster-qualified in #1035; the unqualified spellings still ship in
-        # configs written for the 0.14.0 dev builds.
-        legacy_names=("alcf--metis", "alcf--minerva", "alcf--sophia"),
-        # The archive is commit-addressed (``@dist/<commit>``), and the
-        # loader fills ``{ref}`` with the commit it resolved the branch to,
-        # so the pinned commit and the mirror's bytes name one tree without
-        # a hand-maintained ``sha256``.  ``path`` names ``providers`` rather
-        # than ``"."``: the archive strips its single top-level directory.
-        mirror={
-            "url_template": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-alcf"
-                "@dist/{ref}/alcf.tar.gz"
-            ),
-            "path": "providers",
-        },
-    ),
-    ShimSourcePackage(
-        key="argo",
-        vendors=("argo",),
-        source="argonne",
-        install="argonne:argo",
-        legacy_repos=("https://github.com/Oaklight/llm-rosetta-shim-argo",),
-        label="Argo",
-        repo="https://github.com/Oaklight/llm-rosetta-shim-argonne",
-        package="llm_rosetta_shim_argo",
-        shims=(
-            "argo--chat_completions",
-            "argo--messages",
-            "argo--open_responses",
-        ),
-        # The base renames (#917/#923): ``openai_chat`` → ``chat_completions``,
-        # ``anthropic`` → ``messages``, ``openai_responses`` →
-        # ``open_responses``.
-        legacy_names=(
-            "argo--openai_chat",
-            "argo--anthropic",
-            "argo--openai_responses",
-        ),
-        # The archive is commit-addressed (``@dist/<commit>``), and the
-        # loader fills ``{ref}`` with the commit it resolved the branch to,
-        # so the pinned commit and the mirror's bytes name one tree without
-        # a hand-maintained ``sha256``.  ``path`` names ``providers`` rather
-        # than ``"."``: the archive strips its single top-level directory.
-        mirror={
-            "url_template": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-argonne"
-                "@dist/{ref}/argo.tar.gz"
-            ),
-            "path": "providers",
-        },
-    ),
-    ShimSourcePackage(
-        key="free",
-        vendors=("kilo_free", "llm7", "opencode_zen_free", "ovhcloud"),
-        source="contrib",
-        install="contrib:tag:tier:free",
-        legacy_repos=("https://github.com/Oaklight/llm-rosetta-shim-free",),
-        # Every keyless pool, in one package: four vendors with no contract
-        # behind them.  They live outside core so a pool that closes, or
-        # tightens its rate limit, can be withdrawn or retuned without a
-        # release.  This entry replaces the former ``opencode_zen_free`` one —
-        # that repository shipped a single lane, was renamed, and now ships it
-        # beside the others under an unchanged shim name.
-        label="Free Endpoints",
-        repo="https://github.com/Oaklight/llm-rosetta-shim-contrib",
-        package="llm_rosetta_shim_free",
-        shims=(
-            "kilo_free--chat_completions",
-            "llm7--chat_completions",
-            "opencode_zen_free--chat_completions",
-            "ovhcloud--chat_completions",
-        ),
-        # Keyless, so the picker groups them under free resources.
-        free=True,
-        note={
-            "en": (
-                "Anonymous free tiers with no contract: Kilo serves only its "
-                "free slice, LLM7 only its turbo models, OVHcloud 2 requests "
-                "per minute per IP, and OpenCode's gate fingerprints the "
-                "client transport. Prompts may be logged by any of them."
-            ),
-            "zh": (
-                "无合同的匿名免费额度：Kilo 只服务免费子集，LLM7 只服务 turbo 模型，"
-                "OVHcloud 每 IP 每分钟 2 次请求，OpenCode 的门禁会识别客户端传输栈。"
-                "任何一家的提示词都可能被上游记录。"
-            ),
-        },
-        # The archive lives on the orphan ``dist`` branch, one directory per
-        # commit.  A directory named by a tag stays reachable too: a gateway
-        # that pinned v0.1.0 before the layout moved still resolves its own
-        # preset, and that path was the pre-rename OpenCode-only archive.
-        # The archive is commit-addressed (``@dist/<commit>``), and the
-        # loader fills ``{ref}`` with the commit it resolved the branch to,
-        # so the pinned commit and the mirror's bytes name one tree without
-        # a hand-maintained ``sha256``.  ``path`` names ``providers`` rather
-        # than ``"."``: the archive strips its single top-level directory.
-        mirror={
-            "url_template": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-contrib"
-                "@dist/{ref}/free.tar.gz"
-            ),
-            "path": "providers",
-        },
-    ),
-    ShimSourcePackage(
-        key="asksage",
-        vendors=("asksage",),
-        source="argonne",
-        install="argonne:asksage",
-        label="AskSage",
-        repo="https://github.com/Oaklight/llm-rosetta-shim-asksage",
-        package="llm_rosetta_shim_asksage",
-        shims=(
-            "asksage--chat_completions",
-            "asksage--messages",
-            "asksage--open_responses",
-            "asksage--google_generate",
-            # The archive's embeddings lane (#1433).  It loads — the library
-            # can convert with it — but a gateway embeddings provider on it is
-            # auto-disabled by the static-key gate, because the leaf inherits
-            # the vendor's token_command (#1401).  Listed anyway: the package
-            # ships it, and the migration diagnostics must be able to name it.
-            "asksage--embeddings",
-        ),
-        legacy_names=(
-            "asksage--openai_chat",
-            "asksage--anthropic",
-            "asksage--openai_responses",
-        ),
-        # The archive is commit-addressed (``@dist/<commit>``), and the
-        # loader fills ``{ref}`` with the commit it resolved the branch to,
-        # so the pinned commit and the mirror's bytes name one tree without
-        # a hand-maintained ``sha256``.  ``path`` names ``providers`` rather
-        # than ``"."``: the archive strips its single top-level directory.
-        mirror={
-            "url_template": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-asksage"
-                "@dist/{ref}/asksage.tar.gz"
-            ),
-            "path": "providers",
-        },
-    ),
-    ShimSourcePackage(
-        key="opendesign",
-        vendors=("opendesign",),
-        source="contrib",
-        install="contrib:opendesign",
-        label="OpenDesign",
-        repo="https://github.com/Oaklight/llm-rosetta-shim-opendesign",
-        package="llm_rosetta_shim_opendesign",
-        shims=(
-            "opendesign--chat_completions",
-            "opendesign--messages",
-            "opendesign--open_responses",
-        ),
-        # Branch-addressed for the same reason as the rest: no digest to bump.
-        # The archive is commit-addressed (``@dist/<commit>``), and the
-        # loader fills ``{ref}`` with the commit it resolved the branch to,
-        # so the pinned commit and the mirror's bytes name one tree without
-        # a hand-maintained ``sha256``.  ``path`` names ``providers`` rather
-        # than ``"."``: the archive strips its single top-level directory.
-        mirror={
-            "url_template": (
-                "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-opendesign"
-                "@dist/{ref}/opendesign.tar.gz"
-            ),
-            "path": "providers",
-        },
-    ),
-)
 
 
 @dataclass(frozen=True)
@@ -540,16 +239,6 @@ class ShimSource:
         owner, name = self._owner_repo
         return f"https://raw.githubusercontent.com/{owner}/{name}/dist/manifest.json"
 
-    @property
-    def packages(self) -> tuple[ShimSourcePackage, ...]:
-        """The catalogue packages (preset aliases) this source now serves."""
-        return tuple(p for p in SHIM_SOURCE_PACKAGES if p.source == self.key)
-
-    @property
-    def vendors(self) -> tuple[str, ...]:
-        """The vendors this catalogue knows the source ships, in package order."""
-        return tuple(v for package in self.packages for v in package.vendors)
-
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serialisable view."""
         return {
@@ -558,15 +247,6 @@ class ShimSource:
             "repo": self.repo,
             "manifest_url": self.manifest_url,
             "fallback_url": self.fallback_url,
-            "vendors": [
-                {
-                    "name": vendor,
-                    "package": package.key,
-                    "tier": package.tier,
-                }
-                for package in self.packages
-                for vendor in package.vendors
-            ],
         }
 
 
@@ -605,16 +285,3 @@ def get_shim_source(key: str) -> ShimSource | None:
         if source.key == key:
             return source
     return None
-
-
-def package_repo_keys(package: ShimSourcePackage) -> set[str]:
-    """Every normalised URL that names *package*'s repository.
-
-    Args:
-        package: A catalogue package.
-
-    Returns:
-        The current repository and its earlier names, each through
-        :func:`repo_key`.
-    """
-    return {repo_key(package.repo), *(repo_key(u) for u in package.legacy_repos)}

@@ -376,8 +376,6 @@ class TestTheAdminPayload:
             lambda request: SimpleNamespace(load_raw=lambda path: raw),
         )
         monkeypatch.setattr(payload, "_shim_status_payload", lambda request: {})
-        monkeypatch.setattr(payload, "_shim_removal_advisories", lambda r, doc: [])
-        monkeypatch.setattr(payload, "_shim_source_presets_payload", lambda: [])
         cfg.credential_visible = False
         cfg.api_keys_db = None
         cfg.admin_session_idle_minutes = 30

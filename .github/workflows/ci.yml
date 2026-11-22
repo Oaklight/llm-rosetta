@@ -33,7 +33,7 @@ jobs:
               - '!tests/gateway/**'
               - '!tests/js/**'
               # Tests drive these: test_public_api_diff/test_migration_differential
-              # execute scripts/dev/*, check_shim_removals and the token scripts
+              # execute scripts/dev/* and the token scripts
               # are read as source, and tests/conformance imports tools/conformance.
               - 'scripts/**'
               - 'tools/**'
@@ -49,46 +49,12 @@ jobs:
               - 'tools/theme_matrix/**'
               - '.github/workflows/ci.yml'
 
-  shim-removal-check:
-    # Passes while the version is below every scheduled removal; fails on its own
-    # once the version reaches one, so a removal cannot land without the cleanup
-    # that belongs with it (epic #927).
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      # docs_en / docs_zh are separate worktrees, so they are absent from the
-      # checkout above and have to be asked for by name.
-      - uses: actions/checkout@v6
-        with:
-          ref: docs_en
-          path: docs_en
-
-      - uses: actions/checkout@v6
-        with:
-          ref: docs_zh
-          path: docs_zh
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e packages/llm-rosetta -e packages/llm-rosetta-gateway
-
-      - name: Check scheduled shim removals
-        run: make check-shim-removals
-
   shim-catalog:
-    # The Available view of the Shims page is a hand-written catalogue
-    # (`SHIM_SOURCE_PACKAGES`), so a package repository created after the last
-    # edit is invisible to every operator until someone remembers it exists.
-    # This job lists the account's `llm-rosetta-shim-*` repositories, diffs
-    # them against the catalogue, and fails with the entry to paste — the
+    # The manifest sources are a hand-written record (`SHIM_SOURCES`), so a
+    # source repository created after the last edit is invisible to every
+    # operator until someone remembers it exists.  This job lists the
+    # account's `llm-rosetta-shim-*` repositories, diffs them against the
+    # record, and fails with the entry to paste — the
     # reminder is a red check, not a review comment.  It reads the public
     # repository list, so no secret beyond the workflow token is involved.
     runs-on: ubuntu-latest
@@ -100,21 +66,12 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Compare the catalogue with the published packages
+      - name: Compare the sources with the published repositories
         # The script adds both package source trees to ``sys.path`` itself, so
-        # nothing has to be installed for it to import the catalogue.
+        # nothing has to be installed for it to import the record.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/dev/check_shim_catalog.py
-
-      - name: Compare the packages' branch-publish workflow with the master copy
-        # Five copies of one job, and drift in them is silent: a copy that stops
-        # publishing the `.sha256` sibling leaves a mirror with a missing file.
-        # A package with no copy yet is a warning until the rollout finishes;
-        # the nightly `shim-drift` job passes --require-all once it has.
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/dev/check_shim_workflow.py
 
   docs-build:
     # The docs live on two orphan branches, and Read the Docs builds them by

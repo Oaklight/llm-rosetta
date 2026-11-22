@@ -40,20 +40,12 @@ jobs:
           python-version: "3.11"
 
       - name: Every package names the repositories the catalogue lists
-        # `continue-on-error` so the second check still runs and the report sees
-        # both verdicts in one issue.
+        # `continue-on-error` so the report step still runs and files the verdict.
         id: catalog
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python scripts/dev/check_shim_catalog.py 2>&1 | tee catalog.log
-
-      - name: Every package carries the branch-publish workflow
-        id: workflow
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python scripts/dev/check_shim_workflow.py --require-all 2>&1 | tee workflow.log
 
       - name: Report the verdict to the tracker
         # Runs whatever the checks said, so a green timer run is what closes the
@@ -65,7 +57,7 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/dev/report_shim_drift.py \
-            --problems catalog.log workflow.log \
+            --problems catalog.log \
             --repo "${{ github.repository }}" \
             --event "${{ github.event_name }}" \
             --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"

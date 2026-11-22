@@ -154,10 +154,10 @@ def test_message_names_the_replacement(row: retired_names.RetiredName) -> None:
     assert message is not None
     assert f"{row.name!r} was renamed to {row.replacement!r} in 0.14" in message
     assert "no longer accepted" in message
-    if row.preset:
-        assert f"shims.presets: ['{row.preset}']" in message
+    if row.install:
+        assert f"shims.install: ['{row.install}']" in message
     else:
-        assert "shims.presets" not in message
+        assert "shims.install" not in message
 
 
 @pytest.mark.parametrize("row", ROWS)
@@ -433,8 +433,8 @@ def test_pipeline_rejects_a_retired_shim_string(
     for attempt in attempts:
         with pytest.raises(ValueError, match=repr(row.replacement)) as info:
             attempt()
-        if row.preset:
-            assert f"shims.presets: ['{row.preset}']" in str(info.value)
+        if row.install:
+            assert f"shims.install: ['{row.install}']" in str(info.value)
 
 
 @pytest.mark.parametrize("row", _ids(SHIM_SLOT_ROWS))

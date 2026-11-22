@@ -17,13 +17,13 @@ them.  Per selected vendor this module:
 
 When the manifest cannot be fetched the last fetched copy is used, and when a
 download fails the last good install is kept (marked ``stale``), the same
-warm-cache behaviour a plain remote has.  A digest mismatch never installs.
+warm-cache behaviour any fetched source has.  A digest mismatch never installs.
 
 Freshness guard: a manifest URL can answer 200 with an old copy (a CDN that
 has not caught up with a publish).  When the URL that answered serves a
 manifest whose ``generated_at`` is older than the cached one, or that lacks a
-vendor the selectors expect (an explicit ``<source>:<vendor>``, a mapped
-preset's package vendors, a moved vendor), the other URL is fetched once and
+vendor the selectors expect (an explicit ``<source>:<vendor>``, a moved
+vendor), the other URL is fetched once and
 the manifest with the newer ``generated_at`` is used (the first on a tie).  A
 cached manifest is never replaced by an older one: it is kept and marked
 ``stale`` until a fetch returns one at least as new.

@@ -1,14 +1,17 @@
 """Check that every shim repository the account publishes is in the catalogue.
 
-The Shims page's *Available* list is ``SHIM_SOURCE_PACKAGES`` — a hand-written
-record.  A new package repository therefore goes unnoticed until someone reads
-about it, and an operator who knows it exists has no preset for it.  This check
-compares the two lists and says which side to edit:
+The manifest sources the gateway reads (``SHIM_SOURCES``) are a hand-written
+record.  A new source repository therefore goes unnoticed until someone reads
+about it, and an operator who knows it exists has no key for it.  This check
+compares the account's repositories with the record and says which side to
+edit:
 
-- a repository named ``llm-rosetta-shim-*`` that the catalogue does not name
-  (add an entry — the output prints a skeleton to paste);
-- a catalogue entry whose repository no longer exists (drop the entry, or fix
-  the URL after a rename).
+- a repository named ``llm-rosetta-shim-*`` that the record does not name
+  (add a ``ShimSource`` — the output prints a skeleton to paste).  The earlier
+  names of a source (``legacy_repos``) and the repositories of the stand-alone
+  vendors it replaced are known, so the archived predecessors do not count;
+- a source whose repository no longer exists (drop the entry, or fix the URL
+  after a rename).
 
 Run it by hand (``python scripts/dev/check_shim_catalog.py``) or through the
 ``shim-catalog`` CI job, which fails on drift so the reminder arrives as a red
@@ -69,21 +72,26 @@ def shim_repositories(repos: Iterable[dict[str, Any]]) -> dict[str, str]:
 
 
 def compare_catalog(
-    repos: dict[str, str], catalog: Iterable[Any]
+    repos: dict[str, str],
+    catalog: Iterable[Any],
+    known_extra: Iterable[str] = (),
 ) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
-    """Diff the repositories against the catalogue.
+    """Diff the repositories against the manifest sources.
 
     Args:
         repos: ``normalised url -> name``, from :func:`shim_repositories`.
-        catalog: ``ShimSourcePackage`` records.
+        catalog: ``ShimSource`` records (``key`` and ``repo``).
+        known_extra: Repository URLs that are known but not current sources
+            (earlier names, archived stand-alone packages); they are never
+            reported as missing.
 
     Returns:
-        ``(missing, stale)`` — repositories the catalogue does not name, and
-        catalogue entries whose repository is not in the listing.  Each item is
+        ``(missing, stale)`` — repositories the record does not name, and
+        sources whose repository is not in the listing.  Each item is
         ``(key_or_name, url)``.
     """
     by_url = {pkg.key: _normalise(pkg.repo) for pkg in catalog}
-    known = set(by_url.values())
+    known = set(by_url.values()) | {_normalise(url) for url in known_extra}
     missing = [(name, url) for url, name in sorted(repos.items()) if url not in known]
     stale = [(key, url) for key, url in sorted(by_url.items()) if url not in repos]
     return missing, stale
@@ -127,15 +135,13 @@ def fetch_repositories(owner: str, *, token: str | None = None) -> list[dict[str
 
 
 def _skeleton(name: str, url: str) -> str:
-    """A catalogue entry to paste, with the fields only a human can fill."""
+    """A ``ShimSource`` entry to paste, with the fields only a human can fill."""
     key = name.removeprefix("llm-rosetta-shim-").removeprefix("llm-rosetta-shims-")
     return (
-        "    ShimSourcePackage(\n"
+        "    ShimSource(\n"
         f'        key="{key}",\n'
         f'        label="{key.title()}",\n'
         f'        repo="{url}",\n'
-        f'        package="llm_rosetta_shim_{key.replace("-", "_")}",\n'
-        "        shims=(\n            # one entry per provider.yaml it ships\n        ),\n"
         "    ),"
     )
 
@@ -147,14 +153,14 @@ def report(
 
     Args:
         owner: The account the listing came from.
-        missing: Repositories the catalogue does not name.
-        stale: Catalogue entries whose repository is not in the listing.
+        missing: Repositories the record does not name.
+        stale: Sources whose repository is not in the listing.
 
     Returns:
         ``0`` when the two agree, ``1`` otherwise.
     """
     if not missing and not stale:
-        print(f"shim catalogue: {owner}'s packages match SHIM_SOURCE_PACKAGES")
+        print(f"shim catalogue: {owner}'s packages match SHIM_SOURCES")
         return 0
     print(f"shim catalogue drift for {owner}:")
     for name, url in missing:
@@ -164,9 +170,9 @@ def report(
             f"\n  stale {key}: the catalogue names {url}, which is not in the account"
         )
     print(
-        "\nUpdate SHIM_SOURCE_PACKAGES in "
+        "\nUpdate SHIM_SOURCES in "
         "packages/llm-rosetta-gateway/src/llm_rosetta_gateway/shims/catalog.py "
-        "so the Shims page's Available view offers every package."
+        "so the gateway offers every source."
     )
     return 1
 
@@ -199,9 +205,16 @@ def main(argv: list[str] | None = None) -> int:
 
     sys.path.insert(0, str(REPO_ROOT / "packages/llm-rosetta-gateway/src"))
     sys.path.insert(0, str(REPO_ROOT / "packages/llm-rosetta/src"))
-    from llm_rosetta_gateway.shims.catalog import SHIM_SOURCE_PACKAGES  # noqa: E402
+    from llm_rosetta_gateway.shims.catalog import (  # noqa: E402
+        SHIM_SOURCES,
+        STANDALONE_VENDORS,
+    )
 
-    missing, stale = compare_catalog(shim_repositories(repos), SHIM_SOURCE_PACKAGES)
+    known_extra = [url for source in SHIM_SOURCES for url in source.legacy_repos]
+    known_extra += [url for vendor in STANDALONE_VENDORS for url in vendor.repos]
+    missing, stale = compare_catalog(
+        shim_repositories(repos), SHIM_SOURCES, known_extra
+    )
     return report(args.owner, missing, stale)
 
 

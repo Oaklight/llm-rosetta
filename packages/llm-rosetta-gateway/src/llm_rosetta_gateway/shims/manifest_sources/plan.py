@@ -46,34 +46,21 @@ class InstallSelector:
         kind: ``"all"`` (``*``), ``"tag"`` (``tag:<t>``) or ``"vendor"``.
         value: The tag or the vendor name; ``""`` for ``"all"``.
         negate: An exclusion (``!<vendor>``, ``!<source>:<vendor>``): the
-            vendor is not installed whatever a tag, ``*``, preset or explicit
+            vendor is not installed whatever a tag, ``*`` or explicit
             entry says.  An exclusion always wins, so the order of the list
             never decides it.
         version: The pinned release (``<source>:<vendor>@<version>``): that
             version is installed and nothing newer replaces it.  ``None``
             follows the newest installable release.
-        include: Shim-name patterns to keep from the selected vendors (only a
-            legacy preset carries one, from ``shims.include``).
-        exclude: Shim-name patterns to drop.
-        origin: ``"install"``, or ``"presets:<key>"`` for a mapped preset.
-        fallback_remote: The ``shims.remotes`` entry a mapped preset loaded
-            before manifests existed.  Used only while the source has never
-            answered (no manifest fetched, none cached), so a gateway is not
-            left without the package before its source publishes one.
-        expected: Vendors the source is expected to publish for this
-            selector, for the freshness guard only (a mapped preset's package
-            vendors); what installs is still decided by ``kind``/``value``.
+        origin: ``"install"``, or ``"moved:<vendor>"`` for a selector the
+            gateway added for a vendor that moved out of core.
     """
 
     raw: str
     source: str | None
     kind: Literal["all", "tag", "vendor"]
     value: str
-    include: tuple[str, ...] = ()
-    exclude: tuple[str, ...] = ()
     origin: str = "install"
-    fallback_remote: Mapping[str, Any] | None = None
-    expected: tuple[str, ...] = ()
     negate: bool = False
     version: str | None = None
     #: Every pin of the vendor when more than one names it with different
@@ -189,7 +176,7 @@ def parse_selector(text: Any, **extra: Any) -> InstallSelector:
 
     Args:
         text: The entry.
-        **extra: Fields to set on the result (``include``, ``origin``, ...).
+        **extra: Fields to set on the result (``origin``).
 
     Returns:
         The selector.

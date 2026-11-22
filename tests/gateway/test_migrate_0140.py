@@ -14,7 +14,6 @@ from pathlib import Path
 
 import pytest
 
-from llm_rosetta_gateway.shims.catalog import get_source_package
 from llm_rosetta.api import FORMATS_BY_TYPE, retired_names
 
 from llm_rosetta_gateway._vendor import jsonx
@@ -94,9 +93,8 @@ def test_every_retired_name_migrates(row: retired_names.RetiredName) -> None:
         # A preset is spelled as the install entry it maps to (#1660).
         install = new.get("shims", dict()).get("install", [])
         assert "presets" not in new.get("shims", dict())
-        if row.preset:
-            package = get_source_package(row.preset)
-            assert package is not None and package.install in install
+        if row.install:
+            assert row.install in install
         else:
             assert install == []
     else:
@@ -219,6 +217,48 @@ def test_presets_become_install_entries_and_comments_stay() -> None:
         ("argo", "argonne:argo"),
     ]
     assert not mig.migrate_config_text(result.new_text).changed
+
+
+def test_shims_remotes_is_reported_and_names_the_way_out() -> None:
+    """``remotes`` has no manifest equivalent: it is never rewritten, always reported."""
+    text = _doc(
+        "«",
+        '  "shims": «',
+        '    "presets": ["alcf"],',
+        '    "remotes": [«"url": "https://github.com/acme/shims", "ref": "v1"»]',
+        "  »,",
+        "»",
+    )
+    result = mig.migrate_config_text(text)
+    unmapped = [i for i in result.items if i.action == "unmapped"]
+    assert [i.where for i in unmapped] == ["shims.remotes"]
+    # The operator is told both ways out, and the key itself is left alone.
+    assert "shims.sources" in unmapped[0].detail
+    assert "shims.paths" in unmapped[0].detail
+    new = _load(result.new_text)
+    assert new["shims"]["install"] == ["argonne:alcf"]
+    assert new["shims"]["remotes"] == [
+        {"url": "https://github.com/acme/shims", "ref": "v1"}
+    ]
+
+
+def test_a_preset_a_remote_pinned_is_converted_like_any_other() -> None:
+    """The remote path is gone, so a pin no longer keeps a preset out of ``install``."""
+    text = _doc(
+        "«",
+        '  "shims": «',
+        '    "presets": ["argo"],',
+        '    "remotes": [«"url": "https://github.com/Oaklight/llm-rosetta-shim-argonne"»]',
+        "  »,",
+        "»",
+    )
+    result = mig.migrate_config_text(text)
+    new = _load(result.new_text)
+    assert new["shims"]["install"] == ["argonne:argo"]
+    assert "presets" not in new["shims"]
+    assert [i.where for i in result.items if i.action == "unmapped"] == [
+        "shims.remotes"
+    ]
 
 
 def test_a_needed_preset_creates_the_shims_section_when_absent() -> None:

@@ -1,16 +1,15 @@
 """Migration advice for shims that left core or were renamed (#1106).
 
 A config written for an older build can name a shim in two ways that no longer
-resolve: an older *spelling* of a name that still ships in a standalone package
+resolve: an older *spelling* of a name that still ships in a standalone vendor
 (``alcf--sophia``, ``asksage--openai_chat``), or a name that was never renamed
-but whose package is simply not declared (``alcf_sophia--chat_completions``).
+but whose vendor is simply not installed (``alcf_sophia--chat_completions``).
 Both cases have to lead to the same two facts — the canonical spelling, and the
-preset that makes it loadable — so the catalogue records the legacy spellings
-and the advice sentences are built from that record.
+``shims.install`` entry that makes it loadable — so the advice sentences are
+built from the stand-alone vendor table and the core retired-names table.
 
-The catalogue is hand-maintained and the core retired-names table is separate,
-so the first tests here keep the two in step; the rest pin the sentences and the
-warning path that delivers them.
+The two tables are separate, so the first tests here keep them in step; the
+rest pin the sentences and the warning path that delivers them.
 """
 
 from __future__ import annotations
@@ -22,110 +21,96 @@ import pytest
 from llm_rosetta import retired_names
 from llm_rosetta_gateway.config.providers import build_provider_info
 from llm_rosetta_gateway.shims import (
-    SHIM_SOURCE_PACKAGES,
-    canonical_shim_for,
-    find_legacy_source_package,
-    find_source_package,
     legacy_shim_migration_advice,
     source_package_advice,
 )
+from llm_rosetta_gateway.shims.catalog import (
+    SHIM_SOURCES,
+    STANDALONE_VENDORS,
+    find_standalone,
+    get_shim_source,
+    get_standalone,
+)
 from llm_rosetta.api import load_providers
 
-ALL_PACKAGES = pytest.mark.parametrize(
-    "package", SHIM_SOURCE_PACKAGES, ids=lambda p: p.key
-)
+ALL_VENDORS = pytest.mark.parametrize("vendor", STANDALONE_VENDORS, ids=lambda v: v.key)
 
-ALL_LEGACY_NAMES = pytest.mark.parametrize(
-    "package,legacy",
-    [(p, name) for p in SHIM_SOURCE_PACKAGES for name in p.legacy_names],
-    ids=lambda value: value if isinstance(value, str) else value.key,
-)
+#: Rows of the retired-names table that name a stand-alone vendor's shim.
+_INSTALL_ROWS = [
+    row
+    for row in retired_names.RETIRED_NAMES
+    if row.kind == retired_names.SHIM and row.install is not None
+]
 
 
-class TestCatalogueAndAliasTableAgree:
-    """The catalogue's legacy names are only useful if the table retires them."""
+class TestVendorTableAndRetiredNamesAgree:
+    """The vendor table and the retired-names table name the same installs."""
 
-    @ALL_LEGACY_NAMES
-    def test_every_legacy_name_resolves_within_its_package(self, package, legacy):
-        canonical = canonical_shim_for(package, legacy)
-        assert canonical in package.shims, (legacy, canonical)
+    @ALL_VENDORS
+    def test_every_install_selector_names_a_known_source(self, vendor):
+        source = get_shim_source(vendor.source)
+        assert source is not None, vendor.key
+        assert vendor.install.split(":", 1)[0] == vendor.source
+        assert vendor.source in {s.key for s in SHIM_SOURCES}
 
-    @ALL_LEGACY_NAMES
-    def test_every_legacy_name_is_in_the_retired_names_table(self, package, legacy):
-        """A catalogue entry without a row would not name its replacement.
+    @ALL_VENDORS
+    def test_lookup_returns_the_owning_vendor(self, vendor):
+        assert get_standalone(vendor.key) is vendor
+        for shim in vendor.shims:
+            assert find_standalone(shim) is vendor
 
-        The retired-names table is what the config loader and the library
-        boundaries answer with, so a legacy name recorded only in the catalogue
-        would be rejected without saying what it became.
-        """
-        row = retired_names.lookup(legacy, retired_names.SHIM)
-        assert row is not None
-        assert row.replacement == canonical_shim_for(package, legacy)
-        assert row.preset == package.key
+    @pytest.mark.parametrize("row", _INSTALL_ROWS, ids=lambda r: r.name)
+    def test_every_retired_name_resolves_within_its_vendor(self, row):
+        vendor = find_standalone(row.replacement)
+        assert vendor is not None, row.name
+        assert row.install == vendor.install
 
-    @ALL_LEGACY_NAMES
-    def test_no_legacy_name_is_still_a_registered_shim(self, package, legacy):
+    @pytest.mark.parametrize("row", _INSTALL_ROWS, ids=lambda r: r.name)
+    def test_no_retired_name_is_still_a_registered_shim(self, row):
         """A legacy spelling that still resolves needs no migration advice."""
         from llm_rosetta.shims import get_shim, list_shims
 
         load_providers()
-        assert legacy not in {s.name for s in list_shims()}
-        assert get_shim(legacy) is None
+        assert row.name not in {s.name for s in list_shims()}
+        assert get_shim(row.name) is None
 
-    def test_every_retired_name_pointing_at_a_package_is_a_catalogue_name(self):
-        """The reverse direction: no row invents a package name.
-
-        The table also carries core renames, so only rows whose replacement a
-        package provides are checked — those must be listed in that package's
-        ``legacy_names``, or the advice lookup misses them.
-        """
-        catalogued = {
-            (p.key, name) for p in SHIM_SOURCE_PACKAGES for name in p.legacy_names
+    def test_a_retired_name_is_listed_for_every_vendor_rename(self):
+        """The table carries the renames the advice lookup depends on."""
+        assert {row.install for row in _INSTALL_ROWS} >= {
+            "argonne:argo",
+            "argonne:alcf",
+            "argonne:asksage",
         }
-        for row in retired_names.RETIRED_NAMES:
-            if row.kind != retired_names.SHIM:
-                continue
-            package = find_source_package(row.replacement)
-            if package is None:
-                continue
-            assert (package.key, row.name) in catalogued, row.name
-
-    @ALL_PACKAGES
-    def test_lookup_returns_the_owning_package(self, package):
-        for legacy in package.legacy_names:
-            assert find_legacy_source_package(legacy) is package
-        for canonical in package.shims:
-            assert find_source_package(canonical) is package
 
 
 class TestMigrationAdvice:
-    """One sentence per situation, naming the canonical name and the preset."""
+    """One sentence per situation, naming the canonical name and the install entry."""
 
     @pytest.mark.parametrize(
-        "legacy,canonical,preset",
+        "legacy,canonical,install",
         [
-            ("alcf--sophia", "alcf_sophia--chat_completions", "alcf"),
-            ("asksage--openai_chat", "asksage--chat_completions", "asksage"),
-            ("argo--anthropic", "argo--messages", "argo"),
+            ("alcf--sophia", "alcf_sophia--chat_completions", "argonne:alcf"),
+            ("asksage--openai_chat", "asksage--chat_completions", "argonne:asksage"),
+            ("argo--anthropic", "argo--messages", "argonne:argo"),
         ],
     )
-    def test_legacy_name_gets_canonical_and_preset(self, legacy, canonical, preset):
+    def test_legacy_name_gets_canonical_and_install(self, legacy, canonical, install):
         advice = legacy_shim_migration_advice(legacy)
         assert canonical in advice
-        assert f"shims.presets: ['{preset}']" in advice
+        assert f"shims.install: ['{install}']" in advice
 
     @pytest.mark.parametrize(
-        "canonical,preset",
+        "canonical,install",
         [
-            ("alcf_sophia--chat_completions", "alcf"),
-            ("asksage--messages", "asksage"),
-            ("argo--chat_completions", "argo"),
+            ("alcf_sophia--chat_completions", "argonne:alcf"),
+            ("asksage--messages", "argonne:asksage"),
+            ("argo--chat_completions", "argonne:argo"),
         ],
     )
-    def test_canonical_name_gets_only_the_preset(self, canonical, preset):
+    def test_canonical_name_gets_only_the_install(self, canonical, install):
         assert legacy_shim_migration_advice(canonical) == ""
         advice = source_package_advice(canonical)
-        assert f"shims.presets: ['{preset}']" in advice
+        assert f"shims.install: ['{install}']" in advice
 
     @pytest.mark.parametrize(
         "name",
@@ -185,18 +170,20 @@ class TestWarningPath:
         self._build("alcf--sophia", "alcf--sophia")
         warning = _warning_text(gateway_warnings)
         assert "alcf_sophia--chat_completions" in warning
-        assert "shims.presets: ['alcf']" in warning
+        assert "shims.install: ['argonne:alcf']" in warning
 
-    def test_unregistered_canonical_name_warns_with_its_preset(self, gateway_warnings):
+    def test_unregistered_canonical_name_warns_with_its_install_entry(
+        self, gateway_warnings
+    ):
         self._build("asksage--messages", "asksage--messages")
         warning = _warning_text(gateway_warnings)
-        assert "shims.presets: ['asksage']" in warning
+        assert "shims.install: ['argonne:asksage']" in warning
 
     def test_unknown_name_warns_without_advice(self, gateway_warnings):
         self._build("not-a-provider", None)
         warning = _warning_text(gateway_warnings)
         assert "generic URL template" in warning
-        assert "shims.presets" not in warning
+        assert "shims.install" not in warning
 
 
 def _warning_text(records) -> str:
@@ -221,9 +208,9 @@ class TestUnknownShimField:
         item = self._validate({"shim": "alcf--minerva", "api_key": "k"})
         assert item["category"] == "unknown_shim"
         assert "alcf_minerva--chat_completions" in item["reason"]
-        assert "shims.presets: ['alcf']" in item["reason"]
+        assert "shims.install: ['argonne:alcf']" in item["reason"]
 
     def test_unknown_shim_field_stays_terse(self):
         item = self._validate({"shim": "not-a-shim", "api_key": "k"})
         assert item["category"] == "unknown_shim"
-        assert "shims.presets" not in item["reason"]
+        assert "shims.install" not in item["reason"]

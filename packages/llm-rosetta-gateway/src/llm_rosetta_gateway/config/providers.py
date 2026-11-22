@@ -704,11 +704,7 @@ def build_provider_info(
     """
     from llm_rosetta.api import get_shim
 
-    from ..shims import (
-        find_source_package,
-        legacy_shim_migration_advice,
-        source_package_advice,
-    )
+    from ..shims import legacy_shim_migration_advice, source_package_advice
 
     # A retired spelling (e.g. ``openai_chat``) is an error that names its
     # replacement, not a name the registry lookup below could resolve.
@@ -732,14 +728,6 @@ def build_provider_info(
         cfg = _apply_shim_defaults(cfg, shim, exchange)
     else:
         base_type = provider_type
-
-    # A name that a standalone package provides but the registry does not hold
-    # means the source was not declared (or failed to load).  The missing
-    # base_url error below is the first thing such a config hits, so it is the
-    # right place to name the package and the entry to declare.
-    missing_package = (
-        None if shim is not None else find_source_package(shim_name or provider_type)
-    )
 
     keyless_shim = bool(shim and shim.connection.keyless)
 
@@ -797,9 +785,7 @@ def build_provider_info(
 
     if not cfg.get("base_url"):
         raise ValueError(
-            _missing_base_url_message(
-                provider_type, base_type, shim_name, shim, missing_package
-            )
+            _missing_base_url_message(provider_type, base_type, shim_name, shim)
         )
 
     # The config key, when the caller has one: two providers of the same shim
@@ -912,7 +898,6 @@ def _missing_base_url_message(
     base_type: str,
     shim_name: str | None,
     shim: Any,
-    missing_package: Any,
 ) -> str:
     """The error for a provider with no ``base_url`` from its config or its shim.
 
@@ -921,6 +906,12 @@ def _missing_base_url_message(
     no shim supplied the URL.
     """
     from llm_rosetta.api import retired_names
+
+    from ..shims.catalog import find_standalone
+
+    missing_package = (
+        None if shim is not None else find_standalone(shim_name or provider_type)
+    )
 
     message = (
         f"Provider {provider_type!r} (base type {base_type!r}) has no "
@@ -931,10 +922,9 @@ def _missing_base_url_message(
         name = shim_name or provider_type
         message += (
             f" Shim {name!r} is not built in: it ships in the standalone "
-            f"package {missing_package.label!r} ({missing_package.repo}). "
-            f"Declare `shims.presets: [{missing_package.key!r}]` (or the "
-            f"equivalent `shims.remotes` entry: {missing_package.remote!r}); "
-            "Settings -> Shim Sources offers both. If the source is already "
+            f"package {missing_package.label!r}. Declare "
+            f"`shims.install: [{missing_package.install!r}]`; "
+            "Settings -> Shims offers it. If the source is already "
             "declared, check the shim-source status for a load failure."
         )
     moved = (

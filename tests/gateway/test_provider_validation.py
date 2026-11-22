@@ -163,7 +163,7 @@ def test_legacy_alcf_name_gets_actionable_diagnostic():
 
     reason = result["disabled"][0]["reason"]
     assert "alcf_sophia--chat_completions" in reason
-    assert "shims.presets: ['alcf']" in reason
+    assert "shims.install: ['argonne:alcf']" in reason
 
 
 def test_a_recovery_is_written_to_the_document(tmp_path):

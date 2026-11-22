@@ -466,47 +466,6 @@ def _cmd_db_export_errors(args: argparse.Namespace) -> None:
     print(f"Exported {written} bytes to {output}")
 
 
-def _cmd_shims_preset(args: argparse.Namespace) -> None:
-    """Add or remove an explicitly selected standalone shim preset."""
-    from ..shims import get_source_package
-
-    config_path = discover_config(args.config) or PATHS_TO_TRY[0]
-    if not os.path.isfile(config_path):
-        print(f"Config file not found: {config_path}", file=sys.stderr)
-        sys.exit(1)
-    package = get_source_package(args.preset)
-    if package is None:
-        print(f"Unknown shim preset: {args.preset}", file=sys.stderr)
-        sys.exit(1)
-    data = load_config_raw(config_path)
-    section = data.setdefault("shims", {})
-    if not isinstance(section, dict):
-        print("Error: config 'shims' must be an object", file=sys.stderr)
-        sys.exit(1)
-    presets = section.setdefault("presets", [])
-    if not isinstance(presets, list):
-        print("Error: config 'shims.presets' must be an array", file=sys.stderr)
-        sys.exit(1)
-    if args.action == "enable":
-        if args.preset not in presets:
-            presets.append(args.preset)
-            _write_jsonc(config_path, data)
-            print(f"Enabled shim preset '{args.preset}' in {config_path}")
-        else:
-            print(f"Shim preset '{args.preset}' is already enabled")
-    else:
-        if args.preset in presets:
-            presets.remove(args.preset)
-            if not presets:
-                section.pop("presets", None)
-            if not section:
-                data.pop("shims", None)
-            _write_jsonc(config_path, data)
-            print(f"Disabled shim preset '{args.preset}' in {config_path}")
-        else:
-            print(f"Shim preset '{args.preset}' is not enabled")
-
-
 def _dispatch_shims(args: argparse.Namespace, sub: Any) -> None:
     """Run the ``shims`` action the operator named.
 
@@ -514,10 +473,7 @@ def _dispatch_shims(args: argparse.Namespace, sub: Any) -> None:
         args: The parsed arguments, whose ``shim_action`` names the action.
         sub: The subparsers, whose help is printed when no action was named.
     """
-    if args.shim_action in {"enable-preset", "disable-preset"}:
-        args.action = "enable" if args.shim_action == "enable-preset" else "disable"
-        _cmd_shims_preset(args)
-    elif args.shim_action == "new":
+    if args.shim_action == "new":
         _cmd_shims_new(args)
     elif args.shim_action == "check":
         _cmd_shims_check(args)
@@ -772,8 +728,8 @@ def _report_shim_sources(report: ShimLoadReport | None) -> None:
         )
         if status.unreachable:
             logger.warning(
-                "  %s is unreachable; declare a mirror for it "
-                "(shims.remotes[].mirror), point shims.paths at a local copy, "
+                "  %s is unreachable; declare a second manifest URL for it "
+                "(shims.sources[].fallback), point shims.paths at a local copy, "
                 "or restore access to the host",
                 status.location,
             )
@@ -958,14 +914,6 @@ def main() -> None:  # noqa: C901
     # ``shims`` subcommands
     shims_parser = sub.add_parser("shims", help="Manage external shim sources")
     shim_sub = shims_parser.add_subparsers(dest="shim_action")
-    for action, help_text in (
-        ("enable-preset", "Enable a standalone shim preset"),
-        ("disable-preset", "Disable a standalone shim preset"),
-    ):
-        preset_parser = shim_sub.add_parser(action, help=help_text)
-        preset_parser.add_argument("preset", help="Preset name, e.g. argo")
-        preset_parser.add_argument("--config", default=None, help="Path to config file")
-
     # ``shims new`` — the same flags the repository's scripts/dev/new_shim.py
     # offers; the module owns them, so the two entry points cannot drift.
     from llm_rosetta.api import add_scaffold_arguments as _add_scaffold_args

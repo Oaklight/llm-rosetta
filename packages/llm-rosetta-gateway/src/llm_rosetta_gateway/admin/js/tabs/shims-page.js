@@ -24,9 +24,6 @@ import {
 
 let _view = 'installed';
 let _shims = [];
-/** `/admin/api/config/shims/catalog`: the legacy preset keys, each with the
- *  `shims.install` selector it now stands for. */
-let _packages = [];
 let _shimMeta = {};
 let _loaded = false;
 /** `/admin/api/config/shims/source-catalog`: every manifest source and every
@@ -105,7 +102,6 @@ async function loadShimsPage() {
       _shimMeta[s.group || vendorOf(s.name)] = s;
     }
     const inv = await api.get('/admin/api/config/shims');
-    const cat = await api.get('/admin/api/config/shims/catalog');
     _shims = inv.shims || [];
     // A shim the operator declined is not registered, so it never appears in
     // `registered_shims`; its card would then paint initials beside a loaded
@@ -122,7 +118,6 @@ async function loadShimsPage() {
         group_label: known.group_label || row.group_label || null,
       };
     }
-    _packages = cat.packages || [];
     try {
       const sc = await api.get('/admin/api/config/shims/source-catalog');
       _sourceCat = sc && Array.isArray(sc.sources) ? sc : null;
@@ -360,9 +355,7 @@ async function _mustWrite(request) {
 //
 // Every vendor a manifest source publishes gets a card: where it comes from,
 // what runs, what the source offers, whether the installed release's
-// `requires` matches this core, and the entry that selects it.  A legacy
-// `shims.presets` key is not a card of its own: it is one more selector, and
-// the vendor card it selects says so ("via preset alcf").
+// `requires` matches this core, and the entry that selects it.
 
 /** Vendor cards stay closed until they are the one being worked on. */
 const _openSrcVendors = new Set();
@@ -394,10 +387,6 @@ function _maturityLine(v) {
   return parts.length ? `<p class="shim-card-hash">${esc(parts.join(' · '))}</p>` : '';
 }
 
-/** The preset key an entry came from, or '' for a `shims.install` entry. */
-const _presetOf = (v) => ((v.selected_origin || '').startsWith('presets:')
-  ? v.selected_origin.slice('presets:'.length) : '');
-
 /**
  * Whether the gateway selected the vendor itself, because a provider names
  * one of its shims (`moved:<vendor>`, #1660).  No config entry carries it, so
@@ -421,12 +410,10 @@ function _selectedLine(v) {
     return `<p class="field-hint">${esc(t('shimSrc.excludedBy', {selector: v.excluded_by}))}</p>`;
   }
   if (!v.selected_by) return `<p class="field-hint">${esc(t('shimSrc.notSelected'))}</p>`;
-  const preset = _presetOf(v);
   const users = _providersUsing(v);
-  const line = preset ? t('shimSrc.viaPreset', {preset})
-    : selectedForProvider(v)
-      ? (users.length ? t('shimSrc.viaProviders', {providers: users.join(', ')}) : t('shimSrc.viaProvider'))
-      : t('shimSrc.selectedBy', {selector: v.selected_by});
+  const line = selectedForProvider(v)
+    ? (users.length ? t('shimSrc.viaProviders', {providers: users.join(', ')}) : t('shimSrc.viaProvider'))
+    : t('shimSrc.selectedBy', {selector: v.selected_by});
   return `<p class="field-hint">${esc(line)}</p>`;
 }
 
@@ -540,27 +527,6 @@ function _sourceHead(src, shown) {
     + `${link ? `<span class="shim-source-link">${link}</span>` : ''}</div>`;
 }
 
-/**
- * The legacy `shims.presets` keys this config still declares, each with the
- * `shims.install` entry it stands for.  They keep working, and the vendor
- * cards they select say "via preset"; the note is where the operator learns
- * the spelling that replaces them.
- */
-export function legacyPresetLines(section, packages) {
-  const declared = Array.isArray(section && section.presets) ? section.presets : [];
-  return declared.filter((k) => typeof k === 'string' && k).map((key) => {
-    const pkg = (packages || []).find((p) => p.key === key);
-    return { key, install: (pkg && pkg.install) || '' };
-  });
-}
-
-function _legacyPresetNote() {
-  const lines = legacyPresetLines(S.configData && S.configData.shims, _packages);
-  if (!lines.length) return '';
-  const list = lines.map((l) => (l.install ? `${l.key} \u2192 ${l.install}` : l.key)).join(', ');
-  return `<p class="field-hint shim-legacy-note" role="note">${esc(t('shimSrc.legacyNote', {list}))}</p>`;
-}
-
 /** Every source, each with the vendor cards that pass the filters. */
 function _sourceSections(f) {
   const sources = (_sourceCat && _sourceCat.sources) || [];
@@ -625,41 +591,20 @@ export async function selectShimSourceVendor(btn, sourceId, vendor) {
 
 /**
  * Remove one vendor.  Never a refusal (`deselectVendor`): its own entries go,
- * and when a tag, `*`, a shared entry or a legacy preset would still install
- * it, `!<source>:<vendor>` is written.  A preset is first rewritten as
- * `shims.install` entries on the gateway (the same rewrite
- * `llm-rosetta-migrate --config` applies), and the one toast says so.
+ * and when a tag, `*` or a shared entry would still install it,
+ * `!<source>:<vendor>` is written.
  */
 export async function deselectShimSourceVendor(btn, sourceId, vendor) {
   const { src, v } = _sourceVendor(sourceId, vendor);
   if (!src || !v || selectedForProvider(v)) return;
   const section = (S.configData && S.configData.shims) || {};
-  const presets = v.selected_presets || (_presetOf(v) ? [_presetOf(v)] : []);
-  let plan = deselectVendor(section.install || [], sourceId, vendor, v.tags || [], presets);
+  const plan = deselectVendor(section.install || [], sourceId, vendor, v.tags || []);
   if (plan.refuse) {
     showToast(t(plan.refuse.key, plan.refuse.params), 'error');
     return;
   }
   await withBusyButton(btn, async () => {
     try {
-      let migrated = [];
-      if (plan.migratePresets) {
-        const m = await _mustWrite(() => api.post('/admin/api/config/shims/presets/migrate', {}));
-        const stuck = presets.filter((k) => (m.unconvertible || {})[k]);
-        if (stuck.length) {
-          // The vendor stays: its preset cannot become install entries.  Any
-          // other preset the rewrite did convert is named too.
-          if ((m.converted || []).length) S.configData = await api.get('/admin/api/config');
-          const lead = (m.converted || []).length
-            ? t('shimSrc.presetsMigrated', {presets: m.converted.join(', ')}) + ' ' : '';
-          showToast(lead + t('shimSrc.presetStuck', {
-            preset: stuck.join(', '), reason: stuck.map((k) => m.unconvertible[k]).join('; '),
-          }), 'error');
-          return;
-        }
-        migrated = m.converted || [];
-        plan = deselectVendor(((m.shims || {}).install) || [], sourceId, vendor, v.tags || [], []);
-      }
       const r = await _writeSources({ install: plan.install });
       const warnings = (r && r.provider_warnings) || [];
       const exclusion = `!${sourceId}:${vendor}`;
@@ -667,13 +612,12 @@ export async function deselectShimSourceVendor(btn, sourceId, vendor) {
         ? t('shimSrc.excludeDone', {vendor, selector: exclusion})
         : t('shimSrc.deselectDone', {vendor}))
         + (plan.droppedPin ? ' ' + t('shimSrc.pinDropped', {version: plan.droppedPin}) : '');
-      const lead = migrated.length ? t('shimSrc.presetsMigrated', {presets: migrated.join(', ')}) + ' ' : '';
       // A provider the reload disabled is worth the error colour, but what
-      // the Remove did (the rewrite, the exclusion, a dropped pin) still shows.
+      // the Remove did (the exclusion, a dropped pin) still shows.
       const warned = warnings.length
         ? ' ' + t('toast.providersAutoDisabled', {providers: warnings.map((x) => x.provider).join(', ')})
         : '';
-      showToast(lead + done + warned, warnings.length ? 'error' : undefined);
+      showToast(done + warned, warnings.length ? 'error' : undefined);
     } catch (e) {
       showToast(String(e.message || e), 'error');
     }
@@ -791,7 +735,7 @@ function renderShimsPage() {
         : plural(sections.vendors, 'shimPage.vendors', 'shimPage.vendorOne');
     }
     catalog.innerHTML = sections.html
-      ? _legacyPresetNote() + sections.html
+      ? sections.html
       : '<div class="shim-empty">' + esc(t('shimSrc.noSources')) + '</div>';
   } else if (count) {
     count.textContent = '';

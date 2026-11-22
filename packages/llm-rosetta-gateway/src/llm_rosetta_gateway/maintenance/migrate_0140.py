@@ -33,7 +33,7 @@ an ``include`` becomes one ``<source>:<vendor>`` per kept vendor, an
 ``exclude`` becomes ``!<source>:<vendor>`` per dropped vendor, and a shim a
 selection drops from a kept vendor goes to ``shims.disabled``.  A legacy shim
 name that needs a package gets the install entry, not a preset.  A key that
-cannot be converted (unknown, or pinned by an explicit remote) stays.
+cannot be converted (an unknown key) stays.
 
 Configs are edited as text (:mod:`.jsonc_spans`): comments, key order and
 formatting outside the rewritten names are untouched.  The database step runs
@@ -59,6 +59,8 @@ from pathlib import Path
 from typing import Any
 
 from llm_rosetta.api import FORMATS_BY_TYPE, retired_names
+
+from ..shims.catalog import STANDALONE_VENDORS
 
 from .jsonc_spans import (
     Edits,
@@ -283,8 +285,12 @@ class _ConfigPlanner:
                 self._note_moved(node, where, str(node.value), moved)
             return
         self._rewrite(node, row.replacement, where)
-        if row.preset:
-            self.presets.setdefault(row.preset, row.name)
+        if row.install:
+            vendor = next(
+                (v for v in STANDALONE_VENDORS if v.install == row.install), None
+            )
+            if vendor is not None:
+                self.presets.setdefault(vendor.key, row.name)
         if moved is not None:
             self._note_moved(node, where, row.replacement, moved)
 
@@ -593,13 +599,13 @@ class _ConfigPlanner:
 
         The declared presets, and the ones a rewritten legacy shim name needs,
         are replaced by the entries
-        :func:`~llm_rosetta_gateway.shims.shim_sources.presets_as_install` gives:
+        :func:`~llm_rosetta_gateway.maintenance.migrate_presets.presets_as_install` gives:
         the mapped selector, one ``<source>:<vendor>`` per vendor an
         ``include`` keeps, ``!<source>:<vendor>`` per vendor an ``exclude``
         drops, and ``shims.disabled`` for a shim dropped from a kept vendor.
         A key that cannot be converted stays a preset and is reported.
         """
-        from ..shims.shim_sources import presets_as_install
+        from .migrate_presets import presets_as_install
 
         shims = root.member("shims")
         obj = shims.value if shims is not None and shims.value.kind == "obj" else None
@@ -610,6 +616,17 @@ class _ConfigPlanner:
                 )
                 self._unmapped(shims.value, "shims", "shims", f"not an object; {why}")
             return
+        remotes_member = obj.member("remotes") if obj is not None else None
+        if remotes_member is not None:
+            self._unmapped(
+                remotes_member.value,
+                "shims.remotes",
+                "remotes",
+                "removed in 0.15.0, and an explicit archive URL has no manifest "
+                "equivalent: publish a manifest source and declare it in "
+                "shims.sources, or point shims.paths at a local copy; the "
+                "gateway refuses the key until it is removed",
+            )
         presets_member = obj.member("presets") if obj is not None else None
         declared: list[str] = []
         if presets_member is not None:
@@ -622,15 +639,11 @@ class _ConfigPlanner:
         keys = list(dict.fromkeys([*declared, *sorted(self.presets)]))
         include = self._selection(obj, "include")
         exclude = self._selection(obj, "exclude")
-        remotes_member = obj.member("remotes") if obj is not None else None
-        remotes = _plain(remotes_member.value) if remotes_member is not None else None
-        rewrite = presets_as_install(keys, include, exclude, remotes)
+        rewrite = presets_as_install(keys, include, exclude)
         if not rewrite.converted or self._blocked(obj):
             self._keep_presets(obj, keys, rewrite)
             return
-        self._report_conversion(
-            presets_member, keys, include, exclude, remotes, rewrite
-        )
+        self._report_conversion(presets_member, keys, include, exclude, rewrite)
         if obj is None:
             append_member(
                 self.edits, root, "shims", json.dumps({"install": rewrite.install})
@@ -674,7 +687,7 @@ class _ConfigPlanner:
             self.items.append(
                 Item(
                     "config",
-                    "note" if "remotes" in why else "unmapped",
+                    "unmapped",
                     self.file,
                     "shims.presets",
                     line_of(self.text, node.start) if node is not None else None,
@@ -689,16 +702,15 @@ class _ConfigPlanner:
         keys: list[str],
         include: dict[str, list[str]],
         exclude: dict[str, list[str]],
-        remotes: Any,
         rewrite: Any,
     ) -> None:
-        from ..shims.shim_sources import presets_as_install
+        from .migrate_presets import presets_as_install
 
         line = (
             line_of(self.text, presets_member.value.start) if presets_member else None
         )
         for key in rewrite.converted:
-            one = presets_as_install([key], include, exclude, remotes)
+            one = presets_as_install([key], include, exclude)
             detail = "legacy preset spelled as shims.install entries"
             if key in self.presets:
                 detail = f"needed by {self.presets[key]!r}; " + detail
@@ -770,7 +782,7 @@ class _ConfigPlanner:
         an unknown URL may be a mirror of it, so the key is then reported rather
         than added (a second declaration would fetch the source twice).
         """
-        from ..shims.shim_sources import sources_to_declare
+        from .migrate_presets import sources_to_declare
 
         member = obj.member("sources")
         if member is None or member.value.kind != "arr":

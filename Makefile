@@ -12,7 +12,7 @@ PYPI_MIRROR ?=
 REGISTRY_MIRROR ?=
 
 # Default target
-all: lint test test-js check-shim-removals build
+all: lint test test-js build
 
 # ──────────────────────────────────────────────
 # Linting & Formatting
@@ -64,21 +64,14 @@ theme-matrix:
 
 
 # ──────────────────────────────────────────────
-# Scheduled shim removals
+# Shim source drift
 # ──────────────────────────────────────────────
 
-# Fail when this repo -- examples, docs, the built-in registry -- still names a
-# shim whose removal version has been reached.  Passes until then, on purpose.
-check-shim-removals:
-	@echo "Checking scheduled shim removals..."
-	python scripts/check_shim_removals.py
-	@echo "Shim removals check complete."
-
-
-# Fail when a shim package the account publishes is missing from the catalogue,
-# or its repository URL has moved.  Needs network; CI runs it with a token.
+# Fail when a shim source repository the account publishes is missing from
+# SHIM_SOURCES, or its repository URL has moved.  Needs network; CI runs it
+# with a token.
 check-shim-catalog:
-	@echo "Comparing the shim catalogue with the published packages..."
+	@echo "Comparing the shim sources with the published repositories..."
 	python scripts/dev/check_shim_catalog.py
 	@echo "Shim catalogue check complete."
 
@@ -467,4 +460,4 @@ help:
 	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint bench lint-fix test test-js theme-matrix test-integration test-gateway check-shim-removals check-shim-catalog check-public-api build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
+.PHONY: all lint bench lint-fix test test-js theme-matrix test-integration test-gateway check-shim-catalog check-public-api build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help

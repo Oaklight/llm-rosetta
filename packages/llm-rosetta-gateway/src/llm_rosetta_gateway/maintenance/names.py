@@ -5,7 +5,7 @@ name to its canonical spelling at load time and write the config back; that
 correction is gone.  A ``shim`` / ``type`` value that is a retired
 spelling is rejected with the retired-names diagnostic
 (:mod:`llm_rosetta.retired_names`): it names the replacement, and for a shim
-that moved to a standalone package it names the ``shims.presets`` entry too.
+that moved to a standalone package it names the ``shims.install`` entry too.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ def _retired_error(
     """The message for *value* when it is retired under one of *kinds*.
 
     The message is the retired-names diagnostic: it names the replacement, the
-    standalone package's preset when there is one, and ends with the
+    standalone package's ``shims.install`` entry when there is one, and ends with the
     ``llm-rosetta-migrate`` command.
     """
     from llm_rosetta.api import retired_names
@@ -39,7 +39,7 @@ def legacy_name_error(providers: dict[str, Any]) -> str | None:
     The gateway rejects the config rather than resolving a retired name at
     runtime.  The names come from the retired-names table
     (:mod:`llm_rosetta.retired_names`); the message names the replacement (and
-    the preset of a standalone package).
+    the ``shims.install`` entry of a standalone package).
     """
     from llm_rosetta.api import retired_names
 

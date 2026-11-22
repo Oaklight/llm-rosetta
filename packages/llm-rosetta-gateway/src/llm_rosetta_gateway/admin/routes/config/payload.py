@@ -22,7 +22,6 @@ from ....config.providers import (
     get_default_supports_custom_tools,
     known_provider_types,
 )
-from ....shims import SHIM_SOURCE_PACKAGES
 from ....transport.token_refresh import public_token_status
 from .._shared import (
     _TOKEN_COMMAND_MARKER,
@@ -34,19 +33,9 @@ from .._shared import (
     declared_fields,
 )
 
-from .shims import _shim_removal_advisories, _shim_status_payload
+from .shims import _shim_status_payload
 
 logger = logging.getLogger("llm-rosetta-gateway")
-
-
-def _shim_source_presets_payload() -> list[dict[str, Any]]:
-    """Payload for the Settings → Shim Sources preset picker.
-
-    The catalogue is server-supplied so the client never hardcodes package
-    names; adding a standalone package is a change to
-    :data:`llm_rosetta.shims.SHIM_SOURCE_PACKAGES` only.
-    """
-    return [entry.to_dict() for entry in SHIM_SOURCE_PACKAGES]
 
 
 def _base_formats_payload() -> list[dict[str, Any]]:
@@ -522,8 +511,6 @@ async def get_config(request: Any) -> Response:
             "server": server,
             "shims": raw.get("shims", {}),
             "shim_sources": _shim_status_payload(request),
-            "shim_removals": _shim_removal_advisories(request, raw),
-            "shim_source_presets": _shim_source_presets_payload(),
             "debug": raw.get("debug", {}),
             "credential_visible": config.credential_visible,
             # Effective session lifetimes, defaults included, so the settings

@@ -44,12 +44,12 @@ def test_legacy_name_error_names_the_replacement(cfg: dict, replacement: str) ->
     assert "'p'" in message
 
 
-def test_a_standalone_package_shim_names_its_preset() -> None:
+def test_a_standalone_package_shim_names_its_install() -> None:
     message = legacy_name_error(dict(p=dict(shim="alcf--sophia")))
 
     assert message is not None
     assert "'alcf_sophia--chat_completions'" in message
-    assert "shims.presets: ['alcf']" in message
+    assert "shims.install: ['argonne:alcf']" in message
 
 
 @pytest.mark.parametrize(

@@ -59,8 +59,6 @@ def scan_manifest_status(
         stale=status.stale,
         fetched_at=status.fetched_at,
         resolved_ref=status.resolved_ref,
-        include=status.include,
-        exclude=status.exclude,
         refuse=core_names,
         only=(
             None
