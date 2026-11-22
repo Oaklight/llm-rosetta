@@ -9,7 +9,7 @@
  * variable.
  */
 
-const SAFE_CALL = /^(?:esc|_esc|jsArg|raw)\s*\(/;
+const SAFE_CALL = /^(?:esc|_esc|jsArg|raw|cssValue)\s*\(/;
 const SLASH = '/';
 const STAR = '*';
 
@@ -169,6 +169,78 @@ export function scanUnquoted(src) {
     for (const it of parseTemplate(src, tick).interps) {
       if (/=\s*$/.test(it.before)) found.push({ line, expr: it.expr });
     }
+  }
+  return found;
+}
+
+const URL_ATTR = '(?:href|src|action|formaction)';
+const OPEN_VALUE = new RegExp(`(?:^|[\\s"'\`])(${URL_ATTR}|style)\\s*=\\s*(["'])(?:(?!\\2)[^])*$`, 'i');
+const UNQUOTED_VALUE = new RegExp(`(?:^|[\\s"'\`])(${URL_ATTR}|style)\\s*=\\s*$`, 'i');
+
+/** Whether an interpolation in a `style` / URL position is wrapped by its
+ *  helper: `cssValue(...)` for style, `safeUrl(...)` or `logoUrl(...)` (each
+ *  optionally inside `esc(...)`) for a URL. */
+function isSafeValue(attr, expr) {
+  const e = expr.trim();
+  if (attr === 'style') return /^cssValue\s*\(/.test(e) && isCallOf(e, 'cssValue');
+  const inner = /^(?:_?esc)\s*\(([^]*)\)$/.exec(e);
+  const body = inner ? inner[1].trim() : e;
+  return /^(?:safeUrl|logoUrl)\s*\(/.test(body) && isCallOf(body, body.slice(0, body.indexOf('(')).trim());
+}
+
+/** One call to `name` covering all of `e`. */
+function isCallOf(e, name) {
+  let depth = 0;
+  for (let i = name.length; i < e.length; i++) {
+    if (e[i] === '"' || e[i] === "'") i = skipString(e, i) - 1;
+    else if (e[i] === '`') i = parseTemplate(e, i).end - 1;
+    else if (e[i] === '(') depth++;
+    else if (e[i] === ')') {
+      depth--;
+      if (depth === 0) return i === e.length - 1;
+    }
+  }
+  return false;
+}
+
+/** Interpolations that sit in a `style` value or a URL attribute value
+ *  (`href` / `src` / `action` / `formaction`) of any template literal, and are
+ *  not wrapped by `cssValue()` / `safeUrl()` / `logoUrl()`.  An unquoted value
+ *  (`src=${v}`) is always reported.  [{line, attr, expr}]. */
+export function scanValues(src, base = 0, lineOf = null) {
+  const found = [];
+  const lineAt = lineOf || ((i) => src.slice(0, i).split('\n').length);
+  let i = 0;
+  while (i < src.length) {
+    const skipped = skipComment(src, i);
+    if (skipped !== i) {
+      i = skipped;
+      continue;
+    }
+    const c = src[i];
+    if (c === '"' || c === "'") {
+      i = skipString(src, i);
+      continue;
+    }
+    if (c !== '`') {
+      i++;
+      continue;
+    }
+    const line = lineAt(i);
+    const t = parseTemplate(src, i);
+    let text = '';
+    for (const it of t.interps) {
+      text += it.before;
+      const open = OPEN_VALUE.exec(text);
+      const bare = !open && UNQUOTED_VALUE.exec(text);
+      const hit = open || bare;
+      if (hit && (bare || !isSafeValue(hit[1].toLowerCase(), it.expr))) {
+        found.push({ line, attr: hit[1].toLowerCase(), expr: it.expr });
+      }
+      text += '\u0000';
+      found.push(...scanValues(it.expr, 0, () => line));
+    }
+    i = t.end;
   }
   return found;
 }

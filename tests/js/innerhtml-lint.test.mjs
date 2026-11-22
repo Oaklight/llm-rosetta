@@ -12,12 +12,13 @@
  * a variable assigned earlier (`el.innerHTML = markup`), and it does not check
  * that an escaper suits its position (that is admin-handlers.test.mjs).
  *
- * Two more positions are outside it, because html protects HTML quoting only:
- * `style="...${v}"` (eight occurrences across seven files), where `esc` does
- * not stop `;` or `)` — providers.js `background:${dotColor}` takes
- * `desc.color` from the shim descriptor — and `<script>` context (none today).
- * The one position the lint does enforce inside html`` is the unquoted
- * attribute value (`title=${v}`), which it rejects.
+ * Two more positions have a helper of their own, and the last test below
+ * enforces it in every template literal: an interpolation inside `style="…"`
+ * must be `cssValue(…)` (core/html.js, a strict allow-list: `esc` does not stop
+ * `;` or `)`), and one inside `href` / `src` / `action` / `formaction` must be
+ * `safeUrl(…)` or `logoUrl(…)`, optionally inside `esc()` (`esc` does not stop
+ * a `javascript:` scheme).  `<script>` context is outside it (none today).
+ * The unquoted attribute value (`title=${v}`) is rejected in html`` templates.
  */
 
 import assert from 'node:assert/strict';
@@ -26,7 +27,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, relative } from 'node:path';
 
-import { isSafeExpr, keyCounts, scanSource, scanUnquoted } from './innerhtml-scan.mjs';
+import { isSafeExpr, keyCounts, scanSource, scanUnquoted, scanValues } from './innerhtml-scan.mjs';
 import { LEGACY } from './innerhtml-legacy.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -125,4 +126,45 @@ test('admin js: no html`` template interpolates an unquoted attribute value', ()
     }
   }
   assert.deepEqual(bad, [], 'quote the attribute value: title="${v}", not title=${v}');
+});
+
+test('scanner: style and URL attribute values need their helper', () => {
+  const found = (src) => scanValues(src).map((f) => `${f.attr}:${f.expr}`);
+  assert.deepEqual(found('x = `<i style="width:${p}%">`;'), ['style:p']);
+  assert.deepEqual(found('x = `<i style="width:${cssValue(p)}">`;'), []);
+  assert.deepEqual(found('x = `<i style="${a}${cssValue(b)}">`;'), ['style:a']);
+  assert.deepEqual(found("x = `<i style='color:${c}'>`;"), ['style:c']);
+  assert.deepEqual(found('x = html`<i style="color:${c}">`;'), ['style:c']);
+  assert.deepEqual(found('x = `<i style="cursor:pointer" title="${t}">`;'), []);
+  assert.deepEqual(found('x = `<a href="${u}">`;'), ['href:u']);
+  assert.deepEqual(found('x = `<a href="${esc(u)}">`;'), ['href:esc(u)']);
+  assert.deepEqual(found('x = `<a href="${esc(safeUrl(u))}">`;'), []);
+  assert.deepEqual(found('x = `<img src="${logoUrl(u)}">`;'), []);
+  assert.deepEqual(found('x = `<img src="${esc(logoUrl(u))}">`;'), []);
+  assert.deepEqual(found('x = `<a href="${safeUrl(a) + b}">`;'), ['href:safeUrl(a) + b']);
+  assert.deepEqual(found('x = `<form action="${u}">`;'), ['action:u']);
+  assert.deepEqual(found('x = `<img src=${safeUrl(u)}>`;'), ['src:safeUrl(u)']);
+  // Quoted value closed before the interpolation, another attribute, a data-* name.
+  assert.deepEqual(found('x = `<a href="/a" title="${t}">`;'), []);
+  assert.deepEqual(found('x = `<input data-src="${s}" data-style="${s}">`;'), []);
+  // Nested templates are judged on their own text.
+  assert.deepEqual(found('x = `${xs.map(u => `<a href="${u}">`)}`;'), ['href:u']);
+  assert.deepEqual(found('x = `${a ? ` style="${b}"` : ""}`;'), ['style:b']);
+  // Comments and strings are skipped.
+  assert.deepEqual(found('// `<a href="${u}">`'), []);
+  assert.deepEqual(found('x = "`<a href=\\"${u}\\">`";'), []);
+});
+
+test('admin js: style and URL attribute values go through cssValue / safeUrl', () => {
+  const bad = [];
+  for (const file of adminFiles()) {
+    for (const { line, attr, expr } of scanValues(readFileSync(file, 'utf8'))) {
+      bad.push(`${relative(ADMIN_JS, file)}:${line} ${attr}="\${${expr}}"`);
+    }
+  }
+  assert.deepEqual(
+    bad,
+    [],
+    'wrap the value: style needs cssValue(v); href/src/action/formaction need safeUrl(v) or logoUrl(v)',
+  );
 });

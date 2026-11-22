@@ -53,11 +53,11 @@ export function jsArg(v) {
 // never `title=${v}`.  `esc` leaves whitespace and `=` alone, so an unquoted
 // value such as `" onmouseover="window.__pwned=1` adds attributes of its own.
 // tests/js/innerhtml-lint.test.mjs fails on an unquoted position.  `html`
-// protects HTML quoting only: `style="…${v}"` and `<script>` context are not
-// covered (see the lint's scope note).  URL-valued attributes (`href`, `src`,
-// `action`, `formaction`) also need a scheme allow-list, which `html` does not
-// provide: `href="${v}"` still accepts `javascript:` because `esc` only stops
-// the attribute ending early (follow-up #1628).
+// protects HTML quoting only, so two more positions have helpers of their own,
+// and the same lint requires them: a `style="…${v}"` value goes through
+// `cssValue`, and an `href` / `src` / `action` / `formaction` value goes
+// through `safeUrl` (or `logoUrl`, which applies it).  `<script>` context is
+// not covered (see the lint's scope note).
 
 const SAFE = Symbol('SafeHtml');
 
@@ -118,7 +118,58 @@ export function render(el, safeHtml) {
  * @returns {string}
  */
 export function logoUrl(src) {
-  const value = String(src || '');
+  const value = safeUrl(src);
   if (!/^https?:\/\//i.test(value)) return value;
   return '/admin/api/logo?src=' + encodeURIComponent(value);
+}
+
+
+// ---- Style and URL positions --------------------------------------------------
+//
+// `esc` stops a value ending an HTML attribute; it does not stop `;` or `)` in
+// a CSS value, nor a `javascript:` scheme in a URL.  A value that reaches
+// `style=` or a URL attribute goes through one of these two instead.  Both
+// reject by returning '' rather than throwing, so a bad value drops its own
+// declaration or link and leaves the rest of the panel standing.
+
+const CSS_HEX = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const CSS_FUNC = /^(?:rgba?|hsla?)\(\s*[\d.]+(?:%|deg)?(?:\s*[,/]?\s*[\d.]+%?){2,3}\s*\)$/i;
+const CSS_VAR = /^var\(\s*--[\w-]+\s*\)$/;
+const CSS_LENGTH = /^-?\d+(?:\.\d+)?(?:px|%|rem|em)?$/;
+
+/** A CSS value for a `style` attribute, or '' when it is not on the allow-list.
+ *
+ *  Allowed: a hex colour, `rgb()` / `rgba()` / `hsl()` / `hsla()` with numeric
+ *  arguments, `var(--name)`, and a bare length or percentage.  Nothing that
+ *  can end a declaration (`;`), open a nested function, or name a URL passes.
+ *
+ *  @param {unknown} v
+ *  @returns {string}
+ */
+export function cssValue(v) {
+  const value = String(v === null || v === undefined ? '' : v).trim();
+  if (CSS_HEX.test(value) || CSS_FUNC.test(value) || CSS_VAR.test(value)) return value;
+  if (CSS_LENGTH.test(value)) return value;
+  return '';
+}
+
+/** A URL for an `href` / `src` attribute, or '' when its scheme is not allowed.
+ *
+ *  Allowed: `http:`, `https:`, a path or fragment (no scheme), and a
+ *  `data:image/` URL.  `javascript:`, `vbscript:` and every other scheme are
+ *  dropped, whatever the case or the control characters in front of them.
+ *
+ *  @param {unknown} v
+ *  @returns {string}
+ */
+export function safeUrl(v) {
+  const value = String(v === null || v === undefined ? '' : v);
+  // The URL parser drops tabs, newlines and leading C0 / space before the scheme.
+  const probe = value.replace(/[\u0000-\u0020]/g, '');
+  const scheme = /^([a-z][a-z0-9+.-]*):/i.exec(probe);
+  if (!scheme) return value;
+  const name = scheme[1].toLowerCase();
+  if (name === 'http' || name === 'https') return value;
+  if (name === 'data' && /^data:image\//i.test(probe)) return value;
+  return '';
 }

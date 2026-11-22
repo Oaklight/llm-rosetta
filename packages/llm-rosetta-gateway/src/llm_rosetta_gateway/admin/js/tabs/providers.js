@@ -23,7 +23,7 @@ import { suggestedProviderName, pickDestination } from '../core/provider-pick.js
 import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, orderedProviders, nonLlmFormatType } from '../core/provider-endpoints.js';
 import { routingRows, blockRow } from '../core/quota-lines.js';
 import { shimHintText } from '../core/shim-hint.js';
-import { jsArg, logoUrl } from '../core/html.js';
+import { cssValue, jsArg, logoUrl } from '../core/html.js';
 import { filteredEmptyHtml } from '../core/empty.js';
 import { providerFormError } from '../core/form-validate.js';
 import { isDialogPristine, markDialogPristine } from '../core/dialog.js';
@@ -1966,13 +1966,13 @@ function _buildProvEndpointSections() {
     section.id = `provEndpoint_${desc.name}`;
     const endpointLabel = t('label.' + desc.name + 'Endpoint') || (desc.name.charAt(0).toUpperCase() + desc.name.slice(1) + ' Endpoint');
     const pathLabel = t('label.' + desc.name + 'Path') || (desc.name.charAt(0).toUpperCase() + desc.name.slice(1) + ' Path');
-    const dotColor = desc.color || 'var(--hairline)';
+    const dotColor = cssValue(desc.color) || 'var(--hairline)';
     // One dropdown, as on the LLM endpoint: a vendor serves one dialect per
     // model type, so the shim and the bare format are the same choice at
     // different levels.  The path is a peer field: with a 58% basis on the
     // picker it was squeezed to about 140px.
     section.innerHTML = `
-      <div class="section-label"><span class="dot" style="background:${dotColor}"></span> <span>${esc(endpointLabel)}</span>
+      <div class="section-label"><span class="dot" style="background:${cssValue(dotColor)}"></span> <span>${esc(endpointLabel)}</span>
         <label class="endpoint-enabled" title="${esc(t('hint.typeEnabled'))}">
           <input type="checkbox" id="provTypeEnabled_${desc.name}">
           <span>${esc(t('label.enabled'))}</span>
@@ -3214,7 +3214,7 @@ function deleteProvider(name) {
       + affected.deleted.map(m => `<div style="color:var(--text-dim)">• ${esc(m)}</div>`).join(''));
   }
   if (affected.trimmed.length > 0) {
-    blocks.push(`<div style="font-weight:600;margin:${blocks.length ? '8px' : '0'} 0 4px">${esc(t('confirm.cascadeTrim', {count: affected.trimmed.length}))}</div>`
+    blocks.push(`<div style="font-weight:600;margin:${cssValue(blocks.length ? '8px' : '0')} 0 4px">${esc(t('confirm.cascadeTrim', {count: affected.trimmed.length}))}</div>`
       + affected.trimmed.map(m => `<div style="color:var(--text-dim)">• ${esc(m)}</div>`).join(''));
   }
   if (blocks.length > 0) {

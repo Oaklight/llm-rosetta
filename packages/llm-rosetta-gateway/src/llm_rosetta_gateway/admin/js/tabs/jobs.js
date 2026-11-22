@@ -11,7 +11,7 @@
 import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, esc } from '../core/utils.js';
-import { jsArg } from '../core/html.js';
+import { cssValue, jsArg } from '../core/html.js';
 import {
   jobActions,
   jobMatchesFilter,
@@ -116,7 +116,7 @@ export function renderJobs(allJobs) {
       <td class="mono" title="${esc(job.id)}">${esc(jobShortId(job.id))}</td>
       <td>${esc(jobKindLabel(job.kind, t))}</td>
       <td><span class="${jobStatusTag(job.status)}">${esc(t('jobs.status.' + job.status))}</span></td>
-      <td><div class="job-progress"><div class="job-progress-bar" style="width:${pct}%"></div></div>
+      <td><div class="job-progress"><div class="job-progress-bar" style="width:${cssValue(pct + '%')}"></div></div>
           <span class="job-progress-text">${esc(jobProgressText(job, t))}</span></td>
       <td title="${esc(job.created_at || '')}">${esc(jobTimeText(job.created_at))}${duration ? `<div class="job-progress-text">${esc(duration)}</div>` : ''}</td>
       <td>${esc(jobResultText(job, t))}</td>

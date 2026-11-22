@@ -11,6 +11,7 @@
 import { S } from './state.js';
 import { t } from './i18n.js';
 import { api, showToast, openModal, closeModal, esc } from './utils.js';
+import { safeUrl } from './html.js';
 import { normaliseVersion, parseChangelog, renderEntryHtml } from './changelog.js';
 
 const SEEN_KEY = 'llm-rosetta-changelog-seen';
@@ -106,7 +107,7 @@ function _renderPopover() {
     <div class="update-row"><span>${esc(t('update.latest'))}</span><code>${esc(target.version)}</code></div>
     ${reason}
     <div class="update-actions">
-      <a class="btn btn-sm" href="${esc(docs)}" target="_blank" rel="noopener">${esc(t('update.whatsNew'))}</a>
+      <a class="btn btn-sm" href="${esc(safeUrl(docs))}" target="_blank" rel="noopener">${esc(t('update.whatsNew'))}</a>
       <button type="button" class="btn btn-sm btn-primary" id="updateApplyBtn" onclick="applyUpdate()" ${gate.allowed ? '' : 'disabled'}>${esc(t('update.apply'))}</button>
     </div>`;
 }

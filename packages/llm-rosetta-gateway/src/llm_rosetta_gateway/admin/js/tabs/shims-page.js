@@ -15,7 +15,7 @@
 import { S, _CAP_ICONS } from '../core/state.js';
 import { t, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, esc, showToast, withBusyButton } from '../core/utils.js';
-import { jsArg, logoUrl } from '../core/html.js';
+import { cssValue, jsArg, logoUrl, safeUrl } from '../core/html.js';
 import { toggleCard } from '../core/disclosure.js';
 import {
   declareSource, deselectVendor, followLatest, notInstalledVendors, pinVendor, selectVendor,
@@ -192,7 +192,7 @@ function _originBadge(origin) {
 function _markStyle(text) {
   let h = 0;
   for (const ch of text) h = (h * 31 + ch.charCodeAt(0)) % 360;
-  return ` style="background:hsl(${h} 45% 90%);color:hsl(${h} 55% 32%)"`;
+  return ` style="background:${cssValue(`hsl(${h} 45% 90%)`)};color:${cssValue(`hsl(${h} 55% 32%)`)}"`;
 }
 
 /**
@@ -261,7 +261,7 @@ const shortRepo = (url) =>
 function _sourceLink(source, cls) {
   if (!source) return '';
   if (!isUrl(source)) return `<span class="${cls}">${esc(source)}</span>`;
-  return `<a class="${cls}" href="${esc(source)}" target="_blank" rel="noopener noreferrer">${esc(shortRepo(source))}<span aria-hidden="true"> ↗</span></a>`;
+  return `<a class="${cls}" href="${esc(safeUrl(source))}" target="_blank" rel="noopener noreferrer">${esc(shortRepo(source))}<span aria-hidden="true"> ↗</span></a>`;
 }
 
 /** A vendor is one card: its logo, its formats, one row each.  Collapsed by

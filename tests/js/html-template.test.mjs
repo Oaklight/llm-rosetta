@@ -10,11 +10,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  cssValue,
   html,
   isSafeHtml,
   jsArg,
   raw,
+  logoUrl,
   render,
+  safeUrl,
 } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/html.js';
 
 /** Decode the five entities esc() writes, as an attribute parse would. */
@@ -104,4 +107,39 @@ test('render() throws on a plain string and leaves the element alone', () => {
   assert.throws(() => render(el, undefined), TypeError);
   assert.throws(() => render(el, { value: '<b>' }), TypeError);
   assert.equal(el.innerHTML, 'keep');
+});
+
+test('cssValue keeps colours, var() and lengths, and drops anything that can add a declaration', () => {
+  for (const ok of ['#fff', '#A1B2C3', '#a1b2c3d4', 'rgb(1, 2, 3)', 'rgba(1 2 3 / 0.5)',
+    'hsl(120 45% 90%)', 'hsl(120deg 45% 90%)', 'var(--accent)', '8px', '0', '42%', '-1.5rem']) {
+    assert.equal(cssValue(ok), ok, ok);
+  }
+  assert.equal(cssValue('  #fff '), '#fff');
+  for (const bad of ['red;position:fixed', '#fff;x:y', 'red', 'url(https://x/y)', 'rgb(1,2,3);a:b',
+    'rgb(1,2,calc(3))', 'var(--a);b:c', 'var(--a, red)', 'expression(1)', '#ggg', '8px 0', '',
+    'hsl(1 2% 3%) !important', '"; background:url(//e)']) {
+    assert.equal(cssValue(bad), '', bad);
+  }
+  assert.equal(cssValue(null), '');
+  assert.equal(cssValue(undefined), '');
+  assert.equal(cssValue(12), '12');
+});
+
+test('safeUrl keeps http(s), paths and image data URLs, and drops script schemes', () => {
+  for (const ok of ['https://a.example/x?y=1', 'HTTP://a.example', '/admin/logo.svg', './a.svg',
+    '#frag', 'logo.svg', 'data:image/png;base64,AAAA', '']) {
+    assert.equal(safeUrl(ok), ok, ok);
+  }
+  for (const bad of ['javascript:alert(1)', 'JavaScript:alert(1)', ' javascript:alert(1)',
+    'java\tscript:alert(1)', '\u0001javascript:alert(1)', 'vbscript:x', 'data:text/html,<b>',
+    'file:///etc/passwd', 'blob:https://a/b']) {
+    assert.equal(safeUrl(bad), '', JSON.stringify(bad));
+  }
+  assert.equal(safeUrl(null), '');
+});
+
+test('logoUrl proxies http logos, keeps paths, and drops a script scheme', () => {
+  assert.equal(logoUrl('https://a.example/l.svg'), '/admin/api/logo?src=https%3A%2F%2Fa.example%2Fl.svg');
+  assert.equal(logoUrl('/static/l.svg'), '/static/l.svg');
+  assert.equal(logoUrl('javascript:alert(1)'), '');
 });

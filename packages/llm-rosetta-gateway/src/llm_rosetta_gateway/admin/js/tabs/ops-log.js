@@ -66,7 +66,6 @@ function renderOpsLog(entries, total) {
       const rowId = e.id;
       const detailId = 'opsErr-' + idx;
       const isExpanded = S.expandedOpsLogRows.has(rowId);
-      const rowCursor = hasDetails ? 'cursor:pointer;' : '';
       const rowClick = hasDetails ? ' onclick="toggleOpsLogRow(this.dataset.opsLogId,this)"' : '';
       // Same keyboard contract as the Request Log's error rows: a tab stop,
       // Enter/Space runs the click path, and the nested pre does not re-toggle.
@@ -74,7 +73,7 @@ function renderOpsLog(entries, total) {
         ? ` tabindex="0" aria-expanded="${isExpanded}" aria-controls="${detailId}" onkeydown="rowToggleKey(event,this)"`
         : '';
       const expandHint = hasDetails ? ' ▸' : '';
-      let rows = `<tr data-ops-log-id="${esc(rowId)}" role="row"${rowCursor ? ` style="${rowCursor}"` : ''}${rowClick}${rowKeyboard}>
+      let rows = `<tr data-ops-log-id="${esc(rowId)}" role="row"${hasDetails ? ' style="cursor:pointer"' : ''}${rowClick}${rowKeyboard}>
         <td class="ops-time" role="cell" aria-labelledby="thOpsTime">${time}</td>
         <td class="ops-event" role="cell" aria-labelledby="thOpsEvent"><span class="tag is-pill tag-stream">${esc(label)}</span></td>
         <td class="ops-severity" role="cell" aria-labelledby="thOpsSeverity"><span class="tag is-pill ${sevCls}">${esc(e.severity)}${expandHint}</span></td>

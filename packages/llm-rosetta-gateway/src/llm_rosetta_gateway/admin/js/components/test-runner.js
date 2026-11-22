@@ -2,6 +2,7 @@
 import { S, _TEST_TIMEOUT_MS } from '../core/state.js';
 import { t } from '../core/i18n.js';
 import { api, showToast, esc, openMenu, closeMenus } from '../core/utils.js';
+import { safeUrl } from '../core/html.js';
 
 // ===================== Test Type Registry =====================
 // Extensible registry for non-LLM test types.  Each entry declares:
@@ -173,7 +174,7 @@ async function runTest(model, type, extraParam, provider) {
   // Show image preview for vision tests
   if (type === 'vision' || type === 'embed_multimodal') {
     imgDetails.style.display = '';
-    imgBody.innerHTML = `<img src="${TEST_IMAGE_URL}" alt="${t('test.testImage')}">`;
+    imgBody.innerHTML = `<img src="${esc(safeUrl(TEST_IMAGE_URL))}" alt="${t('test.testImage')}">`;
   } else {
     imgDetails.style.display = 'none';
     imgBody.innerHTML = '';

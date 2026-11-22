@@ -414,7 +414,7 @@ function _renderReasoningEffective(reasoning, override) {
     const value = fmt(overridden != null ? overridden : reasoning[field]);
     const mark = overridden != null ? ' · ' + t('label.overriddenHere', 'overridden here') : '';
     return `<div><span style="min-width:140px;display:inline-block">${esc(t('label.' + key))}</span>` +
-      `<code style="${overridden != null ? 'color:var(--accent)' : ''}">${esc(value + mark)}</code></div>`;
+      `<code${overridden != null ? ' style="color:var(--accent)"' : ''}>${esc(value + mark)}</code></div>`;
   }).join('');
 }
 
@@ -556,14 +556,14 @@ function _testMenuItems(modelType, modelName, {hasTools, hasVision, hasReasoning
  *
  *  `provider` pins the request to one provider name; omit it where the test
  *  should go through routing. */
-function _testGroup(name, modelType, opts, provider, {extraClass = '', style = ''} = {}) {
+function _testGroup(name, modelType, opts, provider, {extraClass = '', inline = false} = {}) {
   const n = jsArg(name);
   const kind = jsArg(_defaultTestKind(modelType));
   const call = provider
     ? `runTest(${n},${kind},null,${jsArg(provider)})`
     : `runTest(${n},${kind})`;
   const aria = provider ? ` ${esc(provider)}` : '';
-  return `<div class="test-group"${style ? ` style="${style}"` : ''}>` +
+  return `<div class="test-group"${inline ? ' style="display:inline-block"' : ''}>` +
     `<button class="btn btn-sm btn-test${extraClass ? ` ${extraClass}` : ''}" onclick="${call}">${t('btn.test')}</button>` +
     `<button class="btn btn-sm btn-caret" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.test')}${aria}" onclick="toggleTestMenu(this)">&#9662;</button>` +
     `<div class="menu test-menu">${_testMenuItems(modelType, name, opts, provider)}</div></div>`;
@@ -1558,7 +1558,7 @@ function renderModels() {
       <td class="model-provider-cell" role="cell" aria-labelledby="sortProvider">${_renderProviderCell(name, info, disabledProviders)}</td>
       <td class="model-actions-cell" role="cell" aria-labelledby="sortEnabled">
         <label class="toggle is-sm" style="margin-right:6px" title="${allProvsDisabled ? t('provider.disabled') : modelEnabled ? t('model.enabled') : t('model.disabled')}"><input type="checkbox" role="switch" ${effectiveEnabled ? 'checked' : ''} aria-checked="${effectiveEnabled}" aria-label="${esc(name)}" onchange="toggleModel(${jsArg(name)})"><span class="slider"></span></label>
-        ${_testGroup(name, modelType, {hasTools, hasVision, hasReasoning}, null, {extraClass: modelType !== 'llm' ? 'btn-test-embed' : '', style: 'display:inline-block'})}
+        ${_testGroup(name, modelType, {hasTools, hasVision, hasReasoning}, null, {extraClass: modelType !== 'llm' ? 'btn-test-embed' : '', inline: true})}
         <button class="icon-btn more-menu-toggle" aria-haspopup="true" aria-expanded="false" aria-label="${t('btn.more')} ${esc(name)}" onclick="toggleMoreMenu(this)">⋯</button>
         <div class="menu more-menu" role="menu">
           <div class="menu-item" role="menuitem" aria-label="${t('btn.edit')} ${esc(name)}" onclick="closeMenus();editModel(${jsArg(name)},${jsArg(prov)})">${t('btn.edit')}</div>
