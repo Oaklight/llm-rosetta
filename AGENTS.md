@@ -39,9 +39,15 @@ One chat converter per API standard:
 the converter writes a turn body (system string, ``[Role]``-labelled prompt
 blocks, model) and assembles replies from the agent's ``session/update``
 notifications.  It implements no source direction — no client speaks ACP to
-the gateway.  Tool declarations are reported as losses (no bridge yet).  The
+the gateway.  A request's tools travel over MCP, not the prompt: the transport
+serves them from a per-session loopback endpoint (named
+``llm_rosetta_tools``) given to the agent in ``session/new``, turns a
+``tools/call`` into an IR tool call, and resumes the pending turn when the next
+request carries the result.  The agent's own built-in tools are refused.  The
 matching transport is `transport/acp.py`, chosen per provider by
-`connection.transport`; the vendored protocol client is `_vendor/acp.py`.
+`connection.transport`; its MCP bridge is `transport/acp_mcp.py`, its session
+ledger is `transport/acp_ledger.py`, and the vendored protocol client is
+`_vendor/acp.py`.
 
 `OpenResponsesConverter` implements the vendor-neutral Open Responses spec (the
 base of both Responses classes); `OpenAIResponsesConverter` derives from it as
@@ -543,6 +549,35 @@ gate — missing any item means the converter is not fully integrated.
 10. **`test_public_api.py`** — add the new class to `EXPECTED_EXPORTS`.
 11. **`test_shim_loader.py`** — add to the expected shim set and the
     `(model_type, format)` mapping.
+
+## Adding an agent-CLI lane (checklist)
+
+An ACP lane fronts an agent CLI.  It is an upstream **model provider**, not a
+place for the agent to run its own tools on the gateway host.
+
+1. **Client tools go over MCP, not the prompt.** The transport serves the
+   request's tools from `AcpMcpServer` as a per-session loopback endpoint
+   named `llm_rosetta_tools`, passed in `session/new`. A `tools/call` becomes
+   an IR tool call; the next request's result answers the pending MCP call.
+   Never stuff tool definitions into the prompt.
+2. **A session's MCP server list is fixed.** ACP cannot add or remove an MCP
+   server inside a session. The ledger stores a digest of the session's tools;
+   a request whose tools differ (added, removed, disabled, or a refreshed
+   schema) closes the session and replays the history into a new one. Order
+   alone is not a difference. Do not share one endpoint between sessions:
+   each session's token selects its own `AcpToolBridge`.
+3. **The agent's own tools stay refused.** Keep the ACP client advertising no
+   filesystem or terminal capability, refuse every non-bridged permission
+   request, and fail a turn that starts a built-in tool. An operator
+   `acp_argv` override is the operator's own risk and must be documented.
+4. **Declare `tools` in the shim's capabilities only when the core implements
+   the bridge.** A lane that cannot bridge must not advertise tools. A request
+   that declares tools without a declared conversation id is refused with
+   `400`, because its result could not be matched to the suspended turn.
+5. **Conformance test.** One fake-agent test must prove the whole rule in one
+   lane: a bridged request tool returns a tool call and resumes on its result;
+   a built-in file read and a built-in shell command are refused with no host
+   side effect.
 
 ## Escalation
 
