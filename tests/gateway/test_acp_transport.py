@@ -69,7 +69,9 @@ FAKE_AGENT = textwrap.dedent(
 
     # One line per process, so a test can tell a replaced agent from a reused
     # one: a process that has to be thrown away shows up as a second pid.
-    note("start", pid=os.getpid(), argv=sys.argv[1:])
+    note("start", pid=os.getpid(), argv=sys.argv[1:],
+         marker=os.environ.get("FAKE_ACP_MARKER"),
+         has_path=bool(os.environ.get("PATH")))
 
     def capabilities():
         if MODE == "resume":
@@ -328,6 +330,7 @@ def _provider(
     conversation: str | None = None,
     *,
     processes: int = 1,
+    acp_env: dict[str, str] | None = None,
 ) -> ProviderInfo:
     script = tmp_path / "fake_acp.py"
     script.write_text(FAKE_AGENT, encoding="utf-8")
@@ -343,6 +346,7 @@ def _provider(
         keyless=True,
         transport="acp",
         acp_argv=(sys.executable, str(script)),
+        acp_env=acp_env,
         acp_processes=processes,
     )
     return provider.with_acp_conversation(conversation)
@@ -1245,6 +1249,32 @@ class TestAgentToolsAreOff:
         )
         # Written by the operator: used as written, no profile, no flags.
         assert AcpTransport()._argv(provider) == ["agy", "acp"]
+
+
+class TestTheAgentEnvironment:
+    async def test_overrides_layer_over_the_gateway_environment(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport(timeout=5)
+        try:
+            response = await transport.send(
+                _provider(
+                    monkeypatch,
+                    tmp_path,
+                    "ok",
+                    acp_env={"FAKE_ACP_MARKER": "from-shim"},
+                ),
+                "",
+                TURN,
+            )
+        finally:
+            await transport.close()
+        assert response.status_code == 200
+        start = next(e for e in _log(tmp_path) if e["kind"] == "start")
+        assert start["marker"] == "from-shim"
+        # The process still sees the gateway's PATH, so a shim that declares
+        # one variable does not strip the environment the agent needs.
+        assert start["has_path"] is True
 
 
 ECHO_TOOL = {

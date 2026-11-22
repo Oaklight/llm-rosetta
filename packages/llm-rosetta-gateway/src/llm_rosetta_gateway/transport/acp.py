@@ -44,6 +44,7 @@ import contextlib
 import hashlib
 import json
 import logging
+import os
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
@@ -630,6 +631,18 @@ class AcpTransport:
         return harden_argv(argv, self._state_dir(provider_info))
 
     @staticmethod
+    def _spawn_env(provider_info: ProviderInfo) -> dict[str, str] | None:
+        """The agent's environment: this process's, plus the shim's switches.
+
+        Passing only the overrides would drop ``PATH`` and the agent's login
+        store, so the full environment is copied and the declared names win.
+        """
+        overrides = getattr(provider_info, "acp_env", None)
+        if not overrides:
+            return None
+        return {**os.environ, **overrides}
+
+    @staticmethod
     def _state_dir(provider_info: ProviderInfo) -> str:
         explicit = getattr(provider_info, "acp_state_dir", None)
         if explicit:
@@ -690,7 +703,7 @@ class AcpTransport:
         """Start one agent process and complete the handshake."""
         argv = self._argv(provider_info)
         self._profile(provider_info, argv)
-        client = ACPClient(argv)
+        client = ACPClient(argv, env=self._spawn_env(provider_info))
         client.set_request_handler(
             _agent_request_handler(
                 provider_info.config_name,

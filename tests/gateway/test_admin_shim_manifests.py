@@ -161,6 +161,7 @@ class TestManifestProblem:
             ("  keyless: 'yes'\n", "keyless must be true or false"),
             ("  token_command: []\n", "at least 1 item"),
             ("  headers:\n    x-a: 7\n", "x-a is not a string"),
+            ("  acp_env:\n    A: 7\n", "A is not a string"),
             ("  session_id_format: nope\n", "must be one of: opencode"),
             ("  token_refresh_interval: -1\n", "at least 0"),
         ],
@@ -645,8 +646,10 @@ class TestLoaderVocabulary:
         keys = shim_manifests._connection_keys()
         assert isinstance(keys, tuple)
         assert keys[:2] == ("base_url", "api_key_env")
-        assert {"headers", "token_command", "keyless", "transport"} <= set(keys)
-        assert len(keys) == len(set(keys)) == 19
+        assert {"headers", "token_command", "keyless", "transport", "acp_env"} <= set(
+            keys
+        )
+        assert len(keys) == len(set(keys)) == 20
 
     def test_the_identity_keys(self):
         assert shim_manifests._identity_keys() == ("name", "format", "base")

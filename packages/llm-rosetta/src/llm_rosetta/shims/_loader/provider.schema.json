@@ -507,6 +507,13 @@
           "minItems": 1,
           "description": "The agent command an 'acp' lane starts, as argv (e.g. ['agy', 'acp']). Only read when transport is 'acp'."
         },
+        "acp_env": {
+          "type": "object",
+          "description": "Environment overrides for the ACP agent process. The gateway layers them over its own environment. Only read when transport is 'acp'.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
         "token_refresh_interval": {
           "type": "integer",
           "minimum": 0,

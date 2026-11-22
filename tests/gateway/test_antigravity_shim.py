@@ -75,3 +75,44 @@ class TestHowTheGatewayReadsIt:
     def test_an_unknown_transport_is_refused_at_config_time(self):
         with pytest.raises(ValueError, match="unknown transport 'carrier-pigeon'"):
             build_provider_info("acp", {"transport": "carrier-pigeon"}, shim_name=SHIM)
+
+
+class TestTheAgentEnvironment:
+    def test_config_layers_over_the_shim(self):
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims import register_shim, unregister_shim
+
+        name = "acp-env-test--acp"
+        register_shim(
+            ProviderShim(
+                name=name,
+                format="acp",
+                connection=ConnectionConfig(
+                    base_url="http://agent.local",
+                    transport="acp",
+                    acp_env={"FROM_SHIM": "1", "SAME": "shim"},
+                ),
+            )
+        )
+        try:
+            info = build_provider_info(
+                "acp",
+                {
+                    "acp_env": {
+                        "FROM_OPERATOR": "2",
+                        "SAME": "operator",
+                    }
+                },
+                shim_name=name,
+            )
+        finally:
+            unregister_shim(name)
+        assert info.acp_env == {
+            "FROM_SHIM": "1",
+            "FROM_OPERATOR": "2",
+            "SAME": "operator",
+        }
+
+    def test_a_non_string_value_is_refused(self):
+        with pytest.raises(ValueError, match="acp_env must map strings to strings"):
+            build_provider_info("acp", {"acp_env": {"A": 1}}, shim_name=SHIM)

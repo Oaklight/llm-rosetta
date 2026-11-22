@@ -545,6 +545,33 @@ def _resolve_lane_transport(
     return lane_transport
 
 
+def _acp_env(
+    cfg: dict[str, Any], shim: Any | None, provider_key: str
+) -> dict[str, str] | None:
+    """Environment overrides for this provider's ACP agent process.
+
+    The shim declares a vendor switch (Claude Code needs
+    ``ENABLE_TOOL_SEARCH=false``); the provider entry may add deployment
+    facts without repeating the vendor's.  The operator's values win.
+    """
+    env = dict(shim.connection.acp_env or {}) if shim is not None else {}
+    override = cfg.get("acp_env")
+    if override is not None:
+        if not isinstance(override, dict):
+            raise ValueError(
+                f"Provider '{provider_key}': acp_env must be a mapping of "
+                f"environment names to strings, got {override!r}"
+            )
+        for name, value in override.items():
+            if not isinstance(name, str) or not isinstance(value, str):
+                raise ValueError(
+                    f"Provider '{provider_key}': acp_env must map strings to "
+                    f"strings; {name!r} has value {value!r}"
+                )
+        env.update(override)
+    return env or None
+
+
 def _resolve_acp_limits(cfg: dict[str, Any], provider_key: str) -> dict[str, Any]:
     """Read one provider's agent-process and session limits.
 
@@ -870,6 +897,7 @@ def build_provider_info(
             else (shim.connection.acp_argv if shim is not None else None)
         ),
         acp_argv_custom=isinstance(cfg.get("acp_argv"), (list, tuple)),
+        acp_env=_acp_env(cfg, shim, provider_key),
         acp_state_dir=_acp_state_dir(data_dir, provider_key),
         **acp_limits,
         quota_probe_id=quota_probe,
