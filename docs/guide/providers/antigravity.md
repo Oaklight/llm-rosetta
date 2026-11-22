@@ -130,9 +130,11 @@ The declared tool set is a property of the session, not of one turn. The agent
 fixes its MCP server list when a session opens, so a request whose tools differ
 from that session's — a tool added or removed, a tool disabled, or a refreshed
 schema — closes the session and replays the conversation into a fresh one that
-lists the new set. A tool-result request that also changes the tool set does
-the same: the gateway abandons the suspended call and replays the history
-rather than continuing with the old bridge.
+lists the new set. Order alone is not a difference: the session's tool digest
+is canonical, so the same definitions in another order keep the session. A
+tool-result request that also changes the tool set does the same: the gateway
+abandons the suspended call and replays the history rather than continuing
+with the old bridge.
 
 ## Limitations
 
