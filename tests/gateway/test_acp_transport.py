@@ -109,8 +109,8 @@ FAKE_AGENT = textwrap.dedent(
             sid = "sess-%d" % SESSIONS[0]
             note("new", session=sid)
             servers = msg["params"].get("mcpServers") or []
-            if servers:
-                MCP_URL = servers[0]["url"]
+            MCP_URL = servers[0]["url"] if servers else ""
+            if MCP_URL:
                 note("mcp", url=MCP_URL)
             send({"jsonrpc": "2.0", "id": req_id, "result": {
                 "sessionId": sid,
@@ -151,6 +151,62 @@ FAKE_AGENT = textwrap.dedent(
                 if block.get("type") == "text"
             )
             note("prompt", session=sid, text=text)
+            if MODE == "mcp-list":
+                listed = []
+                if MCP_URL:
+                    listed = (
+                        mcp_call("tools/list").get("result", {}).get("tools") or []
+                    )
+                names = [tool.get("name") for tool in listed]
+                note("mcp-tools", names=names)
+                update(sid, {"sessionUpdate": "agent_message_chunk",
+                             "content": {"type": "text",
+                                         "text": "tools: "
+                                                 + (", ".join(names) or "none")}})
+                send({"jsonrpc": "2.0", "id": req_id,
+                      "result": {"stopReason": "end_turn"}})
+                continue
+            if MODE == "mcp-change":
+                listed = mcp_call("tools/list").get("result", {}).get("tools") or []
+                names = [tool.get("name") for tool in listed]
+                note("mcp-tools", names=names)
+                if "[Tool result]" not in text:
+                    call = {"toolCallId": "mcp-change-1",
+                            "name": "mcp_llm_rosetta_tools_echo",
+                            "title": "echo", "kind": "other",
+                            "rawInput": {"text": "hello"}}
+                    update(sid, dict(call, sessionUpdate="tool_call",
+                                     status="pending"))
+                    options = [
+                        {"optionId": "a1", "name": "Allow", "kind": "allow_once"},
+                        {"optionId": "r1", "name": "Reject", "kind": "reject_once"},
+                    ]
+                    send({"jsonrpc": "2.0", "id": 903,
+                          "method": "session/request_permission",
+                          "params": {"sessionId": sid, "toolCall": call,
+                                     "options": options}})
+                    reply = json.loads(sys.stdin.readline())
+                    note("permission_reply", reply=reply)
+                    result = mcp_call("tools/call", {"name": "echo",
+                                                     "arguments": {"text": "hello"}})
+                    try:
+                        answer = result["result"]["content"][0]["text"]
+                    except Exception:
+                        answer = json.dumps(result)
+                    note("mcp-result", text=answer)
+                    update(sid, {"sessionUpdate": "agent_message_chunk",
+                                 "content": {"type": "text",
+                                             "text": "tool said: " + answer}})
+                    send({"jsonrpc": "2.0", "id": req_id,
+                          "result": {"stopReason": "end_turn"}})
+                    continue
+                update(sid, {"sessionUpdate": "agent_message_chunk",
+                             "content": {"type": "text",
+                                         "text": "resumed with tools: "
+                                                 + (", ".join(names) or "none")}})
+                send({"jsonrpc": "2.0", "id": req_id,
+                      "result": {"stopReason": "end_turn"}})
+                continue
             if MODE == "mcp":
                 listed = mcp_call("tools/list").get("result", {}).get("tools") or []
                 note("mcp-tools", names=[tool.get("name") for tool in listed])
@@ -1288,6 +1344,17 @@ ECHO_TOOL = {
     },
 }
 
+LOOKUP_TOOL = {
+    "type": "function",
+    "name": "lookup",
+    "description": "look something up",
+    "parameters": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}},
+        "required": ["query"],
+    },
+}
+
 
 class TestClientTools:
     """A request's tools reach the agent, and its call comes back to the client."""
@@ -1547,3 +1614,122 @@ class TestClientTools:
         for response in responses:
             assert response.body is not None
             assert response.body["stop_reason"] == "end_turn"
+
+
+class TestToolChanges:
+    """A request's tool set is a session fact, not a turn-local setting."""
+
+    async def _two_turns(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Any,
+        first_tools: list[dict[str, Any]],
+        second_tools: list[dict[str, Any]],
+    ) -> None:
+        transport = AcpTransport(timeout=10)
+        provider = _provider(
+            monkeypatch, tmp_path, "mcp-list", conversation="conv-tools"
+        )
+        first = _turn("[User]\nhi")
+        first["tools"] = first_tools
+        second = _turn("[User]\nhi", "[Assistant]\nhello")
+        second["tools"] = second_tools
+        try:
+            first_response = await transport.send(provider, "", first)
+            second_response = await transport.send(provider, "", second)
+        finally:
+            await transport.close()
+        assert first_response.status_code == 200
+        assert second_response.status_code == 200
+
+    @staticmethod
+    def _tool_lists(tmp_path: Any) -> list[list[str]]:
+        return [
+            entry["names"] for entry in _log(tmp_path) if entry["kind"] == "mcp-tools"
+        ]
+
+    async def test_the_same_tools_reuse_the_session(self, monkeypatch, tmp_path):
+        await self._two_turns(monkeypatch, tmp_path, [ECHO_TOOL], [ECHO_TOOL])
+
+        assert _kinds(tmp_path).count("new") == 1
+        assert _kinds(tmp_path).count("prompt") == 2
+        assert self._tool_lists(tmp_path) == [["echo"], ["echo"]]
+
+    async def test_a_new_tool_opens_a_new_session(self, monkeypatch, tmp_path):
+        await self._two_turns(
+            monkeypatch, tmp_path, [ECHO_TOOL], [ECHO_TOOL, LOOKUP_TOOL]
+        )
+
+        assert _kinds(tmp_path).count("new") == 2
+        assert self._tool_lists(tmp_path) == [["echo"], ["echo", "lookup"]]
+
+    async def test_a_removed_tool_opens_a_new_session(self, monkeypatch, tmp_path):
+        await self._two_turns(
+            monkeypatch, tmp_path, [ECHO_TOOL, LOOKUP_TOOL], [ECHO_TOOL]
+        )
+
+        assert _kinds(tmp_path).count("new") == 2
+        assert self._tool_lists(tmp_path) == [["echo", "lookup"], ["echo"]]
+
+    async def test_removing_every_tool_opens_a_session_without_mcp(
+        self, monkeypatch, tmp_path
+    ):
+        await self._two_turns(monkeypatch, tmp_path, [ECHO_TOOL], [])
+
+        assert _kinds(tmp_path).count("new") == 2
+        assert self._tool_lists(tmp_path) == [["echo"], []]
+
+    async def test_a_refreshed_schema_opens_a_new_session(self, monkeypatch, tmp_path):
+        refreshed = dict(ECHO_TOOL, description="echo back, now with a new contract")
+        await self._two_turns(monkeypatch, tmp_path, [ECHO_TOOL], [refreshed])
+
+        assert _kinds(tmp_path).count("new") == 2
+        assert self._tool_lists(tmp_path) == [["echo"], ["echo"]]
+
+    async def test_a_result_request_with_changed_tools_replays_instead(
+        self, monkeypatch, tmp_path
+    ):
+        """The old bridge must not stay open when the request drops its tools."""
+        transport = AcpTransport(timeout=10)
+        provider = _provider(
+            monkeypatch, tmp_path, "mcp-change", conversation="conv-change"
+        )
+        first = _turn("[User]\necho hello")
+        first["tools"] = [ECHO_TOOL]
+        try:
+            stream = await transport.send_streaming(provider, "", first)
+            assert stream.status_code == 200
+            chunks = [chunk async for chunk in stream]
+            call = next(chunk for chunk in chunks if chunk["type"] == "tool_call")
+
+            second = _turn(
+                "[User]\necho hello",
+                "[Assistant]\n[called echo]",
+                "[Tool result]\nhello back",
+            )
+            second["tools"] = [LOOKUP_TOOL]
+            second["tool_results"] = [
+                {
+                    "tool_call_id": call["tool_call_id"],
+                    "result": "hello back",
+                    "is_error": False,
+                }
+            ]
+            response = await transport.send(provider, "", second)
+        finally:
+            await transport.close()
+
+        assert response.status_code == 200
+        assert response.body is not None
+        assert response.body["stop_reason"] == "end_turn"
+        assert transport._suspended == {}
+        # The old session is abandoned and the whole history is replayed into
+        # a session whose MCP endpoint lists only the new tool.
+        assert _kinds(tmp_path).count("new") == 2
+        assert self._tool_lists(tmp_path) == [["echo"], ["lookup"]]
+        text = "".join(
+            str(update.get("text") or "")
+            for update in response.body["updates"]
+            if update.get("type") == "text"
+        )
+        assert "resumed with tools: lookup" in text
