@@ -1052,10 +1052,22 @@ class AcpTransport:
             await self._forget(entry)
             return None
         if not entry.live:
-            resumed = await self._resume(provider_info, agent, entry, cwd, deadline)
+            try:
+                resumed = await self._resume(provider_info, agent, entry, cwd, deadline)
+            except BaseException:
+                # The session is no longer known good; do not keep a ledger
+                # entry pointing at a half-resumed agent.
+                await self._forget(entry)
+                raise
             if resumed is None:
                 await self._forget(entry)
                 return None
+        bridge = self._bridge_for(agent.provider, agent.slot, entry.session_id)
+        if entry.tools and bridge is None:
+            # A session with client tools cannot continue without the endpoint
+            # that serves them; replay it into a session that registers one.
+            await self._forget(entry)
+            return None
         model = await self._match_model(provider_info, agent, entry, body, deadline)
         entry.touch()
         return _Turn(
@@ -1066,7 +1078,7 @@ class AcpTransport:
             entry=entry,
             held=held,
             digests=digests,
-            bridge=self._bridge_for(agent.provider, agent.slot, entry.session_id),
+            bridge=bridge,
             tools_digest=entry.tools,
         )
 
@@ -1187,9 +1199,11 @@ class AcpTransport:
             session = await _bounded(
                 agent.client.new_session(cwd, mcp_servers), deadline
             )
-        except JSONRPCException as exc:
+        except BaseException as exc:
             if bridge is not None:
                 self._mcp.unregister(url)
+            if not isinstance(exc, JSONRPCException):
+                raise
             message = str(exc)
             raise AcpTurnError(
                 _sign_in_message(provider_info, message),
@@ -1197,51 +1211,63 @@ class AcpTransport:
             ) from exc
 
         session_id = getattr(session, "session_id", "") or ""
-        if bridge is not None:
-            # The agent received this URL in ``session/new``; it may call it at
-            # any point until the session is closed.
-            ref = (agent.provider, agent.slot, session_id)
-            self._session_bridges[ref] = bridge
-            self._session_urls[ref] = url
-        await self._text_only(
-            provider_info, agent, session_id, deadline, allow_tools=bool(tool_defs)
-        )
-        model = _current_model(getattr(session, "config_options", None))
-        requested = str(body.get("model") or "")
-        if requested and requested != model:
-            model = await self._switch_model(
-                provider_info, agent, session_id, requested, deadline
+        try:
+            if bridge is not None:
+                # The agent received this URL in ``session/new``; it may call
+                # it at any point until the session is closed.
+                ref = (agent.provider, agent.slot, session_id)
+                self._session_bridges[ref] = bridge
+                self._session_urls[ref] = url
+            await self._text_only(
+                provider_info,
+                agent,
+                session_id,
+                deadline,
+                allow_tools=bool(tool_defs),
             )
-        turn = _Turn(
-            agent=agent,
-            session_id=session_id,
-            model=model or requested,
-            tail_start=0,
-            held=held,
-            digests=digests,
-            bridge=bridge,
-            tools_digest=_tools_digest(body),
-        )
-        if key is not None:
-            self._ledger.set_limits(
-                key.provider,
-                max_sessions=getattr(provider_info, "acp_max_sessions", None),
-                idle_ttl=getattr(provider_info, "acp_session_ttl", None),
-            )
-            entry = LedgerEntry(
-                key=key,
+            model = _current_model(getattr(session, "config_options", None))
+            requested = str(body.get("model") or "")
+            if requested and requested != model:
+                model = await self._switch_model(
+                    provider_info, agent, session_id, requested, deadline
+                )
+            turn = _Turn(
+                agent=agent,
                 session_id=session_id,
-                cwd=cwd,
-                model=turn.model,
-                seen=tuple(digests),
-                agent_slot=agent.slot,
-                live=True,
-                tools=_tools_digest(body),
+                model=model or requested,
+                tail_start=0,
+                held=held,
+                digests=digests,
+                bridge=bridge,
+                tools_digest=_tools_digest(body),
             )
-            turn.entry = entry
-            for displaced in self._ledger.put(entry):
-                await self._close_entry(displaced)
-        return turn
+            if key is not None:
+                self._ledger.set_limits(
+                    key.provider,
+                    max_sessions=getattr(provider_info, "acp_max_sessions", None),
+                    idle_ttl=getattr(provider_info, "acp_session_ttl", None),
+                )
+                entry = LedgerEntry(
+                    key=key,
+                    session_id=session_id,
+                    cwd=cwd,
+                    model=turn.model,
+                    seen=tuple(digests),
+                    agent_slot=agent.slot,
+                    live=True,
+                    tools=_tools_digest(body),
+                )
+                turn.entry = entry
+                for displaced in self._ledger.put(entry):
+                    await self._close_entry(displaced)
+            return turn
+        except BaseException:
+            # The session opened but the request never became a turn.  Close
+            # it and stop serving its bridge; otherwise both outlive the
+            # request with nothing in the ledger to find them.
+            self._release_session_resources(agent.provider, agent.slot, session_id)
+            await _close_quietly(agent.client, session_id)
+            raise
 
     async def _text_only(
         self,
