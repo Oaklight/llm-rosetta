@@ -87,6 +87,96 @@ class TestTheHomePath:
             _acp_state_dir("/data", "claude", {"acp": {"home": str(target)}})
 
 
+class TestTheInstallAndTheProfile:
+    """The command names an install; ``acp.home`` names the profile."""
+
+    def _lane(self, tmp_path, **cfg):
+        config = {"base_url": "http://agent.local", "transport": "acp"}
+        config.update(cfg)
+        return build_provider_info(
+            "acp", config, config_name="agy", data_dir=str(tmp_path)
+        )
+
+    def test_acp_argv_names_the_install_and_acp_home_the_profile(self, tmp_path):
+        info = self._lane(
+            tmp_path,
+            acp={"argv": ["/opt/agy-1.7/bin/agy", "acp"], "home": "saved"},
+        )
+
+        assert info.acp_argv == ("/opt/agy-1.7/bin/agy", "acp")
+        assert info.acp_state_dir == str(tmp_path / "saved")
+        assert info.acp_env["LLM_ROSETTA_ACP_HOME"] == info.acp_state_dir
+
+    def test_the_top_level_acp_argv_is_still_an_alias(self, tmp_path):
+        info = self._lane(tmp_path, acp_argv=["agy", "acp"])
+
+        assert info.acp_argv == ("agy", "acp")
+        assert info.acp_argv_custom is True
+
+    def test_acp_argv_wins_over_the_alias(self, tmp_path):
+        info = self._lane(
+            tmp_path,
+            acp={"argv": ["/new/agy", "acp"]},
+            acp_argv=["/old/agy", "acp"],
+        )
+
+        assert info.acp_argv == ("/new/agy", "acp")
+
+    def test_two_installs_share_one_profile(self, tmp_path):
+        """A version switch moves the command, never the login store."""
+        one = self._lane(
+            tmp_path,
+            acp={"argv": ["/opt/agy-1.6/bin/agy", "acp"], "home": "saved"},
+        )
+        two = self._lane(
+            tmp_path,
+            acp={"argv": ["/opt/agy-1.7/bin/agy", "acp"], "home": "saved"},
+        )
+
+        assert one.acp_state_dir == two.acp_state_dir
+        assert one.acp_env == two.acp_env
+
+    def test_a_gemini_dir_in_the_command_is_the_home(self, tmp_path):
+        """The profile the transport writes into is the one the sign-in names."""
+        profile = tmp_path / "profile"
+        info = self._lane(
+            tmp_path, acp={"argv": ["agy", "acp", "--gemini-dir", str(profile)]}
+        )
+
+        assert info.acp_state_dir == str(profile)
+        assert info.acp_env["LLM_ROSETTA_ACP_HOME"] == str(profile)
+
+    def test_a_relative_gemini_dir_is_refused(self, tmp_path):
+        """``agy`` resolves a relative path against its own cwd, not ours."""
+        with pytest.raises(ValueError, match="must be an absolute path"):
+            self._lane(
+                tmp_path, acp={"argv": ["agy", "acp", "--gemini-dir", "profile"]}
+            )
+
+    def test_a_conflicting_home_and_gemini_dir_are_refused(self, tmp_path):
+        with pytest.raises(ValueError, match="name different directories"):
+            self._lane(
+                tmp_path,
+                acp={
+                    "argv": ["agy", "acp", "--gemini-dir", str(tmp_path / "a")],
+                    "home": "b",
+                },
+            )
+
+    def test_harden_defaults_on_and_can_be_turned_off(self, tmp_path):
+        assert self._lane(tmp_path).acp_harden is True
+        assert self._lane(tmp_path, acp={"harden": False}).acp_harden is False
+
+    def test_a_non_boolean_harden_is_refused(self, tmp_path):
+        with pytest.raises(ValueError, match="acp.harden must be true or false"):
+            self._lane(tmp_path, acp={"harden": "no"})
+
+    @pytest.mark.parametrize("bad", ["agy acp", [], ["agy", ""], [1, "acp"]])
+    def test_a_malformed_command_is_refused(self, tmp_path, bad):
+        with pytest.raises(ValueError, match="must be a non-empty list of strings"):
+            self._lane(tmp_path, acp={"argv": bad})
+
+
 class TestTheAgentEnvironment:
     def test_the_shims_placeholder_is_expanded(self):
         shim = _shim(

@@ -114,9 +114,10 @@ DEFAULT_AGENT_ARGV: tuple[str, ...] = (
 #: by the gateway's own loopback MCP endpoint, so approving its permission
 #: request runs the *client's* code through the bridge, not a host tool.  The
 #: transport recognises that case by the bridge's pending call and lets it
-#: through.  An operator-supplied ``acp_argv`` is used as written and gets
-#: none of the profile: it can re-enable host tools, at the operator's own
-#: risk; only the client-side refusal and the tool-frame guard remain.
+#: through.  An operator-supplied ``agy`` command gets the same profile, so a
+#: version switch does not reopen host tools; ``acp.harden: false`` turns it
+#: off, and the command then runs as written with only the client-side
+#: refusal and the tool-frame guard left.
 DENY_AGENT_TOOLS = True
 
 #: The agent mode that asks before *every* tool use, reads included.  Used only
@@ -619,10 +620,14 @@ class AcpTransport:
     def _hardened(self, provider_info: ProviderInfo) -> bool:
         """Whether the gateway gives this provider's agent its own profile.
 
-        True for an ``agy`` command the operator did not write: a provider
-        entry's own ``acp_argv`` is used as written.
+        The profile travels with the command, not with whoever wrote it.  An
+        operator who points ``acp.argv`` at another ``agy`` install — a newer
+        version, a wrapper — still gets ``--gemini-dir``, the no-tools agent
+        and the deny-all hook, so a version switch keeps both the sign-in
+        store and the tool gate.  ``acp.harden: false`` is the explicit
+        opt-out for a command that must run as written.
         """
-        if getattr(provider_info, "acp_argv_custom", False):
+        if not getattr(provider_info, "acp_harden", True):
             return False
         return is_agy(self._declared_argv(provider_info))
 
@@ -1318,7 +1323,7 @@ class AcpTransport:
         by its answer, so it runs ungated unless the name says agy; the
         client's permission refusal and tool-frame guard are what remain.
 
-        For agy without the gateway's profile (an operator's ``acp_argv``):
+        For agy without the gateway's profile (``acp.harden: false``):
         agy's default mode reads files without asking (the permission flag
         does not cover reads); in ``plan`` mode a read asks too, and the
         client refuses.  Failing to set the mode fails the turn: a session
@@ -2171,7 +2176,7 @@ def _default_workspace(provider_info: ProviderInfo) -> str:
     from pathlib import Path
 
     argv = list(getattr(provider_info, "acp_argv", None) or DEFAULT_AGENT_ARGV)
-    if not getattr(provider_info, "acp_argv_custom", False) and is_agy(argv):
+    if getattr(provider_info, "acp_harden", True) and is_agy(argv):
         base = Path(
             getattr(provider_info, "acp_state_dir", None)
             or state_dir_for(None, provider_info.config_name)

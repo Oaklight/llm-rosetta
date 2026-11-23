@@ -20,7 +20,10 @@ services:
     ports:
       - "8765:8765" # Gateway API + admin panel
     volumes:
-      - ./config:/config # Mount your config directory (contains config.jsonc)
+      # Mount your config directory (contains config.jsonc).  It also holds
+      # data/acp/<provider>, where an ACP lane keeps its vendor sign-in and
+      # agent install, so a new image reuses them.
+      - ./config:/config
       # --- ALCF token passthrough (uncomment to enable) ---
       # The ALCF shims ship the Globus exchange, so the container only needs
       # the token file it refreshes.  Login on the host first:
