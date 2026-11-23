@@ -387,3 +387,86 @@ def test_a_config_that_never_ran_validation_reads_as_none():
     config = GatewayConfig({"providers": {}, "models": {}})
 
     assert config.provider_validation_result is None
+
+
+def _lane_entry(home: str | None = None) -> dict:
+    entry = {
+        "type": "chat_completions",
+        "base_url": "http://lane.local",
+        "api_key": "k",
+        "transport": "acp",
+    }
+    if home is not None:
+        entry["acp"] = {"home": home}
+    return entry
+
+
+def test_entries_that_share_a_login_profile_disable_the_later_one():
+    raw = {
+        "providers": {
+            "one": _lane_entry("/srv/shared-profile"),
+            "two": _lane_entry("/srv/shared-profile"),
+        },
+        "models": {},
+    }
+
+    result = asyncio.run(OpsProviderValidation(OpsContext(), raw).execute())
+
+    assert [item["provider"] for item in result["disabled"]] == ["two"]
+    assert raw["providers"]["two"]["enabled"] is False
+    marker = raw["providers"]["two"]["_auto_disabled"]
+    assert marker["category"] == "shared_login_profile"
+    assert "share the ACP profile" in marker["reason"]
+
+
+def test_a_slug_collision_names_the_two_entries(tmp_path):
+    raw = {
+        "server": {"data_dir": str(tmp_path)},
+        "providers": {
+            "nested/name": _lane_entry(),
+            "nested:name": _lane_entry(),
+        },
+        "models": {},
+    }
+
+    result = asyncio.run(OpsProviderValidation(OpsContext(), raw).execute())
+
+    assert [item["provider"] for item in result["disabled"]] == ["nested:name"]
+    reason = raw["providers"]["nested:name"]["_auto_disabled"]["reason"]
+    assert "nested/name" in reason and "nested:name" in reason
+    assert "collide after slugging" in reason
+
+
+def test_a_duplicate_stays_disabled_across_loads():
+    raw = {
+        "providers": {
+            "one": _lane_entry("/srv/shared-profile"),
+            "two": _lane_entry("/srv/shared-profile"),
+        },
+        "models": {},
+    }
+
+    asyncio.run(OpsProviderValidation(OpsContext(), raw).execute())
+    second = asyncio.run(OpsProviderValidation(OpsContext(), raw).execute())
+
+    assert second["recovered"] == []
+    assert [item["provider"] for item in second["disabled"]] == ["two"]
+
+
+def test_a_shared_profile_no_longer_aborts_startup(tmp_path):
+    """A load keeps the first entry serving instead of exiting the process."""
+    from llm_rosetta_gateway.config import GatewayConfig
+
+    raw = {
+        "server": {"data_dir": str(tmp_path / "data")},
+        "providers": {
+            "one": _lane_entry("/srv/shared-profile"),
+            "two": _lane_entry("/srv/shared-profile"),
+        },
+        "models": {},
+    }
+
+    asyncio.run(OpsProviderValidation(OpsContext(), raw).execute())
+    config = GatewayConfig(raw, config_path=str(tmp_path / "gateway.jsonc"))
+
+    assert set(config.providers) == {"one"}

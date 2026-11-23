@@ -29,6 +29,7 @@ from llm_rosetta.api import FORMAT_SPECS, spec_for
 __all__ = [
     "ProviderInfo",
     "build_provider_info",
+    "duplicate_profile_errors",
     "lane_profile_is_managed",
     "managed_acp_state_dir",
     "managed_auth_state_dir",
@@ -461,6 +462,65 @@ def _profile_key(path: str) -> str:
     return os.path.normcase(os.path.abspath(os.path.expanduser(path)))
 
 
+def duplicate_profile_errors(providers: Any) -> dict[str, str]:
+    """Name each entry that repeats an earlier entry's login profile.
+
+    The first entry in *providers* keeps the profile; every later one that
+    resolves to the same ACP home or the same shim-exchange record directory
+    is reported.  ``validate_provider_profiles`` raises the first message for a
+    save, and the load-time recovery disables the reported entries instead of
+    refusing to start.
+
+    Args:
+        providers: ``{config_name: ProviderInfo}`` for the enabled entries.
+
+    Returns:
+        ``{config_name: message}`` for the entries that must not serve.
+    """
+    errors: dict[str, str] = {}
+    acp_homes: dict[str, str] = {}
+    auth_dirs: dict[str, str] = {}
+    for name, pinfo in providers.items():
+        home = getattr(pinfo, "acp_state_dir", None)
+        if home and getattr(pinfo, "transport", "http") != "http":
+            key = _profile_key(str(home))
+            other = acp_homes.get(key)
+            if other is not None and other != name:
+                if getattr(pinfo, "managed_acp_state_dir", None) and getattr(
+                    providers[other], "managed_acp_state_dir", None
+                ):
+                    errors[name] = (
+                        f"Providers '{other}' and '{name}' resolve to the same "
+                        f"ACP profile {home!r} because their names collide "
+                        "after slugging. Rename one entry or give one an "
+                        "explicit acp.home."
+                    )
+                else:
+                    errors[name] = (
+                        f"Providers '{other}' and '{name}' share the ACP profile "
+                        f"{home!r}. Each entry must have its own login profile; "
+                        "remove one acp.home or give each entry a different path."
+                    )
+            else:
+                acp_homes[key] = name
+
+        context = getattr(pinfo, "auth_context", None)
+        state_dir = getattr(context, "state_dir", None) if context is not None else None
+        if state_dir and getattr(pinfo, "auth_exchange", None) is not None:
+            key = _profile_key(str(state_dir))
+            other = auth_dirs.get(key)
+            if other is not None and other != name:
+                errors.setdefault(
+                    name,
+                    f"Providers '{other}' and '{name}' share the credential "
+                    f"record directory {state_dir!r}. Each entry must have its "
+                    "own sign-in; rename one of the entries.",
+                )
+            else:
+                auth_dirs[key] = name
+    return errors
+
+
 def validate_provider_profiles(providers: Any) -> None:
     """Refuse two entries that resolve to one login profile.
 
@@ -476,33 +536,9 @@ def validate_provider_profiles(providers: Any) -> None:
         ValueError: Two entries resolve to the same ACP home or the same
             shim-exchange record directory.
     """
-    acp_homes: dict[str, str] = {}
-    auth_dirs: dict[str, str] = {}
-    for name, pinfo in providers.items():
-        home = getattr(pinfo, "acp_state_dir", None)
-        if home and getattr(pinfo, "transport", "http") != "http":
-            key = _profile_key(str(home))
-            other = acp_homes.get(key)
-            if other is not None and other != name:
-                raise ValueError(
-                    f"Providers '{other}' and '{name}' share the ACP profile "
-                    f"{home!r}. Each entry must have its own login profile; "
-                    "remove one acp.home or give each entry a different path."
-                )
-            acp_homes[key] = name
-
-        context = getattr(pinfo, "auth_context", None)
-        state_dir = getattr(context, "state_dir", None) if context is not None else None
-        if state_dir and getattr(pinfo, "auth_exchange", None) is not None:
-            key = _profile_key(str(state_dir))
-            other = auth_dirs.get(key)
-            if other is not None and other != name:
-                raise ValueError(
-                    f"Providers '{other}' and '{name}' share the credential "
-                    f"record directory {state_dir!r}. Each entry must have its "
-                    "own sign-in; rename one of the entries."
-                )
-            auth_dirs[key] = name
+    errors = duplicate_profile_errors(providers)
+    if errors:
+        raise ValueError(next(iter(errors.values())))
 
 
 def _auth_context(

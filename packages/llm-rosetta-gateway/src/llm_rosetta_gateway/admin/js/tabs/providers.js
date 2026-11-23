@@ -1291,7 +1291,10 @@ async function testProviderCredential() {
     const res = await api.post(`/admin/api/config/providers/${encodeURIComponent(name)}/credential/test`);
     await loadProviderCredential(name);
     if (res && res.ok) {
-      showToast?.(_credentialText('label.credentialAccepted', 'The upstream accepted the credential'), 'success');
+      const text = res.transport && res.transport !== 'http'
+        ? _credentialText('label.laneTurnSucceeded', 'The agent completed a test turn')
+        : _credentialText('label.credentialAccepted', 'The upstream accepted the credential');
+      showToast?.(text, 'success');
     } else {
       _setCredentialError((res && res.error) || _credentialText('label.credentialRejected', 'The credential test failed.'));
     }

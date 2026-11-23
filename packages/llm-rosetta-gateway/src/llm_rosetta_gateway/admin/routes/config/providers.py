@@ -60,49 +60,66 @@ def _managed_paths(pinfo: Any) -> dict[str, str]:
     return paths
 
 
+def _warn(report: dict[str, Any], message: str) -> None:
+    """Keep a lifecycle warning in the response and in the log."""
+    report["warnings"].append(message)
+    logger.warning("%s", message)
+
+
 def _relocate_profiles(
     *,
     old_info: Any,
     new_info: Any | None,
+    remove: bool = False,
 ) -> dict[str, Any]:
     """Move a renamed entry's profile, or remove a deleted entry's.
 
-    Only gateway-managed directories are touched.  A rename keeps the login
-    when the new entry still uses an ACP lane and names no profile of its
-    own; otherwise the old profile is removed, because nothing may keep using
-    a login the entry no longer owns.
+    Only gateway-managed directories are touched.  A delete (``remove=True``,
+    the delete route) removes them.  A rename moves the ones the new entry
+    still owns; a profile the new entry no longer owns — it was disabled in
+    the same save, switched away from the lane, or now names a profile of its
+    own — is left on disk with a warning.  A rename must never delete a
+    sign-in: disabling an entry or switching its lane may be temporary, and
+    the profile is what makes switching back cheap.
     """
     report: dict[str, Any] = {"moved": [], "removed": [], "warnings": []}
     old_paths = _managed_paths(old_info)
-    if new_info is not None:
-        new_paths = _managed_paths(new_info)
-        for kind, old_path in old_paths.items():
-            new_path = new_paths.get(kind)
-            if not os.path.isdir(old_path):
-                continue
-            if not new_path:
-                _remove_profile(old_path, report)
-                continue
-            if os.path.abspath(old_path) == os.path.abspath(new_path):
-                continue
-            if os.path.exists(new_path):
-                report["warnings"].append(
-                    f"the new profile {new_path!r} already exists; the old "
-                    f"profile {old_path!r} was left in place"
-                )
-                continue
-            try:
-                os.makedirs(os.path.dirname(new_path), exist_ok=True)
-                shutil.move(old_path, new_path)
-            except OSError as exc:
-                report["warnings"].append(
-                    f"could not move the profile {old_path!r} to {new_path!r}: {exc}"
-                )
-                continue
-            report["moved"].append({"from": old_path, "to": new_path})
-    else:
+    if remove:
         for old_path in old_paths.values():
             _remove_profile(old_path, report)
+        return report
+
+    new_paths = _managed_paths(new_info) if new_info is not None else {}
+    for kind, old_path in old_paths.items():
+        if not os.path.isdir(old_path):
+            continue
+        new_path = new_paths.get(kind)
+        if not new_path:
+            _warn(
+                report,
+                f"the renamed entry no longer owns a managed {kind} profile; "
+                f"{old_path!r} was kept",
+            )
+            continue
+        if os.path.abspath(old_path) == os.path.abspath(new_path):
+            continue
+        if os.path.exists(new_path):
+            _warn(
+                report,
+                f"the new profile {new_path!r} already exists; the old "
+                f"profile {old_path!r} was left in place",
+            )
+            continue
+        try:
+            os.makedirs(os.path.dirname(new_path), exist_ok=True)
+            shutil.move(old_path, new_path)
+        except OSError as exc:
+            _warn(
+                report,
+                f"could not move the profile {old_path!r} to {new_path!r}: {exc}",
+            )
+            continue
+        report["moved"].append({"from": old_path, "to": new_path})
     return report
 
 
@@ -358,7 +375,9 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
         return ctx.error
     assert ctx.new_config is not None
 
-    profile_report = _relocate_profiles(old_info=current_pinfo, new_info=None)
+    profile_report = _relocate_profiles(
+        old_info=current_pinfo, new_info=None, remove=True
+    )
     await _close_lane_processes(request, [name])
 
     result: dict[str, Any] = {

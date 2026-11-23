@@ -423,6 +423,19 @@ async def test_provider_credential(request: Any, name: str) -> Response:
                 or result.get("text")
                 or "the agent did not complete a test turn"
             )
+        # The lane probe reports what it learned beyond "the turn worked".
+        # Dropping these left the panel with a green toast where the useful
+        # answer was "signed in, but no allowance yet" or "sign in first".
+        warnings: list[str] = []
+        if result.get("needs_sign_in"):
+            warnings.append(
+                "The agent is installed but not signed in: use the credential "
+                "panel's Sign in button."
+            )
+        if result.get("quota_observed"):
+            warnings.append("The agent reported its allowance; open Quota to read it.")
+        if warnings:
+            payload["warnings"] = warnings
         return JSONResponse(payload)
 
     if pinfo.keyless:
