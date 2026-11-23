@@ -111,6 +111,7 @@ class TestTheAgentEnvironment:
             "FROM_SHIM": "1",
             "FROM_OPERATOR": "2",
             "SAME": "operator",
+            "LLM_ROSETTA_ACP_HOME": info.acp_state_dir,
         }
 
     def test_a_non_string_value_is_refused(self):
