@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import copy
 import logging
+import os
+import shutil
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
@@ -17,11 +20,113 @@ from .._shared import (
     config_mutate,
     parse_json_body,
 )
+from .payload import _get_gateway_config
 
 from .bulk import Lane, _merge_outcome, _merge_provider_into_model, lane_key
 from .model_providers import _lanes_named, _remove_all_lanes_of_provider
 
 logger = logging.getLogger("llm-rosetta-gateway")
+
+
+def _owned_profile_paths(
+    name: str, entry: dict[str, Any], data_dir: str | None, transport: str
+) -> dict[str, str]:
+    """The profile directories the gateway owns for one entry.
+
+    A path named by the operator (``acp.home``, ``--gemini-dir``) is never
+    included: lifecycle actions must not move or delete it.
+    """
+    from ....config.providers import managed_acp_state_dir, managed_auth_state_dir
+
+    paths: dict[str, str] = {}
+    if transport == "acp":
+        home = managed_acp_state_dir(name, entry, data_dir)
+        if home:
+            paths["acp"] = home
+    auth = managed_auth_state_dir(name, data_dir)
+    if auth:
+        paths["auth"] = auth
+    return paths
+
+
+def _remove_profile(path: str, report: dict[str, Any]) -> None:
+    if not os.path.isdir(path):
+        return
+    try:
+        shutil.rmtree(path)
+    except OSError as exc:
+        report["warnings"].append(f"could not remove the old profile {path!r}: {exc}")
+        return
+    report["removed"].append(path)
+
+
+def _relocate_profiles(
+    *,
+    old_name: str,
+    old_entry: dict[str, Any],
+    old_transport: str,
+    new_name: str | None,
+    new_entry: dict[str, Any] | None,
+    new_transport: str,
+    data_dir: str | None,
+) -> dict[str, Any]:
+    """Move a renamed entry's profile, or remove a deleted entry's.
+
+    Only gateway-managed directories are touched.  A rename keeps the login
+    when the new entry still uses an ACP lane and names no profile of its
+    own; otherwise the old profile is removed, because nothing may keep using
+    a login the entry no longer owns.
+    """
+    report: dict[str, Any] = {"moved": [], "removed": [], "warnings": []}
+    old_paths = _owned_profile_paths(old_name, old_entry, data_dir, old_transport)
+    if new_name is not None and new_entry is not None:
+        new_paths = _owned_profile_paths(new_name, new_entry, data_dir, new_transport)
+        for kind, old_path in old_paths.items():
+            new_path = new_paths.get(kind)
+            if not os.path.isdir(old_path):
+                continue
+            if not new_path:
+                _remove_profile(old_path, report)
+                continue
+            if os.path.abspath(old_path) == os.path.abspath(new_path):
+                continue
+            if os.path.exists(new_path):
+                report["warnings"].append(
+                    f"the new profile {new_path!r} already exists; the old "
+                    f"profile {old_path!r} was left in place"
+                )
+                continue
+            try:
+                os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                shutil.move(old_path, new_path)
+            except OSError as exc:
+                report["warnings"].append(
+                    f"could not move the profile {old_path!r} to {new_path!r}: {exc}"
+                )
+                continue
+            report["moved"].append({"from": old_path, "to": new_path})
+    else:
+        for old_path in old_paths.values():
+            _remove_profile(old_path, report)
+    return report
+
+
+async def _close_lane_processes(request: Any, names: list[str]) -> None:
+    """Drop the agent processes bound to a renamed or deleted entry."""
+    transports = list((getattr(request.app, "transports", {}) or {}).values())
+    seen: set[int] = set()
+    for transport in transports:
+        if id(transport) in seen:
+            continue
+        seen.add(id(transport))
+        close = getattr(transport, "aclose_provider", None)
+        if not callable(close):
+            continue
+        for name in names:
+            try:
+                await close(name)
+            except Exception:  # noqa: BLE001 - the config change already won
+                logger.debug("could not close the lane for %r", name, exc_info=True)
 
 
 def _missing_provider_fields_error(
@@ -113,12 +218,26 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
     api_key = body.get("api_key", "")
     base_url = body.get("base_url", "")
 
+    current_config = _get_gateway_config(request)
+    resolved_data_dir = getattr(current_config, "data_dir", None)
+    current_pinfo = (
+        current_config.providers.get(body.get("rename_from") or name)
+        if current_config is not None
+        else None
+    )
+
     async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
 
         existing_providers = ctx.data.get("providers", {})
         resolve_name = body.get("rename_from", name) or name
+        old_entry = copy.deepcopy(existing_providers.get(resolve_name) or {})
+        old_transport = (
+            getattr(current_pinfo, "transport", None)
+            or old_entry.get("transport")
+            or "http"
+        )
 
         # When api_key is omitted/empty and we're editing, keep the existing key
         if not api_key and resolve_name in existing_providers:
@@ -156,7 +275,7 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
         # Write only what the loader will accept.  Saving first and reloading
         # second left a rejected document on disk, and the next process start
         # failed on it; this turns that 500 into a 400 that writes nothing.
-        load_error = _config_preflight_error(ctx.data)
+        load_error = _config_preflight_error(ctx.data, resolved_data_dir)
         if load_error is not None:
             return JSONResponse({"error": load_error}, status_code=400)
 
@@ -166,14 +285,32 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
         return ctx.error
     assert ctx.new_config is not None
 
-    return JSONResponse(
-        {
-            "ok": True,
-            "provider": name,
-            "providers": list(ctx.new_config.providers.keys()),
-            "provider_warnings": ctx.warnings,
-        }
-    )
+    renamed = bool(body.get("rename_from") and body.get("rename_from") != name)
+    profile_report: dict[str, Any] | None = None
+    if renamed:
+        data_dir = getattr(ctx.new_config, "data_dir", None) or resolved_data_dir
+        new_entry = copy.deepcopy(ctx.data.get("providers", {}).get(name) or {})
+        new_pinfo = ctx.new_config.providers.get(name)
+        profile_report = _relocate_profiles(
+            old_name=resolve_name,
+            old_entry=old_entry,
+            old_transport=old_transport,
+            new_name=name,
+            new_entry=new_entry,
+            new_transport=getattr(new_pinfo, "transport", "http") or "http",
+            data_dir=data_dir,
+        )
+        await _close_lane_processes(request, [resolve_name, name])
+
+    result: dict[str, Any] = {
+        "ok": True,
+        "provider": name,
+        "providers": list(ctx.new_config.providers.keys()),
+        "provider_warnings": ctx.warnings,
+    }
+    if profile_report is not None:
+        result["profile"] = profile_report
+    return JSONResponse(result)
 
 
 def _models_naming(models: dict[str, Any], provider: str) -> list[str]:
@@ -191,6 +328,12 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
     """Remove a provider entry."""
     name = request.path_params["name"]
 
+    current_config = _get_gateway_config(request)
+    resolved_data_dir = getattr(current_config, "data_dir", None)
+    current_pinfo = (
+        current_config.providers.get(name) if current_config is not None else None
+    )
+
     async with config_mutate(request) as ctx:
         if ctx.error:
             return ctx.error
@@ -200,6 +343,13 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
             return JSONResponse(
                 {"error": f"Provider '{name}' not found"}, status_code=404
             )
+
+        old_entry = copy.deepcopy(providers[name])
+        old_transport = (
+            getattr(current_pinfo, "transport", None)
+            or old_entry.get("transport")
+            or "http"
+        )
 
         # Check if any model still references this provider
         models = ctx.data.get("models", {})
@@ -234,10 +384,23 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
         return ctx.error
     assert ctx.new_config is not None
 
+    data_dir = getattr(ctx.new_config, "data_dir", None) or resolved_data_dir
+    profile_report = _relocate_profiles(
+        old_name=name,
+        old_entry=old_entry,
+        old_transport=old_transport,
+        new_name=None,
+        new_entry=None,
+        new_transport="http",
+        data_dir=data_dir,
+    )
+    await _close_lane_processes(request, [name])
+
     result: dict[str, Any] = {
         "ok": True,
         "deleted": name,
         "providers": list(ctx.new_config.providers.keys()),
+        "profile": profile_report,
     }
     if cascade_deleted:
         result["cascade_deleted_models"] = cascade_deleted
@@ -249,6 +412,8 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
 async def toggle_provider(request: Any, **kwargs: Any) -> Response:
     """Toggle a provider's enabled/disabled state."""
     name = request.path_params["name"]
+    current_config = _get_gateway_config(request)
+    resolved_data_dir = getattr(current_config, "data_dir", None)
 
     async with config_mutate(request) as ctx:
         if ctx.error:
@@ -272,7 +437,7 @@ async def toggle_provider(request: Any, **kwargs: Any) -> Response:
             providers[name].pop("_auto_disabled", None)
             # Enabling is the moment a broken entry becomes loadable — or
             # fatal.  Validate before the switch is written, not after.
-            load_error = _config_preflight_error(ctx.data)
+            load_error = _config_preflight_error(ctx.data, resolved_data_dir)
             if load_error is not None:
                 return JSONResponse({"error": load_error}, status_code=400)
         else:

@@ -26,7 +26,14 @@ from llm_rosetta.api import FORMAT_SPECS, spec_for
 
 # Re-export ProviderInfo so existing ``from .providers import ProviderInfo``
 # continues to work without changes across the codebase.
-__all__ = ["ProviderInfo", "build_provider_info"]
+__all__ = [
+    "ProviderInfo",
+    "build_provider_info",
+    "lane_profile_is_managed",
+    "managed_acp_state_dir",
+    "managed_auth_state_dir",
+    "validate_provider_profiles",
+]
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -374,6 +381,103 @@ def _acp_state_dir(
     if os.path.exists(path) and not os.path.isdir(path):
         raise ValueError(f"Provider '{provider}': acp.home is not a directory: {path}")
     return path
+
+
+def lane_profile_is_managed(provider: str, cfg: dict[str, Any]) -> bool:
+    """Whether this entry's ACP home is derived by the gateway.
+
+    A managed home (``<data>/acp/<slug>``) is the entry's own profile: the
+    gateway may move it when the entry is renamed and remove it when the entry
+    is deleted.  An ``acp.home`` or a ``--gemini-dir`` in the agent command is
+    the operator's path; lifecycle actions never touch it.
+    """
+    acp = cfg.get("acp")
+    if isinstance(acp, dict) and acp.get("home") is not None:
+        return False
+    argv = cfg.get("acp_argv")
+    if argv is None and isinstance(acp, dict):
+        argv = acp.get("argv")
+    if isinstance(argv, (list, tuple)) and argv:
+        from ..transport.acp_profile import gemini_dir_values
+
+        try:
+            if gemini_dir_values([str(item) for item in argv]):
+                return False
+        except (TypeError, ValueError):
+            # A malformed command already fails the build.  Treat it as
+            # operator-owned here so a cleanup never guesses a path.
+            return False
+    return True
+
+
+def managed_acp_state_dir(
+    provider: str, cfg: dict[str, Any], data_dir: str | None
+) -> str | None:
+    """The ACP profile the gateway owns for *provider*, or ``None``.
+
+    ``None`` covers both "there is no managed profile" (an explicit
+    ``acp.home`` or ``--gemini-dir``) and "there is no data directory to put
+    one under".
+    """
+    if not data_dir or not lane_profile_is_managed(provider, cfg):
+        return None
+    from ..transport.acp_profile import state_dir_for
+
+    return state_dir_for(data_dir, provider)
+
+
+def managed_auth_state_dir(provider: str, data_dir: str | None) -> str | None:
+    """The shim-exchange record directory the gateway owns for *provider*."""
+    return _auth_state_dir(data_dir, provider)
+
+
+def _profile_key(path: str) -> str:
+    """A comparison key that treats one directory written two ways as one."""
+    return os.path.normcase(os.path.abspath(os.path.expanduser(path)))
+
+
+def validate_provider_profiles(providers: Any) -> None:
+    """Refuse two entries that resolve to one login profile.
+
+    Every entry has its own profile by default.  An explicit ``acp.home`` (or
+    ``--gemini-dir``) can point two entries at one directory, and two names
+    can slugify to one shim-auth directory.  Either case makes a sign-in for
+    one entry silently serve the other, so it is a configuration error.
+
+    Args:
+        providers: ``{config_name: ProviderInfo}`` for the enabled entries.
+
+    Raises:
+        ValueError: Two entries resolve to the same ACP home or the same
+            shim-exchange record directory.
+    """
+    acp_homes: dict[str, str] = {}
+    auth_dirs: dict[str, str] = {}
+    for name, pinfo in providers.items():
+        home = getattr(pinfo, "acp_state_dir", None)
+        if home and getattr(pinfo, "transport", "http") != "http":
+            key = _profile_key(str(home))
+            other = acp_homes.get(key)
+            if other is not None and other != name:
+                raise ValueError(
+                    f"Providers '{other}' and '{name}' share the ACP profile "
+                    f"{home!r}. Each entry must have its own login profile; "
+                    "remove one acp.home or give each entry a different path."
+                )
+            acp_homes[key] = name
+
+        context = getattr(pinfo, "auth_context", None)
+        state_dir = getattr(context, "state_dir", None) if context is not None else None
+        if state_dir and getattr(pinfo, "auth_exchange", None) is not None:
+            key = _profile_key(str(state_dir))
+            other = auth_dirs.get(key)
+            if other is not None and other != name:
+                raise ValueError(
+                    f"Providers '{other}' and '{name}' share the credential "
+                    f"record directory {state_dir!r}. Each entry must have its "
+                    "own sign-in; rename one of the entries."
+                )
+            auth_dirs[key] = name
 
 
 def _auth_context(

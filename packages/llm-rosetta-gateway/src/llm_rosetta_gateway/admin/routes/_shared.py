@@ -300,7 +300,9 @@ def _expand_env(value: Any) -> Any:
     return value
 
 
-def _config_preflight_error(data: dict[str, Any]) -> str | None:
+def _config_preflight_error(
+    data: dict[str, Any], data_dir: str | None = None
+) -> str | None:
     """Build every enabled provider in *data* and return the first refusal.
 
     ``config_mutate`` saves first and reloads second, so a document the loader
@@ -309,9 +311,13 @@ def _config_preflight_error(data: dict[str, Any]) -> str | None:
     Only the providers are built, not the whole ``GatewayConfig``: the admin
     edits the *raw* document (``${ENV}`` placeholders intact), and a full
     build would resolve server settings the raw text does not.
+
+    *data_dir* is the resolved data directory.  The profile-duplicate check
+    needs it: without it two entries whose ``acp.home`` is defaulted could
+    appear distinct when they are not.
     """
     from ...config.resolve import resolve_provider_identities
-    from ...config.providers import build_provider_info
+    from ...config.providers import build_provider_info, validate_provider_profiles
 
     providers = data.get("providers") or {}
     enabled = {
@@ -323,19 +329,22 @@ def _config_preflight_error(data: dict[str, Any]) -> str | None:
         return None
     try:
         identities, shim_names = resolve_provider_identities(enabled)
+        built: dict[str, Any] = {}
         for name, cfg in enabled.items():
             identity = identities.get(name)
             if identity is None:  # pragma: no cover - resolver covers every entry
                 continue
-            build_provider_info(
+            built[name] = build_provider_info(
                 identity.format,
                 cfg,
                 shim_name=shim_names.get(name),
                 config_name=name,
+                data_dir=data_dir,
                 # Every enabled provider is rebuilt on every save; its
                 # startup notices would otherwise repeat once per save.
                 quiet=True,
             )
+        validate_provider_profiles(built)
     except Exception as exc:  # noqa: BLE001 - the message is the caller's to read
         return str(exc)
     return None
