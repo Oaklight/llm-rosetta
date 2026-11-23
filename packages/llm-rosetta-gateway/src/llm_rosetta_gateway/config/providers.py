@@ -846,22 +846,24 @@ def _lane_environment(
 
         agy = is_agy(list(argv))
         named: str | None = None
-        if harden or agy:
-            values = gemini_dir_values(list(argv))
-            if len(values) > 1:
+        # Any command may already name the profile it reads, a wrapper
+        # included.  The home the sign-in and the panel use must be that
+        # directory whether or not the gateway injects the flag itself.
+        values = gemini_dir_values(list(argv))
+        if len(values) > 1:
+            raise ValueError(
+                f"Provider '{provider_key}': the agent command names "
+                f"--gemini-dir more than once ({values!r}); keep one "
+                f"profile"
+            )
+        if values:
+            named = values[0]
+            if not named or named.startswith("-"):
                 raise ValueError(
-                    f"Provider '{provider_key}': the agent command names "
-                    f"--gemini-dir more than once ({values!r}); keep one "
-                    f"profile"
+                    f"Provider '{provider_key}': --gemini-dir in the agent "
+                    f"command must be followed by a directory, not a flag "
+                    f"or nothing"
                 )
-            if values:
-                named = values[0]
-                if not named or named.startswith("-"):
-                    raise ValueError(
-                        f"Provider '{provider_key}': --gemini-dir in the agent "
-                        f"command must be followed by a directory, not a flag "
-                        f"or nothing"
-                    )
         if agy and not harden and named is None:
             raise ValueError(
                 f"Provider '{provider_key}': acp.harden: false runs agy as "

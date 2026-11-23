@@ -146,6 +146,20 @@ class TestTheInstallAndTheProfile:
         assert info.acp_state_dir == str(profile)
         assert info.acp_env["LLM_ROSETTA_ACP_HOME"] == str(profile)
 
+    def test_a_gemini_dir_in_a_wrapper_is_the_home(self, tmp_path):
+        """A wrapper that reads a named profile keeps it as the lane's home."""
+        profile = tmp_path / "profile"
+        info = self._lane(
+            tmp_path,
+            acp={
+                "argv": ["/opt/run-agy.sh", "acp", "--gemini-dir", str(profile)],
+                "harden": False,
+            },
+        )
+
+        assert info.acp_state_dir == str(profile)
+        assert info.acp_env["LLM_ROSETTA_ACP_HOME"] == str(profile)
+
     def test_a_relative_gemini_dir_is_refused(self, tmp_path):
         """``agy`` resolves a relative path against its own cwd, not ours."""
         with pytest.raises(ValueError, match="must be an absolute path"):
