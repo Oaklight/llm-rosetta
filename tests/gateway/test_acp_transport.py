@@ -1412,6 +1412,28 @@ class TestAgentToolsAreOff:
         assert "mode-unsupported" in kinds
         assert "mode" not in kinds
 
+    async def test_a_mode_less_agent_is_probed_once_per_process(
+        self, monkeypatch, tmp_path
+    ):
+        """``-32601`` describes the agent, so a later session must not re-ask."""
+        transport = AcpTransport()
+        try:
+            for conversation in ("conv-1", "conv-2"):
+                await transport.send(
+                    _provider(
+                        monkeypatch, tmp_path, "no-mode", conversation=conversation
+                    ),
+                    "",
+                    TURN,
+                )
+        finally:
+            await transport.close()
+
+        kinds = _kinds(tmp_path)
+        assert kinds.count("new") == 2
+        assert kinds.count("mode-attempt") == 1
+        assert kinds.count("mode-unsupported") == 1
+
     async def test_an_agent_that_advertises_no_plan_keeps_its_mode(
         self, monkeypatch, tmp_path
     ):
@@ -1431,6 +1453,30 @@ class TestAgentToolsAreOff:
         assert [e.get("mode") for e in _log(tmp_path) if e["kind"] == "mode"] == [
             "plan"
         ]
+
+    async def test_an_agy_that_advertises_no_plan_does_not_run(
+        self, monkeypatch, tmp_path
+    ):
+        """An agy that names its modes but omits ``plan`` must not run.
+
+        The mirror of this test covers a non-agy agent: it keeps its own mode.
+        For agy, starting in ``default`` means its built-in tools are live, so
+        the turn must fail before the prompt is sent.
+        """
+        transport = AcpTransport(timeout=5)
+        try:
+            response = await transport.send(
+                _provider(monkeypatch, tmp_path, "modes-without-plan", agy=True),
+                "",
+                TURN,
+            )
+            kinds = _kinds(tmp_path)
+        finally:
+            await transport.close()
+        assert response.status_code == 502
+        assert b"advertises no 'plan' mode" in response.raw_content
+        assert "mode-attempt" not in kinds
+        assert "prompt" not in kinds
 
     async def test_an_agy_that_advertises_no_modes_does_not_run(
         self, monkeypatch, tmp_path

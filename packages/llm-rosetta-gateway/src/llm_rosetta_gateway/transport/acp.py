@@ -174,6 +174,9 @@ class _Agent:
     #: session of this process, so two prompts must not be written into it at
     #: once even when their sessions differ.
     lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
+    #: Set when the agent answered "method not found" to ``set_mode``: the
+    #: whole process has no mode surface, so a later session need not ask.
+    no_modes: bool = False
 
     def can_resume(self) -> bool:
         """Whether the agent advertises ``session/resume``."""
@@ -1331,6 +1334,10 @@ class AcpTransport:
                     status_code=502,
                 )
             return
+        if available is None and agent.no_modes:
+            # This process already answered ``-32601`` for an earlier session.
+            # Modes are a property of the agent, not of one session.
+            return
         try:
             await _bounded(
                 agent.client.set_mode(session_id, AGENT_TOOLS_OFF_MODE), deadline
@@ -1341,6 +1348,7 @@ class AcpTransport:
                 and getattr(exc.error, "code", None) == METHOD_NOT_FOUND
                 and not is_agy(argv)
             ):
+                agent.no_modes = True
                 logger.info(
                     "ACP provider %r: the agent has no session modes; leaving "
                     "the session as it started",
