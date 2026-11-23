@@ -100,6 +100,11 @@ class LedgerEntry:
     #: agent session cannot gain a new MCP server list in place, so a request
     #: that declares different tools needs a fresh session.
     tools: str = ""
+    #: The mode ids ``session/new`` advertised, kept so a resumed session can
+    #: be gated from the same answer.  ``None`` means the agent named no modes;
+    #: an empty tuple means it named an empty list.  ``resume``/``load`` do not
+    #: return this state, so without the copy a resumed turn would probe blind.
+    modes: tuple[str, ...] | None = None
     last_used: float = field(default_factory=time.monotonic)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
