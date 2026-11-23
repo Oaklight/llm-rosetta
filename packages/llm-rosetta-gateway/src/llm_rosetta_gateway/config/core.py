@@ -331,6 +331,13 @@ class GatewayConfig:
             for name, cfg in self._raw_providers.items()
         }
 
+        # Two entries may not resolve to one login profile: a sign-in would
+        # then serve both, which is the one thing a persistent profile must
+        # never do silently.
+        from .providers import validate_provider_profiles
+
+        validate_provider_profiles(self.providers)
+
         # Attach the process-wide quota state: the key ring learns which
         # credentials a probe or an in-band 429 has demoted.  State outlives a
         # config reload, so it is bound here rather than owned by the config.
