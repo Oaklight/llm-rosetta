@@ -646,10 +646,16 @@ class TestLoaderVocabulary:
         keys = shim_manifests._connection_keys()
         assert isinstance(keys, tuple)
         assert keys[:2] == ("base_url", "api_key_env")
-        assert {"headers", "token_command", "keyless", "transport", "acp_env"} <= set(
-            keys
-        )
-        assert len(keys) == len(set(keys)) == 20
+        assert {
+            "headers",
+            "token_command",
+            "keyless",
+            "transport",
+            "acp_env",
+            "acp_env_unset",
+            "acp_session_meta",
+        } <= set(keys)
+        assert len(keys) == len(set(keys)) == 22
 
     def test_the_identity_keys(self):
         assert shim_manifests._identity_keys() == ("name", "format", "base")
