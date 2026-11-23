@@ -242,6 +242,7 @@ class AcpConverter(BaseConverter):
         text: list[str] = []
         reasoning: list[str] = []
         calls: list[dict[str, Any]] = []
+        usage: dict[str, int] | None = None
         for update in updates:
             if not isinstance(update, dict):
                 continue
@@ -253,6 +254,18 @@ class AcpConverter(BaseConverter):
                 call = self.tool_ops.p_tool_call_to_ir(update)
                 if call.get("tool_name"):
                     calls.append(dict(call))
+            elif update.get("type") == "usage":
+                # ACP reports the session's context usage, not a per-turn
+                # bill.  Carry it as the input side, the same shape the
+                # streaming leg emits, so a non-streaming client sees the
+                # same number a streaming one does.
+                used = update.get("used")
+                if isinstance(used, int) and used >= 0:
+                    usage = {
+                        "prompt_tokens": used,
+                        "completion_tokens": 0,
+                        "total_tokens": used,
+                    }
         content: list[dict[str, Any]] = []
         joined_reasoning = "".join(reasoning)
         if joined_reasoning:
@@ -278,6 +291,8 @@ class AcpConverter(BaseConverter):
             "model": str(provider_response.get("model") or ""),
             "choices": [choice],
         }
+        if usage is not None:
+            ir_response["usage"] = usage
         return ir_response
 
     def _do_response_to_provider(
