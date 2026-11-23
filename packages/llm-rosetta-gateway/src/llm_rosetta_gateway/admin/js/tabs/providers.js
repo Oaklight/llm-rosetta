@@ -3143,6 +3143,22 @@ function saveProviderAndManageCredential() {
   return saveProvider();
 }
 
+/**
+ * The warnings one provider save returned, as one operator-facing line.
+ *
+ * A rename can move a login profile, and the move can leave a directory
+ * behind: that is a fact the operator must see, not a detail of the answer.
+ * The panel shows it instead of the plain "saved" toast, so a successful save
+ * never hides the state it created.
+ */
+function _profileSaveWarnings(res) {
+  const warnings = [
+    ...((res && res.provider_warnings) || []),
+    ...((res && res.profile && res.profile.warnings) || []),
+  ];
+  return warnings.filter(w => typeof w === 'string' && w);
+}
+
 async function _saveProvider() {
   // Read and clear: a failed or ordinary save must not leave the next one
   // holding the drawer open.
@@ -3307,8 +3323,10 @@ async function _saveProvider() {
     body.rename_from = _editingProviderName;
   }
   const res = await api.put(`/admin/api/config/providers/${encodeURIComponent(name)}`, body);
+  const saveWarnings = _profileSaveWarnings(res);
   if (res.ok && stayOnCredential) {
-    showToast(t('toast.providerSaved', {name}));
+    if (saveWarnings.length) showToast(saveWarnings.join(' '), 'error');
+    else showToast(t('toast.providerSaved', {name}));
     // The entry is on disk and loaded now, so the drawer becomes an editor of
     // a provider that exists — which is what makes the credential reachable
     // without closing and re-opening it.
@@ -3321,7 +3339,12 @@ async function _saveProvider() {
     markDialogPristine(document.getElementById('providerModal'));
     return;
   }
-  if (res.ok) { showToast(t('toast.providerSaved',{name})); closeModal('providerModal'); loadConfig(); }
+  if (res.ok) {
+    if (saveWarnings.length) showToast(saveWarnings.join(' '), 'error');
+    else showToast(t('toast.providerSaved', {name}));
+    closeModal('providerModal');
+    loadConfig();
+  }
   else { showToast(res.error || t('toast.error'), 'error'); }
 }
 

@@ -225,11 +225,44 @@ def test_the_builder_names_the_gateway_managed_profile(tmp_path):
     assert pinfo.managed_auth_state_dir is None
 
 
-def test_a_rename_that_finds_the_new_profile_already_present_warns(tmp_path):
+def test_a_rename_into_an_existing_profile_keeps_the_sign_in(tmp_path):
     data_dir = tmp_path / "data"
     old = data_dir / "acp" / "claude"
     new = data_dir / "acp" / "claude-work"
-    old.mkdir(parents=True)
+    (old / "claude").mkdir(parents=True)
+    (old / "claude" / ".credentials.json").write_text(
+        '{"token": "old"}', encoding="utf-8"
+    )
+    (new / "claude").mkdir(parents=True)
+    (new / "claude" / ".claude.json").write_text('{"stale": true}', encoding="utf-8")
+
+    report = _relocate_profiles(
+        old_info=SimpleNamespace(
+            managed_acp_state_dir=str(old), managed_auth_state_dir=None
+        ),
+        new_info=SimpleNamespace(
+            managed_acp_state_dir=str(new), managed_auth_state_dir=None
+        ),
+    )
+
+    # The renamed entry carries its own sign-in; the occupant is not lost.
+    assert not old.exists()
+    assert (new / "claude" / ".credentials.json").is_file()
+    assert not (new / "claude" / ".claude.json").exists()
+    assert report["moved"] == [{"from": str(old), "to": str(new)}]
+    assert len(report["superseded"]) == 1
+    kept_at = report["superseded"][0]["kept_at"]
+    assert kept_at.startswith(str(new) + ".superseded-")
+    assert os.path.isfile(os.path.join(kept_at, "claude", ".claude.json"))
+    assert "already existed" in report["warnings"][0]
+
+
+def test_a_rename_into_an_empty_profile_replaces_it_without_a_warning(tmp_path):
+    data_dir = tmp_path / "data"
+    old = data_dir / "acp" / "claude"
+    new = data_dir / "acp" / "claude-work"
+    (old / "claude").mkdir(parents=True)
+    (old / "claude" / ".credentials.json").write_text("{}", encoding="utf-8")
     new.mkdir(parents=True)
 
     report = _relocate_profiles(
@@ -237,14 +270,13 @@ def test_a_rename_that_finds_the_new_profile_already_present_warns(tmp_path):
             managed_acp_state_dir=str(old), managed_auth_state_dir=None
         ),
         new_info=SimpleNamespace(
-            managed_acp_state_dir=str(data_dir / "acp" / "claude-work"),
-            managed_auth_state_dir=None,
+            managed_acp_state_dir=str(new), managed_auth_state_dir=None
         ),
     )
 
-    assert old.is_dir()
-    assert report["moved"] == []
-    assert "already exists" in report["warnings"][0]
+    assert (new / "claude" / ".credentials.json").is_file()
+    assert report["superseded"] == []
+    assert report["warnings"] == []
 
 
 def test_the_admin_preflight_refuses_a_shared_home(tmp_path):
