@@ -300,12 +300,31 @@ read alone. `local.timeout` defaults to 30 seconds. The probe's
 `parse_local(body)` decodes the JSON stdout and returns `(plan, windows)`; it
 may be sync or async.
 
+`argv[0]` is an executable path, not necessarily the lane's own CLI: the
+command runs with the gateway's environment, so a wrapper script is allowed.
+The gateway starts it in its own process group and bounds the whole read by
+`local.timeout`, output included. On expiry, or if the card closes while the
+read is pending, the group is killed and reaped, so a vendor CLI that leaves a
+helper holding its pipes cannot stall a quota card.
+
+A provider entry may override `quota.local` field by field. `argv` replaces
+the command, `env` layers over the declaration's variables, and `timeout`
+replaces the declaration's value only when it is present. An entry that names
+only `env` therefore keeps the shim's command. `quota.local` needs a
+`quota.probe`: a shim declaration without one is refused at load, and an entry
+that names a command with no probe to decode it is refused when the provider
+is built. Reads of one lane are serialised, so two cards — or a card and the
+background poll — never run the vendor CLI against one profile at the same
+time.
+
 A reading is kept like any other: the Quota card serves it for one minute, and
 `?refresh=1` reads again. A failed command, a timeout, or output the probe
 refuses is stored as an `error` reading, with the command's own words as the
-reason — opening the card does not rerun it; the next refresh does. This source
-needs no `quota.interval`, and a lane that declares none is never polled in
-the background.
+reason — opening the card does not rerun it; the next refresh does. When the
+agent's own turn already reported windows, a failed local command never
+replaces them: the card keeps the agent's windows and shows the failure as a
+warning. This source needs no `quota.interval`, and a lane that declares none
+is never polled in the background.
 
 The probe is written like any other: export `PROBES`, give it an `id` that
 `quota.probe` names, implement `match()` returning `""` (the lane has no HTTP
