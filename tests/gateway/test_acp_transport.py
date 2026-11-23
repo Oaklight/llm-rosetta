@@ -473,6 +473,7 @@ def _provider(
     acp_env: dict[str, str] | None = None,
     agy: bool = False,
     wrapper: bool = False,
+    session_header: str | None = None,
 ) -> ProviderInfo:
     if wrapper:
         # An agy the operator starts through a launcher: the executable's file
@@ -515,6 +516,7 @@ def _provider(
         acp_harden=False,
         acp_env=acp_env,
         acp_processes=processes,
+        session_header=session_header,
     )
     return provider.with_acp_conversation(conversation)
 
@@ -1890,6 +1892,43 @@ class TestClientTools:
         # `x-session-id` is middleware bookkeeping and is ignored.
         assert "x-claude-code-session-id" in response.error_text
         assert "`x-session-id`" not in response.error_text
+        assert _kinds(tmp_path) == []
+
+    @pytest.mark.parametrize(
+        ("declared", "expected", "absent"),
+        [
+            # A config `session_header` is what the gateway sends upstream; it
+            # is not a carrier unless the identity reader knows the name.
+            ("x-session-id", "`x-claude-code-session-id`", "`x-session-id`"),
+            ("x-opencode-session", "`x-opencode-session`", None),
+            (
+                "x-gemini-session-id",
+                "`x-gemini-session-id` (with an id-shaped value)",
+                None,
+            ),
+        ],
+    )
+    async def test_the_session_header_hint_names_a_real_carrier(
+        self, monkeypatch, tmp_path, declared, expected, absent
+    ):
+        transport = AcpTransport(timeout=10)
+        provider = _provider(
+            monkeypatch,
+            tmp_path,
+            "mcp",
+            conversation=None,
+            session_header=declared,
+        )
+        body = _turn("[User]\necho hello")
+        body["tools"] = [ECHO_TOOL]
+        try:
+            response = await transport.send(provider, "", body)
+        finally:
+            await transport.close()
+        assert response.status_code == 400
+        assert expected in response.error_text
+        if absent is not None:
+            assert absent not in response.error_text
         assert _kinds(tmp_path) == []
 
     async def test_two_processes_may_return_the_same_session_id(
