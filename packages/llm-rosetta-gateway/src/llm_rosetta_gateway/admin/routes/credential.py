@@ -585,8 +585,12 @@ async def _reseed(pinfo: Any) -> str | None:
         The failure message when the credential could not be minted.  After an
         install that is news worth reporting — the record is in and has not
         taken effect.  After a sign-out it is the expected outcome (there is no
-        record to mint from), so that caller ignores it.
+        record to mint from), so that caller ignores it.  A provider that mints
+        nothing (a keyless lane, including one whose sign-in a vendor CLI
+        owns) has no record to re-read and no ring to move.
     """
+    if not pinfo.mints_credential:
+        return None
     try:
         token = await pinfo.auth_exchange.credential(pinfo.auth_context)
     except Exception as exc:  # noqa: BLE001 - the ring is emptied below either way

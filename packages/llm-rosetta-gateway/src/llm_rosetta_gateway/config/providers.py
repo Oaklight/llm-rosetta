@@ -420,12 +420,13 @@ def _is_keyless(keyless_shim: bool, exchange: Any | None, cfg: dict[str, Any]) -
     A free public gateway: keyless while no ``api_key`` and no credential
     source is configured.  Asked only after every ``api_key`` source (config,
     shim env) has been applied, so a key resolved from the environment still
-    disables keyless — and an exchange, which always mints one, disables it
-    too.
+    disables keyless — and an exchange that mints a credential disables it
+    too.  A ``vendor_managed`` exchange is the exception: the vendor CLI owns
+    the credential, so the lane stays keyless and the gateway never seeds it.
     """
     return bool(
         keyless_shim
-        and exchange is None
+        and (exchange is None or getattr(exchange, "vendor_managed", False))
         and not cfg.get("api_key")
         and not cfg.get("token_command")
     )
@@ -772,6 +773,12 @@ def build_provider_info(
     keyless = _is_keyless(keyless_shim, exchange, cfg)
     if keyless:
         auth_fn = no_auth
+    if getattr(exchange, "vendor_managed", False) and not keyless_shim:
+        raise ValueError(
+            f"Provider '{config_name or shim_name or provider_type}': its "
+            "auth.py is vendor-managed, so the vendor CLI owns the credential "
+            "and the shim must declare connection.keyless: true"
+        )
 
     # Per-provider proxy overrides global proxy
     proxy_url = cfg.get("proxy") or global_proxy or None

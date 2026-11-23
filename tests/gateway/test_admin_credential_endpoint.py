@@ -46,12 +46,14 @@ class _Exchange:
         self.credential_fails = credential_fails
         self.installed: list[dict[str, Any]] = []
         self.revoked = 0
+        self.credential_calls = 0
         self._record: dict[str, Any] | None = None
 
     def needs_interactive_setup(self, ctx: AuthContext) -> bool:
         return self._record is None
 
     async def credential(self, ctx: AuthContext) -> str:
+        self.credential_calls += 1
         if self.credential_fails:
             raise AuthExchangeError("the token endpoint is unreachable")
         if self._record is None:
@@ -98,6 +100,12 @@ class _BrowserExchange(_Exchange):
         assert callback_url == "http://127.0.0.1:1455/auth/callback?code=c&state=s"
         self._record = {"subject": "user-1"}
         return {"connected": True, "subject": "user-1"}
+
+
+class _VendorExchange(_BrowserExchange):
+    """A vendor-managed exchange: the CLI owns the credential, not the ring."""
+
+    vendor_managed = True
 
 
 class _CodeExchange(_BrowserExchange):
@@ -150,13 +158,21 @@ class _LegacyExchange:
         return None
 
 
-def _pinfo(exchange: Any, *, key: str = TOKEN_PENDING_SENTINEL) -> ProviderInfo:
+def _pinfo(
+    exchange: Any,
+    *,
+    key: str = TOKEN_PENDING_SENTINEL,
+    keyless: bool = False,
+    source: str = "static_key",
+) -> ProviderInfo:
     return ProviderInfo(
         name="open_responses",
         api_key=key,
         base_url="https://api.openai.com/v1",
         auth_header_fn=openai_auth,
         url_template="{base_url}/responses",
+        keyless=keyless,
+        credential_source=source,
         auth_exchange=exchange,
         auth_context=(
             AuthContext(provider="chatgpt", state_dir="/tmp/none") if exchange else None
@@ -968,3 +984,45 @@ class TestCredentialTest:
         assert payload["ok"] is False
         assert "exited with 3" in payload["error"]
         assert called == []
+
+
+class TestVendorManagedLogin:
+    """The sign-in surface works for a lane the gateway never mints for."""
+
+    def _request(self, exchange: Any) -> Any:
+        pinfo = _pinfo(exchange, key="", keyless=True, source="none")
+        return _Request(SimpleNamespace(providers={"chatgpt": pinfo}))
+
+    def test_the_keyless_lane_still_offers_the_browser_flow(self):
+        payload = json.loads(
+            _call(get_provider_credential, self._request(_VendorExchange())).body
+        )
+
+        assert payload["source"] == "none"
+        assert payload["can_begin_login"] is True
+        assert payload["can_complete_login"] is True
+
+    def test_completing_a_sign_in_mints_nothing(self):
+        exchange = _VendorExchange()
+        request = self._request(exchange)
+        request._body = {
+            "callback_url": "http://127.0.0.1:1455/auth/callback?code=c&state=s"
+        }
+
+        payload = json.loads(_call(complete_provider_login, request).body)
+
+        assert payload["connected"] is True
+        assert exchange.credential_calls == 0
+        assert (
+            request.app.gateway_config.providers["chatgpt"].credentials_pending is False
+        )
+
+    def test_signing_out_does_not_need_a_key_ring(self):
+        exchange = _VendorExchange()
+        exchange._record = {"subject": "user-1"}
+        request = self._request(exchange)
+
+        payload = json.loads(_call(delete_provider_credential, request).body)
+
+        assert payload == {"provider": "chatgpt", "removed": True, "revoked": True}
+        assert exchange.credential_calls == 0

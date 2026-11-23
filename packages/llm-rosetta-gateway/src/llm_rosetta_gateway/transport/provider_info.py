@@ -422,8 +422,15 @@ class ProviderInfo:
         ``token_command is not None`` means this question — startup seeding,
         the background refresher, the reactive 401 retry, and the admin
         fallbacks that render a provider as "waiting for its token".
+
+        A keyless lane never mints, even when its shim ships an exchange: a
+        ``vendor_managed`` exchange drives the vendor CLI's own sign-in and
+        leaves the credential in that CLI's store, so there is nothing for the
+        gateway to seed or refresh.
         """
-        return self.token_command is not None or self.auth_exchange is not None
+        return not self.keyless and (
+            self.token_command is not None or self.auth_exchange is not None
+        )
 
     @property
     def credentials_pending(self) -> bool:

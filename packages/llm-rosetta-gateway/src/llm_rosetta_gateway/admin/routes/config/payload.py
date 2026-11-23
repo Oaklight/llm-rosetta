@@ -551,6 +551,10 @@ async def get_config(request: Any) -> Response:
                         getattr(s.auth, "kind", None)
                         or ("command" if s.connection.token_command else None)
                     ),
+                    # The vendor CLI owns this lane's credential.  The shim
+                    # still has an exchange (the sign-in surface), but it
+                    # mints nothing for the gateway, so the lane stays keyless.
+                    "vendor_managed": bool(getattr(s.auth, "vendor_managed", False)),
                     # A command shim's argv is the vendor's default: the editor
                     # renders it read-only and lets the interval be overridden.
                     "default_token_command": (
