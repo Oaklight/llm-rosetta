@@ -392,8 +392,10 @@ def verify(plan_path, summary_path):
         for row in entry["before"]:
             if row["name"] in restored:
                 new = after.get(row["name"])
+                if new is None:
+                    continue
                 old_key = version_key(row.get("installed_version"))
-                new_key = version_key(new.get("installed_version")) if new else None
+                new_key = version_key(new.get("installed_version"))
                 if old_key is not None and new_key is not None and new_key != old_key:
                     restored_notes.append(
                         f"{directory}: {row['name']} reinstalled at "
