@@ -629,6 +629,11 @@ def _apply_optional_int(entry: dict[str, Any], body: dict[str, Any], key: str) -
 #: HTTP, or to the default profile.  ``transport`` names the lane, ``acp``
 #: holds the profile and the agent command, and the two flat spellings stay
 #: for an entry written before ``acp.argv``.
+#
+#: A body that names ``acp`` replaces the whole block; the keys inside it are
+#: not merged.  Send the block as it should be stored, or omit it to keep what
+#: the file holds.  ``{}`` means "nothing to change" so an API client cannot
+#: clear the install pin by sending an empty object; only ``null`` removes it.
 _ACP_PROVIDER_KEYS = ("transport", "acp", "acp_argv", "acp_env")
 
 
@@ -637,15 +642,24 @@ def _apply_acp_fields(
 ) -> None:
     """Carry a hand-written ACP lane through a provider save.
 
-    A key the editor sends is stored, or cleared when it sends an empty value;
-    a key it does not send keeps what the file already holds.  Without this an
-    ordinary edit from the panel dropped ``acp.home``, ``acp.argv`` and
-    ``transport: acp`` — the next request then took the HTTP path.
+    A key the editor sends is stored, or cleared when it sends an explicit
+    empty value; a key it does not send keeps what the file already holds.
+    Without this an ordinary edit from the panel dropped ``acp.home``,
+    ``acp.argv`` and ``transport: acp`` — the next request then took the HTTP
+    path.
     """
     for key in _ACP_PROVIDER_KEYS:
         if key in body:
             value = body[key]
-            if value in (None, "", {}, []):
+            if key == "acp":
+                if value is None:
+                    entry.pop(key, None)
+                elif isinstance(value, dict) and not value:
+                    if existing and key in existing:
+                        entry[key] = existing[key]
+                else:
+                    entry[key] = value
+            elif value in (None, "", {}, []):
                 entry.pop(key, None)
             else:
                 entry[key] = value

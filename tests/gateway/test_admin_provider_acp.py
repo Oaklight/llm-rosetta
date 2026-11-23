@@ -67,11 +67,27 @@ def test_a_body_that_names_the_block_stores_it():
     assert entry["acp"] == {"home": "/srv/agy", "argv": ["agy", "acp"]}
 
 
-def test_an_explicitly_empty_block_clears_it():
+def test_an_empty_block_keeps_the_stored_one():
+    """``{}`` says "nothing to change"; it must not drop the install pin."""
+    stored = {
+        "type": "antigravity--acp",
+        "transport": "acp",
+        "acp": {"home": "/x", "argv": ["/opt/agy", "acp"]},
+    }
+
+    entry = _save(
+        {"type": "antigravity--acp", "acp": {}},
+        {"antigravity": stored},
+    )
+
+    assert entry["acp"] == stored["acp"]
+
+
+def test_a_null_block_clears_it():
     stored = {"type": "antigravity--acp", "transport": "acp", "acp": {"home": "/x"}}
 
     entry = _save(
-        {"type": "antigravity--acp", "transport": "", "acp": {}},
+        {"type": "antigravity--acp", "transport": "", "acp": None},
         {"antigravity": stored},
     )
 
