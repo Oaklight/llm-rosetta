@@ -92,27 +92,24 @@ class OpsProviderValidation(OpsBase):
             cfg.pop("_auto_disabled", None)
             cfg["enabled"] = True
 
+        disabled: list[dict[str, str]] = []
         for name, issue in issues:
-            cfg = providers[name]
-            if not isinstance(cfg, dict):
-                cfg = {}
-                providers[name] = cfg
-            cfg["enabled"] = False
-            marker = {
-                "reason": issue.reason,
-                "category": issue.category,
-            }
-            if issue.shim:
-                marker["shim"] = issue.shim
-            cfg["_auto_disabled"] = marker
-            item = {
-                "provider": name,
-                "reason": issue.reason,
-                "category": issue.category,
-            }
-            if issue.shim:
-                item["shim"] = issue.shim
-            disabled.append(item)
+            _disable(providers, name, issue, disabled)
+
+        # A second entry that resolves to the same login profile is a
+        # provider-local fault too.  The per-entry pass above has already
+        # removed entries that cannot serve, so this sees the effective set:
+        # the first entry keeps the profile, the later one is disabled.
+        for name, issue in _shared_profile_issues(
+            providers,
+            self._raw,
+            config_path=self._ctx.config_path,
+        ):
+            _disable(providers, name, issue, disabled)
+            if name in recovered:
+                # It was auto-disabled for this same fault; the duplicate is
+                # not a recovery, and saying both would mislead the audit row.
+                recovered.remove(name)
 
         self._persist_state(disabled, recovered)
         return {"disabled": disabled, "recovered": recovered}
@@ -221,6 +218,92 @@ class ProviderIssue:
         self.reason = reason
         self.category = category
         self.shim = shim
+
+
+def _disable(
+    providers: dict[str, Any],
+    name: str,
+    issue: ProviderIssue,
+    disabled: list[dict[str, str]],
+) -> None:
+    """Disable one provider in the raw document and add it to the report."""
+    cfg = providers[name]
+    if not isinstance(cfg, dict):
+        cfg = {}
+        providers[name] = cfg
+    cfg["enabled"] = False
+    marker = {
+        "reason": issue.reason,
+        "category": issue.category,
+    }
+    if issue.shim:
+        marker["shim"] = issue.shim
+    cfg["_auto_disabled"] = marker
+    item = {
+        "provider": name,
+        "reason": issue.reason,
+        "category": issue.category,
+    }
+    if issue.shim:
+        item["shim"] = issue.shim
+    disabled.append(item)
+
+
+def _shared_profile_issues(
+    providers: dict[str, Any],
+    raw: dict[str, Any],
+    *,
+    config_path: str | None,
+) -> list[tuple[str, ProviderIssue]]:
+    """Entries whose login profile repeats an earlier entry's.
+
+    Runs after the per-provider pass, on the entries that would actually
+    serve, so an entry already disabled for another fault is not reported
+    twice.  The first entry in config order keeps the profile; a save is
+    refused before a duplicate reaches the file, and a load disables the
+    later entry instead of refusing to start.
+    """
+    from ..config.providers import build_provider_info, duplicate_profile_errors
+    from ..config.resolve import resolve_provider_identities
+    from ..config.settings import resolve_data_dir
+
+    enabled = {
+        str(name): cfg
+        for name, cfg in providers.items()
+        if isinstance(cfg, dict) and cfg.get("enabled", True) is not False
+    }
+    if len(enabled) < 2:
+        return []
+    server = raw.get("server")
+    data_dir = resolve_data_dir(
+        server.get("data_dir") if isinstance(server, dict) else None,
+        config_path,
+    )
+    try:
+        identities, shim_names = resolve_provider_identities(enabled)
+    except ValueError:
+        # The per-entry pass named the bad entry already.
+        return []
+    built: dict[str, Any] = {}
+    for name, cfg in enabled.items():
+        identity = identities.get(name)
+        if identity is None:
+            continue
+        try:
+            built[name] = build_provider_info(
+                identity.format,
+                cfg,
+                shim_name=shim_names.get(name),
+                config_name=name,
+                data_dir=data_dir,
+                quiet=True,
+            )
+        except Exception:  # noqa: BLE001 - its own pass named the fault
+            continue
+    return [
+        (name, ProviderIssue(message, "shared_login_profile"))
+        for name, message in duplicate_profile_errors(built).items()
+    ]
 
 
 def _global_proxy(raw: dict[str, Any]) -> str | None:

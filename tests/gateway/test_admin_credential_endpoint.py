@@ -928,6 +928,7 @@ class TestCredentialTest:
                     "reachable": True,
                     "agent": {"name": "claude-agent-acp", "version": "0.109.1"},
                     "text": "OK",
+                    "quota_observed": True,
                 }
 
         pinfo = SimpleNamespace(
@@ -946,6 +947,7 @@ class TestCredentialTest:
         assert payload["accepted"] is True
         assert payload["transport"] == "acp"
         assert payload["lane"]["agent"]["version"] == "0.109.1"
+        assert any("allowance" in warning for warning in payload["warnings"])
 
     @pytest.mark.asyncio
     async def test_a_failed_lane_turn_reports_the_agent_error(self):
@@ -969,6 +971,7 @@ class TestCredentialTest:
         assert payload["ok"] is False
         assert payload["reachable"] is True
         assert payload["error"] == "the agent is not signed in"
+        assert any("not signed in" in warning for warning in payload["warnings"])
 
     @pytest.mark.asyncio
     async def test_an_accepted_token_is_reported(self, monkeypatch):

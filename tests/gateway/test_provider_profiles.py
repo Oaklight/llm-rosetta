@@ -129,11 +129,48 @@ def test_a_delete_removes_the_managed_profile(tmp_path):
             managed_acp_state_dir=str(home), managed_auth_state_dir=str(shim_auth)
         ),
         new_info=None,
+        remove=True,
     )
 
     assert not home.exists()
     assert not shim_auth.exists()
     assert sorted(report["removed"]) == sorted([str(home), str(shim_auth)])
+
+
+def test_a_rename_that_disables_the_entry_keeps_the_profile(tmp_path):
+    old = tmp_path / "data" / "acp" / "claude"
+    old.mkdir(parents=True)
+
+    report = _relocate_profiles(
+        old_info=SimpleNamespace(
+            managed_acp_state_dir=str(old), managed_auth_state_dir=None
+        ),
+        new_info=None,
+    )
+
+    assert old.is_dir()
+    assert report["moved"] == []
+    assert report["removed"] == []
+    assert "was kept" in report["warnings"][0]
+
+
+def test_a_rename_away_from_the_lane_keeps_the_profile(tmp_path):
+    old = tmp_path / "data" / "acp" / "claude"
+    old.mkdir(parents=True)
+
+    report = _relocate_profiles(
+        old_info=SimpleNamespace(
+            managed_acp_state_dir=str(old), managed_auth_state_dir=None
+        ),
+        new_info=SimpleNamespace(
+            managed_acp_state_dir=None, managed_auth_state_dir=None
+        ),
+    )
+
+    assert old.is_dir()
+    assert report["moved"] == []
+    assert report["removed"] == []
+    assert "no longer owns" in report["warnings"][0]
 
 
 def test_an_operators_own_home_is_never_touched(tmp_path):
