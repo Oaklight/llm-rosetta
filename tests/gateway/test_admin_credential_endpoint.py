@@ -916,6 +916,61 @@ class TestCredentialTest:
         monkeypatch.setattr(connectivity, "test_provider_connectivity", fake)
 
     @pytest.mark.asyncio
+    async def test_a_keyless_agent_lane_runs_a_test_turn(self):
+        """There is no token to mint and no host to dial; the lane is the test."""
+        calls: list[Any] = []
+
+        class _Lane:
+            async def probe_provider(self, pinfo: Any) -> dict[str, Any]:
+                calls.append(pinfo)
+                return {
+                    "ok": True,
+                    "reachable": True,
+                    "agent": {"name": "claude-agent-acp", "version": "0.109.1"},
+                    "text": "OK",
+                }
+
+        pinfo = SimpleNamespace(
+            config_name="claude",
+            keyless=True,
+            transport="acp",
+            mints_credential=False,
+        )
+        request = _Request(SimpleNamespace(providers={"claude": pinfo}))
+        request.app.transports = {"acp": _Lane()}
+
+        payload = json.loads((await check_provider_credential(request, "claude")).body)
+
+        assert calls == [pinfo]
+        assert payload["ok"] is True
+        assert payload["accepted"] is True
+        assert payload["transport"] == "acp"
+        assert payload["lane"]["agent"]["version"] == "0.109.1"
+
+    @pytest.mark.asyncio
+    async def test_a_failed_lane_turn_reports_the_agent_error(self):
+        class _Lane:
+            async def probe_provider(self, pinfo: Any) -> dict[str, Any]:
+                return {
+                    "ok": False,
+                    "reachable": True,
+                    "needs_sign_in": True,
+                    "error": "the agent is not signed in",
+                }
+
+        pinfo = SimpleNamespace(
+            config_name="claude", keyless=True, transport="acp", mints_credential=False
+        )
+        request = _Request(SimpleNamespace(providers={"claude": pinfo}))
+        request.app.transports = {"acp": _Lane()}
+
+        payload = json.loads((await check_provider_credential(request, "claude")).body)
+
+        assert payload["ok"] is False
+        assert payload["reachable"] is True
+        assert payload["error"] == "the agent is not signed in"
+
+    @pytest.mark.asyncio
     async def test_an_accepted_token_is_reported(self, monkeypatch):
         self._probe(monkeypatch, {"endpoints": {"models": {"ok": True, "status": 200}}})
         pinfo = _command_pinfo(command=["python3", "-c", "print('fresh')"])

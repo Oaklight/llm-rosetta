@@ -368,6 +368,51 @@ async def _probe_one(
         )
 
 
+def _lane_reports_its_own_quota(pinfo: Any) -> bool:
+    """Whether this provider's agent reports its allowance during a turn.
+
+    Only the non-HTTP lanes do: a keyless HTTP lane (a local server, say)
+    still has no endpoint that this module knows how to read.
+    """
+    return (
+        bool(getattr(pinfo, "keyless", False))
+        and (getattr(pinfo, "transport", "http") or "http") != "http"
+    )
+
+
+def _lane_quota_payload(name: str, pinfo: Any, ttl: float) -> dict[str, Any]:
+    """The quota payload of a lane whose agent reports its own windows."""
+    from ..transport.acp_quota import ACP_QUOTA_PROBE, lane_credential, lanes_reading
+
+    credential = lane_credential(pinfo)
+    reading = lanes_reading(pinfo)
+    payload: dict[str, Any] = {
+        "provider": name,
+        "supported": True,
+        "probe": ACP_QUOTA_PROBE,
+        "status": STATUS_OK if reading is not None else "unknown",
+        "refreshed": False,
+        "ttl_seconds": ttl,
+        "credentials": [],
+        "routing": routing_facts(pinfo, name),
+    }
+    if reading is None:
+        payload["reason"] = (
+            "This lane's agent has not reported its allowance yet. Send one "
+            "request through it, or press Test, then open Quota again."
+        )
+    else:
+        rendered = reading.to_dict()
+        payload["credentials"] = [
+            {"credential": credential, "reading": rendered, "demotion": None}
+        ]
+        payload["read_at"] = rendered.get("read_at")
+    block = provider_cooldown(name, pinfo)
+    if block is not None:
+        payload["provider_block"] = block
+    return payload
+
+
 async def read_provider_quota(
     config: Any,
     name: str,
@@ -388,6 +433,13 @@ async def read_provider_quota(
         when there is nothing to probe; the credential list never contains a
         key, only its fingerprint.
     """
+    pinfo = getattr(config, "providers", {}).get(name)
+    if pinfo is not None and _lane_reports_its_own_quota(pinfo):
+        # A keyless agent lane is its own quota source: the agent sends its
+        # windows during a turn, and the transport records them.  There is no
+        # key ring and no HTTP endpoint to probe.
+        return _lane_quota_payload(name, pinfo, ttl)
+
     probe, url, unsupported = resolve_provider_probe(config, name)
     if probe is None or url is None:
         payload: dict[str, Any] = {
@@ -400,7 +452,6 @@ async def read_provider_quota(
         # A blocked lane has something to say even with nothing to read: an
         # in-band provider is out of rotation for a bounded time, and this is
         # the only place the operator can see it.
-        pinfo = getattr(config, "providers", {}).get(name)
         if pinfo is not None:
             block = provider_cooldown(name, pinfo)
             if block is not None:

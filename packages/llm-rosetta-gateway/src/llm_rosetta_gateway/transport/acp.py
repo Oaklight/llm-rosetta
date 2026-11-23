@@ -90,6 +90,8 @@ from .acp_profile import (
     state_dir_for,
     tool_name_of,
 )
+from .acp_quota import ACP_QUOTA_PROBE, lane_credential, reading_of
+from ..quota.state import QUOTA_STATE
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -291,6 +293,7 @@ class _TurnRunner:
         on_builtin: Callable[[str], Awaitable[str]],
         provider: str = "",
         on_error: Callable[[str], str] | None = None,
+        on_update: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         self.queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         self.stop_reason = ""
@@ -305,6 +308,10 @@ class _TurnRunner:
         self._on_builtin = on_builtin
         self._provider = provider
         self._on_error = on_error or (lambda message: message)
+        #: Called with every raw update, before it is translated.  The
+        #: transport uses it to record the account's allowance: the update
+        #: carries metadata the chunk shape has no field for.
+        self._on_update = on_update
         #: Tool-call ids this turn has recognised as a client tool.  Agents
         #: that send the name once and then input deltas without it (Claude
         #: Code) would otherwise make the later frames look like a nameless
@@ -378,6 +385,11 @@ class _TurnRunner:
         except Exception as exc:  # noqa: BLE001 - reported to the client
             await self._fail(str(exc))
             return None
+        if self._on_update is not None:
+            try:
+                self._on_update(update)
+            except Exception:  # noqa: BLE001 - bookkeeping must not end a turn
+                logger.debug("ACP update observer failed", exc_info=True)
         builtin = self._builtin_of(update)
         if builtin is not None:
             self.error = await self._on_builtin(builtin)
@@ -845,6 +857,106 @@ class AcpTransport:
         for agent in pool:
             if agent is not None:
                 await agent.client.stop()
+
+    async def probe_provider(self, provider_info: ProviderInfo) -> dict[str, Any]:
+        """Run one short turn through a keyless lane and report what answered.
+
+        This is the ACP counterpart of an HTTP connectivity probe.  The lane
+        has no host to dial, so the only honest question is whether the agent
+        starts, opens a session and completes a prompt.  The session is
+        throwaway, carries no client tools and no MCP endpoint, and the turn
+        is a single short sentence.
+
+        The call never raises for a lane failure: the admin route renders the
+        answer, and an unreachable agent is a result, not an exception.
+        """
+        started = time.monotonic()
+        loop = asyncio.get_running_loop()
+        limit = min(self._timeout, 90.0)
+        deadline = loop.time() + limit
+        result: dict[str, Any] = {"transport": "acp", "reachable": False, "ok": False}
+        try:
+            agent = await self._agent(provider_info)
+        except AcpTurnError as exc:
+            result["error"] = str(exc)
+            return result
+
+        info = getattr(agent.info, "agent_info", None)
+        result["agent"] = {
+            "name": str(getattr(info, "name", "") or ""),
+            "version": str(getattr(info, "version", "") or ""),
+        }
+        result["auth_methods"] = list(agent.auth_methods)
+        result["reachable"] = True
+        session_id = ""
+        try:
+            session = await _bounded(
+                agent.client.new_session(_workspace(provider_info, {}), []), deadline
+            )
+            session_id = getattr(session, "session_id", "") or ""
+            await self._text_only(
+                provider_info,
+                agent,
+                session_id,
+                deadline,
+                modes=getattr(session, "modes", None),
+            )
+            text, usage = await self._probe_turn(
+                provider_info, agent, session_id, deadline
+            )
+            result["ok"] = True
+            result["text"] = text[:500]
+            if usage is not None:
+                result["usage"] = usage
+        except asyncio.TimeoutError:
+            result["error"] = f"the ACP agent did not answer within {int(limit)}s"
+        except AcpTurnError as exc:
+            result["error"] = str(exc)
+        except JSONRPCException as exc:
+            message = str(exc)
+            result["error"] = _sign_in_message(provider_info, message)
+            if _looks_like_sign_in(message):
+                result["needs_sign_in"] = True
+        except Exception as exc:  # noqa: BLE001 - an unreachable lane is a result
+            result["error"] = _sign_in_message(provider_info, str(exc))
+        finally:
+            if session_id:
+                await _close_quietly(agent.client, session_id)
+            result["elapsed_ms"] = int((time.monotonic() - started) * 1000)
+            reading = QUOTA_STATE.get_reading(
+                ACP_QUOTA_PROBE, lane_credential(provider_info)
+            )
+            result["quota_observed"] = reading is not None
+        return result
+
+    async def _probe_turn(
+        self,
+        provider_info: ProviderInfo,
+        agent: _Agent,
+        session_id: str,
+        deadline: float,
+    ) -> tuple[str, dict[str, Any] | None]:
+        """Send the probe prompt and collect its text and usage chunk."""
+        parts: list[str] = []
+        usage: dict[str, Any] | None = None
+
+        async def consume() -> None:
+            nonlocal usage
+            async for update in agent.client.prompt(
+                session_id, "Reply with the single word: OK"
+            ):
+                self._observe(provider_info, update)
+                chunk = _chunk_of(update)
+                if chunk is not None and chunk.get("type") == "text":
+                    parts.append(str(chunk.get("text") or ""))
+                elif chunk is not None and chunk.get("type") == "usage":
+                    usage = chunk
+
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise asyncio.TimeoutError
+        await asyncio.wait_for(consume(), remaining)
+        return "".join(parts).strip(), usage
 
     async def sweep(self) -> int:
         """Give back sessions nobody has used for their provider's TTL.
@@ -1428,6 +1540,18 @@ class AcpTransport:
 
     # -- turn execution -----------------------------------------------------
 
+    def _observe(self, provider_info: ProviderInfo, update: dict[str, Any]) -> None:
+        """Record the allowance an agent reported during a turn.
+
+        The reading is process-wide: a config reload rebuilds the transport,
+        but the account's windows do not change with it.  A ``usage_update``
+        with no rate-limit metadata is a token count and leaves the last
+        reading untouched.
+        """
+        reading = reading_of(update, provider_info)
+        if reading is not None:
+            QUOTA_STATE.put_reading(reading)
+
     async def _run_turn(
         self,
         provider_info: ProviderInfo,
@@ -1483,6 +1607,7 @@ class AcpTransport:
                     ),
                     provider=provider_info.config_name,
                     on_error=lambda message: _sign_in_message(provider_info, message),
+                    on_update=lambda update: self._observe(provider_info, update),
                 )
             try:
                 async for chunk in self._forward_chunks(

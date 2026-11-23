@@ -67,6 +67,84 @@ def _request(tmp_path, entry: dict, models: dict | None = None) -> SimpleNamespa
     return SimpleNamespace(app=app, path_params={"name": "mix"})
 
 
+class TestAnAgentLane:
+    @pytest.mark.asyncio
+    async def test_the_card_test_runs_a_lane_turn(self, tmp_path):
+        """A non-HTTP lane has no host, so the transport's own probe answers."""
+        pinfo = SimpleNamespace(
+            config_name="claude",
+            transport="acp",
+            base_url="http://claude.local",
+            keyless=True,
+            acp_state_dir=str(tmp_path / "acp" / "claude"),
+        )
+        config = SimpleNamespace(
+            _raw_providers={
+                "claude": {"transport": "acp", "base_url": "http://claude.local"}
+            },
+            providers={"claude": pinfo},
+        )
+
+        class _Lane:
+            async def probe_provider(self, provider: Any) -> dict[str, Any]:
+                assert provider is pinfo
+                return {
+                    "ok": True,
+                    "reachable": True,
+                    "agent": {"name": "claude-agent-acp", "version": "0.109.1"},
+                    "quota_observed": True,
+                }
+
+        app = SimpleNamespace(
+            gateway_config=config,
+            transports={"acp": _Lane()},
+        )
+        request = SimpleNamespace(app=app)
+
+        response = await connectivity.test_provider_connectivity(request, "claude")
+        payload = json.loads(response.body)
+
+        assert payload["reachable"] is True
+        assert payload["endpoints"]["agent"]["ok"] is True
+        assert payload["endpoints"]["agent"]["status"] == "claude-agent-acp 0.109.1"
+        assert any("allowance" in warning for warning in payload["warnings"])
+
+    @pytest.mark.asyncio
+    async def test_a_failed_turn_is_not_reported_as_unreachable(self, tmp_path):
+        pinfo = SimpleNamespace(
+            config_name="claude",
+            transport="acp",
+            base_url="http://claude.local",
+            keyless=True,
+            acp_state_dir=str(tmp_path / "acp" / "claude"),
+        )
+        config = SimpleNamespace(
+            _raw_providers={"claude": {"transport": "acp"}},
+            providers={"claude": pinfo},
+        )
+
+        class _Lane:
+            async def probe_provider(self, provider: Any) -> dict[str, Any]:
+                return {
+                    "ok": False,
+                    "reachable": True,
+                    "needs_sign_in": True,
+                    "error": "the agent is not signed in",
+                }
+
+        request = SimpleNamespace(
+            app=SimpleNamespace(gateway_config=config, transports={"acp": _Lane()})
+        )
+
+        response = await connectivity.test_provider_connectivity(request, "claude")
+        payload = json.loads(response.body)
+
+        assert payload["reachable"] is True
+        assert payload["endpoints"]["agent"]["ok"] is False
+        assert payload["endpoints"]["agent"]["error"] == "the agent is not signed in"
+        assert any("not signed in" in warning for warning in payload["warnings"])
+
+
 class TestTheProbeSeesTheFace:
     @pytest.mark.asyncio
     async def test_a_migrated_provider_is_probed_at_its_face(self, tmp_path, probe):
