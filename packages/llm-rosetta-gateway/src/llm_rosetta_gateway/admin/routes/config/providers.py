@@ -384,11 +384,15 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
     profile_report: dict[str, Any] | None = None
     if renamed:
         new_pinfo = ctx.new_config.providers.get(name)
+        # Stop the old lane before its profile moves: a running vendor CLI
+        # still holds paths inside that directory and can write to them (or
+        # re-create them) after the move, which would leave the renamed entry
+        # with a stale skeleton and no sign-in.
+        await _close_lane_processes(request, [resolve_name, name])
         profile_report = _relocate_profiles(
             old_info=current_pinfo,
             new_info=new_pinfo,
         )
-        await _close_lane_processes(request, [resolve_name, name])
 
     result: dict[str, Any] = {
         "ok": True,
