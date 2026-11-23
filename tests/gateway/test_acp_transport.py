@@ -75,7 +75,7 @@ FAKE_AGENT = textwrap.dedent(
          has_path=bool(os.environ.get("PATH")))
 
     def capabilities():
-        if MODE == "resume":
+        if MODE in ("resume", "resume-no-plan"):
             return {"sessionCapabilities": {"resume": {}}}
         if MODE == "load":
             return {"loadSession": True}
@@ -119,7 +119,7 @@ FAKE_AGENT = textwrap.dedent(
                     "currentModeId": "default",
                     "availableModes": (
                         [{"id": "default", "name": "Default"}]
-                        if MODE == "modes-without-plan"
+                        if MODE in ("modes-without-plan", "resume-no-plan")
                         else [
                             {"id": "default", "name": "Default"},
                             {"id": "plan", "name": "Plan"},
@@ -149,6 +149,15 @@ FAKE_AGENT = textwrap.dedent(
                 }})
                 continue
             if MODE == "mode-refused":
+                note("mode-refused", session=msg["params"]["sessionId"])
+                send({"jsonrpc": "2.0", "id": req_id, "error": {
+                    "code": -32602, "message": "unknown mode",
+                }})
+                continue
+            if (
+                MODE == "resume-no-plan"
+                and msg["params"].get("modeId") != "default"
+            ):
                 note("mode-refused", session=msg["params"]["sessionId"])
                 send({"jsonrpc": "2.0", "id": req_id, "error": {
                     "code": -32602, "message": "unknown mode",
@@ -1083,6 +1092,44 @@ class TestSessionResumeAndLoad:
         prompts = [e["text"] for e in _log(tmp_path) if e["kind"] == "prompt"]
         assert prompts == ["[Assistant]\ntwo"]
 
+    async def test_resume_keeps_the_mode_list_the_session_advertised(
+        self, monkeypatch, tmp_path
+    ):
+        """``resume`` carries no mode state, so the entry's copy gates it.
+
+        The agent advertises ``[default]`` and refuses every other mode.  A
+        blind ``plan`` probe on resume would fail the turn; on an agent that
+        accepts any mode it would force one the agent never offered.
+        """
+        transport = AcpTransport()
+        provider = _provider(
+            monkeypatch, tmp_path, "resume-no-plan", conversation="conv-1"
+        )
+        transport.ledger.put(
+            LedgerEntry(
+                key=SessionKey("antigravity", "conv-1"),
+                session_id="sess-9",
+                cwd=str(tmp_path),
+                model="gemini-3.1-pro",
+                seen=(*_digests_for(["[User]\none"]),),
+                live=False,
+                modes=("default",),
+            )
+        )
+        try:
+            await transport.send(
+                provider,
+                "",
+                _turn("[User]\none", "[Assistant]\ntwo", cwd=str(tmp_path)),
+            )
+        finally:
+            await transport.close()
+
+        kinds = _kinds(tmp_path)
+        assert "resume" in kinds
+        assert "mode-attempt" not in kinds
+        assert "mode" not in kinds
+
     async def test_load_discards_the_history_the_agent_replays(
         self, monkeypatch, tmp_path
     ):
@@ -1453,6 +1500,21 @@ class TestAgentToolsAreOff:
         assert [e.get("mode") for e in _log(tmp_path) if e["kind"] == "mode"] == [
             "plan"
         ]
+
+    async def test_a_wrapper_agy_without_a_mode_surface_runs_ungated(
+        self, monkeypatch, tmp_path
+    ):
+        """Without a name and without modes, an old agy is indistinguishable.
+
+        ``-32601`` is the same answer for every agent, so a wrapper-launched
+        agy cannot be told from another adapter here.  It runs; the client's
+        permission refusal and tool-frame guard are what remain.
+        """
+        chunks = await self._turn_chunks(monkeypatch, tmp_path, "no-mode", wrapper=True)
+        kinds = _kinds(tmp_path)
+        assert chunks[-1]["type"] == "stop"
+        assert "mode-unsupported" in kinds
+        assert "prompt" in kinds
 
     async def test_an_agy_that_advertises_no_plan_does_not_run(
         self, monkeypatch, tmp_path

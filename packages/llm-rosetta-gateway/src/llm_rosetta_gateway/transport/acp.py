@@ -1123,6 +1123,7 @@ class AcpTransport:
                 entry.session_id,
                 deadline,
                 allow_tools=bool(entry.tools),
+                modes=entry.modes,
             )
             entry.live = True
             return entry.session_id
@@ -1158,6 +1159,7 @@ class AcpTransport:
                 entry.session_id,
                 deadline,
                 allow_tools=bool(entry.tools),
+                modes=entry.modes,
             )
             entry.live = True
             return entry.session_id
@@ -1214,6 +1216,7 @@ class AcpTransport:
             ) from exc
 
         session_id = getattr(session, "session_id", "") or ""
+        advertised_modes = _mode_ids(getattr(session, "modes", None))
         try:
             if bridge is not None:
                 # The agent received this URL in ``session/new``; it may call
@@ -1260,6 +1263,11 @@ class AcpTransport:
                     agent_slot=agent.slot,
                     live=True,
                     tools=_tools_digest(body),
+                    modes=(
+                        None
+                        if advertised_modes is None
+                        else tuple(sorted(advertised_modes))
+                    ),
                 )
                 turn.entry = entry
                 for displaced in self._ledger.put(entry):
@@ -1305,7 +1313,10 @@ class AcpTransport:
         A wrapper-launched agy advertises its modes like any other agy, so
         the decision does not depend on the executable's file name.  The name
         check remains only to decide whether a missing ``plan`` is an error
-        rather than another agent's normal surface.
+        rather than another agent's normal surface.  An agent that names no
+        modes and answers ``-32601`` cannot be told apart from a wrapped agy
+        by its answer, so it runs ungated unless the name says agy; the
+        client's permission refusal and tool-frame guard are what remain.
 
         For agy without the gateway's profile (an operator's ``acp_argv``):
         agy's default mode reads files without asking (the permission flag
@@ -2203,6 +2214,9 @@ def _drain_queue(client: ACPClient, session_id: str) -> int:
 
 def _mode_ids(modes: Any) -> set[str] | None:
     """The mode ids a session advertised, or ``None`` when it said nothing."""
+    if isinstance(modes, (tuple, list, set, frozenset)):
+        # A copy kept on the ledger entry after ``session/new``.
+        return {str(mode) for mode in modes}
     available = getattr(modes, "available_modes", None)
     if available is None:
         return None
