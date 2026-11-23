@@ -3684,6 +3684,11 @@ async function showProviderQuota(name) {
         lines.push(`<div class="conn-row"><span class="dot conn-warn"></span><span class="conn-detail">${esc(t('quota.demoted', {until: new Date(entry.demotion.until).toLocaleString(), reason: entry.demotion.reason}))}</span></div>`);
       }
     }
+    if (r.warning) {
+      // A local read failed while the agent's own turn still had windows:
+      // keep the windows, and name the failure beside them.
+      lines.push(row({ tone: 'warn', text: r.warning }));
+    }
     if (r.supported && !(r.credentials || []).length && r.reason) {
       // A lane whose agent has not spoken yet is supported, but has nothing
       // to render.  The reason tells the operator how to get a reading.

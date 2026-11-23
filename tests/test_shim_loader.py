@@ -1559,6 +1559,17 @@ class TestVendorManifest:
         with pytest.raises(ValueError, match=message):
             load_providers_from_dir(tmp_path)
 
+    def test_a_local_command_without_a_probe_is_refused(self, tmp_path):
+        """A command with no decoder would be declared and never read."""
+        self._vendor(
+            tmp_path,
+            "quota:\n  local:\n    argv: [agy]\n",
+            {"a": self._leaf("a")},
+        )
+
+        with pytest.raises(ValueError, match="quota.local needs quota.probe"):
+            load_providers_from_dir(tmp_path)
+
     def test_a_vendor_without_a_manifest_still_loads(self, tmp_path):
         """The manifest is optional: an existing third-party shim keeps working."""
         self._vendor(

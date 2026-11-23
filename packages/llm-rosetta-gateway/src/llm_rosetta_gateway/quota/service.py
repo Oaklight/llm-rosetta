@@ -399,35 +399,58 @@ async def _lane_quota_payload(
         ACP_QUOTA_PROBE,
         STATUS_ERROR,
         lane_credential,
+        lane_lock,
         lanes_reading,
         refresh_local,
     )
 
     credential = lane_credential(pinfo)
-    reading = lanes_reading(pinfo)
     local_argv = tuple(getattr(pinfo, "quota_local_argv", ()) or ())
     probe = getattr(pinfo, "quota_probe_impl", None)
     refreshed = False
-    if local_argv and probe is not None:
-        fresh = (
-            reading is not None
-            and not force
-            and (datetime.now(timezone.utc) - reading.read_at).total_seconds() < ttl
+    warning: str | None = None
+    reading = lanes_reading(pinfo)
+    if local_argv and probe is None:
+        warning = (
+            "quota.local is declared without a probe to decode it; "
+            "set quota.probe on this entry or in its shim"
         )
-        if not fresh:
-            reading = await refresh_local(
-                pinfo,
-                probe,
-                local_argv,
-                getattr(pinfo, "quota_local_env", None),
-                timeout=float(getattr(pinfo, "quota_local_timeout", 30.0)),
+    elif local_argv:
+        # One command per profile at a time: two cards, or the poll and a
+        # card, would otherwise run the vendor CLI against one profile folder.
+        async with lane_lock(pinfo):
+            reading = lanes_reading(pinfo)
+            fresh = (
+                reading is not None
+                and not force
+                and (datetime.now(timezone.utc) - reading.read_at).total_seconds() < ttl
             )
-            refreshed = True
+            if not fresh:
+                result = await refresh_local(
+                    pinfo,
+                    probe,
+                    local_argv,
+                    getattr(pinfo, "quota_local_env", None),
+                    timeout=float(getattr(pinfo, "quota_local_timeout", 30.0)),
+                )
+                kept = lanes_reading(pinfo)
+                if (
+                    result.status == STATUS_ERROR
+                    and kept is not None
+                    and kept.status != STATUS_ERROR
+                ):
+                    # The agent's own turn is still the better reading; the
+                    # failed command is a warning beside it, not a replacement.
+                    reading = kept
+                    warning = result.error
+                else:
+                    reading = result
+                refreshed = True
     probe_id = getattr(probe, "id", None) if local_argv else None
     payload: dict[str, Any] = {
         "provider": name,
         "supported": True,
-        "probe": str(probe_id or (reading.probe if reading else ACP_QUOTA_PROBE)),
+        "probe": str(reading.probe if reading else (probe_id or ACP_QUOTA_PROBE)),
         "status": (
             "unknown"
             if reading is None
@@ -451,6 +474,8 @@ async def _lane_quota_payload(
         payload["read_at"] = rendered.get("read_at")
         if reading.status == STATUS_ERROR and reading.error:
             payload["reason"] = reading.error
+    if warning:
+        payload["warning"] = warning
     block = provider_cooldown(name, pinfo)
     if block is not None:
         payload["provider_block"] = block

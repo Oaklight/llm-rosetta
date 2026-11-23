@@ -1121,8 +1121,12 @@ def _resolve_quota_local(
     """Read the local usage command a lane declares, or that its entry overrides.
 
     A vendor CLI that is the only way to read an account prints the allowance
-    as JSON.  The shim names the command; a provider entry may replace it for
-    one profile.
+    as JSON.  The shim names the command; a provider entry may override it one
+    field at a time, exactly like ``connection``: ``argv`` replaces the
+    command, ``env`` layers over the declaration's variables, and ``timeout``
+    replaces the declaration's value only when it is present.  An entry that
+    names only ``env`` therefore keeps the shim's command and its profile
+    variable.
 
     Args:
         local_cfg: The entry's ``quota.local`` block, or ``None`` to inherit.
@@ -1133,22 +1137,22 @@ def _resolve_quota_local(
         ``(argv, env, timeout)``, empty when the lane declares no command.
 
     Raises:
-        ValueError: The block is present but malformed.
+        ValueError: The block is present but malformed, or no command is
+            declared anywhere.
     """
+    shim_argv = tuple(shim_quota.local_argv) if shim_quota is not None else ()
+    shim_env = dict(shim_quota.local_env) if shim_quota is not None else {}
+    shim_timeout = shim_quota.local_timeout if shim_quota is not None else 30.0
     if local_cfg is None:
-        if shim_quota is None:
-            return (), {}, 30.0
-        return (
-            tuple(shim_quota.local_argv),
-            dict(shim_quota.local_env),
-            shim_quota.local_timeout,
-        )
+        return shim_argv, shim_env, shim_timeout
     if not isinstance(local_cfg, dict):
         raise ValueError(f"Provider '{provider_key}': quota.local must be a mapping")
     raw_argv = local_cfg.get("argv")
-    raw_env = local_cfg.get("env") or {}
-    raw_timeout = local_cfg.get("timeout", 30.0)
-    if (
+    raw_env = local_cfg.get("env")
+    raw_timeout = local_cfg.get("timeout")
+    if raw_argv is None:
+        argv = shim_argv
+    elif (
         not isinstance(raw_argv, (list, tuple))
         or not raw_argv
         or not all(isinstance(part, str) and part for part in raw_argv)
@@ -1157,18 +1161,30 @@ def _resolve_quota_local(
             f"Provider '{provider_key}': quota.local.argv must be a "
             "non-empty list of strings"
         )
-    if not isinstance(raw_env, dict):
+    else:
+        argv = tuple(raw_argv)
+    if not argv:
         raise ValueError(
-            f"Provider '{provider_key}': quota.local.env must be a mapping "
-            "of environment names to strings"
+            f"Provider '{provider_key}': quota.local needs an argv; the shim "
+            "declares no command to inherit"
         )
-    for env_name, env_value in raw_env.items():
-        if not isinstance(env_name, str) or not isinstance(env_value, str):
+    env = dict(shim_env)
+    if raw_env is not None:
+        if not isinstance(raw_env, dict):
             raise ValueError(
-                f"Provider '{provider_key}': quota.local.env must map "
-                f"strings to strings; {env_name!r} has value {env_value!r}"
+                f"Provider '{provider_key}': quota.local.env must be a mapping "
+                "of environment names to strings"
             )
-    if (
+        for env_name, env_value in raw_env.items():
+            if not isinstance(env_name, str) or not isinstance(env_value, str):
+                raise ValueError(
+                    f"Provider '{provider_key}': quota.local.env must map "
+                    f"strings to strings; {env_name!r} has value {env_value!r}"
+                )
+            env[env_name] = env_value
+    if raw_timeout is None:
+        timeout = shim_timeout
+    elif (
         isinstance(raw_timeout, bool)
         or not isinstance(raw_timeout, (int, float))
         or float(raw_timeout) <= 0
@@ -1176,7 +1192,29 @@ def _resolve_quota_local(
         raise ValueError(
             f"Provider '{provider_key}': quota.local.timeout must be a positive number"
         )
-    return tuple(raw_argv), dict(raw_env), float(raw_timeout)
+    else:
+        timeout = float(raw_timeout)
+    return argv, env, timeout
+
+
+def _require_local_quota_probe(
+    argv: tuple[str, ...], probes: tuple[Any, ...], provider_key: str
+) -> None:
+    """Refuse a local quota command that nothing would decode.
+
+    ``quota.local`` is inert without a probe, so a provider that declares a
+    command but resolves no probe is a configuration error, not a silent
+    no-op.
+
+    Raises:
+        ValueError: A command is declared and no probe resolved.
+    """
+    if not argv or probes:
+        return
+    raise ValueError(
+        f"Provider '{provider_key}': quota.local needs a probe to decode "
+        "its output; set quota.probe or declare one in the shim"
+    )
 
 
 def _bind_auth_exchange(
@@ -1399,6 +1437,8 @@ def build_provider_info(
         quota_local_env,
         quota_local_timeout,
     ) = _resolve_quota_local(quota_cfg.get("local"), shim_quota, provider_key)
+    quota_probes = _quota_probes(shim, quota_cfg.get("probe"))
+    _require_local_quota_probe(quota_local_argv, quota_probes, provider_key)
 
     command_takes_key = bool(token_command and cfg.get("token_command_env"))
 
@@ -1508,7 +1548,7 @@ def build_provider_info(
         quota_probe_id=quota_probe,
         quota_url=quota_url,
         quota_in_band=quota_in_band,
-        quota_probes=_quota_probes(shim, quota_cfg.get("probe")),
+        quota_probes=quota_probes,
         quota_local_argv=quota_local_argv,
         quota_local_env=quota_local_env,
         quota_local_timeout=quota_local_timeout,
