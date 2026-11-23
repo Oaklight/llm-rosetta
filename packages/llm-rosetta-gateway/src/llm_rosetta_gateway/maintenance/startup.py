@@ -234,6 +234,12 @@ class DeferredStartup:
 
     async def provider_credential_removed(self, name: str, pinfo: Any) -> None:
         """Stop the tracked refresher after an admin sign-out."""
+        if not pinfo.mints_credential:
+            # A keyless lane (including one whose sign-in a vendor CLI owns)
+            # has no refresher to stop and no gateway credential whose absence
+            # should mark it failed.  The CLI's own sign-out is reflected by
+            # the exchange's status answer, not by the provider-init state.
+            return
         self._provider_states[name] = ProviderInitState.FAILED
         status = dict(pinfo.token_status or {})
         status.update(

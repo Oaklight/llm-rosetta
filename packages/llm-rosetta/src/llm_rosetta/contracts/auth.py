@@ -130,6 +130,16 @@ class AuthExchange(Protocol):
     ``isinstance`` fail for every shim that predates it.  Call
     :func:`credential_for` rather than the member, so the fallback is one
     rule.
+
+    An exchange may also declare ``vendor_managed = True``.  That says the
+    vendor's own CLI owns the credential (a subscription sign-in kept in the
+    CLI's store, for example), so the gateway must not mint one: the exchange
+    is used only for the admin sign-in surface, and the lane remains keyless.
+    The attribute is optional and read with ``getattr``; an exchange that
+    omits it mints a credential exactly as before.  A vendor-managed exchange
+    belongs beside a ``keyless: true`` manifest — the gateway refuses to build
+    the provider otherwise, because a lane that expects a gateway token has no
+    token to send.
     """
 
     kind: str

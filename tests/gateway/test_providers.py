@@ -622,3 +622,69 @@ class TestExchangePerConfiguredProvider:
         assert personal.auth_context.provider == "chatgpt-personal"
         assert personal.auth_state_dir != work.auth_state_dir
         assert personal.credential_token != work.credential_token
+
+
+class TestVendorManagedExchange:
+    """A lane whose credential belongs to the vendor CLI, not the gateway."""
+
+    @pytest.fixture()
+    def make_shim(self):
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
+
+        class Exchange:
+            kind = "vendor-cli"
+            consumes_key = False
+            vendor_managed = True
+
+            async def credential(self, ctx):
+                raise AssertionError("a vendor-managed exchange must not be minted")
+
+            def needs_interactive_setup(self, ctx):
+                return True
+
+        made: list[str] = []
+
+        def make(name: str, *, keyless: bool) -> str:
+            register_shim(
+                ProviderShim(
+                    name=name,
+                    format="chat_completions",
+                    connection=ConnectionConfig(
+                        base_url="https://vendor.example/v1",
+                        keyless=keyless,
+                    ),
+                    auth=Exchange(),
+                )
+            )
+            made.append(name)
+            return name
+
+        yield make
+        for name in made:
+            unregister_shim(name)
+
+    def test_a_keyless_shim_stays_keyless_and_mints_nothing(self, make_shim):
+        name = make_shim("__test_vendor_managed_keyless__", keyless=True)
+
+        info = build_provider_info("chat_completions", {}, shim_name=name)
+
+        assert info.keyless is True
+        assert info.auth_exchange is not None
+        assert info.mints_credential is False
+        assert info.credential_source == "none"
+        assert info.credentials_pending is False
+        assert info.credential_token is None
+
+    def test_the_lane_is_ready_without_a_gateway_token(self, make_shim):
+        name = make_shim("__test_vendor_managed_ready__", keyless=True)
+
+        info = build_provider_info("chat_completions", {}, shim_name=name)
+
+        assert info.ready is True
+
+    def test_a_non_keyless_shim_is_refused(self, make_shim):
+        name = make_shim("__test_vendor_managed_paid__", keyless=False)
+
+        with pytest.raises(ValueError, match="vendor-managed"):
+            build_provider_info("chat_completions", {}, shim_name=name)
