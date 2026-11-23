@@ -19,15 +19,6 @@ _test_tasks: dict[str, dict[str, Any]] = {}
 _MAX_TASK_AGE = 300  # seconds — auto-cleanup threshold
 _TASK_TIMEOUT = 120  # seconds — per-task execution timeout
 
-#: How many tool calls one admin test may answer before it stops following.
-#: A well-behaved model finishes after one; the cap only keeps a loop from
-#: consuming the whole task budget.
-_MAX_TEST_TOOL_TURNS = 3
-
-#: The synthetic result a test hands back for any tool the model calls.  The
-#: test is about the round trip, not the tool's data.
-_TEST_TOOL_RESULT = "18C and sunny"
-
 
 def _response_body(response: Any) -> Any:
     """Parse a self-call's body, falling back to its text."""
@@ -35,54 +26,6 @@ def _response_body(response: Any) -> Any:
         return response.json()
     except Exception:
         return response.text
-
-
-def _tool_result_payload(
-    payload: dict[str, Any], response: Any
-) -> dict[str, Any] | None:
-    """Build the follow-up that answers a tool call, when one is due.
-
-    An ACP lane suspends its turn on a client tool call: the agent's prompt
-    stays in flight, holding the session and process locks, until a request
-    carries the result.  A test that stopped at the call would leave that
-    turn suspended for its whole TTL, so the admin test answers the call and
-    lets the same declared conversation finish.  Chat Completions is the
-    shape the built-in LLM tests send; another shape returns ``None``.
-    """
-    if not isinstance(response, dict):
-        return None
-    choices = response.get("choices")
-    if not isinstance(choices, list) or not choices:
-        return None
-    message = choices[0].get("message")
-    calls = message.get("tool_calls") if isinstance(message, dict) else None
-    if not isinstance(calls, list) or not calls:
-        return None
-    messages = payload.get("messages")
-    if not isinstance(messages, list):
-        return None
-    results = [
-        {
-            "role": "tool",
-            "tool_call_id": call["id"],
-            "content": _TEST_TOOL_RESULT,
-        }
-        for call in calls
-        if isinstance(call, dict) and call.get("id")
-    ]
-    if not results:
-        return None
-    follow = dict(payload)
-    follow["messages"] = [
-        *messages,
-        {
-            "role": "assistant",
-            "content": message.get("content"),
-            "tool_calls": calls,
-        },
-        *results,
-    ]
-    return follow
 
 
 def _cleanup_stale_tasks() -> None:
@@ -132,9 +75,10 @@ async def _run_test_task(
             if provider:
                 headers["X-Rosetta-Provider-Pin"] = provider
             # A tool-bearing request needs a declared conversation: an ACP
-            # lane cannot carry a tool result back without one.  The test is
-            # one conversation, so it names itself.  A request without tools
-            # needs no session and leaves no ledger entry behind.
+            # lane refuses one without a conversation to carry the tool
+            # result back to.  The test names its own; the result is the
+            # client's next request, not a second call made here.  A request
+            # without tools needs no session and leaves no ledger entry.
             if payload.get("tools"):
                 headers["x-claude-code-session-id"] = f"admin-test-{task_id}"
 
@@ -143,26 +87,17 @@ async def _run_test_task(
 
             # Enforce per-task timeout so hung upstream calls don't
             # linger for the full _MAX_TASK_AGE cleanup window.
-            current = payload
-            for _ in range(_MAX_TEST_TOOL_TURNS):
-                resp = await asyncio.wait_for(
-                    client.post(url, json=current, headers=headers),
-                    timeout=_TASK_TIMEOUT,
-                )
-                assert isinstance(resp, HttpResponse)
-                body = _response_body(resp)
-                if resp.status_code >= 400:
-                    break
-                follow = _tool_result_payload(current, body)
-                if follow is None:
-                    break
-                current = follow
+            resp = await asyncio.wait_for(
+                client.post(url, json=payload, headers=headers),
+                timeout=_TASK_TIMEOUT,
+            )
+            assert isinstance(resp, HttpResponse)
 
             _test_tasks[task_id].update(
                 {
                     "status": "done",
                     "status_code": resp.status_code,
-                    "body": body,
+                    "body": _response_body(resp),
                 }
             )
         finally:
