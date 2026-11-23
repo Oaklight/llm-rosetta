@@ -458,8 +458,13 @@ def _managed_profile_dirs(
 
 
 def _profile_key(path: str) -> str:
-    """A comparison key that treats one directory written two ways as one."""
-    return os.path.normcase(os.path.abspath(os.path.expanduser(path)))
+    """A comparison key that treats one directory written two ways as one.
+
+    ``realpath`` also resolves a symlink, so two entries that name the same
+    directory — one through a link — are refused rather than writing one
+    sign-in behind two names.
+    """
+    return os.path.normcase(os.path.realpath(os.path.expanduser(path)))
 
 
 def duplicate_profile_errors(providers: Any) -> dict[str, str]:
