@@ -217,7 +217,14 @@ class GatewayExtensions:
 
 
 def _install_cors(app: App, admin_cors_origins: list[str]) -> None:
-    """Register CORS after-request hook and OPTIONS preflight handler."""
+    """Register CORS after-request hook and OPTIONS preflight handler.
+
+    The preflight is a ``before_request`` hook rather than a catch-all route:
+    a catch-all ``/<path>`` that only accepts OPTIONS makes every unknown path
+    *exist* for routing, so an ordinary GET (a browser's ``/sw.js`` probe, say)
+    answers 405 instead of 404.  A hook runs before route matching and leaves
+    the method/path verdict to the router.
+    """
 
     def _apply_cors(response: Any, origin: str | None) -> None:
         if admin_cors_origins and origin and origin in admin_cors_origins:
@@ -240,8 +247,10 @@ def _install_cors(app: App, admin_cors_origins: list[str]) -> None:
             response.headers["Access-Control-Allow-Headers"] = "*"
         return response
 
-    @app.route("/<path:_path>", methods=["OPTIONS"])
-    async def cors_preflight(request: Any, _path: str = "") -> Response:
+    @app.before_request
+    async def cors_preflight(request: Any) -> Response | None:
+        if request.method != "OPTIONS":
+            return None
         resp = Response(body=b"", status_code=204)
         if not _is_admin_path(request.path):
             resp.headers["Access-Control-Allow-Origin"] = "*"
