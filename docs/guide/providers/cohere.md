@@ -11,7 +11,7 @@ chat 走兼容端点，使用 OpenAI Chat Completions 结构。
 | `cohere--embedding` | `embeddings`（`cohere`） | `https://api.cohere.com` | `COHERE_API_KEY` |
 | `cohere--rerank` | `rerank`（`cohere`） | `https://api.cohere.com` | `COHERE_API_KEY` |
 
-chat 叶子覆盖厂商清单里的原生 `base_url`；凭据只在清单上声明一次，其余线路继承。
+chat 叶子覆盖服务方清单里的原生 `base_url`；凭据只在清单上声明一次，其余线路继承。
 
 ## 说明
 

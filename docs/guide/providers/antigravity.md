@@ -4,7 +4,7 @@ title: Google（Antigravity）
 
 # Google（Antigravity）
 
-`antigravity--acp` shim 通过厂商自带的 `agy` CLI 使用 Google **Antigravity**
+`antigravity--acp` shim 通过服务方自带的 `agy` CLI 使用 Google **Antigravity**
 套餐。它不调用 Google 的 Code Assist API：网关在主机上启动 `agy acp`，通过
 stdio 与之讲 [Agent Client Protocol](https://agentclientprotocol.com/)，因此
 Google 登录、访问 token 与 project 都由 `agy` 保管，与你亲自运行 `agy` 时完全一样。
@@ -12,13 +12,13 @@ Google 登录、访问 token 与 project 都由 `agy` 保管，与你亲自运�
 !!! warning "在把账号指过来之前先读这一段"
     Google 的条款决定谁可以使用该套餐，并且 Google 可能封禁被判定在 Antigravity
     自家客户端之外使用的账号。驱动 `agy` 是从网关使用该套餐最不绕路的方式 —— 它
-    本身就是厂商的客户端 —— 但这仍然是一个可能失去的套餐。请使用可以承受损失的账号，
+    本身就是服务方的客户端 —— 但这仍然是一个可能失去的套餐。请使用可以承受损失的账号，
     也不要把这条通道开放给你无法支持的最终用户。
 
 ## 为什么用 `agy` 而不是直接调 API
 
 用 Antigravity 自己的 OAuth client 直接调 Code Assist，正是 Google 会封号的做法：
-它看到这个请求并非来自 Antigravity 自己的客户端。驱动厂商 CLI 则让每个请求都留在
+它看到这个请求并非来自 Antigravity 自己的客户端。驱动服务方 CLI 则让每个请求都留在
 Google 认可的客户端里。因此凭据归 `agy` 所有，本 shim 不声明任何凭据。
 
 | 路线 | 谁持有登录 | 状态 |

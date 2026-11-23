@@ -72,7 +72,7 @@ llm-rosetta-gateway shims new acme --no-input \
   --base-url https://api.acme.example/v1 --check
 ```
 
-在终端上不带参数运行时它是一份问卷 —— 先问扫描根，再问厂商、模型类型、线上格式、lane、base URL、
+在终端上不带参数运行时它是一份问卷 —— 先问扫描根，再问服务方、模型类型、线上格式、lane、base URL、
 凭据变量、可选的展示名 / logo / 分组标题、以及要写出哪些可选模块 —— 回车即采用中括号里的值。
 扫描根排在第一位，因为它之后的每一项都跟随包已有的做法（见下文）。**默认是交互模式**；已经用
 flag 给出的值不会再问。`--no-input`（stdin 不是终端时自动生效）从不提问，所以同一条命令可以
@@ -83,41 +83,41 @@ flag 给出的值不会再问。`--no-input`（stdin 不是终端时自动生效
 | `--root DIR` | 网关扫描的目录；默认 `providers` |
 | `--model-type` | `llm`（默认）、`embeddings`、`rerank`、`decisions` |
 | `--format` | 线上格式；问卷与 `--format` 的帮助都会列出该模型类型注册的全部格式，未注册的格式在写任何文件之前就被拒绝 |
-| `--lane` | 厂商的具名实例，写在厂商与类型目录之间（`<vendor>/<lane>/<type>/`）；ALCF 的集群 |
+| `--lane` | 服务方的具名实例，写在服务方与类型目录之间（`<vendor>/<lane>/<type>/`）；ALCF 的集群 |
 | `--base-url` | 上游 base URL；省略时写入占位值 |
 | `--probe` | 检查 `--base-url` 是否可达，并打印它返回了什么 |
 | `--models-path` | 模型列表 URL 或路径（非默认时） |
 | `--api-key-env` | 凭据变量；默认 `<VENDOR>_API_KEY` |
-| `--display-name` | 厂商分组内的行标签 |
-| `--logo`、`--group`、`--group-label` | 厂商身份，写入厂商清单 |
-| `--auto-logo` | 按厂商名到 jsDelivr 上的 lobehub 图标集里查找标志图；查不到就失败 |
+| `--display-name` | 服务方分组内的行标签 |
+| `--logo`、`--group`、`--group-label` | 服务方身份，写入服务方清单 |
+| `--auto-logo` | 按服务方名到 jsDelivr 上的 lobehub 图标集里查找标志图；查不到就失败 |
 | `--localize-logo` | 把 `--logo` 存进包的 `assets/`，并引用它的 jsDelivr URL |
 | `--transform` | 同时生成一个 `transforms.py` 桩 |
-| `--auth`、`--quota` | 同时生成厂商级的 `auth.py` 或 `quota.py` 桩 |
+| `--auth`、`--quota` | 同时生成服务方级的 `auth.py` 或 `quota.py` 桩 |
 | `--package DISTRIBUTION` | 同时写出外部包外壳（`pyproject.toml`、入口点、CI、README），目录树落在 `src/<package>/providers` |
 | `--no-registry-manifest` | 不改动包的 `shims.yaml` |
 | `--check` | 装载新叶子并报告解析结果 |
 
-厂商已有 `provider.yaml` 时，凭据和厂商身份留在那里，叶子只写自己独有的字段。扫描根提供
+服务方已有 `provider.yaml` 时，凭据和服务方身份留在那里，叶子只写自己独有的字段。扫描根提供
 `shims.yaml` 时，新叶子会被追加进去 —— 那份清单对网关是权威的，没列出的叶子永远不会装载。
 
 **扫描根只被读取，不被照抄。** 一切都按约定形状写出 ——
 `<vendor>[/<lane>]/<type>[/<format>]/provider.yaml` —— 扫描根只决定是否需要 `<format>` 层：
-该类型下已有第二条 lane 的厂商需要，第一条 lane 则直接落在类型目录里。厂商仍把格式目录直接放在
-其下的根（`kilo_free/chat_completions/`）属于约定之前的形状，因此新叶子仍按规范写出，只对该厂商
+该类型下已有第二条 lane 的服务方需要，第一条 lane 则直接落在类型目录里。服务方仍把格式目录直接放在
+其下的根（`kilo_free/chat_completions/`）属于约定之前的形状，因此新叶子仍按规范写出，只对该服务方
 给出提示，并附上报告其余问题的 `shims check` 命令。
 
 以下三种目标在写任何文件之前就被拒绝：
 
-- 厂商自己的 `provider.yaml` 是一个 shim —— loader 会把该目录当成那一个 shim，从不向下看，
+- 服务方自己的 `provider.yaml` 是一个 shim —— loader 会把该目录当成那一个 shim，从不向下看，
   因此它下面的第二个 lane 根本不会被加载；
 - 另一个文件已经声明的 shim 名，并指出那个文件；
-- loader 会跳过或误读的厂商名 —— `_`/`.` 开头，或 `llm`、`embeddings`、`rerank`、`decisions`。
+- loader 会跳过或误读的服务方名 —— `_`/`.` 开头，或 `llm`、`embeddings`、`rerank`、`decisions`。
 
-厂商仍把格式目录直接放在其下时只提示、不阻断：loader 同样能读那些目录，`shims migrate`
+服务方仍把格式目录直接放在其下时只提示、不阻断：loader 同样能读那些目录，`shims migrate`
 负责把它们移过去。
 
-粘贴进来的 base URL 在写入前会先检查。结尾的 `/models`（厂商控制台常见）会被去掉，然后不带
+粘贴进来的 base URL 在写入前会先检查。结尾的 `/models`（服务方控制台常见）会被去掉，然后不带
 凭据请求 `<base>/models`：`200`、`401`、`403` 都证明主机在该路径上有应答，其余结果会连同
 base URL 自身的状态一起报告，于是后缀写错现在就暴露，而不是以后表现为空模型列表。交互模式
 总是检查；flag 模式需加 `--probe`。检查不通过只是警告，不是拒绝 —— 本机未必能到达该主机。
@@ -131,7 +131,7 @@ base URL 自身的状态一起报告，于是后缀写错现在就暴露，而�
 写下的就是本仓库实际会提供的 URL；扫描根不在 git 仓库里时保留原 URL 并说明原因。
 `--localize-logo` 与提问等价，只是不问。
 
-提问之前，会先按厂商名到 lobehub 图标集（jsDelivr 上的 `@lobehub/icons-static-svg`）里查找，
+提问之前，会先按服务方名到 lobehub 图标集（jsDelivr 上的 `@lobehub/icons-static-svg`）里查找，
 命中就作为默认答案 —— 回车即采用。先试完整名字，再试首段以及去掉池标记后的名字，所以
 `opencode_zen_free` 仍能找到 `opencode`；每次尝试是一个 `HEAD`，CDN 不可达时立即结束查找，
 而不是每个候选各等一次超时。已经在 jsDelivr 上的 URL 原样保留，因为没有什么可复制的 ——
@@ -148,8 +148,8 @@ llm-rosetta-gateway shims check --root src/llm_rosetta_shim_acme/providers
 ```
 
 它不装载、不写文件、也不需要配置，因此可以在还没配好网关的包仓库里直接运行。会报告的情形：
-叶子不在规范路径上、把厂商目录当叶子用、类型目录同时混有叶子层和格式层、类型目录之上超过一个
-lane 目录、厂商级 `transforms.py`、厂商与叶子两级都声明了 `auth.py`、文件不在允许清单内、缺少
+叶子不在规范路径上、把服务方目录当叶子用、类型目录同时混有叶子层和格式层、类型目录之上超过一个
+lane 目录、服务方级 `transforms.py`、服务方与叶子两级都声明了 `auth.py`、文件不在允许清单内、缺少
 `provider.yaml`。约定本身见 `llm_rosetta/devtools/_shim_template/README_zh.md`。
 
 ### `shims migrate [--root DIR] [--write]`

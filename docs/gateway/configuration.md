@@ -48,13 +48,13 @@ title: 配置
 
 ### 外部 Shim 源 { #external-shim-sources }
 
-shim 不必放在包内。顶层 `shims` 段可以让 gateway 从 manifest 源安装厂商，并额外扫描若干本地目录
+shim 不必放在包内。顶层 `shims` 段可以让 gateway 从 manifest 源安装服务方，并额外扫描若干本地目录
 —— 于是一套 shim 可以维护在独立仓库里，直接消费，无需往 gateway 镜像里安装任何东西。
 
 ```jsonc
 "shims": {
-  // manifest 源（catalog id 或 manifest URL）以及从中安装的厂商：厂商名、
-  // tag:<标签>、*，均可加 "<source>:" 前缀；!<source>:<vendor> 表示排除某个厂商。
+  // manifest 源（catalog id 或 manifest URL）以及从中安装的服务方：服务方名、
+  // tag:<标签>、*，均可加 "<source>:" 前缀；!<source>:<vendor> 表示排除某个服务方。
   // 只写 install 时读取 contrib 与 argonne。
   "sources": ["contrib", "argonne"],
   "install": ["opendesign", "tag:tier:free", "argonne:*"],
@@ -91,22 +91,22 @@ shim 不必放在包内。顶层 `shims` 段可以让 gateway 从 manifest 源�
 ——未列出的目录根本不会被读取。它是数据而不是代码：只用相对路径，不含 URL。
 
 **Manifest 源。** `sources` 列出 manifest 源：catalog id（`contrib`、`argonne`）、
-manifest URL，或 `{"url", "fallback", "token_env"}`。`install` 从中选择厂商：`<vendor>`、
+manifest URL，或 `{"url", "fallback", "token_env"}`。`install` 从中选择服务方：`<vendor>`、
 `tag:<标签>`（整体匹配，如 `tag:tier:free`）、`*`，均可加 `<source>:` 前缀；`!<vendor>` 与
-`!<source>:<vendor>` 排除某个厂商，`<source>:<vendor>@<version>` 固定某个版本。网关为每个厂商
+`!<source>:<vendor>` 排除某个服务方，`<source>:<vendor>@<version>` 固定某个版本。网关为每个服务方
 安装 `requires` 与本 core 匹配的最新稳定版本（`surface` 等于 `SURFACE_VERSION`，`ir` 不高于
 `IR_VERSION`；只有在没有可安装的稳定版本时才安装预发布版本），校验归档的 sha256，归档没有
 `shims.yaml` 时只加载发布记录列出的 shim 名称，且只在出现更新的可安装版本时升级。在已应答的
 源中没有匹配结果的条目会记录日志，并报告为 *不在 manifest 中* 的条目。manifest 在
 `remote_ttl` 内复用；源不可达时保留缓存的 manifest 与上一次成功的安装。core 按 shim 优先：
-core 的 shim 名称会被拒绝，该厂商的其他 shim 照常安装。记录写有 `promoted_to: core@X` 时，
+core 的 shim 名称会被拒绝，该服务方的其他 shim 照常安装。记录写有 `promoted_to: core@X` 时，
 只有本 core 达到 `X` 或更高版本（`X` 的开发版或预发布版早于 `X`）且 core 注册了该记录的 shim，
-才会跳过该厂商。见 [Manifest 源](../guide/shims.md#manifest-sources)。
+才会跳过该服务方。见 [Manifest 源](../guide/shims.md#manifest-sources)。
 
 **独立包。** ALCF、AskSage、Argo、免费端点与 Open Design 的 shim 位于 core 之外，在 `argonne` 与
-`contrib` 源里。用 `shims.install` 声明厂商：`argonne:alcf`、`argonne:argo`、`argonne:asksage`、
+`contrib` 源里。用 `shims.install` 声明服务方：`argonne:alcf`、`argonne:argo`、`argonne:asksage`、
 `contrib:tag:tier:free`（免费端点）、`contrib:opendesign`。若提供方配置仍使用这些 shim 却没有声明源，
-启动时会得到一条错误，指明厂商与应加入的 `shims.install` 条目。
+启动时会得到一条错误，指明服务方与应加入的 `shims.install` 条目。
 
 **缓存与刷新。** manifest 与归档存放在 `cache_dir`（默认 `<config_dir>/shims-cache`，与配置文件同级），
 manifest 在 `remote_ttl` 秒内复用。热缓存覆盖除「源对自己字节的裁决」之外的所有失败：传输失败、HTTP 错误、
@@ -149,7 +149,7 @@ manifest 在 `remote_ttl` 秒内复用。热缓存覆盖除「源对自己字节
 
 ```jsonc
 "providers": {
-  // 一个账号、两家厂商：聊天在一家，embedding 在另一家。
+  // 一个账号、两家服务方：聊天在一家，embedding 在另一家。
   "frankenservice": {
     "type": "google_generate",
     "base_url": "https://generativelanguage.googleapis.com",
@@ -162,17 +162,17 @@ manifest 在 `remote_ttl` 秒内复用。热缓存覆盖除「源对自己字节
 }
 ```
 
-一个提供方条目是一个**账号**：一份凭据、一个 key ring、一次刷新。每个类型端点都是它的一个**面**，可以落在另一家厂商的主机上 —— 所以 `base_url` 属于面，而不只属于条目。块内的字段是 `shim`、`format`、`path`、`enabled` 与 `base_url`。
+一个提供方条目是一个**账号**：一份凭据、一个 key ring、一次刷新。每个类型端点都是它的一个**面**，可以落在另一家服务方的主机上 —— 所以 `base_url` 属于面，而不只属于条目。块内的字段是 `shim`、`format`、`path`、`enabled` 与 `base_url`。
 
-`base_url` 是主机，`path` 是该主机上的路径 —— 请求发往 `base_url` + `path`。版本段属于 `path`（或 shim 的默认路径），不属于 `base_url`：写成 `base_url: "https://api.cohere.com/v2"` 而端点路径是 `/v1/embeddings`，实际请求的是 `/v2/v1/embeddings`，真实厂商会返回 404。扁平的 `embeddings_format` / `embeddings_path` / `embeddings_shim` / `embeddings_enabled`（以及 `rerank_*`、`decisions_*` 两组）仍然可读，加载时会改写成块（`config_version` 5）。
+`base_url` 是主机，`path` 是该主机上的路径 —— 请求发往 `base_url` + `path`。版本段属于 `path`（或 shim 的默认路径），不属于 `base_url`：写成 `base_url: "https://api.cohere.com/v2"` 而端点路径是 `/v1/embeddings`，实际请求的是 `/v2/v1/embeddings`，真实服务方会返回 404。扁平的 `embeddings_format` / `embeddings_path` / `embeddings_shim` / `embeddings_enabled`（以及 `rerank_*`、`decisions_*` 两组）仍然可读，加载时会改写成块（`config_version` 5）。
 
 每个端点的优先级：
 
 1. **shim**：块内的 `shim`（或扁平的 `<type>_shim`）；否则使用提供方级的 `shim` 或 `type`，但仅当该 shim 的 `model_type` 与端点一致；
 2. **格式**：显式的格式优先于 shim 的格式；
 3. **路径**：显式的路径优先于 shim 的 `connection.default_path`（仅当最终格式就是该 shim 的格式时才使用），其次是该格式自身的默认路径（Cohere 使用 `/v2/...`；Google 的 embedding 路径携带模型）；
-4. **主机**：端点自己的 `base_url`；否则条目的 `base_url`；否则 shim 的 `connection.base_url`。若端点继承条目的主机、而没有为它服务的 shim 声明该主机，启动时会写一条日志，点出相关主机和修法 —— 这种组合几乎总是块出现之前写下的条目，请求会发往错误的厂商。多家厂商共用的方言不等于某一家厂商的主机：SiliconFlow 上的 `embeddings: {format: "openai"}` 是被接受的，因为 `siliconflow--embedding` 为它服务并声明了 SiliconFlow 的主机；
-5. **凭据**：条目的（`base_url` / `api_key` 默认值来自 shim）。一个条目就是一份凭据；两家厂商两把 key 就是两个条目。
+4. **主机**：端点自己的 `base_url`；否则条目的 `base_url`；否则 shim 的 `connection.base_url`。若端点继承条目的主机、而没有为它服务的 shim 声明该主机，启动时会写一条日志，点出相关主机和修法 —— 这种组合几乎总是块出现之前写下的条目，请求会发往错误的服务方。多家服务方共用的方言不等于某一家服务方的主机：SiliconFlow 上的 `embeddings: {format: "openai"}` 是被接受的，因为 `siliconflow--embedding` 为它服务并声明了 SiliconFlow 的主机；
+5. **凭据**：条目的（`base_url` / `api_key` 默认值来自 shim）。一个条目就是一份凭据；两家服务方两把 key 就是两个条目。
 
 `<type>_shim` 若不属于该能力，启动时会报错并指明该 shim 的类别。gateway 把每个提供方的身份记录为 `(model_type, format)` 对；LLM 模型若被路由到身份为 `embeddings`、`rerank` 或 `decisions` 的提供方，会被拒绝。
 
@@ -519,7 +519,7 @@ llm-rosetta-gateway --socket /run/user/$(id -u)/rosetta.sock
 3. 客户端格式下的**任意 provider**。
 4. 都不满足则回到锚点，经 IR 转换。
 
-账号身份是推导出来的，不需要声明。两个 provider 携带同一份凭据即视为同一账号——同一个 `token_command`，或同一个 key 值（字面 key 与由环境变量解析出的同值 key 视为同一个 key）。比较的只是凭据的哈希，keyless provider 永不归组。`base_url` 被刻意排除在外，因此用同一个 key、从不同路径提供多种格式的厂商仍算作一个账号。
+账号身份是推导出来的，不需要声明。两个 provider 携带同一份凭据即视为同一账号——同一个 `token_command`，或同一个 key 值（字面 key 与由环境变量解析出的同值 key 视为同一个 key）。比较的只是凭据的哈希，keyless provider 永不归组。`base_url` 被刻意排除在外，因此用同一个 key、从不同路径提供多种格式的服务方仍算作一个账号。
 
 该开关只改变*由哪个*上游来服务请求。转换依然始终经过 IR——包括第 1 层的情况。参见[架构指南](../contributing/architecture.md)。
 

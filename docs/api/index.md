@@ -58,7 +58,7 @@ shim 不得导入 `llm_rosetta.api`。插件 entry point 与旁挂模块在 `imp
 
 网关只通过两个前缀访问 core：`llm_rosetta.api` 与 `llm_rosetta.contracts`（`contracts.usage` 只导入包本身）。规则是严格的，没有白名单：网关源码中导入任何其他 core 模块或私有（以 `_` 开头）core 名称，都会使 `tests/gateway/test_core_surface_boundary.py` 失败。兼容转发模块 `llm_rosetta.routing` 与 `llm_rosetta.capabilities` 同样被拒绝。
 
-shim 遵循同一规则，只有一个前缀。`shims/builtin/<vendor>/` 下的 `.py` 文件、脚手架模板或脚手架生成的文件，若不经 `llm_rosetta.contracts` 导入 core，或导入其他厂商的目录，`tests/test_shim_sidecar_boundary.py` 就会失败。
+shim 遵循同一规则，只有一个前缀。`shims/builtin/<vendor>/` 下的 `.py` 文件、脚手架模板或脚手架生成的文件，若不经 `llm_rosetta.contracts` 导入 core，或导入其他服务方的目录，`tests/test_shim_sidecar_boundary.py` 就会失败。
 
 ### 版本常量 {#version-constants}
 
@@ -75,7 +75,7 @@ shim 遵循同一规则，只有一个前缀。`shims/builtin/<vendor>/` 下的 
 | --- | --- |
 | `plugin_source`、`builtin_providers_dir` | 管理面板的 shim 文件路由 |
 | `add_scaffold_arguments`、`run_scaffold`、`run_scaffold_check`、`run_scaffold_migrate` | 网关的 `shims new`、`shims check` 与 `shims migrate` 命令 |
-| `leaf_connection`、`manifest_vocabulary`、`merge_connection`、`ManifestVocabulary` | 厂商清单词汇表及其类型，以及把清单的连接配置合并进叶子 |
+| `leaf_connection`、`manifest_vocabulary`、`merge_connection`、`ManifestVocabulary` | 服务方清单词汇表及其类型，以及把清单的连接配置合并进叶子 |
 | `SURFACE_VERSION` | 上文所述的接口级别 |
 
 `manifest_vocabulary()` 返回 `ManifestVocabulary`，`api` 导出该类型，宿主可以用它做标注。`merge_connection(manifest_connection, leaf)` 先接收清单，参数顺序与加载器的私有合并函数相反，并且只返回合并后的映射：相对 `token_command` 据以解析的目录不返回，因为传入的清单没有对应文件。已移除的名字列在 [迁移到 0.14](../guide/migrating-to-0.14.md) 中。

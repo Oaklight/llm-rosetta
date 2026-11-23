@@ -98,7 +98,7 @@ visibility_modes:
 - `"as_is"`（默认）—— 原样发送回放的历史。
 - `"fill_empty"` —— 声明该要求。源请求转换为 IR 之后，能力层 pass 会给每条缺少推理的 assistant 消息补一个空的 reasoning part，由目标转换器按自己的方言渲染（Chat Completions 的 `reasoning_content: ""`）。空值可以满足上游 —— 已在 `deepseek-flash` 上实测 —— 请求得以正常完成。
 
-该要求属于**模型**，而不是某个 vendor。把它声明为 shim 级默认值只能保护那一个端点；同一个模型由另一家厂商转发时仍需单独声明。对于代理多个模型家族的厂商，请放进 `model_overrides`：
+该要求属于**模型**，而不是某个 vendor。把它声明为 shim 级默认值只能保护那一个端点；同一个模型由另一家服务方转发时仍需单独声明。对于代理多个模型家族的服务方，请放进 `model_overrides`：
 
 ```yaml
 # opencode--chat_completions：只有 DeepSeek 思考模型需要回放
@@ -153,7 +153,7 @@ reasoning:
       replay_missing: fill_empty
 ```
 
-代理多个模型家族的厂商正是这样只为其中一个家族声明要求：`opencode--chat_completions` 使用 `deepseek*`，其 Claude、GPT、Gemini 模型仍保持 provider 级默认值。
+代理多个模型家族的服务方正是这样只为其中一个家族声明要求：`opencode--chat_completions` 使用 `deepseek*`，其 Claude、GPT、Gemini 模型仍保持 provider 级默认值。
 
 ## API 参考
 

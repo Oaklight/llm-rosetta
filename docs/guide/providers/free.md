@@ -1,11 +1,11 @@
 # 免费端点
 
-有四家厂商提供无需账号的免费池，且都没有合同约束：模型清单、速率限制甚至端点本身
+有四家服务方提供无需账号的免费池，且都没有合同约束：模型清单、速率限制甚至端点本身
 都可能随时变更或关闭。因此它们作为独立包发布：
 [llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free)——
 某个池消失时可以在不发版的情况下撤下。
 
-| Shim 名称 | 厂商 | 默认 Base URL | 免费范围 |
+| Shim 名称 | 服务方 | 默认 Base URL | 免费范围 |
 |:---|:---|:---|:---|
 | `kilo_free--chat_completions` | Kilo Code | `https://api.kilo.ai/api/gateway` | 标记 `isFree` 的模型 |
 | `llm7--chat_completions` | LLM7.io | `https://api.llm7.io/v1` | `turbo` 档 |
@@ -36,7 +36,7 @@
 
 ## 速率限制
 
-| 厂商 | 匿名限制 | 提供 key 后 |
+| 服务方 | 匿名限制 | 提供 key 后 |
 |:---|:---|:---|
 | Kilo | 每 IP 每小时 200 次请求 | key 会把同一 shim 切换到 Bearer 认证 |
 | LLM7 | `turbo` 档 | 免费 token 把上限提高到 60 RPM / 每小时 250 次请求 |
@@ -56,5 +56,5 @@
 
 ## Kilo 的付费线路
 
-Kilo 是唯一同时出现在两侧的厂商。付费网关是内置 shim `kilo--chat_completions`，
+Kilo 是唯一同时出现在两侧的服务方。付费网关是内置 shim `kilo--chat_completions`，
 始终发送 `KILO_API_KEY` 并开放完整目录；参见 [Kilo](kilo.md)。

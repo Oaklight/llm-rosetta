@@ -273,7 +273,7 @@ LLM-Rosetta 识别出 **6 个格式族**，覆盖主流 embedding 提供方。�
     OpenAI 没有任务类型的概念 —— 从/向 OpenAI 格式转换时，该字段直接省略。
 
 !!! note
-    MiniMax 只有两种任务类型，且 `type` 必填。IR 中其余任务类型在 MiniMax 没有对应值，发送时用 `db`（厂商对存储文本的默认值）。
+    MiniMax 只有两种任务类型，且 `type` 必填。IR 中其余任务类型在 MiniMax 没有对应值，发送时用 `db`（服务方对存储文本的默认值）。
 
 ## 编码格式归一化
 

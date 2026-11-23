@@ -40,7 +40,7 @@ converters/llm/<name>/
 
 ## Shim 层
 
-`ProviderShim` 是一个轻量级身份卡，声明 provider 使用的基础转换器以及连接默认值和字段级变换。Shim 位于 `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<type>/provider.yaml`；只有该类型下存在第二条 lane 时才在类型下再加 `<format>/` 层（`<vendor>/llm/chat_completions/` 与 `<vendor>/llm/messages/` 并排），只有存在多个具名实例的厂商才在类型之上加 lane 目录（`alcf/metis/llm/`）。这份约定、`shims new` 渲染的模板，以及 `shims check` 与 `shims migrate` 执行的检查，都在 `llm_rosetta/devtools/_shim_template/`。
+`ProviderShim` 是一个轻量级身份卡，声明 provider 使用的基础转换器以及连接默认值和字段级变换。Shim 位于 `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<type>/provider.yaml`；只有该类型下存在第二条 lane 时才在类型下再加 `<format>/` 层（`<vendor>/llm/chat_completions/` 与 `<vendor>/llm/messages/` 并排），只有存在多个具名实例的服务方才在类型之上加 lane 目录（`alcf/metis/llm/`）。这份约定、`shims new` 渲染的模板，以及 `shims check` 与 `shims migrate` 执行的检查，都在 `llm_rosetta/devtools/_shim_template/`。
 
 转换器保持格式通用；shim 声明 provider 特定的差异（如 response ID 前缀、默认请求头、字段重命名）。
 
@@ -224,7 +224,7 @@ part 类型。跨腿 harness（`tests/converters/test_leg_agreement.py`）对每
 
 往返就是那条性质：对跨腿表格里的每个 case，`fold(expand(turn))` 都等于 `turn`（用
 harness 自己的 turn view 比较）。它拿不回来的是事件本身没有的东西——即上表逐个 dialect
-列出的那些事实——所以折叠结果与流式回复一致，而不是厂商 JSON API 会返回的 body。
+列出的那些事实——所以折叠结果与流式回复一致，而不是服务方 JSON API 会返回的 body。
 
 要让这条性质在单选项以外的情形也成立，先补了三件事：
 

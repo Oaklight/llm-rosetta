@@ -27,7 +27,7 @@ Open Design 在三种 API 上都提供每个模型，因此按客户端使用的
 
 这些 shim 位于
 [`llm-rosetta-shim-opendesign`](https://github.com/Oaklight/llm-rosetta-shim-opendesign)，
-不在核心包内。使用这些名称前需先声明厂商：
+不在核心包内。使用这些名称前需先声明服务方：
 
 ```jsonc
 {
@@ -52,7 +52,7 @@ Open Design 在三种 API 上都提供每个模型，因此按客户端使用的
 }
 ```
 
-厂商清单提供 base URL、`OPENDESIGN_API_KEY` 环境变量默认值和模型列表地址；提供方条目可以
+服务方清单提供 base URL、`OPENDESIGN_API_KEY` 环境变量默认值和模型列表地址；提供方条目可以
 覆盖其中任何一项。
 
 ## 额度

@@ -5,7 +5,7 @@ title: 迁移到 0.14
 # 迁移到 0.14
 
 !!! warning "0.15.0 已移除 `shims.presets`"
-    本页记录的是 0.14。其中提到的 `shims.presets`、`shims.include`、`shims.exclude` 与 `shims.remotes` 键自 0.15.0 起不再被读取，配置里带着其中任何一个都会在加载时被拒绝。请改在 `shims.install` 中声明厂商（`argonne:alcf`、`argonne:argo`、`argonne:asksage`、`contrib:tag:tier:free`、`contrib:opendesign`），并运行 `llm-rosetta-migrate --config <path>` 改写文件。见[已移除的键](shims.md#retired-keys)。
+    本页记录的是 0.14。其中提到的 `shims.presets`、`shims.include`、`shims.exclude` 与 `shims.remotes` 键自 0.15.0 起不再被读取，配置里带着其中任何一个都会在加载时被拒绝。请改在 `shims.install` 中声明服务方（`argonne:alcf`、`argonne:argo`、`argonne:asksage`、`contrib:tag:tier:free`、`contrib:opendesign`），并运行 `llm-rosetta-migrate --config <path>` 改写文件。见[已移除的键](shims.md#retired-keys)。
 
 0.14.0 移除了 0.13.0 为过渡保留一个版本的已弃用导入路径与类别名（epic [#919](https://github.com/Oaklight/llm-rosetta/issues/919)）。被移除的名字会以普通的 `ImportError`、`ModuleNotFoundError` 或 `AttributeError` 失败；[retired-names](#retired-names) 诊断只覆盖提供方、shim 与模型类型名称，不覆盖 Python 导入路径。本页列出已移除的内容、替代写法，以及仍然可用的部分。要改写网关配置和数据库，请使用 [`llm-rosetta-migrate`](#llm-rosetta-migrate)；[升级流程](#upgrade-recipe)给出了步骤顺序。
 
@@ -252,7 +252,7 @@ grep -rnE "llm_rosetta\.(transforms|shims\.(auth_exchange|quota_probe)|observabi
 | `openai_chatgpt` | `openai_chatgpt--open_responses`（额度探测 `openai_codex`） | OAuth（Sign in with ChatGPT） |
 | `antigravity` | `antigravity--acp` | agent CLI 通道 |
 | `kilo`、`openrouter`、`groq`、`nvidia`、`siliconflow`、`modelscope` | `kilo--chat_completions`；`openrouter--chat_completions`、`--messages`、`--open_responses`、`--rerank`；`groq--chat_completions`；`nvidia--chat_completions`；`siliconflow--chat_completions`、`--embedding`、`--rerank`；`modelscope--chat_completions` | 聚合商与托管端点 |
-| `zhipu`、`zai`、`xai`、`qwen`、`moonshot`、`volcengine` | `zhipu`、`zhipu--embedding`、`--rerank`；`zai--chat_completions`、`--messages`、`--embedding`、`--rerank`；`xai`；`qwen`；`moonshot`；`volcengine--chat_completions`、`--open_responses`、`--embedding` | 先在 contrib 起步、具备晋升资格的模型厂商 |
+| `zhipu`、`zai`、`xai`、`qwen`、`moonshot`、`volcengine` | `zhipu`、`zhipu--embedding`、`--rerank`；`zai--chat_completions`、`--messages`、`--embedding`、`--rerank`；`xai`；`qwen`；`moonshot`；`volcengine--chat_completions`、`--open_responses`、`--embedding` | 先在 contrib 起步、具备晋升资格的模型服务方 |
 
 **网关。** 配置中引用了上述 shim 之一——提供方的 `type:` / `shim:` / 键名、类型化端点
 （`embeddings_shim`、`embeddings: {shim}` 块）、旧式 `<type>_providers` 条目，或
@@ -377,7 +377,7 @@ llm-rosetta-migrate --scan src/                            # 仅提示，不修�
 
 **模式。** 默认是试运行。`--write` 应用改写，并先做副本：`<file>.bak`，该名称已被占用时为 `<file>.bak-<时间戳>`。`--check` 是试运行，有待改写项时以退出码 `3` 结束，供 CI 使用。`--json` 输出机器可读的报告。
 
-**`--scan`。** 扫描只做提示。每条发现都是对退役名称的文本提及，不证明它被使用，输出为 `mentions ... (advisory)` 而不是“无法映射”。同一次运行中同时作为 `--config` 目标的文件会被跳过，因为 `--config` 会改写它。它报告路径下 `.py`、`.json`、`.jsonc`、`.yaml` 与 `.yml` 文件中的退役名称，不修改任何文件。它只保留在任何位置都已退役的字符串：当前格式 `google_generate` 与 `google_interactions`，以及作为 shim 的裸厂商词 `openai`、`google`、`anthropic`，都不会被报告。带引号的字符串是匹配项，不是证明；`"anthropic"` 可能是你自己的变量。
+**`--scan`。** 扫描只做提示。每条发现都是对退役名称的文本提及，不证明它被使用，输出为 `mentions ... (advisory)` 而不是“无法映射”。同一次运行中同时作为 `--config` 目标的文件会被跳过，因为 `--config` 会改写它。它报告路径下 `.py`、`.json`、`.jsonc`、`.yaml` 与 `.yml` 文件中的退役名称，不修改任何文件。它只保留在任何位置都已退役的字符串：当前格式 `google_generate` 与 `google_interactions`，以及作为 shim 的裸服务方词 `openai`、`google`、`anthropic`，都不会被报告。带引号的字符串是匹配项，不是证明；`"anthropic"` 可能是你自己的变量。
 
 **退出码。**
 

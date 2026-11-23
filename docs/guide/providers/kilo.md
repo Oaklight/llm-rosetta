@@ -16,7 +16,7 @@ Kilo Code 运营一个公共模型网关。我们用两个 shim 分别对接，�
 
 `kilo--chat_completions` 始终携带凭据。未配置 key 的 provider 会在启动时被拒绝，
 而不是无凭据发往上游；它的模型列表是账号可访问的完整目录。两个 shim 都声明
-`group_label: Kilo`，因此在选择器中归到同一个厂商下。
+`group_label: Kilo`，因此在选择器中归到同一个服务方下。
 
 ```jsonc
 {

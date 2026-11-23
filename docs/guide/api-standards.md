@@ -108,11 +108,11 @@ OpenAI 较新的 API 格式（2025 年）。使用扁平的类型化项目列表
 
 ## Open Responses (`open_responses`)
 
-[Open Responses](https://www.openresponses.org/) 是一个开源的、厂商中立的规范（Apache 2.0），扩展了 OpenAI Responses API。由 OpenAI 于 2026 年 1 月发起，在保持完全向后兼容的同时增加了正式的可扩展性规则。
+[Open Responses](https://www.openresponses.org/) 是一个开源的、服务方中立的规范（Apache 2.0），扩展了 OpenAI Responses API。由 OpenAI 于 2026 年 1 月发起，在保持完全向后兼容的同时增加了正式的可扩展性规则。
 
-该规范作为基础，OpenAI Responses API 是其一个合规 profile：`OpenResponsesConverter` 实现厂商中立的规范，`OpenAIResponsesConverter` 派生自它，额外提供 `resp_` 响应 ID 前缀、OpenAI 专有的生命周期回显字段（`billing`、`moderation` 等）以及 OpenAI 的 `store: true` 默认值。两个类都可导入；`OpenAIResponses*` ops 类保留为 `OpenResponses*` 的别名。
+该规范作为基础，OpenAI Responses API 是其一个合规 profile：`OpenResponsesConverter` 实现服务方中立的规范，`OpenAIResponsesConverter` 派生自它，额外提供 `resp_` 响应 ID 前缀、OpenAI 专有的生命周期回显字段（`billing`、`moderation` 等）以及 OpenAI 的 `store: true` 默认值。两个类都可导入；`OpenAIResponses*` ops 类保留为 `OpenResponses*` 的别名。
 
-`open_responses` 是没有独立 shim 的基础格式：裸 `type: open_responses` 的提供方不带隐式主机，必须设置 `base_url`。厂商提供 `<vendor>--open_responses` shim（例如 `shims/builtin/openai/llm/open_responses/provider.yaml`），由它的连接信息给出主机；管理界面里 OpenRouter 的 URL 只是占位提示。
+`open_responses` 是没有独立 shim 的基础格式：裸 `type: open_responses` 的提供方不带隐式主机，必须设置 `base_url`。服务方提供 `<vendor>--open_responses` shim（例如 `shims/builtin/openai/llm/open_responses/provider.yaml`），由它的连接信息给出主机；管理界面里 OpenRouter 的 URL 只是占位提示。
 
 **与 OpenAI Responses profile 的区别：**
 

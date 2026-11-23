@@ -19,9 +19,9 @@ Go/Plus/Pro 套餐额度，而不是 Platform API 计费。它使用与 `openai-
 |:---|:---|:---|:---|
 | `openai_chatgpt--open_responses` | `open_responses` | `https://api.openai.com/v1` | 无 —— 通过登录取得 |
 
-这里刻意没有 `api_key_env`：凭据由厂商自带的 `auth.py`（[llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib)
-中的 `src/llm_rosetta_shim_contrib/providers/openai_chatgpt/auth.py`，与厂商清单放在一起；
-该厂商已在 [#1664](https://github.com/Oaklight/llm-rosetta/pull/1664) 中移出 core）生成。若在声明了交换却 `consumes_key=false` 的提供方旁配置 `api_key`，
+这里刻意没有 `api_key_env`：凭据由服务方自带的 `auth.py`（[llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib)
+中的 `src/llm_rosetta_shim_contrib/providers/openai_chatgpt/auth.py`，与服务方清单放在一起；
+该服务方已在 [#1664](https://github.com/Oaklight/llm-rosetta/pull/1664) 中移出 core）生成。若在声明了交换却 `consumes_key=false` 的提供方旁配置 `api_key`，
 加载配置时会被拒绝 —— 两者是同一个凭据的两种来源。
 
 ## 前置条件
@@ -175,7 +175,7 @@ Responses、Chat Completions 客户端都能拿到一个完整响应体。
 - 记录以 `0600` 写在 `0700` 目录下，原子写入，并持有排他锁。每次读写都取锁，因为 refresh
   token 用一次就作废：两次并发刷新会把它轮换两次并丢掉账号。
 - 令牌不会出现在管理台、请求日志或凭据列表里；管理台只显示交换摘要允许的账号与到期时间。
-- **退出登录**会在厂商允许时于上游撤销授权，并立刻把令牌从网关的 key ring 中移除。手工
+- **退出登录**会在服务方允许时于上游撤销授权，并立刻把令牌从网关的 key ring 中移除。手工
   删除记录目录会让网关以为自己仍然连着，直到下一次刷新失败 —— 请使用管理台或
   `DELETE …/credential`。
 

@@ -440,14 +440,14 @@ body = decompress_body(compressed)
 
 | 列 | 含义 |
 |--------|------|
-| `input_tokens` | 输入（prompt）token，以厂商的计数为准 |
+| `input_tokens` | 输入（prompt）token，以服务方的计数为准 |
 | `output_tokens` | 输出（completion）token |
 | `total_tokens` | 规范总量——见下文的 `token_total` |
 | `cache_read_tokens` | 缓存命中 |
 | `cache_creation_tokens` | 缓存写入 |
 | `reasoning_tokens` | 思考 token；**包含在** `output_tokens` 之内，从不额外累加 |
 
-`token_total(usage)` 负责填充 `total_tokens`。厂商给了总量就直接采用；否则把
+`token_total(usage)` 负责填充 `total_tokens`。服务方给了总量就直接采用；否则把
 各计数器相加，其中两条规则并不显然：
 
 - **思考 token 从不累加**——它已经包含在输出 token 里。
@@ -465,12 +465,12 @@ body = decompress_body(compressed)
 
 每一行还带一个**模型类型**——`llm`、`embeddings`、`rerank` 或 `decisions`，
 即 `gateway/model_types/` 注册的那套名字。同一列在不同家族里对应的 IR 字段
-并不相同：chat 向厂商要的是 `prompt_tokens` 与 `completion_tokens`，decision
+并不相同：chat 向服务方要的是 `prompt_tokens` 与 `completion_tokens`，decision
 IR 本来就报 `input_tokens`/`output_tokens`，embedding 与 rerank 的 IR 类型
 没有输出侧，而 rerank 的缓存计数器叫 `cached_tokens`。因此"列 → 字段"的映射
 按模型类型声明，`usage_columns(usage, model_type)` 与
 `token_total(usage, model_type)` 读取对应的一份；不属于这四种的名字会被拒绝
-而不是被猜。规范总量的规则在各家族之间不变：厂商给了总量就采用，否则累加各
+而不是被猜。规范总量的规则在各家族之间不变：服务方给了总量就采用，否则累加各
 部分；自身不提供总量的家族永远走累加路径。
 
 `UsageReport.by_model_type` 把同一批行再按类型切一次——
