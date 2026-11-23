@@ -58,7 +58,7 @@ from .._vendor.acp import (
     InitializeParams,
     PermissionOptionKind,
 )
-from .._vendor.jsonrpc import JSONRPCException
+from .._vendor.jsonrpc import METHOD_NOT_FOUND, JSONRPCException
 from ..transport._base import UpstreamConnectionError, UpstreamResponse, UpstreamStream
 from ..transport.provider_info import ProviderInfo
 from .acp_chunks import (
@@ -1224,6 +1224,7 @@ class AcpTransport:
                 session_id,
                 deadline,
                 allow_tools=bool(tool_defs),
+                modes=getattr(session, "modes", None),
             )
             model = _current_model(getattr(session, "config_options", None))
             requested = str(body.get("model") or "")
@@ -1279,16 +1280,29 @@ class AcpTransport:
         deadline: float,
         *,
         allow_tools: bool = False,
+        modes: Any = None,
     ) -> None:
-        """Put an ``agy`` session in the mode in which every tool use is asked for.
+        """Put a session in the mode in which every tool use is asked for.
 
-        The ``plan`` mode is agy's.  A different ACP agent has its own
-        permission surface, and this transport cannot assume the mode exists
-        (the Claude adapter answers ``session/set_mode`` with "Method not
-        found").  A non-agy agent is therefore left in whatever mode it
-        starts with: the ACP client still refuses every permission request,
-        and an operator can set that agent's own mode to keep host tools
-        behind a prompt.
+        ``plan`` is agy's mode, but it is not a name the transport may assume:
+        an agent advertises its modes on ``session/new``, and an agent that
+        advertises none may still answer ``set_mode`` with "Method not found"
+        (the Claude adapter does).  The gate therefore asks the session, in
+        this order:
+
+        1. ``session/new`` named a mode list: use ``plan`` when it is there.
+           When it is not, an agy must not run — its default mode reads files
+           without asking — while another agent keeps its own mode and is
+           covered by the client's permission refusal and tool-frame guard.
+        2. The session named no mode list: try ``plan``.  ``-32601`` means the
+           agent has no modes to set, so a non-agy agent runs as it started;
+           an agy that refuses the mode still fails the turn.  Any other
+           refusal fails the turn too.
+
+        A wrapper-launched agy advertises its modes like any other agy, so
+        the decision does not depend on the executable's file name.  The name
+        check remains only to decide whether a missing ``plan`` is an error
+        rather than another agent's normal surface.
 
         For agy without the gateway's profile (an operator's ``acp_argv``):
         agy's default mode reads files without asking (the permission flag
@@ -1304,18 +1318,35 @@ class AcpTransport:
         agent's own permission mode to one that keeps host tools behind a
         prompt.
         """
-        if (
-            not DENY_AGENT_TOOLS
-            or allow_tools
-            or self._hardened(provider_info)
-            or not is_agy(self._declared_argv(provider_info))
-        ):
+        if not DENY_AGENT_TOOLS or allow_tools or self._hardened(provider_info):
+            return
+        argv = self._declared_argv(provider_info)
+        available = _mode_ids(modes)
+        if available is not None and AGENT_TOOLS_OFF_MODE not in available:
+            if is_agy(argv):
+                raise AcpTurnError(
+                    f"provider {provider_info.config_name!r}: the ACP agent "
+                    f"advertises no {AGENT_TOOLS_OFF_MODE!r} mode, so its tools "
+                    "cannot be gated",
+                    status_code=502,
+                )
             return
         try:
             await _bounded(
                 agent.client.set_mode(session_id, AGENT_TOOLS_OFF_MODE), deadline
             )
         except JSONRPCException as exc:
+            if (
+                available is None
+                and getattr(exc.error, "code", None) == METHOD_NOT_FOUND
+                and not is_agy(argv)
+            ):
+                logger.info(
+                    "ACP provider %r: the agent has no session modes; leaving "
+                    "the session as it started",
+                    provider_info.config_name,
+                )
+                return
             raise AcpTurnError(
                 f"provider {provider_info.config_name!r}: the ACP agent would not "
                 f"enter its {AGENT_TOOLS_OFF_MODE!r} mode, so its tools cannot be "
@@ -2160,6 +2191,16 @@ def _drain_queue(client: ACPClient, session_id: str) -> int:
             break
         drained += 1
     return drained
+
+
+def _mode_ids(modes: Any) -> set[str] | None:
+    """The mode ids a session advertised, or ``None`` when it said nothing."""
+    available = getattr(modes, "available_modes", None)
+    if available is None:
+        return None
+    ids = {str(getattr(mode, "id", "") or "") for mode in available}
+    ids.discard("")
+    return ids
 
 
 def _current_model(config_options: Any) -> str:

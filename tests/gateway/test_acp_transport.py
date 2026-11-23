@@ -115,6 +115,17 @@ FAKE_AGENT = textwrap.dedent(
                 note("mcp", url=MCP_URL)
             send({"jsonrpc": "2.0", "id": req_id, "result": {
                 "sessionId": sid,
+                "modes": None if MODE == "no-mode" else {
+                    "currentModeId": "default",
+                    "availableModes": (
+                        [{"id": "default", "name": "Default"}]
+                        if MODE == "modes-without-plan"
+                        else [
+                            {"id": "default", "name": "Default"},
+                            {"id": "plan", "name": "Plan"},
+                        ]
+                    ),
+                },
                 "configOptions": [{
                     "id": "model", "name": "Model", "type": "select",
                     "currentValue": "gemini-3.1-pro", "options": [],
@@ -129,12 +140,16 @@ FAKE_AGENT = textwrap.dedent(
                              "content": {"type": "text", "text": "replayed"}})
             send({"jsonrpc": "2.0", "id": req_id, "result": {}})
         elif method == "session/set_mode":
+            note("mode-attempt", session=msg["params"]["sessionId"],
+                 mode=msg["params"].get("modeId"))
             if MODE == "no-mode":
+                note("mode-unsupported", session=msg["params"]["sessionId"])
                 send({"jsonrpc": "2.0", "id": req_id, "error": {
                     "code": -32601, "message": "Method not found",
                 }})
                 continue
             if MODE == "mode-refused":
+                note("mode-refused", session=msg["params"]["sessionId"])
                 send({"jsonrpc": "2.0", "id": req_id, "error": {
                     "code": -32602, "message": "unknown mode",
                 }})
@@ -448,10 +463,22 @@ def _provider(
     processes: int = 1,
     acp_env: dict[str, str] | None = None,
     agy: bool = False,
+    wrapper: bool = False,
 ) -> ProviderInfo:
-    if agy:
-        # The transport decides on the mode by the command's name, so an
-        # agy-shaped test must actually start a file called ``agy``.
+    if wrapper:
+        # An agy the operator starts through a launcher: the executable's file
+        # name says nothing, but the agent still advertises its modes.
+        fake = tmp_path / "fake_acp.py"
+        fake.write_text(FAKE_AGENT, encoding="utf-8")
+        script = tmp_path / "run-agy.sh"
+        script.write_text(
+            f'#!/bin/sh\nexec "{sys.executable}" "{fake}"\n', encoding="utf-8"
+        )
+        script.chmod(0o755)
+        argv: tuple[str, ...] = (str(script),)
+    elif agy:
+        # An agy-shaped test must start a file called ``agy``: the fallback
+        # (an agent that advertises no modes) still decides by the name.
         script = tmp_path / "agy"
         script.write_text("#!/usr/bin/env python3\n" + FAKE_AGENT, encoding="utf-8")
         script.chmod(0o755)
@@ -472,7 +499,7 @@ def _provider(
         keyless=True,
         transport="acp",
         acp_argv=argv,
-        acp_argv_custom=agy,
+        acp_argv_custom=agy or wrapper,
         acp_env=acp_env,
         acp_processes=processes,
     )
@@ -1289,11 +1316,15 @@ async def _await_prompt(tmp_path: Any, timeout: float = 5.0) -> None:
 class TestAgentToolsAreOff:
     """Phase 1: the agent answers in text; every tool request is refused."""
 
-    async def _turn_chunks(self, monkeypatch, tmp_path, mode, *, agy=False):
+    async def _turn_chunks(
+        self, monkeypatch, tmp_path, mode, *, agy=False, wrapper=False
+    ):
         transport = AcpTransport(timeout=5)
         try:
             stream = await transport.send_streaming(
-                _provider(monkeypatch, tmp_path, mode, agy=agy), "", TURN
+                _provider(monkeypatch, tmp_path, mode, agy=agy, wrapper=wrapper),
+                "",
+                TURN,
             )
             return [chunk async for chunk in stream]
         finally:
@@ -1368,13 +1399,55 @@ class TestAgentToolsAreOff:
         kinds = _kinds(tmp_path)
         assert kinds.index("new") < kinds.index("mode") < kinds.index("prompt")
 
-    async def test_a_non_agy_agent_is_not_asked_for_plan_mode(
+    async def test_an_agent_without_modes_runs_after_method_not_found(
         self, monkeypatch, tmp_path
     ):
-        """``plan`` is agy's mode; a Claude-shaped agent has no such method."""
+        """A Claude-shaped agent advertises no modes and answers ``-32601``."""
         chunks = await self._turn_chunks(monkeypatch, tmp_path, "no-mode")
+        kinds = _kinds(tmp_path)
         assert chunks[-1]["type"] == "stop"
-        assert "mode" not in _kinds(tmp_path)
+        # The transport asked once, learned the agent has no modes, and left
+        # the session as it started.
+        assert "mode-attempt" in kinds
+        assert "mode-unsupported" in kinds
+        assert "mode" not in kinds
+
+    async def test_an_agent_that_advertises_no_plan_keeps_its_mode(
+        self, monkeypatch, tmp_path
+    ):
+        """An advertised mode list is authoritative: no probe, no override."""
+        chunks = await self._turn_chunks(monkeypatch, tmp_path, "modes-without-plan")
+        kinds = _kinds(tmp_path)
+        assert chunks[-1]["type"] == "stop"
+        assert "mode-attempt" not in kinds
+        assert "mode" not in kinds
+
+    async def test_an_agy_behind_a_wrapper_still_gets_the_asking_mode(
+        self, monkeypatch, tmp_path
+    ):
+        """The mode is chosen from what the session advertises, not argv[0]."""
+        chunks = await self._turn_chunks(monkeypatch, tmp_path, "ok", wrapper=True)
+        assert chunks[-1]["type"] == "stop"
+        assert [e.get("mode") for e in _log(tmp_path) if e["kind"] == "mode"] == [
+            "plan"
+        ]
+
+    async def test_an_agy_that_advertises_no_modes_does_not_run(
+        self, monkeypatch, tmp_path
+    ):
+        """An agy with no mode surface cannot be gated, so it must not run."""
+        transport = AcpTransport(timeout=5)
+        try:
+            response = await transport.send(
+                _provider(monkeypatch, tmp_path, "no-mode", agy=True), "", TURN
+            )
+            kinds = _kinds(tmp_path)
+        finally:
+            await transport.close()
+        assert response.status_code == 502
+        assert b"cannot be gated" in response.raw_content
+        assert "mode-unsupported" in kinds
+        assert "prompt" not in kinds
 
     async def test_a_session_whose_mode_cannot_be_set_does_not_run(
         self, monkeypatch, tmp_path
