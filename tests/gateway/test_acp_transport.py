@@ -1886,6 +1886,10 @@ class TestClientTools:
         # an agent starts.
         assert response.status_code == 400
         assert "declared conversation id" in response.error_text
+        # The hint must name a carrier the gateway accepts; a bare
+        # `x-session-id` is middleware bookkeeping and is ignored.
+        assert "x-claude-code-session-id" in response.error_text
+        assert "`x-session-id`" not in response.error_text
         assert _kinds(tmp_path) == []
 
     async def test_two_processes_may_return_the_same_session_id(
