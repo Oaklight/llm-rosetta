@@ -26,47 +26,32 @@ jobs:
           python-version: "3.12"
 
       - name: Install zerodep CLI
-        run: pip install 'zerodep>=2026.9.9'
+        # The lock file needs 2026.10.23.1+. The guard script checks versions
+        # itself, so an older CLI still cannot downgrade a module.
+        run: pip install 'zerodep>=2026.10.23.1'
 
-      # Each distribution owns its own _vendor tree and its own
-      # [tool.zerodep] section (epic #1127), so both are checked and updated.
-      - name: Check for outdated modules
-        id: check
+      - name: Inspect vendored modules
+        id: state
         run: |
-          total=0
-          modules=""
-          for dir in . packages/llm-rosetta-gateway; do
-            echo "== $dir"
-            output=$(cd "$dir" && zerodep outdated --json)
-            echo "$output"
-            count=$(echo "$output" | python3 -c "import sys,json; d=json.load(sys.stdin); print(sum(1 for m in d['modules'] if m['status']=='outdated'))")
-            total=$((total + count))
-            modules+=$(echo "$output" | python3 -c "
-          import sys, json
-          d = json.load(sys.stdin)
-          for m in d['modules']:
-              s = m['status']
-              if s == 'outdated':
-                  print(f\\"- {m['name']}: {m['local_version']} -> {m['latest_version']}\\")
-              elif s != 'up-to-date':
-                  print(f\\"- {m['name']}: {s} (manual migration needed)\\")
-          " | sed "s|\$|  [$dir]|")
-          done
-          if [ "$total" -gt 0 ]; then
-            echo "has_updates=true" >> "$GITHUB_OUTPUT"
-            echo "modules<<EOF" >> "$GITHUB_OUTPUT"
-            echo "$modules" >> "$GITHUB_OUTPUT"
-            echo "EOF" >> "$GITHUB_OUTPUT"
-          fi
+          python3 .github/scripts/zerodep_guard.py inspect \
+            "$RUNNER_TEMP/zerodep-plan.json" "$GITHUB_STEP_SUMMARY" \
+            . \
+            packages/llm-rosetta-gateway >> "$GITHUB_OUTPUT"
 
-      - name: Update outdated modules
-        if: steps.check.outputs.has_updates == 'true'
+      - name: Update safe modules
+        if: steps.state.outputs.has_updates == 'true'
         run: |
-          zerodep update --all
-          (cd packages/llm-rosetta-gateway && zerodep update --all)
+          python3 .github/scripts/zerodep_guard.py update \
+            "$RUNNER_TEMP/zerodep-plan.json"
+
+      - name: Verify nothing was downgraded
+        if: steps.state.outputs.has_updates == 'true'
+        run: |
+          python3 .github/scripts/zerodep_guard.py verify \
+            "$RUNNER_TEMP/zerodep-plan.json" "$GITHUB_STEP_SUMMARY"
 
       - name: Create or update Pull Request
-        if: steps.check.outputs.has_updates == 'true'
+        if: steps.state.outputs.has_updates == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
           branch: zerodep-update
@@ -75,6 +60,10 @@ jobs:
           body: |
             Automated update of vendored zerodep modules.
 
-            ${{ steps.check.outputs.modules }}
+            The workflow updates only modules whose locked version is not
+            newer than upstream. Modules it skipped, and modules whose content
+            changed without a version change, are listed below.
+
+            ${{ steps.state.outputs.modules }}
           labels: dependencies,zerodep
           commit-message: "chore(deps): update vendored zerodep modules"
