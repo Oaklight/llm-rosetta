@@ -13,15 +13,18 @@ from types import SimpleNamespace
 
 import pytest
 
+from llm_rosetta_gateway.quota.models import credential_fingerprint
 from llm_rosetta_gateway.quota.service import read_provider_quota
 from llm_rosetta_gateway.quota.state import QUOTA_STATE
 from llm_rosetta_gateway.transport.acp_chunks import _chunk_of
 from llm_rosetta_gateway.transport.acp_quota import (
     ACP_QUOTA_PROBE,
+    clear_lane_readings,
     lane_credential,
     lanes_reading,
     observation_of,
     reading_of,
+    record_reading,
     windows_of,
 )
 
@@ -59,8 +62,10 @@ def _provider(tmp_path):
 @pytest.fixture(autouse=True)
 def _clean_quota_state():
     QUOTA_STATE.clear()
+    clear_lane_readings()
     yield
     QUOTA_STATE.clear()
+    clear_lane_readings()
 
 
 def test_the_usage_chunk_keeps_the_metadata_and_cost():
@@ -124,20 +129,27 @@ def test_the_quota_payload_says_how_to_get_a_first_reading(tmp_path):
 def test_the_quota_payload_returns_the_recorded_windows(tmp_path):
     provider = _provider(tmp_path)
     config = SimpleNamespace(providers={"claude": provider})
-    reading = reading_of(UPDATE, provider)
-    assert reading is not None
-    QUOTA_STATE.put_reading(reading)
+    assert record_reading(UPDATE, provider) is True
 
     payload = asyncio.run(read_provider_quota(config, "claude"))
 
     assert payload["supported"] is True
     assert payload["status"] == "ok"
     entry = payload["credentials"][0]
-    assert entry["credential"] == reading.credential
+    assert entry["credential"] == lane_credential(provider)
     assert [window["name"] for window in entry["reading"]["windows"]] == [
         "5 hours",
         "7 days",
     ]
+
+
+def test_the_lane_fingerprint_matches_the_quota_rule(tmp_path):
+    """The transport may not import quota, so the digest rule is duplicated."""
+    provider = _provider(tmp_path)
+
+    assert lane_credential(provider) == credential_fingerprint(
+        str(provider.acp_state_dir)
+    )
 
 
 def test_two_entries_with_different_profiles_do_not_share_a_reading(tmp_path):
@@ -151,9 +163,7 @@ def test_two_entries_with_different_profiles_do_not_share_a_reading(tmp_path):
         quota_probe=None,
         key_ring=None,
     )
-    reading = reading_of(UPDATE, first)
-    assert reading is not None
-    QUOTA_STATE.put_reading(reading)
+    assert record_reading(UPDATE, first) is True
 
     first_reading = lanes_reading(first)
     assert first_reading is not None

@@ -4,8 +4,14 @@ The vendor CLIs behind the ``acp`` lanes hold the subscription, so the gateway
 has no credential to probe.  The agent does report the account's windows as it
 works: Claude's adapter sends a ``usage_update`` whose ``_meta`` carries
 ``_claude/rateLimit`` with the five-hour and weekly utilization.  This module
-turns that notification into the gateway's normalized quota shapes; the
-transport records the reading, and the quota card reads it like any other.
+turns that notification into a normalized reading; the transport records it,
+and the quota service reads it like any other.
+
+The reading is kept here rather than in :mod:`llm_rosetta_gateway.quota` on
+purpose: the transport is the foundation layer and may not import the state
+layer.  The store is process-wide, so a config reload that rebuilds the
+transport keeps the last reading.  The quota service, which may import this
+module, converts the same reading into the admin payload.
 
 Nothing here is vendor-specific beyond the field names it tolerates: a
 ``rateLimit`` object under any ``_meta`` key is read, and a window shape it
@@ -14,20 +20,21 @@ does not know still becomes a window with whatever share it reported.
 
 from __future__ import annotations
 
+import hashlib
+import threading
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from llm_rosetta_gateway.quota.models import (
-    STATUS_OK,
-    QuotaReading,
-    QuotaWindow,
-    credential_fingerprint,
-)
+from llm_rosetta.contracts.quota import QuotaWindow
 
 #: Probe id the transport's observations are stored under.  One id is enough:
-#: a reading is keyed by the lane's profile fingerprint, so two entries never
-#: overwrite each other even when they share an account.
+#: a reading is keyed by the lane's profile, so two entries never overwrite
+#: each other even when they share an account.
 ACP_QUOTA_PROBE = "acp-usage"
+
+#: The one status a reading from an agent can have: the agent answered.
+STATUS_OK = "ok"
 
 #: Window names an adapter uses for its rolling limits, and their lengths.
 _WINDOW_NAMES = {
@@ -41,6 +48,13 @@ _WINDOW_NAMES = {
     "weekly": ("week", 7 * 86400),
     "monthly": ("month", None),
 }
+
+
+def _iso(value: datetime | None) -> str | None:
+    """Render a timestamp as ISO 8601 with a ``Z`` suffix."""
+    if value is None:
+        return None
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def lane_identity(provider_info: Any) -> str:
@@ -58,15 +72,68 @@ def lane_identity(provider_info: Any) -> str:
 
 
 def lane_credential(provider_info: Any) -> str:
-    """The fingerprint the quota state keys this lane's reading under."""
-    return credential_fingerprint(lane_identity(provider_info))
+    """The fingerprint the quota payload names for this lane.
+
+    The digest rule is the one :func:`quota.models.credential_fingerprint`
+    uses; the two must agree, and a test pins that.  The raw profile path is
+    never part of a payload.
+    """
+    identity = lane_identity(provider_info)
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
 
 
-def lanes_reading(provider_info: Any) -> QuotaReading | None:
+@dataclass(slots=True)
+class LaneReading:
+    """The allowance one agent reported during a turn.
+
+    The shape matches :class:`~llm_rosetta_gateway.quota.models.QuotaReading`
+    so the quota service renders it without a translation step, but it lives
+    here so the transport needs no state-layer import.
+    """
+
+    probe: str
+    credential: str
+    windows: list[QuotaWindow] = field(default_factory=list)
+    plan: str | None = None
+    status: str = STATUS_OK
+    error: str | None = None
+    read_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    demote_at: float = 100.0
+    advisory: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the JSON shape consumed by the admin panel."""
+        return {
+            "probe": self.probe,
+            "credential": self.credential,
+            "plan": self.plan,
+            "status": self.status,
+            "error": self.error,
+            "read_at": _iso(self.read_at),
+            "demote_at": self.demote_at,
+            "advisory": self.advisory,
+            "windows": [w.to_dict() for w in self.windows],
+        }
+
+
+_READINGS: dict[str, LaneReading] = {}
+_READINGS_LOCK = threading.Lock()
+
+
+def clear_lane_readings() -> None:
+    """Drop every recorded reading.
+
+    The store is process-wide, so tests are the one caller that needs to start
+    from nothing.
+    """
+    with _READINGS_LOCK:
+        _READINGS.clear()
+
+
+def lanes_reading(provider_info: Any) -> LaneReading | None:
     """The last allowance this lane's agent reported, if any."""
-    from llm_rosetta_gateway.quota.state import QUOTA_STATE
-
-    return QUOTA_STATE.get_reading(ACP_QUOTA_PROBE, lane_credential(provider_info))
+    with _READINGS_LOCK:
+        return _READINGS.get(lane_identity(provider_info))
 
 
 def _body_of(update: dict[str, Any]) -> dict[str, Any] | None:
@@ -176,7 +243,7 @@ def windows_of(limit: dict[str, Any]) -> list[QuotaWindow]:
     return [window for window in windows if window.used_percent is not None]
 
 
-def reading_of(update: dict[str, Any], provider_info: Any) -> QuotaReading | None:
+def reading_of(update: dict[str, Any], provider_info: Any) -> LaneReading | None:
     """Normalize one ``usage_update`` into a reading, or ``None``.
 
     A usage update that carries no rate-limit metadata is a token-count
@@ -188,10 +255,25 @@ def reading_of(update: dict[str, Any], provider_info: Any) -> QuotaReading | Non
     windows = windows_of(limit)
     if not windows:
         return None
-    return QuotaReading(
+    return LaneReading(
         probe=ACP_QUOTA_PROBE,
         credential=lane_credential(provider_info),
         windows=windows,
         status=STATUS_OK,
         read_at=datetime.now(timezone.utc),
     )
+
+
+def record_reading(update: dict[str, Any], provider_info: Any) -> bool:
+    """Record the reading *update* carries, if it carries one.
+
+    Returns:
+        Whether the update reported an allowance.  A token-count-only update
+        leaves the last reading untouched and returns ``False``.
+    """
+    reading = reading_of(update, provider_info)
+    if reading is None:
+        return False
+    with _READINGS_LOCK:
+        _READINGS[lane_identity(provider_info)] = reading
+    return True

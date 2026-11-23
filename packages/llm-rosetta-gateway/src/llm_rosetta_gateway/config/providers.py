@@ -431,6 +431,31 @@ def managed_auth_state_dir(provider: str, data_dir: str | None) -> str | None:
     return _auth_state_dir(data_dir, provider)
 
 
+def _managed_profile_dirs(
+    provider_key: str,
+    cfg: dict[str, Any],
+    data_dir: str | None,
+    *,
+    lane_transport: str,
+    exchange: Any | None,
+) -> tuple[str | None, str | None]:
+    """The two profile directories one entry owns, if any.
+
+    The ACP home is derived only for an agent lane; the shim-exchange record
+    directory exists only when the shim ships an exchange.  Either is ``None``
+    when the operator named a path of their own or there is no data directory.
+    """
+    acp_home = (
+        managed_acp_state_dir(provider_key, cfg, data_dir)
+        if lane_transport == "acp"
+        else None
+    )
+    auth_home = (
+        _auth_state_dir(data_dir, provider_key) if exchange is not None else None
+    )
+    return acp_home, auth_home
+
+
 def _profile_key(path: str) -> str:
     """A comparison key that treats one directory written two ways as one."""
     return os.path.normcase(os.path.abspath(os.path.expanduser(path)))
@@ -1290,6 +1315,18 @@ def build_provider_info(
         provider_key, cfg, exchange, data_dir, effective_acp_env
     )
 
+    # Which profile directories this entry owns, for the admin lifecycle.
+    # Computed here, where the builder already knows whether the path was
+    # chosen by the gateway or written by the operator, so the admin layer
+    # needs no config import to answer the same question.
+    managed_acp_home, managed_auth_home = _managed_profile_dirs(
+        provider_key,
+        cfg,
+        data_dir,
+        lane_transport=lane_transport,
+        exchange=exchange,
+    )
+
     return ProviderInfo(
         name=provider_type,
         config_name=provider_key,
@@ -1345,6 +1382,8 @@ def build_provider_info(
         acp_harden=acp_harden,
         acp_env=effective_acp_env,
         acp_state_dir=acp_home,
+        managed_acp_state_dir=managed_acp_home,
+        managed_auth_state_dir=managed_auth_home,
         **acp_limits,
         quota_probe_id=quota_probe,
         quota_url=quota_url,
