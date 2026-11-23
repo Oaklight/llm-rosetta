@@ -620,16 +620,13 @@ class AcpTransport:
     def _hardened(self, provider_info: ProviderInfo) -> bool:
         """Whether the gateway gives this provider's agent its own profile.
 
-        The profile travels with the command, not with whoever wrote it.  An
-        operator who points ``acp.argv`` at another ``agy`` install — a newer
-        version, a wrapper — still gets ``--gemini-dir``, the no-tools agent
-        and the deny-all hook, so a version switch keeps both the sign-in
-        store and the tool gate.  ``acp.harden: false`` is the explicit
-        opt-out for a command that must run as written.
+        The answer is resolved when the provider is built: the builder
+        follows the command's name when the entry says nothing, and
+        ``acp.harden: true`` forces it for a renamed binary or a wrapper that
+        forwards ``agy``'s flags.  ``acp.harden: false`` runs the command as
+        written.
         """
-        if not getattr(provider_info, "acp_harden", True):
-            return False
-        return is_agy(self._declared_argv(provider_info))
+        return bool(getattr(provider_info, "acp_harden", False))
 
     def _argv(self, provider_info: ProviderInfo) -> list[str]:
         """The command that starts this provider's agent.
@@ -2175,8 +2172,7 @@ def _default_workspace(provider_info: ProviderInfo) -> str:
     import tempfile
     from pathlib import Path
 
-    argv = list(getattr(provider_info, "acp_argv", None) or DEFAULT_AGENT_ARGV)
-    if getattr(provider_info, "acp_harden", True) and is_agy(argv):
+    if getattr(provider_info, "acp_harden", False):
         base = Path(
             getattr(provider_info, "acp_state_dir", None)
             or state_dir_for(None, provider_info.config_name)

@@ -193,18 +193,47 @@ def gemini_dir_of(argv: list[str]) -> str | None:
     return flag_value(argv, _GEMINI_FLAGS)
 
 
+def gemini_dir_values(argv: list[str]) -> list[str]:
+    """Every value the ``--gemini-dir`` forms carry, in order.
+
+    Unlike :func:`flag_value`, this keeps malformed occurrences visible: a
+    trailing flag with no value yields ``""``, so the config can refuse it
+    instead of letting :func:`harden_argv` consume the next injected flag as
+    the directory.
+    """
+    values: list[str] = []
+    index = 0
+    while index < len(argv):
+        arg = argv[index]
+        for name in _GEMINI_FLAGS:
+            if arg == name:
+                values.append(argv[index + 1] if index + 1 < len(argv) else "")
+                index += 2
+                break
+            if arg.startswith(name + "="):
+                values.append(arg.split("=", 1)[1])
+                index += 1
+                break
+        else:
+            index += 1
+    return values
+
+
 def harden_argv(argv: list[str], state_dir: str) -> list[str]:
     """Add the flags that put ``agy`` in the gateway-owned profile.
 
     A ``--gemini-dir`` already in *argv* is kept: it is another profile the
     gateway owns (an entry's own login profile), and the hardening is written
-    into that one.  The agent flag is always ours.  ``--process-per-session``
-    is what lets ``agy`` load an HTTP MCP server named on ``session/new``
-    (measured on 1.5.13); without it the client tools are not listed.
+    into that one.  The agent and permission flags are always ours; an
+    operator-written ``--dangerously-skip-permissions=true`` is replaced, not
+    trusted, because the gate is the reason this profile exists.
+    ``--process-per-session`` is what lets ``agy`` load an HTTP MCP server
+    named on ``session/new`` (measured on 1.5.13); without it the client tools
+    are not listed.
     """
     out = list(argv)
-    if not any(a.startswith("--dangerously-skip-permissions") for a in out):
-        out.append(PERMISSION_FLAG)
+    out = _without_flag(out, ("--dangerously-skip-permissions",))
+    out.append(PERMISSION_FLAG)
     if "--process-per-session" not in out:
         out.append("--process-per-session")
     if gemini_dir_of(out) is None:

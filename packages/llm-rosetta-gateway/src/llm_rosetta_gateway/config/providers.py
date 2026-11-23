@@ -655,30 +655,109 @@ def _resolve_acp_argv(
     return None
 
 
-def _resolve_acp_harden(cfg: dict[str, Any], provider_key: str) -> bool:
-    """Whether the transport gives an operator-named ``agy`` its own profile.
+def _resolve_acp_harden(cfg: dict[str, Any], provider_key: str) -> bool | None:
+    """The entry's explicit hardening choice, or ``None`` for "by name".
 
-    True by default, including for a command the provider entry wrote: the
-    hardening is what keeps the sign-in store, the tool gate and the workspace
-    with the lane when the operator moves to another ``agy`` build.
-    ``acp.harden: false`` is the explicit opt-out for a command that must run
-    exactly as written.
+    The three states are deliberate.  Absent (``None``) hardens a command
+    whose executable is named ``agy`` — the ordinary install.  ``True``
+    forces the gateway-owned profile on whatever command the entry names, for
+    a renamed binary (``agy-1.7``) or a wrapper that forwards agy's flags.
+    ``False`` runs the command as written.
+
+    The effective answer is :func:`_effective_harden`; this function only
+    reads and validates the operator's declaration.
 
     Raises:
         ValueError: ``acp.harden`` is present but is not a boolean.
     """
     block = cfg.get("acp")
     if not isinstance(block, dict):
-        return True
+        return None
     value = block.get("harden")
     if value is None:
-        return True
+        return None
     if not isinstance(value, bool):
         raise ValueError(
             f"Provider '{provider_key}': acp.harden must be true or false, "
             f"got {value!r}"
         )
     return value
+
+
+def _effective_harden(declared: bool | None, argv: tuple[str, ...] | None) -> bool:
+    """Whether the gateway gives this lane's agent its own profile.
+
+    An absent ``acp.harden`` follows the command's name, so the shim's default
+    ``agy`` command is hardened without the operator repeating it.  An
+    explicit ``True`` forces the profile on a renamed or wrapped command; an
+    explicit ``False`` runs it as written.
+    """
+    if declared is not None:
+        return declared
+    if argv is None:
+        # An ACP lane with no command of its own runs the transport's default
+        # agent, which is ``agy`` and therefore hardened.
+        return True
+    from ..transport.acp_profile import is_agy
+
+    return is_agy(list(argv))
+
+
+#: Provider/argv pairs already warned about.  ``build_provider_info`` runs on
+#: the request path, so an unhardened wrapper must not log on every turn.
+_NOT_HARDENED_WARNED: set[tuple[str, tuple[str, ...]]] = set()
+
+
+def _warn_not_hardened(provider_key: str, argv: tuple[str, ...]) -> None:
+    """Say once that a replaced agent command does not get the profile.
+
+    A shim that starts ``agy`` declares the profile the lane expects.  When
+    the entry replaces that command with something not named ``agy`` — a
+    wrapper, a renamed download — the name-based default cannot tell it is
+    the same agent, so the tool gate is silently absent.  The operator either
+    forces the profile with ``acp.harden: true`` or accepts the command as
+    written with ``false``.
+    """
+    key = (provider_key, tuple(argv))
+    if key in _NOT_HARDENED_WARNED:
+        return
+    _NOT_HARDENED_WARNED.add(key)
+    logger.warning(
+        "Provider '%s': the agent command %r is not named 'agy', so the "
+        "gateway-owned profile is not applied; set acp.harden: true to force "
+        "it on this command, or false to accept it.",
+        provider_key,
+        list(argv),
+    )
+
+
+def _resolve_acp_install(
+    cfg: dict[str, Any],
+    shim: Any | None,
+    provider_key: str,
+    lane_transport: str,
+) -> tuple[tuple[str, ...] | None, bool]:
+    """Return the lane's install command and whether its profile is ours.
+
+    Only an ACP lane has an install to resolve.  A shim that starts ``agy``
+    but is overridden by a command of another name gets one warning: the
+    name-based default cannot see that the unknown command is the same agent.
+    """
+    if lane_transport != "acp":
+        return None, True
+    argv = _resolve_acp_argv(cfg, shim, provider_key)
+    declared = _resolve_acp_harden(cfg, provider_key)
+    if (
+        declared is None
+        and shim is not None
+        and shim.connection.acp_argv
+        and argv is not None
+    ):
+        from ..transport.acp_profile import is_agy
+
+        if is_agy(list(shim.connection.acp_argv)) and not is_agy(list(argv)):
+            _warn_not_hardened(provider_key, argv)
+    return argv, _effective_harden(declared, argv)
 
 
 def _acp_env(
@@ -737,6 +816,7 @@ def _lane_environment(
     data_dir: str | None,
     lane_transport: str,
     argv: tuple[str, ...] | None = None,
+    harden: bool = False,
 ) -> tuple[str, dict[str, str] | None]:
     """Return the persistent home and the environment one lane starts with.
 
@@ -747,17 +827,48 @@ def _lane_environment(
 
     An ``agy`` command may already name ``--gemini-dir``.  That directory is
     the profile the transport writes into, so it is also the home the sign-in
-    and the environment must name.  When ``acp.home`` names a different one,
-    the two are refused rather than split silently across the agent and its
-    sign-in.
+    and the environment must name.  The flag is validated here — one
+    occurrence, a non-empty absolute path — because a malformed one would
+    otherwise let hardening consume the next injected flag as its value.  When
+    ``acp.home`` names a different directory, the two are refused rather than
+    split silently across the agent and its sign-in.
+
+    An unhardened ``agy`` command with no ``--gemini-dir`` is refused: the
+    agent would read the CLI's own profile while the gateway publishes a home
+    nobody signs in to.  Naming the directory, or leaving hardening on, keeps
+    the contract true on every branch.
     """
     if lane_transport != "acp":
         return _acp_state_dir(data_dir, provider_key), _acp_env(cfg, shim, provider_key)
     home = _acp_state_dir(data_dir, provider_key, cfg)
     if argv:
-        from ..transport.acp_profile import gemini_dir_of, is_agy
+        from ..transport.acp_profile import gemini_dir_values, is_agy
 
-        if is_agy(argv) and (named := gemini_dir_of(list(argv))):
+        agy = is_agy(list(argv))
+        named: str | None = None
+        if harden or agy:
+            values = gemini_dir_values(list(argv))
+            if len(values) > 1:
+                raise ValueError(
+                    f"Provider '{provider_key}': the agent command names "
+                    f"--gemini-dir more than once ({values!r}); keep one "
+                    f"profile"
+                )
+            if values:
+                named = values[0]
+                if not named or named.startswith("-"):
+                    raise ValueError(
+                        f"Provider '{provider_key}': --gemini-dir in the agent "
+                        f"command must be followed by a directory, not a flag "
+                        f"or nothing"
+                    )
+        if agy and not harden and named is None:
+            raise ValueError(
+                f"Provider '{provider_key}': acp.harden: false runs agy as "
+                f"written, so the profile it reads is not knowable here. Name "
+                f"it with --gemini-dir <dir>, or leave hardening on."
+            )
+        if named is not None:
             expanded = os.path.expanduser(named)
             if not os.path.isabs(expanded):
                 raise ValueError(
@@ -1053,9 +1164,9 @@ def build_provider_info(
     # volume carries the login across restarts and image upgrades.  The
     # effective environment is built once: the ACP spawn, the vendor sign-in
     # driver and the admin's status probe must all name the same profile.
-    acp_argv = _resolve_acp_argv(cfg, shim, provider_key)
+    acp_argv, acp_harden = _resolve_acp_install(cfg, shim, provider_key, lane_transport)
     acp_home, effective_acp_env = _lane_environment(
-        cfg, shim, provider_key, data_dir, lane_transport, acp_argv
+        cfg, shim, provider_key, data_dir, lane_transport, acp_argv, acp_harden
     )
 
     # Name the effective source for the admin editor.
@@ -1125,7 +1236,7 @@ def build_provider_info(
             cfg.get("acp_argv") is not None
             or (isinstance(cfg.get("acp"), dict) and cfg["acp"].get("argv") is not None)
         ),
-        acp_harden=_resolve_acp_harden(cfg, provider_key),
+        acp_harden=acp_harden,
         acp_env=effective_acp_env,
         acp_state_dir=acp_home,
         **acp_limits,
