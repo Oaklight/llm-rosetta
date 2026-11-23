@@ -15,6 +15,10 @@ permissions:
 env:
   PYTHONIOENCODING: utf-8
 
+concurrency:
+  group: zerodep-update
+  cancel-in-progress: false
+
 jobs:
   check-and-update:
     runs-on: ubuntu-latest
