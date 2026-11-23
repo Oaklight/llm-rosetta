@@ -99,6 +99,31 @@ keyring，`agy` 会把文件形式的 token 写在该目录下。把网关的数
 标记文件（`.llm-rosetta-login.json`）；重启后面板仍显示 **已连接** 就是靠它。
 标记里只有时间戳，没有任何 token。
 
+## 切换 agent 版本
+
+agent 命令指定的是**安装**，`acp.home` 指定的是**配置**。要运行另一个 `agy`
+版本，把 `acp.argv` 指向它，配置目录保持不变：
+
+```jsonc
+"antigravity": {
+  "type": "antigravity--acp",
+  "acp": {
+    "home": "saved/antigravity-work",
+    "argv": ["/opt/agy-1.7/bin/agy", "acp"]
+  }
+}
+```
+
+旧的顶层 `acp_argv` 仍可作为别名使用。只要命令启动的是 `agy`，无论由 shim 还是
+提供方条目写出，网关都会套用自己的配置：`--gemini-dir`、无工具 agent、
+拒绝一切的 `PreToolUse` 钩子和会话闸门都保留。因此切换版本既不会重新放开主机
+工具，也不会丢失登录。命令必须逐字执行时，用 `"harden": false` 显式退出；这同时
+也放弃配置目录和登录存储。
+
+如果命令本身已经带 `--gemini-dir`，该目录就是登录写入的配置目录。不要设置
+`acp.home`，或把它设为同一路径：两个不同目录会被拒绝，而不是让 agent 与登录
+各写一处。
+
 ## 模型
 
 请求里的模型名会作为该会话的 `model` 选项交给 agent。模型名是 agent 自己的，
