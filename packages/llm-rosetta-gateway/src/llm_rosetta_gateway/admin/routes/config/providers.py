@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import time
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
@@ -66,6 +67,97 @@ def _warn(report: dict[str, Any], message: str) -> None:
     logger.warning("%s", message)
 
 
+def _empty_directory(path: str) -> bool:
+    """Whether *path* is a directory with no entries, so it may be replaced."""
+    try:
+        return os.path.isdir(path) and not os.listdir(path)
+    except OSError:
+        return False
+
+
+def _set_aside(path: str) -> str:
+    """Rename one profile to a timestamped sibling and return the new path.
+
+    A rename target can already exist — an earlier entry of that name, or a
+    request that created its lane directory.  Overwriting it would destroy a
+    sign-in, and leaving it would keep the renamed entry's own sign-in behind,
+    so the occupant is kept under a sibling name an operator can inspect.
+    """
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    candidate = f"{path}.superseded-{stamp}"
+    suffix = 1
+    while os.path.lexists(candidate):
+        candidate = f"{path}.superseded-{stamp}-{suffix}"
+        suffix += 1
+    shutil.move(path, candidate)
+    return candidate
+
+
+def _make_room(
+    new_path: str, old_path: str, report: dict[str, Any]
+) -> tuple[bool, str | None]:
+    """Clear a rename target; return whether to proceed and what was set aside.
+
+    An empty directory is replaced silently.  A non-empty one is kept as a
+    timestamped sibling: the rename must carry its own profile into place, and
+    the occupant may still be the only copy of another sign-in.
+    """
+    if not os.path.lexists(new_path):
+        return True, None
+    if _empty_directory(new_path):
+        try:
+            os.rmdir(new_path)
+        except OSError as exc:
+            _warn(
+                report,
+                f"could not clear the empty profile {new_path!r}: {exc}; "
+                f"the old profile {old_path!r} was left in place",
+            )
+            return False, None
+        return True, None
+    try:
+        return True, _set_aside(new_path)
+    except OSError as exc:
+        _warn(
+            report,
+            f"could not set aside the existing profile {new_path!r}: {exc}; "
+            f"the old profile {old_path!r} was left in place",
+        )
+        return False, None
+
+
+def _move_profile(
+    old_path: str,
+    new_path: str,
+    kept_at: str | None,
+    report: dict[str, Any],
+) -> bool:
+    """Move one profile into place, restoring what was set aside on failure."""
+    try:
+        os.makedirs(os.path.dirname(new_path), exist_ok=True)
+        shutil.move(old_path, new_path)
+    except OSError as exc:
+        if kept_at is not None:
+            try:
+                shutil.move(kept_at, new_path)
+            except OSError:
+                pass
+        _warn(
+            report,
+            f"could not move the profile {old_path!r} to {new_path!r}: {exc}",
+        )
+        return False
+    report["moved"].append({"from": old_path, "to": new_path})
+    if kept_at is not None:
+        report["superseded"].append({"profile": new_path, "kept_at": kept_at})
+        _warn(
+            report,
+            f"the new profile {new_path!r} already existed; it was kept as "
+            f"{kept_at!r} and the old profile {old_path!r} was moved into place",
+        )
+    return True
+
+
 def _relocate_profiles(
     *,
     old_info: Any,
@@ -81,8 +173,19 @@ def _relocate_profiles(
     own — is left on disk with a warning.  A rename must never delete a
     sign-in: disabling an entry or switching its lane may be temporary, and
     the profile is what makes switching back cheap.
+
+    When the target name already has a profile, that profile is set aside to
+    ``<path>.superseded-<stamp>`` and the old profile is moved into place.
+    A rename carries the entry's sign-in with it; the earlier warning-only
+    behaviour left the login under the old name, so the panel said the new
+    entry needed authentication right after a successful sign-in.
     """
-    report: dict[str, Any] = {"moved": [], "removed": [], "warnings": []}
+    report: dict[str, Any] = {
+        "moved": [],
+        "removed": [],
+        "superseded": [],
+        "warnings": [],
+    }
     old_paths = _managed_paths(old_info)
     if remove:
         for old_path in old_paths.values():
@@ -103,23 +206,9 @@ def _relocate_profiles(
             continue
         if os.path.abspath(old_path) == os.path.abspath(new_path):
             continue
-        if os.path.exists(new_path):
-            _warn(
-                report,
-                f"the new profile {new_path!r} already exists; the old "
-                f"profile {old_path!r} was left in place",
-            )
-            continue
-        try:
-            os.makedirs(os.path.dirname(new_path), exist_ok=True)
-            shutil.move(old_path, new_path)
-        except OSError as exc:
-            _warn(
-                report,
-                f"could not move the profile {old_path!r} to {new_path!r}: {exc}",
-            )
-            continue
-        report["moved"].append({"from": old_path, "to": new_path})
+        ready, kept_at = _make_room(new_path, old_path, report)
+        if ready:
+            _move_profile(old_path, new_path, kept_at, report)
     return report
 
 
