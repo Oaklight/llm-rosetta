@@ -250,7 +250,7 @@ All notable changes to LLM-Rosetta are documented here. This project follows [Ke
 - **`llm_rosetta.routing`、`llm_rosetta.capabilities` 以及 `llm_rosetta.shims.provider_shim` 中的 shim 数据类**（issue [#1657](https://github.com/Oaklight/llm-rosetta/issues/1657)，PR [#1659](https://github.com/Oaklight/llm-rosetta/pull/1659)）：两个 0.13.0 扁平模块以转发模块的形式恢复，名字与 0.13.0 完全相同——`llm_rosetta.routing` 从 `llm_rosetta.contracts.routing` 转发 `ProviderType`、`ResolvedRoute` 与 `Router`，`llm_rosetta.capabilities` 从各自的现有位置转发它的十二个名字。导入时各发出一次 `DeprecationWarning`，0.15.0 移除。`llm_rosetta.shims.provider_shim` 保留 shim 注册表，并以同一批对象再导出 `llm_rosetta.contracts.shim` 中的 `ProviderShim` 等数据类；从这里导入它们已弃用（写在模块 docstring 中，运行时不告警），这些再导出在 0.15.0 移除。
 
 ### 修复
-- **管理面板的模型测试停在工具调用处**：ACP 通道以客户端工具调用结束一轮，并等待客户端在下一轮请求中带回结果；因此函数调用测试现在直接返回 `tool_calls` 响应，而不是自行编造结果。带工具的测试会声明自己的会话（通道拒绝没有会话的工具请求）；不带工具的请求不声明会话。
+- **管理面板的模型测试返回工具调用，而不是后续回合**：函数调用测试此前会自行回答工具调用并返回完成后的正文，因此面板看不到 `tool_calls`。现在返回第一次 `tool_calls` 响应。测试仍会回答一次调用以归还 ACP 通道的 agent 锁——面板测试没有真实客户端来提交结果，而挂起的回合会持有锁——但这次 follow-up 的正文不展示；若它失败，则报告该错误。带工具的测试会声明自己的会话（通道拒绝没有会话的工具请求）；不带工具的请求不声明会话。
 - **过期的 Service Worker 会被注销，而不是继续轮询**：曾在网关源站运行过 PWA 的浏览器会持续请求 `/sw.js`；404 是更新失败，不是注销，因此注册保留、请求反复出现。现在 `/sw.js` 返回一个会注销自身并删除缓存的 worker，并带 `no-store`。
 - **未登录的 ACP 通道会让 Test 失败**：连通性探针只因为 agent 可执行文件启动就报告条目可达，即使它无法完成一轮。现在会在打开一次性会话前检查厂商托管 exchange 的 `needs_interactive_setup`，未登录时让 `reachable` 为 false 并给出登录提示。exchange 也可以声明该检查不具权威性（Antigravity，其 CLI 把 token 保存在网关读不到的地方）：探针随后询问 agent，由 agent 自己的登录提示让 Test 失败，而不是依据“没有记录”来判断。
 - **ACP 轮次携带 agent 自己的输入/输出拆分**：传输层此前只使用 `usage_update` 里的上下文数字，而它没有输出计数，因此每个 ACP 响应都报告 `completion_tokens: 0`。Claude 适配器在 prompt 响应（ACP v1）或 idle 状态更新（ACP v2）里报告每轮拆分；传输层现在记录该拆分，转换器映射它，上下文数字仅作为只报告该数字的 agent 的回退。
