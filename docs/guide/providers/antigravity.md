@@ -137,6 +137,11 @@ Set `"harden": true` to force the profile on that command — a wrapper must pas
 it starts `agy`, it must also name `--gemini-dir`, because otherwise the agent
 and the sign-in cannot share a profile and the lane is refused.
 
+A command that hides the whole call in a shell string
+(`["bash", "-lc", "… agy acp"]`) has no literal `acp` token, so the panel
+refuses to drive its sign-in; use `["<agy>", "acp"]`, or run the CLI's own
+sign-in in that profile.
+
 If the command already names `--gemini-dir`, that directory is the home the
 sign-in writes. Leave `acp.home` unset, or set it to the same path: two
 different directories are refused rather than split between the agent and its
