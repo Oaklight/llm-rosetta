@@ -1358,9 +1358,37 @@
           <input id="provName" placeholder="e.g. my-openai, openrouter-claude" data-i18n-placeholder="placeholder.providerName">
         </div>
       </div>
-      <div class="form-group">
-        <label data-i18n="label.providerType">Model type</label>
-        <div class="prov-type-summary" id="provTypeSummary">—</div>
+      <!-- The provider preset: the service this entry stands on.  It fills
+           each capability's default shim; every capability can then be changed
+           on its own (Capabilities pane), so no capability has to be ticked
+           to choose a service. -->
+      <div class="endpoint-section visible" id="provPresetSection">
+        <div class="section-label"><span data-i18n="label.providerPreset">Provider preset</span></div>
+        <div class="form-row align-end">
+          <div class="form-group" style="flex:1;min-width:0">
+            <label data-i18n="label.topLevel">Top Level</label>
+            <div class="type-picker" id="typePickerWrapper">
+              <button type="button" id="typePickerTrigger" class="type-picker-trigger">
+                <img id="provTypeLogo" class="type-picker-logo" src="" alt="" style="display:none" onerror="this.style.display='none'">
+                <span id="typePickerLabel" class="tp-trigger-label tp-placeholder"></span>
+                <svg class="type-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="menu type-picker-dropdown" id="typePickerDropdown">
+                <div class="tp-view-toggle" role="tablist">
+                  <button type="button" data-view="top" role="tab" aria-selected="true" data-i18n="label.typeViewTop">Top level</button>
+                  <button type="button" data-view="tree" role="tab" aria-selected="false" data-i18n="label.typeViewTree">Tree</button>
+                </div>
+                <div class="tp-list" id="typePickerList" role="listbox"></div>
+              </div>
+            </div>
+          </div>
+          <div class="form-group" style="flex:0 0 38%;min-width:0">
+            <label data-i18n="label.baseType">Base Type</label>
+            <select id="provBaseType"></select>
+          </div>
+        </div>
+        <input type="hidden" id="provType">
+        <div class="field-hint" data-i18n="hint.providerPreset">Fills the default shim of each capability. A capability you change by hand keeps its choice when the preset changes.</div>
       </div>
 
       <div class="form-row align-end">
@@ -1432,30 +1460,6 @@
           </label>
         </div>
         <div class="endpoint-status" id="provLlmStatus" role="status" hidden></div>
-        <div class="form-row align-end">
-          <div class="form-group" style="flex:1;min-width:0">
-            <label data-i18n="label.topLevel">Top Level</label>
-            <div class="type-picker" id="typePickerWrapper">
-              <button type="button" id="typePickerTrigger" class="type-picker-trigger">
-                <img id="provTypeLogo" class="type-picker-logo" src="" alt="" style="display:none" onerror="this.style.display='none'">
-                <span id="typePickerLabel" class="tp-trigger-label tp-placeholder"></span>
-                <svg class="type-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-              </button>
-              <div class="menu type-picker-dropdown" id="typePickerDropdown">
-                <div class="tp-view-toggle" role="tablist">
-                  <button type="button" data-view="top" role="tab" aria-selected="true" data-i18n="label.typeViewTop">Top level</button>
-                  <button type="button" data-view="tree" role="tab" aria-selected="false" data-i18n="label.typeViewTree">Tree</button>
-                </div>
-                <div class="tp-list" id="typePickerList" role="listbox"></div>
-              </div>
-            </div>
-          </div>
-          <div class="form-group" style="flex:0 0 38%;min-width:0">
-            <label data-i18n="label.baseType">Base Type</label>
-            <select id="provBaseType"></select>
-          </div>
-        </div>
-        <input type="hidden" id="provType">
         <div class="form-group">
           <label data-i18n="label.urlTemplate">URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
           <input id="provUrlTemplate" placeholder="{base_url}/v1/chat/completions">

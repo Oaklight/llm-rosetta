@@ -18,7 +18,7 @@ import {
 } from '../core/credential.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect, createTypePicker } from '../components/type-picker.js';
-import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand } from '../core/shim-tree.js';
+import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand, shimGroupKey } from '../core/shim-tree.js';
 import { suggestedProviderName, pickDestination } from '../core/provider-pick.js';
 import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, orderedProviders, nonLlmFormatType } from '../core/provider-endpoints.js';
 import { routingRows, blockRow } from '../core/quota-lines.js';
@@ -68,21 +68,6 @@ function _applyShimHint(shim) {
   el.textContent = text;
   el.title = text;
   el.hidden = !text;
-}
-
-/** Name the selected type in the Basic pane's read-only summary.
- *
- *  The picker stays in the LLM endpoint card; this only says which choice it
- *  holds, so an operator reading the top of the form sees the type without
- *  scrolling to the endpoint. */
-function _updateTypeSummary(value, shim) {
-  const el = document.getElementById('provTypeSummary');
-  if (!el) return;
-  if (!value) { el.textContent = '—'; return; }
-  // The full type id is the unambiguous name: a vendor shim's display name
-  // alone loses the dialect, and appending the format repeats it for
-  // ``<vendor>--<format>`` shims.
-  el.textContent = (shim && shim.name) || value;
 }
 
 /** Re-render the hint for the picker's current selection.
@@ -1176,12 +1161,14 @@ function _renderAuthSummary() {
     pill.textContent = state
       ? _stateLabel(state)
       : _credentialText('prov.state.none', 'No status');
+    // A static key has no state to report; a pill saying so is noise.
+    pill.hidden = !state;
   }
   if (!detail) return;
   if (ui === 'static') {
     detail.textContent = shim.keyless
       ? _credentialText('prov.detailKeyless', 'No key needed.')
-      : _credentialText('prov.detailStatic', 'No refresh; there is no token status.');
+      : '';
     return;
   }
   if (state === 'unsaved') {
@@ -1641,7 +1628,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
     _credFormDirty = false;
     _credentialFor = null;
     _credentialData = null;
-    _updateTypeSummary(value, shimMap[value]);
+    _followPreset(value);
     _syncBaseTypeDropdown(typeModel.rootOf(value), value);
     _syncKeylessUI();
     const s = shimMap[value];
@@ -1676,7 +1663,6 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
   // paints it: the drawer always opens on Basic, on the source the entry's
   // shim declares.
   _clearProviderDrawerState(_editingCfg());
-  _updateTypeSummary(getSelectedValue(), shimMap[getSelectedValue()] || null);
   onTypeSelect(_applyType);
   document.getElementById('provBaseType').onchange = function () { selectValue(this.value); };
 
@@ -1811,6 +1797,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
       faceBaseEl.oninput = () => _markFaceHostMismatch(desc, faceBaseEl);
     }
     _renderEndpointStatus(desc, provCfg);
+    _initFaceOrigin(desc);
   }
   _renderLlmStatus(provCfg);
   // The LLM endpoint is the provider itself: its switch is `enabled`, the same
@@ -1853,6 +1840,13 @@ function toggleProvCapSection() {
     } else {
       const sec = document.getElementById(`provEndpoint_${desc.name}`);
       if (sec) sec.classList.toggle('visible', chk?.checked || false);
+      // A face ticked while its picker is still empty starts on the preset's
+      // shim, so choosing a service once is enough.
+      if (chk?.checked && sec && sec.dataset.manual !== '1'
+          && !document.getElementById(`provShim_${desc.name}`)?.value) {
+        _followPresetFace(desc, getSelectedValue());
+        _renderFaceOrigin(desc);
+      }
     }
   }
   _renderCapsSummary();
@@ -1873,6 +1867,22 @@ function _tickedCapabilities() {
  * answers the same question without opening the pane, which is the one thing a
  * hidden form cannot do.
  */
+/** One face on the Basic pane: its badge, the shim it uses, and whether the
+ *  preset or the operator chose it. */
+function _faceSummaryRow(name) {
+  const desc = (S.configData?.model_types || []).find(d => d.name === name);
+  const shim = desc && desc.is_llm
+    ? getSelectedValue()
+    : document.getElementById(`provShim_${name}`)?.value || '';
+  const origin = desc && !desc.is_llm ? _faceOrigin(desc) : '';
+  const originKey = origin === 'manual' ? 'label.faceOriginManual' : 'label.faceOriginPreset';
+  const originTag = origin
+    ? `<span class="face-origin${origin === 'manual' ? ' is-manual' : ''}">${esc(t(originKey))}</span>`
+    : '';
+  return `<div class="face-sum-row">${_capBadgesHtml([name], { cfg: _editingCfg() })}`
+    + `<code class="face-sum-shim">${esc(shim || '—')}</code>${originTag}</div>`;
+}
+
 function _renderCapsSummary() {
   const ticked = _tickedCapabilities().map((desc) => desc.name);
   const chips = document.getElementById('provCapsChips');
@@ -1881,7 +1891,7 @@ function _renderCapsSummary() {
     // thing it summarises, and a capability has one visual language in this
     // console.  A grey icon here read as "disabled" on a provider that serves.
     chips.innerHTML = ticked.length
-      ? _capBadgesHtml(ticked, { cfg: _editingCfg() })
+      ? ticked.map(_faceSummaryRow).join('')
       : `<span class="prov-field-hint">${esc(_credentialText('prov.capsNone', 'None selected'))}</span>`;
   }
   const count = document.getElementById('provCapsCount');
@@ -1977,6 +1987,8 @@ function _buildProvEndpointSections() {
           <input type="checkbox" id="provTypeEnabled_${desc.name}">
           <span>${esc(t('label.enabled'))}</span>
         </label>
+        <span class="face-origin" id="provFaceOrigin_${esc(desc.name)}" hidden></span>
+        <button type="button" class="btn btn-sm face-reset" id="provFaceReset_${esc(desc.name)}" hidden>${esc(t('btn.faceResetPreset'))}</button>
       </div>
       <div class="endpoint-status" id="provTypeStatus_${desc.name}" role="status" hidden></div>
       <div class="form-row">
@@ -2015,11 +2027,105 @@ function _buildProvEndpointSections() {
       logo: section.querySelector(`#provEndpointLogo_${desc.name}`),
       hidden: section.querySelector(`#provShim_${desc.name}`),
       viewToggle: false,
-      onChange: (value) => _applyEndpointChoice(desc, value),
+      onChange: (value) => {
+        _applyEndpointChoice(desc, value);
+        // A pick the operator makes is theirs: the preset stops steering this
+        // face, unless the pick is the preset's own.
+        if (!_presetDriven) {
+          section.dataset.manual = value === _presetShimFor(desc, getSelectedValue()) ? '' : '1';
+        }
+        _renderFaceOrigin(desc);
+        _renderCapsSummary();
+      },
     });
     picker.init();
     _endpointPickers.set(desc.name, picker);
+    section.querySelector(`#provFaceReset_${desc.name}`).addEventListener('click', () => {
+      section.dataset.manual = '';
+      _followPresetFace(desc, getSelectedValue());
+    });
   }
+}
+
+/** Set while the preset (not the operator) moves a face's picker. */
+let _presetDriven = false;
+
+/** The shim the preset offers for a typed face: the first registered shim of
+ *  that model type from the same vendor as the preset's shim.  Null when the
+ *  preset is a bare format, or its vendor has no shim of that type. */
+function _presetShimFor(desc, preset) {
+  const shims = S.configData?.registered_shims || [];
+  const base = shims.find(s => s.name === preset);
+  if (!base) return null;
+  const vendor = shimGroupKey(base);
+  const hit = shims.find(s => s.model_type === desc.name && shimGroupKey(s) === vendor);
+  return hit ? hit.name : null;
+}
+
+/** Move one face's picker to what the preset offers (no-op without an offer). */
+function _followPresetFace(desc, preset) {
+  const picker = _endpointPickers.get(desc.name);
+  const target = _presetShimFor(desc, preset);
+  if (!picker || !target || !picker.has(target)) return;
+  _presetDriven = true;
+  try {
+    picker.select(target);
+  } finally {
+    _presetDriven = false;
+  }
+}
+
+/** The preset changed: every face the operator has not set by hand follows. */
+function _followPreset(preset) {
+  for (const desc of (S.configData?.model_types || []).filter(d => !d.is_llm)) {
+    const section = document.getElementById(`provEndpoint_${desc.name}`);
+    if (section && section.dataset.manual !== '1') {
+      if (_presetShimFor(desc, preset)) {
+        _followPresetFace(desc, preset);
+      } else if (document.getElementById(`provShim_${desc.name}`)?.value) {
+        // The new preset has nothing for this face: its value stays, and from
+        // here on it is the operator's, so a later preset does not replace it.
+        section.dataset.manual = '1';
+      }
+    }
+    _renderFaceOrigin(desc);
+  }
+  _renderCapsSummary();
+}
+
+/** Decide on open whether a stored face follows the preset or was set by
+ *  hand.  Derived from the entry, never stored, so an old config opens exactly
+ *  as it was written. */
+function _initFaceOrigin(desc) {
+  const section = document.getElementById(`provEndpoint_${desc.name}`);
+  if (!section) return;
+  const target = _presetShimFor(desc, getSelectedValue());
+  const value = document.getElementById(`provShim_${desc.name}`)?.value || '';
+  section.dataset.manual = target && value && value !== target ? '1' : '';
+  _renderFaceOrigin(desc);
+}
+
+/** Origin of a face for display: 'preset', 'manual', or '' when the preset
+ *  offers nothing for it. */
+function _faceOrigin(desc) {
+  const section = document.getElementById(`provEndpoint_${desc.name}`);
+  if (!section || !getSelectedValue()) return '';
+  if (!document.getElementById(`provShim_${desc.name}`)?.value) return '';
+  // A value the preset offers nothing to replace is not the preset's.
+  if (!_presetShimFor(desc, getSelectedValue())) return 'manual';
+  return section.dataset.manual === '1' ? 'manual' : 'preset';
+}
+
+function _renderFaceOrigin(desc) {
+  const origin = _faceOrigin(desc);
+  const tag = document.getElementById(`provFaceOrigin_${desc.name}`);
+  const reset = document.getElementById(`provFaceReset_${desc.name}`);
+  if (tag) {
+    tag.hidden = !origin;
+    tag.textContent = origin === 'manual' ? t('label.faceOriginManual') : t('label.faceOriginPreset');
+    tag.classList.toggle('is-manual', origin === 'manual');
+  }
+  if (reset) reset.hidden = origin !== 'manual' || !_presetShimFor(desc, getSelectedValue());
 }
 
 /** The picker trees of the open provider modal, keyed by model type. */

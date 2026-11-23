@@ -115,7 +115,11 @@ test('the summary and the ticks share one visual language', () => {
   // it wears everywhere else.  A grey icon read as "disabled" on a provider
   // that serves.
   const body = oneFunction(providers, '_renderCapsSummary');
-  assert.ok(body.includes('_capBadgesHtml(ticked'), 'badges come from the card');
+  assert.ok(body.includes('_faceSummaryRow'), 'one row per ticked face');
+  assert.ok(
+    oneFunction(providers, '_faceSummaryRow').includes('_capBadgesHtml([name]'),
+    'badges come from the card',
+  );
   assert.ok(body.includes("getElementById('provCapsCount')"), 'the count is updated');
   assert.ok(
     providers.includes("const inkClass = desc.badge_class ? ` ${desc.badge_class}` : '';"),
@@ -143,4 +147,22 @@ test('every new string exists in both dictionaries', () => {
     assert.equal(enBody.split(`'${key}'`).length - 1, 1, `${key} in en`);
     assert.equal(zhBody.split(`'${key}'`).length - 1, 1, `${key} in zh`);
   }
+});
+
+test('the provider preset lives on Basic, and the Capabilities pane holds only faces', () => {
+  const basicAt = html.indexOf('id="provPaneBasic"');
+  const capsAt = html.indexOf('id="provPaneCaps"');
+  const presetAt = html.indexOf('id="provPresetSection"');
+  assert.ok(basicAt >= 0 && capsAt > basicAt, 'both panes exist, Basic first');
+  assert.ok(presetAt > basicAt && presetAt < capsAt, 'the preset is inside Basic');
+  assert.ok(html.indexOf('id="provModelsPath"') < capsAt, 'the model list path stays in Basic');
+});
+
+test('a face the operator set by hand is not moved by the preset', () => {
+  const body = oneFunction(providers, '_followPreset');
+  assert.ok(body.includes("dataset.manual !== '1'"), 'only faces that follow are moved');
+  assert.ok(
+    oneFunction(providers, '_initFaceOrigin').includes("value !== target ? '1' : ''"),
+    'a stored face that differs from the preset opens as manual',
+  );
 });
