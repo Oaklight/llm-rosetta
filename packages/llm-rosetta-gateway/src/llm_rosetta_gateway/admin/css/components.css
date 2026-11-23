@@ -366,11 +366,14 @@ tr:hover td { background: var(--surface-2); }
 }
 .prov-tab-count[hidden] { display:none; }
 .prov-pane[hidden] { display:none; }
-.prov-type-summary {
-  font-family:var(--mono); font-size:12px; color:var(--text-dim);
-  padding:7px 12px; background:var(--bg); border:1px solid var(--hairline);
-  border-radius:var(--radius); overflow-wrap:anywhere;
+.face-origin {
+  font-size:var(--fs-xs); color:var(--text-dim); padding:1px 8px;
+  border:1px solid var(--hairline); border-radius:999px; font-weight:400;
 }
+.face-origin.is-manual { color:var(--accent); border-color:var(--accent); }
+.face-origin[hidden], .face-reset[hidden] { display:none; }
+.face-sum-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; width:100%; }
+.face-sum-shim { font-family:var(--mono); font-size:12px; color:var(--text-dim); overflow-wrap:anywhere; }
 .prov-group { margin-bottom:16px; }
 .prov-group-title { font-size:12px; font-weight:600; color:var(--text-dim); text-transform:uppercase; letter-spacing:.5px; }
 .prov-auth-summary { margin-bottom:14px; padding:12px; border:1px solid var(--hairline); border-radius:var(--radius); background:var(--surface); }
