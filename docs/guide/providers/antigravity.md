@@ -130,7 +130,8 @@ own profile to any command that starts `agy`, whoever wrote it: the lane keeps
 `--gemini-dir`, the no-tools agent, the deny-all `PreToolUse` hook and the
 session gate, so switching versions neither re-enables host tools nor costs the
 sign-in. `"harden": false` is the explicit opt-out for a command that must run
-exactly as written; it also gives up the profile and the sign-in store.
+exactly as written; the lane then uses whichever store that command selects,
+not `acp.home`.
 
 If the command already names `--gemini-dir`, that directory is the home the
 sign-in writes. Leave `acp.home` unset, or set it to the same path: two
