@@ -1740,6 +1740,13 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
   }
   // Generate non-LLM endpoint sections and fill each one's picker.
   _buildProvEndpointSections();
+  const llmDesc = (S.configData?.model_types || []).find(d => d.is_llm);
+  if (llmDesc) {
+    const llmPicker = _ensureLlmFacePicker(llmDesc);
+    llmPicker.setTree(typeModel.roots, provType || '');
+    _endpointPickers.set(llmDesc.name, llmPicker);
+    _initFaceOrigin(llmDesc);
+  }
   for (const desc of (S.configData?.model_types || []).filter(d => !d.is_llm)) {
     const picker = _endpointPickers.get(desc.name);
     if (!picker) continue;
@@ -1835,18 +1842,13 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
 function toggleProvCapSection() {
   for (const desc of S.configData?.model_types || []) {
     const chk = document.getElementById(`provCap${_capitalize(desc.name)}`);
-    if (desc.is_llm) {
-      document.getElementById('provLlmSection').classList.toggle('visible', chk?.checked || false);
-    } else {
-      const sec = document.getElementById(`provEndpoint_${desc.name}`);
-      if (sec) sec.classList.toggle('visible', chk?.checked || false);
-      // A face ticked while its picker is still empty starts on the preset's
-      // shim, so choosing a service once is enough.
-      if (chk?.checked && sec && sec.dataset.manual !== '1'
-          && !document.getElementById(`provShim_${desc.name}`)?.value) {
-        _followPresetFace(desc, getSelectedValue());
-        _renderFaceOrigin(desc);
-      }
+    const sec = _faceSection(desc);
+    if (sec) sec.classList.toggle('visible', chk?.checked || false);
+    // A face ticked while its picker is still empty starts on the preset's
+    // shim, so choosing a service once is enough.
+    if (chk?.checked && sec && sec.dataset.manual !== '1' && !_faceShim(desc)) {
+      _followPresetFace(desc, getSelectedValue());
+      _renderFaceOrigin(desc);
     }
   }
   _renderCapsSummary();
@@ -1871,10 +1873,8 @@ function _tickedCapabilities() {
  *  preset or the operator chose it. */
 function _faceSummaryRow(name) {
   const desc = (S.configData?.model_types || []).find(d => d.name === name);
-  const shim = desc && desc.is_llm
-    ? getSelectedValue()
-    : document.getElementById(`provShim_${name}`)?.value || '';
-  const origin = desc && !desc.is_llm ? _faceOrigin(desc) : '';
+  const shim = desc ? _faceShim(desc) : '';
+  const origin = desc ? _faceOrigin(desc) : '';
   const originKey = origin === 'manual' ? 'label.faceOriginManual' : 'label.faceOriginPreset';
   const originTag = origin
     ? `<span class="face-origin${origin === 'manual' ? ' is-manual' : ''}">${esc(t(originKey))}</span>`
@@ -2027,16 +2027,7 @@ function _buildProvEndpointSections() {
       logo: section.querySelector(`#provEndpointLogo_${desc.name}`),
       hidden: section.querySelector(`#provShim_${desc.name}`),
       viewToggle: false,
-      onChange: (value) => {
-        _applyEndpointChoice(desc, value);
-        // A pick the operator makes is theirs: the preset stops steering this
-        // face, unless the pick is the preset's own.
-        if (!_presetDriven) {
-          section.dataset.manual = value === _presetShimFor(desc, getSelectedValue()) ? '' : '1';
-        }
-        _renderFaceOrigin(desc);
-        _renderCapsSummary();
-      },
+      onChange: (value) => _onFaceChange(desc, value),
     });
     picker.init();
     _endpointPickers.set(desc.name, picker);
@@ -2047,6 +2038,56 @@ function _buildProvEndpointSections() {
   }
 }
 
+/** The block a face's controls live in: the LLM endpoint is static markup,
+ *  the typed endpoints are built per open. */
+function _faceSection(desc) {
+  return document.getElementById(desc.is_llm ? 'provLlmSection' : `provEndpoint_${desc.name}`);
+}
+
+/** A face's own shim value (the LLM face's is the saved `type`). */
+function _faceShim(desc) {
+  return document.getElementById(`provShim_${desc.name}`)?.value || '';
+}
+
+/** One face's picker changed: record who chose, then repaint.  The LLM face
+ *  has no path or host to refill, so only the typed faces apply the choice. */
+function _onFaceChange(desc, value) {
+  if (!desc.is_llm) _applyEndpointChoice(desc, value);
+  // A pick the operator makes is theirs: the preset stops steering this
+  // face, unless the pick is the preset's own.
+  if (!_presetDriven) {
+    _faceSection(desc).dataset.manual = value === _presetShimFor(desc, getSelectedValue()) ? '' : '1';
+  }
+  _renderFaceOrigin(desc);
+  _renderCapsSummary();
+}
+
+/** The LLM face's picker: the same tree as the preset, in tree view so a
+ *  vendor's every base type can be chosen. */
+let _llmFacePicker = null;
+function _ensureLlmFacePicker(desc) {
+  if (_llmFacePicker) return _llmFacePicker;
+  const el = id => document.getElementById(id);
+  _llmFacePicker = createTypePicker({
+    wrapper: el('provLlmPicker'),
+    trigger: el('provLlmTrigger'),
+    dropdown: el('provLlmDropdown'),
+    list: el('provLlmList'),
+    label: el('provLlmLabel'),
+    logo: el('provLlmLogo'),
+    hidden: el('provShim_llm'),
+    viewToggle: false,
+    view: 'tree',
+    onChange: (value) => _onFaceChange(desc, value),
+  });
+  _llmFacePicker.init();
+  el('provFaceReset_llm').addEventListener('click', () => {
+    _faceSection(desc).dataset.manual = '';
+    _followPresetFace(desc, getSelectedValue());
+  });
+  return _llmFacePicker;
+}
+
 /** Set while the preset (not the operator) moves a face's picker. */
 let _presetDriven = false;
 
@@ -2054,6 +2095,8 @@ let _presetDriven = false;
  *  that model type from the same vendor as the preset's shim.  Null when the
  *  preset is a bare format, or its vendor has no shim of that type. */
 function _presetShimFor(desc, preset) {
+  // The LLM face is the preset itself unless the operator picks another.
+  if (desc.is_llm) return preset || null;
   const shims = S.configData?.registered_shims || [];
   const base = shims.find(s => s.name === preset);
   if (!base) return null;
@@ -2077,12 +2120,12 @@ function _followPresetFace(desc, preset) {
 
 /** The preset changed: every face the operator has not set by hand follows. */
 function _followPreset(preset) {
-  for (const desc of (S.configData?.model_types || []).filter(d => !d.is_llm)) {
-    const section = document.getElementById(`provEndpoint_${desc.name}`);
+  for (const desc of S.configData?.model_types || []) {
+    const section = _faceSection(desc);
     if (section && section.dataset.manual !== '1') {
       if (_presetShimFor(desc, preset)) {
         _followPresetFace(desc, preset);
-      } else if (document.getElementById(`provShim_${desc.name}`)?.value) {
+      } else if (_faceShim(desc)) {
         // The new preset has nothing for this face: its value stays, and from
         // here on it is the operator's, so a later preset does not replace it.
         section.dataset.manual = '1';
@@ -2097,10 +2140,10 @@ function _followPreset(preset) {
  *  hand.  Derived from the entry, never stored, so an old config opens exactly
  *  as it was written. */
 function _initFaceOrigin(desc) {
-  const section = document.getElementById(`provEndpoint_${desc.name}`);
+  const section = _faceSection(desc);
   if (!section) return;
   const target = _presetShimFor(desc, getSelectedValue());
-  const value = document.getElementById(`provShim_${desc.name}`)?.value || '';
+  const value = _faceShim(desc);
   section.dataset.manual = target && value && value !== target ? '1' : '';
   _renderFaceOrigin(desc);
 }
@@ -2108,9 +2151,9 @@ function _initFaceOrigin(desc) {
 /** Origin of a face for display: 'preset', 'manual', or '' when the preset
  *  offers nothing for it. */
 function _faceOrigin(desc) {
-  const section = document.getElementById(`provEndpoint_${desc.name}`);
+  const section = _faceSection(desc);
   if (!section || !getSelectedValue()) return '';
-  if (!document.getElementById(`provShim_${desc.name}`)?.value) return '';
+  if (!_faceShim(desc)) return '';
   // A value the preset offers nothing to replace is not the preset's.
   if (!_presetShimFor(desc, getSelectedValue())) return 'manual';
   return section.dataset.manual === '1' ? 'manual' : 'preset';
@@ -3084,7 +3127,7 @@ async function _saveProvider() {
   const stayOnCredential = _saveAndManage;
   _saveAndManage = false;
   const name = document.getElementById('provName').value.trim();
-  const provType = document.getElementById('provType').value;
+  const provType = document.getElementById('provShim_llm').value;
   const baseUrl = document.getElementById('provBaseUrl').value.trim();
   const apiKey = _getKeyFieldValue();
   const proxy = document.getElementById('provProxy').value.trim();

@@ -51,7 +51,7 @@ export function createTypePicker(cfg) {
     byValue: new Map(),
     selected: '',
     open: false,
-    view: localStorage.getItem(_VIEW_KEY) === 'tree' ? 'tree' : 'top',
+    view: cfg.view === 'tree' || localStorage.getItem(_VIEW_KEY) === 'tree' ? 'tree' : 'top',
     onChange: cfg.onChange || null,
   };
 

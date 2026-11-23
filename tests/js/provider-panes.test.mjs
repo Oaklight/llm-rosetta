@@ -166,3 +166,14 @@ test('a face the operator set by hand is not moved by the preset', () => {
     'a stored face that differs from the preset opens as manual',
   );
 });
+
+test('the LLM face has its own shim picker, and the saved type comes from it', () => {
+  const llmAt = html.indexOf('id="provLlmSection"');
+  const capsAt = html.indexOf('id="provPaneCaps"');
+  const pickerAt = html.indexOf('id="provShim_llm"');
+  assert.ok(pickerAt > llmAt && llmAt > capsAt, 'the LLM face picker is inside the LLM endpoint');
+  assert.ok(
+    oneFunction(providers, '_saveProvider').includes("getElementById('provShim_llm')"),
+    'the type is read from the face, not from the preset',
+  );
+});
