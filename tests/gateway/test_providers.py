@@ -672,7 +672,7 @@ class TestVendorManagedExchange:
         assert info.keyless is True
         assert info.auth_exchange is not None
         assert info.mints_credential is False
-        assert info.credential_source == "none"
+        assert info.credential_source == "auth_exchange"
         assert info.credentials_pending is False
         assert info.credential_token is None
 
