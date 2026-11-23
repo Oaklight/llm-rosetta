@@ -73,6 +73,37 @@ from .tasks import (
 
 logger = get_logger()
 
+#: A service worker that removes itself and the caches it owns.  An origin
+#: that once served a PWA keeps polling ``/sw.js`` for updates; a 404 is a
+#: failed update, not an unregister, so the old worker stays and the poll
+#: repeats forever.  Serving this tombstone gives the browser a new script
+#: that retires the registration on its next check.
+_SERVICE_WORKER_TOMBSTONE = b"""\
+self.addEventListener('install', function () { self.skipWaiting(); });
+self.addEventListener('activate', function (event) {
+  event.waitUntil((async function () {
+    await self.registration.unregister();
+    var keys = await caches.keys();
+    await Promise.all(keys.map(function (key) { return caches.delete(key); }));
+  })());
+});
+"""
+
+
+def _install_service_worker_tombstone(app: App) -> None:
+    """Answer ``/sw.js`` with a worker that retires a stale registration."""
+
+    @app.route("/sw.js", methods=["GET"])
+    async def service_worker_tombstone(request: Any) -> Response:
+        return Response(
+            body=_SERVICE_WORKER_TOMBSTONE,
+            status_code=200,
+            headers={
+                "Content-Type": "application/javascript; charset=utf-8",
+                "Cache-Control": "no-store, must-revalidate",
+            },
+        )
+
 
 def _resolve_data_dir_for_app(
     config: GatewayConfig, config_path: str | None
@@ -221,9 +252,9 @@ def _install_cors(app: App, admin_cors_origins: list[str]) -> None:
 
     The preflight is a ``before_request`` hook rather than a catch-all route:
     a catch-all ``/<path>`` that only accepts OPTIONS makes every unknown path
-    *exist* for routing, so an ordinary GET (a browser's ``/sw.js`` probe, say)
-    answers 405 instead of 404.  A hook runs before route matching and leaves
-    the method/path verdict to the router.
+    *exist* for routing, so an ordinary GET for a path no route serves answers
+    405 instead of 404.  A hook runs before route matching and leaves the
+    method/path verdict to the router.
     """
 
     def _apply_cors(response: Any, origin: str | None) -> None:
@@ -500,6 +531,9 @@ async def create_app(
         return Response(
             body=b"", status_code=302, headers={"Location": "/admin#change-password"}
         )
+
+    # --- Stale service worker (not a proxy route) ---
+    _install_service_worker_tombstone(app)
 
     @app.errorhandler(404)
     async def handle_404(request: Any, exc: Any) -> Response:
