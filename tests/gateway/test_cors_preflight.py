@@ -1,9 +1,13 @@
 """Routing verdicts an unknown path must keep.
 
-A catch-all OPTIONS route makes every path match, so a browser's ordinary GET
-for a file it caches (``/sw.js``) was answered "405 Method Not Allowed".  The
-preflight hook must not change the router's own verdict: unknown path is 404,
-a known path with the wrong method is 405, and a real preflight is 204.
+A catch-all OPTIONS route makes every path match, so an ordinary GET for a
+path no route serves was answered "405 Method Not Allowed".  The preflight
+hook must not change the router's own verdict: unknown path is 404, a known
+path with the wrong method is 405, and a real preflight is 204.
+
+``/sw.js`` is the one path that deliberately answers a GET: a browser that
+once served a PWA from this origin keeps asking for its worker script, and a
+404 does not unregister the stale registration.
 """
 
 from __future__ import annotations
@@ -65,9 +69,21 @@ def serve(tmp_path):
 
 async def test_unknown_get_is_not_a_method_error(serve):
     async with serve() as port:
-        status, _, _ = await _request(port, "GET", "/sw.js", {})
+        status, _, _ = await _request(port, "GET", "/not-a-route", {})
 
     assert status == 404
+
+
+async def test_a_stale_service_worker_is_retired(serve):
+    """The body unregisters the registration instead of leaving it polling."""
+    async with serve() as port:
+        status, headers, body = await _request(port, "GET", "/sw.js", {})
+
+    assert status == 200
+    assert headers.get("content-type", "").startswith("application/javascript")
+    assert "no-store" in headers.get("cache-control", "")
+    assert b"unregister" in body
+    assert b"caches.delete" in body
 
 
 async def test_a_known_path_with_the_wrong_method_is_still_405(serve):
