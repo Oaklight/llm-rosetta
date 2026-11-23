@@ -688,3 +688,13 @@ class TestVendorManagedExchange:
 
         with pytest.raises(ValueError, match="vendor-managed"):
             build_provider_info("chat_completions", {}, shim_name=name)
+
+    def test_a_token_command_would_mint_again_and_is_refused(self, make_shim):
+        name = make_shim("__test_vendor_managed_command__", keyless=True)
+
+        with pytest.raises(ValueError, match="remove token_command"):
+            build_provider_info(
+                "chat_completions",
+                {"token_command": ["print-a-token"]},
+                shim_name=name,
+            )

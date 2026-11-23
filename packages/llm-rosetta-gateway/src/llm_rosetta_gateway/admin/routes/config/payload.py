@@ -544,8 +544,14 @@ async def get_config(request: Any) -> Response:
                     # through a declared command.  The editor shows one
                     # credential section for both; naming only ``auth`` made a
                     # command shim (ALCF, AskSage) look like a static-key one.
+                    # A vendor-managed exchange is the exception: it drives the
+                    # vendor CLI's sign-in, so it mints nothing.
                     "mints_credential": (
-                        s.auth is not None or s.connection.token_command is not None
+                        s.connection.token_command is not None
+                        or (
+                            s.auth is not None
+                            and not getattr(s.auth, "vendor_managed", False)
+                        )
                     ),
                     "credential_kind": (
                         getattr(s.auth, "kind", None)
