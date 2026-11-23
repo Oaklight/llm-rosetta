@@ -7,6 +7,7 @@ import {
   credentialSourceId, credentialUiSource, availableCredentialSources,
   credentialFallbackSource, credentialSourceFields, credentialNeedsAttention,
   formatCredentialExpiry, formatCountdown, shortAccount,
+  profileSaveWarnings,
 } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/credential.js';
 
 test('a link keeps https and normalises it', () => {
@@ -360,4 +361,37 @@ test('a long account id keeps one line, a short one is untouched', () => {
   assert.ok(shown.length < long.length);
   assert.equal(shortAccount(''), null);
   assert.equal(shortAccount(null), null);
+});
+
+test('a save warning names the disabled provider it came from', () => {
+  // `provider_warnings` holds the loader's objects, not sentences: without
+  // this mapping the toast silently dropped every one of them.
+  assert.deepEqual(
+    profileSaveWarnings({
+      provider_warnings: [
+        {provider: 'claude-work', reason: 'shim not installed', category: 'shim'},
+        'a bare sentence',
+      ],
+    }),
+    ['claude-work: shim not installed', 'a bare sentence'],
+  );
+});
+
+test('a save warning carries the profile lifecycle sentence', () => {
+  assert.deepEqual(
+    profileSaveWarnings({
+      profile: {warnings: ['the new profile X already existed; it was kept as Y']},
+    }),
+    ['the new profile X already existed; it was kept as Y'],
+  );
+});
+
+test('a save with nothing to report has no lines', () => {
+  for (const res of [null, undefined, {}, {provider_warnings: []}, {profile: {}}]) {
+    assert.deepEqual(profileSaveWarnings(res), []);
+  }
+  assert.deepEqual(
+    profileSaveWarnings({provider_warnings: [null, 42, {}, {reason: 'why'}]}),
+    ['why'],
+  );
 });

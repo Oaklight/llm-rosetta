@@ -9,6 +9,8 @@ own ``acp.home`` is never moved or removed.
 from __future__ import annotations
 
 import os
+import shutil
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -277,6 +279,102 @@ def test_a_rename_into_an_empty_profile_replaces_it_without_a_warning(tmp_path):
     assert (new / "claude" / ".credentials.json").is_file()
     assert report["superseded"] == []
     assert report["warnings"] == []
+
+
+def test_a_second_set_aside_in_one_second_gets_a_suffix(tmp_path, monkeypatch):
+    stamp = "20260101T000000Z"
+    monkeypatch.setattr(time, "strftime", lambda *args, **kwargs: stamp)
+    data_dir = tmp_path / "data"
+    old = data_dir / "acp" / "claude"
+    new = data_dir / "acp" / "claude-work"
+    (old / "claude").mkdir(parents=True)
+    (old / "claude" / ".credentials.json").write_text("{}", encoding="utf-8")
+    (new / "claude").mkdir(parents=True)
+    (new / "claude" / ".claude.json").write_text("{}", encoding="utf-8")
+    # A sibling from an earlier set-aside in the same second, as a coarse
+    # clock would produce: the second one must not clobber it.
+    earlier = new.parent / f"{new.name}.superseded-{stamp}"
+    earlier.mkdir()
+    (earlier / "occupied.txt").write_text("keep me", encoding="utf-8")
+
+    report = _relocate_profiles(
+        old_info=SimpleNamespace(
+            managed_acp_state_dir=str(old), managed_auth_state_dir=None
+        ),
+        new_info=SimpleNamespace(
+            managed_acp_state_dir=str(new), managed_auth_state_dir=None
+        ),
+    )
+
+    kept_at = report["superseded"][0]["kept_at"]
+    assert kept_at == f"{new}.superseded-{stamp}-1"
+    assert (earlier / "occupied.txt").read_text(encoding="utf-8") == "keep me"
+    assert os.path.isfile(os.path.join(kept_at, "claude", ".claude.json"))
+
+
+def test_a_symlinked_empty_target_is_set_aside_not_refused(tmp_path):
+    data_dir = tmp_path / "data"
+    old = data_dir / "acp" / "claude"
+    new = data_dir / "acp" / "claude-work"
+    (old / "claude").mkdir(parents=True)
+    (old / "claude" / ".credentials.json").write_text("{}", encoding="utf-8")
+    empty = tmp_path / "empty-target"
+    empty.mkdir()
+    new.parent.mkdir(parents=True, exist_ok=True)
+    new.symlink_to(empty, target_is_directory=True)
+
+    report = _relocate_profiles(
+        old_info=SimpleNamespace(
+            managed_acp_state_dir=str(old), managed_auth_state_dir=None
+        ),
+        new_info=SimpleNamespace(
+            managed_acp_state_dir=str(new), managed_auth_state_dir=None
+        ),
+    )
+
+    assert (new / "claude" / ".credentials.json").is_file()
+    assert not new.is_symlink()
+    assert len(report["superseded"]) == 1
+    assert os.path.islink(report["superseded"][0]["kept_at"])
+
+
+def test_a_failed_move_restores_the_occupant(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    old = data_dir / "acp" / "claude"
+    new = data_dir / "acp" / "claude-work"
+    (old / "claude").mkdir(parents=True)
+    (old / "claude" / ".credentials.json").write_text("{}", encoding="utf-8")
+    (new / "claude").mkdir(parents=True)
+    (new / "claude" / ".claude.json").write_text("{}", encoding="utf-8")
+
+    real_move = shutil.move
+    failed = False
+
+    def flaky_move(src, dst):
+        nonlocal failed
+        if not failed and os.path.abspath(dst) == os.path.abspath(str(new)):
+            failed = True
+            raise OSError("disk full")
+        return real_move(src, dst)
+
+    monkeypatch.setattr(shutil, "move", flaky_move)
+    report = _relocate_profiles(
+        old_info=SimpleNamespace(
+            managed_acp_state_dir=str(old), managed_auth_state_dir=None
+        ),
+        new_info=SimpleNamespace(
+            managed_acp_state_dir=str(new), managed_auth_state_dir=None
+        ),
+    )
+
+    # The occupant is back where it was, the old login is untouched, and no
+    # half-finished sibling is left behind.
+    assert (new / "claude" / ".claude.json").is_file()
+    assert (old / "claude" / ".credentials.json").is_file()
+    assert report["moved"] == []
+    assert report["superseded"] == []
+    assert not list(new.parent.glob(f"{new.name}.superseded-*"))
+    assert report["warnings"]
 
 
 def test_the_admin_preflight_refuses_a_shared_home(tmp_path):
