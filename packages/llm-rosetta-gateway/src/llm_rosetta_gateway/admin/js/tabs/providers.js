@@ -176,7 +176,7 @@ function _credentialShim() {
   const shim = _selectedShim();
   const cfg = _editingCfg();
   if (credentialSource(shim, cfg) === 'static_key') return null;
-  if (shim && shim.mints_credential) return shim;
+  if (shim && (shim.mints_credential || shim.vendor_managed)) return shim;
   const type = (cfg && cfg.type) || _editingProviderName;
   return (S.configData?.registered_shims || []).find(s => s.name === type)
     || { manage_usage_url: null };
