@@ -163,9 +163,56 @@ class TestTheInstallAndTheProfile:
                 },
             )
 
-    def test_harden_defaults_on_and_can_be_turned_off(self, tmp_path):
+    def test_harden_follows_the_executable_name_by_default(self, tmp_path):
         assert self._lane(tmp_path).acp_harden is True
-        assert self._lane(tmp_path, acp={"harden": False}).acp_harden is False
+        named = self._lane(tmp_path, acp={"argv": ["/opt/agy-1.7/bin/agy", "acp"]})
+        assert named.acp_harden is True
+        wrapper = self._lane(tmp_path, acp={"argv": ["/opt/run-agy.sh", "acp"]})
+        assert wrapper.acp_harden is False
+
+    def test_harden_true_forces_the_profile_on_a_renamed_command(self, tmp_path):
+        info = self._lane(
+            tmp_path, acp={"argv": ["/opt/agy-1.7", "acp"], "harden": True}
+        )
+
+        assert info.acp_harden is True
+
+    def test_harden_false_is_the_opt_out(self, tmp_path):
+        profile = tmp_path / "profile"
+        info = self._lane(
+            tmp_path,
+            acp={
+                "argv": ["agy", "acp", "--gemini-dir", str(profile)],
+                "harden": False,
+            },
+        )
+
+        assert info.acp_harden is False
+        assert info.acp_state_dir == str(profile)
+
+    def test_harden_false_needs_a_profile_the_agent_will_read(self, tmp_path):
+        with pytest.raises(ValueError, match="runs agy as written"):
+            self._lane(tmp_path, acp={"argv": ["agy", "acp"], "harden": False})
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["agy", "acp", "--gemini-dir="],
+            ["agy", "acp", "--gemini-dir"],
+            ["agy", "acp", "--gemini-dir", "/a", "--gemini-dir", "/b"],
+        ],
+    )
+    def test_a_malformed_gemini_dir_is_refused(self, tmp_path, argv):
+        with pytest.raises(ValueError, match="gemini-dir"):
+            self._lane(tmp_path, acp={"argv": argv})
+
+    def test_the_underscore_alias_names_the_same_profile(self, tmp_path):
+        profile = tmp_path / "profile"
+        info = self._lane(
+            tmp_path, acp={"argv": ["agy", "acp", "--gemini_dir", str(profile)]}
+        )
+
+        assert info.acp_state_dir == str(profile)
 
     def test_a_non_boolean_harden_is_refused(self, tmp_path):
         with pytest.raises(ValueError, match="acp.harden must be true or false"):

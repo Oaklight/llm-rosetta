@@ -410,11 +410,9 @@ class TestOverridesAndSeparateProfiles:
         finally:
             await transport.close()
         (argv,) = _started_argv(tmp_path)
-        assert argv[:3] == [
-            "acp",
-            "--dangerously-skip-permissions=true",
-            "--process-per-session",
-        ]
+        assert argv[:2] == ["acp", PERMISSION_FLAG]
+        assert "--dangerously-skip-permissions=true" not in argv
+        assert "--process-per-session" in argv
         assert argv[argv.index("--gemini-dir") + 1] == str(_root(provider))
         assert argv[-2:] == ["--agent", AGENT_NAME]
         assert (_root(provider) / "config" / "hooks.json").is_file()
@@ -506,6 +504,12 @@ class TestArgvHelpers:
             AGENT_NAME,
         ]
         assert harden_argv(out, "/state/x").count("--agent") == 1
+
+    def test_harden_argv_replaces_a_skip_permissions_flag(self):
+        out = harden_argv(["agy", "acp", "--dangerously-skip-permissions=true"], "/s")
+
+        assert "--dangerously-skip-permissions=true" not in out
+        assert out.count(PERMISSION_FLAG) == 1
 
     def test_harden_argv_replaces_a_foreign_agent_and_keeps_a_profile(self):
         out = harden_argv(["agy", "acp", "--agent=other", "--gemini_dir=/mine"], "/s")

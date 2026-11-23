@@ -512,7 +512,7 @@ def _provider(
         # These are the best-effort cases: an agent the gateway does not give
         # its own profile.  The production path that keeps a custom ``agy``
         # hardened is covered in test_acp_profile.py.
-        acp_harden=not (agy or wrapper),
+        acp_harden=False,
         acp_env=acp_env,
         acp_processes=processes,
     )
