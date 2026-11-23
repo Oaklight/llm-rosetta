@@ -101,6 +101,51 @@ def target_finish_reason(stop_reason: str) -> FinishReason:
     return FinishReason(reason=cast(Any, reason))
 
 
+def _usage_from_chunk(chunk: Mapping[str, Any]) -> UsageInfo | None:
+    """Read one transport usage chunk as IR token counts.
+
+    The transport emits two shapes.  An agent that reported a per-turn split
+    gives ``prompt_tokens`` and ``completion_tokens``, which is the bill.  An
+    agent that reported only the session's context figure gives ``used``;
+    that is carried on the input side because the context includes the
+    answer, and it is the one number the agent exposed.
+
+    Returns:
+        The IR usage, or ``None`` when the chunk carries no usable count.
+    """
+    prompt = chunk.get("prompt_tokens")
+    completion = chunk.get("completion_tokens")
+    if isinstance(prompt, int) or isinstance(completion, int):
+        prompt = prompt if isinstance(prompt, int) and prompt >= 0 else 0
+        completion = (
+            completion if isinstance(completion, int) and completion >= 0 else 0
+        )
+        total = chunk.get("total_tokens")
+        if not isinstance(total, int) or total < 0:
+            total = prompt + completion
+        usage: dict[str, Any] = {
+            "prompt_tokens": prompt,
+            "completion_tokens": completion,
+            "total_tokens": total,
+        }
+        for key in ("cache_read_tokens", "cache_creation_tokens"):
+            value = chunk.get(key)
+            if isinstance(value, int) and value >= 0:
+                usage[key] = value
+        return cast(UsageInfo, usage)
+    used = chunk.get("used")
+    if not isinstance(used, int) or used < 0:
+        return None
+    return cast(
+        UsageInfo,
+        {
+            "prompt_tokens": used,
+            "completion_tokens": 0,
+            "total_tokens": used,
+        },
+    )
+
+
 class AcpConverter(BaseConverter):
     """Intermediate Representation ↔ an ACP turn."""
 
@@ -242,7 +287,7 @@ class AcpConverter(BaseConverter):
         text: list[str] = []
         reasoning: list[str] = []
         calls: list[dict[str, Any]] = []
-        usage: dict[str, int] | None = None
+        usage: UsageInfo | None = None
         for update in updates:
             if not isinstance(update, dict):
                 continue
@@ -255,17 +300,14 @@ class AcpConverter(BaseConverter):
                 if call.get("tool_name"):
                     calls.append(dict(call))
             elif update.get("type") == "usage":
-                # ACP reports the session's context usage, not a per-turn
-                # bill.  Carry it as the input side, the same shape the
-                # streaming leg emits, so a non-streaming client sees the
-                # same number a streaming one does.
-                used = update.get("used")
-                if isinstance(used, int) and used >= 0:
-                    usage = {
-                        "prompt_tokens": used,
-                        "completion_tokens": 0,
-                        "total_tokens": used,
-                    }
+                # An agent may report a per-turn input/output split, or only
+                # the session's context figure.  The split is the bill; the
+                # context figure rides on the input side, the same shape the
+                # streaming leg emits, so a non-streaming client sees what a
+                # streaming one does.
+                parsed = _usage_from_chunk(update)
+                if parsed is not None:
+                    usage = parsed
         content: list[dict[str, Any]] = []
         joined_reasoning = "".join(reasoning)
         if joined_reasoning:
@@ -397,20 +439,16 @@ class AcpConverter(BaseConverter):
 
     @staticmethod
     def _usage_events(chunk: dict[str, Any]) -> list[IRStreamEvent]:
-        # ACP's usage update reports the session's context usage, not the
-        # token bill for one turn, so it is carried as an input-side figure
-        # and never as an output count.
-        used = chunk.get("used")
-        if not isinstance(used, int) or used < 0:
+        # An agent may report a per-turn input/output split, or only the
+        # session's context figure; _usage_from_chunk decides which shape the
+        # chunk carries.
+        parsed = _usage_from_chunk(chunk)
+        if parsed is None:
             return []
         return [
             UsageEvent(
                 type="usage",
-                usage=UsageInfo(
-                    prompt_tokens=used,
-                    completion_tokens=0,
-                    total_tokens=used,
-                ),
+                usage=parsed,
             )
         ]
 

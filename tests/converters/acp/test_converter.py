@@ -189,6 +189,32 @@ class TestTheResponse:
 
         assert "usage" not in ir
 
+    def test_a_per_turn_split_replaces_the_context_figure(self):
+        """The prompt response's split is the bill; context is the fallback."""
+        ir = _converter().response_from_provider(
+            {
+                "updates": [
+                    {"type": "usage", "used": 661, "size": 1000},
+                    {
+                        "type": "usage",
+                        "prompt_tokens": 120,
+                        "completion_tokens": 34,
+                        "total_tokens": 661,
+                        "cache_read_tokens": 500,
+                        "cache_creation_tokens": 7,
+                    },
+                ]
+            }
+        )
+
+        assert ir["usage"] == {
+            "prompt_tokens": 120,
+            "completion_tokens": 34,
+            "total_tokens": 661,
+            "cache_read_tokens": 500,
+            "cache_creation_tokens": 7,
+        }
+
     def test_an_unknown_stop_reason_is_a_plain_stop(self):
         """The agent ended the turn; what arrived is the answer."""
         assert target_finish_reason("something_new")["reason"] == "stop"

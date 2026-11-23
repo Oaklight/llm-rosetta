@@ -177,6 +177,60 @@ def _parse_connection_argv(raw: Any, shim_name: str) -> tuple[str, ...] | None:
     return argv
 
 
+def _parse_connection_meta(raw: Any, shim_name: str) -> dict[str, Any] | None:
+    """Read a shim's ``connection.acp_session_meta`` as a mapping.
+
+    The value is forwarded as the request's ``_meta`` object, so it must
+    already have the shape the agent expects.  Refusing a non-mapping here
+    puts the error beside the file that has it rather than on the first turn,
+    where a JSON-RPC error would name the agent instead of the shim.
+
+    Args:
+        raw: The declared value: a mapping, or ``None``.
+        shim_name: The shim's name, for the message.
+
+    Returns:
+        A copy of the mapping, or ``None`` when the shim declares none.
+
+    Raises:
+        ValueError: The value is not a mapping.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"{shim_name}: connection.acp_session_meta must be a mapping "
+            f"(e.g. {{disableBuiltInTools: true}})"
+        )
+    return dict(raw)
+
+
+def _parse_connection_env_unset(raw: Any, shim_name: str) -> tuple[str, ...]:
+    """Read a shim's ``connection.acp_env_unset`` as a tuple of names.
+
+    Args:
+        raw: The declared value: a list of non-empty strings, or ``None``.
+        shim_name: The shim's name, for the message.
+
+    Returns:
+        The names to remove, or an empty tuple when none are declared.
+
+    Raises:
+        ValueError: The value is not a list of non-empty strings.
+    """
+    if raw is None:
+        return ()
+    if not isinstance(raw, (list, tuple)) or not raw:
+        raise ValueError(
+            f"{shim_name}: connection.acp_env_unset must be a non-empty list "
+            f"of environment variable names"
+        )
+    names = tuple(str(name) for name in raw)
+    if any(not name for name in names):
+        raise ValueError(f"{shim_name}: connection.acp_env_unset has an empty element")
+    return names
+
+
 def _parse_connection_token_command(
     raw: Any, provider_dir: Path, name: str
 ) -> tuple[str, ...] | None:

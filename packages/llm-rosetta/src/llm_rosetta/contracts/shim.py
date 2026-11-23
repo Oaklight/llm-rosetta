@@ -233,6 +233,31 @@ class ConnectionConfig:
     ``ENABLE_TOOL_SEARCH=false`` for direct MCP tool calls).  Only read when
     ``transport`` is ``"acp"``.
     """
+    acp_session_meta: dict[str, Any] | None = None
+    """Extra ``_meta`` for the agent's ``session/new``, ``session/load`` and
+    ``session/resume`` requests.
+
+    Agent implementations differ in how they turn off their own tools, and
+    some read a vendor-specific switch from the request's ``_meta`` rather
+    than from a profile on disk.  The Claude adapter, for example, keeps
+    Claude Code's file and shell tools unless ``session/new`` carries
+    ``{"disableBuiltInTools": true}``; a resumed session must repeat the same
+    value because the adapter includes it in its session fingerprint.  A
+    vendor that already disables its tools through its own profile (for
+    example through a ``--gemini-dir``) leaves this ``None``.  Only read when
+    ``transport`` is ``"acp"``.
+    """
+    acp_env_unset: tuple[str, ...] = ()
+    """Environment variable names removed from the agent's inherited set.
+
+    The gateway copies its own environment so the agent keeps ``PATH`` and the
+    login store, but a variable that redirects the vendor CLI would override
+    the account the operator signed in with.  Claude Code, for example, bills
+    an ``ANTHROPIC_API_KEY`` instead of the stored subscription and follows
+    ``ANTHROPIC_BASE_URL``.  A shim names those variables here; the spawn and
+    the admin sign-in both remove them before the vendor's own ``acp_env``
+    values are applied.  Only read when ``transport`` is ``"acp"``.
+    """
     token_command: tuple[str, ...] | None = None
     """Command that mints the upstream credential, declared by the shim.
 

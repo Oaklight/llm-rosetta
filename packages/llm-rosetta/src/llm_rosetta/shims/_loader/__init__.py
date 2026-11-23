@@ -149,6 +149,8 @@ from ._parse import (  # noqa: F401
     _BATCH_PATH_KEYS,
     _parse_batch,
     _parse_connection_argv,
+    _parse_connection_env_unset,
+    _parse_connection_meta,
     _check_default_value,
     _expected,
     _parse_connection_token_command,

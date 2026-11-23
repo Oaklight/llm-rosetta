@@ -78,6 +78,26 @@ class TestTheChunks:
         assert usage["prompt_tokens"] == 42
         assert usage["completion_tokens"] == 0
 
+    def test_a_per_turn_split_is_not_flattened(self):
+        """An agent's own output count survives the stream leg."""
+        events = _converter().stream_response_from_provider(
+            {
+                "type": "usage",
+                "prompt_tokens": 120,
+                "completion_tokens": 34,
+                "total_tokens": 661,
+                "cache_read_tokens": 500,
+            }
+        )
+
+        usage = cast(dict[str, Any], _only(events)["usage"])
+        assert usage == {
+            "prompt_tokens": 120,
+            "completion_tokens": 34,
+            "total_tokens": 661,
+            "cache_read_tokens": 500,
+        }
+
     def test_stop_maps_the_reason(self):
         events = _converter().stream_response_from_provider(
             {"type": "stop", "stop_reason": "max_tokens"}

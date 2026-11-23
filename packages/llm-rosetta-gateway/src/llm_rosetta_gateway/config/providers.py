@@ -1422,6 +1422,12 @@ def build_provider_info(
         ),
         acp_harden=acp_harden,
         acp_env=effective_acp_env,
+        acp_env_unset=(
+            tuple(shim.connection.acp_env_unset) if shim is not None else ()
+        ),
+        acp_session_meta=(
+            shim.connection.acp_session_meta if shim is not None else None
+        ),
         acp_state_dir=acp_home,
         managed_acp_state_dir=managed_acp_home,
         managed_auth_state_dir=managed_auth_home,

@@ -153,6 +153,19 @@ class AuthExchange(Protocol):
         """
         ...
 
+    def setup_state_is_authoritative(self, ctx: AuthContext) -> bool:
+        """Whether a ``True`` above is proof, not just absent evidence.
+
+        A vendor-managed lane can keep its sign-in where the gateway cannot
+        read it (the CLI's own store).  "No account visible" then also covers
+        a terminal sign-in, so a readiness probe must not skip the turn on it.
+
+        Returns:
+            ``True`` when the exchange can tell a missing sign-in from an
+            unreadable one; ``False`` when it cannot.
+        """
+        ...
+
     async def credential(self, ctx: AuthContext) -> str:
         """Return a usable credential, minting or refreshing as needed.
 
@@ -336,6 +349,10 @@ class BaseAuthExchange:
     def needs_interactive_setup(self, ctx: AuthContext) -> bool:
         """Return ``False``; override when sign-in is required."""
         return False
+
+    def setup_state_is_authoritative(self, ctx: AuthContext) -> bool:
+        """Return ``True``; override when local state cannot prove a sign-out."""
+        return True
 
     def account_id(self, ctx: AuthContext) -> str | None:
         """Return ``None``; override for a provider with an account identity."""

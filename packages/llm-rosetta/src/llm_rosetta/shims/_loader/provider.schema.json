@@ -514,6 +514,20 @@
             "type": "string"
           }
         },
+        "acp_env_unset": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "Environment variable names removed from the agent's inherited environment before the acp_env overrides are applied. A vendor uses this for variables that would redirect its CLI away from the signed-in account. Only read when transport is 'acp'.",
+          "uniqueItems": true
+        },
+        "acp_session_meta": {
+          "type": "object",
+          "description": "Extra `_meta` the gateway sends on session/new, session/load and session/resume. Vendor-specific session switches live here; e.g. Claude's adapter needs {disableBuiltInTools: true} to stop offering its own tools. Only read when transport is 'acp'.",
+          "additionalProperties": true
+        },
         "token_refresh_interval": {
           "type": "integer",
           "minimum": 0,

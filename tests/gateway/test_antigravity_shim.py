@@ -10,11 +10,13 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.shims import get_shim
+from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+from llm_rosetta.shims import get_shim, register_shim, unregister_shim
 from llm_rosetta_gateway.config.providers import build_provider_info
 from llm_rosetta_gateway.transport import TRANSPORT_NAMES
 
 SHIM = "antigravity--acp"
+META_SHIM = "acp-session-meta-test--acp"
 
 
 @pytest.fixture(autouse=True)
@@ -117,3 +119,34 @@ class TestTheAgentEnvironment:
     def test_a_non_string_value_is_refused(self):
         with pytest.raises(ValueError, match="acp_env must map strings to strings"):
             build_provider_info("acp", {"acp_env": {"A": 1}}, shim_name=SHIM)
+
+
+class TestTheSessionMeta:
+    """The transport receives the shim's ``_meta`` unchanged."""
+
+    def test_a_declared_mapping_reaches_the_provider_info(self):
+        register_shim(
+            ProviderShim(
+                name=META_SHIM,
+                format="acp",
+                model_type="llm",
+                connection=ConnectionConfig(
+                    base_url="http://agent.local",
+                    transport="acp",
+                    acp_session_meta={"disableBuiltInTools": True},
+                    acp_env_unset=("ANTHROPIC_API_KEY",),
+                ),
+            )
+        )
+        try:
+            info = build_provider_info("acp", {}, shim_name=META_SHIM)
+        finally:
+            unregister_shim(META_SHIM)
+
+        assert info.acp_session_meta == {"disableBuiltInTools": True}
+        assert info.acp_env_unset == ("ANTHROPIC_API_KEY",)
+
+    def test_a_shim_without_one_reaches_an_empty_mapping(self):
+        info = build_provider_info("acp", {}, shim_name=SHIM)
+
+        assert info.acp_session_meta == {}

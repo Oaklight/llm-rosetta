@@ -66,6 +66,7 @@ from .acp_chunks import (
     CHUNK_SESSION_START,
     CHUNK_STOP,
     CHUNK_TOOL_CALL,
+    CHUNK_USAGE,
     _blocks_of,
     _chunk_of,
     _error_of,
@@ -82,6 +83,7 @@ from .acp_ledger import (
     block_digests,
 )
 from .acp_mcp import AcpMcpServer, AcpToolBridge, MCP_SERVER_NAME, PendingCall
+from .acp_meta_client import AcpMetaClient
 from .acp_profile import (
     ensure_profile,
     gemini_dir_of,
@@ -658,11 +660,21 @@ class AcpTransport:
 
         Passing only the overrides would drop ``PATH`` and the agent's login
         store, so the full environment is copied and the declared names win.
+        Names the shim says it must not inherit are removed first: a gateway
+        process with ``ANTHROPIC_API_KEY`` exported would otherwise make
+        Claude Code bill the API instead of the subscription it was signed in
+        to.
         """
         overrides = getattr(provider_info, "acp_env", None)
-        if not overrides:
+        removed = getattr(provider_info, "acp_env_unset", ())
+        if not overrides and not removed:
             return None
-        return {**os.environ, **overrides}
+        env = dict(os.environ)
+        for name in removed:
+            env.pop(name, None)
+        if overrides:
+            env.update(overrides)
+        return env
 
     @staticmethod
     def _state_dir(provider_info: ProviderInfo) -> str:
@@ -725,7 +737,11 @@ class AcpTransport:
         """Start one agent process and complete the handshake."""
         argv = self._argv(provider_info)
         self._profile(provider_info, argv)
-        client = ACPClient(argv, env=self._spawn_env(provider_info))
+        client = AcpMetaClient(
+            argv,
+            env=self._spawn_env(provider_info),
+            session_meta=getattr(provider_info, "acp_session_meta", None),
+        )
         client.set_request_handler(
             _agent_request_handler(
                 provider_info.config_name,
@@ -875,6 +891,37 @@ class AcpTransport:
         limit = min(self._timeout, 90.0)
         deadline = loop.time() + limit
         result: dict[str, Any] = {"transport": "acp", "reachable": False, "ok": False}
+        # A vendor-managed lane can answer "is anyone signed in?" before the
+        # agent is spawned.  Asking first turns an unsigned-in Test into an
+        # immediate failure instead of a throwaway session whose only outcome
+        # is the agent's refusal.
+        exchange = getattr(provider_info, "auth_exchange", None)
+        context = getattr(provider_info, "auth_context", None)
+        check = getattr(exchange, "needs_interactive_setup", None)
+        if callable(check) and context is not None:
+            try:
+                waiting = bool(await asyncio.to_thread(check, context))
+            except Exception:  # noqa: BLE001 - an unreadable status is not a verdict
+                waiting = False
+            if waiting:
+                # A vendor-managed lane may keep its sign-in where the shim
+                # cannot read it.  Skip the turn only when the check can tell
+                # a missing sign-in from an unreadable one; otherwise let the
+                # agent answer, which is the only authority left.
+                authoritative = getattr(exchange, "setup_state_is_authoritative", None)
+                if callable(authoritative):
+                    try:
+                        waiting = bool(await asyncio.to_thread(authoritative, context))
+                    except Exception:  # noqa: BLE001 - doubt is not a verdict
+                        waiting = False
+            if waiting:
+                result["needs_sign_in"] = True
+                result["error"] = (
+                    f"provider {provider_info.config_name!r} is not signed in; "
+                    "use the credential panel's Sign in button"
+                )
+                result["elapsed_ms"] = int((time.monotonic() - started) * 1000)
+                return result
         try:
             agent = await self._agent(provider_info)
         except AcpTurnError as exc:
@@ -1665,15 +1712,10 @@ class AcpTransport:
                 )
                 yield _failure(collect, message)
                 return
-            turn.finished = True
-            await self._settle(turn, provider_info)
-            stop = {
-                "type": CHUNK_STOP,
-                "stop_reason": runner.stop_reason or _reason_text(result),
-            }
-            if collect is not None:
-                collect.append(stop)
-            yield stop
+            async for chunk in self._finish_turn(
+                turn, provider_info, runner, result, collect
+            ):
+                yield chunk
         finally:
             try:
                 if not turn.finished:
@@ -1687,6 +1729,34 @@ class AcpTransport:
                 # fails: the locks are the slot, and a slot that is never
                 # given back takes the lane down with it.
                 turn.release()
+
+    async def _finish_turn(
+        self,
+        turn: _Turn,
+        provider_info: ProviderInfo,
+        runner: _TurnRunner,
+        result: Any,
+        collect: list[dict[str, Any]] | None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Settle a completed turn, then emit its usage and stop chunks.
+
+        Usage comes last because the agent reports its per-turn split with
+        the prompt response, after every text and thought update.
+        """
+        turn.finished = True
+        await self._settle(turn, provider_info)
+        usage = _usage_chunk_of(turn.agent.client, turn.session_id)
+        if usage is not None:
+            if collect is not None:
+                collect.append(usage)
+            yield usage
+        stop = {
+            "type": CHUNK_STOP,
+            "stop_reason": runner.stop_reason or _reason_text(result),
+        }
+        if collect is not None:
+            collect.append(stop)
+        yield stop
 
     async def _forward_chunks(
         self,
@@ -2219,6 +2289,53 @@ def _tools_digest(body: dict[str, Any]) -> str:
     )
     blob = "\n".join(canonical)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:32]
+
+
+def _usage_chunk_of(client: Any, session_id: str) -> dict[str, Any] | None:
+    """The agent's per-turn token tally, in this transport's chunk shape.
+
+    A ``usage_update`` notification reports only how full the context is.
+    The prompt response is the one place an agent may report input and output
+    separately, and Claude's adapter does.  An agent that reports neither
+    keeps the context figure already in the collected updates.
+    """
+    lookup = getattr(client, "prompt_usage", None)
+    if not callable(lookup):
+        return None
+    raw = lookup(session_id)
+    if not isinstance(raw, dict):
+        return None
+
+    def number(*names: str) -> int | None:
+        for name in names:
+            value = raw.get(name)
+            if isinstance(value, int) and value >= 0:
+                return value
+        return None
+
+    prompt = number("inputTokens", "input_tokens")
+    completion = number("outputTokens", "output_tokens")
+    if prompt is None and completion is None:
+        return None
+    prompt = prompt or 0
+    completion = completion or 0
+    cache_read = number("cachedReadTokens", "cache_read_tokens")
+    cache_write = number("cachedWriteTokens", "cache_creation_tokens")
+    total = number("totalTokens", "total_tokens")
+    if total is None:
+        total = prompt + completion + (cache_read or 0) + (cache_write or 0)
+    chunk: dict[str, Any] = {
+        "type": CHUNK_USAGE,
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": total,
+        "used": total,
+    }
+    if cache_read is not None:
+        chunk["cache_read_tokens"] = cache_read
+    if cache_write is not None:
+        chunk["cache_creation_tokens"] = cache_write
+    return chunk
 
 
 def _carries_result_for(body: dict[str, Any], pending_ids: list[str]) -> bool:
