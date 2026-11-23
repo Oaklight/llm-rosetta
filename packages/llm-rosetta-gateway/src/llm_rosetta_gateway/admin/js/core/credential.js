@@ -56,9 +56,10 @@ export function parseRecord(text) {
 export function credentialSource(shim, cfg) {
   if (cfg && cfg.token_command) return 'config_command';
   if (shim && shim.credential_kind === 'command') return 'shim_command';
-  if (shim && shim.mints_credential) return 'auth_exchange';
+  if (shim && (shim.mints_credential || shim.vendor_managed)) return 'auth_exchange';
   // A provider whose shim no longer loads still has a live credential source;
   // the payload reports which one, so the section does not disappear.
+  if (!shim && cfg && cfg.vendor_managed) return 'auth_exchange';
   if (!shim && cfg && cfg.credential_source) return cfg.credential_source;
   if (!shim && cfg && cfg.mints_credential) return 'auth_exchange';
   return 'static_key';
@@ -112,9 +113,12 @@ export function credentialUiSource(source) {
  *   shim still gets the card: the operator may bring a paid key.
  */
 export function availableCredentialSources(shim, cfg) {
-  const mints = shim
+  const vendorManaged = !!(shim
+    ? shim.vendor_managed
+    : (cfg && cfg.vendor_managed));
+  const mints = (shim
     ? !!shim.mints_credential
-    : !!(cfg && cfg.mints_credential);
+    : !!(cfg && cfg.mints_credential)) || vendorManaged;
   const live = (cfg && cfg.credential_source) || null;
   // The entry's own source says as much as the shim does: a provider whose
   // live credential is ``config_command`` mints from a command, so the
@@ -126,10 +130,12 @@ export function availableCredentialSources(shim, cfg) {
   const exchangeLive = live === 'auth_exchange' || (!!mints && kind !== 'command');
   return {
     static: !mints,
-    config: true,
+    // A vendor-managed lane refuses a command: it would mint a gateway token
+    // again, so the card must not offer one.
+    config: !vendorManaged,
     // The shim card needs a shim: a command in the entry is the config card.
     shim: !!shim && shimKind === 'command',
-    exchange: exchangeLive,
+    exchange: exchangeLive || vendorManaged,
   };
 }
 

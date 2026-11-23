@@ -198,6 +198,24 @@ class TestTheConfigPayload:
         assert entry["keyless"] is True
         assert entry["mints_credential"] is False
 
+    def test_a_configured_vendor_managed_provider_says_so(self, monkeypatch):
+        """The saved entry carries the same sign-in fact as the shim list."""
+        pinfo = SimpleNamespace(
+            keyless=True,
+            mints_credential=False,
+            credentials_pending=False,
+            credential_source="none",
+            token_status=None,
+            auth_exchange=SimpleNamespace(vendor_managed=True),
+        )
+        payload = self._payload(
+            monkeypatch, SimpleNamespace(providers={"chatgpt": pinfo})
+        )
+
+        entry = payload["providers"]["chatgpt"]
+        assert entry["vendor_managed"] is True
+        assert entry["mints_credential"] is False
+
     def test_the_refresh_log_is_bounded_here_too(self, monkeypatch):
         """The panel loads this payload on open.
 

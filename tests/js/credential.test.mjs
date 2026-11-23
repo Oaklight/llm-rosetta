@@ -56,10 +56,17 @@ test('the credential source follows the builder precedence', () => {
   assert.equal(credentialSource(shim, {}), 'auth_exchange');
   assert.equal(credentialSource({ mints_credential: true, credential_kind: 'command' }, {}), 'shim_command');
   assert.equal(credentialSource({ mints_credential: false, credential_kind: null }, {}), 'static_key');
+  // A vendor-managed exchange mints nothing, but it is still the sign-in
+  // surface the editor has to show.
+  assert.equal(
+    credentialSource({ mints_credential: false, credential_kind: 'vendor-cli', vendor_managed: true }, {}),
+    'auth_exchange',
+  );
   assert.equal(credentialSource(null, null), 'static_key');
   // A shim that no longer loads does not erase the live source.
   assert.equal(credentialSource(null, { credential_source: 'shim_command' }), 'shim_command');
   assert.equal(credentialSource(null, { mints_credential: true }), 'auth_exchange');
+  assert.equal(credentialSource(null, { vendor_managed: true }), 'auth_exchange');
 });
 
 test('a command that consumes the key keeps the key box', () => {
@@ -219,6 +226,21 @@ test('a source card is offered only when the loader can honour it', () => {
   // A keyless shim mints nothing, so a paid key is still a legal choice.
   const keyless = { mints_credential: false, credential_kind: null, keyless: true };
   assert.equal(availableCredentialSources(keyless, {}).static, true);
+
+  // A vendor-managed lane offers only its exchange: a key or a command would
+  // contradict the manifest's keyless declaration, and the builder refuses
+  // both.
+  const vendor = {
+    mints_credential: false, credential_kind: 'vendor-cli',
+    vendor_managed: true, keyless: true,
+  };
+  assert.deepEqual(availableCredentialSources(vendor, {}), {
+    static: false, config: false, shim: false, exchange: true,
+  });
+  // The shim stopped loading; the live entry still names the sign-in lane.
+  assert.deepEqual(availableCredentialSources(null, { vendor_managed: true }), {
+    static: false, config: false, shim: false, exchange: true,
+  });
 
   // The shim stopped loading: the entry's live source still gets a card.
   assert.equal(

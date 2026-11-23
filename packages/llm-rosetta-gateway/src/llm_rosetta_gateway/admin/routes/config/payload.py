@@ -461,6 +461,15 @@ async def get_config(request: Any) -> Response:
                 # The provider editor shows a credential section instead of a
                 # key box for a provider that mints its own.
                 masked["mints_credential"] = pinfo.mints_credential
+                # The editor still shows the sign-in section for a lane the
+                # gateway never mints for; that exchange is the only surface.
+                masked["vendor_managed"] = bool(
+                    getattr(
+                        getattr(pinfo, "auth_exchange", None),
+                        "vendor_managed",
+                        False,
+                    )
+                )
                 masked["credentials_pending"] = pinfo.credentials_pending
                 masked["credential_source"] = pinfo.credential_source
         masked_providers[name] = masked
