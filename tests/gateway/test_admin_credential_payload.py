@@ -166,6 +166,37 @@ class TestTheConfigPayload:
         assert "zen/v1" in hint["en"]
         assert by_name["openai--open_responses"]["hint_msg"] is None
 
+    def test_a_vendor_managed_shim_says_so_and_mints_nothing(self, monkeypatch):
+        """The editor hides the credential ring from such a lane."""
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
+
+        class Exchange:
+            kind = "vendor-cli"
+            consumes_key = False
+            vendor_managed = True
+
+        name = "__test_vendor_managed_payload__"
+        register_shim(
+            ProviderShim(
+                name=name,
+                format="open_responses",
+                connection=ConnectionConfig(
+                    base_url="https://vendor.example/v1", keyless=True
+                ),
+                auth=Exchange(),
+            )
+        )
+        try:
+            payload = self._payload(monkeypatch, SimpleNamespace(providers={}))
+        finally:
+            unregister_shim(name)
+
+        entry = {s["name"]: s for s in payload["registered_shims"]}[name]
+        assert entry["vendor_managed"] is True
+        assert entry["keyless"] is True
+        assert entry["mints_credential"] is False
+
     def test_the_refresh_log_is_bounded_here_too(self, monkeypatch):
         """The panel loads this payload on open.
 

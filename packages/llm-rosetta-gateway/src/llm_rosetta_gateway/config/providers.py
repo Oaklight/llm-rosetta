@@ -718,11 +718,11 @@ def build_provider_info(
     # A provider-level ``token_command`` is the operator's own exchange and
     # outranks the shim's, whichever form the shim declared.
     provider_owns_command = cfg.get("token_command") is not None
-    exchange = (
-        getattr(shim, "auth", None)
-        if shim is not None and not provider_owns_command
-        else None
-    )
+    shim_exchange = getattr(shim, "auth", None) if shim is not None else None
+    # Read this before a provider command hides the shim's exchange: the
+    # vendor-managed rule is a property of the shim, not of the resolved one.
+    vendor_managed = bool(getattr(shim_exchange, "vendor_managed", False))
+    exchange = shim_exchange if shim is not None and not provider_owns_command else None
     if shim is not None:
         base_type = shim.format
         # Apply shim defaults where the config value is missing *or empty*.
@@ -773,12 +773,23 @@ def build_provider_info(
     keyless = _is_keyless(keyless_shim, exchange, cfg)
     if keyless:
         auth_fn = no_auth
-    if getattr(exchange, "vendor_managed", False) and not keyless_shim:
-        raise ValueError(
-            f"Provider '{config_name or shim_name or provider_type}': its "
-            "auth.py is vendor-managed, so the vendor CLI owns the credential "
-            "and the shim must declare connection.keyless: true"
-        )
+    if vendor_managed:
+        if not keyless_shim:
+            raise ValueError(
+                f"Provider '{config_name or shim_name or provider_type}': its "
+                "auth.py is vendor-managed, so the vendor CLI owns the credential "
+                "and the shim must declare connection.keyless: true"
+            )
+        if provider_owns_command:
+            # A command would mint a gateway token again, which is the one
+            # thing a vendor-managed lane says it never does.  The exchange
+            # was dropped above, so report the shim's rule here.
+            raise ValueError(
+                f"Provider '{config_name or shim_name or provider_type}': its "
+                "auth.py is vendor-managed, so the vendor CLI owns the "
+                "credential; remove token_command, or use a shim without that "
+                "exchange"
+            )
 
     # Per-provider proxy overrides global proxy
     proxy_url = cfg.get("proxy") or global_proxy or None

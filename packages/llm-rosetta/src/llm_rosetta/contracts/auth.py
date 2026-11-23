@@ -139,7 +139,8 @@ class AuthExchange(Protocol):
     omits it mints a credential exactly as before.  A vendor-managed exchange
     belongs beside a ``keyless: true`` manifest — the gateway refuses to build
     the provider otherwise, because a lane that expects a gateway token has no
-    token to send.
+    token to send.  A provider entry may not add ``token_command`` either: that
+    would mint a gateway token again, so the builder refuses it too.
     """
 
     kind: str
