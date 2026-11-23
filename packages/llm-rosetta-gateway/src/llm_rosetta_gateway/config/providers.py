@@ -335,15 +335,26 @@ def _acp_state_dir(
     The ``acp.home`` provider setting names another directory.  An absolute
     path is used as written; a relative one is resolved under the data
     directory (or the per-user fallback when the gateway has no data
-    directory).  A tilde is expanded.
+    directory).  A tilde is expanded.  A relative path may not contain ``..``:
+    a profile that escapes the data directory silently stops surviving the
+    image upgrade this home exists for, and an absolute path is the explicit
+    way to point elsewhere.
 
     Raises:
-        ValueError: ``acp.home`` is present but is not a non-empty string.
+        ValueError: ``acp`` is present but is not a mapping, ``acp.home`` is
+            present but is not a non-empty path, a relative home climbs out
+            of the data directory, or the named path is not a directory.
     """
     from ..transport.acp_profile import fallback_root, state_dir_for
 
     raw = (cfg or {}).get("acp")
-    home = raw.get("home") if isinstance(raw, dict) else None
+    if raw is None:
+        return state_dir_for(data_dir, provider)
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"Provider '{provider}': acp must be a mapping of settings, got {raw!r}"
+        )
+    home = raw.get("home")
     if home is None:
         return state_dir_for(data_dir, provider)
     if not isinstance(home, str) or not home.strip():
@@ -352,9 +363,17 @@ def _acp_state_dir(
         )
     path = os.path.expanduser(home.strip())
     if not os.path.isabs(path):
+        if ".." in re.split(r"[\\/]", path):
+            raise ValueError(
+                f"Provider '{provider}': acp.home must stay under the data "
+                f"directory; use an absolute path to point elsewhere, got {home!r}"
+            )
         root = os.path.abspath(data_dir) if data_dir else str(fallback_root().parent)
         path = os.path.join(root, path)
-    return os.path.abspath(path)
+    path = os.path.abspath(path)
+    if os.path.exists(path) and not os.path.isdir(path):
+        raise ValueError(f"Provider '{provider}': acp.home is not a directory: {path}")
+    return path
 
 
 def _auth_context(
@@ -604,10 +623,11 @@ def _acp_env(
     *home* is the lane's persistent directory.  A shim may name it as
     ``{acp_home}`` (``{acp_state_dir}`` is kept as an alias), which keeps a
     vendor's login in the gateway's data directory instead of the process's
-    ``HOME``.  With *inject_home*, the gateway also publishes it as
-    ``LLM_ROSETTA_ACP_HOME`` for a shim that drives the vendor CLI itself.  An
-    operator can override that variable, but the sign-in would then use a
-    profile the agent does not.
+    ``HOME``.  With *inject_home*, the gateway publishes it as
+    ``LLM_ROSETTA_ACP_HOME`` for a shim that drives the vendor CLI itself.
+    That variable is gateway-owned: an ``acp_env`` value is overwritten, so
+    the agent and the sign-in driver cannot be split across two profiles.
+    ``acp.home`` is the supported way to move the profile.
     """
     env = dict(shim.connection.acp_env or {}) if shim is not None else {}
     override = cfg.get("acp_env")
@@ -630,8 +650,28 @@ def _acp_env(
             for name, value in env.items()
         }
         if inject_home:
-            env.setdefault("LLM_ROSETTA_ACP_HOME", home)
+            env["LLM_ROSETTA_ACP_HOME"] = home
     return env or None
+
+
+def _lane_environment(
+    cfg: dict[str, Any],
+    shim: Any | None,
+    provider_key: str,
+    data_dir: str | None,
+    lane_transport: str,
+) -> tuple[str, dict[str, str] | None]:
+    """Return the persistent home and the environment one lane starts with.
+
+    An ACP lane gets a home under the data directory, its ``acp.home``
+    override and the ``{acp_home}`` expansion.  A lane that speaks HTTP starts
+    no agent, so it ignores those settings and keeps its ``acp_env`` map as
+    written.
+    """
+    if lane_transport != "acp":
+        return _acp_state_dir(data_dir, provider_key), _acp_env(cfg, shim, provider_key)
+    home = _acp_state_dir(data_dir, provider_key, cfg)
+    return home, _acp_env(cfg, shim, provider_key, home, inject_home=True)
 
 
 def _resolve_acp_limits(cfg: dict[str, Any], provider_key: str) -> dict[str, Any]:
@@ -906,13 +946,8 @@ def build_provider_info(
     # volume carries the login across restarts and image upgrades.  The
     # effective environment is built once: the ACP spawn, the vendor sign-in
     # driver and the admin's status probe must all name the same profile.
-    acp_home = _acp_state_dir(data_dir, provider_key, cfg)
-    effective_acp_env = _acp_env(
-        cfg,
-        shim,
-        provider_key,
-        acp_home,
-        inject_home=(lane_transport == "acp"),
+    acp_home, effective_acp_env = _lane_environment(
+        cfg, shim, provider_key, data_dir, lane_transport
     )
 
     # Name the effective source for the admin editor.
