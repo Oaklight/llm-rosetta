@@ -3673,6 +3673,11 @@ async function showProviderQuota(name) {
         lines.push(`<div class="conn-row"><span class="dot conn-warn"></span><span class="conn-detail">${esc(t('quota.demoted', {until: new Date(entry.demotion.until).toLocaleString(), reason: entry.demotion.reason}))}</span></div>`);
       }
     }
+    if (r.supported && !(r.credentials || []).length && r.reason) {
+      // A lane whose agent has not spoken yet is supported, but has nothing
+      // to render.  The reason tells the operator how to get a reading.
+      lines.push(row({ tone: 'warn', text: r.reason }));
+    }
     const blocked = blockRow(r.provider_block, t);
     if (blocked) lines.push(row(blocked));
     for (const routingRow of routingRows(r.routing, t)) lines.push(row(routingRow));

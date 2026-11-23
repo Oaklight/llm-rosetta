@@ -100,9 +100,23 @@ def _chunk_of(update: dict[str, Any]) -> dict[str, Any] | None:
         return None
     if kind == "usage_update":
         used = update.get("used")
-        if isinstance(used, int):
-            return {"type": CHUNK_USAGE, "used": used, "size": update.get("size")}
-        return None
+        meta = update.get("_meta") or update.get("meta")
+        if not isinstance(used, int) and meta is None:
+            return None
+        chunk: dict[str, Any] = {
+            "type": CHUNK_USAGE,
+            "used": used if isinstance(used, int) else None,
+            "size": update.get("size"),
+        }
+        # The adapter's own accounting rides beside the context size: Claude
+        # reports the account's rate-limit windows under ``_meta``.  Passing
+        # them through is what lets the quota card read a keyless lane.
+        cost = update.get("cost")
+        if isinstance(cost, dict):
+            chunk["cost"] = cost
+        if meta is not None:
+            chunk["meta"] = meta
+        return chunk
     return None
 
 

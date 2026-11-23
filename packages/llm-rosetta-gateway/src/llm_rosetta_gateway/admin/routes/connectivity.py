@@ -56,19 +56,7 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
     if not lane and pinfo is not None:
         lane = getattr(pinfo, "transport", "http")
     if lane and lane != "http":
-        return JSONResponse(
-            {
-                "provider": name,
-                "base_url": base_url,
-                "transport": lane,
-                "endpoints": {},
-                "warnings": [
-                    f"This lane is served over {lane!r}, not HTTP: there is no host "
-                    "to dial and no HTTP endpoint to probe. Its reachability is "
-                    "whatever the local agent answers on the next request."
-                ],
-            }
-        )
+        return await _probe_agent_lane(request, pinfo, name, base_url, lane)
 
     from llm_rosetta_gateway._vendor.httpclient import AsyncClient
 
@@ -154,6 +142,60 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
                 }
 
     return JSONResponse(results)
+
+
+async def _probe_agent_lane(
+    request: Any, pinfo: Any, name: str, base_url: str, lane: str
+) -> Response:
+    """Answer a non-HTTP lane's connectivity test with its own transport.
+
+    The lane has no host to dial.  A transport that can run a short turn does
+    so; one that cannot says plainly that the next request is the only probe.
+    """
+    transport = (getattr(request.app, "transports", {}) or {}).get(lane)
+    lane_probe = getattr(transport, "probe_provider", None)
+    if not callable(lane_probe) or pinfo is None:
+        return JSONResponse(
+            {
+                "provider": name,
+                "base_url": base_url,
+                "transport": lane,
+                "endpoints": {},
+                "warnings": [
+                    f"This lane is served over {lane!r}, not HTTP: there is no host "
+                    "to dial and no HTTP endpoint to probe. Its reachability is "
+                    "whatever the local agent answers on the next request."
+                ],
+            }
+        )
+
+    probe = await lane_probe(pinfo)
+    agent = probe.get("agent") or {}
+    endpoint: dict[str, Any] = {"ok": bool(probe.get("ok"))}
+    label = " ".join(part for part in (agent.get("name"), agent.get("version")) if part)
+    if label:
+        endpoint["status"] = label
+    if not endpoint["ok"]:
+        endpoint["error"] = probe.get("error") or "the agent did not answer"
+    warnings: list[str] = []
+    if probe.get("needs_sign_in"):
+        warnings.append(
+            "The agent is installed but not signed in: use the credential "
+            "panel's Sign in button."
+        )
+    if probe.get("quota_observed"):
+        warnings.append("The agent reported its allowance; open Quota to read it.")
+    payload: dict[str, Any] = {
+        "provider": name,
+        "base_url": base_url,
+        "transport": lane,
+        "reachable": bool(probe.get("reachable")),
+        "endpoints": {"agent": endpoint},
+        "warnings": warnings,
+    }
+    if not payload["reachable"]:
+        payload["base_error"] = probe.get("error") or "the agent did not start"
+    return JSONResponse(payload)
 
 
 async def _probe_base(client: Any, base_url: str, results: dict[str, Any]) -> None:

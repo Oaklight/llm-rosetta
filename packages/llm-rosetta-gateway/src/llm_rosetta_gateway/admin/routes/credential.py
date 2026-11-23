@@ -392,11 +392,64 @@ async def test_provider_credential(request: Any, name: str) -> Response:
     is the cheapest authenticated call every format shares, and it already
     knows the provider's declared path and headers, so the connectivity probe
     is reused rather than copied.
+
+    A keyless agent lane has neither a token to mint nor a host to dial.  Its
+    test is one short turn through the lane: the agent starts, authenticates
+    from its own store and completes a prompt.
     """
     try:
         pinfo = _provider(request, name)
     except _NotSupported as exc:
         return _error(exc)
+
+    lane = getattr(pinfo, "transport", "http") or "http"
+    transport = (getattr(request.app, "transports", {}) or {}).get(lane)
+    lane_probe = getattr(transport, "probe_provider", None)
+    if lane != "http" and callable(lane_probe):
+        result = await lane_probe(pinfo)
+        ok = bool(result.get("ok"))
+        payload: dict[str, Any] = {
+            "provider": name,
+            "ok": ok,
+            "refreshed": False,
+            "accepted": ok,
+            "reachable": bool(result.get("reachable")),
+            "transport": lane,
+            "lane": result,
+        }
+        if not ok:
+            payload["error"] = (
+                result.get("error")
+                or result.get("text")
+                or "the agent did not complete a test turn"
+            )
+        return JSONResponse(payload)
+
+    if pinfo.keyless:
+        # No credential was ever minted, but the lane still answers over HTTP:
+        # the models listing is the honest reachability test.
+        from .connectivity import test_provider_connectivity
+
+        probe = await test_provider_connectivity(request, name)
+        connectivity = json.loads(probe.body)
+        models = (connectivity.get("endpoints") or {}).get("models") or {}
+        accepted = bool(models.get("ok"))
+        payload = {
+            "provider": name,
+            "ok": accepted,
+            "refreshed": False,
+            "accepted": accepted,
+            "reachable": connectivity.get("reachable"),
+            "connectivity": connectivity,
+        }
+        if not accepted:
+            payload["error"] = (
+                connectivity.get("base_error")
+                or models.get("error")
+                or models.get("status")
+                or "the upstream did not answer"
+            )
+        return JSONResponse(payload)
 
     if not pinfo.mints_credential:
         return JSONResponse(

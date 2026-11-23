@@ -447,7 +447,16 @@ FAKE_AGENT = textwrap.dedent(
             update(sid, {"sessionUpdate": "agent_message_chunk",
                          "content": {"type": "text", "text": "Hello"}})
             update(sid, {"sessionUpdate": "usage_update", "used": 42,
-                         "size": 1000})
+                         "size": 1000,
+                         "_meta": {"_claude/rateLimit": {
+                             "status": "allowed",
+                             "rateLimitType": "five_hour",
+                             "resetsAt": 1800000000,
+                             "unifiedWindows": {
+                                 "five_hour": {"utilization": 0.02},
+                                 "seven_day": {"utilization": 0.31},
+                             },
+                         }}})
             send({"jsonrpc": "2.0", "id": req_id,
                   "result": {"stopReason": "end_turn"}})
         elif method == "session/cancel":
@@ -575,13 +584,15 @@ class TestTheStream:
     """What one turn yields, chunk by chunk."""
 
     async def test_a_turn_streams_text_thought_and_a_stop(self, monkeypatch, tmp_path):
+        from llm_rosetta_gateway.transport.acp_quota import lanes_reading
+
         transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok")
         try:
-            stream = await transport.send_streaming(
-                _provider(monkeypatch, tmp_path, "ok"), "", TURN
-            )
+            stream = await transport.send_streaming(provider, "", TURN)
             assert stream.status_code == 200
             chunks = [chunk async for chunk in stream]
+            reading = lanes_reading(provider)
         finally:
             await transport.close()
         kinds = [chunk["type"] for chunk in chunks]
@@ -592,7 +603,25 @@ class TestTheStream:
             "model": "gemini-3.1-pro",
         }
         assert chunks[2]["text"] == "Hello"
+        assert chunks[3]["meta"]["_claude/rateLimit"]["rateLimitType"] == "five_hour"
+        assert reading is not None
+        assert [window.name for window in reading.windows] == ["5 hours", "7 days"]
         assert chunks[-1]["stop_reason"] == "end_turn"
+
+    async def test_probe_provider_runs_one_throwaway_turn(self, monkeypatch, tmp_path):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok")
+        try:
+            result = await transport.probe_provider(provider)
+        finally:
+            await transport.close()
+
+        assert result["ok"] is True
+        assert result["reachable"] is True
+        assert result["text"] == "Hello"
+        assert result["agent"]["name"] == "fake-acp"
+        assert result["quota_observed"] is True
+        assert "close" in _kinds(tmp_path)
 
     async def test_one_process_serves_two_turns(self, monkeypatch, tmp_path):
         """The agent is started once per provider, not once per request.
