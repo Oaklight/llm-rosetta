@@ -1,8 +1,9 @@
-"""The admin model test answers a client tool call instead of suspending.
+"""The admin model test stops at the tool call.
 
-An ACP lane keeps the agent's turn open while a client tool call is pending,
-so a test that stopped at the call would hold the session for its whole TTL.
-The task follows the call with a synthetic result and lets the turn finish.
+An ACP lane ends a turn with a tool call; the client's next request carries
+the result and resumes the same conversation.  The test is that first
+request, so it declares a conversation and returns the call instead of
+inventing a result.
 """
 
 from __future__ import annotations
@@ -111,50 +112,31 @@ async def _run(payload: dict[str, Any]) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_tool_call_is_answered_and_the_turn_finishes(monkeypatch):
+async def test_a_tool_call_is_returned_as_the_result(monkeypatch):
     calls = _client(
         monkeypatch,
-        [
-            HttpResponse(200, CaseInsensitiveDict(), _tool_call_body(), "http://x"),
-            HttpResponse(
-                200,
-                CaseInsensitiveDict(),
-                _text_body("It is 18C and sunny."),
-                "http://x",
-            ),
-        ],
+        [HttpResponse(200, CaseInsensitiveDict(), _tool_call_body(), "http://x")],
     )
 
     await _run(_payload())
 
-    assert len(calls) == 2
+    assert len(calls) == 1
     _, first, headers = calls[0]
     assert headers["x-claude-code-session-id"] == "admin-test-task-1"
-    _, follow, _ = calls[1]
-    assert follow["messages"][-2] == {
-        "role": "assistant",
-        "content": None,
-        "tool_calls": [
-            {
-                "id": "call_1",
-                "type": "function",
-                "function": {
-                    "name": "get_weather",
-                    "arguments": '{"location": "San Francisco"}',
-                },
-            }
-        ],
-    }
-    assert follow["messages"][-1] == {
-        "role": "tool",
-        "tool_call_id": "call_1",
-        "content": "18C and sunny",
-    }
-    assert testing._test_tasks["task-1"]["status"] == "done"
-    assert (
-        testing._test_tasks["task-1"]["body"]["choices"][0]["message"]["content"]
-        == "It is 18C and sunny."
-    )
+    assert first["tools"] == TOOLS
+    task = testing._test_tasks["task-1"]
+    assert task["status"] == "done"
+    assert task["status_code"] == 200
+    assert task["body"]["choices"][0]["message"]["tool_calls"] == [
+        {
+            "id": "call_1",
+            "type": "function",
+            "function": {
+                "name": "get_weather",
+                "arguments": '{"location": "San Francisco"}',
+            },
+        }
+    ]
 
 
 @pytest.mark.asyncio
@@ -171,7 +153,7 @@ async def test_a_request_without_tools_declares_no_session(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_a_failed_turn_is_not_followed(monkeypatch):
+async def test_a_failed_turn_is_reported_as_the_result(monkeypatch):
     error = json.dumps({"error": "the agent is not signed in"}).encode()
     calls = _client(
         monkeypatch, [HttpResponse(400, CaseInsensitiveDict(), error, "http://x")]
@@ -182,15 +164,6 @@ async def test_a_failed_turn_is_not_followed(monkeypatch):
     assert len(calls) == 1
     assert testing._test_tasks["task-1"]["status"] == "done"
     assert testing._test_tasks["task-1"]["status_code"] == 400
-
-
-@pytest.mark.asyncio
-async def test_the_follow_up_loop_is_bounded(monkeypatch):
-    calls = _client(
-        monkeypatch,
-        [HttpResponse(200, CaseInsensitiveDict(), _tool_call_body(), "http://x")],
-    )
-
-    await _run(_payload())
-
-    assert len(calls) == testing._MAX_TEST_TOOL_TURNS
+    assert testing._test_tasks["task-1"]["body"] == {
+        "error": "the agent is not signed in"
+    }
