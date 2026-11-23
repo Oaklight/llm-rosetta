@@ -1894,30 +1894,17 @@ class TestClientTools:
         assert "`x-session-id`" not in response.error_text
         assert _kinds(tmp_path) == []
 
-    @pytest.mark.parametrize(
-        ("declared", "expected", "absent"),
-        [
-            # A config `session_header` is what the gateway sends upstream; it
-            # is not a carrier unless the identity reader knows the name.
-            ("x-session-id", "`x-claude-code-session-id`", "`x-session-id`"),
-            ("x-opencode-session", "`x-opencode-session`", None),
-            (
-                "x-gemini-session-id",
-                "`x-gemini-session-id` (with an id-shaped value)",
-                None,
-            ),
-        ],
-    )
-    async def test_the_session_header_hint_names_a_real_carrier(
-        self, monkeypatch, tmp_path, declared, expected, absent
+    async def test_the_hint_ignores_a_configured_session_header(
+        self, monkeypatch, tmp_path
     ):
+        """``session_header`` is sent upstream, not a guaranteed carrier."""
         transport = AcpTransport(timeout=10)
         provider = _provider(
             monkeypatch,
             tmp_path,
             "mcp",
             conversation=None,
-            session_header=declared,
+            session_header="x-session-id",
         )
         body = _turn("[User]\necho hello")
         body["tools"] = [ECHO_TOOL]
@@ -1926,9 +1913,8 @@ class TestClientTools:
         finally:
             await transport.close()
         assert response.status_code == 400
-        assert expected in response.error_text
-        if absent is not None:
-            assert absent not in response.error_text
+        assert "x-claude-code-session-id" in response.error_text
+        assert "`x-session-id`" not in response.error_text
         assert _kinds(tmp_path) == []
 
     async def test_two_processes_may_return_the_same_session_id(
