@@ -68,8 +68,15 @@ def _warn(report: dict[str, Any], message: str) -> None:
 
 
 def _empty_directory(path: str) -> bool:
-    """Whether *path* is a directory with no entries, so it may be replaced."""
+    """Whether *path* is a directory with no entries, so it may be replaced.
+
+    A symlink is never "empty": ``os.rmdir`` on one fails, and a link is
+    something an operator made on purpose, so it is set aside like any other
+    occupant.
+    """
     try:
+        if os.path.islink(path):
+            return False
         return os.path.isdir(path) and not os.listdir(path)
     except OSError:
         return False

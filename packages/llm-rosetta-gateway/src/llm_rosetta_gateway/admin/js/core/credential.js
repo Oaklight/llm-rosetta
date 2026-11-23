@@ -352,3 +352,37 @@ export function shortAccount(value) {
   if (value.length <= 28) return value;
   return `${value.slice(0, 10)}…${value.slice(-6)}`;
 }
+
+/**
+ * The lifecycle warnings one provider save returned, as display lines.
+ *
+ * Two sources report in different shapes: ``provider_warnings`` carries the
+ * loader's disabled-provider objects (``{provider, reason, category}``) and
+ * ``profile.warnings`` carries free sentences from the rename.  A successful
+ * save must not hide either — a moved profile or a disabled provider is a
+ * fact about the entry the operator just wrote.
+ */
+export function profileSaveWarnings(res) {
+  const lines = [];
+  const add = value => {
+    if (typeof value === 'string' && value.trim()) lines.push(value.trim());
+  };
+  const providerWarnings = (res && res.provider_warnings) || [];
+  for (const item of Array.isArray(providerWarnings) ? providerWarnings : []) {
+    if (typeof item === 'string') {
+      add(item);
+      continue;
+    }
+    if (!item || typeof item !== 'object') continue;
+    const provider = typeof item.provider === 'string' ? item.provider.trim() : '';
+    const reason = typeof item.reason === 'string' ? item.reason.trim() : '';
+    if (provider && reason) add(`${provider}: ${reason}`);
+    else add(reason || provider);
+  }
+  const profile = res && res.profile;
+  const profileWarnings = (profile && profile.warnings) || [];
+  for (const item of Array.isArray(profileWarnings) ? profileWarnings : []) {
+    add(item);
+  }
+  return lines;
+}
