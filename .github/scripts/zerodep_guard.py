@@ -58,10 +58,9 @@ def version_key(value):
         parts = parts + (0,) * (3 - len(parts))
     if not separator:
         return (parts, 1, ())
-    identifiers = tuple(
-        (0, int(part), "") if part.isdigit() else (1, 0, part)
-        for part in prerelease.split(".")
-    )
+    identifiers = []
+    for part in prerelease.split("."):
+        identifiers.append((0, int(part), "") if part.isdigit() else (1, 0, part))
     return (parts, 0, identifiers)
 
 
@@ -110,19 +109,13 @@ def parse_status(directory, payload):
         status = json.loads(payload)
     except json.JSONDecodeError as error:
         raise SystemExit(
-            f"zerodep status --json failed in {directory}: {error}"
+            f"zerodep status --json failed in {directory}: {error}",
         ) from error
     modules = status.get("modules") if isinstance(status, dict) else None
     if not isinstance(modules, list):
-        raise SystemExit(
-            f"zerodep status --json in {directory} has no 'modules' list; "
-            "the CLI output changed"
-        )
+        raise SystemExit(f"{directory}: status --json has no 'modules' list")
     if not modules:
-        raise SystemExit(
-            f"zerodep status --json in {directory} found no modules; "
-            "check the vendor-dir path"
-        )
+        raise SystemExit(f"{directory}: status --json found no modules")
     if status.get("lock") is not True:
         print(
             f"::warning::zerodep status in {directory} found no lock file; "
@@ -157,7 +150,7 @@ def run_status(directory):
         print(result.stderr.rstrip(), file=sys.stderr)
     if result.returncode != 0:
         raise SystemExit(
-            f"zerodep status failed in {directory} (rc={result.returncode})"
+            f"zerodep status failed in {directory} (rc={result.returncode})",
         )
     return parse_status(directory, result.stdout)
 
@@ -190,7 +183,8 @@ def classify(rows):
             continue
         if state == "outdated":
             compared = compare_versions(
-                row.get("installed_version"), row.get("latest_version")
+                row.get("installed_version"),
+                row.get("latest_version"),
             )
             if compared is None:
                 groups["unknown"].append(row)
@@ -209,6 +203,11 @@ def classify(rows):
             continue
         groups["manual"].append(row)
     return groups
+
+
+def missing_names(rows):
+    """Return the names of rows whose state is ``missing``."""
+    return {row["name"] for row in rows if row.get("state") == "missing"}
 
 
 def describe(row):
@@ -255,9 +254,8 @@ def append_sections(lines, groups):
         lines.append("")
     if groups["expected"]:
         lines.append("**Expected local patches**")
-        lines.extend(
-            f"- {row['name']}: `locally-modified`" for row in groups["expected"]
-        )
+        for row in groups["expected"]:
+            lines.append(f"- {row['name']}: `locally-modified`")
         lines.append("")
     if groups["manual"]:
         lines.append("**Needs a human decision**")
@@ -363,7 +361,7 @@ def update(plan_path):
         result = subprocess.run(command, cwd=directory)
         if result.returncode != 0:
             raise SystemExit(
-                f"zerodep update failed in {directory} (rc={result.returncode})"
+                f"zerodep update failed in {directory} (rc={result.returncode})",
             )
 
 
@@ -377,9 +375,7 @@ def verify(plan_path, summary_path):
         if not entry["updatable"]:
             continue
         after = {row["name"]: row for row in run_status(directory)}
-        restored = {
-            row["name"] for row in entry["before"] if row.get("state") == "missing"
-        }
+        restored = missing_names(entry["before"])
         for name in entry["updatable"]:
             row = after.get(name)
             state = row.get("state") if row else "absent"
@@ -390,7 +386,7 @@ def verify(plan_path, summary_path):
                 problems.append(f"{directory}: {name} is {state}")
             elif row and row.get("missing_deps"):
                 problems.append(
-                    f"{directory}: {name} is missing {', '.join(row['missing_deps'])}"
+                    f"{directory}: {name} is missing {', '.join(row['missing_deps'])}",
                 )
             checked += 1
         for row in entry["before"]:
