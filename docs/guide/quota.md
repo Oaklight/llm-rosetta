@@ -99,6 +99,7 @@ probe by name and URL:
 | `url` | Explicit usage URL, when it is not derivable from `base_url` |
 | `interval` | Background refresh in seconds; `0` reads on demand only |
 | `demote_at` | Used share that counts as spent; `100` keeps the vendor's rule |
+| `local` | A command that prints the reading (`argv`, `env`, `timeout`); for a lane whose own CLI is the only source |
 
 ## Reading it
 
@@ -274,3 +275,38 @@ as everywhere else, that a failed reading never demotes, and an error never
 invents a window. The provider card reports **no readable quota** with that
 reason rather than an error, and its **Manage usage** link points at the
 vendor's settings page, which is the only place the cap is visible.
+
+## A lane whose own CLI prints the allowance
+
+An agent lane keeps the subscription inside the vendor's CLI, so the gateway
+has no key and no HTTP endpoint to read. Some CLIs can print the account's
+windows themselves. Such a shim declares the command alongside its probe:
+
+```yaml
+quota:
+  probe: antigravity_usage
+  local:
+    argv: ["{acp_argv0}", "-p", "/usage", "--output-format", "json"]
+    env:
+      ANTIGRAVITY_APP_DATA_DIR: "{acp_home}"
+    timeout: 60
+```
+
+The gateway runs the command with the lane's environment and profile — the
+same sign-in and account the agent uses. `{acp_home}`, `{acp_state_dir}` and
+`{acp_argv0}` are expanded from the provider entry, and `acp.env` is applied
+before `local.env`, so a declaration can override one vendor variable for the
+read alone. `local.timeout` defaults to 30 seconds. The probe's
+`parse_local(body)` decodes the JSON stdout and returns `(plan, windows)`; it
+may be sync or async.
+
+A reading is kept like any other: the Quota card serves it for one minute, and
+`?refresh=1` reads again. A failed command, a timeout, or output the probe
+refuses is stored as an `error` reading, with the command's own words as the
+reason — opening the card does not rerun it; the next refresh does. This source
+needs no `quota.interval`, and a lane that declares none is never polled in
+the background.
+
+The probe is written like any other: export `PROBES`, give it an `id` that
+`quota.probe` names, implement `match()` returning `""` (the lane has no HTTP
+usage endpoint) and add `parse_local`.
