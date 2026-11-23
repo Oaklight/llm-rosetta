@@ -194,6 +194,13 @@ Each typed endpoint is a **face** of it and may stand on another vendor's host,
 so `base_url` belongs to the face, not only to the entry. The block's fields are
 `shim`, `format`, `path`, `enabled` and `base_url`.
 
+The admin panel also stores a `preset` on the entry: the service the Basic
+pane's **Provider preset** names (a shim name such as `openai--chat_completions`).
+Nothing at runtime reads it. Each face still carries its own `shim`, because
+the gateway infers no face from a vendor. The editor uses `preset` to fill a
+face that has not been set by hand and to tell a face that follows the preset
+from one set to another service; an entry without it opens on its LLM `type`.
+
 `base_url` is a host, and `path` is the path on it — the request goes to
 `base_url` + `path`. A version segment belongs in `path` (or in the shim's
 default path), not in `base_url`: writing
