@@ -900,11 +900,17 @@ class AcpTransport:
         if _tool_defs(body) and key is None:
             # A tool call suspends the turn, and only a declared conversation
             # id can find that suspension when the result arrives.  A derived
-            # id may name two conversations, so it must never key one.
+            # id may name two conversations, so it must never key one.  Name
+            # a header the gateway actually accepts: a bare ``x-session-id``
+            # is set by middleware and is not a carrier.
+            header = (
+                getattr(provider_info, "session_header", None)
+                or "x-claude-code-session-id"
+            )
             raise AcpTurnError(
                 "this request declares tools, but an ACP lane needs a declared "
                 "conversation id to carry a tool result back to the agent; "
-                "send a session header (for example `x-session-id`) and retry.",
+                f"send it in `{header}` and retry.",
                 status_code=400,
             )
         # A process that exited between turns still occupies its slot; taking
