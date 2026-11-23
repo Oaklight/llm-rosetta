@@ -43,6 +43,7 @@ def _agy_provider(
     *,
     name: str = "antigravity",
     custom: bool = False,
+    harden: bool = True,
     argv_extra: tuple[str, ...] = (),
 ) -> ProviderInfo:
     """A provider whose agent executable is called ``agy``."""
@@ -64,6 +65,7 @@ def _agy_provider(
         transport="acp",
         acp_argv=(str(agy), "acp", *argv_extra),
         acp_argv_custom=custom,
+        acp_harden=harden,
         acp_state_dir=str(tmp_path / "acp" / name),
     )
 
@@ -391,7 +393,35 @@ class TestTheGuard:
 
 
 class TestOverridesAndSeparateProfiles:
-    async def test_an_acp_argv_override_keeps_its_override_and_gets_no_profile(
+    async def test_an_acp_argv_override_still_gets_the_profile(
+        self, monkeypatch, tmp_path
+    ):
+        """Another install is not another profile: the sign-in must survive."""
+        provider = _agy_provider(
+            monkeypatch,
+            tmp_path,
+            "ok",
+            custom=True,
+            argv_extra=("--dangerously-skip-permissions=true",),
+        )
+        transport = AcpTransport(timeout=5)
+        try:
+            await _chunks(transport, provider)
+        finally:
+            await transport.close()
+        (argv,) = _started_argv(tmp_path)
+        assert argv[:3] == [
+            "acp",
+            "--dangerously-skip-permissions=true",
+            "--process-per-session",
+        ]
+        assert argv[argv.index("--gemini-dir") + 1] == str(_root(provider))
+        assert argv[-2:] == ["--agent", AGENT_NAME]
+        assert (_root(provider) / "config" / "hooks.json").is_file()
+        # The profile asks for every tool; the plan mode is not needed.
+        assert "mode" not in _kinds(tmp_path)
+
+    async def test_harden_false_runs_the_command_as_written(
         self, monkeypatch, tmp_path
     ):
         provider = _agy_provider(
@@ -399,6 +429,7 @@ class TestOverridesAndSeparateProfiles:
             tmp_path,
             "ok",
             custom=True,
+            harden=False,
             argv_extra=("--dangerously-skip-permissions=true",),
         )
         transport = AcpTransport(timeout=5)

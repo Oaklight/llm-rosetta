@@ -605,6 +605,82 @@ def _resolve_lane_transport(
     return lane_transport
 
 
+def _argv_value(value: Any, provider_key: str, label: str) -> tuple[str, ...] | None:
+    """Check a declared agent command and normalise it to a tuple.
+
+    A command is a non-empty list of non-empty strings.  Refusing a typo here
+    keeps it beside the provider that declared it, rather than surfacing as a
+    start failure on the lane's first request.
+
+    Raises:
+        ValueError: The value is not a list/tuple of non-empty strings.
+    """
+    if value is None:
+        return None
+    if (
+        not isinstance(value, (list, tuple))
+        or not value
+        or not all(isinstance(part, str) and part for part in value)
+    ):
+        raise ValueError(
+            f"Provider '{provider_key}': {label} must be a non-empty list of "
+            f"strings, got {value!r}"
+        )
+    return tuple(value)
+
+
+def _resolve_acp_argv(
+    cfg: dict[str, Any], shim: Any | None, provider_key: str
+) -> tuple[str, ...] | None:
+    """The command that starts this lane's agent, and the version it selects.
+
+    Three sources, in order: ``acp.argv`` in the provider entry, the older
+    top-level ``acp_argv``, then the shim's ``connection.acp_argv``.  The
+    command names an *install*, not a profile: pointing it at another version
+    of the vendor CLI leaves ``acp.home`` and the vendor's login store where
+    they are, so an image upgrade or a version switch does not cost a sign-in.
+    """
+    block = cfg.get("acp")
+    if isinstance(block, dict):
+        declared = _argv_value(block.get("argv"), provider_key, "acp.argv")
+        if declared is not None:
+            return declared
+    declared = _argv_value(cfg.get("acp_argv"), provider_key, "acp_argv")
+    if declared is not None:
+        return declared
+    if shim is not None:
+        return _argv_value(
+            shim.connection.acp_argv, provider_key, "connection.acp_argv"
+        )
+    return None
+
+
+def _resolve_acp_harden(cfg: dict[str, Any], provider_key: str) -> bool:
+    """Whether the transport gives an operator-named ``agy`` its own profile.
+
+    True by default, including for a command the provider entry wrote: the
+    hardening is what keeps the sign-in store, the tool gate and the workspace
+    with the lane when the operator moves to another ``agy`` build.
+    ``acp.harden: false`` is the explicit opt-out for a command that must run
+    exactly as written.
+
+    Raises:
+        ValueError: ``acp.harden`` is present but is not a boolean.
+    """
+    block = cfg.get("acp")
+    if not isinstance(block, dict):
+        return True
+    value = block.get("harden")
+    if value is None:
+        return True
+    if not isinstance(value, bool):
+        raise ValueError(
+            f"Provider '{provider_key}': acp.harden must be true or false, "
+            f"got {value!r}"
+        )
+    return value
+
+
 def _acp_env(
     cfg: dict[str, Any],
     shim: Any | None,
@@ -660,6 +736,7 @@ def _lane_environment(
     provider_key: str,
     data_dir: str | None,
     lane_transport: str,
+    argv: tuple[str, ...] | None = None,
 ) -> tuple[str, dict[str, str] | None]:
     """Return the persistent home and the environment one lane starts with.
 
@@ -667,10 +744,38 @@ def _lane_environment(
     override and the ``{acp_home}`` expansion.  A lane that speaks HTTP starts
     no agent, so it ignores those settings and keeps its ``acp_env`` map as
     written.
+
+    An ``agy`` command may already name ``--gemini-dir``.  That directory is
+    the profile the transport writes into, so it is also the home the sign-in
+    and the environment must name.  When ``acp.home`` names a different one,
+    the two are refused rather than split silently across the agent and its
+    sign-in.
     """
     if lane_transport != "acp":
         return _acp_state_dir(data_dir, provider_key), _acp_env(cfg, shim, provider_key)
     home = _acp_state_dir(data_dir, provider_key, cfg)
+    if argv:
+        from ..transport.acp_profile import gemini_dir_of, is_agy
+
+        if is_agy(argv) and (named := gemini_dir_of(list(argv))):
+            expanded = os.path.expanduser(named)
+            if not os.path.isabs(expanded):
+                raise ValueError(
+                    f"Provider '{provider_key}': the --gemini-dir in the agent "
+                    f"command must be an absolute path (or move the profile "
+                    f"with acp.home), got {named!r}"
+                )
+            resolved = os.path.abspath(expanded)
+            block = cfg.get("acp")
+            explicit = isinstance(block, dict) and block.get("home") is not None
+            if explicit and home != resolved:
+                raise ValueError(
+                    f"Provider '{provider_key}': acp.home and the "
+                    f"--gemini-dir in the agent command name different "
+                    f"directories ({home!r} and {resolved!r}); keep one, or "
+                    f"make them equal"
+                )
+            home = resolved
     return home, _acp_env(cfg, shim, provider_key, home, inject_home=True)
 
 
@@ -941,13 +1046,16 @@ def build_provider_info(
 
     command_takes_key = bool(token_command and cfg.get("token_command_env"))
 
-    # The directory that holds this lane's agent profile and the vendor CLI's
-    # login store.  It lives under the data directory by default, so a mounted
+    # The command names an install; the home names the profile.  They are read
+    # separately so that moving to another vendor CLI version — another argv —
+    # keeps the login store, and so the transport knows which command it may
+    # harden.  The home lives under the data directory by default, so a mounted
     # volume carries the login across restarts and image upgrades.  The
     # effective environment is built once: the ACP spawn, the vendor sign-in
     # driver and the admin's status probe must all name the same profile.
+    acp_argv = _resolve_acp_argv(cfg, shim, provider_key)
     acp_home, effective_acp_env = _lane_environment(
-        cfg, shim, provider_key, data_dir, lane_transport
+        cfg, shim, provider_key, data_dir, lane_transport, acp_argv
     )
 
     # Name the effective source for the admin editor.
@@ -1012,12 +1120,12 @@ def build_provider_info(
         ),
         stream_required=bool(shim.connection.stream_required if shim else False),
         transport=lane_transport,
-        acp_argv=(
-            tuple(cfg["acp_argv"])
-            if isinstance(cfg.get("acp_argv"), (list, tuple))
-            else (shim.connection.acp_argv if shim is not None else None)
+        acp_argv=acp_argv,
+        acp_argv_custom=(
+            cfg.get("acp_argv") is not None
+            or (isinstance(cfg.get("acp"), dict) and cfg["acp"].get("argv") is not None)
         ),
-        acp_argv_custom=isinstance(cfg.get("acp_argv"), (list, tuple)),
+        acp_harden=_resolve_acp_harden(cfg, provider_key),
         acp_env=effective_acp_env,
         acp_state_dir=acp_home,
         **acp_limits,

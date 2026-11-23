@@ -32,8 +32,11 @@ The transport re-asserts all of it before every session, so a change the agent
 makes to its own profile is undone.  The ACP client also stops a turn at the
 first tool frame that is not a bridged call (the guard in ``acp.py``).
 
-Only an ``agy`` command is hardened this way: the flags are ``agy``'s.  An
-operator-supplied ``acp_argv`` is used as written and is not hardened.
+Only an ``agy`` command is hardened this way: the flags are ``agy``'s.  The
+decision follows the command, not who wrote it: an operator who points
+``acp.argv`` at another ``agy`` build keeps the profile, so the sign-in store
+and the tool gate survive the version switch.  ``acp.harden: false`` is the
+explicit opt-out, and the command then runs as written.
 """
 
 from __future__ import annotations

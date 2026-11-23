@@ -509,6 +509,10 @@ def _provider(
         transport="acp",
         acp_argv=argv,
         acp_argv_custom=agy or wrapper,
+        # These are the best-effort cases: an agent the gateway does not give
+        # its own profile.  The production path that keeps a custom ``agy``
+        # hardened is covered in test_acp_profile.py.
+        acp_harden=not (agy or wrapper),
         acp_env=acp_env,
         acp_processes=processes,
     )
@@ -1622,8 +1626,9 @@ class TestAgentToolsAreOff:
             transport="acp",
             acp_argv=("agy", "acp"),
             acp_argv_custom=True,
+            acp_harden=False,
         )
-        # Written by the operator: used as written, no profile, no flags.
+        # ``acp.harden: false``: used as written, no profile, no flags.
         assert AcpTransport()._argv(provider) == ["agy", "acp"]
 
 

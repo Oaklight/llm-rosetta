@@ -623,6 +623,36 @@ def _apply_optional_int(entry: dict[str, Any], body: dict[str, Any], key: str) -
             entry.pop(key, None)
 
 
+#: Provider keys the ACP lane owns.  They are written by hand in
+#: ``config.jsonc`` — the provider editor has no ACP pane — so a save that
+#: rebuilt the entry from the editor's fields alone would move the lane back to
+#: HTTP, or to the default profile.  ``transport`` names the lane, ``acp``
+#: holds the profile and the agent command, and the two flat spellings stay
+#: for an entry written before ``acp.argv``.
+_ACP_PROVIDER_KEYS = ("transport", "acp", "acp_argv", "acp_env")
+
+
+def _apply_acp_fields(
+    entry: dict[str, Any], body: dict[str, Any], existing: dict[str, Any] | None
+) -> None:
+    """Carry a hand-written ACP lane through a provider save.
+
+    A key the editor sends is stored, or cleared when it sends an empty value;
+    a key it does not send keeps what the file already holds.  Without this an
+    ordinary edit from the panel dropped ``acp.home``, ``acp.argv`` and
+    ``transport: acp`` — the next request then took the HTTP path.
+    """
+    for key in _ACP_PROVIDER_KEYS:
+        if key in body:
+            value = body[key]
+            if value in (None, "", {}, []):
+                entry.pop(key, None)
+            else:
+                entry[key] = value
+        elif existing and key in existing:
+            entry[key] = existing[key]
+
+
 def _optional_provider_keys() -> list[str]:
     """Return provider config keys that should be set-or-cleared.
 
@@ -856,6 +886,9 @@ def _build_provider_entry(
     # The exchange's declared setup inputs live beside those fields but are a
     # dict, so they get their own validated writer.
     _apply_auth_fields(entry, body, existing_providers.get(resolve_name))
+    # The ACP lane's settings are hand-written beside the fields the editor
+    # knows; a save keeps them unless it names one itself.
+    _apply_acp_fields(entry, body, existing_providers.get(resolve_name))
 
     return entry
 

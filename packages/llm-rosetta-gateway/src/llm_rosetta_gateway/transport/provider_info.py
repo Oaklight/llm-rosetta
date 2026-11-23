@@ -245,6 +245,7 @@ class ProviderInfo:
         acp_argv: tuple[str, ...] | None = None,
         acp_env: dict[str, str] | None = None,
         acp_argv_custom: bool = False,
+        acp_harden: bool = True,
         acp_state_dir: str | None = None,
         acp_processes: int = 1,
         acp_max_sessions: int | None = None,
@@ -338,9 +339,15 @@ class ProviderInfo:
         # survive while a vendor-specific switch takes effect.
         self.acp_env = dict(acp_env or {})
         # Whether the operator wrote ``acp_argv`` in the provider entry (as
-        # opposed to the shim declaring it).  A written argv is used as is; a
-        # declared one gets the gateway-owned agent profile.
+        # opposed to the shim declaring it).  Whether that command still gets
+        # the gateway-owned profile is :attr:`acp_harden`'s decision: the
+        # command names an install, not a profile.
         self.acp_argv_custom = acp_argv_custom
+        # Whether the transport may give this lane's agent the gateway-owned
+        # profile.  True even for an operator-supplied command: the profile
+        # carries the sign-in store and the tool gate, so a version switch
+        # must not drop them.  ``acp.harden: false`` is the opt-out.
+        self.acp_harden = acp_harden
         # Where the gateway keeps this provider's agent profile (its own
         # ``--gemini-dir`` for ``agy``); ``None`` takes the transport's
         # per-user default.
