@@ -283,27 +283,15 @@ def _time_matches(window: dict[str, Any], facts: RuleFacts) -> bool:
     return local >= start or local <= end
 
 
-def facts_from_ir(
-    ir_request: dict[str, Any] | None,
-    *,
-    agents: tuple[str, ...] = (),
-    now: datetime | None = None,
-) -> RuleFacts:
-    """Derive a rule's facts from a converted request.
+def _countable_request(ir_request: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    """The parts of *ir_request* an estimate counts, and its image count.
 
-    Args:
-        ir_request: The source-format request in IR form, or ``None``.
-        agents: Tags the client named itself with (headers).
-        now: The moment to judge ``time`` conditions against.
-
-    Returns:
-        The facts.  An absent or empty request is small, image-free and
-        effort-free rather than an error: a rule must not fail a request.
+    Image payloads are replaced by a one-token marker: a data URI is not a
+    token count, and counting its bytes would make every vision request look
+    enormous.  The system prompt and the tool schemas are input the upstream
+    bills for, so they count too.
     """
     from llm_rosetta.api import is_image_part, is_tool_result_part
-
-    if not ir_request:
-        return RuleFacts(agents=agents, now=now)
 
     images = 0
     images_stripped: list[Any] = []
@@ -329,16 +317,49 @@ def facts_from_ir(
                 kept.append(part)
         images_stripped.append({"role": message.get("role"), "content": kept})
 
-    # Four characters per token is the usual rough rule; image payloads are
-    # excluded because a data: URI is not a token count.  The system prompt
-    # and the tool schemas are input the upstream bills for, so they count
-    # too: a rule about input size that only sees the conversation misses
-    # however many tokens they add.
     counted: dict[str, Any] = {"messages": images_stripped}
     if ir_request.get("system_instruction"):
         counted["system_instruction"] = ir_request["system_instruction"]
     if ir_request.get("tools"):
         counted["tools"] = ir_request["tools"]
+    return counted, images
+
+
+def estimate_input_tokens(ir_request: dict[str, Any] | None) -> int:
+    """A rough input-token count for one request in IR form.
+
+    Four characters per token is the usual rough rule.  The gateway has no
+    tokenizer, so this is an estimate and every surface that returns it says
+    so.  ``0`` for an absent request.
+    """
+    if not ir_request:
+        return 0
+    counted, _ = _countable_request(ir_request)
+    size = len(json.dumps(counted, ensure_ascii=False, separators=(",", ":")))
+    return size // 4
+
+
+def facts_from_ir(
+    ir_request: dict[str, Any] | None,
+    *,
+    agents: tuple[str, ...] = (),
+    now: datetime | None = None,
+) -> RuleFacts:
+    """Derive a rule's facts from a converted request.
+
+    Args:
+        ir_request: The source-format request in IR form, or ``None``.
+        agents: Tags the client named itself with (headers).
+        now: The moment to judge ``time`` conditions against.
+
+    Returns:
+        The facts.  An absent or empty request is small, image-free and
+        effort-free rather than an error: a rule must not fail a request.
+    """
+    if not ir_request:
+        return RuleFacts(agents=agents, now=now)
+
+    counted, images = _countable_request(ir_request)
     size = len(json.dumps(counted, ensure_ascii=False, separators=(",", ":")))
     reasoning = ir_request.get("reasoning") or {}
     effort = reasoning.get("effort") if isinstance(reasoning, dict) else None

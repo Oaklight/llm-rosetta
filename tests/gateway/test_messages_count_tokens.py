@@ -328,3 +328,100 @@ async def test_a_dead_host_is_counted_against_its_lane() -> None:
     # an upstream alias, so the *requested* model keys the lane, as in chat.
     assert QUOTA_STATE.rate_limits.upstream_sunk("Up", "claude-alias")
     QUOTA_STATE.clear()
+
+
+def _acp_config() -> dict[str, Any]:
+    """One ACP lane under an alias, for the local-estimate path."""
+    return {
+        "providers": {
+            "Agy": {
+                "type": "acp",
+                "base_url": "http://agy.local",
+                "transport": "acp",
+            }
+        },
+        "models": {"gemini-alias": {"provider": "Agy", "upstream_model": "gemini-pro"}},
+        "server": {"open_on_no_keys": True},
+    }
+
+
+@pytest.mark.asyncio
+async def test_an_acp_lane_answers_a_local_estimate() -> None:
+    """ACP has no counting endpoint; the conversation is still countable.
+
+    The answer must be a normal Messages count body, and the header must say
+    the number is an estimate — a client that needs an exact count can tell
+    the difference.
+    """
+    body = dict(_COUNT_BODY, model="gemini-alias")
+
+    async with _serve(_acp_config()) as app:
+        status, headers, answer = await app.post("/v1/messages/count_tokens", body)
+
+    assert status == 200
+    assert set(answer) == {"input_tokens"}
+    assert answer["input_tokens"] > 0
+    assert headers["x-rosetta-token-count"] == "estimate"
+
+
+@pytest.mark.asyncio
+async def test_an_acp_estimate_does_not_count_an_image_payload() -> None:
+    """A base64 image is a handful of tokens, not one per character."""
+    body = {
+        "model": "gemini-alias",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": "A" * 200_000,
+                        },
+                    },
+                    {"type": "text", "text": "What is this?"},
+                ],
+            }
+        ],
+    }
+
+    async with _serve(_acp_config()) as app:
+        status, _, answer = await app.post("/v1/messages/count_tokens", body)
+
+    assert status == 200
+    assert 0 < answer["input_tokens"] < 1_000
+
+
+@pytest.mark.asyncio
+async def test_the_acp_estimate_row_names_the_lane(tmp_path) -> None:
+    """The estimate is answered before ``begin_typed``; its own note is the
+    only place the row learns the lane."""
+    from llm_rosetta_gateway.observability import PersistenceManager, RequestLog
+    from llm_rosetta_gateway.ops import OpsContext
+
+    pm = await PersistenceManager.create(str(tmp_path))
+    app = await create_app(GatewayConfig(_acp_config()))
+    request_log = RequestLog(persistence=pm)
+    wired: Any = app
+    wired.ops_ctx = OpsContext(request_log=request_log, persistence=pm)
+    wired.request_log = request_log
+    wired.persistence = pm
+    listener = await asyncio.start_server(app._handle_connection, "127.0.0.1", 0)
+    try:
+        served = Served(listener.sockets[0].getsockname()[1])
+        status, _, _ = await served.post(
+            "/v1/messages/count_tokens", dict(_COUNT_BODY, model="gemini-alias")
+        )
+        assert status == 200
+        rows, _total = await pm.query_log_entries(limit=5)
+    finally:
+        listener.close()
+        await listener.wait_closed()
+        await pm.close()
+
+    assert (rows[0]["target_provider_name"], rows[0]["upstream_model"]) == (
+        "Agy",
+        "gemini-pro",
+    )

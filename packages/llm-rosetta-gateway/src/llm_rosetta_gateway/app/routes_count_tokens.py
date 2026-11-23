@@ -17,6 +17,11 @@ and nothing to convert a count into, so the route answers 501 rather than
 forwarding a body the upstream would reject.  The upstream URL is the
 ``/count_tokens`` sibling of the target's own Messages endpoint, so a provider
 with a custom base path or a per-model URL template keeps working.
+
+The ACP lane is the one exception with no counting endpoint of its own.  It
+carries the same conversation, so the route answers a local estimate instead
+of refusing every request; ``x-rosetta-token-count: estimate`` marks the
+number as an approximation, because the gateway has no tokenizer.
 """
 
 from __future__ import annotations
@@ -123,6 +128,46 @@ def _relay(resp: Any, request_id: str) -> Response:
     return response
 
 
+def _estimate_input_tokens(body: dict[str, Any]) -> int:
+    """Estimate a Messages request's input size without a tokenizer."""
+    from llm_rosetta.api import get_converter_class
+
+    from ..routing.rules import estimate_input_tokens
+
+    try:
+        ir = get_converter_class("llm", SOURCE_FORMAT)().request_from_provider(body)
+    except Exception:  # noqa: BLE001 - an estimate must not fail the request
+        ir = None
+    if ir is None:
+        # A body the source converter refuses is still answerable roughly:
+        # the caller asked for a count, not for validation.
+        size = len(json.dumps(body, ensure_ascii=False, separators=(",", ":")).encode())
+        return size // 4
+    return estimate_input_tokens(ir)
+
+
+def _estimated(request_id: str, body: dict[str, Any]) -> Response:
+    """Answer with the local estimate, marked as one."""
+    payload = json.dumps({"input_tokens": _estimate_input_tokens(body)}).encode()
+    response = Response(body=payload, status_code=200, content_type="application/json")
+    response.headers["x-request-id"] = request_id
+    response.headers["x-rosetta-token-count"] = "estimate"
+    return response
+
+
+def _note_lane(ctx: Any, *, model: str, route: Any) -> None:
+    """Record the lane for a refusal or an estimate answered before the flow."""
+    if ctx is None:
+        return
+    ctx.note_route(
+        model=model,
+        target_format=route.target_provider,
+        provider_name=route.provider_name,
+        upstream_model=route.upstream_model,
+        is_stream=False,
+    )
+
+
 async def handle_messages_count_tokens(request: Any, config: GatewayConfig) -> Response:
     """Serve one token-count request."""
     request_id = get_request_id(request)
@@ -176,18 +221,18 @@ async def handle_messages_count_tokens(request: Any, config: GatewayConfig) -> R
 
     ctx = current_lifecycle()
 
+    # An ACP lane drives the conversation over stdio and has no counting
+    # endpoint to relay.  The conversation is the same one the source body
+    # describes, so answer a local estimate rather than refusing.
+    if route.target_provider == "acp":
+        _note_lane(ctx, model=model, route=route)
+        return _estimated(request_id, body)
+
     # The format check comes before the breaker is acquired: a 501 here is
     # this route refusing, not the provider failing, and the lifecycle counts
     # any 5xx that passed the breaker as a provider failure.
     if route.target_provider != SOURCE_FORMAT:
-        if ctx is not None:
-            ctx.note_route(
-                model=model,
-                target_format=route.target_provider,
-                provider_name=route.provider_name,
-                upstream_model=route.upstream_model,
-                is_stream=False,
-            )
+        _note_lane(ctx, model=model, route=route)
         return _error(
             request_id,
             501,
