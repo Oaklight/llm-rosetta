@@ -125,13 +125,17 @@ run a different `agy` build, point `acp.argv` at it and leave the home alone:
 }
 ```
 
-The older top-level `acp_argv` still works as an alias. The gateway applies its
-own profile to any command that starts `agy`, whoever wrote it: the lane keeps
-`--gemini-dir`, the no-tools agent, the deny-all `PreToolUse` hook and the
-session gate, so switching versions neither re-enables host tools nor costs the
-sign-in. `"harden": false` is the explicit opt-out for a command that must run
-exactly as written; the lane then uses whichever store that command selects,
-not `acp.home`.
+The older top-level `acp_argv` still works as an alias. Hardening follows the
+executable name by default: a command whose executable is `agy` (`agy`,
+`agy.real`, `agy.exe`) keeps `--gemini-dir`, the no-tools agent, the deny-all
+`PreToolUse` hook and the session gate, so switching versions neither
+re-enables host tools nor costs the sign-in.
+
+A renamed download (`agy-1.7`) or a wrapper script is not recognised by name.
+Set `"harden": true` to force the profile on that command — a wrapper must pass
+`agy`'s flags through. With `"harden": false` the command runs as written; if
+it starts `agy`, it must also name `--gemini-dir`, because otherwise the agent
+and the sign-in cannot share a profile and the lane is refused.
 
 If the command already names `--gemini-dir`, that directory is the home the
 sign-in writes. Leave `acp.home` unset, or set it to the same path: two
