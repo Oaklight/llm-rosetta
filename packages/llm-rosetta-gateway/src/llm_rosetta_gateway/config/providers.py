@@ -438,13 +438,17 @@ def _credential_source_name(
     provider_owns_command: bool,
     exchange: Any | None,
     token_command: list[str] | None,
+    vendor_managed: bool = False,
 ) -> str:
     """Name the effective credential source for the admin editor.
 
     The builder, not the panel, knows the precedence: a provider-level command
     outranks the shim's declaration, and a shim ships either ``auth.py`` or a
-    command, never both.
+    command, never both.  A vendor-managed exchange is named for itself even
+    though the lane is keyless: it is still the only surface the editor has.
     """
+    if vendor_managed:
+        return "auth_exchange"
     if keyless:
         return "none"
     if provider_owns_command:
@@ -840,6 +844,7 @@ def build_provider_info(
         provider_owns_command=provider_owns_command,
         exchange=exchange,
         token_command=token_command,
+        vendor_managed=vendor_managed,
     )
 
     # The config key, when the caller has one: two providers of the same shim
