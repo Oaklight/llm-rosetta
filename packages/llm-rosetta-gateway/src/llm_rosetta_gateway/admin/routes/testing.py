@@ -19,6 +19,15 @@ _test_tasks: dict[str, dict[str, Any]] = {}
 _MAX_TASK_AGE = 300  # seconds — auto-cleanup threshold
 _TASK_TIMEOUT = 120  # seconds — per-task execution timeout
 
+#: How many tool calls one admin test may answer before it stops following.
+#: A well-behaved model finishes after one; the cap only keeps a loop from
+#: consuming the whole task budget.
+_MAX_TEST_TOOL_TURNS = 3
+
+#: The synthetic result a test hands back for any tool the model calls.  The
+#: test is about the call, not the tool's data.
+_TEST_TOOL_RESULT = "18C and sunny"
+
 
 def _response_body(response: Any) -> Any:
     """Parse a self-call's body, falling back to its text."""
@@ -26,6 +35,54 @@ def _response_body(response: Any) -> Any:
         return response.json()
     except Exception:
         return response.text
+
+
+def _tool_result_payload(
+    payload: dict[str, Any], response: Any
+) -> dict[str, Any] | None:
+    """Build the follow-up that answers a tool call, when one is due.
+
+    The panel reports the tool-call response, not this follow-up.  The admin
+    test is a client that has no tool result of its own, and an ACP lane keeps
+    the agent's ``session/prompt`` in flight — holding the agent lock — until
+    a request carries the result.  Answering the call once is what gives the
+    lane its lock back.  Chat Completions is the shape the built-in LLM tests
+    send; another shape returns ``None``.
+    """
+    if not isinstance(response, dict):
+        return None
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    message = choices[0].get("message")
+    calls = message.get("tool_calls") if isinstance(message, dict) else None
+    if not isinstance(calls, list) or not calls:
+        return None
+    messages = payload.get("messages")
+    if not isinstance(messages, list):
+        return None
+    results = [
+        {
+            "role": "tool",
+            "tool_call_id": call["id"],
+            "content": _TEST_TOOL_RESULT,
+        }
+        for call in calls
+        if isinstance(call, dict) and call.get("id")
+    ]
+    if not results:
+        return None
+    follow = dict(payload)
+    follow["messages"] = [
+        *messages,
+        {
+            "role": "assistant",
+            "content": message.get("content"),
+            "tool_calls": calls,
+        },
+        *results,
+    ]
+    return follow
 
 
 def _cleanup_stale_tasks() -> None:
@@ -87,17 +144,38 @@ async def _run_test_task(
 
             # Enforce per-task timeout so hung upstream calls don't
             # linger for the full _MAX_TASK_AGE cleanup window.
-            resp = await asyncio.wait_for(
-                client.post(url, json=payload, headers=headers),
-                timeout=_TASK_TIMEOUT,
-            )
-            assert isinstance(resp, HttpResponse)
+            current = payload
+            # The panel reports the call the model produced, so keep the
+            # first tool-call response.  Following it answers the call and
+            # returns the lane's locks; that body is cleanup, not a result.
+            reported: tuple[int, Any] | None = None
+            for _ in range(_MAX_TEST_TOOL_TURNS):
+                resp = await asyncio.wait_for(
+                    client.post(url, json=current, headers=headers),
+                    timeout=_TASK_TIMEOUT,
+                )
+                assert isinstance(resp, HttpResponse)
+                body = _response_body(resp)
+                if resp.status_code >= 400:
+                    break
+                follow = _tool_result_payload(current, body)
+                if follow is None:
+                    break
+                if reported is None:
+                    reported = (resp.status_code, body)
+                current = follow
+
+            status_code = resp.status_code
+            # A later error outranks the call: it means the lane could not
+            # carry the synthetic result back, which the test must show.
+            if reported is not None and status_code < 400:
+                status_code, body = reported
 
             _test_tasks[task_id].update(
                 {
                     "status": "done",
-                    "status_code": resp.status_code,
-                    "body": _response_body(resp),
+                    "status_code": status_code,
+                    "body": body,
                 }
             )
         finally:

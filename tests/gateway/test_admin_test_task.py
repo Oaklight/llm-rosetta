@@ -112,18 +112,32 @@ async def _run(payload: dict[str, Any]) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_tool_call_is_returned_as_the_result(monkeypatch):
+async def test_a_tool_call_is_shown_and_the_turn_is_released(monkeypatch):
     calls = _client(
         monkeypatch,
-        [HttpResponse(200, CaseInsensitiveDict(), _tool_call_body(), "http://x")],
+        [
+            HttpResponse(200, CaseInsensitiveDict(), _tool_call_body(), "http://x"),
+            HttpResponse(
+                200,
+                CaseInsensitiveDict(),
+                _text_body("It is 18C and sunny."),
+                "http://x",
+            ),
+        ],
     )
 
     await _run(_payload())
 
-    assert len(calls) == 1
+    assert len(calls) == 2
     _, first, headers = calls[0]
     assert headers["x-claude-code-session-id"] == "admin-test-task-1"
     assert first["tools"] == TOOLS
+    _, follow, _ = calls[1]
+    assert follow["messages"][-1] == {
+        "role": "tool",
+        "tool_call_id": "call_1",
+        "content": testing._TEST_TOOL_RESULT,
+    }
     task = testing._test_tasks["task-1"]
     assert task["status"] == "done"
     assert task["status_code"] == 200
@@ -137,6 +151,7 @@ async def test_a_tool_call_is_returned_as_the_result(monkeypatch):
             },
         }
     ]
+    assert task["body"]["choices"][0]["message"]["content"] is None
 
 
 @pytest.mark.asyncio
@@ -166,4 +181,38 @@ async def test_a_failed_turn_is_reported_as_the_result(monkeypatch):
     assert testing._test_tasks["task-1"]["status_code"] == 400
     assert testing._test_tasks["task-1"]["body"] == {
         "error": "the agent is not signed in"
+    }
+
+
+@pytest.mark.asyncio
+async def test_the_follow_up_loop_is_bounded(monkeypatch):
+    calls = _client(
+        monkeypatch,
+        [HttpResponse(200, CaseInsensitiveDict(), _tool_call_body(), "http://x")],
+    )
+
+    await _run(_payload())
+
+    assert len(calls) == testing._MAX_TEST_TOOL_TURNS
+    assert testing._test_tasks["task-1"]["body"]["choices"][0]["message"]["tool_calls"]
+
+
+@pytest.mark.asyncio
+async def test_a_follow_up_error_outranks_the_call(monkeypatch):
+    """A lane that cannot carry the result back must not look healthy."""
+    error = json.dumps({"error": "the tool result could not be carried"}).encode()
+    calls = _client(
+        monkeypatch,
+        [
+            HttpResponse(200, CaseInsensitiveDict(), _tool_call_body(), "http://x"),
+            HttpResponse(400, CaseInsensitiveDict(), error, "http://x"),
+        ],
+    )
+
+    await _run(_payload())
+
+    assert len(calls) == 2
+    assert testing._test_tasks["task-1"]["status_code"] == 400
+    assert testing._test_tasks["task-1"]["body"] == {
+        "error": "the tool result could not be carried"
     }
