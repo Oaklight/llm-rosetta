@@ -177,6 +177,17 @@ class TestTheResponse:
             {"type": "text", "text": "Hello there"},
         ]
         assert choice["finish_reason"] == {"reason": "length"}
+        assert ir["usage"] == {
+            "prompt_tokens": 42,
+            "completion_tokens": 0,
+            "total_tokens": 42,
+        }
+
+    def test_a_turn_without_usage_has_no_usage_key(self):
+        """No figure is different from a figure of zero."""
+        ir = _converter().response_from_provider({"updates": []})
+
+        assert "usage" not in ir
 
     def test_an_unknown_stop_reason_is_a_plain_stop(self):
         """The agent ended the turn; what arrived is the answer."""
