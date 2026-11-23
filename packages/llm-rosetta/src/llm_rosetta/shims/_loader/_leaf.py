@@ -58,6 +58,9 @@ def _local_quota(
     local = quota.get("local")
     if local is None:
         return (), {}, 30.0
+    probe = quota.get("probe")
+    if not isinstance(probe, str) or not probe:
+        raise ValueError(f"{path}: quota.local needs quota.probe to decode its output")
     if not isinstance(local, dict):
         raise ValueError(f"{path}: quota.local must be a mapping")
     argv = local.get("argv")

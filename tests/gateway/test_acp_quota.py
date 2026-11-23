@@ -8,7 +8,9 @@ place the reading is stored, and the payload the Quota card reads.
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
+import time
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -217,7 +219,7 @@ def _local_provider(tmp_path, script, **env):
     )
 
 
-def _script(tmp_path, body, *, exit_code=0, marker=None):
+def _script(tmp_path, body, *, exit_code=0, marker=None, suffix=""):
     """A stand-in vendor CLI that prints *body* as JSON."""
     payload = {"bucket": {"remaining_fraction": 0.75}, **body}
     path = tmp_path / "quota.py"
@@ -228,12 +230,40 @@ def _script(tmp_path, body, *, exit_code=0, marker=None):
         "payload['lane'] = os.environ.get('FROM_LANE')",
         "payload['extra'] = os.environ.get('EXTRA')",
         "print(json.dumps(payload))",
-        f"sys.exit({exit_code})",
     ]
+    if suffix:
+        source.append(f"print({suffix!r})")
+    source.append(f"sys.exit({exit_code})")
     if marker is not None:
         source.insert(1, f"open({str(marker)!r}, 'a').write('run\\n')")
     path.write_text("\n".join(source), encoding="utf-8")
     return path
+
+
+def _child_script(tmp_path, pid_file):
+    """A CLI that leaves a helper holding stdout and then sleeps."""
+    path = tmp_path / "child.py"
+    path.write_text(
+        "import subprocess, sys, time\n"
+        "p = subprocess.Popen([sys.executable, '-c', "
+        "'import time; time.sleep(60)'])\n"
+        f"open({str(pid_file)!r}, 'w').write(str(p.pid))\n"
+        "time.sleep(60)\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _wait_for_exit(pid, timeout=10.0):
+    """Wait until *pid* is gone, failing the test if it outlives *timeout*."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        time.sleep(0.05)
+    raise AssertionError(f"process {pid} was still running after {timeout:g}s")
 
 
 def test_a_local_command_is_run_with_the_lane_profile(tmp_path):
@@ -346,6 +376,138 @@ def test_a_reading_from_another_source_can_be_stored(tmp_path):
     assert stored.windows[0].name == "7 days"
 
 
+def test_a_local_command_that_leaves_a_helper_is_bounded(tmp_path):
+    """A helper holding the pipes cannot stretch the declared timeout."""
+    pid_file = tmp_path / "helper.pid"
+    provider = _local_provider(tmp_path, _child_script(tmp_path, pid_file))
+    started = time.monotonic()
+
+    reading = asyncio.run(
+        refresh_local(
+            provider,
+            provider.quota_probe_impl,
+            provider.quota_local_argv,
+            provider.quota_local_env,
+            timeout=0.5,
+        )
+    )
+
+    elapsed = time.monotonic() - started
+    assert reading.status == "error"
+    assert reading.error is not None
+    assert "did not finish" in reading.error
+    assert elapsed < 8, f"the read took {elapsed:.1f}s"
+    assert pid_file.exists()
+    _wait_for_exit(int(pid_file.read_text()))
+
+
+def test_cancelling_a_local_read_kills_the_command(tmp_path):
+    pid_file = tmp_path / "helper.pid"
+    provider = _local_provider(tmp_path, _child_script(tmp_path, pid_file))
+
+    async def run():
+        task = asyncio.create_task(
+            refresh_local(
+                provider,
+                provider.quota_probe_impl,
+                provider.quota_local_argv,
+                provider.quota_local_env,
+                timeout=30.0,
+            )
+        )
+        deadline = time.monotonic() + 10
+        while not pid_file.exists() and time.monotonic() < deadline:
+            await asyncio.sleep(0.02)
+        assert pid_file.exists(), "the helper never started"
+        pid = int(pid_file.read_text())
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        return pid
+
+    _wait_for_exit(asyncio.run(run()))
+
+
+def test_concurrent_reads_run_the_local_command_once(tmp_path):
+    marker = tmp_path / "runs"
+    provider = _local_provider(tmp_path, _script(tmp_path, {}, marker=marker))
+    config = SimpleNamespace(providers={"local": provider})
+
+    async def both():
+        return await asyncio.gather(
+            read_provider_quota(config, "local"),
+            read_provider_quota(config, "local"),
+        )
+
+    first, second = asyncio.run(both())
+
+    assert marker.read_text().count("run") == 1
+    assert first["status"] == "ok"
+    assert second["status"] == "ok"
+
+
+def test_a_failed_local_read_keeps_the_agents_reading(tmp_path):
+    script = _script(tmp_path, {}, exit_code=2)
+    provider = _local_provider(tmp_path, script)
+    store_reading(
+        provider,
+        LaneReading(
+            probe="agent",
+            credential=lane_credential(provider),
+            windows=[QuotaWindow(name="7 days", used_percent=12.0)],
+        ),
+    )
+    config = SimpleNamespace(providers={"local": provider})
+
+    payload = asyncio.run(read_provider_quota(config, "local", force=True))
+
+    assert payload["status"] == "ok"
+    assert payload["credentials"][0]["reading"]["windows"][0]["name"] == "7 days"
+    assert "the quota command failed" in payload["warning"]
+    stored = lanes_reading(provider)
+    assert stored is not None
+    assert stored.windows[0].name == "7 days"
+
+
+def test_a_command_that_floods_stdout_is_cut_off(tmp_path):
+    script = tmp_path / "flood.py"
+    script.write_text(
+        "import sys\nsys.stdout.write('x' * (2 << 20))\n", encoding="utf-8"
+    )
+    provider = _local_provider(tmp_path, script)
+
+    reading = asyncio.run(
+        refresh_local(
+            provider,
+            provider.quota_probe_impl,
+            provider.quota_local_argv,
+            provider.quota_local_env,
+            timeout=10.0,
+        )
+    )
+
+    assert reading.status == "error"
+    assert "printed more than" in (reading.error or "")
+
+
+def test_a_footer_after_the_json_is_tolerated(tmp_path):
+    script = _script(tmp_path, {}, suffix="read complete")
+    provider = _local_provider(tmp_path, script)
+
+    reading = asyncio.run(
+        refresh_local(
+            provider,
+            provider.quota_probe_impl,
+            provider.quota_local_argv,
+            provider.quota_local_env,
+            timeout=5.0,
+        )
+    )
+
+    assert reading.status == "ok"
+    assert [window.name for window in reading.windows] == ["5 hours"]
+
+
 class TestTheLocalCommandDeclaration:
     """The shim declares the command; a provider entry may override it."""
 
@@ -373,6 +535,7 @@ class TestTheLocalCommandDeclaration:
                     local_env={"FROM_SHIM": "1"},
                     local_timeout=15.0,
                 ),
+                quota_probes=(_LocalProbe(),),
             )
         )
         yield
@@ -404,8 +567,40 @@ class TestTheLocalCommandDeclaration:
         )
 
         assert info.quota_local_argv == ("other", "-p", "/usage")
-        assert info.quota_local_env == {"FROM_ENTRY": "2"}
+        assert info.quota_local_env == {"FROM_SHIM": "1", "FROM_ENTRY": "2"}
         assert info.quota_local_timeout == 7.0
+
+    def test_an_entry_override_is_merged_field_by_field(self):
+        """Env layers, and the shim's command and timeout stay when unnamed."""
+        info = self._info({"quota": {"local": {"env": {"FROM_ENTRY": "2"}}}})
+
+        assert info.quota_local_argv == ("agy", "-p", "/usage")
+        assert info.quota_local_env == {"FROM_SHIM": "1", "FROM_ENTRY": "2"}
+        assert info.quota_local_timeout == 15.0
+
+    def test_a_local_command_without_a_probe_is_refused(self):
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims import register_shim, unregister_shim
+        from llm_rosetta_gateway.config.providers import build_provider_info
+
+        register_shim(
+            ProviderShim(
+                name="local-no-probe--acp",
+                format="acp",
+                connection=ConnectionConfig(
+                    base_url="http://agent.local", transport="acp"
+                ),
+            )
+        )
+        try:
+            with pytest.raises(ValueError, match="needs a probe"):
+                build_provider_info(
+                    "acp",
+                    {"quota": {"local": {"argv": ["agy", "-p", "/usage"]}}},
+                    shim_name="local-no-probe--acp",
+                )
+        finally:
+            unregister_shim("local-no-probe--acp")
 
     @pytest.mark.parametrize(
         ("local", "message"),
