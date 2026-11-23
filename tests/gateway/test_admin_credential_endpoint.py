@@ -1026,3 +1026,25 @@ class TestVendorManagedLogin:
 
         assert payload == {"provider": "chatgpt", "removed": True, "revoked": True}
         assert exchange.credential_calls == 0
+
+    def test_signing_out_does_not_mark_the_lane_failed(self):
+        """The CLI's sign-out is not the gateway's credential failing."""
+        from llm_rosetta_gateway.maintenance.startup import (
+            DeferredStartup,
+            ProviderInitState,
+        )
+
+        exchange = _VendorExchange()
+        exchange._record = {"subject": "user-1"}
+        pinfo = _pinfo(exchange, key="", keyless=True, source="none")
+        startup = DeferredStartup(
+            SimpleNamespace(providers={"chatgpt": pinfo}), SimpleNamespace()
+        )
+        request = _Request(SimpleNamespace(providers={"chatgpt": pinfo}))
+        request.app.deferred_startup = startup
+
+        payload = json.loads(_call(delete_provider_credential, request).body)
+
+        assert payload["removed"] is True
+        assert startup.provider_state("chatgpt") is not ProviderInitState.FAILED
+        assert "interactive_setup_required" not in (pinfo.token_status or {})
