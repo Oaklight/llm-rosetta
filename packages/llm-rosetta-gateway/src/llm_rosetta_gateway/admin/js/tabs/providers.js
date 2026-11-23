@@ -2764,18 +2764,6 @@ function renderProviders() {
     // single provider can serve several formats at once (#611).
     const baseUrl = cfg.base_url || '';
     const shimBaseUrl = !baseUrl && shim.default_base_url ? shim.default_base_url : '';
-    let apiKeyDisplay = cfg.api_key || '';
-    let apiKeyMuted = false;
-    if (!apiKeyDisplay && cfg.token_command) {
-      apiKeyDisplay = 'token_command';
-      apiKeyMuted = true;
-    } else if (!apiKeyDisplay && shim.default_api_key_env) {
-      apiKeyDisplay = '${' + shim.default_api_key_env + '}';
-      apiKeyMuted = true;
-    }
-    const apiKeyField = S._credentialVisible
-      ? `<div class="pc-field" data-field="api-key" data-label="${t('card.apiKey')}" title="${esc(apiKeyDisplay)}"><code class="${apiKeyMuted ? 'text-muted' : ''}">${esc(apiKeyDisplay)}</code></div>`
-      : '';
     const isFree = _isFreeProvider(name);
     const title = isFree ? _freeTitle(name) : name;
     const modelCount = _countModelsForProvider(name);
@@ -2803,7 +2791,7 @@ function renderProviders() {
       // A card has room for the name of a capability; the table's 150px column
       // does not, so it keeps the icon alone and the name in the tooltip.
       capsHtmlFull: _capBadgesHtml(_getProviderCaps(cfg, name), { compact: false, cfg }),
-      toggleHtml, actionsHtml, modelCount, apiKeyField,
+      toggleHtml, actionsHtml, modelCount,
     };
   };
 
@@ -2821,7 +2809,6 @@ function renderProviders() {
       <div class="pc-validation-warning" role="status" aria-hidden="true" title="${p.autoDisabled ? esc(p.autoWarningHover) : ''}">${p.autoDisabled ? esc(p.autoWarningTitle) : ''}</div>
       ${p.degradedHtml}
       <div class="pc-badges">${p.capsHtmlFull}</div>
-      ${p.apiKeyField ? `<div class="pc-meta">${p.apiKeyField}</div>` : ''}
       ${p.isFree ? `<div class="pc-free-note">${esc(t('free.disclosure'))}</div>` : ''}
       <div class="pc-foot">
         ${p.actionsHtml}
