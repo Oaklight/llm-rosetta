@@ -77,6 +77,28 @@ generateContent 请求照常转换后就到达它。
 3. 发送请求。流式与非流式客户端都能被服务：网关边接收 agent 的更新边按客户端
    自己的方言写出。
 
+## 登录与持久配置
+
+网关给每个提供方一个位于数据目录下的独立目录，默认是
+`<data_dir>/acp/<provider>`，并用 `--gemini-dir` 指向它来启动 ACP agent 和管理面板的
+登录。桌面 Linux 上 `agy` 把 token 放在整机共享的 keyring 里；无头主机或容器里没有
+keyring，`agy` 会把文件形式的 token 写在该目录下。把网关的数据目录挂载到卷上，
+重启网关或部署新镜像后都能复用这次登录。在提供方条目里设置 `acp.home` 可以切换到
+另一个已保存的目录：
+
+```jsonc
+"antigravity": {
+  "type": "antigravity--acp",
+  "acp": {"home": "saved/antigravity-work"}
+}
+```
+
+认证卡片提供 **Start browser sign-in**：它运行
+`agy acp --login --gemini-dir <home>`，打开 Google 登录页，接收粘贴的授权码，
+并报告账号。无头主机无法反查账号，因此登录成功后还会在同一目录写一个不含机密的
+标记文件（`.llm-rosetta-login.json`）；重启后面板仍显示 **已连接** 就是靠它。
+标记里只有时间戳，没有任何 token。
+
 ## 模型
 
 请求里的模型名会作为该会话的 `model` 选项交给 agent。模型名是 agent 自己的，
@@ -163,7 +185,8 @@ schema —— 网关就关闭会话，把整段对话重放进一个列出新工
 
 ## 安全
 
-- 网关从不持有、读取或记录 Google token：`agy` 把它存在自己使用的位置。
+- 网关从不持有、读取或记录 Google token：`agy` 把它存在 keyring 里，或在无头主机上
+  存在该通道的持久目录里。网关只在那个目录写一个不含机密的时间戳标记。
 - agent 在网关自有、且每次会话前都会被重写的配置中运行：它的内置工具无法在主机上
   执行，客户端工具只能通过网关的回环 MCP 端点到达它。
 - agent 每个提供方启动一次并跨请求复用；网关退出时停止它。一个提供方是一个进程，
