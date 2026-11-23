@@ -258,6 +258,9 @@ class ProviderInfo:
         quota_url: str | None = None,
         quota_in_band: bool = False,
         quota_probes: tuple[Any, ...] = (),
+        quota_local_argv: tuple[str, ...] = (),
+        quota_local_env: dict[str, str] | None = None,
+        quota_local_timeout: float = 30.0,
     ) -> None:
         if not base_url.startswith(("http://", "https://")):
             raise ValueError(
@@ -397,6 +400,11 @@ class ProviderInfo:
         # for its in-band classifier only.
         self.quota_in_band = quota_in_band
         self.quota_probes = tuple(quota_probes)
+        # A lane whose allowance is only readable by its own CLI names the
+        # command here; ``quota_probe_impl.parse_local`` decodes its output.
+        self.quota_local_argv = tuple(quota_local_argv)
+        self.quota_local_env = dict(quota_local_env or {})
+        self.quota_local_timeout = float(quota_local_timeout)
         self.quota_probe: str | None = None
         self.quota_probe_impl: Any | None = None
         self.quota_usage_url: str | None = None

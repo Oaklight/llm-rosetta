@@ -149,6 +149,43 @@
               "type": "number",
               "description": "Used share at which a window demotes the credential. 100 keeps the vendor's own rule.",
               "default": 100
+            },
+            "in_band": {
+              "type": "boolean",
+              "description": "This lane has no usage endpoint; the probe is kept for its in-band classifier.",
+              "default": false
+            },
+            "local": {
+              "type": "object",
+              "description": "A vendor CLI command that prints the allowance as JSON. Use it when the only way to read the account is the lane's own CLI.",
+              "additionalProperties": false,
+              "required": [
+                "argv"
+              ],
+              "properties": {
+                "argv": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "description": "Command and arguments. {acp_home}, {acp_state_dir} and {acp_argv0} are expanded from the provider entry."
+                },
+                "env": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Extra environment for the command; the lane's acp_env is applied first."
+                },
+                "timeout": {
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "default": 30,
+                  "description": "Seconds the command may run before it is stopped."
+                }
+              }
             }
           }
         },

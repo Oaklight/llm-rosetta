@@ -1115,6 +1115,70 @@ def _resolve_acp_limits(cfg: dict[str, Any], provider_key: str) -> dict[str, Any
     return limits
 
 
+def _resolve_quota_local(
+    local_cfg: Any, shim_quota: Any, provider_key: str
+) -> tuple[tuple[str, ...], dict[str, str], float]:
+    """Read the local usage command a lane declares, or that its entry overrides.
+
+    A vendor CLI that is the only way to read an account prints the allowance
+    as JSON.  The shim names the command; a provider entry may replace it for
+    one profile.
+
+    Args:
+        local_cfg: The entry's ``quota.local`` block, or ``None`` to inherit.
+        shim_quota: The shim's :class:`QuotaDeclaration`, when it has one.
+        provider_key: The config key, used in error messages.
+
+    Returns:
+        ``(argv, env, timeout)``, empty when the lane declares no command.
+
+    Raises:
+        ValueError: The block is present but malformed.
+    """
+    if local_cfg is None:
+        if shim_quota is None:
+            return (), {}, 30.0
+        return (
+            tuple(shim_quota.local_argv),
+            dict(shim_quota.local_env),
+            shim_quota.local_timeout,
+        )
+    if not isinstance(local_cfg, dict):
+        raise ValueError(f"Provider '{provider_key}': quota.local must be a mapping")
+    raw_argv = local_cfg.get("argv")
+    raw_env = local_cfg.get("env") or {}
+    raw_timeout = local_cfg.get("timeout", 30.0)
+    if (
+        not isinstance(raw_argv, (list, tuple))
+        or not raw_argv
+        or not all(isinstance(part, str) and part for part in raw_argv)
+    ):
+        raise ValueError(
+            f"Provider '{provider_key}': quota.local.argv must be a "
+            "non-empty list of strings"
+        )
+    if not isinstance(raw_env, dict):
+        raise ValueError(
+            f"Provider '{provider_key}': quota.local.env must be a mapping "
+            "of environment names to strings"
+        )
+    for env_name, env_value in raw_env.items():
+        if not isinstance(env_name, str) or not isinstance(env_value, str):
+            raise ValueError(
+                f"Provider '{provider_key}': quota.local.env must map "
+                f"strings to strings; {env_name!r} has value {env_value!r}"
+            )
+    if (
+        isinstance(raw_timeout, bool)
+        or not isinstance(raw_timeout, (int, float))
+        or float(raw_timeout) <= 0
+    ):
+        raise ValueError(
+            f"Provider '{provider_key}': quota.local.timeout must be a positive number"
+        )
+    return tuple(raw_argv), dict(raw_env), float(raw_timeout)
+
+
 def _bind_auth_exchange(
     provider_key: str,
     cfg: dict[str, Any],
@@ -1326,6 +1390,15 @@ def build_provider_info(
         quota_cfg.get("in_band", False)
         or (shim_quota.in_band if shim_quota is not None else False)
     )
+    # A lane whose allowance is only readable through its own CLI: the shim
+    # names the command, or the provider entry overrides it.  Unlike the HTTP
+    # probes this is a local subprocess, so the command is expanded with the
+    # lane's profile when the quota card reads it.
+    (
+        quota_local_argv,
+        quota_local_env,
+        quota_local_timeout,
+    ) = _resolve_quota_local(quota_cfg.get("local"), shim_quota, provider_key)
 
     command_takes_key = bool(token_command and cfg.get("token_command_env"))
 
@@ -1436,6 +1509,9 @@ def build_provider_info(
         quota_url=quota_url,
         quota_in_band=quota_in_band,
         quota_probes=_quota_probes(shim, quota_cfg.get("probe")),
+        quota_local_argv=quota_local_argv,
+        quota_local_env=quota_local_env,
+        quota_local_timeout=quota_local_timeout,
     )
 
 

@@ -13,6 +13,12 @@ layer.  The store is process-wide, so a config reload that rebuilds the
 transport keeps the last reading.  The quota service, which may import this
 module, converts the same reading into the admin payload.
 
+Not every CLI reports the allowance in a turn.  A shim may instead declare
+``quota.local``: a command that prints the account as JSON.  :func:`refresh_local`
+runs it with the lane's profile and hands stdout to the probe's
+``parse_local``; the reading lands in the same store, so the card cannot tell
+the two sources apart.
+
 Nothing here is vendor-specific beyond the field names it tolerates: a
 ``rateLimit`` object under any ``_meta`` key is read, and a window shape it
 does not know still becomes a window with whatever share it reported.
@@ -20,13 +26,18 @@ does not know still becomes a window with whatever share it reported.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import inspect
+import json
+import os
+import tempfile
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-from llm_rosetta.contracts.quota import QuotaWindow
+from llm_rosetta.contracts.quota import QuotaProbeError, QuotaWindow
 
 #: Probe id the transport's observations are stored under.  One id is enough:
 #: a reading is keyed by the lane's profile, so two entries never overwrite
@@ -35,6 +46,12 @@ ACP_QUOTA_PROBE = "acp-usage"
 
 #: The one status a reading from an agent can have: the agent answered.
 STATUS_OK = "ok"
+
+#: The local command failed, timed out, or printed no reading.
+STATUS_ERROR = "error"
+
+#: How much of a local command's output is kept for decoding and errors.
+_MAX_LOCAL_OUTPUT = 1 << 20
 
 #: Window names an adapter uses for its rolling limits, and their lengths.
 _WINDOW_NAMES = {
@@ -274,6 +291,178 @@ def record_reading(update: dict[str, Any], provider_info: Any) -> bool:
     reading = reading_of(update, provider_info)
     if reading is None:
         return False
+    store_reading(provider_info, reading)
+    return True
+
+
+def store_reading(provider_info: Any, reading: LaneReading) -> None:
+    """Replace this lane's last reading with *reading*.
+
+    A local command's success and its failure are both readings: storing the
+    failure keeps the Quota card from rerunning a broken command on every
+    open, and the next forced read replaces it.
+    """
     with _READINGS_LOCK:
         _READINGS[lane_identity(provider_info)] = reading
-    return True
+
+
+def _expand_local(value: str, provider_info: Any) -> str:
+    """Expand the profile placeholders a local quota command may carry."""
+    home = str(getattr(provider_info, "acp_state_dir", "") or "")
+    argv = tuple(getattr(provider_info, "acp_argv", ()) or ())
+    executable = str(argv[0]) if argv else ""
+    return (
+        value.replace("{acp_home}", home)
+        .replace("{acp_state_dir}", home)
+        .replace("{acp_argv0}", executable)
+    )
+
+
+def _local_env(provider_info: Any, extra: dict[str, str] | None) -> dict[str, str]:
+    """The command's environment: the lane's, then the declaration's."""
+    env = dict(os.environ)
+    for name in getattr(provider_info, "acp_env_unset", ()) or ():
+        env.pop(str(name), None)
+    for name, value in (getattr(provider_info, "acp_env", None) or {}).items():
+        env[str(name)] = _expand_local(str(value), provider_info)
+    for name, value in (extra or {}).items():
+        env[str(name)] = _expand_local(str(value), provider_info)
+    return env
+
+
+def _local_workdir(provider_info: Any) -> str:
+    """A writable directory for the vendor CLI."""
+    home = getattr(provider_info, "acp_state_dir", None)
+    if home and os.path.isdir(str(home)):
+        return str(home)
+    return tempfile.gettempdir()
+
+
+def _json_of_output(text: str) -> Any:
+    """Decode the JSON a vendor CLI printed, tolerating a leading banner."""
+    stripped = text.strip()
+    if not stripped:
+        raise QuotaProbeError("the quota command printed nothing")
+    try:
+        return json.loads(stripped)
+    except ValueError:
+        start = stripped.find("{")
+        if start >= 0:
+            try:
+                return json.loads(stripped[start:])
+            except ValueError:
+                pass
+    raise QuotaProbeError("the quota command did not print JSON: " + stripped[:300])
+
+
+def _error_reading(provider_info: Any, probe_id: str, message: str) -> LaneReading:
+    """A failed local read, stored like any other reading."""
+    return LaneReading(
+        probe=probe_id,
+        credential=lane_credential(provider_info),
+        status=STATUS_ERROR,
+        error=message,
+    )
+
+
+async def refresh_local(
+    provider_info: Any,
+    probe: Any,
+    argv: tuple[str, ...],
+    env: dict[str, str] | None = None,
+    *,
+    timeout: float = 30.0,
+) -> LaneReading:
+    """Run a shim-declared local quota command and store its reading.
+
+    The command is the lane's own vendor CLI: it sees the same profile the
+    agent does, so the reading belongs to the same account.  The probe's
+    ``parse_local`` decodes the JSON; a failure is stored as an error reading
+    so the next Quota open does not immediately rerun it.
+
+    Args:
+        provider_info: The lane whose profile and environment the command uses.
+        probe: The shim probe; it must provide ``parse_local``.
+        argv: Declared command, with profile placeholders.
+        env: Declaration-owned environment, applied over the lane's.
+        timeout: Seconds the command may run.
+
+    Returns:
+        The stored reading, successful or not.
+    """
+    probe_id = str(getattr(probe, "id", ACP_QUOTA_PROBE))
+    command = [_expand_local(str(part), provider_info) for part in argv]
+    if not command or not all(command):
+        reading = _error_reading(provider_info, probe_id, "the quota command is empty")
+        store_reading(provider_info, reading)
+        return reading
+    parse_local = getattr(probe, "parse_local", None)
+    if not callable(parse_local):
+        reading = _error_reading(
+            provider_info,
+            probe_id,
+            f"probe {probe_id!r} does not decode a local quota command",
+        )
+        store_reading(provider_info, reading)
+        return reading
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=_local_env(provider_info, env),
+            cwd=_local_workdir(provider_info),
+        )
+    except OSError as exc:
+        reading = _error_reading(
+            provider_info, probe_id, f"the quota command could not start: {exc}"
+        )
+        store_reading(provider_info, reading)
+        return reading
+    try:
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(), timeout=max(0.1, float(timeout))
+        )
+    except asyncio.TimeoutError:
+        process.kill()
+        await process.wait()
+        reading = _error_reading(
+            provider_info,
+            probe_id,
+            f"the quota command did not finish in {timeout:g}s",
+        )
+        store_reading(provider_info, reading)
+        return reading
+    out = stdout[:_MAX_LOCAL_OUTPUT].decode("utf-8", "replace")
+    err = stderr[:_MAX_LOCAL_OUTPUT].decode("utf-8", "replace").strip()
+    if process.returncode != 0:
+        detail = err or out.strip()[:300] or f"exit code {process.returncode}"
+        reading = _error_reading(
+            provider_info, probe_id, f"the quota command failed: {detail}"
+        )
+        store_reading(provider_info, reading)
+        return reading
+    try:
+        payload = _json_of_output(out)
+        result = parse_local(payload)
+        if inspect.isawaitable(result):
+            result = await result
+        plan, windows = result
+    except QuotaProbeError as exc:
+        reading = _error_reading(provider_info, probe_id, str(exc))
+    except Exception as exc:  # noqa: BLE001 - a shim parser must not break admin
+        reading = _error_reading(
+            provider_info, probe_id, f"the quota command's output was not read: {exc}"
+        )
+    else:
+        reading = LaneReading(
+            probe=probe_id,
+            credential=lane_credential(provider_info),
+            windows=list(windows),
+            plan=plan,
+            status=STATUS_OK,
+            read_at=datetime.now(timezone.utc),
+        )
+    store_reading(provider_info, reading)
+    return reading

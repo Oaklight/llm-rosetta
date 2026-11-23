@@ -240,6 +240,12 @@ class QuotaProbe(Protocol):
     # for a non-2xx answer.  The probe raises :class:`QuotaProbeError` for an
     # answer it cannot decode, and :class:`ProbeRefused` for a status whose
     # description belongs to :meth:`describe_error`.
+    #
+    # ``def parse_local(self, body) -> (plan, windows)`` -- decode the JSON a
+    # shim-declared ``quota.local.argv`` command printed.  The gateway runs
+    # the command with the lane's profile and calls this method with the
+    # parsed stdout; no HTTP request is made.  It raises
+    # :class:`QuotaProbeError` for output it cannot read.
 
 
 @dataclass(frozen=True, slots=True)
