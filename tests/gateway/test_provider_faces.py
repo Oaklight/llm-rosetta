@@ -610,3 +610,44 @@ def test_every_typed_endpoint_reads_its_block(type_name):
     assert desc.config_path_key is not None
     assert face_value(cfg, desc.config_shim_key, type_name) == "x--y"
     assert face_value(cfg, desc.config_path_key, type_name) == "/p"
+
+
+class TestThePresetIsRemembered:
+    """The editor's preset is stored beside the entry and read by nothing else."""
+
+    def _build(self, body: dict, existing: dict | None = None) -> dict:
+        from llm_rosetta_gateway.admin.routes._shared import _build_provider_entry
+
+        return _build_provider_entry(
+            {"api_key": "k", **body}, "k", "https://x.example", existing or {}, "p"
+        )
+
+    def test_it_is_written_and_cleared_like_the_other_optional_fields(self):
+        entry = self._build({"preset": "openai--chat_completions"})
+        assert entry["preset"] == "openai--chat_completions"
+        assert "preset" not in self._build({"preset": ""})
+
+    @pytest.mark.parametrize("value", [5, True, ["x"], {"a": 1}, "   ", None])
+    def test_only_a_non_blank_string_is_stored(self, value):
+        assert "preset" not in self._build({"preset": value})
+
+    def test_surrounding_whitespace_is_trimmed(self):
+        assert self._build({"preset": " openai--chat_completions "})["preset"] == (
+            "openai--chat_completions"
+        )
+
+    def test_an_entry_that_carries_it_still_loads_and_routes_on_its_faces(self):
+        cfg = _config(
+            {
+                "type": "cohere--chat_completions",
+                "preset": "openai--chat_completions",
+                "base_url": "https://api.cohere.com",
+                "api_key": "k",
+                "embeddings": {"shim": "openai--embedding"},
+            }
+        )
+
+        assert "mix" in cfg.providers
+        assert "mix" in cfg.embeddings_provider_infos
+        # The chat face installed its own shim, not the preset's.
+        assert cfg.provider_shim_names["mix"] == "cohere--chat_completions"

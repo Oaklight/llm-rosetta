@@ -815,6 +815,15 @@ def _build_provider_entry(
     if provider_type:
         entry["type"] = provider_type
 
+    # The service the entry stands on, as the editor's preset picker shows it.
+    # Nothing at runtime reads it: each face carries its own shim.  It is kept
+    # so the editor reopens on the same preset, and so a face set by hand to
+    # another service is still told apart from one that follows.  A shim name,
+    # so anything but a non-blank string is dropped rather than stored.
+    preset = body.get("preset")
+    if isinstance(preset, str) and preset.strip():
+        entry["preset"] = preset.strip()
+
     if "proxy" in body:
         proxy = body["proxy"]
         if proxy:

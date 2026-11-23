@@ -18,6 +18,7 @@ import {
 } from '../core/credential.js';
 import { initLogoPicker, setLogoPickerValue, getLogoPickerValue } from '../components/logo-picker.js';
 import { setTypeTree, getSelectedValue, selectValue, onTypeSelect, createTypePicker } from '../components/type-picker.js';
+import { presetShimFor, initialManual, faceOrigin, afterPresetChange } from '../core/face-origin.js';
 import { buildTypeModel, buildEndpointTypeModel, endpointChoiceConfig, shimBrand, shimGroupKey } from '../core/shim-tree.js';
 import { suggestedProviderName, pickDestination } from '../core/provider-pick.js';
 import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, orderedProviders, nonLlmFormatType } from '../core/provider-endpoints.js';
@@ -1631,6 +1632,14 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
     _followPreset(value);
     _syncBaseTypeDropdown(typeModel.rootOf(value), value);
     _syncKeylessUI();
+  }
+
+  // The entry's host, key variable and per-shim defaults belong to its LLM
+  // face, so they follow that face — the preset only moves it when it follows.
+  // A face set by hand to another service refills them for itself, and a host
+  // the operator wrote is kept: only an empty field, or the previous shim's own
+  // default, is replaced.
+  _llmShimRefill = function (value) {
     const s = shimMap[value];
     _applyShimHint(s);
     if (!s) return;
@@ -1655,10 +1664,13 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
     if (!provCfg || !('preflight_token_count' in provCfg)) {
       document.getElementById('provPreflightTokens').checked = false;
     }
-  }
+  };
 
   // The rich Top-level dropdown and the plain Base type dropdown drive one value.
-  setTypeTree(typeModel.roots, provType || '');
+  // The preset is stored beside the entry; one saved before that existed
+  // stood on its LLM shim, so that is what it opens on.
+  const _storedCfg = name && S.configData ? S.configData.providers[name] : null;
+  setTypeTree(typeModel.roots, (_storedCfg && _storedCfg.preset) || provType || '');
   // Reset the Auth pane for this provider before the first `_syncKeylessUI`
   // paints it: the drawer always opens on Basic, on the source the entry's
   // shim declares.
@@ -1686,12 +1698,13 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
   // Vendor hint placeholders for the initially selected type.  Preserve the
   // "leave blank to keep current key" hint when editing a stored key.
   _syncBaseTypeDropdown(typeModel.rootOf(getSelectedValue()), getSelectedValue());
-  _applyTypePlaceholders(shimMap[getSelectedValue()] || {}, {
+  const _llmInit = provType || getSelectedValue();
+  _applyTypePlaceholders(shimMap[_llmInit] || {}, {
     preserveKeyHint: !S._credentialVisible && !!name,
   });
   // The picker's setTree does not fire the change callback, so the modal's
   // initial selection needs the hint set explicitly.
-  _applyShimHint(shimMap[getSelectedValue()] || null);
+  _applyShimHint(shimMap[_llmInit] || null);
   document.getElementById('provProxy').value = proxy || '';
 
   // URL template overrides
@@ -1703,7 +1716,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
   if (provCfg && 'supports_custom_tools' in provCfg) {
     customToolsCb.checked = !!provCfg.supports_custom_tools;
   } else {
-    const shimDefault = (shimMap[getSelectedValue()] || {}).supports_custom_tools;
+    const shimDefault = (shimMap[_llmInit] || {}).supports_custom_tools;
     customToolsCb.checked = !!shimDefault;
   }
   // Hoist system messages checkbox: config value > shim default
@@ -1711,7 +1724,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
   if (provCfg && 'hoist_system_messages' in provCfg) {
     hoistCb.checked = !!provCfg.hoist_system_messages;
   } else {
-    const shimHoist = (shimMap[getSelectedValue()] || {}).hoist_system_messages;
+    const shimHoist = (shimMap[_llmInit] || {}).hoist_system_messages;
     hoistCb.checked = shimHoist !== false;
   }
   // Preflight token count checkbox: config value only (no shim default)
@@ -1721,7 +1734,7 @@ function openProviderModal(name, baseUrl, apiKey, proxy, provType, opts) {
   document.getElementById('provTimeout').placeholder = (S.configData.server && S.configData.server.upstream_timeout) || 300;
   const maxToolDescEl = document.getElementById('provMaxToolDescLen');
   maxToolDescEl.value = (provCfg && provCfg.max_tool_description_length != null) ? provCfg.max_tool_description_length : '';
-  const _selShim = shimMap[getSelectedValue()] || {};
+  const _selShim = shimMap[_llmInit] || {};
   maxToolDescEl.placeholder = _selShim.max_tool_description_length || '';
   document.getElementById('provModelsPath').value = (provCfg && provCfg.models_path) || '';
   // A new provider opened from the chooser, the shims page or the free-source
@@ -2031,10 +2044,7 @@ function _buildProvEndpointSections() {
     });
     picker.init();
     _endpointPickers.set(desc.name, picker);
-    section.querySelector(`#provFaceReset_${desc.name}`).addEventListener('click', () => {
-      section.dataset.manual = '';
-      _followPresetFace(desc, getSelectedValue());
-    });
+    section.querySelector(`#provFaceReset_${desc.name}`).addEventListener('click', () => _resetFace(desc));
   }
 }
 
@@ -2052,12 +2062,26 @@ function _faceShim(desc) {
 /** One face's picker changed: record who chose, then repaint.  The LLM face
  *  has no path or host to refill, so only the typed faces apply the choice. */
 function _onFaceChange(desc, value) {
-  if (!desc.is_llm) _applyEndpointChoice(desc, value);
+  if (desc.is_llm) {
+    if (_llmShimRefill) _llmShimRefill(value);
+  } else {
+    _applyEndpointChoice(desc, value);
+  }
   // A pick the operator makes is theirs: the preset stops steering this
   // face, unless the pick is the preset's own.
   if (!_presetDriven) {
     _faceSection(desc).dataset.manual = value === _presetShimFor(desc, getSelectedValue()) ? '' : '1';
   }
+  _renderFaceOrigin(desc);
+  _renderCapsSummary();
+}
+
+/** Hand a face back to the preset.  The picker only fires a change when the
+ *  value moves; a face that already holds the preset's offer would otherwise
+ *  keep its Manual badge while the flag underneath had flipped. */
+function _resetFace(desc) {
+  _faceSection(desc).dataset.manual = '';
+  _followPresetFace(desc, getSelectedValue());
   _renderFaceOrigin(desc);
   _renderCapsSummary();
 }
@@ -2081,28 +2105,22 @@ function _ensureLlmFacePicker(desc) {
     onChange: (value) => _onFaceChange(desc, value),
   });
   _llmFacePicker.init();
-  el('provFaceReset_llm').addEventListener('click', () => {
-    _faceSection(desc).dataset.manual = '';
-    _followPresetFace(desc, getSelectedValue());
-  });
+  el('provFaceReset_llm').addEventListener('click', () => _resetFace(desc));
   return _llmFacePicker;
 }
 
 /** Set while the preset (not the operator) moves a face's picker. */
 let _presetDriven = false;
 
+/** Set by the open drawer: refill the host, key variable and defaults for a
+ *  new LLM shim. */
+let _llmShimRefill = null;
+
 /** The shim the preset offers for a typed face: the first registered shim of
  *  that model type from the same vendor as the preset's shim.  Null when the
  *  preset is a bare format, or its vendor has no shim of that type. */
 function _presetShimFor(desc, preset) {
-  // The LLM face is the preset itself unless the operator picks another.
-  if (desc.is_llm) return preset || null;
-  const shims = S.configData?.registered_shims || [];
-  const base = shims.find(s => s.name === preset);
-  if (!base) return null;
-  const vendor = shimGroupKey(base);
-  const hit = shims.find(s => s.model_type === desc.name && shimGroupKey(s) === vendor);
-  return hit ? hit.name : null;
+  return presetShimFor(S.configData?.registered_shims || [], desc, preset);
 }
 
 /** Move one face's picker to what the preset offers (no-op without an offer). */
@@ -2122,14 +2140,14 @@ function _followPresetFace(desc, preset) {
 function _followPreset(preset) {
   for (const desc of S.configData?.model_types || []) {
     const section = _faceSection(desc);
-    if (section && section.dataset.manual !== '1') {
-      if (_presetShimFor(desc, preset)) {
-        _followPresetFace(desc, preset);
-      } else if (_faceShim(desc)) {
-        // The new preset has nothing for this face: its value stays, and from
-        // here on it is the operator's, so a later preset does not replace it.
-        section.dataset.manual = '1';
-      }
+    if (section) {
+      const next = afterPresetChange({
+        manual: section.dataset.manual === '1',
+        value: _faceShim(desc),
+        target: _presetShimFor(desc, preset),
+      });
+      if (next.move) _followPresetFace(desc, preset);
+      section.dataset.manual = next.manual ? '1' : '';
     }
     _renderFaceOrigin(desc);
   }
@@ -2142,9 +2160,8 @@ function _followPreset(preset) {
 function _initFaceOrigin(desc) {
   const section = _faceSection(desc);
   if (!section) return;
-  const target = _presetShimFor(desc, getSelectedValue());
-  const value = _faceShim(desc);
-  section.dataset.manual = target && value && value !== target ? '1' : '';
+  section.dataset.manual = initialManual(
+    _faceShim(desc), _presetShimFor(desc, getSelectedValue())) ? '1' : '';
   _renderFaceOrigin(desc);
 }
 
@@ -2152,11 +2169,13 @@ function _initFaceOrigin(desc) {
  *  offers nothing for it. */
 function _faceOrigin(desc) {
   const section = _faceSection(desc);
-  if (!section || !getSelectedValue()) return '';
-  if (!_faceShim(desc)) return '';
-  // A value the preset offers nothing to replace is not the preset's.
-  if (!_presetShimFor(desc, getSelectedValue())) return 'manual';
-  return section.dataset.manual === '1' ? 'manual' : 'preset';
+  if (!section) return '';
+  return faceOrigin({
+    preset: getSelectedValue(),
+    value: _faceShim(desc),
+    target: _presetShimFor(desc, getSelectedValue()),
+    manual: section.dataset.manual === '1',
+  });
 }
 
 function _renderFaceOrigin(desc) {
@@ -3164,6 +3183,8 @@ async function _saveProvider() {
   // Empty string clears the type: _build_provider_entry only copies `type`
   // when truthy, so the key is dropped from the saved entry.
   body.type = isLlm ? provType : '';
+  // Empty clears it, like the other optional fields.
+  body.preset = getSelectedValue() || '';
   if (urlTemplate) body.url_template = urlTemplate;
   if (streamUrlTemplate) body.stream_url_template = streamUrlTemplate;
   body.supports_custom_tools = document.getElementById('provCustomTools').checked;
