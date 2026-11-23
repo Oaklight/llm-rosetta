@@ -321,31 +321,67 @@ def _auth_state_dir(data_dir: str | None, provider: str) -> str | None:
     return os.path.join(data_dir, "shim-auth", slug)
 
 
-def _acp_state_dir(data_dir: str | None, provider: str) -> str | None:
-    """Return the directory the ACP transport keeps a provider's agent profile in.
+def _acp_state_dir(
+    data_dir: str | None, provider: str, cfg: dict[str, Any] | None = None
+) -> str:
+    """Return the persistent home for this provider's ACP lane.
 
-    One directory per configured provider, ``<data_dir>/acp/<slug>``, so two
-    entries are two profiles and two processes.  ``None`` (no data dir) leaves
-    the location to the transport's per-user default.
+    The default is one directory per configured provider,
+    ``<data_dir>/acp/<slug>``, so two entries are two profiles, two vendor
+    login stores and two processes.  Because it lives under the data
+    directory, a deployment that mounts that directory keeps the vendor's
+    login across restarts and across image upgrades.
+
+    The ``acp.home`` provider setting names another directory.  An absolute
+    path is used as written; a relative one is resolved under the data
+    directory (or the per-user fallback when the gateway has no data
+    directory).  A tilde is expanded.
+
+    Raises:
+        ValueError: ``acp.home`` is present but is not a non-empty string.
     """
-    if not data_dir:
-        return None
-    from ..transport.acp_profile import state_dir_for
+    from ..transport.acp_profile import fallback_root, state_dir_for
 
-    return state_dir_for(data_dir, provider)
+    raw = (cfg or {}).get("acp")
+    home = raw.get("home") if isinstance(raw, dict) else None
+    if home is None:
+        return state_dir_for(data_dir, provider)
+    if not isinstance(home, str) or not home.strip():
+        raise ValueError(
+            f"Provider '{provider}': acp.home must be a non-empty path, got {home!r}"
+        )
+    path = os.path.expanduser(home.strip())
+    if not os.path.isabs(path):
+        root = os.path.abspath(data_dir) if data_dir else str(fallback_root().parent)
+        path = os.path.join(root, path)
+    return os.path.abspath(path)
 
 
-def _auth_context(provider: str, cfg: dict[str, Any], state_dir: str | None) -> Any:
+def _auth_context(
+    provider: str,
+    cfg: dict[str, Any],
+    state_dir: str | None,
+    acp_env: dict[str, str] | None = None,
+) -> Any:
     """Build the context an exchange is handed.
 
     The operator's key travels in ``input_key`` rather than in ``config``, so
     the secret lives in exactly one place even though the exchange is trusted.
+
+    *acp_env* is the environment the lane's agent will actually be started
+    with, after shim defaults, provider overrides and ``{acp_home}``
+    expansion.  A vendor-managed exchange drives the vendor CLI itself, so it
+    must see that same map: otherwise its sign-in would write to one profile
+    while the agent read another.
     """
     from llm_rosetta.contracts.auth import AuthContext
 
+    config = {k: v for k, v in cfg.items() if k != "api_key"}
+    if acp_env is not None:
+        config["acp_env"] = dict(acp_env)
     return AuthContext(
         provider=provider,
-        config={k: v for k, v in cfg.items() if k != "api_key"},
+        config=config,
         state_dir=state_dir,
         input_key=cfg.get("api_key") or "",
     )
@@ -551,13 +587,27 @@ def _resolve_lane_transport(
 
 
 def _acp_env(
-    cfg: dict[str, Any], shim: Any | None, provider_key: str
+    cfg: dict[str, Any],
+    shim: Any | None,
+    provider_key: str,
+    home: str | None = None,
+    *,
+    inject_home: bool = False,
 ) -> dict[str, str] | None:
     """Environment overrides for this provider's ACP agent process.
 
     The shim declares a vendor switch (Claude Code needs
-    ``ENABLE_TOOL_SEARCH=false``); the provider entry may add deployment
-    facts without repeating the vendor's.  The operator's values win.
+    ``ENABLE_TOOL_SEARCH=false`` and its config directory); the provider entry
+    may add deployment facts without repeating the vendor's.  The operator's
+    values win.
+
+    *home* is the lane's persistent directory.  A shim may name it as
+    ``{acp_home}`` (``{acp_state_dir}`` is kept as an alias), which keeps a
+    vendor's login in the gateway's data directory instead of the process's
+    ``HOME``.  With *inject_home*, the gateway also publishes it as
+    ``LLM_ROSETTA_ACP_HOME`` for a shim that drives the vendor CLI itself.  An
+    operator can override that variable, but the sign-in would then use a
+    profile the agent does not.
     """
     env = dict(shim.connection.acp_env or {}) if shim is not None else {}
     override = cfg.get("acp_env")
@@ -574,6 +624,13 @@ def _acp_env(
                     f"strings; {name!r} has value {value!r}"
                 )
         env.update(override)
+    if home:
+        env = {
+            name: value.replace("{acp_home}", home).replace("{acp_state_dir}", home)
+            for name, value in env.items()
+        }
+        if inject_home:
+            env.setdefault("LLM_ROSETTA_ACP_HOME", home)
     return env or None
 
 
@@ -635,16 +692,22 @@ def _bind_auth_exchange(
     cfg: dict[str, Any],
     exchange: Any | None,
     data_dir: str | None,
+    acp_env: dict[str, str] | None = None,
 ) -> tuple[Any | None, str | None]:
     """Build an exchange's context and read the account identity it implies.
 
     Returns ``(context, account_id)``; both ``None`` without an exchange.  A
     record the exchange cannot read costs the provider its account identity,
     not its configuration — the credential may yet be minted.
+
+    *acp_env* is forwarded to the context, so a vendor-managed exchange drives
+    the vendor CLI in the same profile the ACP transport will start it with.
     """
     if exchange is None:
         return None, None
-    context = _auth_context(provider_key, cfg, _auth_state_dir(data_dir, provider_key))
+    context = _auth_context(
+        provider_key, cfg, _auth_state_dir(data_dir, provider_key), acp_env
+    )
     try:
         return context, exchange.account_id(context)
     except Exception as exc:  # noqa: BLE001 - a broken record must not abort config
@@ -838,6 +901,20 @@ def build_provider_info(
 
     command_takes_key = bool(token_command and cfg.get("token_command_env"))
 
+    # The directory that holds this lane's agent profile and the vendor CLI's
+    # login store.  It lives under the data directory by default, so a mounted
+    # volume carries the login across restarts and image upgrades.  The
+    # effective environment is built once: the ACP spawn, the vendor sign-in
+    # driver and the admin's status probe must all name the same profile.
+    acp_home = _acp_state_dir(data_dir, provider_key, cfg)
+    effective_acp_env = _acp_env(
+        cfg,
+        shim,
+        provider_key,
+        acp_home,
+        inject_home=(lane_transport == "acp"),
+    )
+
     # Name the effective source for the admin editor.
     credential_source = _credential_source_name(
         keyless=keyless,
@@ -850,7 +927,7 @@ def build_provider_info(
     # The config key, when the caller has one: two providers of the same shim
     # are two accounts, and the exchange must be able to tell them apart.
     auth_context, auth_account_id = _bind_auth_exchange(
-        provider_key, cfg, exchange, data_dir
+        provider_key, cfg, exchange, data_dir, effective_acp_env
     )
 
     return ProviderInfo(
@@ -906,8 +983,8 @@ def build_provider_info(
             else (shim.connection.acp_argv if shim is not None else None)
         ),
         acp_argv_custom=isinstance(cfg.get("acp_argv"), (list, tuple)),
-        acp_env=_acp_env(cfg, shim, provider_key),
-        acp_state_dir=_acp_state_dir(data_dir, provider_key),
+        acp_env=effective_acp_env,
+        acp_state_dir=acp_home,
         **acp_limits,
         quota_probe_id=quota_probe,
         quota_url=quota_url,
