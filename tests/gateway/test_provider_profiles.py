@@ -15,6 +15,7 @@ import pytest
 
 from llm_rosetta_gateway.admin.routes._shared import _config_preflight_error
 from llm_rosetta_gateway.admin.routes.config.providers import _relocate_profiles
+from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.config.providers import (
     build_provider_info,
     lane_profile_is_managed,
@@ -36,6 +37,21 @@ def test_two_entries_may_not_share_an_acp_home():
     providers = {
         "claude": _pinfo("/srv/profiles/one"),
         "claude-work": _pinfo("/srv/profiles/one"),
+    }
+
+    with pytest.raises(ValueError, match="share the ACP profile"):
+        validate_provider_profiles(providers)
+
+
+def test_a_symlinked_profile_is_the_same_profile(tmp_path):
+    real = tmp_path / "real-profile"
+    real.mkdir()
+    link = tmp_path / "linked-profile"
+    link.symlink_to(real, target_is_directory=True)
+
+    providers = {
+        "claude": _pinfo(str(real)),
+        "claude-work": _pinfo(str(link)),
     }
 
     with pytest.raises(ValueError, match="share the ACP profile"):
@@ -256,3 +272,30 @@ def test_the_admin_preflight_refuses_a_shared_home(tmp_path):
     assert error is not None
     assert "share the ACP profile" in error
     assert not os.path.exists(tmp_path / "shared")
+
+
+def test_the_loader_itself_refuses_a_shared_home(tmp_path):
+    """The build path refuses too, not only the admin preflight."""
+    shared = str(tmp_path / "shared")
+    raw = {
+        "providers": {
+            "one": {
+                "type": "acp",
+                "base_url": "http://one.local",
+                "api_key": "k",
+                "transport": "acp",
+                "acp": {"home": shared},
+            },
+            "two": {
+                "type": "acp",
+                "base_url": "http://two.local",
+                "api_key": "k",
+                "transport": "acp",
+                "acp": {"home": shared},
+            },
+        },
+        "models": {},
+    }
+
+    with pytest.raises(ValueError, match="share the ACP profile"):
+        GatewayConfig(raw, config_path=str(tmp_path / "config.json"))

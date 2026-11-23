@@ -200,3 +200,27 @@ class TestAnEntryWithTwoLanesOfIt:
         assert body["cascade_trimmed_models"] == ["m"]
         entry = _on_disk(request)["models"]["m"]
         assert entry["provider"] == "a"
+
+
+class TestTheDeleteRouteGivesBackTheProfile:
+    @pytest.mark.asyncio
+    async def test_a_deleted_entry_removes_its_managed_profile(self, tmp_path):
+        data_dir = tmp_path / "data"
+        home = data_dir / "acp" / "gone"
+        home.mkdir(parents=True)
+        request = _request(tmp_path, {"providers": _providers("gone"), "models": {}})
+        request.app.gateway_config = SimpleNamespace(
+            data_dir=str(data_dir),
+            providers={
+                "gone": SimpleNamespace(
+                    managed_acp_state_dir=str(home),
+                    managed_auth_state_dir=None,
+                )
+            },
+        )
+
+        body = json.loads((await delete_provider(request)).body)
+
+        assert body["ok"] is True
+        assert not home.exists()
+        assert body["profile"]["removed"] == [str(home)]
