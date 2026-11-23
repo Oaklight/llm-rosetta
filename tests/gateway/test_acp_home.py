@@ -255,3 +255,21 @@ class TestTheBuilderWiresTheExchange:
         assert seen == info.acp_env
         assert seen["LLM_ROSETTA_ACP_HOME"] == info.acp_state_dir
         assert seen["CLAUDE_CONFIG_DIR"] == f"{info.acp_state_dir}/claude"
+
+
+class TestTheLaneTransport:
+    def test_an_http_lane_ignores_the_acp_home(self):
+        """``acp.home`` describes a profile only an ACP lane opens."""
+        info = build_provider_info(
+            "chat_completions",
+            {
+                "base_url": "https://x/v1",
+                "acp": {"home": "saved"},
+                "acp_env": {"P": "{acp_home}/x"},
+            },
+            config_name="http-lane",
+            data_dir="/data",
+        )
+
+        assert info.acp_state_dir == "/data/acp/http-lane"
+        assert info.acp_env == {"P": "{acp_home}/x"}
