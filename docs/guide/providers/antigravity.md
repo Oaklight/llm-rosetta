@@ -110,6 +110,33 @@ so a successful sign-in also writes a non-secret marker
 (`.llm-rosetta-login.json`) in the same directory; that marker is why the panel
 still reads **Connected** after a restart. It holds a timestamp, never a token.
 
+## Switching the agent version
+
+The agent command names an **install**; `acp.home` names the **profile**. To
+run a different `agy` build, point `acp.argv` at it and leave the home alone:
+
+```jsonc
+"antigravity": {
+  "type": "antigravity--acp",
+  "acp": {
+    "home": "saved/antigravity-work",
+    "argv": ["/opt/agy-1.7/bin/agy", "acp"]
+  }
+}
+```
+
+The older top-level `acp_argv` still works as an alias. The gateway applies its
+own profile to any command that starts `agy`, whoever wrote it: the lane keeps
+`--gemini-dir`, the no-tools agent, the deny-all `PreToolUse` hook and the
+session gate, so switching versions neither re-enables host tools nor costs the
+sign-in. `"harden": false` is the explicit opt-out for a command that must run
+exactly as written; it also gives up the profile and the sign-in store.
+
+If the command already names `--gemini-dir`, that directory is the home the
+sign-in writes. Leave `acp.home` unset, or set it to the same path: two
+different directories are refused rather than split between the agent and its
+sign-in.
+
 ## Models
 
 The model name in the request is handed to the agent's own `model` option for
