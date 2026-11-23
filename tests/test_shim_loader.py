@@ -1180,6 +1180,69 @@ class TestConnectionTokenCommand:
         assert shim.connection.token_refresh_interval is None
 
 
+class TestConnectionSessionMeta:
+    """A shim names the ``_meta`` its agent needs on every session call."""
+
+    def _load(self, tmp_path: Path, connection: str):
+        d = tmp_path / "vendor"
+        d.mkdir()
+        (d / "provider.yaml").write_text(
+            f"name: vendor\nformat: acp\nmodel_type: llm\nconnection:\n{connection}"
+        )
+        shims = load_providers_from_dir(tmp_path)
+        assert len(shims) == 1
+        return shims[0]
+
+    def test_a_declared_mapping_is_read(self, tmp_path):
+        shim = self._load(
+            tmp_path,
+            "  base_url: https://vendor.example/v1\n"
+            "  acp_session_meta:\n"
+            "    disableBuiltInTools: true\n",
+        )
+
+        assert shim.connection.acp_session_meta == {"disableBuiltInTools": True}
+
+    def test_a_shim_without_one_declares_nothing(self, tmp_path):
+        shim = self._load(tmp_path, "  base_url: https://vendor.example/v1\n")
+
+        assert shim.connection.acp_session_meta is None
+
+    def test_a_non_mapping_is_refused(self, tmp_path):
+        with pytest.raises(ValueError, match="acp_session_meta must be a mapping"):
+            self._load(
+                tmp_path,
+                "  base_url: https://vendor.example/v1\n"
+                "  acp_session_meta: disableBuiltInTools\n",
+            )
+
+    def test_the_names_to_remove_are_read(self, tmp_path):
+        shim = self._load(
+            tmp_path,
+            "  base_url: https://vendor.example/v1\n"
+            "  acp_env_unset: [ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL]\n",
+        )
+
+        assert shim.connection.acp_env_unset == (
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_BASE_URL",
+        )
+
+    def test_a_shim_without_removals_declares_an_empty_tuple(self, tmp_path):
+        shim = self._load(tmp_path, "  base_url: https://vendor.example/v1\n")
+
+        assert shim.connection.acp_env_unset == ()
+
+    @pytest.mark.parametrize("declaration", ["ANTHROPIC_API_KEY", "[]", "['']"])
+    def test_a_malformed_removal_list_is_refused(self, tmp_path, declaration):
+        with pytest.raises(ValueError, match="acp_env_unset"):
+            self._load(
+                tmp_path,
+                f"  base_url: https://vendor.example/v1\n"
+                f"  acp_env_unset: {declaration}\n",
+            )
+
+
 class TestAuthExchange:
     """A shim can ship its credential exchange as code, not as an argv.
 

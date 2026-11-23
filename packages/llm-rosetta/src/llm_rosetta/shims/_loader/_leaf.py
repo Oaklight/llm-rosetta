@@ -25,6 +25,8 @@ from ._model_list import _model_list_transforms
 from ._parse import (
     _parse_batch,
     _parse_connection_argv,
+    _parse_connection_env_unset,
+    _parse_connection_meta,
     _parse_connection_token_command,
     _parse_hint_msg,
     _parse_reasoning_cap,
@@ -165,6 +167,12 @@ def _load_single_provider(
         transport=str(conn_raw.get("transport") or "http"),
         acp_argv=_parse_connection_argv(conn_raw.get("acp_argv"), cfg.get("name", "")),
         acp_env=conn_raw.get("acp_env"),
+        acp_env_unset=_parse_connection_env_unset(
+            conn_raw.get("acp_env_unset"), cfg.get("name", "")
+        ),
+        acp_session_meta=_parse_connection_meta(
+            conn_raw.get("acp_session_meta"), cfg.get("name", "")
+        ),
         token_command=_parse_connection_token_command(
             conn_raw.get("token_command"),
             command_dir or provider_dir,

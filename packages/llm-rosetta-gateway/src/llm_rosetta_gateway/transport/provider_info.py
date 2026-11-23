@@ -244,6 +244,8 @@ class ProviderInfo:
         transport: str = "http",
         acp_argv: tuple[str, ...] | None = None,
         acp_env: dict[str, str] | None = None,
+        acp_env_unset: tuple[str, ...] = (),
+        acp_session_meta: dict[str, Any] | None = None,
         acp_argv_custom: bool = False,
         acp_harden: bool = True,
         acp_state_dir: str | None = None,
@@ -340,6 +342,17 @@ class ProviderInfo:
         # when the agent process starts, so PATH and the agent's login store
         # survive while a vendor-specific switch takes effect.
         self.acp_env = dict(acp_env or {})
+        # Names removed from the inherited environment before the overrides
+        # apply.  Claude Code reads ANTHROPIC_API_KEY and ANTHROPIC_BASE_URL
+        # from its environment ahead of the stored subscription, so a gateway
+        # process that has them would silently bill the API instead.
+        self.acp_env_unset = tuple(acp_env_unset or ())
+        # Extra ``_meta`` the shim declares for ``session/new`` /
+        # ``session/load`` / ``session/resume``.  A vendor whose agent reads a
+        # tool switch from the request (Claude's ``disableBuiltInTools``)
+        # declares it in the shim; one whose profile already disables tools
+        # leaves it empty.
+        self.acp_session_meta = dict(acp_session_meta or {})
         # Whether the operator wrote ``acp_argv`` in the provider entry (as
         # opposed to the shim declaring it).  Whether that command still gets
         # the gateway-owned profile is :attr:`acp_harden`'s decision: the

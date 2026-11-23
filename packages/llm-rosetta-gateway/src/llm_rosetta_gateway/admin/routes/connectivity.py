@@ -177,6 +177,9 @@ async def _probe_agent_lane(
         endpoint["status"] = label
     if not endpoint["ok"]:
         endpoint["error"] = probe.get("error") or "the agent did not answer"
+    elif probe.get("needs_sign_in"):
+        endpoint["ok"] = False
+        endpoint["error"] = probe.get("error") or "the agent is not signed in"
     warnings: list[str] = []
     if probe.get("needs_sign_in"):
         warnings.append(
@@ -189,7 +192,11 @@ async def _probe_agent_lane(
         "provider": name,
         "base_url": base_url,
         "transport": lane,
-        "reachable": bool(probe.get("reachable")),
+        # An agent that is not signed in cannot serve a turn, so the entry
+        # fails its Test even though the executable started.  Reporting it
+        # reachable sent the operator to the network instead of the sign-in.
+        "reachable": bool(probe.get("reachable"))
+        and not bool(probe.get("needs_sign_in")),
         "endpoints": {"agent": endpoint},
         "warnings": warnings,
     }

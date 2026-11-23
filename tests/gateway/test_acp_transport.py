@@ -108,7 +108,7 @@ FAKE_AGENT = textwrap.dedent(
                 continue
             SESSIONS[0] += 1
             sid = "sess-%d" % SESSIONS[0]
-            note("new", session=sid)
+            note("new", session=sid, meta=msg["params"].get("_meta"))
             servers = msg["params"].get("mcpServers") or []
             MCP_URL = servers[0]["url"] if servers else ""
             if MCP_URL:
@@ -134,7 +134,8 @@ FAKE_AGENT = textwrap.dedent(
             }})
         elif method in ("session/resume", "session/load"):
             sid = msg["params"]["sessionId"]
-            note(method.split("/")[1], session=sid)
+            note(method.split("/")[1], session=sid,
+                 meta=msg["params"].get("_meta"))
             if method == "session/load":
                 update(sid, {"sessionUpdate": "agent_message_chunk",
                              "content": {"type": "text", "text": "replayed"}})
@@ -457,8 +458,16 @@ FAKE_AGENT = textwrap.dedent(
                                  "seven_day": {"utilization": 0.31},
                              },
                          }}})
-            send({"jsonrpc": "2.0", "id": req_id,
-                  "result": {"stopReason": "end_turn"}})
+            outcome = {"stopReason": "end_turn"}
+            if MODE == "usage":
+                outcome["usage"] = {
+                    "inputTokens": 120,
+                    "outputTokens": 34,
+                    "cachedReadTokens": 500,
+                    "cachedWriteTokens": 7,
+                    "totalTokens": 661,
+                }
+            send({"jsonrpc": "2.0", "id": req_id, "result": outcome})
         elif method == "session/cancel":
             note("cancel", session=msg["params"]["sessionId"])
         elif method == "session/close":
@@ -483,6 +492,8 @@ def _provider(
     agy: bool = False,
     wrapper: bool = False,
     session_header: str | None = None,
+    session_meta: dict[str, Any] | None = None,
+    env_unset: tuple[str, ...] = (),
 ) -> ProviderInfo:
     if wrapper:
         # An agy the operator starts through a launcher: the executable's file
@@ -524,6 +535,8 @@ def _provider(
         # hardened is covered in test_acp_profile.py.
         acp_harden=False,
         acp_env=acp_env,
+        acp_env_unset=env_unset,
+        acp_session_meta=session_meta,
         acp_processes=processes,
         session_header=session_header,
     )
@@ -623,6 +636,57 @@ class TestTheStream:
         assert result["quota_observed"] is True
         assert "close" in _kinds(tmp_path)
 
+    async def test_an_authoritative_sign_out_skips_the_turn(
+        self, monkeypatch, tmp_path
+    ):
+        """A definite "signed out" fails the probe before an agent starts."""
+
+        class _Exchange:
+            def needs_interactive_setup(self, ctx):
+                return True
+
+            def setup_state_is_authoritative(self, ctx):
+                return True
+
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok")
+        provider.auth_exchange = _Exchange()
+        provider.auth_context = object()
+        try:
+            result = await transport.probe_provider(provider)
+        finally:
+            await transport.close()
+
+        assert result["reachable"] is False
+        assert result["needs_sign_in"] is True
+        assert _kinds(tmp_path) == []
+
+    async def test_an_unprovable_sign_out_lets_the_agent_answer(
+        self, monkeypatch, tmp_path
+    ):
+        """A vendor-managed lane signs in where the shim cannot read it."""
+
+        class _Exchange:
+            def needs_interactive_setup(self, ctx):
+                return True
+
+            def setup_state_is_authoritative(self, ctx):
+                return False
+
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok")
+        provider.auth_exchange = _Exchange()
+        provider.auth_context = object()
+        try:
+            result = await transport.probe_provider(provider)
+        finally:
+            await transport.close()
+
+        assert result["ok"] is True
+        assert result["reachable"] is True
+        assert result["text"] == "Hello"
+        assert "close" in _kinds(tmp_path)
+
     async def test_one_process_serves_two_turns(self, monkeypatch, tmp_path):
         """The agent is started once per provider, not once per request.
 
@@ -642,6 +706,170 @@ class TestTheStream:
         assert first.body["session_id"] == "sess-1"
         assert second.body["session_id"] == "sess-2"
         assert len(transport._agents) == 0  # closed, not leaked
+
+
+class TestDeclaredSessionMeta:
+    """A shim's ``_meta`` must accompany every call that names a session."""
+
+    async def test_a_new_session_carries_the_shim_meta(self, monkeypatch, tmp_path):
+        transport = AcpTransport()
+        provider = _provider(
+            monkeypatch,
+            tmp_path,
+            "ok",
+            conversation="conv-1",
+            session_meta={"disableBuiltInTools": True},
+        )
+        try:
+            await transport.send(provider, "", _turn("[User]\none"))
+        finally:
+            await transport.close()
+
+        new = [entry for entry in _log(tmp_path) if entry["kind"] == "new"]
+        assert [entry["meta"] for entry in new] == [{"disableBuiltInTools": True}]
+
+    async def test_a_resume_repeats_the_same_meta(self, monkeypatch, tmp_path):
+        """The adapter folds the switch into its fingerprint, load included."""
+        transport = AcpTransport()
+        provider = _provider(
+            monkeypatch,
+            tmp_path,
+            "resume",
+            conversation="conv-1",
+            session_meta={"disableBuiltInTools": True},
+        )
+        transport.ledger.put(
+            LedgerEntry(
+                key=SessionKey("antigravity", "conv-1"),
+                session_id="sess-9",
+                cwd=str(tmp_path),
+                model="gemini-3.1-pro",
+                seen=(*_digests_for(["[User]\none"]),),
+                live=False,
+            )
+        )
+        try:
+            await transport.send(
+                provider,
+                "",
+                _turn("[User]\none", "[Assistant]\ntwo", cwd=str(tmp_path)),
+            )
+        finally:
+            await transport.close()
+
+        resumed = [entry for entry in _log(tmp_path) if entry["kind"] == "resume"]
+        assert [entry["meta"] for entry in resumed] == [{"disableBuiltInTools": True}]
+
+
+class TestTurnUsage:
+    """The prompt response's per-turn split reaches the usage chunk."""
+
+    def test_a_v2_idle_carries_the_turns_usage(self):
+        """ACP v2 acks the prompt; the idle state update is the bill."""
+        from llm_rosetta_gateway.transport.acp_meta_client import AcpMetaClient
+
+        client = AcpMetaClient(["unused"])
+        stop = client._stop_reason_from_update(
+            {
+                "sessionId": "sess-1",
+                "update": {
+                    "sessionUpdate": "state_update",
+                    "state": "idle",
+                    "stopReason": "end_turn",
+                    "usage": {
+                        "inputTokens": 120,
+                        "outputTokens": 34,
+                        "totalTokens": 154,
+                    },
+                },
+            }
+        )
+
+        assert stop == "end_turn"
+        assert client.prompt_usage("sess-1") == {
+            "inputTokens": 120,
+            "outputTokens": 34,
+            "totalTokens": 154,
+        }
+
+    async def test_a_prompt_usage_split_becomes_a_usage_chunk(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "usage", conversation="conv-usage")
+        try:
+            response = await transport.send(provider, "", _turn("[User]\nhi"))
+        finally:
+            await transport.close()
+
+        assert response.body is not None
+        usage = [
+            update for update in response.body["updates"] if update["type"] == "usage"
+        ]
+        assert usage[-1] == {
+            "type": "usage",
+            "prompt_tokens": 120,
+            "completion_tokens": 34,
+            "total_tokens": 661,
+            "used": 661,
+            "cache_read_tokens": 500,
+            "cache_creation_tokens": 7,
+        }
+
+    async def test_streaming_carries_the_split_before_the_stop(
+        self, monkeypatch, tmp_path
+    ):
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "usage", conversation="conv-usage")
+        try:
+            stream = await transport.send_streaming(provider, "", _turn("[User]\nhi"))
+            assert stream.status_code == 200
+            chunks = [chunk async for chunk in stream]
+        finally:
+            await transport.close()
+
+        usage = [chunk for chunk in chunks if chunk["type"] == "usage"]
+        assert usage[-1]["completion_tokens"] == 34
+        assert chunks[-1]["type"] == "stop"
+
+
+class TestTheSpawnEnvironment:
+    """A shim can keep a gateway variable away from its agent."""
+
+    def test_a_declared_name_is_removed_before_the_overrides_apply(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-gateway")
+        monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://gateway.example")
+        provider = _provider(
+            monkeypatch,
+            tmp_path,
+            "ok",
+            acp_env={"ANTHROPIC_MODEL": "claude-haiku-4-5"},
+            env_unset=("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL"),
+        )
+
+        env = AcpTransport._spawn_env(provider)
+
+        assert env is not None
+        assert "ANTHROPIC_API_KEY" not in env
+        assert "ANTHROPIC_BASE_URL" not in env
+        assert env["ANTHROPIC_MODEL"] == "claude-haiku-4-5"
+        assert env["PATH"] == os.environ["PATH"]
+
+    def test_a_lane_that_declares_nothing_still_inherits(self):
+        provider = ProviderInfo(
+            "acp",
+            config_name="plain",
+            api_key="",
+            base_url="http://agent.local",
+            auth_header_fn=openai_auth,
+            url_template="{base_url}/acp-turn",
+            keyless=True,
+            transport="acp",
+        )
+
+        assert AcpTransport._spawn_env(provider) is None
 
 
 class TestSessionReuse:

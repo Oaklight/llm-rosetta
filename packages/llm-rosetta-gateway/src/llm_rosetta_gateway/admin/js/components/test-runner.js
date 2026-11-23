@@ -74,7 +74,7 @@ function buildTestPayload(model, type, extraParam) {
     case 'vision':
       return {...base,
         messages:[{role:'user', content:[
-          {type:'text', text:'Describe what you see in this image in one sentence.'},
+          {type:'text', text:'The image is attached inline. Describe what you see in one sentence. Do not use any tools or read any files.'},
           {type:'image_url', image_url:{url: TEST_IMAGE_URL}}
         ]}]
       };

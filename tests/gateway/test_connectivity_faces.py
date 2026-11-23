@@ -110,7 +110,7 @@ class TestAnAgentLane:
         assert any("allowance" in warning for warning in payload["warnings"])
 
     @pytest.mark.asyncio
-    async def test_a_failed_turn_is_not_reported_as_unreachable(self, tmp_path):
+    async def test_an_unsigned_in_lane_fails_its_test(self, tmp_path):
         pinfo = SimpleNamespace(
             config_name="claude",
             transport="acp",
@@ -139,9 +139,10 @@ class TestAnAgentLane:
         response = await connectivity.test_provider_connectivity(request, "claude")
         payload = json.loads(response.body)
 
-        assert payload["reachable"] is True
+        assert payload["reachable"] is False
         assert payload["endpoints"]["agent"]["ok"] is False
         assert payload["endpoints"]["agent"]["error"] == "the agent is not signed in"
+        assert payload["base_error"] == "the agent is not signed in"
         assert any("not signed in" in warning for warning in payload["warnings"])
 
 
