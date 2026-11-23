@@ -129,6 +129,11 @@ FAKE_AGENT = textwrap.dedent(
                              "content": {"type": "text", "text": "replayed"}})
             send({"jsonrpc": "2.0", "id": req_id, "result": {}})
         elif method == "session/set_mode":
+            if MODE == "no-mode":
+                send({"jsonrpc": "2.0", "id": req_id, "error": {
+                    "code": -32601, "message": "Method not found",
+                }})
+                continue
             if MODE == "mode-refused":
                 send({"jsonrpc": "2.0", "id": req_id, "error": {
                     "code": -32602, "message": "unknown mode",
@@ -442,9 +447,19 @@ def _provider(
     *,
     processes: int = 1,
     acp_env: dict[str, str] | None = None,
+    agy: bool = False,
 ) -> ProviderInfo:
-    script = tmp_path / "fake_acp.py"
-    script.write_text(FAKE_AGENT, encoding="utf-8")
+    if agy:
+        # The transport decides on the mode by the command's name, so an
+        # agy-shaped test must actually start a file called ``agy``.
+        script = tmp_path / "agy"
+        script.write_text("#!/usr/bin/env python3\n" + FAKE_AGENT, encoding="utf-8")
+        script.chmod(0o755)
+        argv: tuple[str, ...] = (str(script),)
+    else:
+        script = tmp_path / "fake_acp.py"
+        script.write_text(FAKE_AGENT, encoding="utf-8")
+        argv = (sys.executable, str(script))
     monkeypatch.setenv("FAKE_ACP_MODE", mode)
     monkeypatch.setenv("FAKE_ACP_LOG", str(tmp_path / "agent.log"))
     provider = ProviderInfo(
@@ -456,7 +471,8 @@ def _provider(
         url_template="{base_url}/acp-turn",
         keyless=True,
         transport="acp",
-        acp_argv=(sys.executable, str(script)),
+        acp_argv=argv,
+        acp_argv_custom=agy,
         acp_env=acp_env,
         acp_processes=processes,
     )
@@ -1273,11 +1289,11 @@ async def _await_prompt(tmp_path: Any, timeout: float = 5.0) -> None:
 class TestAgentToolsAreOff:
     """Phase 1: the agent answers in text; every tool request is refused."""
 
-    async def _turn_chunks(self, monkeypatch, tmp_path, mode):
+    async def _turn_chunks(self, monkeypatch, tmp_path, mode, *, agy=False):
         transport = AcpTransport(timeout=5)
         try:
             stream = await transport.send_streaming(
-                _provider(monkeypatch, tmp_path, mode), "", TURN
+                _provider(monkeypatch, tmp_path, mode, agy=agy), "", TURN
             )
             return [chunk async for chunk in stream]
         finally:
@@ -1346,11 +1362,19 @@ class TestAgentToolsAreOff:
     async def test_every_new_session_is_put_in_the_asking_mode(
         self, monkeypatch, tmp_path
     ):
-        await self._turn_chunks(monkeypatch, tmp_path, "ok")
+        await self._turn_chunks(monkeypatch, tmp_path, "ok", agy=True)
         modes = [e for e in _log(tmp_path) if e["kind"] == "mode"]
         assert [m["mode"] for m in modes] == ["plan"]
         kinds = _kinds(tmp_path)
         assert kinds.index("new") < kinds.index("mode") < kinds.index("prompt")
+
+    async def test_a_non_agy_agent_is_not_asked_for_plan_mode(
+        self, monkeypatch, tmp_path
+    ):
+        """``plan`` is agy's mode; a Claude-shaped agent has no such method."""
+        chunks = await self._turn_chunks(monkeypatch, tmp_path, "no-mode")
+        assert chunks[-1]["type"] == "stop"
+        assert "mode" not in _kinds(tmp_path)
 
     async def test_a_session_whose_mode_cannot_be_set_does_not_run(
         self, monkeypatch, tmp_path
@@ -1358,7 +1382,7 @@ class TestAgentToolsAreOff:
         transport = AcpTransport(timeout=5)
         try:
             response = await transport.send(
-                _provider(monkeypatch, tmp_path, "mode-refused"), "", TURN
+                _provider(monkeypatch, tmp_path, "mode-refused", agy=True), "", TURN
             )
             kinds = _kinds(tmp_path)
         finally:

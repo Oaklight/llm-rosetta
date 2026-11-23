@@ -1280,15 +1280,23 @@ class AcpTransport:
         *,
         allow_tools: bool = False,
     ) -> None:
-        """Put the session in the mode in which every tool use is asked for.
+        """Put an ``agy`` session in the mode in which every tool use is asked for.
 
-        Only for an agent without the gateway's profile (an operator's
-        ``acp_argv``): agy's default mode reads files without asking (the
-        permission flag does not cover reads); in ``plan`` mode a read asks
-        too, and the client refuses.  Failing to set the mode fails the turn:
-        a session whose tools cannot be shown to be gated must not run.  The
-        hardened profile asks for everything through ``toolPermission:
-        strict`` and needs no mode.
+        The ``plan`` mode is agy's.  A different ACP agent has its own
+        permission surface, and this transport cannot assume the mode exists
+        (the Claude adapter answers ``session/set_mode`` with "Method not
+        found").  A non-agy agent is therefore left in whatever mode it
+        starts with: the ACP client still refuses every permission request,
+        and an operator can set that agent's own mode to keep host tools
+        behind a prompt.
+
+        For agy without the gateway's profile (an operator's ``acp_argv``):
+        agy's default mode reads files without asking (the permission flag
+        does not cover reads); in ``plan`` mode a read asks too, and the
+        client refuses.  Failing to set the mode fails the turn: a session
+        whose tools cannot be shown to be gated must not run.  The hardened
+        profile asks for everything through ``toolPermission: strict`` and
+        needs no mode.
 
         A request that declares tools cannot use this mode: it would block
         the very tools the client offered.  Such a lane relies on the client
@@ -1296,7 +1304,12 @@ class AcpTransport:
         agent's own permission mode to one that keeps host tools behind a
         prompt.
         """
-        if not DENY_AGENT_TOOLS or allow_tools or self._hardened(provider_info):
+        if (
+            not DENY_AGENT_TOOLS
+            or allow_tools
+            or self._hardened(provider_info)
+            or not is_agy(self._declared_argv(provider_info))
+        ):
             return
         try:
             await _bounded(
