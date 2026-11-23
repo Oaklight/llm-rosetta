@@ -134,6 +134,7 @@ class TestTheConfigPayload:
 
         plain = by_name["openai--open_responses"]
         assert plain["mints_credential"] is False
+        assert plain["vendor_managed"] is False
         assert plain["credential_kind"] is None
         assert plain["manage_usage_url"] is None
 
