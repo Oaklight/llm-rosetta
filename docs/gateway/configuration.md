@@ -164,6 +164,8 @@ manifest 在 `remote_ttl` 秒内复用。热缓存覆盖除「源对自己字节
 
 一个提供方条目是一个**账号**：一份凭据、一个 key ring、一次刷新。每个类型端点都是它的一个**面**，可以落在另一家服务方的主机上 —— 所以 `base_url` 属于面，而不只属于条目。块内的字段是 `shim`、`format`、`path`、`enabled` 与 `base_url`。
 
+管理面板还会在条目上存一个 `preset`：Basic 页「服务方预设」所选的服务方（一个 shim 名，例如 `openai--chat_completions`）。运行时没有任何代码读它 —— 每个面仍带着自己的 `shim`，因为网关不会按服务方推断面。编辑器用 `preset` 给尚未手动设置的面填默认值，并区分「跟随预设的面」与「改成了别家服务方的面」；没有它的条目按其 LLM `type` 打开。
+
 `base_url` 是主机，`path` 是该主机上的路径 —— 请求发往 `base_url` + `path`。版本段属于 `path`（或 shim 的默认路径），不属于 `base_url`：写成 `base_url: "https://api.cohere.com/v2"` 而端点路径是 `/v1/embeddings`，实际请求的是 `/v2/v1/embeddings`，真实服务方会返回 404。扁平的 `embeddings_format` / `embeddings_path` / `embeddings_shim` / `embeddings_enabled`（以及 `rerank_*`、`decisions_*` 两组）仍然可读，加载时会改写成块（`config_version` 5）。
 
 每个端点的优先级：
