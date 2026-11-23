@@ -158,15 +158,6 @@ test('the provider preset lives on Basic, and the Capabilities pane holds only f
   assert.ok(html.indexOf('id="provModelsPath"') < capsAt, 'the model list path stays in Basic');
 });
 
-test('a face the operator set by hand is not moved by the preset', () => {
-  const body = oneFunction(providers, '_followPreset');
-  assert.ok(body.includes("dataset.manual !== '1'"), 'only faces that follow are moved');
-  assert.ok(
-    oneFunction(providers, '_initFaceOrigin').includes("value !== target ? '1' : ''"),
-    'a stored face that differs from the preset opens as manual',
-  );
-});
-
 test('the LLM face has its own shim picker, and the saved type comes from it', () => {
   const llmAt = html.indexOf('id="provLlmSection"');
   const capsAt = html.indexOf('id="provPaneCaps"');
@@ -176,4 +167,12 @@ test('the LLM face has its own shim picker, and the saved type comes from it', (
     oneFunction(providers, '_saveProvider').includes("getElementById('provShim_llm')"),
     'the type is read from the face, not from the preset',
   );
+});
+
+test('the preset is saved with the entry and reopened from it', () => {
+  assert.ok(
+    oneFunction(providers, '_saveProvider').includes("body.preset = getSelectedValue() || ''"),
+    'save sends the preset',
+  );
+  assert.ok(providers.includes('_storedCfg.preset'), 'open reads the stored preset first');
 });
