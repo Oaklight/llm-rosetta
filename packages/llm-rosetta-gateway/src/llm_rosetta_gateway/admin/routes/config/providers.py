@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import logging
 import os
 import shutil
@@ -28,27 +27,6 @@ from .model_providers import _lanes_named, _remove_all_lanes_of_provider
 logger = logging.getLogger("llm-rosetta-gateway")
 
 
-def _owned_profile_paths(
-    name: str, entry: dict[str, Any], data_dir: str | None, transport: str
-) -> dict[str, str]:
-    """The profile directories the gateway owns for one entry.
-
-    A path named by the operator (``acp.home``, ``--gemini-dir``) is never
-    included: lifecycle actions must not move or delete it.
-    """
-    from ....config.providers import managed_acp_state_dir, managed_auth_state_dir
-
-    paths: dict[str, str] = {}
-    if transport == "acp":
-        home = managed_acp_state_dir(name, entry, data_dir)
-        if home:
-            paths["acp"] = home
-    auth = managed_auth_state_dir(name, data_dir)
-    if auth:
-        paths["auth"] = auth
-    return paths
-
-
 def _remove_profile(path: str, report: dict[str, Any]) -> None:
     if not os.path.isdir(path):
         return
@@ -60,15 +38,32 @@ def _remove_profile(path: str, report: dict[str, Any]) -> None:
     report["removed"].append(path)
 
 
+def _managed_paths(pinfo: Any) -> dict[str, str]:
+    """The profile directories the gateway owns for one built provider.
+
+    The builder already decided which paths are the gateway's (a managed
+    ``<data>/acp/<entry>`` and, for a shim exchange, ``<data>/shim-auth/<entry>``)
+    and left an operator's own ``acp.home`` out.  Reading that decision keeps
+    the lifecycle from guessing a path from raw config, and keeps this module
+    free of a config import.
+    """
+    paths: dict[str, str] = {}
+    if pinfo is None:
+        return paths
+    for kind, attribute in (
+        ("acp", "managed_acp_state_dir"),
+        ("auth", "managed_auth_state_dir"),
+    ):
+        path = getattr(pinfo, attribute, None)
+        if path:
+            paths[kind] = str(path)
+    return paths
+
+
 def _relocate_profiles(
     *,
-    old_name: str,
-    old_entry: dict[str, Any],
-    old_transport: str,
-    new_name: str | None,
-    new_entry: dict[str, Any] | None,
-    new_transport: str,
-    data_dir: str | None,
+    old_info: Any,
+    new_info: Any | None,
 ) -> dict[str, Any]:
     """Move a renamed entry's profile, or remove a deleted entry's.
 
@@ -78,9 +73,9 @@ def _relocate_profiles(
     a login the entry no longer owns.
     """
     report: dict[str, Any] = {"moved": [], "removed": [], "warnings": []}
-    old_paths = _owned_profile_paths(old_name, old_entry, data_dir, old_transport)
-    if new_name is not None and new_entry is not None:
-        new_paths = _owned_profile_paths(new_name, new_entry, data_dir, new_transport)
+    old_paths = _managed_paths(old_info)
+    if new_info is not None:
+        new_paths = _managed_paths(new_info)
         for kind, old_path in old_paths.items():
             new_path = new_paths.get(kind)
             if not os.path.isdir(old_path):
@@ -232,12 +227,6 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
 
         existing_providers = ctx.data.get("providers", {})
         resolve_name = body.get("rename_from", name) or name
-        old_entry = copy.deepcopy(existing_providers.get(resolve_name) or {})
-        old_transport = (
-            getattr(current_pinfo, "transport", None)
-            or old_entry.get("transport")
-            or "http"
-        )
 
         # When api_key is omitted/empty and we're editing, keep the existing key
         if not api_key and resolve_name in existing_providers:
@@ -288,17 +277,10 @@ async def put_provider(request: Any, **kwargs: Any) -> Response:
     renamed = bool(body.get("rename_from") and body.get("rename_from") != name)
     profile_report: dict[str, Any] | None = None
     if renamed:
-        data_dir = getattr(ctx.new_config, "data_dir", None) or resolved_data_dir
-        new_entry = copy.deepcopy(ctx.data.get("providers", {}).get(name) or {})
         new_pinfo = ctx.new_config.providers.get(name)
         profile_report = _relocate_profiles(
-            old_name=resolve_name,
-            old_entry=old_entry,
-            old_transport=old_transport,
-            new_name=name,
-            new_entry=new_entry,
-            new_transport=getattr(new_pinfo, "transport", "http") or "http",
-            data_dir=data_dir,
+            old_info=current_pinfo,
+            new_info=new_pinfo,
         )
         await _close_lane_processes(request, [resolve_name, name])
 
@@ -329,7 +311,6 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
     name = request.path_params["name"]
 
     current_config = _get_gateway_config(request)
-    resolved_data_dir = getattr(current_config, "data_dir", None)
     current_pinfo = (
         current_config.providers.get(name) if current_config is not None else None
     )
@@ -343,13 +324,6 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
             return JSONResponse(
                 {"error": f"Provider '{name}' not found"}, status_code=404
             )
-
-        old_entry = copy.deepcopy(providers[name])
-        old_transport = (
-            getattr(current_pinfo, "transport", None)
-            or old_entry.get("transport")
-            or "http"
-        )
 
         # Check if any model still references this provider
         models = ctx.data.get("models", {})
@@ -384,16 +358,7 @@ async def delete_provider(request: Any, **kwargs: Any) -> Response:
         return ctx.error
     assert ctx.new_config is not None
 
-    data_dir = getattr(ctx.new_config, "data_dir", None) or resolved_data_dir
-    profile_report = _relocate_profiles(
-        old_name=name,
-        old_entry=old_entry,
-        old_transport=old_transport,
-        new_name=None,
-        new_entry=None,
-        new_transport="http",
-        data_dir=data_dir,
-    )
+    profile_report = _relocate_profiles(old_info=current_pinfo, new_info=None)
     await _close_lane_processes(request, [name])
 
     result: dict[str, Any] = {

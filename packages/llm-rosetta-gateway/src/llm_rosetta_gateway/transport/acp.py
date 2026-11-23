@@ -90,8 +90,7 @@ from .acp_profile import (
     state_dir_for,
     tool_name_of,
 )
-from .acp_quota import ACP_QUOTA_PROBE, lane_credential, reading_of
-from ..quota.state import QUOTA_STATE
+from .acp_quota import record_reading
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -293,7 +292,8 @@ class _TurnRunner:
         on_builtin: Callable[[str], Awaitable[str]],
         provider: str = "",
         on_error: Callable[[str], str] | None = None,
-        on_update: Callable[[dict[str, Any]], None] | None = None,
+        # The return is ignored; an observer may report what it saw.
+        on_update: Callable[[dict[str, Any]], object] | None = None,
     ) -> None:
         self.queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         self.stop_reason = ""
@@ -901,13 +901,14 @@ class AcpTransport:
                 deadline,
                 modes=getattr(session, "modes", None),
             )
-            text, usage = await self._probe_turn(
+            text, usage, observed = await self._probe_turn(
                 provider_info, agent, session_id, deadline
             )
             result["ok"] = True
             result["text"] = text[:500]
             if usage is not None:
                 result["usage"] = usage
+            result["quota_observed"] = observed
         except asyncio.TimeoutError:
             result["error"] = f"the ACP agent did not answer within {int(limit)}s"
         except AcpTurnError as exc:
@@ -923,10 +924,6 @@ class AcpTransport:
             if session_id:
                 await _close_quietly(agent.client, session_id)
             result["elapsed_ms"] = int((time.monotonic() - started) * 1000)
-            reading = QUOTA_STATE.get_reading(
-                ACP_QUOTA_PROBE, lane_credential(provider_info)
-            )
-            result["quota_observed"] = reading is not None
         return result
 
     async def _probe_turn(
@@ -935,17 +932,19 @@ class AcpTransport:
         agent: _Agent,
         session_id: str,
         deadline: float,
-    ) -> tuple[str, dict[str, Any] | None]:
-        """Send the probe prompt and collect its text and usage chunk."""
+    ) -> tuple[str, dict[str, Any] | None, bool]:
+        """Send the probe prompt and collect its text, usage and allowance."""
         parts: list[str] = []
         usage: dict[str, Any] | None = None
+        observed = False
 
         async def consume() -> None:
-            nonlocal usage
+            nonlocal usage, observed
             async for update in agent.client.prompt(
                 session_id, "Reply with the single word: OK"
             ):
-                self._observe(provider_info, update)
+                if self._observe(provider_info, update):
+                    observed = True
                 chunk = _chunk_of(update)
                 if chunk is not None and chunk.get("type") == "text":
                     parts.append(str(chunk.get("text") or ""))
@@ -956,7 +955,7 @@ class AcpTransport:
         if remaining <= 0:
             raise asyncio.TimeoutError
         await asyncio.wait_for(consume(), remaining)
-        return "".join(parts).strip(), usage
+        return "".join(parts).strip(), usage, observed
 
     async def sweep(self) -> int:
         """Give back sessions nobody has used for their provider's TTL.
@@ -1540,17 +1539,18 @@ class AcpTransport:
 
     # -- turn execution -----------------------------------------------------
 
-    def _observe(self, provider_info: ProviderInfo, update: dict[str, Any]) -> None:
+    def _observe(self, provider_info: ProviderInfo, update: dict[str, Any]) -> bool:
         """Record the allowance an agent reported during a turn.
 
-        The reading is process-wide: a config reload rebuilds the transport,
-        but the account's windows do not change with it.  A ``usage_update``
-        with no rate-limit metadata is a token count and leaves the last
-        reading untouched.
+        The reading is process-wide and lives with the transport foundation:
+        a config reload rebuilds the transport, but the account's windows do
+        not change with it.  A ``usage_update`` with no rate-limit metadata is
+        a token count and leaves the last reading untouched.
+
+        Returns:
+            Whether this update carried an allowance.
         """
-        reading = reading_of(update, provider_info)
-        if reading is not None:
-            QUOTA_STATE.put_reading(reading)
+        return record_reading(update, provider_info)
 
     async def _run_turn(
         self,

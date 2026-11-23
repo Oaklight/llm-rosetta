@@ -247,6 +247,8 @@ class ProviderInfo:
         acp_argv_custom: bool = False,
         acp_harden: bool = True,
         acp_state_dir: str | None = None,
+        managed_acp_state_dir: str | None = None,
+        managed_auth_state_dir: str | None = None,
         acp_processes: int = 1,
         acp_max_sessions: int | None = None,
         acp_session_ttl: float | None = None,
@@ -352,6 +354,13 @@ class ProviderInfo:
         # ``--gemini-dir`` for ``agy``); ``None`` takes the transport's
         # per-user default.
         self.acp_state_dir = acp_state_dir
+        # The profiles this entry *owns*: the gateway chose the path, so a
+        # rename may move it and a delete may remove it.  ``None`` for an
+        # operator's own ``acp.home`` / ``--gemini-dir`` and for a lane with
+        # no shim exchange.  The admin lifecycle reads these; the transport
+        # itself never moves a profile.
+        self.managed_acp_state_dir = managed_acp_state_dir
+        self.managed_auth_state_dir = managed_auth_state_dir
         # How many agent processes this provider may run, and the two bounds
         # on the sessions they hold.  All three default from the transport;
         # ``None`` means "keep the default", which is why they are not

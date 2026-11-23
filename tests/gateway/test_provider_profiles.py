@@ -14,11 +14,9 @@ from types import SimpleNamespace
 import pytest
 
 from llm_rosetta_gateway.admin.routes._shared import _config_preflight_error
-from llm_rosetta_gateway.admin.routes.config.providers import (
-    _owned_profile_paths,
-    _relocate_profiles,
-)
+from llm_rosetta_gateway.admin.routes.config.providers import _relocate_profiles
 from llm_rosetta_gateway.config.providers import (
+    build_provider_info,
     lane_profile_is_managed,
     managed_acp_state_dir,
     validate_provider_profiles,
@@ -103,13 +101,13 @@ def test_a_rename_moves_the_managed_profile(tmp_path):
     (old / "claude" / ".credentials.json").write_text("{}", encoding="utf-8")
 
     report = _relocate_profiles(
-        old_name="claude",
-        old_entry={},
-        old_transport="acp",
-        new_name="claude-work",
-        new_entry={},
-        new_transport="acp",
-        data_dir=str(data_dir),
+        old_info=SimpleNamespace(
+            managed_acp_state_dir=str(old), managed_auth_state_dir=None
+        ),
+        new_info=SimpleNamespace(
+            managed_acp_state_dir=str(data_dir / "acp" / "claude-work"),
+            managed_auth_state_dir=None,
+        ),
     )
 
     new = data_dir / "acp" / "claude-work"
@@ -127,13 +125,10 @@ def test_a_delete_removes_the_managed_profile(tmp_path):
     shim_auth.mkdir(parents=True)
 
     report = _relocate_profiles(
-        old_name="claude",
-        old_entry={},
-        old_transport="acp",
-        new_name=None,
-        new_entry=None,
-        new_transport="http",
-        data_dir=str(data_dir),
+        old_info=SimpleNamespace(
+            managed_acp_state_dir=str(home), managed_auth_state_dir=str(shim_auth)
+        ),
+        new_info=None,
     )
 
     assert not home.exists()
@@ -145,22 +140,36 @@ def test_an_operators_own_home_is_never_touched(tmp_path):
     data_dir = tmp_path / "data"
     own = tmp_path / "my-claude-profile"
     own.mkdir()
-    entry = {"acp": {"home": str(own)}}
 
-    paths = _owned_profile_paths("claude", entry, str(data_dir), "acp")
-
-    assert "acp" not in paths
-    report = _relocate_profiles(
-        old_name="claude",
-        old_entry=entry,
-        old_transport="acp",
-        new_name=None,
-        new_entry=None,
-        new_transport="http",
+    pinfo = build_provider_info(
+        "acp",
+        {
+            "base_url": "http://lane.local",
+            "transport": "acp",
+            "acp": {"home": str(own)},
+        },
+        config_name="claude",
         data_dir=str(data_dir),
+        quiet=True,
     )
+
+    assert pinfo.managed_acp_state_dir is None
+    report = _relocate_profiles(old_info=pinfo, new_info=None)
     assert own.is_dir()
     assert report["removed"] == []
+
+
+def test_the_builder_names_the_gateway_managed_profile(tmp_path):
+    pinfo = build_provider_info(
+        "acp",
+        {"base_url": "http://lane.local", "transport": "acp"},
+        config_name="claude",
+        data_dir=str(tmp_path),
+        quiet=True,
+    )
+
+    assert pinfo.managed_acp_state_dir == str(tmp_path / "acp" / "claude")
+    assert pinfo.managed_auth_state_dir is None
 
 
 def test_a_rename_that_finds_the_new_profile_already_present_warns(tmp_path):
@@ -171,13 +180,13 @@ def test_a_rename_that_finds_the_new_profile_already_present_warns(tmp_path):
     new.mkdir(parents=True)
 
     report = _relocate_profiles(
-        old_name="claude",
-        old_entry={},
-        old_transport="acp",
-        new_name="claude-work",
-        new_entry={},
-        new_transport="acp",
-        data_dir=str(data_dir),
+        old_info=SimpleNamespace(
+            managed_acp_state_dir=str(old), managed_auth_state_dir=None
+        ),
+        new_info=SimpleNamespace(
+            managed_acp_state_dir=str(data_dir / "acp" / "claude-work"),
+            managed_auth_state_dir=None,
+        ),
     )
 
     assert old.is_dir()
