@@ -376,6 +376,17 @@ class QuotaDeclaration:
             A plan lane whose per-app cap lives in the vendor's own settings is
             the case: the app can be told the window is spent, and can never
             see how much of it is left.
+        local_argv: Command that prints the lane's allowance as JSON.  A lane
+            whose vendor CLI is the only way to read the account (an agent
+            process, a subscription store) declares the command here instead
+            of a URL.  The gateway runs it with the lane's profile, and the
+            probe's ``parse_local`` decodes its stdout.  ``{acp_home}``,
+            ``{acp_state_dir}`` and ``{acp_argv0}`` are expanded from the
+            provider entry.
+        local_env: Extra environment for :attr:`local_argv`.  The lane's own
+            ``acp_env`` is applied first, so a declaration can override a
+            vendor default for the probe alone.
+        local_timeout: Seconds the command may run before it is stopped.
     """
 
     probe: str | None = None
@@ -383,6 +394,9 @@ class QuotaDeclaration:
     interval: int = 0
     demote_at: float = 100.0
     in_band: bool = False
+    local_argv: tuple[str, ...] = ()
+    local_env: dict[str, str] = field(default_factory=dict)
+    local_timeout: float = 30.0
 
     def as_dict(self) -> dict[str, Any]:
         """Return the non-``None`` fields as a plain dict."""
@@ -393,6 +407,12 @@ class QuotaDeclaration:
             out["url"] = self.url
         if self.in_band:
             out["in_band"] = True
+        if self.local_argv:
+            out["local"] = {
+                "argv": list(self.local_argv),
+                "env": dict(self.local_env),
+                "timeout": self.local_timeout,
+            }
         return out
 
 

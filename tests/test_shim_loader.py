@@ -1494,6 +1494,71 @@ class TestVendorManifest:
 
             load_providers_from_dir(tmp_path)
 
+    def test_a_local_usage_command_is_declared_under_the_allowance(self, tmp_path):
+        """An agent lane's vendor CLI is the only source of its allowance."""
+        self._vendor(
+            tmp_path,
+            "quota:\n"
+            "  probe: acme\n"
+            "  local:\n"
+            '    argv: ["{acp_argv0}", "-p", "/usage"]\n'
+            "    env:\n"
+            '      ACME_HOME: "{acp_home}"\n'
+            "    timeout: 45\n",
+            {"a": self._leaf("a")},
+        )
+
+        shim = load_providers_from_dir(tmp_path)[0]
+
+        assert shim.quota is not None
+        assert shim.quota.local_argv == ("{acp_argv0}", "-p", "/usage")
+        assert shim.quota.local_env == {"ACME_HOME": "{acp_home}"}
+        assert shim.quota.local_timeout == 45.0
+
+    def test_an_allowance_without_a_local_command_has_no_argv(self, tmp_path):
+        self._vendor(
+            tmp_path,
+            "quota:\n  probe: acme\n  url: https://control.acme.example\n",
+            {"a": self._leaf("a")},
+        )
+
+        shim = load_providers_from_dir(tmp_path)[0]
+
+        assert shim.quota is not None
+        assert shim.quota.local_argv == ()
+        assert shim.quota.local_env == {}
+        assert shim.quota.local_timeout == 30.0
+
+    @pytest.mark.parametrize(
+        ("local", "message"),
+        [
+            ("local: [agy, -p]\n", "quota.local must be a mapping"),
+            ("local:\n  argv: []\n", "quota.local.argv must be a non-empty list"),
+            ("local:\n  argv: [agy, 3]\n", "quota.local.argv must be a non-empty list"),
+            (
+                "local:\n  argv: [agy]\n  env: [ACME_HOME]\n",
+                "quota.local.env must map environment names to strings",
+            ),
+            (
+                "local:\n  argv: [agy]\n  env:\n    ACME_HOME: 7\n",
+                "quota.local.env must map environment names to strings",
+            ),
+            (
+                "local:\n  argv: [agy]\n  timeout: 0\n",
+                "quota.local.timeout must be a positive number",
+            ),
+        ],
+    )
+    def test_a_malformed_local_command_is_refused(self, tmp_path, local, message):
+        self._vendor(
+            tmp_path,
+            "quota:\n  probe: acme\n" + textwrap.indent(local, "  "),
+            {"a": self._leaf("a")},
+        )
+
+        with pytest.raises(ValueError, match=message):
+            load_providers_from_dir(tmp_path)
+
     def test_a_vendor_without_a_manifest_still_loads(self, tmp_path):
         """The manifest is optional: an existing third-party shim keeps working."""
         self._vendor(

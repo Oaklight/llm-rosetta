@@ -380,18 +380,60 @@ def _lane_reports_its_own_quota(pinfo: Any) -> bool:
     )
 
 
-def _lane_quota_payload(name: str, pinfo: Any, ttl: float) -> dict[str, Any]:
-    """The quota payload of a lane whose agent reports its own windows."""
-    from ..transport.acp_quota import ACP_QUOTA_PROBE, lane_credential, lanes_reading
+async def _lane_quota_payload(
+    name: str, pinfo: Any, ttl: float, *, force: bool = False
+) -> dict[str, Any]:
+    """The quota payload of a lane whose allowance comes from its own agent.
+
+    Two sources exist.  An agent may send its windows during a turn (Claude's
+    ``usage_update`` metadata); that reading is already in the store.  A
+    vendor whose ACP surface says nothing about the account can instead
+    declare a local command (Antigravity's ``/usage``); the gateway runs it
+    here, with the lane's profile, and the shim probe decodes the output.
+
+    A local command is read when the stored reading is older than *ttl* or a
+    refresh was asked for.  Its failure is stored too, so a broken command is
+    not rerun on every card open.
+    """
+    from ..transport.acp_quota import (
+        ACP_QUOTA_PROBE,
+        STATUS_ERROR,
+        lane_credential,
+        lanes_reading,
+        refresh_local,
+    )
 
     credential = lane_credential(pinfo)
     reading = lanes_reading(pinfo)
+    local_argv = tuple(getattr(pinfo, "quota_local_argv", ()) or ())
+    probe = getattr(pinfo, "quota_probe_impl", None)
+    refreshed = False
+    if local_argv and probe is not None:
+        fresh = (
+            reading is not None
+            and not force
+            and (datetime.now(timezone.utc) - reading.read_at).total_seconds() < ttl
+        )
+        if not fresh:
+            reading = await refresh_local(
+                pinfo,
+                probe,
+                local_argv,
+                getattr(pinfo, "quota_local_env", None),
+                timeout=float(getattr(pinfo, "quota_local_timeout", 30.0)),
+            )
+            refreshed = True
+    probe_id = getattr(probe, "id", None) if local_argv else None
     payload: dict[str, Any] = {
         "provider": name,
         "supported": True,
-        "probe": ACP_QUOTA_PROBE,
-        "status": STATUS_OK if reading is not None else "unknown",
-        "refreshed": False,
+        "probe": str(probe_id or (reading.probe if reading else ACP_QUOTA_PROBE)),
+        "status": (
+            "unknown"
+            if reading is None
+            else (STATUS_ERROR if reading.status == STATUS_ERROR else STATUS_OK)
+        ),
+        "refreshed": refreshed,
         "ttl_seconds": ttl,
         "credentials": [],
         "routing": routing_facts(pinfo, name),
@@ -407,6 +449,8 @@ def _lane_quota_payload(name: str, pinfo: Any, ttl: float) -> dict[str, Any]:
             {"credential": credential, "reading": rendered, "demotion": None}
         ]
         payload["read_at"] = rendered.get("read_at")
+        if reading.status == STATUS_ERROR and reading.error:
+            payload["reason"] = reading.error
     block = provider_cooldown(name, pinfo)
     if block is not None:
         payload["provider_block"] = block
@@ -436,9 +480,9 @@ async def read_provider_quota(
     pinfo = getattr(config, "providers", {}).get(name)
     if pinfo is not None and _lane_reports_its_own_quota(pinfo):
         # A keyless agent lane is its own quota source: the agent sends its
-        # windows during a turn, and the transport records them.  There is no
-        # key ring and no HTTP endpoint to probe.
-        return _lane_quota_payload(name, pinfo, ttl)
+        # windows during a turn, or a declared local command prints them.
+        # There is no key ring and no HTTP endpoint to probe.
+        return await _lane_quota_payload(name, pinfo, ttl, force=force)
 
     probe, url, unsupported = resolve_provider_probe(config, name)
     if probe is None or url is None:
@@ -605,7 +649,7 @@ def resolve_provider_probe_for_info(
     ``quota_probes``, the declaration names one (``quota_probe_id``), and the
     provider may override the URL.
     """
-    if pinfo.keyless:
+    if pinfo.keyless and not getattr(pinfo, "quota_local_argv", ()):
         pinfo.quota_unsupported = "the lane is keyless"
         return None, None, pinfo.quota_unsupported
     try:
@@ -624,8 +668,12 @@ def resolve_provider_probe_for_info(
         return None, None, pinfo.quota_unsupported
     if match.url is None:
         # Nothing to poll, but the probe stays bound: its ``inband()`` is the
-        # only signal this lane gives, and demoting on it is the point.
+        # only signal this lane gives, or a declared local command prints the
+        # reading without any endpoint.
         pinfo.quota_probe_impl = match.probe
+        if getattr(pinfo, "quota_local_argv", ()):
+            pinfo.quota_unsupported = None
+            return match.probe, None, None
         pinfo.quota_unsupported = match.unsupported or "no quota endpoint"
         return match.probe, None, pinfo.quota_unsupported
     pinfo.quota_probe_impl = match.probe

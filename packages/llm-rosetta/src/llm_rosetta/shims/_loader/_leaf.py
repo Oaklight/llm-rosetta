@@ -41,6 +41,53 @@ from ._constants import (
 )
 
 
+def _local_quota(
+    quota: dict[str, Any], path: Path
+) -> tuple[tuple[str, ...], dict[str, str], float]:
+    """The local usage command a shim declares under ``quota.local``.
+
+    A vendor CLI that is the only way to read an account (an agent lane, a
+    subscription store) prints the allowance as JSON.  The shim names the
+    command; the gateway runs it and the shim's probe decodes the output.
+
+    Raises:
+        ValueError: ``local`` is not a mapping, its ``argv`` is not a non-empty
+            list of strings, its ``env`` is not a string mapping, or its
+            ``timeout`` is not positive.
+    """
+    local = quota.get("local")
+    if local is None:
+        return (), {}, 30.0
+    if not isinstance(local, dict):
+        raise ValueError(f"{path}: quota.local must be a mapping")
+    argv = local.get("argv")
+    if (
+        not isinstance(argv, (list, tuple))
+        or not argv
+        or not all(isinstance(part, str) and part for part in argv)
+    ):
+        raise ValueError(
+            f"{path}: quota.local.argv must be a non-empty list of strings"
+        )
+    env = local.get("env")
+    if env is None:
+        env = {}
+    if not isinstance(env, dict) or not all(
+        isinstance(name, str) and isinstance(value, str) for name, value in env.items()
+    ):
+        raise ValueError(
+            f"{path}: quota.local.env must map environment names to strings"
+        )
+    timeout = local.get("timeout", 30.0)
+    if (
+        isinstance(timeout, bool)
+        or not isinstance(timeout, (int, float))
+        or float(timeout) <= 0
+    ):
+        raise ValueError(f"{path}: quota.local.timeout must be a positive number")
+    return tuple(argv), dict(env), float(timeout)
+
+
 def _load_single_provider(
     provider_dir: Path,
     *,
@@ -195,12 +242,16 @@ def _load_single_provider(
     quota_raw = _leaf_quota(cfg, manifest, yaml_path)
     quota_decl: QuotaDeclaration | None = None
     if isinstance(quota_raw, dict):
+        local_argv, local_env, local_timeout = _local_quota(quota_raw, yaml_path)
         quota_decl = QuotaDeclaration(
             probe=quota_raw.get("probe"),
             url=quota_raw.get("url"),
             interval=int(quota_raw.get("interval", 0) or 0),
             demote_at=float(quota_raw.get("demote_at", 100.0)),
             in_band=bool(quota_raw.get("in_band", False)),
+            local_argv=local_argv,
+            local_env=local_env,
+            local_timeout=local_timeout,
         )
 
     # Parse tools config.
