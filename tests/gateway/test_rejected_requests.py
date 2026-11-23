@@ -155,17 +155,16 @@ async def limited(tmp_path) -> AsyncIterator[Served]:
 
 class TestEarlyRejectionsLeaveARow:
     async def test_an_unmatched_path_is_recorded_with_its_request_id(self, served):
-        # The CORS catch-all route matches every path, so an unknown path
-        # answers 405 rather than 404.
+        # No catch-all route owns an unknown path, so it answers 404.
         status, headers, _ = await served.send("GET", "/nowhere")
 
-        assert status == 405
+        assert status == 404
         (row,) = await served.rows()
-        assert row["status_code"] == 405
+        assert row["status_code"] == 404
         assert row["request_id"] == headers["x-request-id"]
         assert row["client_ip"] == "127.0.0.1"
         assert "GET /nowhere" in row["error_detail"]
-        assert "Method Not Allowed" in row["error_detail"]
+        assert "Not Found" in row["error_detail"]
 
     async def test_a_wrong_method_is_recorded(self, served):
         status, _, _ = await served.send("GET", "/v1/chat/completions")
@@ -188,9 +187,9 @@ class TestEarlyRejectionsLeaveARow:
         first, _, _ = await limited.send("GET", "/nowhere")
         status, headers, _ = await limited.send("GET", "/nowhere")
 
-        assert (first, status) == (405, 429)
+        assert (first, status) == (404, 429)
         rows = await limited.rows()
-        assert sorted(row["status_code"] for row in rows) == [405, 429]
+        assert sorted(row["status_code"] for row in rows) == [404, 429]
         limited_row = next(row for row in rows if row["status_code"] == 429)
         assert limited_row["request_id"] == headers["x-request-id"]
 
