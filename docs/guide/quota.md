@@ -92,6 +92,7 @@ quota:
 | `url` | 显式用量 URL，用于无法从 `base_url` 推导的情况 |
 | `interval` | 后台刷新秒数；`0` 表示只在需要时读取 |
 | `demote_at` | 已用比例达到多少即视为耗尽；`100` 沿用 vendor 自己的规则 |
+| `local` | 打印读数的本机命令（`argv`、`env`、`timeout`）；用于只能通过自家 CLI 读取额度的通道 |
 
 ## 读取
 
@@ -231,3 +232,31 @@ quota:
 冷却时间 —— 60 秒 —— 而不是等到一个服务方并未给出的重置时间：与其他地方一致，读取失败
 从不降级，而错误从不臆造窗口。提供方卡片会报告**没有可读的配额**并给出原因，而不是报错；
 它的 **管理用量** 链接指向服务方的设置页，那是唯一能看到额度的地方。
+
+## 由自家 CLI 打印额度的通道
+
+agent 通道把订阅保存在服务方 CLI 里，网关既没有 key，也没有可读的 HTTP 端点。有些 CLI
+自己能打印账号的窗口。这类 shim 在探针旁声明命令：
+
+```yaml
+quota:
+  probe: antigravity_usage
+  local:
+    argv: ["{acp_argv0}", "-p", "/usage", "--output-format", "json"]
+    env:
+      ANTIGRAVITY_APP_DATA_DIR: "{acp_home}"
+    timeout: 60
+```
+
+网关用通道自己的环境与配置目录运行该命令 —— 与 agent 使用同一个登录、同一个账号。
+`{acp_home}`、`{acp_state_dir}` 和 `{acp_argv0}` 由 provider 条目展开；先应用 `acp.env`，
+再应用 `local.env`，因此声明可以只为这次读取覆盖某个服务方变量。`local.timeout` 默认
+30 秒。探针的 `parse_local(body)` 解码 stdout 的 JSON，返回 `(plan, windows)`，可以是
+同步或异步。
+
+读数与其他来源一样保存：Quota 卡片一分钟内复用，`?refresh=1` 重新读取。命令失败、超时，
+或探针拒绝输出时，会保存为 `error` 读数，原因就是命令自己的话 —— 打开卡片不会重跑，
+下一次刷新才会。该来源不需要 `quota.interval`；没有声明 interval 的通道不做后台轮询。
+
+探针的写法与其他探针相同：导出 `PROBES`，给探针一个 `quota.probe` 会引用的 `id`，
+实现返回 `""` 的 `match()`（通道没有 HTTP 用量端点），并加上 `parse_local`。
