@@ -85,6 +85,31 @@ conversion like any other provider.
    gateway reads the agent's updates as they arrive and writes the client's own
    dialect.
 
+## Sign-in and a persistent profile
+
+The gateway gives each provider its own directory under its data directory,
+`<data_dir>/acp/<provider>` by default, and starts both the ACP agent and the
+admin sign-in with `--gemini-dir` pointing at it. On desktop Linux `agy` keeps
+the token in the keyring, which is shared by the machine; on a headless host or
+in a container there is no keyring, and `agy` writes its file-based token under
+that directory. Mount the gateway's data directory on a volume to reuse the
+sign-in after a restart and after a new image is deployed. Set `acp.home` on the
+provider entry to use another saved directory:
+
+```jsonc
+"antigravity": {
+  "type": "antigravity--acp",
+  "acp": {"home": "saved/antigravity-work"}
+}
+```
+
+The Authentication card offers **Start browser sign-in**. It runs
+`agy acp --login --gemini-dir <home>`, opens the Google URL, accepts the pasted
+code, and reports the account. A headless host cannot be asked for the account,
+so a successful sign-in also writes a non-secret marker
+(`.llm-rosetta-login.json`) in the same directory; that marker is why the panel
+still reads **Connected** after a restart. It holds a timestamp, never a token.
+
 ## Models
 
 The model name in the request is handed to the agent's own `model` option for
@@ -190,8 +215,9 @@ with the old bridge.
 
 ## Security
 
-- The gateway never holds, reads or logs a Google token: `agy` stores it where
-  it stores it for its own use.
+- The gateway never holds, reads or logs a Google token: `agy` stores it in
+  the keyring, or headless in the lane's persistent directory. The gateway
+  writes only a non-secret timestamp marker in that directory.
 - The agent runs in a profile the gateway owns and re-writes before every
   session: its built-in tools cannot run on the host, and client tools reach
   it only through the gateway's loopback MCP endpoint.
