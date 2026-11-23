@@ -59,7 +59,6 @@ from .._vendor.acp import (
     PermissionOptionKind,
 )
 from .._vendor.jsonrpc import METHOD_NOT_FOUND, JSONRPCException
-from ..routing.session_identity import SESSION_HEADER_PATTERN, SESSION_HEADERS
 from ..transport._base import UpstreamConnectionError, UpstreamResponse, UpstreamStream
 from ..transport.provider_info import ProviderInfo
 from .acp_chunks import (
@@ -102,22 +101,6 @@ DEFAULT_AGENT_ARGV: tuple[str, ...] = (
     "acp",
     "--dangerously-skip-permissions=false",
 )
-
-
-def _session_header_hint(provider_info: ProviderInfo) -> str:
-    """An inbound session header a client can actually use, for the 400 text.
-
-    ``session_header`` is the header the gateway *sends upstream*, not
-    necessarily one it reads back.  Name it only when it is a real carrier;
-    otherwise name the always-read Claude Code header.  A patterned header is
-    accepted only with an id-shaped value, so say that too.
-    """
-    declared = (getattr(provider_info, "session_header", None) or "").lower()
-    if declared in SESSION_HEADERS:
-        return f"`{declared}`"
-    if SESSION_HEADER_PATTERN.match(declared):
-        return f"`{declared}` (with an id-shaped value)"
-    return "`x-claude-code-session-id`"
 
 
 #: The agent must never run one of its own tools (file read, write, shell,
@@ -918,11 +901,14 @@ class AcpTransport:
         if _tool_defs(body) and key is None:
             # A tool call suspends the turn, and only a declared conversation
             # id can find that suspension when the result arrives.  A derived
-            # id may name two conversations, so it must never key one.
+            # id may name two conversations, so it must never key one.  Name a
+            # header the identity reader always accepts: a bare ``x-session-id``
+            # is middleware bookkeeping, and a provider's ``session_header`` is
+            # the header sent upstream, not a guaranteed inbound carrier.
             raise AcpTurnError(
                 "this request declares tools, but an ACP lane needs a declared "
                 "conversation id to carry a tool result back to the agent; "
-                f"send it in {_session_header_hint(provider_info)} and retry.",
+                "send it in `x-claude-code-session-id` and retry.",
                 status_code=400,
             )
         # A process that exited between turns still occupies its slot; taking
