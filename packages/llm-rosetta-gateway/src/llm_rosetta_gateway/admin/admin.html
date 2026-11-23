@@ -1362,8 +1362,10 @@
            each capability's default shim; every capability can then be changed
            on its own (Capabilities pane), so no capability has to be ticked
            to choose a service. -->
-      <div class="endpoint-section visible" id="provPresetSection">
-        <div class="section-label"><span data-i18n="label.providerPreset">Provider preset</span></div>
+      <div class="prov-auth-summary" id="provPresetSection">
+        <div class="prov-auth-summary-head">
+          <span class="prov-group-title" data-i18n="label.providerPreset">Provider preset</span>
+        </div>
         <div class="form-row align-end">
           <div class="form-group" style="flex:1;min-width:0">
             <label data-i18n="label.topLevel">Top Level</label>
@@ -1458,8 +1460,24 @@
             <input type="checkbox" id="provLlmEnabled" checked>
             <span data-i18n="label.enabled">Enabled</span>
           </label>
+          <span class="face-origin" id="provFaceOrigin_llm" hidden></span>
+          <button type="button" class="btn btn-sm face-reset" id="provFaceReset_llm" data-i18n="btn.faceResetPreset" hidden>Use the preset</button>
         </div>
         <div class="endpoint-status" id="provLlmStatus" role="status" hidden></div>
+        <div class="form-group">
+          <label data-i18n="label.endpointSource">Source</label>
+          <div class="type-picker" id="provLlmPicker">
+            <button type="button" id="provLlmTrigger" class="type-picker-trigger">
+              <img id="provLlmLogo" class="type-picker-logo" src="" alt="" style="display:none" onerror="this.style.display='none'">
+              <span id="provLlmLabel" class="tp-trigger-label tp-placeholder"></span>
+              <svg class="type-picker-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+            <div class="menu type-picker-dropdown" id="provLlmDropdown">
+              <div class="tp-list" id="provLlmList" role="listbox"></div>
+            </div>
+          </div>
+          <input type="hidden" id="provShim_llm">
+        </div>
         <div class="form-group">
           <label data-i18n="label.urlTemplate">URL Template <span style="font-weight:normal;color:var(--text-dim)">(optional)</span></label>
           <input id="provUrlTemplate" placeholder="{base_url}/v1/chat/completions">

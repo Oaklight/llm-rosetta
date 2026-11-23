@@ -371,7 +371,7 @@ tr:hover td { background: var(--surface-2); }
   border:1px solid var(--hairline); border-radius:999px; font-weight:400;
 }
 .face-origin.is-manual { color:var(--accent); border-color:var(--accent); }
-.face-origin[hidden], .face-reset[hidden] { display:none; }
+.face-origin[hidden], .face-reset[hidden], .prov-pill[hidden] { display:none; }
 .face-sum-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; width:100%; }
 .face-sum-shim { font-family:var(--mono); font-size:12px; color:var(--text-dim); overflow-wrap:anywhere; }
 .prov-group { margin-bottom:16px; }
