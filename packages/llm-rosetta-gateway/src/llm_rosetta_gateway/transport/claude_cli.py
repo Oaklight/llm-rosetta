@@ -35,7 +35,7 @@ import signal
 import tempfile
 import uuid
 from collections import deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from ._base import (
@@ -203,6 +203,115 @@ def conversation_session_id(system: str, frames: list[dict[str, Any]]) -> str:
         default=str,
     )
     return str(uuid.uuid5(_SESSION_NAMESPACE, seed))
+
+
+#: The cache marker the Messages API accepts on a content block.
+_BREAKPOINT: dict[str, str] = {"type": "ephemeral"}
+
+#: Block kinds a cache breakpoint may sit on.
+_BREAKPOINT_KINDS = frozenset({"text", "tool_use", "tool_result", "image"})
+
+#: The API's limit on cache breakpoints in one request.
+_MAX_BREAKPOINTS = 4
+
+
+def _content_blocks_of(value: Any) -> list[dict[str, Any]]:
+    """The block list of a message value, or an empty list."""
+    content = value.get("content") if isinstance(value, dict) else None
+    return content if isinstance(content, list) else []
+
+
+def _breakpoint_blocks(body: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """Every block of *body* that carries a cache breakpoint, in request order.
+
+    Args:
+        body: A Messages request body.
+
+    Returns:
+        ``(where, block)`` pairs, ``where`` being ``"system"`` or ``"messages"``.
+    """
+    found: list[tuple[str, dict[str, Any]]] = []
+    for block in body.get("system") or []:
+        if isinstance(block, dict) and block.get("cache_control"):
+            found.append(("system", block))
+    for message in body.get("messages") or []:
+        for block in _content_blocks_of(message):
+            if isinstance(block, dict) and block.get("cache_control"):
+                found.append(("messages", block))
+    return found
+
+
+def _relocate_breakpoint(body: dict[str, Any], messages: list[dict[str, Any]]) -> None:
+    """Move the newest cache breakpoint onto the turn's last block.
+
+    The CLI puts its own breakpoint on the annotation message it appends, and
+    that message is dropped.  Without a breakpoint at the end of the
+    conversation the newest turn is never written to the cache, so every later
+    turn re-reads the growing tail at full price.
+
+    Args:
+        body: The request body being built.
+        messages: The conversation that will be sent.
+    """
+    content = _content_blocks_of(messages[-1]) if messages else []
+    if not content:
+        return
+    block = content[-1]
+    if not isinstance(block, dict) or block.get("cache_control"):
+        return
+    if block.get("type") not in _BREAKPOINT_KINDS:
+        return
+    markers = _breakpoint_blocks(body)
+    if len(markers) >= _MAX_BREAKPOINTS:
+        for where, existing in markers:
+            if where == "messages":
+                existing.pop("cache_control", None)
+                break
+    block["cache_control"] = dict(_BREAKPOINT)
+
+
+def make_restorer(
+    host_body: dict[str, Any],
+) -> Callable[[dict[str, Any]], dict[str, Any]]:
+    """Build the rewrite that puts the host's conversation back.
+
+    The CLI appends a ``role: "system"`` annotation message after every user
+    message it replays: an environment reminder that names its own working
+    directory, a date line, context reminders.  Those blocks sit inside the
+    conversation prefix and differ between turns, so the upstream can never
+    reuse the cached prefix, and they describe a directory the client never
+    asked about.  They are the CLI's bookkeeping, not part of the conversation,
+    so they are dropped before the request leaves the relay, and the cache
+    breakpoint the CLI put on them is moved to the end of the turn.
+
+    The rewrite fails open: a conversation whose message count does not come
+    back as the host sent it is forwarded unchanged, which costs the cached
+    prefix but never the answer.
+
+    Args:
+        host_body: The target-format body the gateway received.
+
+    Returns:
+        A function from the CLI's parsed request body to the body to forward.
+    """
+    expected = sum(
+        1 for message in host_body.get("messages") or [] if isinstance(message, dict)
+    )
+
+    def restore(cli_body: dict[str, Any]) -> dict[str, Any]:
+        messages = [
+            message
+            for message in cli_body.get("messages") or []
+            if isinstance(message, dict)
+        ]
+        kept = [message for message in messages if message.get("role") != "system"]
+        if len(kept) != expected:
+            return cli_body
+        body = {**cli_body, "messages": kept}
+        _relocate_breakpoint(body, kept)
+        return body
+
+    return restore
 
 
 def _spawn_argv(
@@ -790,7 +899,11 @@ class ClaudeCliTransport(UpstreamTransport):
         )
         env = _spawn_env(provider_info)
         try:
-            relay = Relay(provider_info.cli_upstream, timeout=self._timeout)
+            relay = Relay(
+                provider_info.cli_upstream,
+                timeout=self._timeout,
+                rewrite=make_restorer(body),
+            )
             relay_url = await relay.start()
         except RelayError as exc:
             shutil.rmtree(workdir, ignore_errors=True)
