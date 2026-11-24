@@ -125,3 +125,17 @@ async def test_a_request_made_mid_scan_survives_the_pass(pm):
 
     second = await pm.rebuild_flag_token()
     assert isinstance(second, str) and second != first
+
+
+async def test_a_failed_scan_keeps_the_request_it_could_not_answer(pm):
+    """The clear sits after the scan, so a raise leaves the token in place."""
+    await pm.set_rebuild_flag()
+
+    class _FailingScan(MetricsCollector):
+        async def rebuild_from_stream(self, rows):
+            raise RuntimeError("scan failed")
+
+    with pytest.raises(RuntimeError):
+        await OpsRebuildMetrics(_ops(pm, _FailingScan())).execute()
+
+    assert await pm.rebuild_flag_token() is not None
