@@ -885,6 +885,10 @@
         <h2 data-i18n="tab.jobs">Jobs</h2>
         <div class="jobs-head-actions">
           <span class="jobs-count" id="jobsCount"></span>
+          <div class="seg-control" id="jobsKindSeg" role="radiogroup" aria-label="Job category" data-i18n-aria-label="jobs.categoryLabel">
+            <label role="radio" aria-checked="false" tabindex="-1" data-view="requests" onclick="setJobsCategory('requests')" data-i18n="jobs.category.requests">Requests</label>
+            <label class="active" role="radio" aria-checked="true" tabindex="0" data-view="ops" onclick="setJobsCategory('ops')" data-i18n="jobs.category.ops">Ops</label>
+          </div>
           <div class="seg-control" id="jobsSeg" role="radiogroup" aria-label="Job filter" data-i18n-aria-label="jobs.filterLabel">
             <label class="active" role="radio" aria-checked="true" tabindex="0" data-view="all" onclick="setJobsFilter('all')" data-i18n="jobs.filter.all">All</label>
             <label role="radio" aria-checked="false" tabindex="-1" data-view="active" onclick="setJobsFilter('active')" data-i18n="jobs.filter.active">Active</label>
@@ -893,7 +897,7 @@
           <button class="btn btn-sm" onclick="loadJobs()" data-i18n="jobs.refresh">Refresh</button>
         </div>
       </div>
-      <p class="jobs-hint" data-i18n="jobs.hint">Destructive operations run in the background; their progress appears here.</p>
+      <p class="jobs-hint" data-i18n="jobs.hint">Request work (Batch) and gateway maintenance run in the background; their progress appears here.</p>
       <div class="table-scroll"><table id="jobsTableEl">
         <thead><tr>
           <th data-i18n="jobs.col.id">Job</th>

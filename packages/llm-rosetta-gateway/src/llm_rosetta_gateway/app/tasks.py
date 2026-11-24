@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 
@@ -84,7 +85,32 @@ async def _periodic_cleanup(app: App) -> None:
             jobs = getattr(app, "jobs", None)
             config = getattr(app, "gateway_config", None)
             if jobs is not None and config is not None:
-                from ..jobs.enqueue import enqueue_cleanup
+                from ..jobs.enqueue import CLEANUP_KIND, enqueue_cleanup
+                from ..jobs.model import JOB_SUCCEEDED
+
+                # The jobs table outlives this task.  Without this check every
+                # restart queues another cleanup two minutes later, however
+                # recently the last one finished.  Only a *successful periodic*
+                # pass counts: a failed or cancelled one did not do the work,
+                # and a small manual range delete is not the weekly sweep.
+                # Sleep the remainder of the interval rather than a whole one,
+                # so a wake that lands milliseconds early is not doubled.
+                last = await jobs.store.last_job_at(
+                    CLEANUP_KIND, status=JOB_SUCCEEDED, source="periodic"
+                )
+                if last is not None:
+                    try:
+                        due = datetime.fromisoformat(last) + timedelta(
+                            seconds=_CLEANUP_INTERVAL
+                        )
+                    except ValueError:
+                        due = None
+                    if due is not None:
+                        wait = (due - datetime.now(timezone.utc)).total_seconds()
+                        if wait > 0:
+                            logger.debug("Periodic cleanup deferred for %.0fs", wait)
+                            await asyncio.sleep(wait)
+                            continue
 
                 raw_cfg = getattr(config, "_raw", {})
                 server = raw_cfg.get("server", {}) if isinstance(raw_cfg, dict) else {}

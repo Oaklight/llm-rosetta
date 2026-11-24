@@ -32,6 +32,11 @@ ACTIVE_STATES = frozenset({JOB_QUEUED, JOB_RUNNING})
 #: States a job never leaves on its own.
 TERMINAL_STATES = frozenset({JOB_SUCCEEDED, JOB_FAILED, JOB_CANCELLED})
 
+#: Kinds whose job reserved rows in ``hidden_ranges`` before it ran.  Startup
+#: repair uses this instead of guessing from payload keys, so a future kind
+#: that starts hiding rows cannot silently lose that repair.
+HIDING_KINDS = frozenset({"data.clear", "data.cleanup"})
+
 ALL_STATES = (JOB_QUEUED, JOB_RUNNING, JOB_SUCCEEDED, JOB_FAILED, JOB_CANCELLED)
 
 #: A lane serialises the jobs in it.  ``sqlite`` work shares the one database

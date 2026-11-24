@@ -57,7 +57,7 @@ def _mock_persistence() -> MagicMock:
     p.cleanup_ops_log_by_age = AsyncMock(return_value={"deleted": 2})
     p.cleanup_before = AsyncMock(return_value={"deleted": 7})
     p.cleanup_range = AsyncMock(return_value={"deleted": 4})
-    p.trim_to_cap = AsyncMock(return_value={"trimmed": 15})
+    p.trim_to_cap = AsyncMock(return_value={"trimmed": 15, "request_log_trimmed": 10})
     p.vacuum = AsyncMock(return_value={"freed_bytes": 1024})
     p.count_log_entries = AsyncMock(return_value=100)
     p.iter_log_rows_for_rebuild = _mock_iter_rows
@@ -185,6 +185,21 @@ class TestOpsCleanupData:
         p.cleanup_error_dumps_by_age.assert_awaited_once_with(14)
 
     @pytest.mark.asyncio
+    async def test_a_cleanup_that_deletes_nothing_does_not_rebuild(self):
+        p = _mock_persistence()
+        p.cleanup_logs_by_age = AsyncMock(return_value={"deleted": 0})
+        m = MagicMock()
+        m.rebuild_from_stream = AsyncMock(return_value=0)
+        m.export_counters = MagicMock(return_value={})
+        ctx = _make_ctx(persistence=p, metrics=m)
+
+        await OpsCleanupData(
+            ctx, mode="age", tables=("request_log",), max_age_days=90
+        ).execute()
+
+        m.rebuild_from_stream.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_cleanup_before(self):
         p = _mock_persistence()
         ctx = _make_ctx(persistence=p)
@@ -236,6 +251,19 @@ class TestOpsTrimData:
         p.trim_to_cap.assert_awaited_once()
         entry = ctx.ops_log.add.call_args[0][0]
         assert entry.event_type == EVENT_DATA_TRIMMED
+
+    @pytest.mark.asyncio
+    async def test_a_trim_that_keeps_every_request_row_does_not_rebuild(self):
+        p = _mock_persistence()
+        p.trim_to_cap = AsyncMock(return_value={"trimmed": 2, "request_log_trimmed": 0})
+        m = MagicMock()
+        m.rebuild_from_stream = AsyncMock(return_value=0)
+        m.export_counters = MagicMock(return_value={})
+        ctx = _make_ctx(persistence=p, metrics=m)
+
+        await OpsTrimData(ctx).execute()
+
+        m.rebuild_from_stream.assert_not_awaited()
 
 
 class TestOpsVacuum:
@@ -337,6 +365,28 @@ class TestOpsPeriodicCleanup:
         entry = ops_log.add.call_args[0][0]
         assert entry.event_type == EVENT_DATA_CLEANUP
         assert entry.source == "persistence"
+        m.rebuild_from_stream.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_ops_only_deletion_does_not_rebuild_request_counters(self):
+        from llm_rosetta_gateway.ops.data import OpsPeriodicCleanup
+
+        p = _mock_persistence()
+        p.cleanup_logs_by_age = AsyncMock(return_value={"deleted": 0})
+        p.cleanup_error_dumps_by_age = AsyncMock(
+            return_value={"error_dumps_deleted": 0}
+        )
+        p.cleanup_ops_log_by_age = AsyncMock(return_value={"deleted": 3})
+        m = MagicMock()
+        m.rebuild_from_stream = AsyncMock(return_value=0)
+        m.export_counters = MagicMock(return_value={})
+        ctx = OpsContext(ops_log=MagicMock(add=AsyncMock()), persistence=p, metrics=m)
+
+        result = await OpsPeriodicCleanup(ctx, rl_age=90, ol_age=90).execute()
+
+        assert result["request_log_deleted"] == 0
+        assert result["total"] == 3
+        m.rebuild_from_stream.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_periodic_cleanup_zero_deletions_no_record(self):

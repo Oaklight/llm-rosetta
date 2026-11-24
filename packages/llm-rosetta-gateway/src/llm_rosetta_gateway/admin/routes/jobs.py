@@ -1,4 +1,4 @@
-"""Background job routes: list, inspect, cancel, retry, resume, unhide."""
+"""Background job routes: list, inspect, cancel, retry, resume."""
 
 from __future__ import annotations
 
@@ -36,9 +36,15 @@ async def get_jobs(request: Any) -> Response:
         return JSONResponse(
             {"error": "limit and offset must be integers"}, status_code=400
         )
+    category = _qp(request, "category") or None
+    if category not in (None, "requests", "ops"):
+        return JSONResponse(
+            {"error": "category must be requests or ops"}, status_code=400
+        )
     jobs, total = await manager.store.list_jobs(
         status=_qp(request, "status") or None,
         kind=_qp(request, "kind") or None,
+        category=category,
         limit=max(1, min(limit, 200)),
         offset=max(0, offset),
     )
@@ -46,7 +52,7 @@ async def get_jobs(request: Any) -> Response:
         {
             "jobs": [job.to_payload() for job in jobs],
             "total": total,
-            "active": await manager.store.active_count(),
+            "active": await manager.store.active_count(category=category),
         }
     )
 
@@ -78,7 +84,10 @@ async def retry_job(request: Any, **kwargs: Any) -> Response:
     manager = _manager(request)
     if manager is None:
         return _unavailable()
-    ok = await manager.store.retry(_job_id(request, kwargs))
+    try:
+        ok = await manager.store.retry(_job_id(request, kwargs))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
     if not ok:
         return JSONResponse(
             {"error": "Only a failed or cancelled job can be retried"},
@@ -93,24 +102,13 @@ async def resume_job(request: Any, **kwargs: Any) -> Response:
     manager = _manager(request)
     if manager is None:
         return _unavailable()
-    ok = await manager.store.resume(_job_id(request, kwargs))
+    try:
+        ok = await manager.store.resume(_job_id(request, kwargs))
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
     if not ok:
         return JSONResponse(
             {"error": "Only a cancelled job can be resumed"}, status_code=409
         )
     manager.wake()
     return JSONResponse({"ok": True, "status": "queued"})
-
-
-async def unhide_job(request: Any, **kwargs: Any) -> Response:
-    """Make a job's still-hidden rows visible again."""
-    manager = _manager(request)
-    if manager is None:
-        return _unavailable()
-    try:
-        removed = await manager.store.unhide(_job_id(request, kwargs))
-    except KeyError:
-        return JSONResponse({"error": "Job not found"}, status_code=404)
-    except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=409)
-    return JSONResponse({"ok": True, "ranges_removed": removed})

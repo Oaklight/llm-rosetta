@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -15,6 +16,8 @@ from llm_rosetta_gateway.jobs import (
     JOB_SUCCEEDED,
     JobStore,
 )
+from llm_rosetta_gateway.jobs.enqueue import CLEANUP_KIND, CLEAR_KIND
+from llm_rosetta_gateway.jobs.model import HIDING_KINDS
 from llm_rosetta_gateway.observability.persistence import PersistenceManager
 from llm_rosetta_gateway.observability.visibility import MAX_TS, MIN_TS
 
@@ -123,7 +126,7 @@ async def test_success_drops_the_ranges(store, pm):
     assert pm.visibility.ranges("request_log") == []
 
 
-async def test_failure_keeps_the_ranges_so_a_retry_finishes_the_job(store, pm):
+async def test_failure_releases_the_ranges_and_a_retry_puts_them_back(store, pm):
     job = await store.enqueue(
         "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
     )
@@ -132,8 +135,12 @@ async def test_failure_keeps_the_ranges_so_a_retry_finishes_the_job(store, pm):
     assert await store.finish(job.id, "owner", JOB_FAILED, error="disk full")
     finished = await store.get(job.id)
     assert finished.error == "disk full"
-    assert len(finished.hidden_range_ids) == 1
+    assert finished.hidden_range_ids == []
+    assert pm.visibility.ranges("request_log") == []
+
+    assert await store.retry(job.id) is True
     assert pm.visibility.ranges("request_log") == [(MIN_TS, MAX_TS)]
+    assert len((await store.get(job.id)).hidden_range_ids) == 1
 
 
 async def test_cancelling_a_queued_job_is_a_clean_undo(store, pm):
@@ -159,16 +166,16 @@ async def test_cancelling_a_running_job_only_flags_it(store, pm):
     assert pm.visibility.ranges("request_log") == [(MIN_TS, MAX_TS)]
 
 
-async def test_a_cancel_after_a_partial_delete_keeps_the_ranges(store, pm):
+async def test_a_cancel_after_a_partial_delete_releases_the_ranges(store, pm):
     job = await store.enqueue(
         "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
     )
     await store.claim("sqlite", "owner")
 
-    await store.finish(job.id, "owner", JOB_CANCELLED, deleted=2)
+    await store.finish(job.id, "owner", JOB_CANCELLED)
     finished = await store.get(job.id)
-    assert len(finished.hidden_range_ids) == 1
-    assert pm.visibility.ranges("request_log") == [(MIN_TS, MAX_TS)]
+    assert finished.hidden_range_ids == []
+    assert pm.visibility.ranges("request_log") == []
 
 
 async def test_release_gives_the_attempt_back(store):
@@ -237,7 +244,7 @@ async def test_retry_resets_and_resume_continues(store, pm):
     )
     claimed = await store.claim("sqlite", "owner")
     assert claimed.attempts == 1
-    await store.finish(job.id, "owner", JOB_CANCELLED, deleted=1)
+    await store.finish(job.id, "owner", JOB_CANCELLED)
 
     assert await store.resume(job.id) is True
     resumed = await store.get(job.id)
@@ -298,41 +305,151 @@ async def test_resume_of_a_job_with_no_window_adds_no_range(store, pm):
     """Trim and VACUUM never hide anything, so there is nothing to put back."""
     job = await store.enqueue("data.trim")
     await store.claim("sqlite", "owner")
-    await store.finish(job.id, "owner", JOB_CANCELLED, deleted=0)
+    await store.finish(job.id, "owner", JOB_CANCELLED)
 
     assert await store.resume(job.id) is True
     assert (await store.get(job.id)).hidden_range_ids == []
     assert pm.visibility.is_empty()
 
 
-async def test_unhide_makes_the_rows_visible_again(store, pm):
+async def test_a_lost_window_refuses_a_requeue_instead_of_deleting_visible_rows(
+    store, pm
+):
+    """A pre-`_hide` job whose range is gone must not be resumed blindly."""
+    job = await store.enqueue(
+        "data.clear",
+        {"table": "request_log"},
+        hidden_ranges=[("request_log", MIN_TS, MAX_TS)],
+    )
+    await store.request_cancel(job.id)
+    raw = await pm.connection.execute_fetchone(
+        "SELECT payload FROM jobs WHERE id = ?", (job.id,)
+    )
+    payload = json.loads(raw[0])
+    payload.pop("_hide", None)
+    await pm.connection.execute(
+        "UPDATE jobs SET payload = ? WHERE id = ?", (json.dumps(payload), job.id)
+    )
+    await pm.connection.commit()
+
+    with pytest.raises(ValueError, match="no recorded hide window"):
+        await store.resume(job.id)
+
+    assert (await store.get(job.id)).status == JOB_CANCELLED
+    assert pm.visibility.is_empty()
+
+
+async def test_startup_repair_releases_a_pre_upgrade_terminal_range(store, pm):
+    """A failed job written by the old code kept its range with no route back."""
+    job = await store.enqueue(
+        "data.clear",
+        {"table": "request_log"},
+        hidden_ranges=[("request_log", MIN_TS, MAX_TS)],
+    )
+    await store.claim("sqlite", "owner")
+    raw = await pm.connection.execute_fetchone(
+        "SELECT payload FROM jobs WHERE id = ?", (job.id,)
+    )
+    payload = json.loads(raw[0])
+    payload.pop("_hide", None)
+    await pm.connection.execute(
+        "UPDATE jobs SET status = ?, error = 'disk full', payload = ?, "
+        "lease_owner = NULL, lease_expires_at = NULL WHERE id = ?",
+        (JOB_FAILED, json.dumps(payload), job.id),
+    )
+    await pm.connection.commit()
+    assert pm.visibility.ranges("request_log") == [(MIN_TS, MAX_TS)]
+
+    assert await store.release_terminal_ranges() == 1
+
+    assert pm.visibility.ranges("request_log") == []
+    row = await pm.connection.execute_fetchone(
+        "SELECT payload, hidden_range_ids FROM jobs WHERE id = ?", (job.id,)
+    )
+    assert json.loads(row[0])["_hide"] == [["request_log", MIN_TS, MAX_TS]]
+    assert json.loads(row[1]) == []
+    assert await store.release_terminal_ranges() == 0
+    assert await store.retry(job.id) is True
+    assert pm.visibility.ranges("request_log") == [(MIN_TS, MAX_TS)]
+
+
+async def test_startup_repair_keeps_a_maintenance_job_requeueable(store, pm):
+    job = await store.enqueue("data.trim")
+    await store.claim("sqlite", "owner")
+    raw = await pm.connection.execute_fetchone(
+        "SELECT payload FROM jobs WHERE id = ?", (job.id,)
+    )
+    payload = json.loads(raw[0])
+    payload.pop("_hide", None)
+    await pm.connection.execute(
+        "UPDATE jobs SET status = ?, error = 'boom', payload = ?, "
+        "lease_owner = NULL, lease_expires_at = NULL WHERE id = ?",
+        (JOB_FAILED, json.dumps(payload), job.id),
+    )
+    await pm.connection.commit()
+
+    assert await store.release_terminal_ranges() == 1
+
+    row = await pm.connection.execute_fetchone(
+        "SELECT payload FROM jobs WHERE id = ?", (job.id,)
+    )
+    assert json.loads(row[0])["_hide"] == []
+    assert await store.retry(job.id) is True
+    assert pm.visibility.is_empty()
+
+
+async def test_prune_removes_a_terminal_job_after_it_releases_its_range(store, pm):
     job = await store.enqueue(
         "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
     )
     await store.claim("sqlite", "owner")
     await store.finish(job.id, "owner", JOB_FAILED, error="boom")
-
-    assert await store.unhide(job.id) == 1
     assert pm.visibility.ranges("request_log") == []
-    assert (await store.get(job.id)).hidden_range_ids == []
-
-
-async def test_prune_keeps_a_job_that_owns_a_range(store, pm):
-    owner = await store.enqueue(
-        "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
-    )
-    await store.claim("sqlite", "owner")
-    await store.finish(owner.id, "owner", JOB_FAILED, error="boom")
-    for _ in range(3):
-        job = await store.enqueue("data.trim")
-        await store.claim("sqlite", "owner")
-        await store.finish(job.id, "owner", JOB_SUCCEEDED)
 
     removed = await store.prune(keep=0)
 
-    assert removed == 3
-    assert await store.get(owner.id) is not None
+    assert removed == 1
     assert await store.get(job.id) is None
+
+
+async def test_last_job_at_is_kind_status_and_source_scoped(store):
+    job = await store.enqueue("data.cleanup", {"source": "periodic"})
+
+    assert await store.last_job_at("data.cleanup") == job.created_at
+    assert await store.last_job_at("data.trim") is None
+    assert await store.last_job_at("data.cleanup", source="periodic") == (
+        job.created_at
+    )
+
+    # A queued pass has not done the work yet, and a failed one did not.
+    assert (
+        await store.last_job_at("data.cleanup", status=JOB_SUCCEEDED, source="periodic")
+        is None
+    )
+    await store.claim("sqlite", "owner")
+    await store.finish(job.id, "owner", JOB_FAILED, error="database is locked")
+    assert (
+        await store.last_job_at("data.cleanup", status=JOB_SUCCEEDED, source="periodic")
+        is None
+    )
+
+    manual = await store.enqueue("data.cleanup", {"source": "admin"})
+    await store.claim("sqlite", "owner")
+    await store.finish(manual.id, "owner", JOB_SUCCEEDED)
+    assert (
+        await store.last_job_at("data.cleanup", status=JOB_SUCCEEDED, source="periodic")
+        is None
+    )
+
+    periodic = await store.enqueue("data.cleanup", {"source": "periodic"})
+    await store.claim("sqlite", "owner")
+    await store.finish(periodic.id, "owner", JOB_SUCCEEDED)
+    done = await store.get(periodic.id)
+    assert done is not None and done.finished_at is not None
+    assert (
+        await store.last_job_at("data.cleanup", status=JOB_SUCCEEDED, source="periodic")
+        == done.finished_at
+    )
 
 
 async def test_list_filters_and_counts(store):
@@ -348,6 +465,33 @@ async def test_list_filters_and_counts(store):
     succeeded, count = await store.list_jobs(status=JOB_SUCCEEDED)
     assert count == 1 and succeeded[0].id == first.id
     assert await store.active_count() == 1
+
+
+async def test_category_is_filtered_in_sql_so_one_half_cannot_evict_the_other(
+    store,
+):
+    request = await store.enqueue("batch.submit", lane="network")
+    network_ops = await store.enqueue("data.clear", lane="network")
+    ops = await store.enqueue("data.trim")
+
+    requests, total = await store.list_jobs(category="requests")
+    assert total == 1 and [job.id for job in requests] == [request.id]
+    assert await store.active_count(category="requests") == 1
+
+    everything_else, total = await store.list_jobs(category="ops")
+    assert total == 2
+    assert {job.id for job in everything_else} == {network_ops.id, ops.id}
+    assert await store.active_count(category="ops") == 2
+
+    with pytest.raises(ValueError, match="unknown job category"):
+        await store.list_jobs(category="everything")
+    with pytest.raises(ValueError, match="unknown job category"):
+        await store.active_count(category="everything")
+
+
+def test_hiding_kinds_match_the_enqueue_producers():
+    """Startup repair must keep naming the kinds that actually hide rows."""
+    assert HIDING_KINDS == {CLEAR_KIND, CLEANUP_KIND}
 
 
 async def test_claim_is_atomic_under_two_claimers(store):
@@ -399,14 +543,14 @@ async def test_success_while_the_range_still_covers_rows_fails_the_job(store, pm
     await store.claim("sqlite", "owner")
 
     # The handler did nothing; `deleted` may even look fine.
-    assert await store.finish(job.id, "owner", JOB_SUCCEEDED, deleted=1) is True
+    assert await store.finish(job.id, "owner", JOB_SUCCEEDED) is True
 
     finished = await store.get(job.id)
     assert finished.status == JOB_FAILED
     assert "hidden rows remain" in (finished.error or "")
-    assert len(finished.hidden_range_ids) == 1
-    assert pm.visibility.ranges("request_log") != []
-    assert await pm.count_log_entries() == 0
+    assert finished.hidden_range_ids == []
+    assert pm.visibility.ranges("request_log") == []
+    assert await pm.count_log_entries() == 1
 
 
 async def test_success_after_the_rows_are_gone_is_accepted(store, pm):
@@ -417,7 +561,7 @@ async def test_success_after_the_rows_are_gone_is_accepted(store, pm):
     await store.claim("sqlite", "owner")
 
     # A handler that removed the rows but never called note_deleted.
-    assert await store.finish(job.id, "owner", JOB_SUCCEEDED, deleted=0) is True
+    assert await store.finish(job.id, "owner", JOB_SUCCEEDED) is True
 
     finished = await store.get(job.id)
     assert finished.status == JOB_SUCCEEDED
@@ -439,37 +583,7 @@ async def test_recover_settles_a_job_the_operator_cancelled(store, pm):
     settled = await store.get(job.id)
     assert settled.status == JOB_CANCELLED
     assert settled.cancel_requested is True
-    # The ranges stay: deletion may have run partially before the restart.
-    assert len(settled.hidden_range_ids) == 1
-    assert await store.claim("sqlite", "owner") is None
-
-
-async def test_unhiding_a_queued_job_cancels_it(store, pm):
-    """The only honest unhide for a job that has not run is to cancel it.
-
-    Leaving it queued would bring the rows back now and delete them again on
-    the job's first batch, without anything in the listing having changed.
-    """
-    job = await store.enqueue(
-        "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
-    )
-
-    assert await store.unhide(job.id) == 1
+    # A settled job releases its reservation; resume re-hides the window.
+    assert settled.hidden_range_ids == []
     assert pm.visibility.ranges("request_log") == []
-    cancelled = await store.get(job.id)
-    assert cancelled.status == JOB_CANCELLED
-    assert cancelled.cancel_requested is True
-    assert cancelled.hidden_range_ids == []
     assert await store.claim("sqlite", "owner") is None
-
-
-async def test_unhiding_a_running_job_is_refused(store, pm):
-    job = await store.enqueue(
-        "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
-    )
-    await store.claim("sqlite", "owner")
-
-    with pytest.raises(ValueError, match="running"):
-        await store.unhide(job.id)
-
-    assert pm.visibility.ranges("request_log") == [(MIN_TS, MAX_TS)]

@@ -28,6 +28,24 @@ from llm_rosetta_gateway.observability.ops_log import (
 from .base import OpsBase, OpsContext
 
 
+def _request_rows_deleted(result: Any) -> int:
+    """Rows this operation removed from request_log, whatever it names them.
+
+    A single-table clear names its count ``deleted``; every multi-table shape
+    carries a per-table key, and the explicit ``request_log_deleted`` wins over
+    a sum that also counts ops-log or error-dump rows.  A cleanup that found
+    nothing old enough must not set the rebuild flag: the periodic cleanup runs
+    on a schedule, and a flag per empty pass turns an idle gateway into a
+    rebuild job every time the timer fires.
+    """
+    if not isinstance(result, dict):
+        return 0
+    for key in ("request_log_deleted", "request_log_trimmed", "deleted"):
+        if key in result:
+            return int(result.get(key) or 0)
+    return 0
+
+
 class _DataMutationMixin:
     """Shared counter-rebuild and batched-delete logic for data operations."""
 
@@ -75,12 +93,23 @@ class OpsClearData(_DataMutationMixin, OpsBase):
     event_type: ClassVar[str] = EVENT_DATA_CLEARED
     severity: ClassVar[str] = SEVERITY_WARNING
 
-    __slots__ = ("_table", "_job")
+    __slots__ = ("_table", "_end", "_job")
 
-    def __init__(self, ctx: OpsContext, *, table: str, job: Any = None) -> None:
+    def __init__(
+        self, ctx: OpsContext, *, table: str, job: Any = None, end: str | None = None
+    ) -> None:
         super().__init__(ctx)
         self._table = table
+        self._end = end
         self._job = job
+
+    def _job_where(self) -> tuple[str, tuple[Any, ...]]:
+        """The deletion predicate a background clear shares with its hide range.
+
+        The enqueue recorded the cutoff; a legacy job without one keeps the old
+        clear-everything behaviour.
+        """
+        return ("timestamp < ?", (self._end,)) if self._end else ("1 = 1", ())
 
     async def _run(self) -> dict[str, Any]:
         p = self._ctx.persistence
@@ -92,7 +121,8 @@ class OpsClearData(_DataMutationMixin, OpsBase):
                 count = await p.count_log_entries(include_hidden=True) if p else 0
                 await rl.clear()
                 return {"deleted": count}
-            total = await self._delete_where("request_log", "1 = 1")
+            where, params = self._job_where()
+            total = await self._delete_where("request_log", where, params)
             await p.settle_deletions(total)
             return {"deleted": total}
         if p is None:
@@ -101,7 +131,8 @@ class OpsClearData(_DataMutationMixin, OpsBase):
             if self._job is None:
                 await p.clear_error_dumps()
                 return {}
-            total = await self._delete_where("error_dumps", "1 = 1")
+            where, params = self._job_where()
+            total = await self._delete_where("error_dumps", where, params)
             bodies = await p.sweep_orphan_bodies()
             await p.settle_deletions(total)
             return {"error_dumps_deleted": total, "dump_bodies_deleted": bodies}
@@ -109,7 +140,11 @@ class OpsClearData(_DataMutationMixin, OpsBase):
 
     async def _record(self, result: Any, *, error: BaseException | None = None) -> None:
         await super()._record(result, error=error)
-        if error is None and self._table == "request_log":
+        if (
+            error is None
+            and self._table == "request_log"
+            and _request_rows_deleted(result) > 0
+        ):
             await self._rebuild_counters()
 
     def _message(self, result: Any) -> str:
@@ -244,7 +279,11 @@ class OpsCleanupData(_DataMutationMixin, OpsBase):
 
     async def _record(self, result: Any, *, error: BaseException | None = None) -> None:
         await super()._record(result, error=error)
-        if error is None and "request_log" in self._tables:
+        if (
+            error is None
+            and "request_log" in self._tables
+            and _request_rows_deleted(result) > 0
+        ):
             await self._rebuild_counters()
 
     def _message(self, result: Any) -> str:
@@ -296,7 +335,7 @@ class OpsTrimData(_DataMutationMixin, OpsBase):
 
     async def _record(self, result: Any, *, error: BaseException | None = None) -> None:
         await super()._record(result, error=error)
-        if error is None:
+        if error is None and _request_rows_deleted(result) > 0:
             await self._rebuild_counters()
 
     def _message(self, result: Any) -> str:
@@ -376,10 +415,13 @@ class OpsClearOpsLog(_DataMutationMixin, OpsBase):
 
     event_type: ClassVar[str] = EVENT_OPS_LOG_CLEARED
 
-    __slots__ = ("_job",)
+    __slots__ = ("_end", "_job")
 
-    def __init__(self, ctx: OpsContext, *, job: Any = None) -> None:
+    def __init__(
+        self, ctx: OpsContext, *, job: Any = None, end: str | None = None
+    ) -> None:
         super().__init__(ctx)
+        self._end = end
         self._job = job
 
     async def _run(self) -> dict[str, Any]:
@@ -392,7 +434,8 @@ class OpsClearOpsLog(_DataMutationMixin, OpsBase):
         p = self._ctx.persistence
         if p is None:
             return {"cleared": 0}
-        total = await self._delete_where("ops_log", "1 = 1")
+        where, params = ("timestamp < ?", (self._end,)) if self._end else ("1 = 1", ())
+        total = await self._delete_where("ops_log", where, params)
         await p.settle_deletions(total)
         return {"cleared": total}
 
@@ -465,17 +508,25 @@ class OpsPeriodicCleanup(_DataMutationMixin, OpsBase):
         self._rl_result = await p.cleanup_logs_by_age(self._rl_age)
         self._ed_result = await p.cleanup_error_dumps_by_age(self._rl_age)
         self._ol_result = await p.cleanup_ops_log_by_age(self._ol_age)
+        request_log_deleted = self._rl_result.get("deleted", 0)
         total = (
-            self._rl_result.get("deleted", 0)
+            request_log_deleted
             + self._ed_result.get("error_dumps_deleted", 0)
             + self._ol_result.get("deleted", 0)
         )
-        return {"total": total, **self._rl_result, **self._ed_result, **self._ol_result}
+        return {
+            "total": total,
+            "request_log_deleted": request_log_deleted,
+            **self._rl_result,
+            **self._ed_result,
+            **self._ol_result,
+        }
 
     async def _record(self, result: Any, *, error: BaseException | None = None) -> None:
         total = (result or {}).get("total", 0)
         if total > 0 or error is not None:
             await super()._record(result, error=error)
+        if error is None and _request_rows_deleted(result) > 0:
             await self._rebuild_counters()
 
     def _message(self, result: Any) -> str:

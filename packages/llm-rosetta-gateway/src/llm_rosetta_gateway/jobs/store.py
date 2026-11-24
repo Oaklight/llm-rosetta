@@ -18,6 +18,7 @@ from typing import Any
 from ..observability.visibility import HIDDEN_TABLES, MAX_TS, MIN_TS
 from .model import (
     DEFAULT_LEASE_SECONDS,
+    HIDING_KINDS,
     PRIORITY_DEFAULT,
     JOB_CANCELLED,
     JOB_FAILED,
@@ -36,6 +37,37 @@ _JOB_COLUMNS = (
     "progress_unit, result, error, hidden_range_ids, dedupe_key, "
     "cancel_requested"
 )
+
+_NO_WINDOW = "this job has no recorded hide window to restore; run the operation again"
+
+
+def _stored_hide_spec(payload: str | None) -> list[tuple[str, str, str]] | None:
+    """The window an enqueue recorded beside a job, or ``None`` if absent.
+
+    A missing key is different from an empty list: the empty list is a job that
+    never hid anything (trim, VACUUM, rebuild), while a missing key means a job
+    written before the window was recorded, or one whose range rows were lost.
+    Requeueing the latter would delete rows that no read is hiding, so callers
+    refuse it instead of guessing.
+    """
+    try:
+        raw = json.loads(payload) if payload else {}
+    except ValueError as exc:
+        raise ValueError(_NO_WINDOW) from exc
+    if "_hide" not in raw:
+        return None
+    spec = raw["_hide"]
+    if not isinstance(spec, list):
+        raise ValueError(_NO_WINDOW)
+    out: list[tuple[str, str, str]] = []
+    for item in spec:
+        if not isinstance(item, (list, tuple)) or len(item) != 3:
+            raise ValueError(_NO_WINDOW)
+        table, start, end = item
+        if table not in HIDDEN_TABLES:
+            raise ValueError(_NO_WINDOW)
+        out.append((str(table), str(start), str(end)))
+    return out
 
 
 class JobStore:
@@ -101,11 +133,12 @@ class JobStore:
                     (range_id, table, start, end, job_id, created),
                 )
             stored = {"v": PAYLOAD_VERSION, **(payload or {})}
-            if normalized:
-                # Keep the resolved window beside the job: a clean-undo cancel
-                # deletes the range rows, and resume has to hide the same rows
-                # again before it deletes them.
-                stored["_hide"] = [list(item) for item in normalized]
+            # Keep the resolved window beside the job, including an empty one.
+            # A clean-undo cancel deletes the range rows, and resume has to hide
+            # the same rows again before it deletes them; the empty list is the
+            # marker that says this kind of job never hid anything, so a
+            # requeue can tell it apart from a job whose window was lost.
+            stored["_hide"] = [list(item) for item in normalized]
             await conn.execute(
                 "INSERT INTO jobs (id, kind, payload, lane, status, priority, "
                 "created_at, attempts, max_attempts, progress_done, "
@@ -228,15 +261,15 @@ class JobStore:
         *,
         result: dict[str, Any] | None = None,
         error: str | None = None,
-        deleted: int = 0,
     ) -> bool:
         """Close a running job.
 
-        A job that succeeded has deleted its rows, so its ranges go with them.
-        A job that was cancelled before deleting anything is a clean undo, so
-        its ranges go too.  A failure keeps them: the intent was deletion, the
-        rows are already invisible, and retrying finishes the job — unhiding
-        would resurrect data that may be half gone.
+        A terminal job releases its hidden ranges.  Success has deleted the
+        rows, so the reservation is spent.  A failure or a partial cancel
+        leaves the rows on disk, but keeping them invisible would need a
+        second operator action to bring them back; retry and resume already
+        re-hide the same window from the payload before they delete, so the
+        reservation can end with the job.
         """
         if status not in (JOB_SUCCEEDED, JOB_FAILED, JOB_CANCELLED):
             raise ValueError(f"{status!r} is not a terminal job state")
@@ -260,14 +293,11 @@ class JobStore:
                         f"{remaining} hidden rows remain after the handler "
                         "reported success"
                     )
-            drop_ranges = status == JOB_SUCCEEDED or (
-                status == JOB_CANCELLED and deleted == 0
-            )
             cur = await conn.execute(
                 "UPDATE jobs SET status = ?, finished_at = ?, result = ?, "
-                "error = ?, lease_owner = NULL, lease_expires_at = NULL"
-                + (", hidden_range_ids = '[]'" if drop_ranges else "")
-                + " WHERE id = ? AND lease_owner = ? AND status = ?",
+                "error = ?, lease_owner = NULL, lease_expires_at = NULL, "
+                "hidden_range_ids = '[]' "
+                "WHERE id = ? AND lease_owner = ? AND status = ?",
                 (
                     status,
                     now_iso(),
@@ -280,8 +310,7 @@ class JobStore:
             )
             if cur.rowcount == 0:
                 return False
-            if drop_ranges:
-                dropped = await self._drop_ranges(conn, job_id)
+            dropped = await self._drop_ranges(conn, job_id)
         for table, start, end in dropped:
             self._p.visibility.remove(table, start, end)
         return True
@@ -313,7 +342,7 @@ class JobStore:
         return [(row[0], row[1], row[2]) for row in rows]
 
     # ------------------------------------------------------------------
-    # Cancel, retry, resume, unhide
+    # Cancel, retry, resume
     # ------------------------------------------------------------------
 
     async def request_cancel(self, job_id: str) -> tuple[bool, str | None]:
@@ -385,7 +414,9 @@ class JobStore:
                 "SELECT COUNT(*) FROM hidden_ranges WHERE job_id = ?", (job_id,)
             )
             if not (owned and owned[0]):
-                spec = (json.loads(row[0]) or {}).get("_hide") or []
+                spec = _stored_hide_spec(row[0] if row else None)
+                if spec is None:
+                    raise ValueError(_NO_WINDOW)
                 range_ids: list[str] = []
                 created = now_iso()
                 for table, start, end in spec:
@@ -407,61 +438,91 @@ class JobStore:
             self._p.visibility.add(table, start, end)
         return True
 
-    async def _cancel_queued(self, job_id: str) -> int:
-        """Cancel a queued job and drop its ranges; returns ranges removed.
-
-        The same transaction as `request_cancel`'s queued branch, so unhiding
-        and cancelling cannot disagree about what the job owns.
-        """
-        dropped: list[tuple[str, str, str]] = []
-        async with self._p.transaction() as conn:
-            cur = await conn.execute(
-                "UPDATE jobs SET status = ?, finished_at = ?, "
-                "cancel_requested = 1, hidden_range_ids = '[]' "
-                "WHERE id = ? AND status = ?",
-                (JOB_CANCELLED, now_iso(), job_id, JOB_QUEUED),
-            )
-            if cur.rowcount == 0:
-                raise ValueError("cannot unhide a job that left the queue")
-            dropped = await self._drop_ranges(conn, job_id)
-        for table, start, end in dropped:
-            self._p.visibility.remove(table, start, end)
-        return len(dropped)
-
-    async def unhide(self, job_id: str) -> int:
-        """Make a job's hidden rows visible again; returns ranges removed.
-
-        A queued job is cancelled instead: it has deleted nothing yet, and
-        leaving it runnable would bring the rows back only for its first batch
-        to delete them again, unannounced.  A running job is refused — the
-        worker deletes by its own predicate, so the rows would come back and
-        disappear again; cancel it first, then unhide the cancelled job.
-
-        Raises:
-            KeyError: no such job.
-            ValueError: the job is running, already succeeded, or left the
-                queue between the read and the cancel.
-        """
-        job = await self.get(job_id)
-        if job is None:
-            raise KeyError(job_id)
-        if job.status == JOB_QUEUED:
-            return await self._cancel_queued(job_id)
-        if job.status not in (JOB_FAILED, JOB_CANCELLED):
-            raise ValueError(f"cannot unhide a {job.status} job")
-        dropped: list[tuple[str, str, str]] = []
-        async with self._p.transaction() as conn:
-            dropped = await self._drop_ranges(conn, job_id)
-            await conn.execute(
-                "UPDATE jobs SET hidden_range_ids = '[]' WHERE id = ?", (job_id,)
-            )
-        for table, start, end in dropped:
-            self._p.visibility.remove(table, start, end)
-        return len(dropped)
-
     # ------------------------------------------------------------------
     # Recovery and reads
     # ------------------------------------------------------------------
+
+    async def _backfill_hide(
+        self, conn: Any, job_id: str, kind: str, payload: str | None, ranges: Any
+    ) -> bool:
+        """Record a failed or cancelled job's released window in its payload."""
+        try:
+            data = json.loads(payload) if payload else {}
+        except ValueError:
+            return False
+        if "_hide" in data:
+            return False
+        if ranges:
+            data["_hide"] = [list(row) for row in ranges]
+        elif kind not in HIDING_KINDS:
+            data["_hide"] = []
+        else:
+            return False
+        await conn.execute(
+            "UPDATE jobs SET payload = ? WHERE id = ?", (json.dumps(data), job_id)
+        )
+        return True
+
+    async def _repair_terminal_job(
+        self,
+        conn: Any,
+        job_id: str,
+        kind: str,
+        status: str,
+        payload: str | None,
+        range_ids: str | None,
+    ) -> tuple[bool, list[tuple[str, str, str]]]:
+        """Release one terminal job's ranges, backfilling its retry window."""
+        ranges = await conn.execute_fetchall(
+            "SELECT table_name, start_ts, end_ts FROM hidden_ranges WHERE job_id = ?",
+            (job_id,),
+        )
+        touched = False
+        if status in (JOB_FAILED, JOB_CANCELLED):
+            touched = await self._backfill_hide(conn, job_id, kind, payload, ranges)
+        if ranges:
+            await conn.execute("DELETE FROM hidden_ranges WHERE job_id = ?", (job_id,))
+            touched = True
+        if range_ids and range_ids != "[]":
+            await conn.execute(
+                "UPDATE jobs SET hidden_range_ids = '[]' WHERE id = ?", (job_id,)
+            )
+            touched = True
+        return touched, [(row[0], row[1], row[2]) for row in ranges]
+
+    async def release_terminal_ranges(self) -> int:
+        """Release ranges a terminal job still owned before this release.
+
+        Earlier versions kept a failed job's reservation and hid a job's rows
+        until something deleted them; both are gone now, so a store written by
+        one of those versions would otherwise keep its windows invisible with
+        no route back.  For a failed or cancelled job the released window is
+        written into ``payload["_hide"]`` first, which is what Retry and Resume
+        re-hide; a job that never hid anything gets an empty window so it stays
+        requeueable.  A job whose window was already lost keeps no ``_hide``:
+        requeueing it is refused rather than deleting visible rows silently.
+
+        Idempotent, and called once by :meth:`JobManager.start` before serving.
+        """
+        dropped: list[tuple[str, str, str]] = []
+        changed = 0
+        async with self._p.transaction() as conn:
+            rows = await conn.execute_fetchall(
+                "SELECT DISTINCT j.id, j.kind, j.status, j.payload, "
+                "j.hidden_range_ids "
+                "FROM jobs AS j "
+                "LEFT JOIN hidden_ranges AS h ON h.job_id = j.id "
+                "WHERE j.status IN (?, ?) OR (j.status = ? AND "
+                "(j.hidden_range_ids <> '[]' OR h.job_id IS NOT NULL))",
+                (JOB_FAILED, JOB_CANCELLED, JOB_SUCCEEDED),
+            )
+            for row in rows:
+                touched, gone = await self._repair_terminal_job(conn, *row)
+                dropped.extend(gone)
+                changed += 1 if touched else 0
+        if dropped:
+            await self._p.reload_visibility()
+        return changed
 
     async def sweep_orphan_ranges(self) -> int:
         """Drop ranges whose job row no longer exists, and reload the cache.
@@ -507,24 +568,29 @@ class JobStore:
         untouched = ""
         if skip:
             untouched = " AND id NOT IN (" + ", ".join("?" for _ in skip) + ")"
+        expired = "status = ? AND (lease_expires_at IS NULL OR lease_expires_at < ?"
+        where = expired + foreign + ")" + untouched
+        select_params: list[Any] = [JOB_RUNNING, now]
+        if owner is not None:
+            select_params.append(owner)
+        select_params.extend(skip)
         params: list[Any] = [
             JOB_CANCELLED,
             JOB_FAILED,
             JOB_QUEUED,
             now,
             now,
-            JOB_RUNNING,
-            now,
+            *select_params,
         ]
-        if owner is not None:
-            params.append(owner)
-        params.extend(skip)
+        dropped: list[tuple[str, str, str]] = []
         async with self._p.transaction() as conn:
-            # A job the operator cancelled while it ran has its terminal state
-            # decided already.  Requeueing it would run to completion work that
-            # was stopped, and `claim` skips a flagged row, so it would sit
-            # queued and unclaimable forever.  Settle it as cancelled and keep
-            # its ranges: deletion may have run partially.
+            rows = await conn.execute_fetchall(
+                "SELECT id, cancel_requested, attempts, max_attempts FROM jobs "
+                f"WHERE {where}",
+                select_params,
+            )
+            if not rows:
+                return 0
             cur = await conn.execute(
                 "UPDATE jobs SET "
                 "status = CASE "
@@ -540,13 +606,35 @@ class JobStore:
                 "finished_at = CASE "
                 "WHEN cancel_requested = 1 THEN ? "
                 "WHEN attempts >= max_attempts THEN ? ELSE NULL END "
-                "WHERE status = ? "
-                "AND (lease_expires_at IS NULL OR lease_expires_at < ?"
-                + foreign
-                + ")"
-                + untouched,
+                "WHERE " + where,
                 params,
             )
+            if cur.rowcount == 0:
+                return 0
+            # Recovery settles a cancelled or exhausted job instead of
+            # requeueing it.  Like `finish`, that releases its reservation:
+            # retry and resume re-hide the payload's window before deleting.
+            terminal = [row[0] for row in rows if row[1] or row[2] >= row[3]]
+            if terminal:
+                marks = ", ".join("?" for _ in terminal)
+                dropped = [
+                    (row[0], row[1], row[2])
+                    for row in await conn.execute_fetchall(
+                        "SELECT table_name, start_ts, end_ts FROM hidden_ranges "
+                        f"WHERE job_id IN ({marks})",
+                        terminal,
+                    )
+                ]
+                await conn.execute(
+                    f"DELETE FROM hidden_ranges WHERE job_id IN ({marks})",
+                    terminal,
+                )
+                await conn.execute(
+                    f"UPDATE jobs SET hidden_range_ids = '[]' WHERE id IN ({marks})",
+                    terminal,
+                )
+        for table, start, end in dropped:
+            self._p.visibility.remove(table, start, end)
         return cur.rowcount
 
     async def get(self, job_id: str) -> Job | None:
@@ -556,15 +644,38 @@ class JobStore:
         )
         return _row_to_job(row) if row else None
 
+    @staticmethod
+    def _category_clause(category: str | None) -> tuple[str, list[Any]]:
+        """The SQL predicate for a job category, or ``("", [])`` for all.
+
+        One home for the ``batch.*`` namespace: the listing and the active
+        count must answer the same question, or the header disagrees with the
+        table it sits above.
+        """
+        if category == "requests":
+            return "kind GLOB 'batch.*'", []
+        if category == "ops":
+            return "kind NOT GLOB 'batch.*'", []
+        if category is not None:
+            raise ValueError(f"unknown job category {category!r}")
+        return "", []
+
     async def list_jobs(
         self,
         *,
         status: str | None = None,
         kind: str | None = None,
+        category: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[list[Job], int]:
-        """Return jobs newest first, and the total matching the filters."""
+        """Return jobs newest first, and the total matching the filters.
+
+        *category* is ``requests`` for the reserved ``batch.*`` namespace and
+        ``ops`` for everything else.  The predicate is in SQL rather than the
+        caller so one busy half of the board cannot push the other half out of
+        the page.
+        """
         where: list[str] = []
         params: list[Any] = []
         if status:
@@ -573,6 +684,10 @@ class JobStore:
         if kind:
             where.append("kind = ?")
             params.append(kind)
+        category_clause, category_params = self._category_clause(category)
+        if category_clause:
+            where.append(category_clause)
+            params.extend(category_params)
         clause = (" WHERE " + " AND ".join(where)) if where else ""
         conn = self._p.connection
         row = await conn.execute_fetchone(f"SELECT COUNT(*) FROM jobs{clause}", params)
@@ -584,12 +699,128 @@ class JobStore:
         )
         return [_row_to_job(r) for r in rows], total
 
-    async def active_count(self) -> int:
-        """How many jobs are queued or running."""
+    async def active_count(self, *, category: str | None = None) -> int:
+        """How many jobs are queued or running, optionally in one category."""
+        clause, params = self._category_clause(category)
+        where = "status IN ('queued', 'running')"
+        if clause:
+            where += " AND " + clause
         row = await self._p.connection.execute_fetchone(
-            "SELECT COUNT(*) FROM jobs WHERE status IN ('queued', 'running')"
+            "SELECT COUNT(*) FROM jobs WHERE " + where, params
         )
         return row[0] if row else 0
+
+    async def hidden_end(self, job_id: str, table: str) -> str | None:
+        """The end of the window *job_id* hid for *table*, if it still owns one.
+
+        A job written before the payload carried a cutoff still has its range
+        row, so the handler can delete by the same bound the reads hide by
+        instead of falling back to "everything".
+        """
+        row = await self._p.connection.execute_fetchone(
+            "SELECT MAX(end_ts) FROM hidden_ranges WHERE job_id = ? AND table_name = ?",
+            (job_id, table),
+        )
+        if not row or not row[0] or row[0] == MAX_TS:
+            return None
+        return str(row[0])
+
+    async def extend_clear_window(self, job_id: str, *, table: str, end: str) -> bool:
+        """Move a still-queued clear's cutoff forward to *end*.
+
+        A second Clear click is the same request with a later cutoff.  Nothing
+        has been deleted while the job is queued, so extending its range hides
+        and deletes the rows that arrived in between.  A running job has
+        already read its cutoff and is left alone.
+        """
+        old: list[tuple[str, str, str]] = []
+        new: list[tuple[str, str, str]] = []
+        async with self._p.transaction() as conn:
+            row = await conn.execute_fetchone(
+                "SELECT payload FROM jobs WHERE id = ? AND status = ? AND kind = ?",
+                (job_id, JOB_QUEUED, "data.clear"),
+            )
+            if row is None:
+                return False
+            data = json.loads(row[0]) if row[0] else {}
+            if data.get("table") != table:
+                return False
+            current_end = data.get("end")
+            if isinstance(current_end, str) and current_end >= end:
+                return False
+            ranges = await conn.execute_fetchall(
+                "SELECT table_name, start_ts, end_ts FROM hidden_ranges "
+                "WHERE job_id = ?",
+                (job_id,),
+            )
+            old = [(r[0], r[1], r[2]) for r in ranges]
+            if not any(t == table for t, _, _ in old):
+                return False
+            for name, start, previous in old:
+                if name == table:
+                    await conn.execute(
+                        "UPDATE hidden_ranges SET end_ts = ? "
+                        "WHERE job_id = ? AND table_name = ? AND start_ts = ?",
+                        (end, job_id, table, start),
+                    )
+                    new.append((name, start, end))
+                else:
+                    new.append((name, start, previous))
+            data["end"] = end
+            if isinstance(data.get("_hide"), list):
+                data["_hide"] = [list(item) for item in new]
+            await conn.execute(
+                "UPDATE jobs SET payload = ? WHERE id = ?",
+                (json.dumps(data), job_id),
+            )
+        for name, start, previous in old:
+            self._p.visibility.remove(name, start, previous)
+        for name, start, previous in new:
+            self._p.visibility.add(name, start, previous)
+        return True
+
+    async def last_job_at(
+        self,
+        kind: str,
+        *,
+        status: str | None = None,
+        source: str | None = None,
+    ) -> str | None:
+        """The newest matching job's completion time, or ``None``.
+
+        A periodic task uses this to survive restarts: the worker and its
+        in-memory timer do not, but the jobs table does.  The timestamp rather
+        than a yes/no answer is what lets the caller sleep the remainder of the
+        interval, so a wake a few milliseconds early cannot double the gap.
+        *status* and *source* narrow the question — a failed or cancelled pass,
+        or a one-hour manual delete, must not count as the weekly sweep.
+
+        A finished job reports ``finished_at``; an unfinished one falls back to
+        ``created_at``.  Anchoring on completion means a cleanup that takes
+        hours does not pull the next weekly pass earlier by its own runtime.
+        """
+        where = "kind = ?"
+        params: list[Any] = [kind]
+        if status is not None:
+            where += " AND status = ?"
+            params.append(status)
+        rows = await self._p.connection.execute_fetchall(
+            f"SELECT COALESCE(finished_at, created_at), payload "
+            f"FROM jobs WHERE {where}",
+            params,
+        )
+        newest: str | None = None
+        for at, payload in rows:
+            if source is not None:
+                try:
+                    data = json.loads(payload) if payload else {}
+                except ValueError:
+                    continue
+                if data.get("source") != source:
+                    continue
+            if newest is None or at > newest:
+                newest = at
+        return newest
 
     async def prune(self, keep: int = 200) -> int:
         """Delete old terminal jobs, never one that still owns a range."""
