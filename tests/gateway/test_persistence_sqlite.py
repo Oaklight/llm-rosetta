@@ -482,6 +482,24 @@ class TestRebuildFlag:
         await pm.close()
 
     @pytest.mark.asyncio
+    async def test_a_stale_token_does_not_clear_a_newer_request(self, tmp_path):
+        pm = await PersistenceManager.create(str(tmp_path))
+        assert await pm.rebuild_flag_token() is None
+
+        await pm.set_rebuild_flag()
+        first = await pm.rebuild_flag_token()
+        assert isinstance(first, str) and first
+        await pm.set_rebuild_flag()
+        second = await pm.rebuild_flag_token()
+        assert isinstance(second, str) and second != first
+
+        assert await pm.clear_rebuild_flag(first) is False
+        assert await pm.rebuild_flag_token() == second
+        assert await pm.clear_rebuild_flag(second) is True
+        assert await pm.rebuild_flag_token() is None
+        await pm.close()
+
+    @pytest.mark.asyncio
     async def test_flag_persists_across_connections(self, tmp_path):
         pm1 = await PersistenceManager.create(str(tmp_path))
         await pm1.set_rebuild_flag()
