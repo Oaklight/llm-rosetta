@@ -351,20 +351,25 @@ def _specs_and_selectors(config: Any) -> tuple[list[Any], list[Any], list[Any]]:
 
 
 def _with_default_sources(specs: Sequence[Any]) -> list[Any]:
-    """*specs* plus every catalogue default it does not already name."""
+    """*specs* plus every catalogue default it does not already name.
+
+    Identity is the source id when the spec has one, so a mirror or a pinned
+    URL for a catalogue source does not get a second row beside it.
+    """
     from .catalog import DEFAULT_SOURCES, get_shim_source
     from .manifest_sources.plan import source_spec_from_catalogue
 
     out = list(specs)
-    urls = {spec.url for spec in out}
+    seen = {spec.key or spec.url for spec in out}
     for key in DEFAULT_SOURCES:
         source = get_shim_source(key)
         if source is None:
             continue
         spec = source_spec_from_catalogue(source)
-        if spec.url not in urls:
+        identity = spec.key or spec.url
+        if identity not in seen:
             out.append(spec)
-            urls.add(spec.url)
+            seen.add(identity)
     return out
 
 

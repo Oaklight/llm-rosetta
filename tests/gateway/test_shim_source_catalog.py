@@ -493,3 +493,42 @@ class TestPinnedMarks:
             "contrib",
             "argonne",
         ]
+
+    def test_a_mirror_for_a_default_is_not_duplicated(self, tmp_path):
+        """A spec that names the source is that source, whatever its URL."""
+        from llm_rosetta_gateway.shims.catalog import get_shim_source
+
+        contrib = get_shim_source("contrib")
+        argonne = get_shim_source("argonne")
+        assert contrib is not None and argonne is not None
+        mirror = "https://mirror.invalid/contrib.json"
+        http = FakeHttp(
+            {
+                mirror: _manifest("contrib", {"kilo": [_record("0.1.0")]}),
+                argonne.manifest_url: _manifest(
+                    "argonne", {"argo": [_record("0.1.0")]}
+                ),
+            }
+        )
+        shims = SimpleNamespace(
+            sources=(),
+            install=("contrib:kilo",),
+            manifests=ManifestPlan(
+                sources=(ManifestSourceSpec(key="contrib", url=mirror),),
+                selectors=(parse_selector("contrib:kilo"),),
+            ),
+            cache_root=str(tmp_path),
+            remote_ttl=3600,
+        )
+        config = SimpleNamespace(shims=shims, proxy=None)
+
+        payload = catalogue_payload(config, None, http_get=http)
+
+        assert [source["id"] for source in payload["sources"]] == [
+            "contrib",
+            "argonne",
+        ]
+        assert [source["url"] for source in payload["sources"]] == [
+            mirror,
+            argonne.manifest_url,
+        ]
