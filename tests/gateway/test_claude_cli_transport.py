@@ -675,6 +675,35 @@ class TestTurn:
         assert "--no-session-persistence" in argv
         assert start["system"] == "You are terse."
 
+    async def test_a_context_window_tag_reaches_the_cli_verbatim(
+        self, monkeypatch, tmp_path
+    ):
+        """``[1m]`` is the CLI's own 1M opt-in; the gateway must not strip it.
+
+        The CLI resolves the tag itself: a bare model id gets the model's
+        normal window, an id with ``[1m]`` asks for one million tokens.  An
+        unknown id falls back to the CLI's 200K default.  Rewriting the id
+        here would silently pin every route to the wrong window.
+        """
+        monkeypatch.setenv("FAKE_CLI_MODE", "stream")
+        log = tmp_path / "cli.jsonl"
+        monkeypatch.setenv("FAKE_CLI_LOG", str(log))
+        transport = ClaudeCliTransport(timeout=30)
+
+        turn = _turn()
+        turn["model"] = "claude-sonnet-5[1m]"
+        stream = await transport.send_streaming(
+            _provider(_write_cli(tmp_path)), "", turn
+        )
+        try:
+            [event async for event in stream]
+        finally:
+            await stream.close()
+            await transport.close()
+
+        argv = _start(log)["argv"]
+        assert argv[argv.index("--model") + 1] == "claude-sonnet-5[1m]"
+
     async def test_the_conversation_arrives_as_frames(self, monkeypatch, tmp_path):
         monkeypatch.setenv("FAKE_CLI_MODE", "stream")
         log = tmp_path / "cli.jsonl"
