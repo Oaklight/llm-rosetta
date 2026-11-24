@@ -14,6 +14,7 @@ inferring them from the reply.
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import sys
 import textwrap
@@ -30,6 +31,7 @@ from llm_rosetta_gateway.transport import (
 from llm_rosetta_gateway.transport.claude_cli import (
     build_frames,
     conversation_session_id,
+    make_restorer,
 )
 from llm_rosetta_gateway.transport.claude_cli_relay import Relay, RelayError
 from llm_rosetta_gateway.transport.provider_info import ProviderInfo, openai_auth
@@ -130,7 +132,13 @@ FAKE_CLI = textwrap.dedent(
 
     if MODE in ("relay-once", "relay-twice"):
         base = os.environ.get("ANTHROPIC_BASE_URL", "")
-        payload = json.dumps({"model": "claude-test", "frames": len(frames)}).encode()
+        # The CLI rebuilds the conversation from the frames it replayed and
+        # appends its own annotation message.
+        payload = json.dumps({
+            "model": "claude-test",
+            "messages": [frame["message"] for frame in frames]
+            + [{"role": "system", "content": "# Environment\\n/tmp/cli"}],
+        }).encode()
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         statuses = []
         attempts = 1 if MODE == "relay-once" else 2
@@ -405,6 +413,107 @@ class TestFrames:
         assert conversation_session_id(*other) != first
 
 
+class TestRestore:
+    """Putting the host's conversation back over the CLI's annotations."""
+
+    @staticmethod
+    def _cli_body(host: dict) -> dict:
+        """The conversation as the CLI rebuilds it: an annotation per user turn."""
+        messages: list[dict] = []
+        for message in copy.deepcopy(host["messages"]):
+            # The CLI rewrites string content as a text block.
+            if isinstance(message["content"], str):
+                message["content"] = [{"type": "text", "text": message["content"]}]
+            messages.append(message)
+            if message["role"] == "user":
+                messages.append(
+                    {"role": "system", "content": "# Environment\n/tmp/claude-cli-x"}
+                )
+        return {"model": "claude-test", "messages": messages}
+
+    @staticmethod
+    def _markers(body: dict) -> int:
+        total = sum(
+            1
+            for block in body.get("system") or []
+            if isinstance(block, dict) and block.get("cache_control")
+        )
+        for message in body["messages"]:
+            content = message.get("content")
+            if isinstance(content, list):
+                total += sum(
+                    1
+                    for block in content
+                    if isinstance(block, dict) and block.get("cache_control")
+                )
+        return total
+
+    def test_the_annotation_messages_are_dropped(self) -> None:
+        host = _turn()
+        restore = make_restorer(host)
+
+        body = restore(self._cli_body(host))
+
+        assert [message["role"] for message in body["messages"]] == [
+            "user",
+            "assistant",
+            "user",
+        ]
+        assert "# Environment" not in json.dumps(body)
+
+    def test_a_reshaped_history_is_forwarded_unchanged(self) -> None:
+        host = _turn()
+        restore = make_restorer(host)
+        cli_body = self._cli_body(host)
+        # The CLI dropped a message (or merged two): the rewrite cannot put the
+        # host's conversation back, so the request must go out as it is.
+        cli_body["messages"] = [
+            message
+            for message in cli_body["messages"]
+            if message["role"] != "assistant"
+        ]
+
+        assert restore(cli_body) is cli_body
+
+    def test_the_breakpoint_moves_to_the_last_block(self) -> None:
+        host = _turn()
+        restore = make_restorer(host)
+
+        body = restore(self._cli_body(host))
+
+        assert body["messages"][-1]["content"][-1]["cache_control"] == {
+            "type": "ephemeral"
+        }
+
+    def test_an_existing_breakpoint_is_left_alone(self) -> None:
+        host = _turn()
+        host["messages"][-1]["content"][-1]["cache_control"] = {"type": "ephemeral"}
+        restore = make_restorer(host)
+
+        body = restore(self._cli_body(host))
+
+        assert self._markers(body) == 1
+
+    def test_the_breakpoint_budget_is_four(self) -> None:
+        host = _turn()
+        restore = make_restorer(host)
+        cli_body = self._cli_body(host)
+        # Four markers, the API's limit, so the rewrite has to make room.
+        for index, block in ((0, 0), (2, 0), (2, 1), (3, 0)):
+            cli_body["messages"][index]["content"][block]["cache_control"] = {
+                "type": "ephemeral"
+            }
+
+        body = restore(cli_body)
+
+        assert self._markers(body) == 4
+        # The oldest message-level marker made room for the new one.
+        assert "cache_control" not in body["messages"][0]["content"][0]
+        assert body["messages"][-1]["content"][-1]["cache_control"] == {
+            "type": "ephemeral"
+        }
+
+
 class TestRelay:
     """The loopback relay between the CLI and the upstream."""
 
@@ -431,9 +540,21 @@ class TestRelay:
         request = upstream.requests[0]
         assert request["headers"]["authorization"] == "Bearer test-token"
         assert request["headers"]["anthropic-version"] == "2023-06-01"
-        assert json.loads(request["body"]) == {"model": "claude-test", "frames": 3}
+        body = json.loads(request["body"])
+        assert body["model"] == "claude-test"
+        # The CLI's own annotation message is dropped and the conversation
+        # comes back as the host sent it, with the breakpoint moved last.
+        assert [message["role"] for message in body["messages"]] == [
+            "user",
+            "assistant",
+            "user",
+        ]
+        assert body["messages"][-1]["content"][-1]["cache_control"] == {
+            "type": "ephemeral"
+        }
         assert stream is not None
         assert [reading.status for reading in stream.readings] == [200]
+        assert [reading.restored for reading in stream.readings] == [True]
         assert (
             stream.readings[0].rate_limit()["anthropic-ratelimit-unified-status"]
             == "allowed"

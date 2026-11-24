@@ -30,7 +30,9 @@ import asyncio
 import json
 import secrets
 import ssl
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 from urllib.parse import urlsplit
 
 #: Where the relay forwards when the shim names no upstream.
@@ -76,6 +78,9 @@ class RelayReading:
 
     status: int = 0
     headers: dict[str, str] = field(default_factory=dict)
+    #: Whether the transport's rewrite reached the upstream.  ``None`` when the
+    #: relay was built without one.
+    restored: bool | None = None
 
     def rate_limit(self) -> dict[str, str]:
         """The ``anthropic-ratelimit-*`` headers, lower-cased."""
@@ -98,6 +103,7 @@ class Relay:
         upstream: str | None = None,
         *,
         timeout: float = 300.0,
+        rewrite: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
     ) -> None:
         self._upstream = urlsplit(upstream or DEFAULT_UPSTREAM)
         if (
@@ -111,6 +117,8 @@ class Relay:
                 f"loopback host), got {upstream!r}"
             )
         self._timeout = float(timeout)
+        self._rewrite = rewrite
+        self._restored: bool | None = None
         self._token = secrets.token_urlsafe(18)
         self._server: asyncio.AbstractServer | None = None
         self._port = 0
@@ -216,7 +224,42 @@ class Relay:
                 await _reply(writer, 429, _REFUSAL)
             return
         # The relay's own token is not part of the upstream path.
-        await self._forward(target[len(prefix) :], headers, body, writer)
+        await self._forward(
+            target[len(prefix) :], headers, self._rewritten(body), writer
+        )
+
+    def _rewritten(self, body: bytes) -> bytes:
+        """Apply the transport's rewrite to the CLI's request body.
+
+        A rewrite that cannot be applied — a body this relay cannot parse, a
+        hook that raises, a result that is not a mapping — leaves the request
+        as the CLI built it.  The turn must not fail over an optimisation.
+
+        Args:
+            body: The request body the CLI posted.
+
+        Returns:
+            The body to forward.
+        """
+        if self._rewrite is None:
+            return body
+        try:
+            payload = json.loads(body) if body else None
+        except ValueError:
+            payload = None
+        if not isinstance(payload, dict):
+            self._restored = False
+            return body
+        try:
+            rewritten = self._rewrite(payload)
+        except Exception:  # noqa: BLE001 - a rewrite must never fail a turn
+            self._restored = False
+            return body
+        if not isinstance(rewritten, dict):
+            self._restored = False
+            return body
+        self._restored = rewritten is not payload
+        return json.dumps(rewritten, ensure_ascii=False).encode("utf-8")
 
     def _admits(self) -> bool:
         """Whether this attempt may reach the upstream."""
@@ -299,6 +342,7 @@ class Relay:
             RelayReading(
                 status=status,
                 headers={k.lower(): v for k, v in response_headers.items()},
+                restored=self._restored,
             )
         )
         out = [status_line]
