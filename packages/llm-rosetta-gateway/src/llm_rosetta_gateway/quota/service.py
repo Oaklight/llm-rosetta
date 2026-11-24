@@ -371,12 +371,16 @@ async def _probe_one(
 def _lane_reports_its_own_quota(pinfo: Any) -> bool:
     """Whether this provider's agent reports its allowance during a turn.
 
-    Only the non-HTTP lanes do: a keyless HTTP lane (a local server, say)
-    still has no endpoint that this module knows how to read.
+    A non-HTTP keyless lane does: its agent sends the windows, or a declared
+    local command prints them.  A keyless HTTP lane (a local server, say) has
+    no endpoint this module knows how to read, but a command it declares makes
+    the lane its own source too.
     """
-    return (
-        bool(getattr(pinfo, "keyless", False))
-        and (getattr(pinfo, "transport", "http") or "http") != "http"
+    if not bool(getattr(pinfo, "keyless", False)):
+        return False
+    return bool(
+        (getattr(pinfo, "transport", "http") or "http") != "http"
+        or getattr(pinfo, "quota_local_argv", ())
     )
 
 

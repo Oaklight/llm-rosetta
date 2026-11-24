@@ -398,8 +398,19 @@ def _error_reading(provider_info: Any, probe_id: str, message: str) -> LaneReadi
     )
 
 
-def _kill_group(process: Any) -> None:
-    """Kill the command and any helper left holding its pipes."""
+def _kill_group(process: Any, pgid: int | None = None) -> None:
+    """Kill the command and any helper left holding its pipes.
+
+    *pgid* is captured at spawn: once the direct child is reaped,
+    ``os.getpgid(pid)`` no longer resolves, but a helper in the same group can
+    still be alive and hold the pipes.
+    """
+    if pgid is not None and hasattr(os, "killpg"):
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+            return
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
     pid = getattr(process, "pid", None)
     if pid is not None and hasattr(os, "killpg"):
         try:
@@ -413,7 +424,25 @@ def _kill_group(process: Any) -> None:
         pass
 
 
-async def _read_capped(stream: Any, limit: int, process: Any) -> tuple[bytes, bool]:
+def _close_transport(process: Any) -> None:
+    """Close the subprocess transport while the loop that owns it still runs.
+
+    An early exit leaves the pipe protocols pending; their ``__del__`` would
+    close them after the loop is gone (a warning in tests, a late fd release
+    in a long-lived gateway).
+    """
+    transport = getattr(process, "_transport", None)
+    close = getattr(transport, "close", None)
+    if callable(close):
+        try:
+            close()
+        except Exception:  # noqa: BLE001 - teardown must not mask the reading
+            pass
+
+
+async def _read_capped(
+    stream: Any, limit: int, process: Any, pgid: int | None
+) -> tuple[bytes, bool]:
     """Read *stream* up to *limit* bytes; kill the command beyond it.
 
     A vendor CLI has no reason to print more than this, and a parser given a
@@ -429,7 +458,7 @@ async def _read_capped(stream: Any, limit: int, process: Any) -> tuple[bytes, bo
         size += len(chunk)
         chunks.append(chunk)
         if size > limit:
-            _kill_group(process)
+            _kill_group(process, pgid)
             while True:
                 rest = await stream.read(65536)
                 if not rest:
@@ -456,7 +485,8 @@ async def refresh_local(
     The command runs in its own process group, and *timeout* bounds the whole
     read: on expiry, or if the caller is cancelled, the group is killed and
     waited for at most :data:`_KILL_GRACE` seconds.  A vendor CLI that leaves
-    a helper holding stdout cannot stretch the call.
+    a helper holding stdout cannot stretch the call, and the group is killed
+    even when the direct child already exited.
 
     Args:
         provider_info: The lane whose profile and environment the command uses.
@@ -500,29 +530,39 @@ async def refresh_local(
         _store_local(provider_info, reading)
         return reading
 
+    # The command is its own session leader, so this group id outlives the
+    # direct child: a helper it left behind still shares it.
+    pgid = process.pid if hasattr(os, "killpg") else None
     timed_out = False
     overflowed = False
+    completed = False
     out = b""
     err = b""
     try:
         (out, overflowed), (err, err_overflow), _ = await asyncio.wait_for(
             asyncio.gather(
-                _read_capped(process.stdout, _MAX_LOCAL_OUTPUT, process),
-                _read_capped(process.stderr, _MAX_LOCAL_OUTPUT, process),
+                _read_capped(process.stdout, _MAX_LOCAL_OUTPUT, process, pgid),
+                _read_capped(process.stderr, _MAX_LOCAL_OUTPUT, process, pgid),
                 process.wait(),
             ),
             timeout=max(0.1, float(timeout)),
         )
         overflowed = overflowed or err_overflow
+        completed = True
     except asyncio.TimeoutError:
         timed_out = True
     finally:
-        if process.returncode is None:
-            _kill_group(process)
-            try:
-                await asyncio.wait_for(asyncio.shield(process.wait()), _KILL_GRACE)
-            except (asyncio.TimeoutError, asyncio.CancelledError):
-                pass
+        if not completed:
+            # Timeout, cancellation, or an overflow: kill the group even when
+            # the direct child already exited, or a helper holding the pipes
+            # survives the read.
+            _kill_group(process, pgid)
+            if process.returncode is None:
+                try:
+                    await asyncio.wait_for(asyncio.shield(process.wait()), _KILL_GRACE)
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    pass
+            _close_transport(process)
 
     if timed_out:
         reading = _error_reading(
