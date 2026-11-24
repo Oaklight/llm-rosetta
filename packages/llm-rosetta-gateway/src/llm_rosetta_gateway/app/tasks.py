@@ -156,6 +156,7 @@ async def _periodic_cleanup(app: App) -> None:
 
 async def _periodic_flush(app: App) -> None:
     """Periodically flush metrics counters to disk."""
+    last_queued_rebuild: str | None = None
     while True:
         await asyncio.sleep(_FLUSH_METRICS_INTERVAL)
         persistence = getattr(app, "persistence", None)
@@ -177,7 +178,16 @@ async def _periodic_flush(app: App) -> None:
                         from ..jobs.enqueue import enqueue_rebuild
 
                         job = await enqueue_rebuild(jobs, source="persistence")
-                        logger.info("Rebuild flag detected; queued as job %s", job.id)
+                        if job.id != last_queued_rebuild:
+                            # One info line per rebuild, not one per flush:
+                            # the flag stands until that job answers it, and
+                            # every pass before then deduplicates onto it.
+                            logger.info(
+                                "Rebuild flag detected; queued as job %s", job.id
+                            )
+                            last_queued_rebuild = job.id
+                        else:
+                            logger.debug("Rebuild already queued as job %s", job.id)
                     else:
                         # No worker (in-memory mode): rebuild here, streaming so
                         # the table is not materialised.
