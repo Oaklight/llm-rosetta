@@ -277,7 +277,7 @@ provider 条目可以逐字段覆盖 `quota.local`。`argv` 替换命令，`env`
 ## 重启后仍保留读数
 
 agent 通道最后一次成功读数也会写在配置目录旁：
-`<acp_home>/.llm-rosetta-quota.json`，内容是窗口、重置时间和配置指纹，绝不包含 token。
+`<acp_home>/.llm-rosetta-quota.json`，内容是窗口、重置时间和原始读取时间，绝不包含 token。
 网关在内存里没有读数时加载它，因此进程或容器更换后，agent 已经填好的 Claude 卡片
 不会退回 *unknown*。读数保留原来的 `read_at`，卡片仍会显示它是什么时候取得的。错误读数
 不会写入；下一次回合或本地命令会替换该文件。
