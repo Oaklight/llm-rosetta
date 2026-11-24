@@ -360,13 +360,14 @@ A destructive action no longer blocks the panel. Clearing the request log, a cle
 
 **Jobs** is its own rail section rather than a view of Observability. The routes behind it belong to the observability panel, so disabling Observability hides **Jobs** as well.
 
-The board filters by state — **All**, **Active** and **Failed** — and the header counts what is on it (`6 jobs · 0 active`). Timestamps read like the request log's, with the raw ISO value in the tooltip.
+The board has two views. **Requests** holds the reserved `batch.*` namespace — request work such as the Batch API. **Ops** holds gateway maintenance: clear, cleanup, trim, VACUUM and counter rebuild. A job's `lane` is the worker queue, not a category, and the split runs as a SQL predicate, so a busy Ops history cannot push request work off the page. The state filter — **All**, **Active** and **Failed** — applies inside the selected view, and the header counts what that view holds (`6 jobs · 0 active`). Timestamps read like the request log's, with the raw ISO value in the tooltip.
 
 - The rows a clear or cleanup targets stop being returned by every read the moment the job is queued, so the lists and the counts update immediately. The rows themselves are deleted in batches afterwards.
-- Progress is per row (`5,000 / 20,000 rows`), and every batch is a point where the job can stop: **Cancel** takes effect between batches, never mid-statement. A cancel before anything was deleted restores the rows; a cancel after a partial delete keeps them hidden and offers **Resume**.
-- A failed job keeps its rows hidden and offers **Retry** and **Unhide**. The rows are still on disk, so retrying loses nothing.
+- Progress is per row (`5,000 / 20,000 rows`), and every batch is a point where the job can stop: **Cancel** takes effect between batches, never mid-statement. A cancel before or after a partial delete restores the rows that remain; **Resume** re-hides the same original window before it continues.
+- A failed job releases its hidden rows too and offers **Retry**; retry re-hides the window recorded at enqueue and deletes only that window, so a row written after the clear request survives. A second **Clear** while the first is still queued moves its cutoff forward; once the job is running, the first cutoff stands. There is no separate Unhide action: when a job ends, its reservation ends with it.
+- A job whose recorded window is missing is refused with a 409 rather than deleting rows that no read is hiding. At startup the gateway repairs terminal jobs from an earlier release, releasing their ranges and backfilling the window Retry and Resume need.
 - **Trim to cap** and **Vacuum** are jobs too, but hide nothing: their target is disk maintenance rather than a time window the operator asked to disappear. Vacuum cannot be interrupted once it starts, so it runs last.
-- The dashboard's request total is the **lifetime** count and is never reset by clearing records; the footer's `ok:` segment shows how many rows the log currently holds. Counters rebuild in the background after a deletion, so the breakdowns catch up a few seconds later.
+- The dashboard's request total is the **lifetime** count and is never reset by clearing records; the footer's `ok:` segment shows how many rows the log currently holds. Counters rebuild only after an operation removed request-log rows; an empty cleanup, or one that touched only ops-log or error-dump rows, leaves them unchanged.
 
 ## Settings
 
