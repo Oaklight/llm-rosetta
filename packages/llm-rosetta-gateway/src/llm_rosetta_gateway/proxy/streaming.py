@@ -325,6 +325,30 @@ async def _stream_chunks(
         yield item
 
 
+def _lane_profile(stream: Any) -> dict[str, Any]:
+    """Facts the transport alone knows, for the request-log profile.
+
+    A lane that reports its own accounting (``claude_cli``'s native usage,
+    cost and context window) exposes ``lane_profile()`` on its stream.  An
+    HTTP stream has none, so the mapping is empty.  A failure to read it is
+    a lost log fact, never a failed stream.
+
+    Args:
+        stream: The opened upstream stream.
+
+    Returns:
+        The lane's mapping, or an empty one.
+    """
+    reader = getattr(stream, "lane_profile", None)
+    if not callable(reader):
+        return {}
+    try:
+        return dict(reader())
+    except Exception:  # noqa: BLE001 - a log fact must not fail a stream
+        logger.debug("Failed to read lane profile", exc_info=True)
+        return {}
+
+
 async def _stream_event_generator(
     *,
     source_provider: ProviderType,
@@ -426,6 +450,9 @@ async def _stream_event_generator(
                 stream_profile["stream_ttfb_ms"] = ttfb_ms
             if stream_error is not None:
                 stream_profile["stream_error"] = stream_error.message[:500]
+            lane_profile = getattr(stream, "lane_profile", None)
+            if callable(lane_profile):
+                stream_profile.update(_lane_profile(stream))
             await _write_back_stream_meta(
                 request_log, entry_id, stream_profile, ttfb_ms
             )

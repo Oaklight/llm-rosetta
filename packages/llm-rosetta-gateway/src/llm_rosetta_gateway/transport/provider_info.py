@@ -251,6 +251,7 @@ class ProviderInfo:
         cli_env_unset: tuple[str, ...] = (),
         cli_args: tuple[str, ...] = (),
         cli_upstream: str | None = None,
+        cli_processes: int = 1,
         acp_argv_custom: bool = False,
         acp_harden: bool = True,
         acp_state_dir: str | None = None,
@@ -378,6 +379,10 @@ class ProviderInfo:
         # Where the relay forwards the CLI's request.  ``None`` is Anthropic's
         # own API; an organization gateway is named by the shim.
         self.cli_upstream = str(cli_upstream) if cli_upstream else None
+        # How many CLI processes this provider may run at once.  A turn holds
+        # one process for its whole life (~250 MB), so the cap is a deployment
+        # fact and requests beyond it wait instead of failing.
+        self.cli_processes = max(1, int(cli_processes or 1))
         # Whether the operator wrote ``acp_argv`` in the provider entry (as
         # opposed to the shim declaring it).  Whether that command still gets
         # the gateway-owned profile is :attr:`acp_harden`'s decision: the

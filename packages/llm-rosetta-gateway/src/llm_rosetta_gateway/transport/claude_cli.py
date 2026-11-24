@@ -388,6 +388,46 @@ def _spawn_env(provider_info: ProviderInfo) -> dict[str, str]:
     return env
 
 
+async def _signal_tree(process: asyncio.subprocess.Process, *, force: bool) -> None:
+    """Signal a CLI process together with every child it started.
+
+    POSIX gets the process group: the child is spawned in its own session, so
+    the group holds the node wrapper and anything it spawned.  Windows has no
+    group signal, and ``terminate()`` reaches only the wrapper; ``taskkill
+    /T`` is what walks the tree.  A missing ``taskkill`` falls back to the
+    single-process call.
+
+    Args:
+        process: The child to signal.
+        force: ``True`` for an unconditional kill, ``False`` for a polite
+            termination.
+    """
+    if os.name == "posix":
+        sig = signal.SIGKILL if force else signal.SIGTERM
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.killpg(os.getpgid(process.pid), sig)
+        return
+    if os.name == "nt":
+        args = ["taskkill", "/PID", str(process.pid), "/T"]
+        if force:
+            args.append("/F")
+        try:
+            killer = await asyncio.create_subprocess_exec(
+                *args,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            await killer.wait()
+            return
+        except (OSError, asyncio.SubprocessError):
+            pass
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        if force:
+            process.kill()
+        else:
+            process.terminate()
+
+
 class _CliProcess:
     """One CLI child, its private working directory, and its stderr drain."""
 
@@ -396,12 +436,25 @@ class _CliProcess:
         process: asyncio.subprocess.Process,
         workdir: str,
         relay: Relay | None = None,
+        gate: asyncio.Semaphore | None = None,
     ) -> None:
         self.process = process
         self.workdir = workdir
         self.relay = relay
+        # The provider's process slot; released exactly once, when the turn
+        # has fully stopped.  A caller that abandons the stream without
+        # closing it keeps the slot, which is the same contract the HTTP
+        # transports have for a response body.
+        self._gate = gate
+        self._released = False
         self.stderr: deque[str] = deque(maxlen=40)
         self._stderr_task = asyncio.ensure_future(self._drain_stderr())
+
+    def _release(self) -> None:
+        """Return this turn's process slot, once."""
+        if self._gate is not None and not self._released:
+            self._released = True
+            self._gate.release()
 
     async def _drain_stderr(self) -> None:
         """Keep stderr flowing so a full pipe cannot stall the child."""
@@ -429,28 +482,23 @@ class _CliProcess:
     async def stop(self) -> None:
         """Terminate the whole process tree and remove the working directory."""
         process = self.process
-        if process.returncode is None:
-            with contextlib.suppress(ProcessLookupError, PermissionError):
-                if os.name == "posix":
-                    os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-                else:
-                    process.terminate()
-            try:
-                await asyncio.wait_for(process.wait(), 5)
-            except (TimeoutError, asyncio.TimeoutError):
-                with contextlib.suppress(ProcessLookupError, PermissionError):
-                    if os.name == "posix":
-                        os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-                    else:
-                        process.kill()
-                with contextlib.suppress(Exception):
-                    await process.wait()
-        self._stderr_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError, Exception):
-            await self._stderr_task
-        if self.relay is not None:
-            await self.relay.close()
-        shutil.rmtree(self.workdir, ignore_errors=True)
+        try:
+            if process.returncode is None:
+                await _signal_tree(process, force=False)
+                try:
+                    await asyncio.wait_for(process.wait(), 5)
+                except (TimeoutError, asyncio.TimeoutError):
+                    await _signal_tree(process, force=True)
+                    with contextlib.suppress(Exception):
+                        await process.wait()
+            self._stderr_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._stderr_task
+            if self.relay is not None:
+                await self.relay.close()
+            shutil.rmtree(self.workdir, ignore_errors=True)
+        finally:
+            self._release()
 
 
 class _CliStream(UpstreamStream):
@@ -523,6 +571,15 @@ class _CliStream(UpstreamStream):
         """The upstream calls the relay saw during this turn."""
         relay = self._cli.relay
         return list(relay.readings) if relay is not None else []
+
+    def lane_profile(self) -> dict[str, Any]:
+        """What this lane alone knows, for the request log's profile.
+
+        The proxy writes the returned mapping into the row's ``profile`` JSON
+        beside the stream metrics.  It is best-effort: a turn that produced no
+        result event still reports the relay's readings.
+        """
+        return _lane_facts(self._result, self.readings)
 
     # -- replay, one frame at a time ---------------------------------------
 
@@ -791,6 +848,42 @@ def _mapping(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _lane_facts(result: dict[str, Any] | None, readings: list[Any]) -> dict[str, Any]:
+    """The lane's own accounting, shaped for the request-log profile.
+
+    The CLI's ``result`` event carries what the Messages body cannot: the
+    native usage it billed, the model's context window (``modelUsage``) and
+    the list-price cost.  ``restored`` and the upstream status come from the
+    relay's per-call readings, so a log row says whether the prefix restore
+    applied and what the upstream answered.
+
+    Args:
+        result: The turn's ``result`` event, when it produced one.
+        readings: The relay's :class:`RelayReading` objects for this turn.
+
+    Returns:
+        ``{"claude_cli": {...}}``, or an empty mapping when nothing is known.
+    """
+    facts: dict[str, Any] = {}
+    if readings:
+        facts["restored"] = [reading.restored for reading in readings]
+        facts["upstream_status"] = [reading.status for reading in readings]
+        rate_limit = readings[-1].rate_limit()
+        if rate_limit:
+            facts["rate_limit"] = rate_limit
+    payload = result or {}
+    usage = _mapping(payload.get("usage"))
+    if usage:
+        facts["usage"] = usage
+    cost = payload.get("total_cost_usd")
+    if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+        facts["total_cost_usd"] = cost
+    model_usage = _mapping(payload.get("modelUsage"))
+    if model_usage:
+        facts["model_usage"] = model_usage
+    return {"claude_cli": facts} if facts else {}
+
+
 def _result_texts(assistant: dict[str, Any] | None) -> list[str]:
     """The assistant message's text blocks, if any."""
     if not assistant:
@@ -824,6 +917,25 @@ class ClaudeCliTransport(UpstreamTransport):
 
     def __init__(self, *, timeout: float = DEFAULT_TIMEOUT) -> None:
         self._timeout = float(timeout)
+        # One gate per configured provider, created on first use inside the
+        # running loop.  The app builds a single transport for every lane, so
+        # the gate is what keeps two providers from sharing a cap.
+        self._gates: dict[str, tuple[int, asyncio.Semaphore]] = {}
+
+    def _gate(self, provider_info: ProviderInfo) -> asyncio.Semaphore:
+        """The process-slot semaphore for *provider_info*.
+
+        A config reload may change ``cli_processes`` while turns are running.
+        A new limit replaces the gate; turns already holding the old one
+        finish under it, and new turns queue on the new one.
+        """
+        limit = provider_info.cli_processes
+        name = provider_info.config_name
+        held = self._gates.get(name)
+        if held is None or held[0] != limit:
+            held = (limit, asyncio.Semaphore(limit))
+            self._gates[name] = held
+        return held[1]
 
     # -- UpstreamTransport --------------------------------------------------
 
@@ -853,7 +965,7 @@ class ClaudeCliTransport(UpstreamTransport):
         stream = await self._turn(provider_info, body)
         assistant, result = await self._collect(stream)
         model = str(body.get("model") or "")
-        return _response_body(assistant, result, model)
+        return _response_body(assistant, result, model, stream.readings)
 
     async def send_streaming(
         self,
@@ -886,6 +998,26 @@ class ClaudeCliTransport(UpstreamTransport):
 
     async def _turn(
         self, provider_info: ProviderInfo, body: dict[str, Any]
+    ) -> _CliStream:
+        """Wait for a process slot, then start one CLI process.
+
+        A turn beyond the provider's ``cli_processes`` waits here; it does not
+        fail.  The slot passes to the process and is released when the turn's
+        stream closes.
+        """
+        gate = self._gate(provider_info)
+        await gate.acquire()
+        try:
+            return await self._start_turn(provider_info, body, gate)
+        except BaseException:
+            gate.release()
+            raise
+
+    async def _start_turn(
+        self,
+        provider_info: ProviderInfo,
+        body: dict[str, Any],
+        gate: asyncio.Semaphore,
     ) -> _CliStream:
         """Start one CLI process and write the conversation to it."""
         system, frames = build_frames(body)
@@ -944,7 +1076,7 @@ class ClaudeCliTransport(UpstreamTransport):
             raise UpstreamConnectionError(
                 f"claude_cli: cannot start {argv[0]!r}: {exc}"
             ) from exc
-        cli = _CliProcess(process, workdir, relay)
+        cli = _CliProcess(process, workdir, relay, gate)
         return _CliStream(cli, str(body.get("model") or ""), self._timeout, frames)
 
     async def _collect(
@@ -963,6 +1095,7 @@ def _response_body(
     assistant: dict[str, Any] | None,
     result: dict[str, Any] | None,
     model: str,
+    readings: list[Any] | None = None,
 ) -> UpstreamResponse:
     """Build one Messages response body from the turn's facts."""
     result = result or {}
@@ -998,7 +1131,12 @@ def _response_body(
         },
     }
     raw = json.dumps(body, ensure_ascii=False).encode("utf-8")
-    return UpstreamResponse(status_code=200, body=body, raw_content=raw)
+    return UpstreamResponse(
+        status_code=200,
+        body=body,
+        raw_content=raw,
+        meta=_lane_facts(result, readings or []),
+    )
 
 
 def _stderr_suffix(cli: _CliProcess) -> str:

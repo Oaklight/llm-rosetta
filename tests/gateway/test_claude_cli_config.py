@@ -17,6 +17,7 @@ from llm_rosetta_gateway.config.providers import (
     _cli_argv,
     _cli_env,
     _cli_env_unset,
+    _cli_processes,
     _cli_upstream,
 )
 
@@ -120,6 +121,19 @@ class TestTheUnsetList:
     def test_a_malformed_list_is_refused(self, bad):
         with pytest.raises(ValueError, match="cli_env_unset must be a list"):
             _cli_env_unset({"cli_env_unset": bad}, _shim(), "claude")
+
+
+class TestTheProcessCap:
+    def test_one_process_is_the_default(self):
+        assert _cli_processes({}, "claude") == 1
+
+    def test_the_provider_may_raise_the_cap(self):
+        assert _cli_processes({"cli_processes": 3}, "claude") == 3
+
+    @pytest.mark.parametrize("bad", [0, -1, "2", 1.5, True])
+    def test_a_malformed_cap_is_refused(self, bad):
+        with pytest.raises(ValueError, match="cli_processes must be an integer"):
+            _cli_processes({"cli_processes": bad}, "claude")
 
 
 class TestTheUpstream:
