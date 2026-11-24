@@ -15,10 +15,13 @@ from typing import Any
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
 from llm_rosetta.contracts.shim_manifest import parse_manifest
 from llm_rosetta_gateway.shims.manifest_sources.plan import (
+    ManifestPlan,
     ManifestSourceSpec,
     parse_selector,
+    source_spec_from_catalogue,
 )
 from llm_rosetta_gateway.shims.source_view import (
+    catalogue_payload,
     release_requires_problem,
     source_catalogue,
     vendor_view,
@@ -448,3 +451,45 @@ class TestPinnedMarks:
 
         assert card["installed"] == "0.1.0"
         assert card["state"] == "installed"
+
+    def test_implied_defaults_are_all_read_when_a_moved_vendor_adds_one(self, tmp_path):
+        """The editor shows both defaults; the catalogue must read both.
+
+        A provider that names a moved shim makes the plan carry that vendor's
+        source even when ``shims.sources`` is undeclared.  The other default
+        then used to have no catalogue row, so its editor block said "save to
+        read" and offered no vendors.
+        """
+        from llm_rosetta_gateway.shims.catalog import get_shim_source
+
+        contrib = get_shim_source("contrib")
+        argonne = get_shim_source("argonne")
+        assert contrib is not None and argonne is not None
+        http = FakeHttp(
+            {
+                contrib.manifest_url: _manifest(
+                    "contrib", {"kilo": [_record("0.1.0")]}
+                ),
+                argonne.manifest_url: _manifest(
+                    "argonne", {"argo": [_record("0.1.0")]}
+                ),
+            }
+        )
+        shims = SimpleNamespace(
+            sources=(),
+            install=("contrib:kilo",),
+            manifests=ManifestPlan(
+                sources=(source_spec_from_catalogue(contrib),),
+                selectors=(parse_selector("contrib:kilo"),),
+            ),
+            cache_root=str(tmp_path),
+            remote_ttl=3600,
+        )
+        config = SimpleNamespace(shims=shims, proxy=None)
+
+        payload = catalogue_payload(config, None, http_get=http)
+
+        assert [source["id"] for source in payload["sources"]] == [
+            "contrib",
+            "argonne",
+        ]

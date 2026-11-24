@@ -333,24 +333,39 @@ def source_catalogue(
 def _specs_and_selectors(config: Any) -> tuple[list[Any], list[Any], list[Any]]:
     """The sources to show, the selectors in force, and ``shims.sources`` as written.
 
-    With no source in the plan, the catalogue's default sources are listed as
+    With no declared source, the catalogue's default sources are listed as
     implied, so the panel can offer their vendors before any is selected.
     """
-    from .catalog import DEFAULT_SOURCES, get_shim_source
-    from .manifest_sources.plan import source_spec_from_catalogue
-
     shims = getattr(config, "shims", None)
     plan = getattr(shims, "manifests", None)
     specs = list(getattr(plan, "sources", ()) or ())
     selectors = list(getattr(plan, "selectors", ()) or ())
     raw_sources = list(getattr(shims, "sources", ()) or ())
-    if not specs:
-        specs = [
-            source_spec_from_catalogue(source)
-            for source in (get_shim_source(k) for k in DEFAULT_SOURCES)
-            if source is not None
-        ]
+    if not raw_sources:
+        # The panel shows the catalogue defaults when ``shims.sources`` is
+        # undeclared, so the catalogue must read them too.  A moved vendor
+        # can make the plan non-empty with only one of them (its own source),
+        # and then the other default had no row to match its editor block.
+        specs = _with_default_sources(specs)
     return specs, selectors, raw_sources
+
+
+def _with_default_sources(specs: Sequence[Any]) -> list[Any]:
+    """*specs* plus every catalogue default it does not already name."""
+    from .catalog import DEFAULT_SOURCES, get_shim_source
+    from .manifest_sources.plan import source_spec_from_catalogue
+
+    out = list(specs)
+    urls = {spec.url for spec in out}
+    for key in DEFAULT_SOURCES:
+        source = get_shim_source(key)
+        if source is None:
+            continue
+        spec = source_spec_from_catalogue(source)
+        if spec.url not in urls:
+            out.append(spec)
+            urls.add(spec.url)
+    return out
 
 
 def _core_names(report: Any) -> set[str]:
