@@ -197,6 +197,15 @@ class JobContext:
             raise JobCancelled()
         await self.heartbeat()
 
+    async def hidden_end(self, table: str) -> str | None:
+        """The end of the window this job hid for *table*, if it owns one.
+
+        A legacy payload has no cutoff, but its range row still records the
+        bound every read is hiding by.  Returning it lets the handler delete
+        the same set instead of falling back to the whole table.
+        """
+        return await self._store.hidden_end(self.job.id, table)
+
     def partial_result(self) -> dict[str, Any]:
         """What a cancelled job reports about the work it did finish."""
         return {"deleted": self._deleted} if self._deleted else {}
@@ -250,7 +259,12 @@ class JobManager:
         return Path(db_path).parent if db_path else None
 
     async def start(self) -> None:
-        """Repair orphaned ranges, recover interrupted jobs, start the lanes."""
+        """Repair ranges, recover interrupted jobs, start the lanes."""
+        released = await self.store.release_terminal_ranges()
+        if released:
+            logger.info(
+                "Jobs: repaired %d terminal job(s) from an earlier release", released
+            )
         self.orphaned_ranges = await self.store.sweep_orphan_ranges()
         # Taking a live lease away from its owner is only correct when this
         # process is the only one running jobs in this database, so the
@@ -442,7 +456,6 @@ class JobManager:
                     self.owner,
                     JOB_CANCELLED,
                     result=ctx.partial_result(),
-                    deleted=ctx.deleted,
                 )
             except LeaseLost:
                 # Not ours to finish: the row belongs to recovery now, and
@@ -464,7 +477,6 @@ class JobManager:
                     self.owner,
                     JOB_FAILED,
                     error=str(exc) or exc.__class__.__name__,
-                    deleted=ctx.deleted,
                 )
             else:
                 wrote = await self.store.finish(
@@ -472,7 +484,6 @@ class JobManager:
                     self.owner,
                     JOB_SUCCEEDED,
                     result=result or ctx.partial_result() or None,
-                    deleted=ctx.deleted,
                 )
                 if not wrote:
                     # The row belongs to recovery now: this run's result is

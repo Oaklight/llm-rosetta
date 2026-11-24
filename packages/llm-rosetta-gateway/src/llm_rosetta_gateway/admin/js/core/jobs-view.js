@@ -24,6 +24,24 @@ const KIND_KEYS = {
 
 const ACTIVE = new Set(['queued', 'running']);
 
+/** Which half of the board a job belongs to.
+ *
+ * `batch.*` is the reserved namespace for request work (the Batch API,
+ * #1509).  Everything else is the gateway maintaining itself, whatever queue
+ * it runs on: `lane` is the worker queue, not a semantic flag, so a data job
+ * that later runs on a network worker still belongs to Ops.
+ */
+export function jobCategory(job) {
+  if (!job) return 'ops';
+  return String(job.kind || '').startsWith('batch.') ? 'requests' : 'ops';
+}
+
+/** Whether a job belongs in the selected category; `all` keeps everything. */
+export function jobMatchesCategory(job, category) {
+  if (!category || category === 'all') return !!job;
+  return !!job && jobCategory(job) === category;
+}
+
 /** The short id a table row shows; the full id is in the title attribute. */
 export function jobShortId(id) {
   return String(id || '').slice(0, 8);
@@ -139,11 +157,21 @@ export function jobsHaveActive(jobs) {
   return (jobs || []).some(job => ACTIVE.has(job && job.status));
 }
 
+/** The header's active count: the server's category-wide value when present.
+ *
+ * A page-local count reads "0 active" whenever the active job sits on page
+ * two, so the API's number wins and the page is only the fallback.
+ */
+export function jobActiveCount(serverActive, jobs) {
+  if (Number.isFinite(serverActive)) return serverActive;
+  return (jobs || []).filter(job => ACTIVE.has(job && job.status)).length;
+}
+
 /** The actions a row offers, given its state. */
 export function jobActions(job) {
   if (!job) return [];
   if (ACTIVE.has(job.status)) return ['cancel'];
-  if (job.status === 'failed') return ['retry', 'unhide'];
-  if (job.status === 'cancelled') return ['resume', 'unhide'];
+  if (job.status === 'failed') return ['retry'];
+  if (job.status === 'cancelled') return ['resume'];
   return [];
 }

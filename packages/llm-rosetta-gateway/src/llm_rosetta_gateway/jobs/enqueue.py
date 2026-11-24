@@ -20,6 +20,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from .model import (
+    JOB_QUEUED,
     PRIORITY_DEFAULT,
     PRIORITY_INTERACTIVE,
     PRIORITY_MAINTENANCE,
@@ -42,14 +43,36 @@ def _age_cutoff(days: int) -> str:
 
 
 async def enqueue_clear(manager: Any, table: str, *, source: str = "admin") -> Job:
-    """Hide *table* completely and queue its deletion."""
-    return await manager.enqueue(
+    """Hide *table* up to the enqueue instant and queue its deletion.
+
+    The cutoff is recorded in the payload, and the handler deletes by it.  A
+    clear therefore removes exactly the rows it hid: a row written while the
+    job waited, or between a cancel and a Retry, stays visible and survives.
+    A second click while the first clear is still queued is the same request
+    with a later cutoff, so it extends that job's window; once the job is
+    running its cutoff stands.
+    """
+    end = _now()
+    job = await manager.enqueue(
         CLEAR_KIND,
-        {"table": table, "source": source},
+        {"table": table, "source": source, "end": end},
         priority=PRIORITY_INTERACTIVE,
         dedupe_key=f"clear:{table}",
-        hidden_ranges=[(table, "", _now())],
+        hidden_ranges=[(table, "", end)],
     )
+    previous = job.payload.get("end")
+    if not isinstance(previous, str) and job.status == JOB_QUEUED:
+        # A legacy payload has no cutoff; its range row still knows the bound.
+        previous = await manager.store.hidden_end(job.id, table)
+    if (
+        job.status == JOB_QUEUED
+        and job.payload.get("table") == table
+        and isinstance(previous, str)
+        and previous < end
+        and await manager.store.extend_clear_window(job.id, table=table, end=end)
+    ):
+        return await manager.store.get(job.id) or job
+    return job
 
 
 async def enqueue_cleanup(

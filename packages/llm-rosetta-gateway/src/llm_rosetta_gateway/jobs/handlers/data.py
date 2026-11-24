@@ -29,9 +29,12 @@ def data_handlers(ops_ctx: Any) -> dict[str, Handler]:
 
     async def clear(ctx: Any) -> dict[str, Any]:
         table = ctx.job.payload.get("table", "request_log")
+        end = ctx.job.payload.get("end")
+        if end is None:
+            end = await ctx.hidden_end(table)
         if table == "ops_log":
-            return await OpsClearOpsLog(ops_ctx, job=ctx).execute()
-        return await OpsClearData(ops_ctx, table=table, job=ctx).execute()
+            return await OpsClearOpsLog(ops_ctx, job=ctx, end=end).execute()
+        return await OpsClearData(ops_ctx, table=table, job=ctx, end=end).execute()
 
     async def cleanup(ctx: Any) -> dict[str, Any]:
         payload = ctx.job.payload

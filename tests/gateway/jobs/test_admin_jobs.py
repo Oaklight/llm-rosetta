@@ -24,7 +24,7 @@ class _Request:
     def __init__(self, app: _App, **path_params: str) -> None:
         self.app = app
         self.path_params = path_params
-        self.query_params: dict[str, str] = {}
+        self.query_params: dict[str, Any] = {}
 
 
 def _body(response) -> dict[str, Any]:
@@ -120,7 +120,7 @@ async def test_resume_wakes_the_lane(manager, monkeypatch):
     monkeypatch.setattr(manager, "wake", lambda: woken.append(True))
     await manager.enqueue("data.clear")
     claimed = await manager.store.claim("sqlite", "owner")
-    await manager.store.finish(claimed.id, "owner", "cancelled", deleted=1)
+    await manager.store.finish(claimed.id, "owner", "cancelled")
 
     response = await routes.resume_job(_Request(_App(manager), job_id=claimed.id))
 
@@ -155,20 +155,6 @@ async def test_retry_rejects_a_job_that_has_not_failed(manager):
     assert "failed or cancelled" in _body(response)["error"]
 
 
-async def test_unhide_reports_the_ranges_it_removed(manager, pm):
-    job = await manager.enqueue(
-        "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
-    )
-    await manager.store.claim("sqlite", "owner")
-    await manager.store.finish(job.id, "owner", "failed", error="boom")
-
-    response = await routes.unhide_job(_Request(_App(manager), job_id=job.id))
-
-    assert _body(response) == {"ok": True, "ranges_removed": 1}
-    assert pm.visibility.ranges("request_log") == []
-    assert (await manager.store.get(job.id)).status == "failed"
-
-
 async def test_without_persistence_the_routes_say_so():
     response = await routes.get_jobs(_Request(_App(None)))
 
@@ -184,6 +170,50 @@ async def test_a_bad_limit_is_a_400(manager):
 
     assert response.status_code == 400
     assert "integers" in _body(response)["error"]
+
+
+async def test_the_category_filter_is_applied_before_the_page(manager):
+    await manager.enqueue("batch.submit")
+    await manager.enqueue("data.clear")
+
+    request = _Request(_App(manager))
+    request.query_params = {"category": ["requests"]}
+    body = _body(await routes.get_jobs(request))
+    assert body["total"] == 1
+    assert body["active"] == 1
+    assert [job["kind"] for job in body["jobs"]] == ["batch.submit"]
+
+    request.query_params = {"category": ["ops"]}
+    body = _body(await routes.get_jobs(request))
+    assert body["total"] == 1
+    assert body["active"] == 1
+    assert [job["kind"] for job in body["jobs"]] == ["data.clear"]
+
+    request.query_params = {"category": ["everything"]}
+    response = await routes.get_jobs(request)
+    assert response.status_code == 400
+    assert "category" in _body(response)["error"]
+
+
+async def test_retry_of_a_lost_window_is_a_409_with_the_reason(manager, pm):
+    job = await manager.enqueue(
+        "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
+    )
+    await manager.store.request_cancel(job.id)
+    raw = await pm.connection.execute_fetchone(
+        "SELECT payload FROM jobs WHERE id = ?", (job.id,)
+    )
+    payload = json.loads(raw[0])
+    payload.pop("_hide", None)
+    await pm.connection.execute(
+        "UPDATE jobs SET payload = ? WHERE id = ?", (json.dumps(payload), job.id)
+    )
+    await pm.connection.commit()
+
+    response = await routes.retry_job(_Request(_App(manager), job_id=job.id))
+
+    assert response.status_code == 409
+    assert "no recorded hide window" in _body(response)["error"]
 
 
 async def test_cancel_after_a_job_was_cleared_reports_its_state(manager):

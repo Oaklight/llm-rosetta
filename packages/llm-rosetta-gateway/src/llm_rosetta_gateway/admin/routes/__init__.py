@@ -123,7 +123,6 @@ from .jobs import (
     get_jobs,
     resume_job,
     retry_job,
-    unhide_job,
 )
 from .routing import get_model_routing, list_routable_models, put_model_routing
 from .testing import (
@@ -236,9 +235,6 @@ def register_admin_routes(app: Any) -> None:
     )
     app.route("/admin/api/jobs/<job_id>/resume", methods=["POST"])(
         _guard("logs", resume_job)
-    )
-    app.route("/admin/api/jobs/<job_id>/unhide", methods=["POST"])(
-        _guard("logs", unhide_job)
     )
     # API key management (keys tab)
     app.route("/admin/api/keys", methods=["GET"])(_guard("keys", get_api_keys))

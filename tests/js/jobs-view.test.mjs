@@ -13,8 +13,11 @@ import { test } from 'node:test';
 
 import {
   jobActions,
+  jobActiveCount,
+  jobCategory,
   jobDurationText,
   jobKindLabel,
+  jobMatchesCategory,
   jobMatchesFilter,
   jobProgressPct,
   jobProgressText,
@@ -150,6 +153,14 @@ test('the board is active while anything is queued or running', () => {
   assert.equal(jobsHaveActive([]), false);
 });
 
+test('the header active count prefers the server and falls back to the page', () => {
+  const page = [job({ status: 'queued' }), job({ status: 'succeeded' })];
+  assert.equal(jobActiveCount(7, page), 7);
+  assert.equal(jobActiveCount(0, page), 0);
+  assert.equal(jobActiveCount(undefined, page), 1);
+  assert.equal(jobActiveCount(null, []), 0);
+});
+
 test('the filter keeps the rows the segment names', () => {
   const rows = [
     job({ status: 'queued' }),
@@ -166,7 +177,27 @@ test('the filter keeps the rows the segment names', () => {
 test('a row offers the actions its state allows', () => {
   assert.deepEqual(jobActions(job({ status: 'queued' })), ['cancel']);
   assert.deepEqual(jobActions(job({ status: 'running' })), ['cancel']);
-  assert.deepEqual(jobActions(job({ status: 'failed' })), ['retry', 'unhide']);
-  assert.deepEqual(jobActions(job({ status: 'cancelled' })), ['resume', 'unhide']);
+  assert.deepEqual(jobActions(job({ status: 'failed' })), ['retry']);
+  assert.deepEqual(jobActions(job({ status: 'cancelled' })), ['resume']);
   assert.deepEqual(jobActions(job({ status: 'succeeded' })), []);
+});
+
+test('request work and gateway maintenance have separate pages', () => {
+  const request = job({ kind: 'batch.submit', lane: 'network' });
+  const batchByKind = job({ kind: 'batch.poll', lane: 'sqlite' });
+  const ops = job({ kind: 'data.cleanup', lane: 'sqlite' });
+  // `lane` is the worker queue, not a category: a data job that happens to
+  // run on the network lane is still gateway maintenance.
+  const opsOnNetwork = job({ kind: 'data.cleanup', lane: 'network' });
+
+  assert.equal(jobCategory(request), 'requests');
+  assert.equal(jobCategory(batchByKind), 'requests');
+  assert.equal(jobCategory(ops), 'ops');
+  assert.equal(jobCategory(opsOnNetwork), 'ops');
+  assert.equal(jobCategory(null), 'ops');
+
+  assert.equal(jobMatchesCategory(request, 'requests'), true);
+  assert.equal(jobMatchesCategory(request, 'ops'), false);
+  assert.equal(jobMatchesCategory(ops, 'ops'), true);
+  assert.equal(jobMatchesCategory(ops, 'all'), true);
 });

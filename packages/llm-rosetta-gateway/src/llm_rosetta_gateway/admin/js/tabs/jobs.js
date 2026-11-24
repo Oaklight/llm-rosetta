@@ -14,6 +14,8 @@ import { api, esc } from '../core/utils.js';
 import { cssValue, jsArg } from '../core/html.js';
 import {
   jobActions,
+  jobActiveCount,
+  jobMatchesCategory,
   jobMatchesFilter,
   jobDurationText,
   jobKindLabel,
@@ -66,8 +68,11 @@ function scheduleJobsPoll(active) {
  */
 export async function loadJobs() {
   try {
-    const data = await api.get('/admin/api/jobs?limit=50');
-    renderJobs(data.jobs || []);
+    const category = S._jobsCategory || 'ops';
+    const data = await api.get(
+      `/admin/api/jobs?limit=50&category=${encodeURIComponent(category)}`,
+    );
+    renderJobs(data.jobs || [], data.total, data.active);
     return data;
   } catch (e) {
     return null;
@@ -89,18 +94,39 @@ export function setJobsFilter(view) {
   loadJobs();
 }
 
+/** Pick the half of the board (request work or gateway maintenance). */
+export function setJobsCategory(view) {
+  S._jobsCategory = view === 'requests' ? 'requests' : 'ops';
+  const seg = document.getElementById('jobsKindSeg');
+  if (seg) {
+    seg.querySelectorAll('[data-view]').forEach(el => {
+      const active = el.dataset.view === S._jobsCategory;
+      el.classList.toggle('active', active);
+      el.setAttribute('aria-checked', String(active));
+      el.tabIndex = active ? 0 : -1;
+    });
+  }
+  loadJobs();
+}
+
 /** Paint the rows, and choose the next poll interval from what they show. */
-export function renderJobs(allJobs) {
+export function renderJobs(allJobs, total, activeCount) {
   const body = document.getElementById('jobsBody');
   if (!body) return;
   const all = allJobs || [];
-  const jobs = all.filter(job => jobMatchesFilter(job, S._jobsFilter || 'all'));
-  const active = all.filter(job => jobMatchesFilter(job, 'active')).length;
+  const category = S._jobsCategory || 'ops';
+  const inCategory = all.filter(job => jobMatchesCategory(job, category));
+  const jobs = inCategory.filter(job => jobMatchesFilter(job, S._jobsFilter || 'all'));
+  // The server counts active work across the whole category; a page-local
+  // count would read "0 active" whenever the active job sat on page two.
+  const active = jobActiveCount(activeCount, inCategory);
   const count = document.getElementById('jobsCount');
-  if (count) count.textContent = t('jobs.count', { count: all.length, active });
+  const shown = Number.isFinite(total) ? total : inCategory.length;
+  if (count) count.textContent = t('jobs.count', { count: shown, active });
   if (!jobs.length) {
     const empty = S._jobsFilter && S._jobsFilter !== 'all'
-      ? t('jobs.emptyFiltered') : t('jobs.empty');
+      ? t('jobs.emptyFiltered')
+      : category === 'requests' ? t('jobs.emptyRequests') : t('jobs.emptyOps');
     body.innerHTML = `<tr><td colspan="7" style="color:var(--text-dim)">${esc(empty)}</td></tr>`;
     scheduleJobsPoll(false);
     return;
@@ -132,7 +158,6 @@ export async function jobAction(action, id) {
     cancel: 'cancel',
     retry: 'retry',
     resume: 'resume',
-    unhide: 'unhide',
   };
   const path = paths[action];
   if (!path) return;
@@ -146,6 +171,6 @@ export async function jobAction(action, id) {
   window.loadMetrics?.();
 }
 
-Object.assign(window, { loadJobs, jobAction, setJobsFilter, startJobsBoard, stopJobsTimer });
+Object.assign(window, { loadJobs, jobAction, setJobsFilter, setJobsCategory, startJobsBoard, stopJobsTimer });
 
 export { jobShortId };
