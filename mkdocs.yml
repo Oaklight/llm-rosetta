@@ -158,6 +158,7 @@ nav:
               - OpenCode: guide/providers/opencode.md
               - ChatGPT 套餐: guide/providers/openai_chatgpt.md
               - Antigravity (Google): guide/providers/antigravity.md
+              - Claude（官方 CLI）: guide/providers/claude-cli.md
               - 免费端点: guide/providers/free.md
           - 推理 / 思考参数: guide/reasoning.md
           - 提供方推理行为: guide/provider-reasoning.md

@@ -33,6 +33,7 @@ title: 提供方参考
 | [Open Design](opendesign.md) | `opendesign--*` | 多种 | 独立包；模型网关 |
 | [Plan (ChatGPT)](openai_chatgpt.md) | `openai_chatgpt--open_responses` | `open_responses` | ChatGPT 套餐通道；登录而非 API key |
 | [Antigravity](antigravity.md) | `antigravity--acp` | `acp` | Google Antigravity 套餐，经本机 `agy` CLI 驱动 |
+| [Claude（官方 CLI）](claude-cli.md) | `claude--messages` | `messages` | Claude 订阅，经本机 `claude` CLI 驱动 |
 | [免费端点](free.md) | `kilo_free--*`、`llm7--*`、`opencode_zen_free--*`、`ovhcloud--*` | `chat_completions` | 独立包；无需账号 |
 
 Argo、AskSage、ALCF、Open Design 与免费端点的 shim 作为独立包发布 —— 在使用其名称之前，请通过 `shims.install`（或 **网关 → Shims → 可安装**）声明对应源。参见[独立 Shim 包](../shims.md#standalone-shim-packages)。
