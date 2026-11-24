@@ -62,6 +62,8 @@ def _mock_persistence() -> MagicMock:
     p.count_log_entries = AsyncMock(return_value=100)
     p.iter_log_rows_for_rebuild = _mock_iter_rows
     p.save_metrics = AsyncMock()
+    p.rebuild_flag_token = AsyncMock(return_value=None)
+    p.clear_rebuild_flag = AsyncMock(return_value=True)
     return p
 
 
@@ -367,6 +369,19 @@ class TestOpsRebuildMetrics:
         assert "counters" in result
         entry = ctx.ops_log.add.call_args[0][0]
         assert entry.event_type == EVENT_DATA_REBUILT
+
+    @pytest.mark.asyncio
+    async def test_rebuild_clears_the_request_it_answered(self):
+        p = _mock_persistence()
+        p.rebuild_flag_token = AsyncMock(return_value="tok-1")
+        m = MagicMock()
+        m.export_counters = MagicMock(return_value={})
+        m.rebuild_from_stream = AsyncMock(return_value=1)
+        ctx = _make_ctx(persistence=p, metrics=m)
+
+        await OpsRebuildMetrics(ctx).execute()
+
+        p.clear_rebuild_flag.assert_awaited_once_with("tok-1")
 
 
 class TestOpsClearOpsLog:

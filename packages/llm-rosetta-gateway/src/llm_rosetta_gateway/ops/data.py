@@ -385,10 +385,16 @@ class OpsRebuildMetrics(_DataMutationMixin, OpsBase):
         m = self._ctx.metrics
         if p is None or m is None:
             return {}
+        # Capture the request this pass answers.  A set_rebuild_flag call that
+        # lands while the log is being scanned replaces the token, and the
+        # conditional clear below leaves that newer request for the next pass.
+        token = await p.rebuild_flag_token()
         self._before = m.export_counters()
         self._count = await m.rebuild_from_stream(p.iter_log_rows_for_rebuild())
         self._after = m.export_counters()
         await p.save_metrics(self._after)
+        if token is not None:
+            await p.clear_rebuild_flag(token)
         if self._job is not None:
             await self._job.progress(self._count, total=self._count, unit="rows")
         return {

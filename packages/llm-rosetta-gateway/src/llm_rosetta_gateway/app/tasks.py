@@ -164,7 +164,14 @@ async def _periodic_flush(app: App) -> None:
         metrics = getattr(app, "metrics", None)
         if metrics is not None:
             try:
-                if await persistence.check_and_clear_rebuild_flag():
+                # Peek, do not clear: the flag is a request, and only a
+                # rebuild that scanned the log after the request may answer
+                # it.  Clearing here lost the request when the enqueue raised
+                # and when a running rebuild deduplicated the enqueue.  The
+                # rebuild job clears the token it captured, so a request that
+                # arrives mid-scan stays behind.
+                token = await persistence.rebuild_flag_token()
+                if token is not None:
                     jobs = getattr(app, "jobs", None)
                     if jobs is not None:
                         from ..jobs.enqueue import enqueue_rebuild
@@ -181,6 +188,7 @@ async def _periodic_flush(app: App) -> None:
                         await metrics.rebuild_from_stream(
                             persistence.iter_log_rows_for_rebuild()
                         )
+                        await persistence.clear_rebuild_flag(token)
                 jobs = getattr(app, "jobs", None)
                 if jobs is not None:
                     await jobs.maybe_prune()
