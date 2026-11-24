@@ -227,6 +227,24 @@ def _pinned_release(
     return release, None
 
 
+def _provided_by(names: Collection[str]) -> str:
+    """Name who already registers *names*: core, a plugin, or both.
+
+    A plugin shim is registered before the manifest install, so it looks like
+    a core name to the catalog.  Naming the plugin keeps a skipped vendor from
+    being reported as a core feature the operator cannot find in the tree.
+    """
+    from llm_rosetta.api import plugin_source
+
+    sources = {plugin_source(name) for name in names}
+    plugins = sorted(source for source in sources if source)
+    if plugins and None not in sources and len(plugins) == 1:
+        return f"installed plugin {plugins[0]}"
+    if plugins:
+        return "core and installed plugin(s) " + ", ".join(plugins)
+    return "core"
+
+
 def _skip_reason(
     chosen: VendorRelease,
     selector: InstallSelector,
@@ -236,29 +254,31 @@ def _skip_reason(
 ) -> str | None:
     """Why the chosen release is not installed at all, or ``None``.
 
-    A promotion this core honours, a record every shim of which core already
-    registers, or a legacy include that names none of the vendor's shims.  A
-    *partial* clash is not a reason: the vendor installs and the scan refuses
-    the core names one by one (core wins per shim).
+    A promotion this core honours, a record every shim of which core or an
+    installed plugin already registers, or a legacy include that names none of
+    the vendor's shims.  A *partial* clash is not a reason: the vendor installs
+    and the scan refuses the already registered names one by one (they win).
     """
     promoted = _promotion(chosen, core_version, core_names, source_id)
     if promoted:
         return f"promoted to {promoted}"
     clash = sorted(set(chosen.shims) & set(core_names))
     if clash and set(clash) == set(chosen.shims):
+        reason = f"already provided by {_provided_by(clash)}: " + ", ".join(clash)
         logger.warning(
-            "Shim source %s: vendor %r is ignored; core already provides %s",
+            "Shim source %s: vendor %r is ignored; %s",
             source_id,
             chosen.vendor,
-            ", ".join(clash),
+            reason,
         )
-        return "core provides " + ", ".join(clash)
+        return reason
     if clash:
         logger.warning(
-            "Shim source %s: vendor %r: core already provides %s; those "
+            "Shim source %s: vendor %r: already provided by %s: %s; those "
             "shims are ignored and the rest install",
             source_id,
             chosen.vendor,
+            _provided_by(clash),
             ", ".join(clash),
         )
     return None

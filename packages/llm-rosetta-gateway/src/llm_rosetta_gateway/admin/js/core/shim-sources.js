@@ -385,8 +385,8 @@ export function vendorFacts(v, src) {
   if (v.skipped) facts.push({ key: 'shimSrc.skipped', params: { reason: v.skipped }, cls: 'is-unknown' });
   if (v.error) facts.push({ key: 'shimSrc.failed', params: { error: v.error }, cls: 'is-unknown' });
   if (v.claimed_by) facts.push({ key: 'shimSrc.claimedBy', params: { source: v.claimed_by } });
-  if ((v.core_provides || []).length) {
-    facts.push({ key: 'shimSrc.coreProvides', params: { names: v.core_provides.join(', ') } });
+  if ((v.core_provides || []).length && !v.skipped) {
+    facts.push({ key: 'shimSrc.coreProvides', params: { names: v.core_provides.join(', ') }, cls: 'is-unknown' });
   }
   return facts;
 }

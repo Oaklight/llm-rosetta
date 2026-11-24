@@ -254,6 +254,19 @@ test('a skipped vendor carries the reason; nothing installable says so', () => {
   assert.ok(none.some((f) => f.key === 'shimSrc.noInstallable'));
 });
 
+test('a provided vendor says so once, as a warning', () => {
+  const available = vendorFacts({ core_provides: ['kilo--chat_completions'] }, SRC);
+  const fact = available.find((f) => f.key === 'shimSrc.coreProvides');
+  assert.ok(fact);
+  assert.equal(fact.cls, 'is-unknown');
+
+  const skipped = vendorFacts({
+    skipped: 'already provided by core: kilo--chat_completions',
+    core_provides: ['kilo--chat_completions'],
+  }, SRC);
+  assert.equal(skipped.filter((f) => f.key === 'shimSrc.coreProvides').length, 0);
+});
+
 test('tags and search read the vendor and its source', () => {
   const src = { id: 'contrib', vendors: [{ tags: ['tier:free'] }, { tags: ['auth:device', 'tier:free'] }] };
   assert.deepEqual(sourceTags(src), ['auth:device', 'tier:free']);

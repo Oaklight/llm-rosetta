@@ -482,6 +482,27 @@ class TestUpgrades:
         assert entry["update"] is True
 
 
+class TestProvidedBy:
+    def test_a_plugin_name_names_the_plugin(self, monkeypatch):
+        from llm_rosetta_gateway.shims.manifest_sources.selection import _provided_by
+
+        monkeypatch.setattr(
+            "llm_rosetta.api.plugin_source", lambda name: "demo-shim 0.1.0"
+        )
+
+        assert (
+            _provided_by(["demo--chat_completions"])
+            == "installed plugin demo-shim 0.1.0"
+        )
+
+    def test_a_core_name_stays_core(self, monkeypatch):
+        from llm_rosetta_gateway.shims.manifest_sources.selection import _provided_by
+
+        monkeypatch.setattr("llm_rosetta.api.plugin_source", lambda name: None)
+
+        assert _provided_by(["demo--chat_completions"]) == "core"
+
+
 class TestPrecedence:
     def test_core_wins_a_shim_name_clash(self, tmp_path, logs):
         core_name = next(s.name for s in list_shims() if "--" in s.name)
@@ -498,7 +519,7 @@ class TestPrecedence:
         assert before is not None and after is not None
         assert after.connection.base_url == before.connection.base_url
         assert any(
-            "contrib" in m and repr(vendor) in m and "core already provides" in m
+            "contrib" in m and repr(vendor) in m and "already provided by core" in m
             for m in logs
         ), logs
         # The estimate saves the download too.
@@ -603,7 +624,7 @@ class TestPrecedence:
         assert before is not None and after is not None
         assert after.connection.base_url == before.connection.base_url
         assert any(
-            f"core already provides {core_name}; those shims are ignored" in m
+            f"already provided by core: {core_name}; those shims are ignored" in m
             for m in logs
         ), logs
 
