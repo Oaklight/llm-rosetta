@@ -273,3 +273,11 @@ provider 条目可以逐字段覆盖 `quota.local`。`argv` 替换命令，`env`
 
 探针的写法与其他探针相同：导出 `PROBES`，给探针一个 `quota.probe` 会引用的 `id`，
 实现返回 `""` 的 `match()`（通道没有 HTTP 用量端点），并加上 `parse_local`。
+
+## 重启后仍保留读数
+
+agent 通道最后一次成功读数也会写在配置目录旁：
+`<acp_home>/.llm-rosetta-quota.json`，内容是窗口、重置时间和配置指纹，绝不包含 token。
+网关在重启后的第一次读取时加载它，因此进程或容器更换后，agent 已经填好的 Claude 卡片
+不会退回 *unknown*。读数保留原来的 `read_at`，卡片仍会显示它是什么时候取得的。错误读数
+不会写入；下一次回合或本地命令会替换该文件。
