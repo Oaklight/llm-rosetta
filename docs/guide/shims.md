@@ -782,7 +782,7 @@ version. Open, it shows:
   `promoted_to`;
 - the tags, and the shims the release registers, each marked installed or not;
 - the `install` entry that selects the vendor, the reason a
-  selected vendor was skipped (*not in the manifest*, *core provides …*,
+  selected vendor was skipped (*not in the manifest*, *already provided by …*,
   *promoted to …*), and the earlier source that provides the same vendor.
 
 **Install** adds `<source>:<vendor>` to `shims.install` and reloads, which

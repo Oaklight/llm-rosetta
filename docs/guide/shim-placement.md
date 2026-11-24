@@ -93,7 +93,7 @@ When core and a source provide the same shim name:
 - **Core wins, per shim.** The gateway does not load that name from the source
   and logs the source, the vendor and the ignored names. The vendor's other
   shims still install. A vendor whose shims are all core names is skipped, and
-  its card says *core provides …*.
+  its card says *already provided by …*.
 - **`promoted_to` is read from the release that would be installed.** It holds
   only when the running core is at or after the named version (a dev or
   pre-release of that version is before it) **and** core registers the
