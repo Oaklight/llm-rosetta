@@ -172,6 +172,5 @@ export function jobActions(job) {
   if (!job) return [];
   if (ACTIVE.has(job.status)) return ['cancel'];
   if (job.status === 'failed') return ['retry'];
-  if (job.status === 'cancelled') return ['resume'];
   return [];
 }

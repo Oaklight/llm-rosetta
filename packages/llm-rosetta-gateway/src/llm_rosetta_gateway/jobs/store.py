@@ -47,7 +47,7 @@ def _stored_hide_spec(payload: str | None) -> list[tuple[str, str, str]] | None:
     A missing key is different from an empty list: the empty list is a job that
     never hid anything (trim, VACUUM, rebuild), while a missing key means a job
     written before the window was recorded, or one whose range rows were lost.
-    Requeueing the latter would delete rows that no read is hiding, so callers
+    Retrying the latter would delete rows that no read is hiding, so callers
     refuse it instead of guessing.
     """
     try:
@@ -134,9 +134,9 @@ class JobStore:
                 )
             stored = {"v": PAYLOAD_VERSION, **(payload or {})}
             # Keep the resolved window beside the job, including an empty one.
-            # A clean-undo cancel deletes the range rows, and resume has to hide
-            # the same rows again before it deletes them; the empty list is the
-            # marker that says this kind of job never hid anything, so a
+            # A terminal transition releases the range rows, and a retry has to
+            # hide the same rows again before it deletes them; the empty list is
+            # the marker that says this kind of job never hid anything, so a
             # requeue can tell it apart from a job whose window was lost.
             stored["_hide"] = [list(item) for item in normalized]
             await conn.execute(
@@ -267,9 +267,9 @@ class JobStore:
         A terminal job releases its hidden ranges.  Success has deleted the
         rows, so the reservation is spent.  A failure or a partial cancel
         leaves the rows on disk, but keeping them invisible would need a
-        second operator action to bring them back; retry and resume already
-        re-hide the same window from the payload before they delete, so the
-        reservation can end with the job.
+        second operator action to bring them back; retry already re-hides the
+        same window from the payload before it deletes, so the reservation can
+        end with the job.
         """
         if status not in (JOB_SUCCEEDED, JOB_FAILED, JOB_CANCELLED):
             raise ValueError(f"{status!r} is not a terminal job state")
@@ -342,7 +342,7 @@ class JobStore:
         return [(row[0], row[1], row[2]) for row in rows]
 
     # ------------------------------------------------------------------
-    # Cancel, retry, resume
+    # Cancel and retry
     # ------------------------------------------------------------------
 
     async def request_cancel(self, job_id: str) -> tuple[bool, str | None]:
@@ -377,22 +377,17 @@ class JobStore:
         return True, job.status
 
     async def retry(self, job_id: str) -> bool:
-        """Put a failed or cancelled job back in the queue, fresh."""
-        return await self._requeue(job_id, reset_attempts=True)
+        """Put a failed job back in the queue, fresh."""
+        return await self._requeue(job_id)
 
-    async def resume(self, job_id: str) -> bool:
-        """Continue a cancelled job, keeping the rows it has not deleted yet."""
-        return await self._requeue(job_id, reset_attempts=False)
+    async def _requeue(self, job_id: str) -> bool:
+        """Queue a failed job again, re-hiding its rows if it lost them.
 
-    async def _requeue(self, job_id: str, *, reset_attempts: bool) -> bool:
-        """Queue a terminal job again, re-hiding its rows if it lost them.
-
-        A cancel before anything was deleted is a clean undo and drops the
-        range rows, so resuming that job would otherwise delete rows that were
-        never hidden: they would vanish on the first batch instead of leaving
-        the listings first.  The window is the one recorded at enqueue, not a
-        recomputed one — for a clear, recomputing would sweep in traffic that
-        arrived after the operator asked for it.
+        A terminal job releases its hidden ranges, so retrying would otherwise
+        delete rows that were never hidden: they would vanish on the first
+        batch instead of leaving the listings first.  The window is the one
+        recorded at enqueue, not a recomputed one — for a clear, recomputing
+        would sweep in traffic that arrived after the operator asked for it.
         """
         restored: list[tuple[str, str, str]] = []
         async with self._p.transaction() as conn:
@@ -400,10 +395,10 @@ class JobStore:
             # not get its ranges back on the way out.
             cur = await conn.execute(
                 "UPDATE jobs SET status = ?, finished_at = NULL, error = NULL, "
-                "cancel_requested = 0, lease_owner = NULL, lease_expires_at = NULL"
-                + (", attempts = 0" if reset_attempts else "")
-                + " WHERE id = ? AND status IN ('failed', 'cancelled')",
-                (JOB_QUEUED, job_id),
+                "cancel_requested = 0, lease_owner = NULL, lease_expires_at = NULL, "
+                "attempts = 0 "
+                "WHERE id = ? AND status = ?",
+                (JOB_QUEUED, job_id, JOB_FAILED),
             )
             if cur.rowcount == 0:
                 return False
@@ -497,10 +492,10 @@ class JobStore:
         until something deleted them; both are gone now, so a store written by
         one of those versions would otherwise keep its windows invisible with
         no route back.  For a failed or cancelled job the released window is
-        written into ``payload["_hide"]`` first, which is what Retry and Resume
-        re-hide; a job that never hid anything gets an empty window so it stays
-        requeueable.  A job whose window was already lost keeps no ``_hide``:
-        requeueing it is refused rather than deleting visible rows silently.
+        written into ``payload["_hide"]`` first, which is what Retry re-hides;
+        a job that never hid anything gets an empty window so it stays
+        retryable.  A job whose window was already lost keeps no ``_hide``:
+        retrying it is refused rather than deleting visible rows silently.
 
         Idempotent, and called once by :meth:`JobManager.start` before serving.
         """
@@ -613,7 +608,7 @@ class JobStore:
                 return 0
             # Recovery settles a cancelled or exhausted job instead of
             # requeueing it.  Like `finish`, that releases its reservation:
-            # retry and resume re-hide the payload's window before deleting.
+            # retry re-hides the payload's window before deleting.
             terminal = [row[0] for row in rows if row[1] or row[2] >= row[3]]
             if terminal:
                 marks = ", ".join("?" for _ in terminal)

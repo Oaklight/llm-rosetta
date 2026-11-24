@@ -336,9 +336,9 @@ class JobManager:
     def wake(self) -> None:
         """Tell the lanes to look for work now, not at the next timeout.
 
-        Retry and resume change a row's state from a request handler, which
-        the lane has no way to observe; without this the job waits out the
-        30-second poll first.
+        Retry changes a row's state from a request handler, which the lane has
+        no way to observe; without this the job waits out the 30-second poll
+        first.
         """
         self._wake.set()
 
