@@ -1548,6 +1548,7 @@ def build_provider_info(
             tuple(shim.connection.cli_env_unset) if shim is not None else ()
         ),
         cli_args=(tuple(shim.connection.cli_args) if shim is not None else ()),
+        cli_upstream=(shim.connection.cli_upstream if shim is not None else None),
         acp_state_dir=acp_home,
         managed_acp_state_dir=managed_acp_home,
         managed_auth_state_dir=managed_auth_home,

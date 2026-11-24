@@ -237,6 +237,7 @@ def _load_single_provider(
             conn_raw.get("cli_args"), cfg.get("name", ""), "cli_args"
         )
         or (),
+        cli_upstream=conn_raw.get("cli_upstream"),
         token_command=_parse_connection_token_command(
             conn_raw.get("token_command"),
             command_dir or provider_dir,
