@@ -502,6 +502,33 @@ class TestProvidedBy:
 
         assert _provided_by(["demo--chat_completions"]) == "core"
 
+    def test_a_core_and_plugin_set_names_both(self, monkeypatch):
+        from llm_rosetta_gateway.shims.manifest_sources.selection import _provided_by
+
+        monkeypatch.setattr(
+            "llm_rosetta.api.plugin_source",
+            lambda name: None if name.startswith("core--") else "demo-shim 0.1.0",
+        )
+
+        assert (
+            _provided_by(["core--chat_completions", "demo--chat_completions"])
+            == "core and installed plugin(s) demo-shim 0.1.0"
+        )
+
+    def test_two_plugins_without_a_core_name_name_only_the_plugins(self, monkeypatch):
+        from llm_rosetta_gateway.shims.manifest_sources.selection import _provided_by
+
+        owners = {
+            "alpha--chat_completions": "alpha-shim 1.0",
+            "beta--chat_completions": "beta-shim 2.0",
+        }
+        monkeypatch.setattr("llm_rosetta.api.plugin_source", owners.get)
+
+        assert (
+            _provided_by(["alpha--chat_completions", "beta--chat_completions"])
+            == "installed plugins alpha-shim 1.0, beta-shim 2.0"
+        )
+
 
 class TestPrecedence:
     def test_core_wins_a_shim_name_clash(self, tmp_path, logs):

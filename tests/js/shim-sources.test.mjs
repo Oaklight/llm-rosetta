@@ -258,13 +258,30 @@ test('a provided vendor says so once, as a warning', () => {
   const available = vendorFacts({ core_provides: ['kilo--chat_completions'] }, SRC);
   const fact = available.find((f) => f.key === 'shimSrc.coreProvides');
   assert.ok(fact);
-  assert.equal(fact.cls, 'is-unknown');
+  assert.equal(fact.cls, 'is-warn');
 
   const skipped = vendorFacts({
     skipped: 'already provided by core: kilo--chat_completions',
     core_provides: ['kilo--chat_completions'],
   }, SRC);
   assert.equal(skipped.filter((f) => f.key === 'shimSrc.coreProvides').length, 0);
+});
+
+test('both provided lines open with the ! marker in each language', async () => {
+  // i18n.js reads state.js, which reads localStorage at module scope.
+  globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {}, clear() {} };
+  globalThis.document = {
+    documentElement: { getAttribute: () => null, setAttribute() {} },
+    body: { classList: { add() {}, remove() {}, contains: () => false } },
+    getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+  };
+  globalThis.window = globalThis;
+  const { I18N } = await import(`${ADMIN}/core/i18n.js`);
+
+  for (const lang of ['en', 'zh']) {
+    assert.match(I18N[lang]['shimSrc.skipped'], /^! /);
+    assert.match(I18N[lang]['shimSrc.coreProvides'], /^! /);
+  }
 });
 
 test('tags and search read the vendor and its source', () => {

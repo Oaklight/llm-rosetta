@@ -238,11 +238,14 @@ def _provided_by(names: Collection[str]) -> str:
 
     sources = {plugin_source(name) for name in names}
     plugins = sorted(source for source in sources if source)
-    if plugins and None not in sources and len(plugins) == 1:
-        return f"installed plugin {plugins[0]}"
-    if plugins:
-        return "core and installed plugin(s) " + ", ".join(plugins)
-    return "core"
+    if not plugins:
+        return "core"
+    joined = ", ".join(plugins)
+    if None not in sources:
+        if len(plugins) == 1:
+            return f"installed plugin {plugins[0]}"
+        return "installed plugins " + joined
+    return "core and installed plugin(s) " + joined
 
 
 def _skip_reason(
