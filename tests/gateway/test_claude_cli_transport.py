@@ -20,6 +20,8 @@ import sys
 import textwrap
 import time
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -27,10 +29,12 @@ from llm_rosetta_gateway.transport import (
     ClaudeCliTransport,
     UpstreamConnectionError,
     UpstreamTimeoutError,
+    claude_cli,
 )
 from llm_rosetta_gateway.transport.claude_cli import (
     _quota_update,
     _response_body,
+    _signal_tree,
     build_frames,
     conversation_session_id,
     make_restorer,
@@ -1358,3 +1362,25 @@ class TestLaneQuota:
 
     def test_headers_without_a_window_are_not_a_reading(self) -> None:
         assert _quota_update({"anthropic-ratelimit-unified-status": "allowed"}) is None
+
+
+class TestProcessTree:
+    """A turn's child is stopped together with anything it started."""
+
+    async def test_windows_walks_the_tree_with_taskkill(self, monkeypatch) -> None:
+        calls: list[tuple[Any, ...]] = []
+
+        class Killer:
+            async def wait(self) -> int:
+                return 0
+
+        async def fake_exec(*args: Any, **kwargs: Any) -> Killer:
+            calls.append(args)
+            return Killer()
+
+        monkeypatch.setattr(claude_cli, "os", SimpleNamespace(name="nt"))
+        monkeypatch.setattr(claude_cli.asyncio, "create_subprocess_exec", fake_exec)
+
+        await _signal_tree(cast(Any, SimpleNamespace(pid=4321)), force=True)
+
+        assert calls == [("taskkill", "/PID", "4321", "/T", "/F")]
