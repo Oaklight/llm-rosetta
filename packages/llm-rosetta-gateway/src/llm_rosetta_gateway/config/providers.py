@@ -1542,6 +1542,12 @@ def build_provider_info(
         acp_session_meta=(
             shim.connection.acp_session_meta if shim is not None else None
         ),
+        cli_argv=(shim.connection.cli_argv if shim is not None else None),
+        cli_env=(shim.connection.cli_env if shim is not None else None),
+        cli_env_unset=(
+            tuple(shim.connection.cli_env_unset) if shim is not None else ()
+        ),
+        cli_args=(tuple(shim.connection.cli_args) if shim is not None else ()),
         acp_state_dir=acp_home,
         managed_acp_state_dir=managed_acp_home,
         managed_auth_state_dir=managed_auth_home,

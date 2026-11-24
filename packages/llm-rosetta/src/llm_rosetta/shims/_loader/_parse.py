@@ -147,8 +147,10 @@ def _resolve_shim_pair(cfg: dict[str, Any], yaml_path: Path) -> tuple[str, str]:
     return fmt, declared_type
 
 
-def _parse_connection_argv(raw: Any, shim_name: str) -> tuple[str, ...] | None:
-    """Read a shim's ``connection.acp_argv`` as an argv tuple.
+def _parse_connection_argv(
+    raw: Any, shim_name: str, field: str = "acp_argv"
+) -> tuple[str, ...] | None:
+    """Read a shim's ``connection.<field>`` as an argv tuple.
 
     A string would be split on whitespace by a shell and a list of non-strings
     would fail somewhere inside the subprocess call; refusing both here puts
@@ -157,6 +159,7 @@ def _parse_connection_argv(raw: Any, shim_name: str) -> tuple[str, ...] | None:
     Args:
         raw: The declared value: a list of strings, or ``None``.
         shim_name: The shim's name, for the message.
+        field: The connection key being parsed, for the message.
 
     Returns:
         The argv, or ``None`` when the shim declares none.
@@ -168,12 +171,12 @@ def _parse_connection_argv(raw: Any, shim_name: str) -> tuple[str, ...] | None:
         return None
     if not isinstance(raw, (list, tuple)) or not raw:
         raise ValueError(
-            f"{shim_name}: connection.acp_argv must be a non-empty list of "
+            f"{shim_name}: connection.{field} must be a non-empty list of "
             f"strings (e.g. ['agy', 'acp'])"
         )
     argv = tuple(str(part) for part in raw)
     if any(not part for part in argv):
-        raise ValueError(f"{shim_name}: connection.acp_argv has an empty element")
+        raise ValueError(f"{shim_name}: connection.{field} has an empty element")
     return argv
 
 
@@ -205,12 +208,15 @@ def _parse_connection_meta(raw: Any, shim_name: str) -> dict[str, Any] | None:
     return dict(raw)
 
 
-def _parse_connection_env_unset(raw: Any, shim_name: str) -> tuple[str, ...]:
-    """Read a shim's ``connection.acp_env_unset`` as a tuple of names.
+def _parse_connection_env_unset(
+    raw: Any, shim_name: str, field: str = "acp_env_unset"
+) -> tuple[str, ...]:
+    """Read a shim's ``connection.<field>`` as a tuple of names.
 
     Args:
         raw: The declared value: a list of non-empty strings, or ``None``.
         shim_name: The shim's name, for the message.
+        field: The connection key being parsed, for the message.
 
     Returns:
         The names to remove, or an empty tuple when none are declared.
@@ -222,13 +228,46 @@ def _parse_connection_env_unset(raw: Any, shim_name: str) -> tuple[str, ...]:
         return ()
     if not isinstance(raw, (list, tuple)) or not raw:
         raise ValueError(
-            f"{shim_name}: connection.acp_env_unset must be a non-empty list "
+            f"{shim_name}: connection.{field} must be a non-empty list "
             f"of environment variable names"
         )
     names = tuple(str(name) for name in raw)
     if any(not name for name in names):
-        raise ValueError(f"{shim_name}: connection.acp_env_unset has an empty element")
+        raise ValueError(f"{shim_name}: connection.{field} has an empty element")
     return names
+
+
+def _parse_connection_env(
+    raw: Any, shim_name: str, field: str = "cli_env"
+) -> dict[str, str] | None:
+    """Read a shim's ``connection.<field>`` as a string mapping.
+
+    The values are handed to a subprocess environment, so a non-string would
+    fail at spawn time on the operator's machine; refusing it here puts the
+    error beside the file that has it.
+
+    Args:
+        raw: The declared value: a mapping of string to string, or ``None``.
+        shim_name: The shim's name, for the message.
+        field: The connection key being parsed, for the message.
+
+    Returns:
+        A copy of the mapping, or ``None`` when the shim declares none.
+
+    Raises:
+        ValueError: The value is not a mapping of strings.
+    """
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"{shim_name}: connection.{field} must be a mapping of "
+            f"environment variable names to values"
+        )
+    env = {str(key): str(value) for key, value in raw.items()}
+    if any(not key for key in env):
+        raise ValueError(f"{shim_name}: connection.{field} has an empty name")
+    return env
 
 
 def _parse_connection_token_command(

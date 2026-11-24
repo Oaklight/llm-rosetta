@@ -388,13 +388,19 @@ def _lane_transports(
             leaves the ACP transport on its default, because a turn has no
             server-side deadline to inherit.
     """
-    from ..transport import AcpTransport
+    from ..transport import AcpTransport, ClaudeCliTransport
 
     if ext.transport is not None:
-        return {"acp": transport}
+        return {"acp": transport, "claude_cli": transport}
     if timeout is None:
-        return {"acp": AcpTransport()}
-    return {"acp": AcpTransport(timeout=timeout)}
+        return {
+            "acp": AcpTransport(),
+            "claude_cli": ClaudeCliTransport(),
+        }
+    return {
+        "acp": AcpTransport(timeout=timeout),
+        "claude_cli": ClaudeCliTransport(timeout=timeout),
+    }
 
 
 async def create_app(

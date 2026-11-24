@@ -7,6 +7,7 @@ sub-packages:
 
 * :mod:`transport.http` — HTTP REST + SSE streaming (current).
 * :mod:`transport.acp` — a local agent CLI over the Agent Client Protocol.
+* :mod:`transport.claude_cli` — the Claude Code CLI as a model client.
 * ``transport.grpc`` — gRPC (future).
 * ``transport.websocket`` — WebSocket (future).
 """
@@ -19,6 +20,7 @@ from ._base import (
     UpstreamTransport,
 )
 from .acp import AcpTransport, AcpTurnError
+from .claude_cli import ClaudeCliTransport
 from .http import HttpTransport
 from .provider_info import (
     TOKEN_PENDING_SENTINEL,
@@ -34,7 +36,7 @@ from .sse_format import SSE_FORMATTERS, format_sse_done
 #: Transport names a provider may declare in ``connection.transport`` (or its
 #: own ``transport`` key).  The gateway builds one instance per name; a name
 #: outside this tuple fails at config load instead of on the first request.
-TRANSPORT_NAMES: tuple[str, ...] = ("http", "acp")
+TRANSPORT_NAMES: tuple[str, ...] = ("http", "acp", "claude_cli")
 
 __all__ = [
     # Transport names a provider may declare
@@ -50,6 +52,8 @@ __all__ = [
     # Local agent CLI over ACP
     "AcpTransport",
     "AcpTurnError",
+    # The Claude Code CLI as a model client
+    "ClaudeCliTransport",
     # Provider config
     "TOKEN_PENDING_SENTINEL",
     "AuthHeaderFn",

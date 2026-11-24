@@ -565,6 +565,38 @@
           "description": "Extra `_meta` the gateway sends on session/new, session/load and session/resume. Vendor-specific session switches live here; e.g. Claude's adapter needs {disableBuiltInTools: true} to stop offering its own tools. Only read when transport is 'acp'.",
           "additionalProperties": true
         },
+        "cli_argv": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "The model-client command a 'claude_cli' lane starts, as argv (e.g. ['claude']). The CLI builds and signs the upstream request itself; the gateway never holds its credential. Only read when transport is 'claude_cli'."
+        },
+        "cli_env": {
+          "type": "object",
+          "description": "Environment overrides for the process a 'claude_cli' lane starts. The gateway layers them over its own environment. Only read when transport is 'claude_cli'.",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "cli_env_unset": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "Environment variable names removed from the inherited environment before cli_env is applied. A vendor uses this for variables that would redirect its CLI away from the signed-in account. Only read when transport is 'claude_cli'.",
+          "uniqueItems": true
+        },
+        "cli_args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "description": "Extra arguments appended after the transport's own flags, so a repeated option takes this value. For example --setting-sources user when the host's apiKeyHelper supplies the credential. Only read when transport is 'claude_cli'."
+        },
         "token_refresh_interval": {
           "type": "integer",
           "minimum": 0,
