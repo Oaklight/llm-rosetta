@@ -475,6 +475,11 @@ deployed to ReadTheDocs.
 
 ### When to update docs worktrees
 
+Docs are release-bound: write or update `docs_en/` and `docs_zh/` only when the
+change is ready to ship and a version is being cut. While a change is
+unfinished or unverified, do not edit the docs worktrees; record the pending
+doc items in the PR or commit instead.
+
 Update `docs_en/` and `docs_zh/` whenever any of the following happens:
 
 - **New public API added or signature changed**: update the relevant API
@@ -491,12 +496,14 @@ Update `docs_en/` and `docs_zh/` whenever any of the following happens:
 
 ### Cross-language consistency (enforced)
 
-**Both language versions must be updated in the same task/agent run.** Never
-update only one language and leave the other for later. The workflow is:
+**Both language versions must land together whenever the docs are written.**
+Never update only one language and leave the other for later. Docs are written
+at release time, so both languages ship with the release; the code task itself
+is done without them. The workflow is:
 
 1. Make changes to `docs_en/` first (English is the source of truth).
 2. In the same task, apply equivalent changes to `docs_zh/` before committing.
-3. Commit and push both worktrees before the task is considered done.
+3. Commit and push both worktrees together.
 
 Splitting the two languages across separate agents or separate sessions is not
 allowed — it leads to drift and missed pages.
@@ -542,8 +549,10 @@ gate — missing any item means the converter is not fully integrated.
    stream flag injection, preflight body, and usage extraction.
 7. **CLAUDE.md** — update the converter table in this file.
 8. **Documentation** — update `docs_en/` and `docs_zh/` (both in the
-   same task): changelog, converters guide, API reference.  Push both
-   worktrees.
+   same task) when the release that ships the converter is cut:
+   changelog, converters guide, API reference.  While the converter is
+   still in development, record the pending doc items in the PR instead
+   of editing the docs worktrees.
 9. **CI smoke test** — if applicable, add an import check in
    `.github/workflows/ci.yml`.
 10. **`test_public_api.py`** — add the new class to `EXPECTED_EXPORTS`.
@@ -640,8 +649,10 @@ declarative — steps 1–3 are the core work, the rest is wiring.
 7. **CLAUDE.md** — update the converter/model-type tables in this
    file.
 8. **Documentation** — update `docs_en/` and `docs_zh/` (both in
-   the same task): changelog, model types guide.  Push both
-   worktrees.
+   the same task) when the release that ships the model type is cut:
+   changelog, model types guide.  While the model type is still in
+   development, record the pending doc items in the PR instead of
+   editing the docs worktrees.
 
 ### What you do NOT need to change
 
