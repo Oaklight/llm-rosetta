@@ -762,8 +762,9 @@ class JobStore:
                 else:
                     new.append((name, start, previous))
             data["end"] = end
-            if isinstance(data.get("_hide"), list):
-                data["_hide"] = [list(item) for item in new]
+            # A pre-`_hide` job needs the window recorded here, or a later
+            # failure would leave Retry with nothing to re-hide.
+            data["_hide"] = [list(item) for item in new]
             await conn.execute(
                 "UPDATE jobs SET payload = ? WHERE id = ?",
                 (json.dumps(data), job_id),
@@ -780,6 +781,7 @@ class JobStore:
         *,
         status: str | None = None,
         source: str | None = None,
+        tables: Sequence[str] | None = None,
     ) -> str | None:
         """The newest matching job's completion time, or ``None``.
 
@@ -789,6 +791,12 @@ class JobStore:
         interval, so a wake a few milliseconds early cannot double the gap.
         *status* and *source* narrow the question — a failed or cancelled pass,
         or a one-hour manual delete, must not count as the weekly sweep.
+
+        *tables* matches the set a cleanup's payload says it covered.  The
+        periodic task can queue two passes with different ages, so one
+        success must not answer for the other: the caller asks per table set.
+        A superset counts, because a pass that cleaned every table did the
+        work of both.
 
         A finished job reports ``finished_at``; an unfinished one falls back to
         ``created_at``.  Anchoring on completion means a cleanup that takes
@@ -804,15 +812,21 @@ class JobStore:
             f"FROM jobs WHERE {where}",
             params,
         )
+        wanted = frozenset(tables) if tables is not None else None
+        need_payload = source is not None or wanted is not None
         newest: str | None = None
         for at, payload in rows:
-            if source is not None:
+            if need_payload:
                 try:
                     data = json.loads(payload) if payload else {}
                 except ValueError:
                     continue
-                if data.get("source") != source:
+                if source is not None and data.get("source") != source:
                     continue
+                if wanted is not None:
+                    covered = data.get("tables")
+                    if not isinstance(covered, list) or not wanted <= set(covered):
+                        continue
             if newest is None or at > newest:
                 newest = at
         return newest

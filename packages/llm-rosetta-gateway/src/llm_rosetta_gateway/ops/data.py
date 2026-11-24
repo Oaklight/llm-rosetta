@@ -28,24 +28,6 @@ from llm_rosetta_gateway.observability.ops_log import (
 from .base import OpsBase, OpsContext
 
 
-def _request_rows_deleted(result: Any) -> int:
-    """Rows this operation removed from request_log, whatever it names them.
-
-    A single-table clear names its count ``deleted``; every multi-table shape
-    carries a per-table key, and the explicit ``request_log_deleted`` wins over
-    a sum that also counts ops-log or error-dump rows.  A cleanup that found
-    nothing old enough must not set the rebuild flag: the periodic cleanup runs
-    on a schedule, and a flag per empty pass turns an idle gateway into a
-    rebuild job every time the timer fires.
-    """
-    if not isinstance(result, dict):
-        return 0
-    for key in ("request_log_deleted", "request_log_trimmed", "deleted"):
-        if key in result:
-            return int(result.get(key) or 0)
-    return 0
-
-
 class _DataMutationMixin:
     """Shared counter-rebuild and batched-delete logic for data operations."""
 
@@ -85,6 +67,26 @@ class _DataMutationMixin:
             return
         await m.rebuild_from_stream(p.iter_log_rows_for_rebuild())
         await p.save_metrics(m.export_counters())
+
+    def _deleted_request_rows(self: Any, result: Any) -> int:
+        """Request-log rows removed, including a job's partial count on error.
+
+        ``result`` is ``None`` when the operation raised after a batch already
+        committed; the job context still knows what it deleted.  Without this
+        a cancelled or failed clear would leave the counters over-counting
+        with no later job to repair them.
+
+        A completed result always carries the request-log count, so it wins:
+        ``job.deleted`` spans every table, and falling back to it after a
+        successful multi-table pass would flag a rebuild for ops-log rows.
+        """
+        if isinstance(result, dict):
+            for key in ("request_log_deleted", "request_log_trimmed", "deleted"):
+                if key in result:
+                    return int(result.get(key) or 0)
+        if self._job is not None:
+            return int(getattr(self._job, "deleted", 0))
+        return 0
 
 
 class OpsClearData(_DataMutationMixin, OpsBase):
@@ -140,11 +142,7 @@ class OpsClearData(_DataMutationMixin, OpsBase):
 
     async def _record(self, result: Any, *, error: BaseException | None = None) -> None:
         await super()._record(result, error=error)
-        if (
-            error is None
-            and self._table == "request_log"
-            and _request_rows_deleted(result) > 0
-        ):
+        if self._table == "request_log" and self._deleted_request_rows(result) > 0:
             await self._rebuild_counters()
 
     def _message(self, result: Any) -> str:
@@ -279,11 +277,7 @@ class OpsCleanupData(_DataMutationMixin, OpsBase):
 
     async def _record(self, result: Any, *, error: BaseException | None = None) -> None:
         await super()._record(result, error=error)
-        if (
-            error is None
-            and "request_log" in self._tables
-            and _request_rows_deleted(result) > 0
-        ):
+        if "request_log" in self._tables and self._deleted_request_rows(result) > 0:
             await self._rebuild_counters()
 
     def _message(self, result: Any) -> str:
@@ -335,7 +329,7 @@ class OpsTrimData(_DataMutationMixin, OpsBase):
 
     async def _record(self, result: Any, *, error: BaseException | None = None) -> None:
         await super()._record(result, error=error)
-        if error is None and _request_rows_deleted(result) > 0:
+        if self._deleted_request_rows(result) > 0:
             await self._rebuild_counters()
 
     def _message(self, result: Any) -> str:
@@ -524,9 +518,10 @@ class OpsPeriodicCleanup(_DataMutationMixin, OpsBase):
 
     async def _record(self, result: Any, *, error: BaseException | None = None) -> None:
         total = (result or {}).get("total", 0)
-        if total > 0 or error is not None:
+        deleted = self._deleted_request_rows(result)
+        if total > 0 or error is not None or deleted > 0:
             await super()._record(result, error=error)
-        if error is None and _request_rows_deleted(result) > 0:
+        if deleted > 0:
             await self._rebuild_counters()
 
     def _message(self, result: Any) -> str:
