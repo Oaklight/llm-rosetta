@@ -179,6 +179,60 @@ FAKE_CLI = textwrap.dedent(
         send(RESULT)
         sys.exit(0)
 
+    if MODE == "relay-refusal":
+        # The CLI reports a refused upstream call as prose in one result
+        # event; only the relay saw the status.
+        base = os.environ.get("ANTHROPIC_BASE_URL", "")
+        payload = json.dumps({
+            "model": "claude-test",
+            "messages": [frame["message"] for frame in frames],
+        }).encode()
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        request = urllib.request.Request(
+            base + "/v1/messages",
+            data=payload,
+            headers={"content-type": "application/json",
+                     "authorization": "Bearer test-token",
+                     "anthropic-version": "2023-06-01"},
+        )
+        try:
+            with opener.open(request, timeout=10) as response:
+                status, text = response.status, response.read().decode()
+        except urllib.error.HTTPError as exc:
+            status, text = exc.code, exc.read().decode()
+        note("relay", statuses=[status])
+        try:
+            message = json.loads(text)["error"]["message"]
+        except (ValueError, KeyError, TypeError):
+            message = text or "refused"
+        send({"type": "result", "subtype": "error_during_execution",
+              "is_error": True, "num_turns": 1,
+              "result": message, "errors": [message]})
+        sys.exit(0)
+
+    if MODE == "relay-hang":
+        # A refused call, then the CLI backs off instead of reporting it.
+        base = os.environ.get("ANTHROPIC_BASE_URL", "")
+        payload = json.dumps({
+            "model": "claude-test",
+            "messages": [frame["message"] for frame in frames],
+        }).encode()
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        request = urllib.request.Request(
+            base + "/v1/messages",
+            data=payload,
+            headers={"content-type": "application/json",
+                     "authorization": "Bearer test-token",
+                     "anthropic-version": "2023-06-01"},
+        )
+        try:
+            with opener.open(request, timeout=10) as response:
+                response.read()
+        except urllib.error.HTTPError as exc:
+            exc.read()
+        time.sleep(60)
+        sys.exit(0)
+
     if MODE in ("stream", "chunks"):
         send({"type": "stream_event", "event": {
             "type": "message_start",
@@ -690,6 +744,99 @@ class TestRelay:
     def test_a_hosted_upstream_must_be_a_url(self):
         with pytest.raises(RelayError, match="not a URL"):
             Relay("api.example.com")
+
+
+class TestUpstreamRefusal:
+    """A refused upstream keeps its status; the CLI only reports prose."""
+
+    @pytest.mark.parametrize(
+        ("status", "error_type"),
+        [
+            (401, "authentication_error"),
+            (402, "billing_error"),
+            (429, "rate_limit_error"),
+            (503, "overloaded_error"),
+            (529, "overloaded_error"),
+        ],
+    )
+    async def test_the_upstream_status_reaches_the_caller(
+        self, monkeypatch, tmp_path, status, error_type
+    ):
+        monkeypatch.setenv("FAKE_CLI_MODE", "relay-refusal")
+        body = json.dumps(
+            {"type": "error", "error": {"type": error_type, "message": "refused"}}
+        ).encode()
+        upstream = FakeUpstream([(status, body)])
+        url = await upstream.start()
+        transport = ClaudeCliTransport(timeout=30)
+        try:
+            provider = _provider(_write_cli(tmp_path), upstream=url)
+            response = await transport.send(provider, "", _turn())
+        finally:
+            await transport.close()
+            await upstream.close()
+
+        assert response.status_code == status
+        assert response.body is not None
+        assert response.body["error"]["type"] == error_type
+        assert "refused" in response.error_text
+
+    async def test_a_cli_failure_without_a_status_still_raises(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("FAKE_CLI_MODE", "error")
+        transport = ClaudeCliTransport(timeout=30)
+        try:
+            provider = _provider(_write_cli(tmp_path))
+            with pytest.raises(UpstreamConnectionError):
+                await transport.send(provider, "", _turn())
+        finally:
+            await transport.close()
+
+    async def test_a_refused_probe_is_not_ok(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("FAKE_CLI_MODE", "relay-refusal")
+        body = json.dumps(
+            {
+                "type": "error",
+                "error": {"type": "billing_error", "message": "credit is low"},
+            }
+        ).encode()
+        upstream = FakeUpstream([(402, body)])
+        url = await upstream.start()
+        transport = ClaudeCliTransport(timeout=30)
+        try:
+            provider = _provider(_write_cli(tmp_path), upstream=url)
+            result = await transport.probe_provider(provider)
+        finally:
+            await transport.close()
+            await upstream.close()
+
+        assert result["ok"] is False
+        assert result["reachable"] is True
+        assert "credit is low" in result["error"]
+
+    async def test_a_cli_that_backs_off_does_not_hold_the_turn(
+        self, monkeypatch, tmp_path
+    ):
+        """A retry cannot succeed, so the turn ends at the refusal, not later."""
+        monkeypatch.setenv("FAKE_CLI_MODE", "relay-hang")
+        body = json.dumps(
+            {"type": "error", "error": {"type": "rate_limit_error", "message": "slow"}}
+        ).encode()
+        upstream = FakeUpstream([(429, body)])
+        url = await upstream.start()
+        transport = ClaudeCliTransport(timeout=120)
+        try:
+            provider = _provider(_write_cli(tmp_path), upstream=url)
+            started = time.monotonic()
+            response = await transport.send(provider, "", _turn())
+            elapsed = time.monotonic() - started
+        finally:
+            await transport.close()
+            await upstream.close()
+
+        assert response.status_code == 429
+        assert elapsed < 10
 
 
 class TestTurn:
