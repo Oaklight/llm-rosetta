@@ -676,6 +676,11 @@ async def handle_non_streaming(  # noqa: C901
         break
 
     assert resp is not None
+    if resp.meta:
+        # What the transport alone knows (a CLI lane's native usage, cost and
+        # context window).  Merged before the error branch so a refused turn
+        # still records what the lane saw.
+        profile.update(resp.meta)
     if not resp.is_error:
         # A success clears the lane's 429 count and strike ladder, so one
         # transient refusal does not accumulate across hours.

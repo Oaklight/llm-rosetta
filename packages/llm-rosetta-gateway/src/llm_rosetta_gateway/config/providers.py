@@ -997,6 +997,35 @@ def _cli_upstream(
     return shim.connection.cli_upstream if shim is not None else None
 
 
+def _cli_processes(cfg: dict[str, Any], provider_key: str) -> int:
+    """How many CLI processes one provider may run at once.
+
+    A ``claude_cli`` turn owns a whole process for its lifetime (~250 MB), so
+    the cap is a fact about the deployment's memory rather than about the
+    vendor.  Requests over the cap wait for a slot instead of failing; the
+    default is one process, the conservative choice for a subscription lane.
+
+    Args:
+        cfg: The provider's own config block.
+        provider_key: The config key, used in the error message.
+
+    Returns:
+        The positive cap; ``1`` when the entry declares none.
+
+    Raises:
+        ValueError: ``cli_processes`` is not an integer of at least one.
+    """
+    declared = cfg.get("cli_processes")
+    if declared is None:
+        return 1
+    if not isinstance(declared, int) or isinstance(declared, bool) or declared < 1:
+        raise ValueError(
+            f"Provider '{provider_key}': cli_processes must be an integer >= 1, "
+            f"got {declared!r}"
+        )
+    return declared
+
+
 def _resolve_acp_harden(cfg: dict[str, Any], provider_key: str) -> bool | None:
     """The entry's explicit hardening choice, or ``None`` for "by name".
 
@@ -1659,6 +1688,7 @@ def build_provider_info(
     cli_env = _cli_env(cfg, shim, provider_key)
     cli_env_unset = _cli_env_unset(cfg, shim, provider_key)
     cli_upstream = _cli_upstream(cfg, shim, provider_key)
+    cli_processes = _cli_processes(cfg, provider_key)
 
     return ProviderInfo(
         name=provider_type,
@@ -1725,6 +1755,7 @@ def build_provider_info(
         cli_env_unset=cli_env_unset,
         cli_args=cli_args,
         cli_upstream=cli_upstream,
+        cli_processes=cli_processes,
         acp_state_dir=acp_home,
         managed_acp_state_dir=managed_acp_home,
         managed_auth_state_dir=managed_auth_home,

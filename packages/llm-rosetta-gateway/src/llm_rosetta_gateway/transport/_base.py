@@ -29,11 +29,16 @@ class UpstreamResponse:
         status_code: HTTP status code (or equivalent for other transports).
         body: Parsed JSON response body, or ``None`` on error.
         raw_content: Raw response bytes for error passthrough.
+        meta: Facts the transport alone knows, for the request-log profile.
+            A lane that reports its own accounting (``claude_cli``'s native
+            usage, cost and context window) puts it here; an HTTP transport
+            leaves it empty.
     """
 
     status_code: int
     body: dict[str, Any] | None
     raw_content: bytes
+    meta: dict[str, Any] | None = None
 
     @property
     def is_error(self) -> bool:

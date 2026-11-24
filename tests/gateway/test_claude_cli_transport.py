@@ -51,6 +51,8 @@ FAKE_CLI = textwrap.dedent(
         with open(LOG, "a", encoding="utf-8") as handle:
             handle.write(json.dumps({"kind": kind, **fields}) + "\\n")
 
+    note("boot", pid=os.getpid())
+
     def send(payload):
         sys.stdout.write(json.dumps(payload) + "\\n")
         sys.stdout.flush()
@@ -124,6 +126,18 @@ FAKE_CLI = textwrap.dedent(
         "num_turns": 1, "stop_reason": "end_turn",
         "usage": {"input_tokens": 11, "output_tokens": 3},
         "result": "Hello!",
+        "total_cost_usd": 0.0123,
+        "modelUsage": {
+            "claude-test": {
+                "inputTokens": 11,
+                "outputTokens": 3,
+                "cacheReadInputTokens": 0,
+                "cacheCreationInputTokens": 0,
+                "contextWindow": 200000,
+                "maxOutputTokens": 32000,
+                "costUSD": 0.0123,
+            }
+        },
     }
 
     if MODE == "hang":
@@ -826,6 +840,96 @@ class TestTurn:
         assert response.body["stop_reason"] == "end_turn"
         assert response.body["usage"]["input_tokens"] == 11
         assert response.body["usage"]["output_tokens"] == 3
+        assert response.meta is not None
+        facts = response.meta["claude_cli"]
+        assert facts["usage"]["output_tokens"] == 3
+        assert facts["total_cost_usd"] == 0.0123
+        assert facts["model_usage"]["claude-test"]["contextWindow"] == 200000
+
+    async def test_the_stream_reports_the_lane_accounting(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("FAKE_CLI_MODE", "stream")
+        monkeypatch.setenv("FAKE_CLI_LOG", str(tmp_path / "cli.jsonl"))
+        transport = ClaudeCliTransport(timeout=30)
+
+        stream = await transport.send_streaming(
+            _provider(_write_cli(tmp_path)), "", _turn()
+        )
+        try:
+            [event async for event in stream]
+            facts = stream.lane_profile()["claude_cli"]
+        finally:
+            await stream.close()
+            await transport.close()
+
+        assert facts["usage"] == {"input_tokens": 11, "output_tokens": 3}
+        assert facts["total_cost_usd"] == 0.0123
+        assert facts["model_usage"]["claude-test"]["maxOutputTokens"] == 32000
+
+    async def test_a_turn_waits_for_the_providers_process_slot(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("FAKE_CLI_MODE", "stream")
+        log = tmp_path / "cli.jsonl"
+        monkeypatch.setenv("FAKE_CLI_LOG", str(log))
+        transport = ClaudeCliTransport(timeout=30)
+        provider = _provider(_write_cli(tmp_path))
+
+        first = await transport.send_streaming(provider, "", _turn())
+        second_task = asyncio.create_task(
+            transport.send_streaming(provider, "", _turn())
+        )
+        second = None
+        try:
+            await asyncio.sleep(0.4)
+            boots = [entry for entry in _log(log) if entry["kind"] == "boot"]
+            assert len(boots) == 1
+            await first.close()
+            second = await second_task
+            await asyncio.sleep(0.3)
+            boots = [entry for entry in _log(log) if entry["kind"] == "boot"]
+            assert len(boots) == 2
+        finally:
+            if not second_task.done():
+                second_task.cancel()
+                try:
+                    await second_task
+                except asyncio.CancelledError:
+                    pass
+            if second is not None:
+                await second.close()
+            await first.close()
+            await transport.close()
+
+    async def test_two_providers_do_not_share_a_slot(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("FAKE_CLI_MODE", "stream")
+        log = tmp_path / "cli.jsonl"
+        monkeypatch.setenv("FAKE_CLI_LOG", str(log))
+        transport = ClaudeCliTransport(timeout=30)
+        first_provider = _provider(_write_cli(tmp_path))
+        second_provider = _provider(_write_cli(tmp_path))
+        second_provider.config_name = "claude-other"
+
+        first = await transport.send_streaming(first_provider, "", _turn())
+        second = await transport.send_streaming(second_provider, "", _turn())
+        try:
+            await asyncio.sleep(0.4)
+            boots = [entry for entry in _log(log) if entry["kind"] == "boot"]
+            assert len(boots) == 2
+        finally:
+            await first.close()
+            await second.close()
+            await transport.close()
+
+    async def test_a_failed_start_releases_the_slot(self, tmp_path):
+        transport = ClaudeCliTransport(timeout=5)
+        provider = _provider((str(tmp_path / "does-not-exist"),))
+
+        with pytest.raises(UpstreamConnectionError, match="cannot start"):
+            await transport.send_streaming(provider, "", _turn())
+        with pytest.raises(UpstreamConnectionError, match="cannot start"):
+            await asyncio.wait_for(
+                transport.send_streaming(provider, "", _turn()), timeout=5
+            )
 
     async def test_an_error_result_raises(self, monkeypatch, tmp_path):
         monkeypatch.setenv("FAKE_CLI_MODE", "error")
