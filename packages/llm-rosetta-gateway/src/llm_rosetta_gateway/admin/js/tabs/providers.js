@@ -3680,6 +3680,11 @@ async function showProviderQuota(name) {
         const cls = w.exhausted ? 'conn-fail' : 'conn-ok';
         lines.push(`<div class="conn-row"><span class="dot ${cls}"></span><span class="conn-label">${esc(head)} · ${esc(w.name)}</span><span class="conn-detail">${esc(pct + reset)}</span></div>`);
       }
+      if (reading.read_at) {
+        // A reading kept beside the profile survives a restart; say when it
+        // was taken so an old window cannot pass for a live one.
+        lines.push(row({ tone: 'ok', text: t('quota.readAt', {time: new Date(reading.read_at).toLocaleString()}) }));
+      }
       if (entry.demotion) {
         lines.push(`<div class="conn-row"><span class="dot conn-warn"></span><span class="conn-detail">${esc(t('quota.demoted', {until: new Date(entry.demotion.until).toLocaleString(), reason: entry.demotion.reason}))}</span></div>`);
       }

@@ -8,6 +8,7 @@ place the reading is stored, and the payload the Quota card reads.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import sys
 import time
@@ -176,6 +177,187 @@ def test_two_entries_with_different_profiles_do_not_share_a_reading(tmp_path):
     assert first_reading is not None
     assert first_reading.to_dict()["windows"]
     assert lanes_reading(second) is None
+
+
+def test_a_reading_survives_a_restart(tmp_path):
+    """The last good reading is kept beside the profile, not only in memory."""
+    provider = _provider(tmp_path)
+    os.makedirs(provider.acp_state_dir)
+    assert record_reading(UPDATE, provider) is True
+    before = lanes_reading(provider)
+
+    clear_lane_readings()
+
+    reading = lanes_reading(provider)
+    assert reading is not None
+    assert [window.name for window in reading.windows] == ["5 hours", "7 days"]
+    assert reading.probe == ACP_QUOTA_PROBE
+    assert reading.credential == lane_credential(provider)
+    assert before is not None and reading.read_at == before.read_at
+    assert os.path.isfile(
+        os.path.join(provider.acp_state_dir, ".llm-rosetta-quota.json")
+    )
+    with open(
+        os.path.join(provider.acp_state_dir, ".llm-rosetta-quota.json"),
+        encoding="utf-8",
+    ) as handle:
+        stored = json.load(handle)
+    # The file is the profile's; its path already names the credential.
+    assert "credential" not in stored["reading"]
+
+
+def test_an_error_reading_is_not_kept(tmp_path):
+    provider = _provider(tmp_path)
+    os.makedirs(provider.acp_state_dir)
+    store_reading(
+        provider,
+        LaneReading(
+            probe="local_test",
+            credential=lane_credential(provider),
+            status="error",
+            error="not signed in",
+        ),
+    )
+
+    clear_lane_readings()
+
+    assert lanes_reading(provider) is None
+    assert not os.path.exists(
+        os.path.join(provider.acp_state_dir, ".llm-rosetta-quota.json")
+    )
+
+
+def test_a_profile_without_a_directory_keeps_the_reading_in_memory(tmp_path):
+    provider = _provider(tmp_path)
+
+    assert record_reading(UPDATE, provider) is True
+    clear_lane_readings()
+
+    assert lanes_reading(provider) is None
+
+
+def test_a_reading_appears_when_the_profile_directory_arrives(tmp_path):
+    """A first miss is not remembered: a login or a late mount creates it."""
+    provider = _provider(tmp_path)
+    assert lanes_reading(provider) is None
+
+    _write_raw(
+        provider,
+        {
+            "schema": 1,
+            "reading": {
+                "read_at": "2025-01-01T00:00:00Z",
+                "windows": [{"name": "5 hours", "used_percent": 1.0}],
+            },
+        },
+    )
+
+    reading = lanes_reading(provider)
+    assert reading is not None
+    assert [window.name for window in reading.windows] == ["5 hours"]
+
+
+def test_a_kept_reading_without_a_timestamp_takes_the_file_age(tmp_path):
+    """A missing ``read_at`` must not become "now" and look freshly taken."""
+    provider = _provider(tmp_path)
+    os.makedirs(provider.acp_state_dir)
+    path = os.path.join(provider.acp_state_dir, ".llm-rosetta-quota.json")
+    payload = {
+        "schema": 1,
+        "reading": {
+            "probe": ACP_QUOTA_PROBE,
+            "windows": [{"name": "5 hours", "used_percent": 1.0}],
+        },
+    }
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle)
+    stamp = time.time() - 3600
+    os.utime(path, (stamp, stamp))
+
+    reading = lanes_reading(provider)
+
+    assert reading is not None
+    written = datetime.fromtimestamp(stamp, timezone.utc)
+    assert abs((reading.read_at - written).total_seconds()) < 2
+
+
+def _write_raw(provider, payload):
+    os.makedirs(provider.acp_state_dir, exist_ok=True)
+    path = os.path.join(provider.acp_state_dir, ".llm-rosetta-quota.json")
+    with open(path, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle)
+    return path
+
+
+def test_a_future_schema_is_refused(tmp_path):
+    """A later writer's file is not read as this release's reading."""
+    provider = _provider(tmp_path)
+    _write_raw(
+        provider,
+        {"schema": 2, "reading": {"windows": [{"name": "from the future"}]}},
+    )
+
+    assert lanes_reading(provider) is None
+
+
+def test_a_file_that_claims_an_error_is_not_a_reading(tmp_path):
+    """Only a good reading is ever written, so a non-ok status is refused."""
+    provider = _provider(tmp_path)
+    _write_raw(
+        provider,
+        {
+            "schema": 1,
+            "reading": {
+                "status": "error",
+                "read_at": "2025-01-01T00:00:00Z",
+                "windows": [{"name": "5 hours"}],
+            },
+        },
+    )
+
+    assert lanes_reading(provider) is None
+
+
+def test_an_infinite_share_is_dropped(tmp_path):
+    provider = _provider(tmp_path)
+    _write_raw(
+        provider,
+        {
+            "schema": 1,
+            "reading": {
+                "read_at": "2025-01-01T00:00:00Z",
+                "windows": [{"name": "5 hours", "used_percent": float("inf")}],
+            },
+        },
+    )
+
+    reading = lanes_reading(provider)
+
+    assert reading is not None
+    assert reading.windows[0].used_percent is None
+
+
+def test_a_malformed_window_is_skipped(tmp_path):
+    """One bad window does not raise out of the reader or hide its sibling."""
+    provider = _provider(tmp_path)
+    _write_raw(
+        provider,
+        {
+            "schema": 1,
+            "reading": {
+                "read_at": "2025-01-01T00:00:00Z",
+                "windows": [
+                    {"used_percent": 5},
+                    {"name": "7 days", "used_percent": 2},
+                ],
+            },
+        },
+    )
+
+    reading = lanes_reading(provider)
+
+    assert reading is not None
+    assert [window.name for window in reading.windows] == ["7 days"]
 
 
 class _LocalProbe:
