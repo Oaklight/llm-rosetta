@@ -625,7 +625,7 @@ manifest 自称 `contrib` 的已声明源（即镜像）仍能提供该提供方
 - 已安装版本的 `requires` 是否与当前核心匹配；
 - 成熟度及其达到日期、最近一次一致性测试结果，以及 `promoted_to`（如有）；
 - 标签，以及该版本注册的 shim，每个都标明是否已安装；
-- 选中该服务方的 `install` 条目、选中的服务方被跳过的原因（*not in the manifest*、*core provides …*、*promoted to …*），以及先提供同一服务方的源。
+- 选中该服务方的 `install` 条目、选中的服务方被跳过的原因（*not in the manifest*、*已提供（由核心或已安装插件）…*、*promoted to …*），以及先提供同一服务方的源。
 
 **安装**把 `<source>:<vendor>` 加入 `shims.install` 并重载，从而安装该服务方。如果声明的 `shims.sources` 没有列出该源，也会把该源写进去。没有 `sources` 键的配置会连同默认源一起写出，这样保存后的文件列出它读取的每个源，不依赖内置的默认列表。
 
