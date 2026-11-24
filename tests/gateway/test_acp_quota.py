@@ -266,6 +266,19 @@ def _wait_for_exit(pid, timeout=10.0):
     raise AssertionError(f"process {pid} was still running after {timeout:g}s")
 
 
+def _orphan_script(tmp_path, pid_file):
+    """A CLI that leaves a helper holding stdout and exits at once."""
+    path = tmp_path / "orphan.py"
+    path.write_text(
+        "import subprocess, sys\n"
+        "p = subprocess.Popen([sys.executable, '-c', "
+        "'import time; time.sleep(60)'])\n"
+        f"open({str(pid_file)!r}, 'w').write(str(p.pid))\n",
+        encoding="utf-8",
+    )
+    return path
+
+
 def test_a_local_command_is_run_with_the_lane_profile(tmp_path):
     script = _script(tmp_path, {})
     provider = _local_provider(tmp_path, script, EXTRA="{acp_home}")
@@ -401,6 +414,27 @@ def test_a_local_command_that_leaves_a_helper_is_bounded(tmp_path):
     _wait_for_exit(int(pid_file.read_text()))
 
 
+def test_a_helper_that_outlives_its_parent_is_still_killed(tmp_path):
+    """The group id is captured at spawn, so a reaped child does not save it."""
+    pid_file = tmp_path / "helper.pid"
+    provider = _local_provider(tmp_path, _orphan_script(tmp_path, pid_file))
+
+    reading = asyncio.run(
+        refresh_local(
+            provider,
+            provider.quota_probe_impl,
+            provider.quota_local_argv,
+            provider.quota_local_env,
+            timeout=0.5,
+        )
+    )
+
+    assert reading.error is not None
+    assert "did not finish" in reading.error
+    assert pid_file.exists()
+    _wait_for_exit(int(pid_file.read_text()))
+
+
 def test_cancelling_a_local_read_kills_the_command(tmp_path):
     pid_file = tmp_path / "helper.pid"
     provider = _local_provider(tmp_path, _child_script(tmp_path, pid_file))
@@ -444,6 +478,19 @@ def test_concurrent_reads_run_the_local_command_once(tmp_path):
     assert marker.read_text().count("run") == 1
     assert first["status"] == "ok"
     assert second["status"] == "ok"
+
+
+def test_a_keyless_http_lane_with_a_local_command_can_report(tmp_path):
+    """A declared command makes even an HTTP lane its own quota source."""
+    provider = _local_provider(tmp_path, _script(tmp_path, {}))
+    provider.transport = "http"
+    config = SimpleNamespace(providers={"local": provider})
+
+    payload = asyncio.run(read_provider_quota(config, "local"))
+
+    assert payload["supported"] is True
+    assert payload["status"] == "ok"
+    assert payload["credentials"][0]["reading"]["windows"]
 
 
 def test_a_failed_local_read_keeps_the_agents_reading(tmp_path):
