@@ -925,13 +925,19 @@ function _renderExchangePanel(data, ui) {
     }
     if (refreshHint) {
       // The expiry is not a deadline the operator must act on: say so, or the
-      // row reads like a manual-renewal chore.
+      // row reads like a manual-renewal chore.  A vendor-managed sign-in has
+      // no gateway token at all, so neither sentence about renewal is true.
       refreshHint.hidden = false;
-      refreshHint.textContent = data.refresher_enabled === false
-        ? _credentialText('label.credentialRefresherOff',
-          'Automatic refresh is off — this token will not renew.')
-        : _credentialText('prov.autoRefreshOn',
-          'The gateway renews this token automatically before it expires.');
+      if (data.vendor_managed) {
+        refreshHint.textContent = _credentialText('prov.vendorManagedHint',
+          'The vendor CLI owns this sign-in; the gateway holds no token.');
+      } else {
+        refreshHint.textContent = data.refresher_enabled === false
+          ? _credentialText('label.credentialRefresherOff',
+            'Automatic refresh is off — this token will not renew.')
+          : _credentialText('prov.autoRefreshOn',
+            'The gateway renews this token automatically before it expires.');
+      }
     }
   }
   const shim = _credentialShim() || {};
@@ -1057,10 +1063,14 @@ function _renderStatusCard(data, ui) {
   }
 
   const st = data.token_status || {};
+  const vendorManaged = data.vendor_managed === true;
   // A usable token and a refresher that will replace it are two facts; saying
   // "connected" alone would imply the token renews itself.  With no token at
-  // all, "will not renew" is noise: there is nothing to renew.
-  const hasToken = data.state === 'connected' || data.state === 'failing';
+  // all, "will not renew" is noise: there is nothing to renew.  A
+  // vendor-managed lane has no gateway token at all, so the token log below
+  // must not read like a mint that has not happened yet.
+  const hasToken = !vendorManaged
+    && (data.state === 'connected' || data.state === 'failing');
   // The exchange panel's hint sits beside the expiry and says this same
   // sentence; the operator gets one warning, not two.
   const hintSaysIt = ui === 'exchange' && data.state === 'connected';
@@ -1068,7 +1078,13 @@ function _renderStatusCard(data, ui) {
     line(_credentialText('label.credentialRefresherOff',
       'Automatic refresh is off — this token will not renew.'), true);
   }
-  if (st.last_refresh) {
+  if (vendorManaged) {
+    // The token log belongs to the gateway's ring, which this lane never
+    // fills.  "No token yet" would read as a mint still pending; the lane
+    // needs a sign-in in the vendor CLI, not a token here.
+    line(_credentialText('prov.vendorManagedStatus',
+      'The vendor CLI manages this sign-in; the gateway stores no token.'), true);
+  } else if (st.last_refresh) {
     line(_credentialText('label.credentialLastRefresh', 'Last token') + ' '
       + new Date(st.last_refresh).toLocaleString(), true);
   } else if (!st.last_error) {
@@ -1102,10 +1118,14 @@ function _renderStatusCard(data, ui) {
   }
   const saveFirst = _credentialText('prov.saveFirst',
     'Save this provider first — refresh and test run the saved command.');
-  _appendAction(actions, {
-    label: _credentialText('btn.refreshCredential', 'Refresh now'),
-    fn: 'refreshProviderCredential()', disabled: stale, title: saveFirst,
-  });
+  // Refresh mints into the gateway's ring, which a vendor-managed lane never
+  // fills; the endpoint answers 409.  Test still drives the lane itself.
+  if (!vendorManaged) {
+    _appendAction(actions, {
+      label: _credentialText('btn.refreshCredential', 'Refresh now'),
+      fn: 'refreshProviderCredential()', disabled: stale, title: saveFirst,
+    });
+  }
   _appendAction(actions, {
     label: _credentialText('btn.testCredential', 'Test credential'),
     fn: 'testProviderCredential()', disabled: stale, title: saveFirst,

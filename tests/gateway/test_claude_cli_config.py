@@ -88,6 +88,13 @@ class TestTheEnvironment:
             "A": "1",
         }
 
+    def test_the_lane_home_is_expanded(self):
+        shim = _shim(cli_env={"CLAUDE_CONFIG_DIR": "{acp_home}/claude"})
+
+        assert _cli_env({}, shim, "claude", "/data/acp/claude") == {
+            "CLAUDE_CONFIG_DIR": "/data/acp/claude/claude"
+        }
+
     def test_neither_side_declares_one(self):
         assert _cli_env({}, _shim(cli_env=None), "claude") is None
         assert _cli_env({}, None, "claude") is None

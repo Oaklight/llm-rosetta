@@ -407,6 +407,57 @@ class TestTheBuilderWiresTheExchange:
         assert seen["LLM_ROSETTA_ACP_HOME"] == info.acp_state_dir
         assert seen["CLAUDE_CONFIG_DIR"] == f"{info.acp_state_dir}/claude"
 
+    def test_a_cli_lane_wires_its_own_login_profile_into_the_exchange(self, tmp_path):
+        """The direct CLI lane must not read the gateway process's ~/.claude."""
+        from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+        from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
+
+        seen: dict[str, str] = {}
+
+        class Exchange:
+            kind = "vendor-cli"
+            consumes_key = False
+            vendor_managed = True
+
+            def needs_interactive_setup(self, ctx):
+                return True
+
+            async def credential(self, ctx):
+                raise AssertionError("a vendor-managed exchange mints nothing")
+
+            def account_id(self, ctx):
+                seen.update(ctx.config.get("acp_env") or {})
+                return None
+
+        name = "__test_cli_home_exchange__"
+        register_shim(
+            ProviderShim(
+                name=name,
+                format="messages",
+                connection=ConnectionConfig(
+                    base_url="http://claude.local",
+                    transport="claude_cli",
+                    keyless=True,
+                    cli_env={"CLAUDE_CONFIG_DIR": "{acp_home}/claude"},
+                ),
+                auth=Exchange(),
+            )
+        )
+        try:
+            info = build_provider_info(
+                "messages",
+                {},
+                shim_name=name,
+                config_name="claude",
+                data_dir=str(tmp_path),
+            )
+        finally:
+            unregister_shim(name)
+
+        assert info.auth_context is not None
+        assert seen == info.cli_env
+        assert seen["CLAUDE_CONFIG_DIR"] == f"{info.acp_state_dir}/claude"
+
 
 class TestTheLaneTransport:
     def test_an_http_lane_ignores_the_acp_home(self):

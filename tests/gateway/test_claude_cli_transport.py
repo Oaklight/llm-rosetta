@@ -29,6 +29,8 @@ from llm_rosetta_gateway.transport import (
     UpstreamTimeoutError,
 )
 from llm_rosetta_gateway.transport.claude_cli import (
+    _quota_update,
+    _response_body,
     build_frames,
     conversation_session_id,
     make_restorer,
@@ -527,6 +529,65 @@ class TestRestore:
             "type": "ephemeral"
         }
 
+    def test_a_history_over_budget_still_ends_with_the_new_marker(self) -> None:
+        host = _turn()
+        restore = make_restorer(host)
+        cli_body = self._cli_body(host)
+        # Five markers: one more than the API accepts.  The rewrite must free
+        # two slots, not one, or the request fails with a 400.
+        for index, block in ((0, 0), (2, 0), (2, 1), (3, 0)):
+            cli_body["messages"][index]["content"][block]["cache_control"] = {
+                "type": "ephemeral"
+            }
+        cli_body["system"] = [
+            {
+                "type": "text",
+                "text": "host system",
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+
+        body = restore(cli_body)
+
+        assert self._markers(body) == 4
+        assert "cache_control" not in body["messages"][0]["content"][0]
+        assert "cache_control" not in body["messages"][1]["content"][0]
+        assert body["messages"][1]["content"][1]["cache_control"] == {
+            "type": "ephemeral"
+        }
+        assert body["system"][0]["cache_control"] == {"type": "ephemeral"}
+        assert body["messages"][-1]["content"][-1]["cache_control"] == {
+            "type": "ephemeral"
+        }
+
+    def test_an_already_marked_last_block_still_trims_the_budget(self) -> None:
+        host = _turn()
+        restore = make_restorer(host)
+        cli_body = self._cli_body(host)
+        # The last block already carries the CLI's marker, and four others
+        # push the history over the API's limit.  No marker may be added, but
+        # the request still has to fit.
+        for index, block in ((0, 0), (2, 0), (2, 1), (3, 1)):
+            cli_body["messages"][index]["content"][block]["cache_control"] = {
+                "type": "ephemeral"
+            }
+        cli_body["system"] = [
+            {
+                "type": "text",
+                "text": "host system",
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+
+        body = restore(cli_body)
+
+        assert self._markers(body) == 4
+        assert "cache_control" not in body["messages"][0]["content"][0]
+        assert body["system"][0]["cache_control"] == {"type": "ephemeral"}
+        assert body["messages"][-1]["content"][-1]["cache_control"] == {
+            "type": "ephemeral"
+        }
+
 
 class TestRelay:
     """The loopback relay between the CLI and the upstream."""
@@ -1006,3 +1067,147 @@ class TestTurn:
 
         with pytest.raises(UpstreamConnectionError, match="cannot start"):
             await transport.send_streaming(provider, "", _turn())
+
+
+class TestToolInjection:
+    """The client's tool definitions reach the model through the relay."""
+
+    TOOLS = [
+        {
+            "name": "lookup",
+            "description": "Look something up.",
+            "input_schema": {"type": "object", "properties": {"q": {"type": "string"}}},
+        }
+    ]
+
+    def test_the_hosts_tools_and_choice_are_copied_onto_the_cli_body(self) -> None:
+        host = _turn()
+        host["tools"] = self.TOOLS
+        host["tool_choice"] = {"type": "auto"}
+
+        body = make_restorer(host)(TestRestore._cli_body(host))
+
+        assert body["tools"] == self.TOOLS
+        assert body["tool_choice"] == {"type": "auto"}
+
+    def test_a_request_without_tools_stays_as_the_cli_sent_it(self) -> None:
+        host = _turn()
+
+        body = make_restorer(host)(TestRestore._cli_body(host))
+
+        assert "tools" not in body
+        assert "tool_choice" not in body
+
+    def test_a_tool_breakpoint_is_not_forwarded(self) -> None:
+        """The host's tool cache marker would collide with the CLI's own.
+
+        The CLI marks ``system`` with a one-hour TTL; the API rejects a
+        one-hour block after a five-minute one, and tool blocks come first.
+        Measured on 2.1.299: forwarding the marker gave HTTP 400
+        ``system.1.cache_control.ttl``.
+        """
+        host = _turn()
+        host["tools"] = [
+            {**self.TOOLS[0], "cache_control": {"type": "ephemeral"}},
+        ]
+
+        body = make_restorer(host)(TestRestore._cli_body(host))
+
+        assert body["tools"] == self.TOOLS
+
+    def test_tools_reach_the_upstream_even_when_the_history_cannot_be_restored(
+        self,
+    ) -> None:
+        host = _turn()
+        host["tools"] = self.TOOLS
+        cli_body = TestRestore._cli_body(host)
+        cli_body["messages"] = cli_body["messages"][:1]
+
+        body = make_restorer(host)(cli_body)
+
+        assert body["tools"] == self.TOOLS
+
+    async def test_the_upstream_request_carries_the_tools(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("FAKE_CLI_MODE", "relay-once")
+        monkeypatch.setenv("FAKE_CLI_LOG", str(tmp_path / "cli.jsonl"))
+        upstream = FakeUpstream([(200, b'{"ok":true}')])
+        url = await upstream.start()
+        transport = ClaudeCliTransport(timeout=30)
+        turn = _turn()
+        turn["tools"] = self.TOOLS
+        try:
+            stream = await transport.send_streaming(
+                _provider(_write_cli(tmp_path), upstream=url), "", turn
+            )
+            try:
+                [event async for event in stream]
+            finally:
+                await stream.close()
+                await transport.close()
+        finally:
+            await upstream.close()
+
+        body = json.loads(upstream.requests[0]["body"])
+        assert body["tools"] == self.TOOLS
+
+    def test_an_error_result_with_a_tool_use_still_yields_the_call(self) -> None:
+        """``--max-turns 1`` ends a tool turn with ``error_max_turns``.
+
+        The message the model produced is the answer; the exit status is the
+        CLI complaining that it had nothing to execute.  Dropping the turn
+        would turn every tool call into a false failure.
+        """
+        body = _response_body(
+            {
+                "id": "msg_tool",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_1",
+                        "name": "lookup",
+                        "input": {"q": "x"},
+                    }
+                ],
+                "stop_reason": "tool_use",
+            },
+            {
+                "subtype": "error_max_turns",
+                "is_error": True,
+                "stop_reason": "tool_use",
+                "num_turns": 2,
+            },
+            "claude-test",
+        )
+
+        assert body.body is not None
+        assert body.body["content"][0]["type"] == "tool_use"
+        assert body.body["stop_reason"] == "tool_use"
+
+
+class TestLaneQuota:
+    """The allowance the upstream reported becomes the lane's reading."""
+
+    def test_unified_rate_limit_headers_map_onto_the_acp_shape(self) -> None:
+        update = _quota_update(
+            {
+                "anthropic-ratelimit-unified-status": "allowed",
+                "anthropic-ratelimit-unified-5h-utilization": "0.02",
+                "anthropic-ratelimit-unified-5h-reset": "1800000000",
+                "anthropic-ratelimit-unified-7d-utilization": "0.31",
+                "anthropic-ratelimit-unified-7d-reset": "1800600000",
+                "anthropic-ratelimit-unified-representative-claim": "five_hour",
+            }
+        )
+
+        assert update is not None
+        limit = update["_meta"]["_claude/rateLimit"]
+        assert limit["status"] == "allowed"
+        assert limit["rateLimitType"] == "five_hour"
+        assert limit["unifiedWindows"]["5h"] == {
+            "utilization": 0.02,
+            "resetsAt": 1800000000,
+        }
+        assert limit["unifiedWindows"]["7d"]["utilization"] == 0.31
+
+    def test_headers_without_a_window_are_not_a_reading(self) -> None:
+        assert _quota_update({"anthropic-ratelimit-unified-status": "allowed"}) is None
