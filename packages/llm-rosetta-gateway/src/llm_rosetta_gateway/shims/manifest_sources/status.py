@@ -22,6 +22,7 @@ from .._types import (
 )
 from .freshness import _fetch_manifest_once
 from .plan import ManifestSourceSpec
+from .selection import _provided_by
 
 
 def scan_manifest_status(
@@ -43,13 +44,14 @@ def scan_manifest_status(
     record_shims = (status.release or {}).get("shims") or ()
     clash = sorted(set(record_shims) & set(core_names))
     if clash and set(clash) == set(record_shims):
+        reason = f"already provided by {_provided_by(clash)}: " + ", ".join(clash)
         logger.warning(
-            "Shim source %s: vendor %r is ignored; core already provides %s",
+            "Shim source %s: vendor %r is ignored; %s",
             status.source,
             status.vendor,
-            ", ".join(clash),
+            reason,
         )
-        return replace(status, skipped="core provides " + ", ".join(clash))
+        return replace(status, skipped=reason)
     scanned = _scan_dir(
         Path(status.resolved_dir),
         kind="remote",
