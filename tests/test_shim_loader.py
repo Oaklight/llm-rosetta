@@ -844,6 +844,42 @@ class TestPluginEntryPoints:
         _load_plugin_shims()
         assert calls == ["called"]
 
+    def test_names_the_distribution_behind_a_plugin_shim(self, monkeypatch):
+        """The plugin source map says which distribution registered a name."""
+        from llm_rosetta.contracts.shim import ProviderShim
+        from llm_rosetta.shims.provider_shim import register_shim
+
+        class FakeDist:
+            name = "demo-shim"
+            version = "0.1.0"
+
+        class FakeEP:
+            name = "demo"
+            dist = FakeDist()
+
+            def load(self):
+                def register():
+                    register_shim(
+                        ProviderShim(
+                            name="demo--chat_completions", format="chat_completions"
+                        )
+                    )
+
+                return register
+
+        class FakeEPs:
+            def select(self, *, group: str):
+                return [FakeEP()]
+
+        monkeypatch.setattr(providers_mod, "entry_points", lambda: FakeEPs())
+        try:
+            _load_plugin_shims()
+            assert providers_mod.plugin_source("demo--chat_completions") == (
+                "demo-shim 0.1.0"
+            )
+        finally:
+            providers_mod._PLUGIN_SOURCES.clear()
+
     def test_collects_returned_shims(self, monkeypatch):
         """Entry points that return list[ProviderShim] are collected."""
         from llm_rosetta.contracts.shim import ProviderShim

@@ -534,41 +534,22 @@ class TestPluginOwnedSkipReachesTheStatus:
     """The plugin owner must survive the status path, not only the helper."""
 
     def test_a_plugin_owned_clash_names_the_plugin_in_the_status(self, monkeypatch):
+        from llm_rosetta.api import register_shim, restore_registry, snapshot_registry
         from llm_rosetta.contracts.shim import ProviderShim
-        from llm_rosetta.shims import _loader
-        from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
 
         from llm_rosetta_gateway.shims._types import ShimSourceStatus
         from llm_rosetta_gateway.shims.manifest_sources.status import (
             scan_manifest_status,
         )
 
-        class FakeDist:
-            name = "demo-shim"
-            version = "0.1.0"
-
-        class FakeEP:
-            name = "demo"
-            dist = FakeDist()
-
-            def load(self):
-                def register():
-                    register_shim(
-                        ProviderShim(
-                            name="demo--chat_completions", format="chat_completions"
-                        )
-                    )
-
-                return register
-
-        class FakeEPs:
-            def select(self, *, group: str):
-                assert group == "llm_rosetta.shim_providers"
-                return [FakeEP()]
-
-        monkeypatch.setattr("llm_rosetta.shims._loader.entry_points", lambda: FakeEPs())
+        snapshot = snapshot_registry()
         try:
-            _loader._load_plugin_shims()
+            register_shim(
+                ProviderShim(name="demo--chat_completions", format="chat_completions")
+            )
+            monkeypatch.setattr(
+                "llm_rosetta.api.plugin_source", lambda name: "demo-shim 0.1.0"
+            )
             status = ShimSourceStatus(
                 kind="remote",
                 location="https://example.test/demo/manifest.json",
@@ -580,8 +561,7 @@ class TestPluginOwnedSkipReachesTheStatus:
 
             scanned = scan_manifest_status(status, {"demo--chat_completions"})
         finally:
-            unregister_shim("demo--chat_completions")
-            _loader._PLUGIN_SOURCES.clear()
+            restore_registry(snapshot)
 
         assert scanned.skipped == (
             "already provided by installed plugin demo-shim 0.1.0: "
