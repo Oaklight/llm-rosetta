@@ -33,6 +33,7 @@ Per-provider guides covering shim configuration, transforms, authentication, and
 | [Open Design](opendesign.md) | `opendesign--*` | multiple | Standalone package; model gateway |
 | [Plan (ChatGPT)](openai_chatgpt.md) | `openai_chatgpt--open_responses` | `open_responses` | ChatGPT plan route; sign-in instead of an API key |
 | [Antigravity](antigravity.md) | `antigravity--acp` | `acp` | Google Antigravity plan, driven through the local `agy` CLI |
+| [Claude (official CLI)](claude-cli.md) | `claude--messages` | `messages` | Claude subscription, driven through the local `claude` CLI |
 | [Free Endpoints](free.md) | `kilo_free--*`, `llm7--*`, `opencode_zen_free--*`, `ovhcloud--*` | `chat_completions` | Standalone package; no account needed |
 
 The Argo, AskSage, ALCF, Open Design and Free Endpoints shims ship as standalone packages — declare them with `shims.install` (or **Gateway → Shims → Available**) before using their names. See [Standalone shim packages](../shims.md#standalone-shim-packages).

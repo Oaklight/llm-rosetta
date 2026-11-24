@@ -158,6 +158,7 @@ nav:
               - OpenCode: guide/providers/opencode.md
               - Plan (ChatGPT): guide/providers/openai_chatgpt.md
               - Antigravity (Google): guide/providers/antigravity.md
+              - Claude (official CLI): guide/providers/claude-cli.md
               - Free Endpoints: guide/providers/free.md
           - Reasoning / Thinking: guide/reasoning.md
           - Provider Reasoning Behavior: guide/provider-reasoning.md
