@@ -157,7 +157,6 @@ export async function jobAction(action, id) {
   const paths = {
     cancel: 'cancel',
     retry: 'retry',
-    resume: 'resume',
   };
   const path = paths[action];
   if (!path) return;

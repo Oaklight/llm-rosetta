@@ -121,7 +121,6 @@ from .jobs import (
     cancel_job,
     get_job,
     get_jobs,
-    resume_job,
     retry_job,
 )
 from .routing import get_model_routing, list_routable_models, put_model_routing
@@ -232,9 +231,6 @@ def register_admin_routes(app: Any) -> None:
     )
     app.route("/admin/api/jobs/<job_id>/retry", methods=["POST"])(
         _guard("logs", retry_job)
-    )
-    app.route("/admin/api/jobs/<job_id>/resume", methods=["POST"])(
-        _guard("logs", resume_job)
     )
     # API key management (keys tab)
     app.route("/admin/api/keys", methods=["GET"])(_guard("keys", get_api_keys))

@@ -1,4 +1,4 @@
-"""Background job routes: list, inspect, cancel, retry, resume."""
+"""Background job routes: list, inspect, cancel, retry."""
 
 from __future__ import annotations
 
@@ -80,7 +80,7 @@ async def cancel_job(request: Any, **kwargs: Any) -> Response:
 
 
 async def retry_job(request: Any, **kwargs: Any) -> Response:
-    """Queue a failed or cancelled job again from the start."""
+    """Queue a failed job again from the start."""
     manager = _manager(request)
     if manager is None:
         return _unavailable()
@@ -90,25 +90,7 @@ async def retry_job(request: Any, **kwargs: Any) -> Response:
         return JSONResponse({"error": str(exc)}, status_code=409)
     if not ok:
         return JSONResponse(
-            {"error": "Only a failed or cancelled job can be retried"},
-            status_code=409,
-        )
-    manager.wake()
-    return JSONResponse({"ok": True, "status": "queued"})
-
-
-async def resume_job(request: Any, **kwargs: Any) -> Response:
-    """Continue a cancelled job, keeping the rows it has not deleted yet."""
-    manager = _manager(request)
-    if manager is None:
-        return _unavailable()
-    try:
-        ok = await manager.store.resume(_job_id(request, kwargs))
-    except ValueError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=409)
-    if not ok:
-        return JSONResponse(
-            {"error": "Only a cancelled job can be resumed"}, status_code=409
+            {"error": "Only a failed job can be retried"}, status_code=409
         )
     manager.wake()
     return JSONResponse({"ok": True, "status": "queued"})

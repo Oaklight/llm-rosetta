@@ -238,48 +238,36 @@ async def test_recovery_fails_a_job_out_of_attempts(store, pm):
     assert "interrupted" in (recovered.error or "")
 
 
-async def test_retry_resets_and_resume_continues(store, pm):
+async def test_retry_resets_attempts_and_restores_the_window(store, pm):
     job = await store.enqueue(
         "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
     )
     claimed = await store.claim("sqlite", "owner")
     assert claimed.attempts == 1
-    await store.finish(job.id, "owner", JOB_CANCELLED)
-
-    assert await store.resume(job.id) is True
-    resumed = await store.get(job.id)
-    assert resumed.status == JOB_QUEUED and resumed.attempts == 1
-    assert pm.visibility.ranges("request_log") == [(MIN_TS, MAX_TS)]
-
-    await store.claim("sqlite", "owner")
     await store.finish(job.id, "owner", JOB_FAILED, error="boom")
+    assert pm.visibility.ranges("request_log") == []
+
     assert await store.retry(job.id) is True
     retried = await store.get(job.id)
     assert retried.status == JOB_QUEUED and retried.attempts == 0
     assert retried.error is None
+    assert pm.visibility.ranges("request_log") == [(MIN_TS, MAX_TS)]
 
 
-async def test_resume_after_a_clean_undo_hides_the_rows_again(store, pm):
-    """A clean-undo cancel dropped the range; resuming must put it back.
-
-    Otherwise the resumed job deletes rows that no read is hiding: they
-    disappear on the first batch instead of leaving the listings when the
-    operator resumes, which is the whole promise of the hide-at-enqueue design.
-    """
+async def test_a_cancelled_job_is_terminal_and_cannot_be_retried(store, pm):
+    """Cancelling is final: the operation has to be submitted again."""
     job = await store.enqueue(
         "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
     )
     await store.request_cancel(job.id)
     assert pm.visibility.ranges("request_log") == []
 
-    assert await store.resume(job.id) is True
-    assert pm.visibility.ranges("request_log") == [(MIN_TS, MAX_TS)]
-    resumed = await store.get(job.id)
-    assert len(resumed.hidden_range_ids) == 1
-    assert "_hide" not in resumed.to_payload()["payload"]
+    assert await store.retry(job.id) is False
+    assert (await store.get(job.id)).status == JOB_CANCELLED
+    assert pm.visibility.is_empty()
 
 
-async def test_a_requeue_that_loses_the_race_restores_no_range(store, pm):
+async def test_a_retry_that_loses_the_race_restores_no_range(store, pm):
     """The status fence comes before the range comes back.
 
     A job that left the terminal states between the operator's click and the
@@ -289,39 +277,40 @@ async def test_a_requeue_that_loses_the_race_restores_no_range(store, pm):
     job = await store.enqueue(
         "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
     )
-    await store.request_cancel(job.id)
-    assert pm.visibility.ranges("request_log") == []
+    await store.claim("sqlite", "owner")
+    await store.finish(job.id, "owner", JOB_FAILED, error="boom")
     await pm.connection.execute(
         "UPDATE jobs SET status = 'running', lease_owner = 'someone' WHERE id = ?",
         (job.id,),
     )
     await pm.connection.commit()
 
-    assert await store.resume(job.id) is False
+    assert await store.retry(job.id) is False
     assert pm.visibility.ranges("request_log") == []
 
 
-async def test_resume_of_a_job_with_no_window_adds_no_range(store, pm):
+async def test_retry_of_a_job_with_no_window_adds_no_range(store, pm):
     """Trim and VACUUM never hide anything, so there is nothing to put back."""
     job = await store.enqueue("data.trim")
     await store.claim("sqlite", "owner")
-    await store.finish(job.id, "owner", JOB_CANCELLED)
+    await store.finish(job.id, "owner", JOB_FAILED, error="boom")
 
-    assert await store.resume(job.id) is True
+    assert await store.retry(job.id) is True
     assert (await store.get(job.id)).hidden_range_ids == []
     assert pm.visibility.is_empty()
 
 
-async def test_a_lost_window_refuses_a_requeue_instead_of_deleting_visible_rows(
+async def test_a_lost_window_refuses_a_retry_instead_of_deleting_visible_rows(
     store, pm
 ):
-    """A pre-`_hide` job whose range is gone must not be resumed blindly."""
+    """A pre-`_hide` job whose range is gone must not be retried blindly."""
     job = await store.enqueue(
         "data.clear",
         {"table": "request_log"},
         hidden_ranges=[("request_log", MIN_TS, MAX_TS)],
     )
-    await store.request_cancel(job.id)
+    await store.claim("sqlite", "owner")
+    await store.finish(job.id, "owner", JOB_FAILED, error="boom")
     raw = await pm.connection.execute_fetchone(
         "SELECT payload FROM jobs WHERE id = ?", (job.id,)
     )
@@ -333,9 +322,9 @@ async def test_a_lost_window_refuses_a_requeue_instead_of_deleting_visible_rows(
     await pm.connection.commit()
 
     with pytest.raises(ValueError, match="no recorded hide window"):
-        await store.resume(job.id)
+        await store.retry(job.id)
 
-    assert (await store.get(job.id)).status == JOB_CANCELLED
+    assert (await store.get(job.id)).status == JOB_FAILED
     assert pm.visibility.is_empty()
 
 
@@ -583,7 +572,7 @@ async def test_recover_settles_a_job_the_operator_cancelled(store, pm):
     settled = await store.get(job.id)
     assert settled.status == JOB_CANCELLED
     assert settled.cancel_requested is True
-    # A settled job releases its reservation; resume re-hides the window.
+    # A settled job releases its reservation; a cancelled one is not requeued.
     assert settled.hidden_range_ids == []
     assert pm.visibility.ranges("request_log") == []
     assert await store.claim("sqlite", "owner") is None

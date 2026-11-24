@@ -115,19 +115,6 @@ async def test_retry_is_picked_up_without_waiting_out_the_poll(pm):
         await lane_manager.stop()
 
 
-async def test_resume_wakes_the_lane(manager, monkeypatch):
-    woken: list[bool] = []
-    monkeypatch.setattr(manager, "wake", lambda: woken.append(True))
-    await manager.enqueue("data.clear")
-    claimed = await manager.store.claim("sqlite", "owner")
-    await manager.store.finish(claimed.id, "owner", "cancelled")
-
-    response = await routes.resume_job(_Request(_App(manager), job_id=claimed.id))
-
-    assert _body(response)["status"] == "queued"
-    assert woken == [True]
-
-
 async def test_an_unknown_job_is_a_404(manager):
     response = await routes.get_job(_Request(_App(manager), job_id="nope"))
 
@@ -152,7 +139,19 @@ async def test_retry_rejects_a_job_that_has_not_failed(manager):
     response = await routes.retry_job(_Request(_App(manager), job_id=job.id))
 
     assert response.status_code == 409
-    assert "failed or cancelled" in _body(response)["error"]
+    assert "Only a failed job can be retried" in _body(response)["error"]
+
+
+async def test_retry_rejects_a_cancelled_job(manager):
+    """Cancelling is final; the operation has to be submitted again."""
+    job = await manager.enqueue("data.clear")
+    await manager.store.request_cancel(job.id)
+
+    response = await routes.retry_job(_Request(_App(manager), job_id=job.id))
+
+    assert response.status_code == 409
+    assert "Only a failed job can be retried" in _body(response)["error"]
+    assert (await manager.store.get(job.id)).status == JOB_CANCELLED
 
 
 async def test_without_persistence_the_routes_say_so():
@@ -199,7 +198,8 @@ async def test_retry_of_a_lost_window_is_a_409_with_the_reason(manager, pm):
     job = await manager.enqueue(
         "data.clear", hidden_ranges=[("request_log", MIN_TS, MAX_TS)]
     )
-    await manager.store.request_cancel(job.id)
+    await manager.store.claim("sqlite", "owner")
+    await manager.store.finish(job.id, "owner", "failed", error="boom")
     raw = await pm.connection.execute_fetchone(
         "SELECT payload FROM jobs WHERE id = ?", (job.id,)
     )

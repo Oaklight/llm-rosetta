@@ -178,7 +178,7 @@ test('a row offers the actions its state allows', () => {
   assert.deepEqual(jobActions(job({ status: 'queued' })), ['cancel']);
   assert.deepEqual(jobActions(job({ status: 'running' })), ['cancel']);
   assert.deepEqual(jobActions(job({ status: 'failed' })), ['retry']);
-  assert.deepEqual(jobActions(job({ status: 'cancelled' })), ['resume']);
+  assert.deepEqual(jobActions(job({ status: 'cancelled' })), []);
   assert.deepEqual(jobActions(job({ status: 'succeeded' })), []);
 });
 

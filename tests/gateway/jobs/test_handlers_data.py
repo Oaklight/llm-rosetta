@@ -155,13 +155,14 @@ async def test_a_clear_does_not_delete_a_row_written_after_it_was_requested(
     assert await pm.count_log_entries(include_hidden=True) == 1
 
 
-async def test_a_retried_clear_keeps_a_row_that_arrived_after_the_cancel(
+async def test_a_retried_clear_keeps_a_row_that_arrived_after_the_failure(
     pm, ops, manager
 ):
     """Retry re-hides the original window and deletes exactly that window."""
     await _seed(pm, days=(0.1,))
     job = await enqueue_clear(manager, "request_log")
-    await manager.cancel(job.id)
+    await manager.store.claim("sqlite", manager.owner)
+    await manager.store.finish(job.id, manager.owner, "failed", error="boom")
     await pm.insert_log_entries([_log_row("late", _ago(minutes=-1))])
 
     assert await manager.store.retry(job.id) is True
@@ -214,7 +215,8 @@ async def test_a_retry_after_extension_rehides_the_extended_window(pm, ops, mana
     await pm.insert_log_entries([_log_row("late", first.payload["end"])])
     second = await enqueue_clear(manager, "request_log")
 
-    await manager.cancel(first.id)
+    await manager.store.claim("sqlite", manager.owner)
+    await manager.store.finish(first.id, manager.owner, "failed", error="boom")
     assert pm.visibility.ranges("request_log") == []
     assert await manager.store.retry(first.id) is True
 
