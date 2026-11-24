@@ -329,3 +329,14 @@ is never polled in the background.
 The probe is written like any other: export `PROBES`, give it an `id` that
 `quota.probe` names, implement `match()` returning `""` (the lane has no HTTP
 usage endpoint) and add `parse_local`.
+
+## A reading that survives a restart
+
+An agent lane's last good reading is also written beside its profile, in
+`<acp_home>/.llm-rosetta-quota.json`: the windows, their reset times and the
+profile fingerprint, never a token. The gateway reads it back on the first
+look after a restart, so a Claude card the agent had filled does not fall back
+to *unknown* when the process or the container is replaced. The reading keeps
+its original `read_at`, so the card still says when it was taken. An error
+reading is never written, and the next turn or local command replaces the
+file.
