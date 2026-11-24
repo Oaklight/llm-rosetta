@@ -25,6 +25,7 @@ from ._model_list import _model_list_transforms
 from ._parse import (
     _parse_batch,
     _parse_connection_argv,
+    _parse_connection_env,
     _parse_connection_env_unset,
     _parse_connection_meta,
     _parse_connection_token_command,
@@ -223,6 +224,19 @@ def _load_single_provider(
         acp_session_meta=_parse_connection_meta(
             conn_raw.get("acp_session_meta"), cfg.get("name", "")
         ),
+        cli_argv=_parse_connection_argv(
+            conn_raw.get("cli_argv"), cfg.get("name", ""), "cli_argv"
+        ),
+        cli_env=_parse_connection_env(
+            conn_raw.get("cli_env"), cfg.get("name", ""), "cli_env"
+        ),
+        cli_env_unset=_parse_connection_env_unset(
+            conn_raw.get("cli_env_unset"), cfg.get("name", ""), "cli_env_unset"
+        ),
+        cli_args=_parse_connection_argv(
+            conn_raw.get("cli_args"), cfg.get("name", ""), "cli_args"
+        )
+        or (),
         token_command=_parse_connection_token_command(
             conn_raw.get("token_command"),
             command_dir or provider_dir,

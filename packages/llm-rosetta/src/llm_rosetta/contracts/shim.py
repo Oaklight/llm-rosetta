@@ -296,6 +296,45 @@ class ConnectionConfig:
     ``api_key`` / ``token_command`` mutual exclusion for this shim, because the
     key is an input rather than a second credential.
     """
+    cli_argv: tuple[str, ...] | None = None
+    """The model-client command a ``claude_cli`` transport starts.
+
+    The lane reaches its model by running a vendor CLI that builds and signs
+    the upstream request itself; the gateway never holds the credential.  The
+    command is a vendor fact, so the shim declares it rather than the operator
+    (``["claude"]``, or an absolute path when the binary is not on ``PATH``).
+    ``None`` takes the transport's own default.  Only read when ``transport``
+    is ``"claude_cli"``.
+    """
+    cli_env: dict[str, str] | None = None
+    """Environment overrides for the process a ``claude_cli`` transport starts.
+
+    Layered over the gateway's own environment, so ``PATH`` and the CLI's
+    login store keep working.  A vendor declares here the variables its CLI
+    needs for a correct, non-interactive lane (the caller name a subscription
+    meters by, a switch that keeps the CLI from offering its own tools).  Only
+    read when ``transport`` is ``"claude_cli"``.
+    """
+    cli_env_unset: tuple[str, ...] = ()
+    """Environment variable names removed before :attr:`cli_env` is applied.
+
+    The gateway copies its environment so the CLI keeps its login, but a
+    variable that redirects it (``ANTHROPIC_API_KEY`` bills the API instead of
+    the stored subscription; ``ANTHROPIC_BASE_URL`` points it at another host)
+    would silently change what the lane does.  Removed from the child before
+    the shim's own overrides are layered on.  Only read when ``transport`` is
+    ``"claude_cli"``.
+    """
+    cli_args: tuple[str, ...] = ()
+    """Extra arguments appended to the ``claude_cli`` command.
+
+    The transport owns the flags that keep the CLI a model client (no tools,
+    no session persistence, one turn).  A lane that needs one more — the
+    ``--setting-sources user`` that lets a host's ``apiKeyHelper`` supply the
+    credential, a ``--settings`` file, a ``--permission-prompts`` mode — names
+    it here.  Appended after the transport's own flags, so a repeated option
+    takes this value.  Only read when ``transport`` is ``"claude_cli"``.
+    """
 
 
 @dataclass(frozen=True)

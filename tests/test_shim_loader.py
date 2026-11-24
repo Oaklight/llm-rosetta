@@ -1279,6 +1279,64 @@ class TestConnectionSessionMeta:
             )
 
 
+class TestClaudeCliConnection:
+    """The ``claude_cli`` transport's connection block."""
+
+    def _load(self, tmp_path, connection):
+        d = tmp_path / "vendor"
+        d.mkdir()
+        (d / "provider.yaml").write_text(
+            f"name: vendor\nformat: messages\nmodel_type: llm\nconnection:\n{connection}"
+        )
+        shims = load_providers_from_dir(tmp_path)
+        assert len(shims) == 1
+        return shims[0]
+
+    def test_argv_env_and_removals_are_read(self, tmp_path):
+        shim = self._load(
+            tmp_path,
+            "  base_url: https://vendor.example/v1\n"
+            "  transport: claude_cli\n"
+            '  cli_argv: ["claude"]\n'
+            "  cli_env:\n"
+            '    CLAUDE_CODE_ENTRYPOINT: "llm-rosetta"\n'
+            "  cli_env_unset: [ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL]\n"
+            '  cli_args: ["--setting-sources", "user"]\n',
+        )
+
+        assert shim.connection.transport == "claude_cli"
+        assert shim.connection.cli_argv == ("claude",)
+        assert shim.connection.cli_env == {"CLAUDE_CODE_ENTRYPOINT": "llm-rosetta"}
+        assert shim.connection.cli_env_unset == (
+            "ANTHROPIC_API_KEY",
+            "ANTHROPIC_BASE_URL",
+        )
+        assert shim.connection.cli_args == ("--setting-sources", "user")
+
+    def test_a_shim_without_them_declares_nothing(self, tmp_path):
+        shim = self._load(tmp_path, "  base_url: https://vendor.example/v1\n")
+
+        assert shim.connection.cli_argv is None
+        assert shim.connection.cli_env is None
+        assert shim.connection.cli_env_unset == ()
+        assert shim.connection.cli_args == ()
+
+    @pytest.mark.parametrize("declaration", ["claude", "[]", "['']"])
+    def test_a_malformed_argv_is_refused(self, tmp_path, declaration):
+        with pytest.raises(ValueError, match="cli_argv"):
+            self._load(
+                tmp_path,
+                f"  base_url: https://vendor.example/v1\n  cli_argv: {declaration}\n",
+            )
+
+    def test_a_malformed_env_is_refused(self, tmp_path):
+        with pytest.raises(ValueError, match="cli_env must be a mapping"):
+            self._load(
+                tmp_path,
+                "  base_url: https://vendor.example/v1\n  cli_env: ANTHROPIC_API_KEY\n",
+            )
+
+
 class TestAuthExchange:
     """A shim can ship its credential exchange as code, not as an argv.
 
