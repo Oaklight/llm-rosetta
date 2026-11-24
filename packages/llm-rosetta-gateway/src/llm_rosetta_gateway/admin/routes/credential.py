@@ -237,6 +237,7 @@ async def get_provider_credential(request: Any, name: str) -> Response:
         {
             "provider": name,
             "kind": getattr(exchange, "kind", "exchange"),
+            "vendor_managed": bool(getattr(exchange, "vendor_managed", False)),
             "source": pinfo.credential_source,
             "installed": summary is not None,
             "state": state,

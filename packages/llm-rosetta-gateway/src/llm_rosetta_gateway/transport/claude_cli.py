@@ -39,6 +39,7 @@ import os
 import shutil
 import signal
 import tempfile
+import time
 import uuid
 from collections import deque
 from collections.abc import AsyncIterator, Callable
@@ -247,6 +248,28 @@ def _breakpoint_blocks(body: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]
     return found
 
 
+def _trim_breakpoints(body: dict[str, Any], keep: dict[str, Any] | None = None) -> None:
+    """Drop the oldest markers until *keep* plus the rest fit the API's limit.
+
+    Args:
+        body: The request body whose markers are counted.
+        keep: A block whose marker must survive, or ``None`` when room is
+            being made for a marker not yet added.
+    """
+    markers = [
+        (where, block) for where, block in _breakpoint_blocks(body) if block is not keep
+    ]
+    excess = len(markers) + 1 - _MAX_BREAKPOINTS
+    if excess <= 0:
+        return
+    # Message-level markers go first, then the CLI's own system markers,
+    # oldest first.
+    ordered = [block for where, block in markers if where == "messages"]
+    ordered += [block for where, block in markers if where != "messages"]
+    for block in ordered[:excess]:
+        block.pop("cache_control", None)
+
+
 def _relocate_breakpoint(body: dict[str, Any], messages: list[dict[str, Any]]) -> None:
     """Move the newest cache breakpoint onto the turn's last block.
 
@@ -254,6 +277,10 @@ def _relocate_breakpoint(body: dict[str, Any], messages: list[dict[str, Any]]) -
     that message is dropped.  Without a breakpoint at the end of the
     conversation the newest turn is never written to the cache, so every later
     turn re-reads the growing tail at full price.
+
+    A marker already on the last block is kept.  Either way the request must
+    not leave with more than the API's limit: the CLI spends a marker on the
+    annotation message, and a longer conversation can already carry several.
 
     Args:
         body: The request body being built.
@@ -263,23 +290,21 @@ def _relocate_breakpoint(body: dict[str, Any], messages: list[dict[str, Any]]) -
     if not content:
         return
     block = content[-1]
-    if not isinstance(block, dict) or block.get("cache_control"):
+    if not isinstance(block, dict):
+        return
+    if block.get("cache_control"):
+        _trim_breakpoints(body, keep=block)
         return
     if block.get("type") not in _BREAKPOINT_KINDS:
         return
-    markers = _breakpoint_blocks(body)
-    if len(markers) >= _MAX_BREAKPOINTS:
-        for where, existing in markers:
-            if where == "messages":
-                existing.pop("cache_control", None)
-                break
+    _trim_breakpoints(body)
     block["cache_control"] = dict(_BREAKPOINT)
 
 
 def make_restorer(
     host_body: dict[str, Any],
 ) -> Callable[[dict[str, Any]], dict[str, Any]]:
-    """Build the rewrite that puts the host's conversation back.
+    """Build the rewrite that puts the host's conversation and tools back.
 
     The CLI appends a ``role: "system"`` annotation message after every user
     message it replays: an environment reminder that names its own working
@@ -290,9 +315,18 @@ def make_restorer(
     so they are dropped before the request leaves the relay, and the cache
     breakpoint the CLI put on them is moved to the end of the turn.
 
+    The CLI runs with its own tool set off, so it sends no ``tools`` array and
+    the model cannot call a client tool — a request that supplies one degrades
+    to prose.  The client's definitions are therefore copied onto the CLI's
+    body here; the CLI then reports the model's ``tool_use`` block unchanged,
+    and the next request's history carries the result back.  Measured on CLI
+    2.1.299: the injected definition produced a ``tool_use`` with the model's
+    input, while the same request without it produced text.
+
     The rewrite fails open: a conversation whose message count does not come
     back as the host sent it is forwarded unchanged, which costs the cached
-    prefix but never the answer.
+    prefix but never the answer.  Tool injection is independent of that check
+    — a reshaped history is still a turn whose tools must reach the model.
 
     Args:
         host_body: The target-format body the gateway received.
@@ -303,6 +337,8 @@ def make_restorer(
     expected = sum(
         1 for message in host_body.get("messages") or [] if isinstance(message, dict)
     )
+    host_tools = host_body.get("tools")
+    host_choice = host_body.get("tool_choice")
 
     def restore(cli_body: dict[str, Any]) -> dict[str, Any]:
         messages = [
@@ -311,13 +347,37 @@ def make_restorer(
             if isinstance(message, dict)
         ]
         kept = [message for message in messages if message.get("role") != "system"]
-        if len(kept) != expected:
-            return cli_body
-        body = {**cli_body, "messages": kept}
-        _relocate_breakpoint(body, kept)
+        body = cli_body
+        if len(kept) == expected:
+            body = {**cli_body, "messages": kept}
+            _relocate_breakpoint(body, kept)
+        if isinstance(host_tools, list) and host_tools:
+            body = {**body, "tools": _without_cache_control(host_tools)}
+            if host_choice is not None:
+                body["tool_choice"] = host_choice
         return body
 
     return restore
+
+
+def _without_cache_control(tools: list[Any]) -> list[Any]:
+    """The client's tool definitions with their cache breakpoints removed.
+
+    A tool-level ``cache_control`` is a breakpoint in the *host's* body.  The
+    CLI puts its own breakpoint on ``system`` with a one-hour TTL, and the API
+    refuses a one-hour block that comes after a five-minute one, in the order
+    tools, system, messages.  Measured on 2.1.299: forwarding an ephemeral
+    tool marker made every tool request fail with
+    ``system.1.cache_control.ttl`` and HTTP 400.  The restorer already places
+    the lane's breakpoint on the turn's last block, so the host's marker on a
+    definition adds nothing here.
+    """
+    cleaned: list[Any] = []
+    for tool in tools:
+        if isinstance(tool, dict) and "cache_control" in tool:
+            tool = {key: value for key, value in tool.items() if key != "cache_control"}
+        cleaned.append(tool)
+    return cleaned
 
 
 def _spawn_argv(
@@ -512,11 +572,13 @@ class _CliStream(UpstreamStream):
         model: str,
         timeout: float,
         frames: list[dict[str, Any]],
+        provider_info: ProviderInfo | None = None,
     ) -> None:
         self._cli = cli
         self._model = model
         self._timeout = timeout
         self._frames = list(frames)
+        self._provider_info = provider_info
         self._next_frame = 0
         self._turn_sent = False
         self._queue: deque[dict[str, Any]] = deque()
@@ -702,6 +764,8 @@ class _CliStream(UpstreamStream):
             return
         self._finished = True
         result = self._result
+        if self._provider_info is not None:
+            _record_lane_quota(self._provider_info, self.readings)
         if result is None and self._assistant is None and not self._saw_stream_event:
             self._error = self._cli.stderr_tail() or (
                 "claude_cli: the CLI ended without a response"
@@ -709,8 +773,12 @@ class _CliStream(UpstreamStream):
             self._queue.clear()
             return
         if result is not None and result.get("is_error"):
+            # A tool call ends the CLI with ``error_max_turns`` and no text.
+            # The message it emitted is the answer, so content — text or a
+            # ``tool_use`` block — outranks the exit status.
             texts = _result_texts(self._assistant)
-            if not texts and not self._saw_stream_event:
+            blocks = (self._assistant or {}).get("content")
+            if not texts and not self._saw_stream_event and not blocks:
                 self._error = _result_error(result) or "claude_cli: the turn failed"
                 self._queue.clear()
                 return
@@ -884,6 +952,78 @@ def _lane_facts(result: dict[str, Any] | None, readings: list[Any]) -> dict[str,
     return {"claude_cli": facts} if facts else {}
 
 
+_UNIFIED_PREFIX = "anthropic-ratelimit-unified-"
+
+
+def _number_or_text(value: str) -> Any:
+    """An integer when the header is a digit string, else the text as given."""
+    text = value.strip()
+    return int(text) if text.isdigit() else text
+
+
+def _quota_update(headers: dict[str, str]) -> dict[str, Any] | None:
+    """Turn one upstream call's rate-limit headers into an ACP-shaped update.
+
+    The ACP lane learns the account's allowance from the adapter's
+    ``usage_update`` message.  A direct CLI lane has no such channel: the
+    allowance reaches it as ``anthropic-ratelimit-unified-*`` response
+    headers.  This maps them onto the shape :mod:`acp_quota` already reads, so
+    both Claude lanes store and render one kind of reading.
+
+    Args:
+        headers: The upstream response headers of the turn's last call.
+
+    Returns:
+        A ``usage_update`` mapping for :func:`acp_quota.record_reading`, or
+        ``None`` when the response carried no window utilisation.
+    """
+    windows: dict[str, dict[str, Any]] = {}
+    limit: dict[str, Any] = {}
+    for key, value in headers.items():
+        if not key.startswith(_UNIFIED_PREFIX):
+            continue
+        field = key[len(_UNIFIED_PREFIX) :]
+        if field.endswith("-utilization"):
+            try:
+                used = float(value)
+            except (TypeError, ValueError):
+                continue
+            windows.setdefault(field[: -len("-utilization")], {})["utilization"] = used
+        elif field.endswith("-reset"):
+            windows.setdefault(field[: -len("-reset")], {})["resetsAt"] = (
+                _number_or_text(value)
+            )
+        elif field == "status":
+            limit["status"] = value
+        elif field == "representative-claim":
+            limit["rateLimitType"] = value
+        elif field == "reset":
+            limit["resetsAt"] = _number_or_text(value)
+    if not windows:
+        return None
+    limit["unifiedWindows"] = windows
+    limit.setdefault("rateLimitType", next(iter(windows)))
+    return {"sessionUpdate": "usage_update", "_meta": {"_claude/rateLimit": limit}}
+
+
+def _record_lane_quota(provider_info: ProviderInfo, readings: list[Any]) -> bool:
+    """Store the allowance the turn's upstream call reported, if it did.
+
+    Best-effort: a lane whose upstream sent no rate-limit headers simply leaves
+    the last reading alone, exactly as an ACP turn without a ``usage_update``
+    does.
+    """
+    if not readings:
+        return False
+    reading = readings[-1]
+    update = _quota_update(reading.rate_limit())
+    if update is None:
+        return False
+    from .acp_quota import record_reading
+
+    return record_reading(update, provider_info)
+
+
 def _result_texts(assistant: dict[str, Any] | None) -> list[str]:
     """The assistant message's text blocks, if any."""
     if not assistant:
@@ -994,6 +1134,87 @@ class ClaudeCliTransport(UpstreamTransport):
     async def close(self) -> None:
         """Release transport resources.  Each turn owns its own process."""
 
+    async def probe_provider(self, provider_info: ProviderInfo) -> dict[str, Any]:
+        """Run one short turn through the lane and report what answered.
+
+        The counterpart of the ACP lane's probe and, above it, of the HTTP
+        connectivity test: the lane has no host to dial, so the only honest
+        question is whether the CLI starts, signs in from its own store and
+        completes a prompt.  The turn carries no tools and one short sentence;
+        its upstream call also updates the lane's quota reading.
+
+        The call never raises for a lane failure: an unreachable lane is a
+        result the admin route renders, not an exception.
+        """
+        from .acp_quota import lanes_reading
+
+        started = time.monotonic()
+        limit = min(self._timeout, 90.0)
+        result: dict[str, Any] = {
+            "transport": "claude_cli",
+            "reachable": False,
+            "ok": False,
+        }
+        exchange = getattr(provider_info, "auth_exchange", None)
+        context = getattr(provider_info, "auth_context", None)
+        check = getattr(exchange, "needs_interactive_setup", None)
+        if callable(check) and context is not None:
+            try:
+                waiting = bool(await asyncio.to_thread(check, context))
+            except Exception:  # noqa: BLE001 - an unreadable status is not a verdict
+                waiting = False
+            if waiting:
+                authoritative = getattr(exchange, "setup_state_is_authoritative", None)
+                if callable(authoritative):
+                    try:
+                        waiting = bool(await asyncio.to_thread(authoritative, context))
+                    except Exception:  # noqa: BLE001 - doubt is not a verdict
+                        waiting = False
+            if waiting:
+                result["needs_sign_in"] = True
+                result["error"] = (
+                    f"provider {provider_info.config_name!r} is not signed in; "
+                    "use the credential panel's Sign in button"
+                )
+                result["elapsed_ms"] = int((time.monotonic() - started) * 1000)
+                return result
+        before = lanes_reading(provider_info)
+        body = {
+            "max_tokens": 32,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Reply with the single word: OK"}
+                    ],
+                }
+            ],
+        }
+        try:
+            response = await asyncio.wait_for(self.send(provider_info, "", body), limit)
+        except (TimeoutError, asyncio.TimeoutError):
+            result["error"] = f"the Claude CLI did not answer within {int(limit)}s"
+        except Exception as exc:  # noqa: BLE001 - an unreachable lane is a result
+            result["error"] = str(exc)
+        else:
+            answered = response.body or {}
+            blocks = answered.get("content") or []
+            text = "".join(
+                str(block.get("text") or "")
+                for block in blocks
+                if isinstance(block, dict) and block.get("type") == "text"
+            ).strip()
+            result["ok"] = True
+            result["reachable"] = True
+            result["text"] = text[:500]
+            usage = answered.get("usage")
+            if isinstance(usage, dict):
+                result["usage"] = usage
+            after = lanes_reading(provider_info)
+            result["quota_observed"] = bool(after is not None and after is not before)
+        result["elapsed_ms"] = int((time.monotonic() - started) * 1000)
+        return result
+
     # -- turn ---------------------------------------------------------------
 
     async def _turn(
@@ -1077,7 +1298,13 @@ class ClaudeCliTransport(UpstreamTransport):
                 f"claude_cli: cannot start {argv[0]!r}: {exc}"
             ) from exc
         cli = _CliProcess(process, workdir, relay, gate)
-        return _CliStream(cli, str(body.get("model") or ""), self._timeout, frames)
+        return _CliStream(
+            cli,
+            str(body.get("model") or ""),
+            self._timeout,
+            frames,
+            provider_info,
+        )
 
     async def _collect(
         self, stream: _CliStream

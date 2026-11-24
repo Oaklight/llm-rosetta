@@ -288,6 +288,19 @@ test('the refresher warning is said once, not once per card', () => {
   assert.match(code, /data\.refresher_enabled === false && !hintSaysIt/);
 });
 
+test('a vendor-managed sign-in does not claim the gateway holds a token', () => {
+  // The CLI owns this credential.  Saying "No token yet" beside "Connected as"
+  // reads like a mint that has not happened, and "the gateway renews this
+  // token" is false: there is no gateway token to renew.
+  assert.match(code, /data\.vendor_managed/);
+  assert.match(code, /const vendorManaged = data\.vendor_managed === true;/);
+  assert.match(code, /const hasToken = !vendorManaged/);
+  assert.match(code, /if \(vendorManaged\) \{\s*line\(_credentialText\('prov\.vendorManagedStatus'/);
+  assert.match(code, /if \(!vendorManaged\) \{\s*_appendAction\(actions, \{\s*label: _credentialText\('btn\.refreshCredential'/);
+  assert.match(code, /prov\.vendorManagedHint/);
+  assert.match(code, /prov\.vendorManagedStatus/);
+});
+
 test('the countdown ticks only while it is on screen, and stops with the drawer', () => {
   // An always-running 1 s interval kept ticking after the drawer closed; the
   // timer now belongs to the countdown and the close path clears it.

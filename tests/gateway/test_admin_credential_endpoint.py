@@ -1057,6 +1057,7 @@ class TestVendorManagedLogin:
         )
 
         assert payload["source"] == "none"
+        assert payload["vendor_managed"] is True
         assert payload["can_begin_login"] is True
         assert payload["can_complete_login"] is True
 

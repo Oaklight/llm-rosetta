@@ -826,20 +826,28 @@ def _resolve_acp_argv(
 
 
 def _cli_env(
-    cfg: dict[str, Any], shim: Any | None, provider_key: str
+    cfg: dict[str, Any],
+    shim: Any | None,
+    provider_key: str,
+    home: str | None = None,
 ) -> dict[str, str] | None:
     """Environment overrides for one ``claude_cli`` lane's child process.
 
     The shim declares the vendor facts (the caller name a subscription meters
-    by, a switch that keeps the CLI from offering its own tools); the provider
-    entry may add deployment facts without repeating them.  The operator's
-    values win.
+    by, the lane's own login profile); the provider entry may add deployment
+    facts without repeating them.  The operator's values win.
+
+    *home* is the lane's persistent directory.  A shim may name it as
+    ``{acp_home}`` (``{acp_state_dir}`` is kept as an alias), so the direct
+    CLI lane keeps its login in the same kind of profile the ACP lane does
+    instead of reading the gateway process's ``~/.claude``.
 
     Args:
         cfg: The provider's own config block.
         shim: The provider's shim, whose ``connection.cli_env`` supplies the
             defaults.
         provider_key: The config key, used in the error message.
+        home: The lane's persistent directory, when it has one.
 
     Returns:
         The merged mapping, or ``None`` when neither side declares one.
@@ -862,6 +870,11 @@ def _cli_env(
                     f"strings; {name!r} has value {value!r}"
                 )
         env.update(override)
+    if home:
+        env = {
+            name: value.replace("{acp_home}", home).replace("{acp_state_dir}", home)
+            for name, value in env.items()
+        }
     return env or None
 
 
@@ -909,7 +922,8 @@ def _cli_args(
     """Extra arguments for one ``claude_cli`` lane's command.
 
     The shim names the vendor's own requirement (``--setting-sources user``
-    loads the ``apiKeyHelper`` a host authenticates with).  A provider entry
+    lets the lane's own profile settings participate, without reading a
+    settings file the CLI would otherwise skip).  A provider entry
     replaces the list, because the flags are one command line: appending a
     second ``--setting-sources`` would make the last value win by accident.
 
@@ -1399,6 +1413,54 @@ def _resolve_quota_local(
     return argv, env, timeout
 
 
+def _resolve_quota_config(
+    cfg: dict[str, Any], shim: Any, provider_key: str
+) -> dict[str, Any]:
+    """Read the quota probe, URL, in-band flag and local command for a lane.
+
+    The shim declares what its vendor exposes; a provider entry overrides one
+    field at a time.  A lane with no usage endpoint keeps the probe for its
+    in-band classifier, and nothing polls it.  A lane whose allowance is only
+    readable through its own CLI names that command here; unlike the HTTP
+    probes it is a local subprocess, so the command is expanded with the
+    lane's profile when the quota card reads it.
+
+    Args:
+        cfg: The provider's own config block.
+        shim: The provider's shim, or ``None`` for a bare base type.
+        provider_key: The config key, used in error messages.
+
+    Returns:
+        The resolved fields: ``probe``, ``url``, ``in_band``, ``local_argv``,
+        ``local_env``, ``local_timeout`` and ``probes``.
+
+    Raises:
+        ValueError: A local command is named but no probe ships with it.
+    """
+    quota_raw = cfg.get("quota")
+    quota_cfg: dict[str, Any] = quota_raw if isinstance(quota_raw, dict) else {}
+    shim_quota = getattr(shim, "quota", None) if shim is not None else None
+    local_argv, local_env, local_timeout = _resolve_quota_local(
+        quota_cfg.get("local"), shim_quota, provider_key
+    )
+    probes = _quota_probes(shim, quota_cfg.get("probe"))
+    _require_local_quota_probe(local_argv, probes, provider_key)
+    return {
+        "probe": quota_cfg.get("probe")
+        or (shim_quota.probe if shim_quota is not None else None),
+        "url": quota_cfg.get("url")
+        or (shim_quota.url if shim_quota is not None else None),
+        "in_band": bool(
+            quota_cfg.get("in_band", False)
+            or (shim_quota.in_band if shim_quota is not None else False)
+        ),
+        "local_argv": local_argv,
+        "local_env": local_env,
+        "local_timeout": local_timeout,
+        "probes": probes,
+    }
+
+
 def _require_local_quota_probe(
     argv: tuple[str, ...], probes: tuple[Any, ...], provider_key: str
 ) -> None:
@@ -1432,8 +1494,9 @@ def _bind_auth_exchange(
     record the exchange cannot read costs the provider its account identity,
     not its configuration — the credential may yet be minted.
 
-    *acp_env* is forwarded to the context, so a vendor-managed exchange drives
-    the vendor CLI in the same profile the ACP transport will start it with.
+    *acp_env* is the lane's effective environment: ``acp_env`` for an agent
+    process, ``cli_env`` for the direct CLI lane.  A vendor-managed exchange
+    drives the vendor CLI in the same profile that lane will use.
     """
     if exchange is None:
         return None, None
@@ -1615,32 +1678,14 @@ def build_provider_info(
     lane_transport = _resolve_lane_transport(cfg, shim, provider_key)
     acp_limits = _resolve_acp_limits(cfg, provider_key)
 
-    quota_raw = cfg.get("quota")
-    quota_cfg: dict[str, Any] = quota_raw if isinstance(quota_raw, dict) else {}
-    shim_quota = getattr(shim, "quota", None) if shim is not None else None
-    quota_probe = quota_cfg.get("probe") or (
-        shim_quota.probe if shim_quota is not None else None
-    )
-    quota_url = quota_cfg.get("url") or (
-        shim_quota.url if shim_quota is not None else None
-    )
-    # A lane with no usage endpoint: the probe is kept for its in-band
-    # classifier, and nothing polls it.
-    quota_in_band = bool(
-        quota_cfg.get("in_band", False)
-        or (shim_quota.in_band if shim_quota is not None else False)
-    )
-    # A lane whose allowance is only readable through its own CLI: the shim
-    # names the command, or the provider entry overrides it.  Unlike the HTTP
-    # probes this is a local subprocess, so the command is expanded with the
-    # lane's profile when the quota card reads it.
-    (
-        quota_local_argv,
-        quota_local_env,
-        quota_local_timeout,
-    ) = _resolve_quota_local(quota_cfg.get("local"), shim_quota, provider_key)
-    quota_probes = _quota_probes(shim, quota_cfg.get("probe"))
-    _require_local_quota_probe(quota_local_argv, quota_probes, provider_key)
+    quota = _resolve_quota_config(cfg, shim, provider_key)
+    quota_probe = quota["probe"]
+    quota_url = quota["url"]
+    quota_in_band = quota["in_band"]
+    quota_local_argv = quota["local_argv"]
+    quota_local_env = quota["local_env"]
+    quota_local_timeout = quota["local_timeout"]
+    quota_probes = quota["probes"]
 
     command_takes_key = bool(token_command and cfg.get("token_command_env"))
 
@@ -1665,10 +1710,26 @@ def build_provider_info(
         vendor_managed=vendor_managed,
     )
 
+    cli_argv = _cli_argv(cfg, shim, provider_key)
+    cli_args = _cli_args(cfg, shim, provider_key)
+    cli_env = _cli_env(cfg, shim, provider_key, acp_home)
+    cli_env_unset = _cli_env_unset(cfg, shim, provider_key)
+    cli_upstream = _cli_upstream(cfg, shim, provider_key)
+    cli_processes = _cli_processes(cfg, provider_key)
+
     # The config key, when the caller has one: two providers of the same shim
     # are two accounts, and the exchange must be able to tell them apart.
+    # A vendor-managed exchange drives the same process the lane starts, so it
+    # receives that lane's effective environment: ``acp_env`` for an agent
+    # process, ``cli_env`` for the direct CLI lane.
+    lane_env = cli_env if lane_transport == "claude_cli" else effective_acp_env
+    auth_cfg = dict(cfg)
+    if cli_argv:
+        # The admin sign-in must drive the resolved command, not only the one
+        # an operator happened to write into this entry.
+        auth_cfg["cli_argv"] = list(cli_argv)
     auth_context, auth_account_id = _bind_auth_exchange(
-        provider_key, cfg, exchange, data_dir, effective_acp_env
+        provider_key, auth_cfg, exchange, data_dir, lane_env
     )
 
     # Which profile directories this entry owns, for the admin lifecycle.
@@ -1682,13 +1743,6 @@ def build_provider_info(
         lane_transport=lane_transport,
         exchange=exchange,
     )
-
-    cli_argv = _cli_argv(cfg, shim, provider_key)
-    cli_args = _cli_args(cfg, shim, provider_key)
-    cli_env = _cli_env(cfg, shim, provider_key)
-    cli_env_unset = _cli_env_unset(cfg, shim, provider_key)
-    cli_upstream = _cli_upstream(cfg, shim, provider_key)
-    cli_processes = _cli_processes(cfg, provider_key)
 
     return ProviderInfo(
         name=provider_type,
