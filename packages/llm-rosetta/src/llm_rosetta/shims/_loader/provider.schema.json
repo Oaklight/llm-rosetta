@@ -463,7 +463,7 @@
         },
         "transport": {
           "type": "string",
-          "description": "How this lane reaches its upstream: 'http' (the default) or 'acp', which drives an agent CLI over stdio JSON-RPC instead of POSTing a body."
+          "description": "How this lane reaches its upstream: 'http' (the default), 'acp', which drives an agent CLI over stdio JSON-RPC instead of POSTing a body, or 'claude_cli', which runs the Claude Code CLI as a model client and reads its upstream request through a loopback relay."
         },
         "api_key_env": {
           "type": "string",

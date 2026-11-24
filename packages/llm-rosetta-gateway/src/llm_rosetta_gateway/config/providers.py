@@ -825,6 +825,178 @@ def _resolve_acp_argv(
     return None
 
 
+def _cli_env(
+    cfg: dict[str, Any], shim: Any | None, provider_key: str
+) -> dict[str, str] | None:
+    """Environment overrides for one ``claude_cli`` lane's child process.
+
+    The shim declares the vendor facts (the caller name a subscription meters
+    by, a switch that keeps the CLI from offering its own tools); the provider
+    entry may add deployment facts without repeating them.  The operator's
+    values win.
+
+    Args:
+        cfg: The provider's own config block.
+        shim: The provider's shim, whose ``connection.cli_env`` supplies the
+            defaults.
+        provider_key: The config key, used in the error message.
+
+    Returns:
+        The merged mapping, or ``None`` when neither side declares one.
+
+    Raises:
+        ValueError: ``cli_env`` is not a mapping of strings to strings.
+    """
+    env = dict(shim.connection.cli_env or {}) if shim is not None else {}
+    override = cfg.get("cli_env")
+    if override is not None:
+        if not isinstance(override, dict):
+            raise ValueError(
+                f"Provider '{provider_key}': cli_env must be a mapping of "
+                f"environment names to strings, got {override!r}"
+            )
+        for name, value in override.items():
+            if not isinstance(name, str) or not isinstance(value, str):
+                raise ValueError(
+                    f"Provider '{provider_key}': cli_env must map strings to "
+                    f"strings; {name!r} has value {value!r}"
+                )
+        env.update(override)
+    return env or None
+
+
+def _cli_env_unset(
+    cfg: dict[str, Any], shim: Any | None, provider_key: str
+) -> tuple[str, ...]:
+    """Environment names removed from one ``claude_cli`` lane's child process.
+
+    The shim names the billing and backend variables that would otherwise
+    outrank the CLI's own login.  A provider entry may add names; it cannot
+    re-admit one the shim removed, because the lane's contract is that the
+    CLI's login is the only credential.
+
+    Args:
+        cfg: The provider's own config block.
+        shim: The provider's shim, whose ``connection.cli_env_unset`` supplies
+            the defaults.
+        provider_key: The config key, used in the error message.
+
+    Returns:
+        The merged names, shim first.
+
+    Raises:
+        ValueError: ``cli_env_unset`` is not a list of non-empty strings.
+    """
+    names = list(shim.connection.cli_env_unset) if shim is not None else []
+    raw = cfg.get("cli_env_unset")
+    if raw is not None:
+        if not isinstance(raw, (list, tuple)) or not all(
+            isinstance(part, str) and part for part in raw
+        ):
+            raise ValueError(
+                f"Provider '{provider_key}': cli_env_unset must be a list of "
+                f"non-empty strings, got {raw!r}"
+            )
+        for name in raw:
+            if name not in names:
+                names.append(name)
+    return tuple(names)
+
+
+def _cli_args(
+    cfg: dict[str, Any], shim: Any | None, provider_key: str
+) -> tuple[str, ...]:
+    """Extra arguments for one ``claude_cli`` lane's command.
+
+    The shim names the vendor's own requirement (``--setting-sources user``
+    loads the ``apiKeyHelper`` a host authenticates with).  A provider entry
+    replaces the list, because the flags are one command line: appending a
+    second ``--setting-sources`` would make the last value win by accident.
+
+    Args:
+        cfg: The provider's own config block.
+        shim: The provider's shim, whose ``connection.cli_args`` supplies the
+            defaults.
+        provider_key: The config key, used in the error message.
+
+    Returns:
+        The effective arguments.
+
+    Raises:
+        ValueError: ``cli_args`` is not a list of non-empty strings.
+    """
+    raw = cfg.get("cli_args")
+    if raw is None:
+        return tuple(shim.connection.cli_args) if shim is not None else ()
+    if not isinstance(raw, (list, tuple)) or not all(
+        isinstance(part, str) for part in raw
+    ):
+        raise ValueError(
+            f"Provider '{provider_key}': cli_args must be a list of strings, "
+            f"got {raw!r}"
+        )
+    return tuple(raw)
+
+
+def _cli_argv(
+    cfg: dict[str, Any], shim: Any | None, provider_key: str
+) -> tuple[str, ...] | None:
+    """The command one ``claude_cli`` lane starts.
+
+    The shim names the vendor's command (``claude``, or an absolute path when
+    the binary is not on ``PATH``); a provider entry may point at another
+    install without editing the shim.
+
+    Args:
+        cfg: The provider's own config block.
+        shim: The provider's shim, whose ``connection.cli_argv`` supplies the
+            default.
+        provider_key: The config key, used in the error message.
+
+    Returns:
+        The command, or ``None`` for the transport's own default.
+
+    Raises:
+        ValueError: ``cli_argv`` is not a non-empty list of non-empty strings.
+    """
+    declared = _argv_value(cfg.get("cli_argv"), provider_key, "cli_argv")
+    if declared is not None:
+        return declared
+    return shim.connection.cli_argv if shim is not None else None
+
+
+def _cli_upstream(
+    cfg: dict[str, Any], shim: Any | None, provider_key: str
+) -> str | None:
+    """Where one ``claude_cli`` lane's relay forwards the CLI's request.
+
+    The shim leaves this unset for Anthropic's own API.  An organization that
+    fronts the API with its own gateway names that host on the provider entry,
+    which is a deployment fact rather than a vendor one.
+
+    Args:
+        cfg: The provider's own config block.
+        shim: The provider's shim, whose ``connection.cli_upstream`` supplies
+            the default.
+        provider_key: The config key, used in the error message.
+
+    Returns:
+        The upstream URL, or ``None`` for Anthropic's API.
+
+    Raises:
+        ValueError: ``cli_upstream`` is not a non-empty string.
+    """
+    declared = cfg.get("cli_upstream")
+    if declared is not None:
+        if not isinstance(declared, str) or not declared.strip():
+            raise ValueError(
+                f"Provider '{provider_key}': cli_upstream must be a non-empty "
+                f"string, got {declared!r}"
+            )
+        return declared
+    return shim.connection.cli_upstream if shim is not None else None
+
+
 def _resolve_acp_harden(cfg: dict[str, Any], provider_key: str) -> bool | None:
     """The entry's explicit hardening choice, or ``None`` for "by name".
 
@@ -1482,6 +1654,12 @@ def build_provider_info(
         exchange=exchange,
     )
 
+    cli_argv = _cli_argv(cfg, shim, provider_key)
+    cli_args = _cli_args(cfg, shim, provider_key)
+    cli_env = _cli_env(cfg, shim, provider_key)
+    cli_env_unset = _cli_env_unset(cfg, shim, provider_key)
+    cli_upstream = _cli_upstream(cfg, shim, provider_key)
+
     return ProviderInfo(
         name=provider_type,
         config_name=provider_key,
@@ -1542,13 +1720,11 @@ def build_provider_info(
         acp_session_meta=(
             shim.connection.acp_session_meta if shim is not None else None
         ),
-        cli_argv=(shim.connection.cli_argv if shim is not None else None),
-        cli_env=(shim.connection.cli_env if shim is not None else None),
-        cli_env_unset=(
-            tuple(shim.connection.cli_env_unset) if shim is not None else ()
-        ),
-        cli_args=(tuple(shim.connection.cli_args) if shim is not None else ()),
-        cli_upstream=(shim.connection.cli_upstream if shim is not None else None),
+        cli_argv=cli_argv,
+        cli_env=cli_env,
+        cli_env_unset=cli_env_unset,
+        cli_args=cli_args,
+        cli_upstream=cli_upstream,
         acp_state_dir=acp_home,
         managed_acp_state_dir=managed_acp_home,
         managed_auth_state_dir=managed_auth_home,
