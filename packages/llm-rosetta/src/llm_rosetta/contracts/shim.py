@@ -335,6 +335,15 @@ class ConnectionConfig:
     it here.  Appended after the transport's own flags, so a repeated option
     takes this value.  Only read when ``transport`` is ``"claude_cli"``.
     """
+    cli_upstream: str | None = None
+    """Where the relay forwards the CLI's request.
+
+    ``None`` means Anthropic's own API.  An organization that fronts the API
+    with its own gateway names that host here; the CLI's request is forwarded
+    to it with the CLI's own authorization headers.  ``https://`` only, except
+    for a loopback host (tests and a local gateway).  Only read when
+    ``transport`` is ``"claude_cli"``.
+    """
 
 
 @dataclass(frozen=True)

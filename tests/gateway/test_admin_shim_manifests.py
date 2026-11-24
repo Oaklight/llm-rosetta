@@ -654,8 +654,13 @@ class TestLoaderVocabulary:
             "acp_env",
             "acp_env_unset",
             "acp_session_meta",
+            "cli_argv",
+            "cli_env",
+            "cli_env_unset",
+            "cli_args",
+            "cli_upstream",
         } <= set(keys)
-        assert len(keys) == len(set(keys)) == 22
+        assert len(keys) == len(set(keys)) == 27
 
     def test_the_identity_keys(self):
         assert shim_manifests._identity_keys() == ("name", "format", "base")

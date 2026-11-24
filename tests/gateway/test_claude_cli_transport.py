@@ -13,6 +13,7 @@ inferring them from the reply.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 import textwrap
@@ -30,13 +31,14 @@ from llm_rosetta_gateway.transport.claude_cli import (
     build_frames,
     conversation_session_id,
 )
+from llm_rosetta_gateway.transport.claude_cli_relay import Relay, RelayError
 from llm_rosetta_gateway.transport.provider_info import ProviderInfo, openai_auth
 
 #: A minimal stand-in for ``claude``: it reads every frame, notes what it saw,
 #: then answers according to ``FAKE_CLI_MODE``.
 FAKE_CLI = textwrap.dedent(
     """
-    import json, os, sys, time
+    import json, os, sys, time, urllib.error, urllib.request
 
     MODE = os.environ.get("FAKE_CLI_MODE", "stream")
     LOG = os.environ.get("FAKE_CLI_LOG", "")
@@ -47,12 +49,53 @@ FAKE_CLI = textwrap.dedent(
         with open(LOG, "a", encoding="utf-8") as handle:
             handle.write(json.dumps({"kind": kind, **fields}) + "\\n")
 
+    def send(payload):
+        sys.stdout.write(json.dumps(payload) + "\\n")
+        sys.stdout.flush()
+
     frames = []
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        frames.append(json.loads(line))
+
+    def ack():
+        send({"type": "result", "subtype": "success", "is_error": False,
+              "num_turns": 0})
+
+    def take(frame):
+        \"\"\"Note one frame; answer a history turn.  True on the queried frame.\"\"\"
+        frames.append(frame)
+        note("frame", index=len(frames) - 1, at=time.monotonic())
+        if frame.get("shouldQuery") is False:
+            # The real CLI acknowledges a queued *user* frame and says nothing
+            # about an appended assistant frame.
+            if frame.get("type") == "user":
+                ack()
+                note("ack", index=len(frames) - 1, at=time.monotonic())
+            return False
+        return True
+
+    if MODE == "chunks":
+        # Read the raw pipe, one read at a time.  A transport that writes the
+        # whole history at once puts several frames in a single read; one that
+        # waits for the acknowledgment puts exactly one there.  The sleep lets
+        # a bulk-writing transport finish before the first read.
+        time.sleep(0.3)
+        done = False
+        while not done:
+            data = os.read(0, 65536)
+            if not data:
+                break
+            lines = [line for line in data.decode("utf-8").splitlines() if line.strip()]
+            note("chunk", lines=len(lines))
+            for line in lines:
+                if take(json.loads(line)):
+                    done = True
+                    break
+    else:
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
+            if take(json.loads(line)):
+                break
 
     system_path = None
     argv = sys.argv[1:]
@@ -67,10 +110,6 @@ FAKE_CLI = textwrap.dedent(
          removed=os.environ.get("FAKE_CLI_REMOVED"),
          kept=os.environ.get("FAKE_CLI_KEPT"),
          pid=os.getpid())
-
-    def send(payload):
-        sys.stdout.write(json.dumps(payload) + "\\n")
-        sys.stdout.flush()
 
     ASSISTANT = {
         "id": "msg_test", "type": "message", "role": "assistant",
@@ -89,7 +128,34 @@ FAKE_CLI = textwrap.dedent(
         time.sleep(60)
         sys.exit(0)
 
-    if MODE == "stream":
+    if MODE in ("relay-once", "relay-twice"):
+        base = os.environ.get("ANTHROPIC_BASE_URL", "")
+        payload = json.dumps({"model": "claude-test", "frames": len(frames)}).encode()
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        statuses = []
+        attempts = 1 if MODE == "relay-once" else 2
+        for _ in range(attempts):
+            request = urllib.request.Request(
+                base + "/v1/messages",
+                data=payload,
+                headers={"content-type": "application/json",
+                         "authorization": "Bearer test-token",
+                         "anthropic-version": "2023-06-01",
+                         "anthropic-ratelimit-unified-status": "allowed"},
+            )
+            try:
+                with opener.open(request, timeout=10) as response:
+                    statuses.append(response.status)
+                    response.read()
+            except urllib.error.HTTPError as exc:
+                statuses.append(exc.code)
+                exc.read()
+        note("relay", statuses=statuses, base=base)
+        send({"type": "assistant", "message": ASSISTANT})
+        send(RESULT)
+        sys.exit(0)
+
+    if MODE in ("stream", "chunks"):
         send({"type": "stream_event", "event": {
             "type": "message_start",
             "message": {"id": "msg_test", "type": "message",
@@ -151,6 +217,7 @@ def _provider(
     env: dict[str, str] | None = None,
     unset: tuple[str, ...] = (),
     args: tuple[str, ...] = (),
+    upstream: str | None = None,
 ) -> ProviderInfo:
     """A keyless lane whose CLI is the fake one."""
     return ProviderInfo(
@@ -166,6 +233,7 @@ def _provider(
         cli_env=env,
         cli_env_unset=unset,
         cli_args=args,
+        cli_upstream=upstream,
     )
 
 
@@ -178,6 +246,68 @@ def _log(path: Path) -> list[dict]:
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
+
+
+def _start(path: Path) -> dict:
+    """The fake CLI's ``start`` note: its argv, the frames and the system text."""
+    return next(entry for entry in _log(path) if entry["kind"] == "start")
+
+
+class FakeUpstream:
+    """A scripted Anthropic-shaped upstream that records what it received."""
+
+    def __init__(self, responses: list[tuple[int, bytes]]) -> None:
+        self._responses = list(responses)
+        self.requests: list[dict] = []
+        self._server: asyncio.AbstractServer | None = None
+
+    async def start(self) -> str:
+        """Bind a loopback port and return the URL the relay should use."""
+        self._server = await asyncio.start_server(self._handle, "127.0.0.1", 0)
+        socket = (self._server.sockets or [None])[0]
+        assert socket is not None
+        return f"http://127.0.0.1:{socket.getsockname()[1]}"
+
+    async def close(self) -> None:
+        """Stop serving."""
+        if self._server is not None:
+            self._server.close()
+            await self._server.wait_closed()
+
+    async def _handle(
+        self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
+    ) -> None:
+        try:
+            await reader.readline()
+            headers: dict[str, str] = {}
+            while True:
+                line = await reader.readline()
+                if not line or line in (b"\r\n", b"\n"):
+                    break
+                name, _, value = line.decode("latin-1").rstrip("\r\n").partition(":")
+                headers[name.strip().lower()] = value.strip()
+            body = b""
+            length = headers.get("content-length")
+            if length:
+                body = await reader.readexactly(int(length))
+            self.requests.append({"headers": headers, "body": body})
+            status, payload = (
+                self._responses.pop(0) if self._responses else (200, b'{"ok":true}')
+            )
+            head = (
+                f"HTTP/1.1 {status} Scripted\r\n"
+                "content-type: application/json\r\n"
+                f"content-length: {len(payload)}\r\n"
+                "anthropic-ratelimit-unified-status: allowed\r\n\r\n"
+            )
+            writer.write(head.encode("latin-1") + payload)
+            await writer.drain()
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except (ConnectionError, OSError):
+                pass
 
 
 def _turn() -> dict:
@@ -275,6 +405,97 @@ class TestFrames:
         assert conversation_session_id(*other) != first
 
 
+class TestRelay:
+    """The loopback relay between the CLI and the upstream."""
+
+    async def test_one_request_reaches_the_upstream(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("FAKE_CLI_MODE", "relay-once")
+        log = tmp_path / "cli.jsonl"
+        monkeypatch.setenv("FAKE_CLI_LOG", str(log))
+        upstream = FakeUpstream([(200, b'{"ok":true}')])
+        url = await upstream.start()
+        transport = ClaudeCliTransport(timeout=30)
+        stream = None
+        try:
+            provider = _provider(_write_cli(tmp_path), upstream=url)
+            stream = await transport.send_streaming(provider, "", _turn())
+            try:
+                [event async for event in stream]
+            finally:
+                await stream.close()
+                await transport.close()
+        finally:
+            await upstream.close()
+
+        assert len(upstream.requests) == 1
+        request = upstream.requests[0]
+        assert request["headers"]["authorization"] == "Bearer test-token"
+        assert request["headers"]["anthropic-version"] == "2023-06-01"
+        assert json.loads(request["body"]) == {"model": "claude-test", "frames": 3}
+        assert stream is not None
+        assert [reading.status for reading in stream.readings] == [200]
+        assert (
+            stream.readings[0].rate_limit()["anthropic-ratelimit-unified-status"]
+            == "allowed"
+        )
+
+    async def test_a_second_attempt_is_refused_locally(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("FAKE_CLI_MODE", "relay-twice")
+        log = tmp_path / "cli.jsonl"
+        monkeypatch.setenv("FAKE_CLI_LOG", str(log))
+        upstream = FakeUpstream([(200, b'{"ok":true}')])
+        url = await upstream.start()
+        transport = ClaudeCliTransport(timeout=30)
+        try:
+            provider = _provider(_write_cli(tmp_path), upstream=url)
+            stream = await transport.send_streaming(provider, "", _turn())
+            try:
+                [event async for event in stream]
+            finally:
+                await stream.close()
+                await transport.close()
+            statuses = [entry for entry in _log(log) if entry["kind"] == "relay"][0][
+                "statuses"
+            ]
+        finally:
+            await upstream.close()
+
+        assert statuses == [200, 429]
+        assert len(upstream.requests) == 1
+
+    async def test_a_401_lets_one_retry_through(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("FAKE_CLI_MODE", "relay-twice")
+        log = tmp_path / "cli.jsonl"
+        monkeypatch.setenv("FAKE_CLI_LOG", str(log))
+        upstream = FakeUpstream([(401, b'{"error":"expired"}'), (200, b'{"ok":true}')])
+        url = await upstream.start()
+        transport = ClaudeCliTransport(timeout=30)
+        try:
+            provider = _provider(_write_cli(tmp_path), upstream=url)
+            stream = await transport.send_streaming(provider, "", _turn())
+            try:
+                [event async for event in stream]
+            finally:
+                await stream.close()
+                await transport.close()
+            statuses = [entry for entry in _log(log) if entry["kind"] == "relay"][0][
+                "statuses"
+            ]
+        finally:
+            await upstream.close()
+
+        assert statuses == [401, 200]
+        assert len(upstream.requests) == 2
+
+    def test_a_plain_http_upstream_must_be_loopback(self):
+        with pytest.raises(RelayError, match="loopback"):
+            Relay("http://api.example.com")
+
+    def test_a_hosted_upstream_must_be_a_url(self):
+        with pytest.raises(RelayError, match="not a URL"):
+            Relay("api.example.com")
+
+
 class TestTurn:
     """Driving one CLI process."""
 
@@ -320,13 +541,14 @@ class TestTurn:
             await stream.close()
             await transport.close()
 
-        start = _log(log)[0]
+        start = _start(log)
         argv = start["argv"]
         assert argv[0] == "-p"
         assert argv[argv.index("--input-format") + 1] == "stream-json"
         assert argv[argv.index("--output-format") + 1] == "stream-json"
         assert argv[argv.index("--tools") + 1] == ""
         assert argv[argv.index("--model") + 1] == "claude-test"
+        assert argv[argv.index("--settings") + 1].endswith("settings.json")
         assert argv[-2:] == ["--setting-sources", "user"]
         assert "--include-partial-messages" in argv
         assert "--no-session-persistence" in argv
@@ -347,11 +569,37 @@ class TestTurn:
             await stream.close()
             await transport.close()
 
-        frames = _log(log)[0]["frames"]
+        frames = _start(log)["frames"]
         assert [frame["type"] for frame in frames] == ["user", "assistant", "user"]
         assert frames[0]["message"]["content"] == [
             {"type": "text", "text": "name a fruit"}
         ]
+
+    async def test_the_history_is_written_one_frame_per_acknowledgment(
+        self, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("FAKE_CLI_MODE", "chunks")
+        log = tmp_path / "cli.jsonl"
+        monkeypatch.setenv("FAKE_CLI_LOG", str(log))
+        transport = ClaudeCliTransport(timeout=30)
+
+        stream = await transport.send_streaming(
+            _provider(_write_cli(tmp_path)), "", _turn()
+        )
+        try:
+            [event async for event in stream]
+        finally:
+            await stream.close()
+            await transport.close()
+
+        chunks = [entry["lines"] for entry in _log(log) if entry["kind"] == "chunk"]
+        # Writing the whole history at once makes the CLI fold the later user
+        # frames into the turn's own message, and the model answers the first
+        # question.  The first read must therefore hold the first history frame
+        # alone: it is written only once the CLI has acknowledged the previous
+        # queued turn.
+        assert chunks[0] == 1
+        assert len(_start(log)["frames"]) == 3
 
     async def test_a_whole_message_is_synthesised_into_events(
         self, monkeypatch, tmp_path
@@ -494,7 +742,7 @@ class TestTurn:
             await stream.close()
             await transport.close()
 
-        start = _log(log)[0]
+        start = _start(log)
         assert start["removed"] is None
         assert start["kept"] == "yes"
 

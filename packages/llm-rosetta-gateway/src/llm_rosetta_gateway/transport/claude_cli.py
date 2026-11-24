@@ -18,9 +18,10 @@ The CLI's own tool set is disabled (``--tools ""``) and its session
 persistence is off: the gateway owns the conversation, and a request must not
 leave state behind.
 
-The relay that reads the CLI's upstream request (and enforces one upstream
-call per host request) is the next slice; this module is the process and the
-event mapping it will sit in front of.
+Every turn's child points ``ANTHROPIC_BASE_URL`` at a per-turn loopback relay
+(:mod:`~.claude_cli_relay`).  The relay forwards the CLI's single upstream
+request with the CLI's own headers, refuses the CLI's recovery attempts, and
+keeps the upstream status and rate-limit headers for the gateway.
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ from ._base import (
     UpstreamTimeoutError,
     UpstreamTransport,
 )
+from .claude_cli_relay import Relay, RelayError
 from .provider_info import ProviderInfo
 
 #: The command a shim that declares none gets.
@@ -66,6 +68,20 @@ _STREAM_EVENT = "stream_event"
 
 #: Stop reason when the CLI reports none.
 _DEFAULT_STOP_REASON = "end_turn"
+
+#: Environment the transport needs whatever the shim declares.  A shim's own
+#: ``cli_env`` value wins, because these are defaults.
+_FIXED_ENV: dict[str, str] = {
+    # Native's session-title request is its own upstream call, and it races
+    # the turn for the relay's one admitted request.  The gateway names the
+    # turn itself, so the title call is not wanted.
+    "CLAUDE_CODE_DISABLE_TERMINAL_TITLE": "1",
+    # The gateway owns the conversation and the system prompt.  Native's
+    # memory and CLAUDE.md files would otherwise be injected into the replayed
+    # prefix, changing it between turns and reading host notes as user text.
+    "CLAUDE_CODE_DISABLE_AUTO_MEMORY": "1",
+    "CLAUDE_CODE_DISABLE_CLAUDE_MDS": "1",
+}
 
 
 def _system_text(system: Any) -> str:
@@ -194,6 +210,7 @@ def _spawn_argv(
     session_id: str,
     system_path: str | None,
     model: str,
+    settings_path: str,
 ) -> list[str]:
     """The CLI argv for one turn.
 
@@ -202,6 +219,7 @@ def _spawn_argv(
         session_id: The conversation's CLI session id.
         system_path: File the system prompt was written to, if any.
         model: The model the client named, when it named one.
+        settings_path: The private settings file that pins the relay URL.
 
     Returns:
         The full argv.
@@ -231,6 +249,7 @@ def _spawn_argv(
         argv += ["--system-prompt-file", system_path]
     if model:
         argv += ["--model", model]
+    argv += ["--settings", settings_path]
     argv += ["--session-id", session_id]
     argv += list(provider_info.cli_args)
     return argv
@@ -249,15 +268,23 @@ def _spawn_env(provider_info: ProviderInfo) -> dict[str, str]:
     for name in provider_info.cli_env_unset:
         env.pop(name, None)
     env.update({str(key): str(value) for key, value in provider_info.cli_env.items()})
+    for key, value in _FIXED_ENV.items():
+        env.setdefault(key, value)
     return env
 
 
 class _CliProcess:
     """One CLI child, its private working directory, and its stderr drain."""
 
-    def __init__(self, process: asyncio.subprocess.Process, workdir: str) -> None:
+    def __init__(
+        self,
+        process: asyncio.subprocess.Process,
+        workdir: str,
+        relay: Relay | None = None,
+    ) -> None:
         self.process = process
         self.workdir = workdir
+        self.relay = relay
         self.stderr: deque[str] = deque(maxlen=40)
         self._stderr_task = asyncio.ensure_future(self._drain_stderr())
 
@@ -306,6 +333,8 @@ class _CliProcess:
         self._stderr_task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await self._stderr_task
+        if self.relay is not None:
+            await self.relay.close()
         shutil.rmtree(self.workdir, ignore_errors=True)
 
 
@@ -319,11 +348,14 @@ class _CliStream(UpstreamStream):
         cli: _CliProcess,
         model: str,
         timeout: float,
-        frames_flushed: bool = True,
+        frames: list[dict[str, Any]],
     ) -> None:
         self._cli = cli
         self._model = model
         self._timeout = timeout
+        self._frames = list(frames)
+        self._next_frame = 0
+        self._turn_sent = False
         self._queue: deque[dict[str, Any]] = deque()
         self._finished = False
         self._error: str | None = None
@@ -343,7 +375,10 @@ class _CliStream(UpstreamStream):
                 raise UpstreamConnectionError(self._error)
             if self._finished:
                 raise StopAsyncIteration
-            await self._pump()
+            if self._turn_sent:
+                await self._pump()
+            else:
+                await self._send_frame()
         return self._queue.popleft()
 
     async def read_error(self) -> str:
@@ -368,14 +403,73 @@ class _CliStream(UpstreamStream):
         """The ``result`` event that settled the turn, if any."""
         return self._result
 
-    # -- event pump ---------------------------------------------------------
+    @property
+    def readings(self) -> list[Any]:
+        """The upstream calls the relay saw during this turn."""
+        relay = self._cli.relay
+        return list(relay.readings) if relay is not None else []
 
-    async def _pump(self) -> None:
-        """Read one stdout line and, on end of stream, settle the turn."""
-        stream = self._cli.process.stdout
+    # -- replay, one frame at a time ---------------------------------------
+
+    async def _send_frame(self) -> None:
+        """Write the next frame; wait for its acknowledgment when it has one.
+
+        The CLI acknowledges a replayed *user* frame with a zero-turn
+        ``result`` only after it has ingested it; a replayed assistant frame is
+        appended to the history and answers nothing.  Sending the whole history
+        at once makes the CLI fold the later user frames into the turn's own
+        user message — the model then answers the first question in that merged
+        block.  Waiting on the user frames is what keeps the history in order.
+        """
+        frame = self._frames[self._next_frame]
+        self._next_frame += 1
+        await self._write(frame)
+        if frame.get("shouldQuery") is False and frame.get("type") == "user":
+            await self._await_ack()
+        elif frame.get("shouldQuery") is not False:
+            self._turn_sent = True
+
+    async def _write(self, frame: dict[str, Any]) -> None:
+        """Write one NDJSON frame to the CLI's stdin."""
+        stream = self._cli.process.stdin
         if stream is None:
+            raise UpstreamConnectionError("claude_cli: the CLI has no stdin")
+        payload = (json.dumps(frame, ensure_ascii=False, default=str) + "\n").encode(
+            "utf-8"
+        )
+        try:
+            stream.write(payload)
+            await stream.drain()
+        except (BrokenPipeError, ConnectionResetError):
+            await self._cli.stop()
+            raise UpstreamConnectionError(
+                "claude_cli: the CLI closed its input before the turn started"
+                + _stderr_suffix(self._cli)
+            ) from None
+
+    async def _await_ack(self) -> None:
+        """Wait for the zero-turn ``result`` that ends a replayed frame."""
+        while True:
+            event = await self._next_event()
+            if event is None:
+                self._finish()
+                return
+            if event.get("type") != "result":
+                # Setup notices during ingestion carry nothing this turn uses.
+                continue
+            if int(event.get("num_turns") or 0) == 0:
+                return
+            self._result = event
             self._finish()
             return
+
+    # -- event pump ---------------------------------------------------------
+
+    async def _next_event(self) -> dict[str, Any] | None:
+        """Read one CLI event, or ``None`` at end of stream."""
+        stream = self._cli.process.stdout
+        if stream is None:
+            return None
         try:
             line = await asyncio.wait_for(stream.readline(), self._timeout)
         except (TimeoutError, asyncio.TimeoutError) as exc:
@@ -383,8 +477,7 @@ class _CliStream(UpstreamStream):
             await self._cli.stop()
             raise UpstreamTimeoutError(self._error) from exc
         if not line:
-            self._finish()
-            return
+            return None
         try:
             event = json.loads(line)
         except json.JSONDecodeError as exc:
@@ -392,7 +485,14 @@ class _CliStream(UpstreamStream):
             raise UpstreamConnectionError(
                 f"claude_cli: the CLI wrote a non-JSON line: {text!r}"
             ) from exc
-        if isinstance(event, dict):
+        return event if isinstance(event, dict) else None
+
+    async def _pump(self) -> None:
+        """Read one stdout line and, on end of stream, settle the turn."""
+        event = await self._next_event()
+        if event is None:
+            self._finish()
+        else:
             self._handle(event)
 
     def _handle(self, event: dict[str, Any]) -> None:
@@ -647,7 +747,7 @@ class ClaudeCliTransport(UpstreamTransport):
         body: dict[str, Any],
         *,
         extra_headers: dict[str, str] | None = None,
-    ) -> UpstreamStream:
+    ) -> _CliStream:
         """Run one turn and return its ``messages`` event stream.
 
         Args:
@@ -682,9 +782,29 @@ class ClaudeCliTransport(UpstreamTransport):
             with open(system_path, "w", encoding="utf-8") as handle:
                 handle.write(system)
         argv = _spawn_argv(
-            provider_info, session_id, system_path, str(body.get("model") or "")
+            provider_info,
+            session_id,
+            system_path,
+            str(body.get("model") or ""),
+            os.path.join(workdir, "settings.json"),
         )
         env = _spawn_env(provider_info)
+        try:
+            relay = Relay(provider_info.cli_upstream, timeout=self._timeout)
+            relay_url = await relay.start()
+        except RelayError as exc:
+            shutil.rmtree(workdir, ignore_errors=True)
+            raise UpstreamConnectionError(str(exc)) from exc
+        env["ANTHROPIC_BASE_URL"] = relay_url
+        # A user settings file may set ``env.ANTHROPIC_BASE_URL`` itself, and
+        # settings win over the process environment: the CLI would then call
+        # its own host directly and the relay would see nothing.  ``--settings``
+        # is the highest user-controlled layer, so the private file pins the
+        # relay URL whatever the profile says.
+        with open(
+            os.path.join(workdir, "settings.json"), "w", encoding="utf-8"
+        ) as handle:
+            json.dump({"env": {"ANTHROPIC_BASE_URL": relay_url}}, handle)
         spawn_kwargs: dict[str, Any] = {}
         if os.name == "posix":
             spawn_kwargs["start_new_session"] = True
@@ -700,39 +820,13 @@ class ClaudeCliTransport(UpstreamTransport):
                 **spawn_kwargs,
             )
         except OSError as exc:
+            await relay.close()
             shutil.rmtree(workdir, ignore_errors=True)
             raise UpstreamConnectionError(
                 f"claude_cli: cannot start {argv[0]!r}: {exc}"
             ) from exc
-        cli = _CliProcess(process, workdir)
-        try:
-            await self._flush_frames(cli, frames)
-        except Exception:
-            await cli.stop()
-            raise
-        return _CliStream(cli, str(body.get("model") or ""), self._timeout)
-
-    async def _flush_frames(
-        self, cli: _CliProcess, frames: list[dict[str, Any]]
-    ) -> None:
-        """Write every frame, then close stdin so the CLI runs the turn."""
-        stream = cli.process.stdin
-        if stream is None:
-            raise UpstreamConnectionError("claude_cli: the CLI has no stdin")
-        payload = "".join(
-            json.dumps(frame, ensure_ascii=False, default=str) + "\n"
-            for frame in frames
-        ).encode("utf-8")
-        try:
-            stream.write(payload)
-            await stream.drain()
-            stream.close()
-        except (BrokenPipeError, ConnectionResetError):
-            await cli.stop()
-            raise UpstreamConnectionError(
-                "claude_cli: the CLI closed its input before the turn started"
-                + _stderr_suffix(cli)
-            ) from None
+        cli = _CliProcess(process, workdir, relay)
+        return _CliStream(cli, str(body.get("model") or ""), self._timeout, frames)
 
     async def _collect(
         self, stream: _CliStream

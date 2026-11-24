@@ -250,6 +250,7 @@ class ProviderInfo:
         cli_env: dict[str, str] | None = None,
         cli_env_unset: tuple[str, ...] = (),
         cli_args: tuple[str, ...] = (),
+        cli_upstream: str | None = None,
         acp_argv_custom: bool = False,
         acp_harden: bool = True,
         acp_state_dir: str | None = None,
@@ -374,6 +375,9 @@ class ProviderInfo:
         # Flags the lane adds to the transport's own, appended last so a
         # repeated option takes the shim's value.
         self.cli_args = tuple(cli_args or ())
+        # Where the relay forwards the CLI's request.  ``None`` is Anthropic's
+        # own API; an organization gateway is named by the shim.
+        self.cli_upstream = str(cli_upstream) if cli_upstream else None
         # Whether the operator wrote ``acp_argv`` in the provider entry (as
         # opposed to the shim declaring it).  Whether that command still gets
         # the gateway-owned profile is :attr:`acp_harden`'s decision: the

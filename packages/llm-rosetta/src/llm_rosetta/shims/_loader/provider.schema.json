@@ -597,6 +597,11 @@
           "minItems": 1,
           "description": "Extra arguments appended after the transport's own flags, so a repeated option takes this value. For example --setting-sources user when the host's apiKeyHelper supplies the credential. Only read when transport is 'claude_cli'."
         },
+        "cli_upstream": {
+          "type": "string",
+          "format": "uri",
+          "description": "Where the loopback relay forwards the CLI's request. Omit for Anthropic's own API. https:// only, except for a loopback host. Only read when transport is 'claude_cli'."
+        },
         "token_refresh_interval": {
           "type": "integer",
           "minimum": 0,
