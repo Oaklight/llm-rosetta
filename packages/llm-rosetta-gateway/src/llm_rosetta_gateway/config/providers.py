@@ -1126,7 +1126,8 @@ def _resolve_quota_local(
     command, ``env`` layers over the declaration's variables, and ``timeout``
     replaces the declaration's value only when it is present.  An entry that
     names only ``env`` therefore keeps the shim's command and its profile
-    variable.
+    variable.  ``env`` can add or override a variable but cannot remove one an
+    earlier source set; removing one needs a change in the shim.
 
     Args:
         local_cfg: The entry's ``quota.local`` block, or ``None`` to inherit.
