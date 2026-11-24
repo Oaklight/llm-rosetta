@@ -10,8 +10,11 @@ and the quota service reads it like any other.
 The reading is kept here rather than in :mod:`llm_rosetta_gateway.quota` on
 purpose: the transport is the foundation layer and may not import the state
 layer.  The store is process-wide, so a config reload that rebuilds the
-transport keeps the last reading.  The quota service, which may import this
-module, converts the same reading into the admin payload.
+transport keeps the last reading.  A good reading is also written beside the
+lane's profile (``.llm-rosetta-quota.json``) and read back whenever memory has
+none, so a gateway restart or an image upgrade keeps the card populated until
+the agent reports again.  The quota service, which may import this module,
+converts the same reading into the admin payload.
 
 Not every CLI reports the allowance in a turn.  A shim may instead declare
 ``quota.local``: a command that prints the account as JSON.  :func:`refresh_local`
@@ -30,6 +33,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import math
 import os
 import signal
 import tempfile
@@ -57,6 +61,12 @@ _MAX_LOCAL_OUTPUT = 1 << 20
 #: How long a killed command group may take to disappear before the read gives
 #: up on reaping it.  Nothing waits on the result after this.
 _KILL_GRACE = 5.0
+
+#: The last good reading is kept beside the lane's profile, so a restart or an
+#: image upgrade keeps the card populated until the agent reports again.  The
+#: file holds shares and reset times only — never a token.
+_READING_FILE = ".llm-rosetta-quota.json"
+_READING_SCHEMA = 1
 
 #: Window names an adapter uses for its rolling limits, and their lengths.
 _WINDOW_NAMES = {
@@ -146,16 +156,146 @@ def clear_lane_readings() -> None:
     """Drop every recorded reading.
 
     The store is process-wide, so tests are the one caller that needs to start
-    from nothing.
+    from nothing.  A reading kept beside a profile stays on disk and is read
+    again on the next call.
     """
     with _READINGS_LOCK:
         _READINGS.clear()
 
 
+def _reading_path(provider_info: Any) -> str | None:
+    """Where this lane's reading is kept, when its profile directory exists."""
+    home = str(getattr(provider_info, "acp_state_dir", "") or "")
+    if not home or not os.path.isdir(home):
+        return None
+    return os.path.join(home, _READING_FILE)
+
+
+def _timestamp(value: Any) -> datetime | None:
+    """Parse an ISO timestamp from the profile file."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
+
+
+def _write_reading(provider_info: Any, reading: LaneReading) -> None:
+    """Keep a good reading beside the profile; an error is not persisted."""
+    if reading.status != STATUS_OK or not reading.windows:
+        return
+    path = _reading_path(provider_info)
+    if path is None:
+        return
+    temp = ""
+    stored = reading.to_dict()
+    # The credential is derived from this very path, so a stored copy could
+    # only echo the filename back.  This file is the profile's, not an
+    # account's: a re-login inside one profile is replaced by the next turn.
+    stored.pop("credential", None)
+    try:
+        fd, temp = tempfile.mkstemp(prefix=".quota-", dir=os.path.dirname(path))
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(
+                {"schema": _READING_SCHEMA, "reading": stored},
+                handle,
+                separators=(",", ":"),
+            )
+        os.replace(temp, path)
+        temp = ""
+    except OSError:
+        pass
+    finally:
+        if temp:
+            try:
+                os.unlink(temp)
+            except OSError:
+                pass
+
+
+def _load_reading(provider_info: Any) -> LaneReading | None:
+    """Read the profile's kept reading, or ``None`` when there is none."""
+    path = _reading_path(provider_info)
+    if path is None or not os.path.isfile(path):
+        return None
+    try:
+        with open(path, encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(payload, dict) or payload.get("schema") != _READING_SCHEMA:
+        return None
+    raw = payload.get("reading")
+    if not isinstance(raw, dict) or raw.get("status", STATUS_OK) != STATUS_OK:
+        return None
+    windows: list[QuotaWindow] = []
+    for item in raw.get("windows") or []:
+        if not isinstance(item, dict) or not isinstance(item.get("name"), str):
+            continue
+        used = item.get("used_percent")
+        used_percent = None
+        if isinstance(used, (int, float)) and not isinstance(used, bool):
+            used = float(used)
+            used_percent = used if math.isfinite(used) else None
+        span = item.get("span_seconds")
+        windows.append(
+            QuotaWindow(
+                name=item["name"],
+                used_percent=used_percent,
+                span_seconds=(
+                    int(span)
+                    if isinstance(span, int) and not isinstance(span, bool)
+                    else None
+                ),
+                resets_at=_timestamp(item.get("resets_at")),
+                status=str(item.get("status") or ""),
+            )
+        )
+    if not windows:
+        return None
+    read_at = _timestamp(raw.get("read_at"))
+    if read_at is None:
+        # "now" would read as freshly taken.  The file's mtime is the honest
+        # fallback; without it, refuse the reading rather than claim an age.
+        try:
+            read_at = datetime.fromtimestamp(os.path.getmtime(path), timezone.utc)
+        except OSError:
+            return None
+    demote_at = raw.get("demote_at")
+    return LaneReading(
+        probe=str(raw.get("probe") or ACP_QUOTA_PROBE),
+        credential=lane_credential(provider_info),
+        windows=windows,
+        plan=raw.get("plan") if isinstance(raw.get("plan"), str) else None,
+        status=STATUS_OK,
+        read_at=read_at,
+        demote_at=(
+            float(demote_at)
+            if isinstance(demote_at, (int, float)) and not isinstance(demote_at, bool)
+            else 100.0
+        ),
+        advisory=bool(raw.get("advisory", False)),
+    )
+
+
 def lanes_reading(provider_info: Any) -> LaneReading | None:
-    """The last allowance this lane's agent reported, if any."""
+    """The last allowance this lane reported, from memory or its profile."""
+    key = lane_identity(provider_info)
     with _READINGS_LOCK:
-        return _READINGS.get(lane_identity(provider_info))
+        reading = _READINGS.get(key)
+        if reading is not None:
+            return reading
+    # A miss is retried: a login creates the profile directory, and a volume
+    # may be mounted a moment after the gateway starts.  One stat per card
+    # open is cheap, and caching a miss would hide the file that appears.
+    reading = _load_reading(provider_info)
+    if reading is None:
+        return None
+    with _READINGS_LOCK:
+        # A turn may have recorded a newer reading while the file was read.
+        return _READINGS.setdefault(key, reading)
 
 
 def _body_of(update: dict[str, Any]) -> dict[str, Any] | None:
@@ -301,9 +441,11 @@ def record_reading(update: dict[str, Any], provider_info: Any) -> bool:
 
 
 def store_reading(provider_info: Any, reading: LaneReading) -> None:
-    """Replace this lane's last reading with *reading*."""
+    """Replace this lane's last reading with *reading*, memory and profile."""
+    key = lane_identity(provider_info)
     with _READINGS_LOCK:
-        _READINGS[lane_identity(provider_info)] = reading
+        _READINGS[key] = reading
+    _write_reading(provider_info, reading)
 
 
 def _store_local(provider_info: Any, reading: LaneReading) -> None:
