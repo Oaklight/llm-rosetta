@@ -88,6 +88,21 @@ async def _periodic_cleanup(app: App) -> None:
                 from ..jobs.enqueue import CLEANUP_KIND, enqueue_cleanup
                 from ..jobs.model import JOB_SUCCEEDED
 
+                raw_cfg = getattr(config, "_raw", {})
+                server = raw_cfg.get("server", {}) if isinstance(raw_cfg, dict) else {}
+                rl_age = int((server.get("request_log") or {}).get("max_age_days", 90))
+                ol_age = int((server.get("ops_log") or {}).get("max_age_days", 90))
+
+                # The two ages can differ, and then this task queues two
+                # passes over different table sets.  Ask per set: one success
+                # must not answer for the other, or a failed ops-log sweep is
+                # deferred for a week by the request-log pass.
+                passes: list[tuple[tuple[str, ...], int]] = [
+                    (("request_log", "error_dumps"), rl_age)
+                ]
+                if ol_age != rl_age:
+                    passes.append((("ops_log",), ol_age))
+
                 # The jobs table outlives this task.  Without this check every
                 # restart queues another cleanup two minutes later, however
                 # recently the last one finished.  Only a *successful periodic*
@@ -95,43 +110,44 @@ async def _periodic_cleanup(app: App) -> None:
                 # and a small manual range delete is not the weekly sweep.
                 # Sleep the remainder of the interval rather than a whole one,
                 # so a wake that lands milliseconds early is not doubled.
-                last = await jobs.store.last_job_at(
-                    CLEANUP_KIND, status=JOB_SUCCEEDED, source="periodic"
-                )
-                if last is not None:
+                # Wake at the earliest due pass and rerun both; rerunning the
+                # other pass early is harmless and keeps the schedule simple.
+                waits: list[float] = []
+                for tables, _ in passes:
+                    last = await jobs.store.last_job_at(
+                        CLEANUP_KIND,
+                        status=JOB_SUCCEEDED,
+                        source="periodic",
+                        tables=tables,
+                    )
+                    if last is None:
+                        waits.append(0.0)
+                        continue
                     try:
                         due = datetime.fromisoformat(last) + timedelta(
                             seconds=_CLEANUP_INTERVAL
                         )
                     except ValueError:
-                        due = None
-                    if due is not None:
-                        wait = (due - datetime.now(timezone.utc)).total_seconds()
-                        if wait > 0:
-                            logger.debug("Periodic cleanup deferred for %.0fs", wait)
-                            await asyncio.sleep(wait)
-                            continue
+                        waits.append(0.0)
+                        continue
+                    waits.append((due - datetime.now(timezone.utc)).total_seconds())
 
-                raw_cfg = getattr(config, "_raw", {})
-                server = raw_cfg.get("server", {}) if isinstance(raw_cfg, dict) else {}
-                rl_age = int((server.get("request_log") or {}).get("max_age_days", 90))
-                ol_age = int((server.get("ops_log") or {}).get("max_age_days", 90))
+                wait = min(waits)
+                if wait > 0:
+                    logger.debug("Periodic cleanup deferred for %.0fs", wait)
+                    await asyncio.sleep(wait)
+                    continue
 
-                queued = await enqueue_cleanup(
-                    jobs,
-                    mode="age",
-                    tables=("request_log", "error_dumps"),
-                    max_age_days=rl_age,
-                    source="periodic",
-                )
-                if ol_age != rl_age:
-                    await enqueue_cleanup(
+                queued = None
+                for tables, age in passes:
+                    queued = await enqueue_cleanup(
                         jobs,
                         mode="age",
-                        tables=("ops_log",),
-                        max_age_days=ol_age,
+                        tables=tables,
+                        max_age_days=age,
                         source="periodic",
                     )
+                assert queued is not None  # passes is never empty
                 logger.info("Periodic cleanup queued as job %s", queued.id)
         except Exception as exc:
             logger.warning("Periodic cleanup failed: %s", exc)

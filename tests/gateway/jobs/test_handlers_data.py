@@ -249,6 +249,35 @@ async def test_a_second_clear_extends_a_legacy_queued_cutoff(pm, ops, manager):
     assert await pm.count_log_entries(include_hidden=True) == 0
 
 
+async def test_extending_a_legacy_clear_records_a_retry_window(pm, ops, manager):
+    """A pre-`_hide` job extended while queued can still retry after failure."""
+    await _seed(pm, days=(0.1,))
+    job = await enqueue_clear(manager, "request_log")
+    first_end = job.payload["end"]
+    raw = await pm.connection.execute_fetchone(
+        "SELECT payload FROM jobs WHERE id = ?", (job.id,)
+    )
+    payload = json.loads(raw[0])
+    payload.pop("end", None)
+    payload.pop("_hide", None)
+    await pm.connection.execute(
+        "UPDATE jobs SET payload = ? WHERE id = ?", (json.dumps(payload), job.id)
+    )
+    await pm.connection.commit()
+    await pm.insert_log_entries([_log_row("late", first_end)])
+
+    second = await enqueue_clear(manager, "request_log")
+
+    assert second.id == job.id
+    assert second.payload["end"] > first_end
+    await manager.store.claim("sqlite", manager.owner)
+    await manager.store.finish(job.id, manager.owner, "failed", error="boom")
+    assert pm.visibility.ranges("request_log") == []
+    assert await manager.store.retry(job.id) is True
+    await manager.drain()
+    assert await pm.count_log_entries(include_hidden=True) == 0
+
+
 async def test_a_legacy_clear_uses_the_window_it_still_owns(pm, ops, manager):
     """A job from before the payload carried `end` deletes by its range row."""
     await _seed(pm, days=(0.1,))

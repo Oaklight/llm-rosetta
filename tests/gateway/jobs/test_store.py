@@ -441,6 +441,78 @@ async def test_last_job_at_is_kind_status_and_source_scoped(store):
     )
 
 
+async def test_last_job_at_matches_the_covered_table_set(store):
+    pair = await store.enqueue(
+        "data.cleanup",
+        {"source": "periodic", "tables": ["request_log", "error_dumps"]},
+    )
+    await store.claim("sqlite", "owner")
+    await store.finish(pair.id, "owner", JOB_SUCCEEDED)
+    ops = await store.enqueue(
+        "data.cleanup", {"source": "periodic", "tables": ["ops_log"]}
+    )
+    await store.claim("sqlite", "owner")
+    await store.finish(ops.id, "owner", JOB_SUCCEEDED)
+
+    pair_done = await store.get(pair.id)
+    ops_done = await store.get(ops.id)
+    assert pair_done is not None and pair_done.finished_at is not None
+    assert ops_done is not None and ops_done.finished_at is not None
+    assert (
+        await store.last_job_at(
+            "data.cleanup",
+            status=JOB_SUCCEEDED,
+            source="periodic",
+            tables=("request_log", "error_dumps"),
+        )
+        == pair_done.finished_at
+    )
+    assert (
+        await store.last_job_at(
+            "data.cleanup",
+            status=JOB_SUCCEEDED,
+            source="periodic",
+            tables=("ops_log",),
+        )
+        == ops_done.finished_at
+    )
+
+    every = await store.enqueue(
+        "data.cleanup",
+        {
+            "source": "periodic",
+            "tables": ["request_log", "error_dumps", "ops_log"],
+        },
+    )
+    await store.claim("sqlite", "owner")
+    await store.finish(every.id, "owner", JOB_SUCCEEDED)
+    every_done = await store.get(every.id)
+    assert every_done is not None and every_done.finished_at is not None
+    for tables in (
+        ("request_log", "error_dumps"),
+        ("ops_log",),
+        ("ops_log", "request_log", "error_dumps"),
+    ):
+        assert (
+            await store.last_job_at(
+                "data.cleanup",
+                status=JOB_SUCCEEDED,
+                source="periodic",
+                tables=tables,
+            )
+            == every_done.finished_at
+        )
+    assert (
+        await store.last_job_at(
+            "data.cleanup",
+            status=JOB_SUCCEEDED,
+            source="periodic",
+            tables=("request_log", "error_dumps", "unknown"),
+        )
+        is None
+    )
+
+
 async def test_list_filters_and_counts(store):
     first = await store.enqueue("data.clear")
     await store.enqueue("data.trim")

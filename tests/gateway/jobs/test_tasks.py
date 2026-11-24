@@ -34,6 +34,18 @@ def _app(manager):
     return SimpleNamespace(jobs=manager, gateway_config=config)
 
 
+def _app_two_ages(manager):
+    config = SimpleNamespace(
+        _raw={
+            "server": {
+                "request_log": {"max_age_days": 90},
+                "ops_log": {"max_age_days": 30},
+            }
+        }
+    )
+    return SimpleNamespace(jobs=manager, gateway_config=config)
+
+
 async def _stop_after_two_sleeps():
     calls = 0
 
@@ -53,7 +65,10 @@ async def _finish(manager, job, status):
 
 async def test_a_recent_successful_periodic_cleanup_suppresses_the_restart(pm):
     manager = JobManager(pm)
-    job = await manager.enqueue("data.cleanup", {"source": "periodic"})
+    job = await manager.enqueue(
+        "data.cleanup",
+        {"source": "periodic", "tables": ["request_log", "error_dumps"]},
+    )
     await _finish(manager, job, "succeeded")
     app = _app(manager)
     sleep = await _stop_after_two_sleeps()
@@ -69,7 +84,10 @@ async def test_a_recent_successful_periodic_cleanup_suppresses_the_restart(pm):
 async def test_a_deferral_sleeps_only_the_remainder_of_the_interval(pm):
     """A wake a few seconds early must not add a whole interval to the gap."""
     manager = JobManager(pm)
-    job = await manager.enqueue("data.cleanup", {"source": "periodic"})
+    job = await manager.enqueue(
+        "data.cleanup",
+        {"source": "periodic", "tables": ["request_log", "error_dumps"]},
+    )
     await _finish(manager, job, "succeeded")
     finished = datetime.now(timezone.utc) - timedelta(seconds=_CLEANUP_INTERVAL - 60)
     # Ten hours of runtime must not move the next due time earlier.
@@ -100,7 +118,10 @@ async def test_a_deferral_sleeps_only_the_remainder_of_the_interval(pm):
 @pytest.mark.parametrize("status", ["failed", "cancelled"])
 async def test_a_cleanup_that_did_not_succeed_does_not_suppress_the_restart(pm, status):
     manager = JobManager(pm)
-    job = await manager.enqueue("data.cleanup", {"source": "periodic"})
+    job = await manager.enqueue(
+        "data.cleanup",
+        {"source": "periodic", "tables": ["request_log", "error_dumps"]},
+    )
     await _finish(manager, job, status)
     app = _app(manager)
     sleep = await _stop_after_two_sleeps()
@@ -143,3 +164,92 @@ async def test_no_recent_cleanup_queues_one(pm):
     jobs, total = await manager.store.list_jobs()
     assert total == 1 and jobs[0].kind == "data.cleanup"
     assert jobs[0].payload["source"] == "periodic"
+
+
+async def test_one_successful_half_does_not_suppress_the_other(pm):
+    """The two ages queue two passes; one success cannot answer for both."""
+    manager = JobManager(pm)
+    request = await manager.enqueue(
+        "data.cleanup",
+        {"source": "periodic", "tables": ["request_log", "error_dumps"]},
+    )
+    await _finish(manager, request, "succeeded")
+    ops = await manager.enqueue(
+        "data.cleanup",
+        {"source": "periodic", "tables": ["ops_log"]},
+    )
+    await _finish(manager, ops, "failed")
+    old = (datetime.now(timezone.utc) - timedelta(days=6)).isoformat()
+    await pm.connection.execute(
+        "UPDATE jobs SET created_at = ?, finished_at = ? "
+        "WHERE status IN ('succeeded', 'failed')",
+        (old, old),
+    )
+    await pm.connection.commit()
+
+    sleeps: list[float] = []
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) >= 2:
+            raise asyncio.CancelledError
+
+    with patch("llm_rosetta_gateway.app.tasks.asyncio.sleep", sleep):
+        with pytest.raises(asyncio.CancelledError):
+            await _periodic_cleanup(_app_two_ages(manager))
+
+    assert sleeps[0] == _CLEANUP_INITIAL_DELAY
+    assert sleeps[1] == _CLEANUP_INTERVAL
+    jobs, total = await manager.store.list_jobs()
+    assert total == 4
+    assert sum(1 for job in jobs if job.status == "queued") == 2
+
+
+async def test_two_successful_passes_defer_to_the_earliest_due(pm):
+    """With both halves done, wake at the first deadline, not the last."""
+    manager = JobManager(pm)
+    now = datetime.now(timezone.utc)
+    request = await manager.enqueue(
+        "data.cleanup",
+        {"source": "periodic", "tables": ["request_log", "error_dumps"]},
+    )
+    await _finish(manager, request, "succeeded")
+    await pm.connection.execute(
+        "UPDATE jobs SET created_at = ?, finished_at = ? WHERE id = ?",
+        (
+            (now - timedelta(days=6)).isoformat(),
+            (now - timedelta(days=6)).isoformat(),
+            request.id,
+        ),
+    )
+    await pm.connection.commit()
+    ops = await manager.enqueue(
+        "data.cleanup",
+        {"source": "periodic", "tables": ["ops_log"]},
+    )
+    await _finish(manager, ops, "succeeded")
+    await pm.connection.execute(
+        "UPDATE jobs SET created_at = ?, finished_at = ? WHERE id = ?",
+        (
+            (now - timedelta(days=5)).isoformat(),
+            (now - timedelta(days=5)).isoformat(),
+            ops.id,
+        ),
+    )
+    await pm.connection.commit()
+
+    sleeps: list[float] = []
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) >= 2:
+            raise asyncio.CancelledError
+
+    with patch("llm_rosetta_gateway.app.tasks.asyncio.sleep", sleep):
+        with pytest.raises(asyncio.CancelledError):
+            await _periodic_cleanup(_app_two_ages(manager))
+
+    assert sleeps[0] == _CLEANUP_INITIAL_DELAY
+    assert 86300 < sleeps[1] <= 86460
+    _, total = await manager.store.list_jobs()
+    assert total == 2

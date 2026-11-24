@@ -95,6 +95,53 @@ class TestOpsClearData:
         assert "request_log" in entry.message
 
     @pytest.mark.asyncio
+    async def test_a_failed_job_still_flags_the_rows_it_deleted(self):
+        p = _mock_persistence()
+        p.delete_batch = AsyncMock(side_effect=[5, 0])
+        p.set_rebuild_flag = AsyncMock()
+        p.settle_deletions = AsyncMock(side_effect=RuntimeError("disk busy"))
+        m = MagicMock()
+        rl = MagicMock()
+        ctx = _make_ctx(persistence=p, metrics=m, request_log=rl)
+        job = MagicMock()
+        job.deleted = 5
+        job.checkpoint = AsyncMock()
+        job.progress = AsyncMock()
+
+        with pytest.raises(RuntimeError, match="disk busy"):
+            await OpsClearData(
+                ctx,
+                table="request_log",
+                job=job,
+                end="2026-01-01T00:00:00+00:00",
+            ).execute()
+
+        p.set_rebuild_flag.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_a_job_that_deleted_no_request_rows_does_not_flag_a_rebuild(self):
+        p = _mock_persistence()
+        p.delete_batch = AsyncMock(return_value=0)
+        p.set_rebuild_flag = AsyncMock()
+        p.settle_deletions = AsyncMock()
+        m = MagicMock()
+        rl = MagicMock()
+        ctx = _make_ctx(persistence=p, metrics=m, request_log=rl)
+        job = MagicMock()
+        job.deleted = 0
+        job.checkpoint = AsyncMock()
+        job.progress = AsyncMock()
+
+        await OpsClearData(
+            ctx,
+            table="request_log",
+            job=job,
+            end="2026-01-01T00:00:00+00:00",
+        ).execute()
+
+        p.set_rebuild_flag.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_clear_error_dumps(self):
         p = _mock_persistence()
         ctx = _make_ctx(persistence=p)
@@ -198,6 +245,30 @@ class TestOpsCleanupData:
         ).execute()
 
         m.rebuild_from_stream.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_ops_rows_alone_do_not_flag_a_request_log_rebuild(self):
+        """A multi-table pass counts only its request_log slice."""
+        p = _mock_persistence()
+        p.delete_batch = AsyncMock(side_effect=[0, 5, 0])
+        p.set_rebuild_flag = AsyncMock()
+        p.settle_deletions = AsyncMock(return_value=None)
+        m = MagicMock()
+        ctx = _make_ctx(persistence=p, metrics=m)
+        job = MagicMock()
+        job.deleted = 5
+        job.checkpoint = AsyncMock()
+        job.progress = AsyncMock()
+
+        await OpsCleanupData(
+            ctx,
+            mode="age",
+            tables=("request_log", "ops_log"),
+            max_age_days=90,
+            job=job,
+        ).execute()
+
+        p.set_rebuild_flag.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_cleanup_before(self):
