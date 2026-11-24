@@ -334,7 +334,7 @@ usage endpoint) and add `parse_local`.
 
 An agent lane's last good reading is also written beside its profile, in
 `<acp_home>/.llm-rosetta-quota.json`: the windows, their reset times and the
-profile fingerprint, never a token. The gateway reads it back whenever memory
+original read time, never a token. The gateway reads it back whenever memory
 has no reading, so a Claude card the agent had filled does not fall back
 to *unknown* when the process or the container is replaced. The reading keeps
 its original `read_at`, so the card still says when it was taken. An error
