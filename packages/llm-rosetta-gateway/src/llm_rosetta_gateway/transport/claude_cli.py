@@ -22,6 +22,12 @@ Every turn's child points ``ANTHROPIC_BASE_URL`` at a per-turn loopback relay
 (:mod:`~.claude_cli_relay`).  The relay forwards the CLI's single upstream
 request with the CLI's own headers, refuses the CLI's recovery attempts, and
 keeps the upstream status and rate-limit headers for the gateway.
+
+``max_tokens`` stays the CLI's own.  The CLI asks for 32,000 output tokens
+because its adaptive thinking shares that budget, so forwarding a host's small
+value would truncate a reply mid-thought; the field is ignored.  An operator
+that needs a hard ceiling sets ``CLAUDE_CODE_MAX_OUTPUT_TOKENS`` in the shim's
+``cli_env`` (measured on CLI 2.1.299: 64 reaches the wire body as 64, 32 as 32).
 """
 
 from __future__ import annotations
