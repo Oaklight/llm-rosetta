@@ -382,11 +382,11 @@ export function vendorFacts(v, src) {
   } else if (!v.installed && !v.installable && v.newest) {
     facts.push({ key: 'shimSrc.noInstallable', cls: 'is-unknown', title: v.newest_problem || '' });
   }
-  if (v.skipped) facts.push({ key: 'shimSrc.skipped', params: { reason: v.skipped }, cls: 'is-unknown' });
+  if (v.skipped) facts.push({ key: 'shimSrc.skipped', params: { reason: v.skipped }, cls: 'is-warn' });
   if (v.error) facts.push({ key: 'shimSrc.failed', params: { error: v.error }, cls: 'is-unknown' });
   if (v.claimed_by) facts.push({ key: 'shimSrc.claimedBy', params: { source: v.claimed_by } });
   if ((v.core_provides || []).length && !v.skipped) {
-    facts.push({ key: 'shimSrc.coreProvides', params: { names: v.core_provides.join(', ') }, cls: 'is-unknown' });
+    facts.push({ key: 'shimSrc.coreProvides', params: { names: v.core_provides.join(', ') }, cls: 'is-warn' });
   }
   return facts;
 }

@@ -3116,7 +3116,7 @@ button.shim-update.unknown { color: var(--tag-warn); }
 /* Where the copy sits, and how far the repository has moved past it.  Only
    a differing pair is dressed as an upgrade; an unreadable head says so. */
 .shim-card-hash { margin: 0; font-size: 11px; color: var(--text-muted); }
-.shim-card-hash .is-moved { color: var(--warn); }
+.shim-card-hash .is-moved, .shim-card-hash .is-warn { color: var(--warn); }
 .shim-card-hash .is-unknown { color: var(--text-dim); }
 .shim-mark {
   flex: 0 0 30px; width: 30px; height: 30px;
