@@ -66,6 +66,12 @@ DEFAULT_TIMEOUT = 300.0
 #: input; the default 64 KiB stream limit is too small for a large schema.
 _STREAM_LIMIT = 8 * 1024 * 1024
 
+#: Seconds to let the CLI report a refusal in its own words before the turn is
+#: ended.  The CLI retries a refused call on its own schedule, and this lane
+#: admits one upstream request, so waiting for it to give up holds the process
+#: slot for minutes and changes nothing.
+_REFUSAL_GRACE = 2.0
+
 #: Namespace for the stable per-conversation session id.  A fixed UUID keeps
 #: the id reproducible across processes.
 _SESSION_NAMESPACE = uuid.UUID("6f5e2b1c-2f38-4c1e-9f2a-7c6d1e9a4b30")
@@ -561,10 +567,44 @@ class _CliProcess:
             self._release()
 
 
+class _TurnRefused(UpstreamConnectionError):
+    """A turn the upstream refused, carrying the status the relay saw."""
+
+    def __init__(self, message: str, status_code: int) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+#: The Anthropic error type each upstream refusal status maps to.  The CLI
+#: turns a refused answer into prose; the relay is the only place the gateway
+#: sees the status, so the envelope is rebuilt here.
+_ERROR_TYPES: dict[int, str] = {
+    400: "invalid_request_error",
+    401: "authentication_error",
+    402: "billing_error",
+    403: "permission_error",
+    404: "not_found_error",
+    413: "request_too_large",
+    429: "rate_limit_error",
+    500: "api_error",
+    503: "overloaded_error",
+    529: "overloaded_error",
+}
+
+
+def _refusal_status(readings: list[Any]) -> int:
+    """The upstream status of a turn that ended in a refusal, else ``0``.
+
+    Only the last call decides the turn: the CLI retries a 401 once, and a
+    retry that succeeds is a turn that succeeded.
+    """
+    last = readings[-1] if readings else None
+    status = int(getattr(last, "status", 0) or 0)
+    return status if status >= 400 else 0
+
+
 class _CliStream(UpstreamStream):
     """A turn's ``messages`` events, produced from one CLI process."""
-
-    status_code = 200
 
     def __init__(
         self,
@@ -584,6 +624,7 @@ class _CliStream(UpstreamStream):
         self._queue: deque[dict[str, Any]] = deque()
         self._finished = False
         self._error: str | None = None
+        self.status_code = 200
         self._saw_stream_event = False
         self._last_kind: str | None = None
         self._assistant: dict[str, Any] | None = None
@@ -597,6 +638,8 @@ class _CliStream(UpstreamStream):
     async def __anext__(self) -> dict[str, Any]:
         while not self._queue:
             if self._error is not None:
+                if self.status_code >= 400:
+                    raise _TurnRefused(self._error, self.status_code)
                 raise UpstreamConnectionError(self._error)
             if self._finished:
                 raise StopAsyncIteration
@@ -642,6 +685,40 @@ class _CliStream(UpstreamStream):
         result event still reports the relay's readings.
         """
         return _lane_facts(self._result, self.readings)
+
+    def refusal(self) -> UpstreamResponse | None:
+        """The turn as an error response, when the upstream refused it.
+
+        A non-streaming caller needs the status the client's SDK understands;
+        the CLI only reported the refusal as prose.  ``None`` means the turn
+        did not end on an upstream error status, so the caller should keep the
+        original exception.
+        """
+        if self.status_code < 400:
+            return None
+        message = self._error or f"the upstream answered {self.status_code}"
+        payload: dict[str, Any] = {
+            "type": "error",
+            "error": {
+                "type": _ERROR_TYPES.get(self.status_code, "api_error"),
+                "message": message,
+            },
+        }
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        return UpstreamResponse(
+            status_code=self.status_code,
+            body=payload,
+            raw_content=raw,
+            meta=_lane_facts(self._result, self.readings),
+        )
+
+    def _fail(self, message: str) -> None:
+        """Close an empty turn as a failure, keeping the upstream's status."""
+        status = _refusal_status(self.readings)
+        if status:
+            self.status_code = status
+        self._error = message
+        self._queue.clear()
 
     # -- replay, one frame at a time ---------------------------------------
 
@@ -701,15 +778,7 @@ class _CliStream(UpstreamStream):
 
     async def _next_event(self) -> dict[str, Any] | None:
         """Read one CLI event, or ``None`` at end of stream."""
-        stream = self._cli.process.stdout
-        if stream is None:
-            return None
-        try:
-            line = await asyncio.wait_for(stream.readline(), self._timeout)
-        except (TimeoutError, asyncio.TimeoutError) as exc:
-            self._error = f"claude_cli: the CLI stayed silent for {self._timeout:.0f}s"
-            await self._cli.stop()
-            raise UpstreamTimeoutError(self._error) from exc
+        line = await self._readline_or_refusal()
         if not line:
             return None
         try:
@@ -720,6 +789,52 @@ class _CliStream(UpstreamStream):
                 f"claude_cli: the CLI wrote a non-JSON line: {text!r}"
             ) from exc
         return event if isinstance(event, dict) else None
+
+    async def _readline_or_refusal(self) -> bytes:
+        """One stdout line, or empty bytes when the turn is over.
+
+        The CLI retries a refused call on its own schedule; this turn admits
+        one upstream request, so that retry cannot succeed.  A refusal gets
+        :data:`_REFUSAL_GRACE` for the CLI to report it in its own words, then
+        the turn is ended here rather than holding the process slot.
+
+        Raises:
+            UpstreamTimeoutError: The CLI stayed silent past the timeout.
+        """
+        stream = self._cli.process.stdout
+        if stream is None:
+            return b""
+        deadline = time.monotonic() + self._timeout
+        grace_end: float | None = None
+        while True:
+            now = time.monotonic()
+            refusal = self._relay_refusal()
+            if refusal and grace_end is None:
+                grace_end = now + _REFUSAL_GRACE
+            limit = min(deadline, grace_end) if grace_end is not None else deadline
+            remaining = limit - now
+            if remaining <= 0:
+                if refusal:
+                    await self._cli.stop()
+                    self._fail(f"the upstream answered {refusal}")
+                    return b""
+                self._error = (
+                    f"claude_cli: the CLI stayed silent for {self._timeout:.0f}s"
+                )
+                await self._cli.stop()
+                raise UpstreamTimeoutError(self._error)
+            try:
+                # Poll rather than wait for the whole limit: a refusal can
+                # arrive while the CLI sits in its own backoff, and no stdout
+                # line will announce it.
+                return await asyncio.wait_for(stream.readline(), min(remaining, 1.0))
+            except (TimeoutError, asyncio.TimeoutError):
+                continue
+
+    def _relay_refusal(self) -> int:
+        """The status of a refusal no retry can change, or ``0``."""
+        relay = self._cli.relay
+        return relay.refusal_status if relay is not None else 0
 
     async def _pump(self) -> None:
         """Read one stdout line and, on end of stream, settle the turn."""
@@ -766,11 +881,26 @@ class _CliStream(UpstreamStream):
         result = self._result
         if self._provider_info is not None:
             _record_lane_quota(self._provider_info, self.readings)
-        if result is None and self._assistant is None and not self._saw_stream_event:
-            self._error = self._cli.stderr_tail() or (
-                "claude_cli: the CLI ended without a response"
+        if self._error is not None:
+            # A reader (``_readline_or_refusal``) already settled the turn.
+            return
+        # A refused upstream call outranks whatever the CLI printed: the CLI
+        # turns the refusal into a synthetic assistant message ("API Error: 402
+        # ..."), and treating that as an answer would hide the status from the
+        # client.  A 200 reading is a real turn, where content outranks the
+        # CLI's ``is_error`` for a tool call.
+        refused = _refusal_status(self.readings)
+        if refused:
+            message = (_result_error(result) if result else "") or (
+                self._cli.stderr_tail() or f"the upstream answered {refused}"
             )
-            self._queue.clear()
+            self._fail(message)
+            return
+        if result is None and self._assistant is None and not self._saw_stream_event:
+            self._fail(
+                self._cli.stderr_tail()
+                or "claude_cli: the CLI ended without a response"
+            )
             return
         if result is not None and result.get("is_error"):
             # A tool call ends the CLI with ``error_max_turns`` and no text.
@@ -779,8 +909,7 @@ class _CliStream(UpstreamStream):
             texts = _result_texts(self._assistant)
             blocks = (self._assistant or {}).get("content")
             if not texts and not self._saw_stream_event and not blocks:
-                self._error = _result_error(result) or "claude_cli: the turn failed"
-                self._queue.clear()
+                self._fail(_result_error(result) or "claude_cli: the turn failed")
                 return
         if not self._saw_stream_event:
             self._synthesise()
@@ -1103,7 +1232,13 @@ class ClaudeCliTransport(UpstreamTransport):
             UpstreamTimeoutError: The CLI stayed silent past the timeout.
         """
         stream = await self._turn(provider_info, body)
-        assistant, result = await self._collect(stream)
+        try:
+            assistant, result = await self._collect(stream)
+        except UpstreamConnectionError:
+            refusal = stream.refusal()
+            if refusal is None:
+                raise
+            return refusal
         model = str(body.get("model") or "")
         return _response_body(assistant, result, model, stream.readings)
 
@@ -1204,9 +1339,17 @@ class ClaudeCliTransport(UpstreamTransport):
                 for block in blocks
                 if isinstance(block, dict) and block.get("type") == "text"
             ).strip()
-            result["ok"] = True
             result["reachable"] = True
             result["text"] = text[:500]
+            if response.is_error:
+                error = answered.get("error")
+                result["error"] = (
+                    str(error.get("message"))
+                    if isinstance(error, dict) and error.get("message")
+                    else response.error_text[:500]
+                )
+            else:
+                result["ok"] = True
             usage = answered.get("usage")
             if isinstance(usage, dict):
                 result["usage"] = usage
@@ -1310,12 +1453,12 @@ class ClaudeCliTransport(UpstreamTransport):
         self, stream: _CliStream
     ) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
         """Consume the turn's stream and keep its whole-message facts."""
-        async for _event in stream:
-            pass
-        assistant = stream.assistant
-        result = stream.result
-        await stream.close()
-        return assistant, result
+        try:
+            async for _event in stream:
+                pass
+            return stream.assistant, stream.result
+        finally:
+            await stream.close()
 
 
 def _response_body(

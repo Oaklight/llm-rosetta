@@ -261,6 +261,23 @@ class Relay:
         self._restored = rewritten is not payload
         return json.dumps(rewritten, ensure_ascii=False).encode("utf-8")
 
+    @property
+    def refusal_status(self) -> int:
+        """The status of a refusal no retry can change, or ``0``.
+
+        The turn admits one upstream request, so a repeated refusal can never
+        turn into a success.  A 401 is the exception: the CLI's one allowed
+        retry (an expired token) has not happened yet, so its first 401 is not
+        final.
+        """
+        last = self.readings[-1] if self.readings else None
+        status = int(getattr(last, "status", 0) or 0)
+        if status < 400:
+            return 0
+        if status == 401 and not self._retried_after_401:
+            return 0
+        return status
+
     def _admits(self) -> bool:
         """Whether this attempt may reach the upstream."""
         if self._admitted == 0:
@@ -350,6 +367,11 @@ class Relay:
             if key.lower() in ("connection", "transfer-encoding", "content-length"):
                 continue
             out.append(f"{key}: {value}")
+        if status >= 400:
+            # The turn admits one upstream request, so the CLI's retry can
+            # never succeed.  Say so instead of letting it back off for
+            # minutes: the SDK behind the CLI honours this header.
+            out.append("x-should-retry: false")
         for key in ("transfer-encoding", "content-length"):
             for name, value in response_headers.items():
                 if name.lower() == key:
