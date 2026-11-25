@@ -12,6 +12,7 @@ import textwrap
 import threading
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -699,18 +700,95 @@ class TestPip:
         with pytest.raises(ExtensionInstallError, match="pip is not available"):
             install_with_pip("x", dest=tmp_path)
 
-    def test_the_command_line(self, monkeypatch, tmp_path):
-        seen = {}
+    @staticmethod
+    def _wheel_in(tmp_path: Path, sub: str, ext_id: str) -> Path:
+        folder = tmp_path / sub
+        folder.mkdir(parents=True, exist_ok=True)
+        return _wheel(folder, ext_id)
 
-        class Done:
-            returncode = 3
+    @staticmethod
+    def _fake_pip(monkeypatch, *, wheels=(), returncode=0, stderr="", seen=None):
+        """Replace the pip subprocess: it writes *wheels* into the ``-w`` dir."""
+
+        def run(command, **kwargs):
+            out = Path(command[command.index("-w") + 1])
+            for name, source in wheels:
+                (out / name).write_bytes(Path(source).read_bytes())
+            if seen is not None:
+                seen["command"] = command
+                seen["kwargs"] = kwargs
+            return SimpleNamespace(returncode=returncode, stderr=stderr, stdout="")
 
         monkeypatch.setattr(_install, "pip_available", lambda: True)
-        monkeypatch.setattr(
-            _install.subprocess, "run", lambda cmd, **kw: seen.update(cmd=cmd) or Done()
-        )
-        assert install_with_pip("pkg==1", dest=tmp_path) == 3
-        assert seen["cmd"] == [
-            sys.executable, "-m", "pip", "install", "--no-deps", "--upgrade",
-            "--target", str(tmp_path), "pkg==1",
-        ]  # fmt: skip
+        monkeypatch.setattr(_install.subprocess, "run", run)
+
+    def test_pip_builds_a_wheel_and_our_installer_places_it(
+        self, monkeypatch, tmp_path
+    ):
+        wheel = self._wheel_in(tmp_path, "w", "acme")
+        seen: dict = {}
+        self._fake_pip(monkeypatch, wheels=[(wheel.name, wheel)], seen=seen)
+        dest = tmp_path / "dest"
+
+        installed = install_with_pip("acme==0.1.0", dest=dest)
+
+        assert (installed.id, installed.version) == ("acme", "0.1.0")
+        assert (dest / "llm_rosetta_ext" / "acme" / "plugin.yaml").is_file()
+        command = seen["command"]
+        assert command[:5] == [sys.executable, "-m", "pip", "wheel", "--no-deps"]
+        assert command[-1] == "acme==0.1.0"
+        # pip never installs into the shared directory
+        assert "install" not in command and "--target" not in command
+
+    def test_a_pip_install_leaves_the_other_extensions_alone(
+        self, monkeypatch, tmp_path
+    ):
+        # pip's own ``--target`` replaces the whole ``llm_rosetta_ext`` folder
+        # and deleted every other extension's code in a live run
+        dest = tmp_path / "dest"
+        install_wheel(self._wheel_in(tmp_path, "a", "alpha"), dest=dest)
+        wheel = self._wheel_in(tmp_path, "b", "beta")
+        self._fake_pip(monkeypatch, wheels=[(wheel.name, wheel)])
+
+        install_with_pip("beta", dest=dest)
+
+        assert (dest / "llm_rosetta_ext" / "alpha" / "plugin.yaml").is_file()
+        assert (dest / "llm_rosetta_ext" / "beta" / "plugin.yaml").is_file()
+        assert sorted(i.id for i in installed_extensions(dest)) == ["alpha", "beta"]
+
+    def test_a_pip_failure_names_the_spec_and_the_tail_of_its_output(
+        self, monkeypatch, tmp_path
+    ):
+        self._fake_pip(monkeypatch, returncode=1, stderr="a\nb\nERROR: no such thing")
+        with pytest.raises(ExtensionInstallError, match=r"'ghost'.*no such thing"):
+            install_with_pip("ghost", dest=tmp_path)
+
+    @pytest.mark.parametrize("count", [0, 2])
+    def test_pip_must_produce_exactly_one_wheel(self, monkeypatch, tmp_path, count):
+        wheels = [
+            (w.name, w)
+            for w in (
+                self._wheel_in(tmp_path, f"w{n}", f"acme{n}") for n in range(count)
+            )
+        ]
+        self._fake_pip(monkeypatch, wheels=wheels)
+        with pytest.raises(ExtensionInstallError, match=f"{count} wheels"):
+            install_with_pip("acme", dest=tmp_path / "dest")
+
+    def test_a_local_folder_is_built_from_a_clean_copy(self, monkeypatch, tmp_path):
+        folder = tmp_path / "acme"
+        (folder / "build" / "lib").mkdir(parents=True)
+        (folder / "build" / "lib" / "stale.py").write_text("x")
+        (folder / "acme.egg-info").mkdir()
+        (folder / "plugin.yaml").write_text("id: acme\n")
+        wheel = self._wheel_in(tmp_path, "w", "acme")
+        seen: dict = {}
+        self._fake_pip(monkeypatch, wheels=[(wheel.name, wheel)], seen=seen)
+
+        install_with_pip(str(folder), dest=tmp_path / "dest")
+
+        built = Path(seen["command"][-1])
+        assert built != folder and built.name == "acme"
+        # the copy was taken before the fake pip ran and is gone with its temp
+        # dir, so assert what was excluded through the original: untouched
+        assert (folder / "build" / "lib" / "stale.py").is_file()

@@ -10,6 +10,8 @@ One module per contract:
 - :mod:`llm_rosetta.contracts.shim` — the shim data classes
   (:class:`~llm_rosetta.contracts.shim.ProviderShim` and the connection, tools,
   reasoning, quota and batch declarations);
+- :mod:`llm_rosetta.contracts.command` — a subcommand a distribution adds to
+  the ``llm-rosetta`` dispatcher (a spec, an entry point group, registration);
 - :mod:`llm_rosetta.contracts.extension` — the manifest (``plugin.yaml``) an
   extension folder carries, the compatibility rule, and the transport scope;
 - :mod:`llm_rosetta.contracts.shim_manifest` — the manifest a shim source
