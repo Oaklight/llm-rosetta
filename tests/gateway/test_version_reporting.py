@@ -30,7 +30,12 @@ def test_version_info_names_both_packages() -> None:
 
 def test_the_cli_prints_both_versions() -> None:
     result = subprocess.run(
-        [sys.executable, "-m", "llm_rosetta_gateway", "--version"],
+        [
+            sys.executable,
+            "-c",
+            "from llm_rosetta_gateway import main; raise SystemExit(main())",
+            "--version",
+        ],
         capture_output=True,
         text=True,
         timeout=60,

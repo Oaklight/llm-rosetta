@@ -5,8 +5,8 @@ Usage::
     # CLI entry point (after pip install)
     llm-rosetta-gateway --config config.jsonc
 
-    # Module invocation
-    python -m llm_rosetta_gateway --config config.jsonc
+    # The dispatcher (also ``python -m llm_rosetta serve``)
+    llm-rosetta serve --config config.jsonc
 
     # Programmatic usage
     from llm_rosetta_gateway import create_app, GatewayExtensions, load_gateway_config
