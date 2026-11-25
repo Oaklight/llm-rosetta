@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Oaklight/llm-rosetta/blob/master/packages/llm-rosetta/src/llm_rosetta/contracts/extension_manifest.schema.json",
+  "title": "llm-rosetta extension manifest (plugin.yaml)",
+  "description": "What one extension folder declares beside its code: who it is, which core it needs, and which shims and transports it provides.",
+  "type": "object",
+  "required": ["id", "name", "version", "maturity", "requires", "provides"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "description": "The extension id: the vendor key its shims are named after and the name it is imported under (llm_rosetta_ext.<id>). Globally unique across extension repositories and core built-ins.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$",
+      "maxLength": 64
+    },
+    "name": {
+      "description": "Human-readable name.",
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "description": "MAJOR.MINOR.PATCH with an optional pre-release (-rc.1), no build metadata. Must equal the version in the extension's pyproject.toml.",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
+    },
+    "maturity": {
+      "description": "The maturity ladder below core.",
+      "type": "string",
+      "enum": ["experimental", "beta", "stable"]
+    },
+    "tags": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "homepage": { "type": "string", "minLength": 1 },
+    "requires": {
+      "description": "Compatibility: 'surface' must equal the core's contracts.SURFACE_VERSION, and 'ir' must not exceed its contracts.IR_VERSION. 'extensions' lists other extensions whose transports this one names; the installer installs them too.",
+      "type": "object",
+      "required": ["surface", "ir"],
+      "additionalProperties": false,
+      "properties": {
+        "surface": { "type": "integer", "minimum": 1 },
+        "ir": { "type": "integer", "minimum": 1 },
+        "extensions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "maxLength": 64 }
+        }
+      }
+    },
+    "provides": {
+      "description": "What the extension registers. At least one of 'shims' and 'transports' is not empty.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "shims": {
+          "description": "Shim names: the id itself, '<id>--<name>', or '<id>_<lane>--<name>'.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "transports": {
+          "description": "Transport ids this extension implements, private to it unless another extension requires it.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "maxLength": 64 }
+        }
+      }
+    },
+    "external": {
+      "description": "Programs the extension drives and does not ship.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "check"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "check": {
+            "description": "The command that reports the program's version.",
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          },
+          "minimum": { "type": "string", "minLength": 1 },
+          "install_hint": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "platforms": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "enum": ["linux", "darwin", "windows"] }
+    },
+    "summary": {
+      "description": "One-line description per language; 'en' is required.",
+      "type": "object",
+      "required": ["en"],
+      "additionalProperties": { "type": "string", "minLength": 1 }
+    }
+  }
+}
