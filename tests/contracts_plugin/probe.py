@@ -1,6 +1,6 @@
 """Run in a fresh interpreter by ``tests/test_contracts_partial_init.py``.
 
-Prints what the entry-point plugin registered, as JSON.
+Prints what the extension registered, as JSON.
 """
 
 import json

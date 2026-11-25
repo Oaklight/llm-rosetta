@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import importlib
 import io
 import json
+import sys
 import tarfile
 import zipfile
 from pathlib import Path
@@ -14,9 +16,8 @@ from llm_rosetta.shims import get_shim, list_shims, register_shim
 from llm_rosetta_gateway.shims import ShimSourceError, rebuild_shims
 from llm_rosetta_gateway.shims._archive import _extract_archive
 from llm_rosetta_gateway.shims import sources as sources_mod
-from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
+from llm_rosetta.contracts.shim import ProviderShim
 from llm_rosetta.shims.provider_shim import _reset_registry
-import llm_rosetta.shims._loader as providers_mod
 
 PROVIDER_YAML = (
     "name: {name}\n"
@@ -198,27 +199,42 @@ class TestOutOfBandShims:
         assert get_shim("embedder--x") is not None
 
 
-class TestEntryPointTier:
-    """Entry-point plugins survive alongside dirs and manifest installs (precedence tier)."""
+def _write_extension(root: Path, ext_id: str, shim: str, *, base_url: str) -> None:
+    """An installed extension: ``llm_rosetta_ext/<id>`` under *root*."""
+    folder = root / "llm_rosetta_ext" / ext_id
+    (folder / "llm").mkdir(parents=True)
+    (folder / "plugin.yaml").write_text(
+        f"id: {ext_id}\nname: {ext_id}\nversion: 0.1.0\nmaturity: experimental\n"
+        "requires: {surface: 1, ir: 1}\n"
+        f"provides: {{shims: [{shim}]}}\n"
+    )
+    (folder / "llm" / "provider.yaml").write_text(
+        f"name: {shim}\nformat: chat_completions\nmodel_type: llm\n"
+        f"connection:\n  base_url: {base_url}\n"
+    )
 
-    def test_plugin_shim_and_dir_shim_coexist(self, tmp_path: Path, monkeypatch):
 
-        def register_shims():
-            register_shim(ProviderShim(name="plugin--x", format="chat_completions"))
+@pytest.fixture
+def _extension_namespace():
+    """Forget the cached ``llm_rosetta_ext`` namespace after a test."""
+    yield
+    for name in [n for n in sys.modules if n.split(".")[0] == "llm_rosetta_ext"]:
+        del sys.modules[name]
+    importlib.invalidate_caches()
 
-        class _EP:
-            name = "fake-plugin"
 
-            @staticmethod
-            def load():
-                return register_shims
+class TestExtensionTier:
+    """Installed extensions survive alongside dirs and manifest installs (precedence tier)."""
 
-        class _EPs:
-            @staticmethod
-            def select(group):
-                return [_EP()] if group == "llm_rosetta.shim_providers" else []
-
-        monkeypatch.setattr(providers_mod, "entry_points", lambda: _EPs())
+    def test_extension_shim_and_dir_shim_coexist(
+        self, tmp_path: Path, monkeypatch, _extension_namespace
+    ):
+        site = tmp_path / "site"
+        _write_extension(
+            site, "plugin", "plugin--x", base_url="https://plugin.example/v1"
+        )
+        monkeypatch.syspath_prepend(str(site))
+        importlib.invalidate_caches()
 
         root = tmp_path / "shims"
         _write_provider(root, "acme", name="acme--chat_completions")
@@ -227,30 +243,13 @@ class TestEntryPointTier:
         assert get_shim("plugin--x") is not None
         assert get_shim("acme--chat_completions") is not None
 
-    def test_source_can_override_a_plugin_shim(self, tmp_path: Path, monkeypatch):
-
-        def register_shims():
-            register_shim(
-                ProviderShim(
-                    name="dup--x",
-                    format="chat_completions",
-                    connection=ConnectionConfig(base_url="https://plugin.example/v1"),
-                )
-            )
-
-        class _EP:
-            name = "fake-plugin"
-
-            @staticmethod
-            def load():
-                return register_shims
-
-        class _EPs:
-            @staticmethod
-            def select(group):
-                return [_EP()] if group == "llm_rosetta.shim_providers" else []
-
-        monkeypatch.setattr(providers_mod, "entry_points", lambda: _EPs())
+    def test_source_can_override_an_extension_shim(
+        self, tmp_path: Path, monkeypatch, _extension_namespace
+    ):
+        site = tmp_path / "site"
+        _write_extension(site, "dup", "dup--x", base_url="https://plugin.example/v1")
+        monkeypatch.syspath_prepend(str(site))
+        importlib.invalidate_caches()
 
         root = tmp_path / "shims"
         directory = root / "dup"

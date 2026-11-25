@@ -2,7 +2,7 @@
 
 Importing this package automatically registers the built-in shims
 (OpenAI, Anthropic, Google, DeepSeek, Volcengine, etc.) and discovers
-any plugin shims declared via ``llm_rosetta.shim_providers`` entry points.
+the shims of every installed extension (:mod:`llm_rosetta.extensions`).
 
 Public API:
 

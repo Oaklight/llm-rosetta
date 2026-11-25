@@ -9,12 +9,12 @@ reads; they hold no state.
 The registry that stores shims, and the functions that read and write it
 (``register_shim``, ``get_shim``, ``list_shims``, ...), are not part of this
 contract: a host reaches them through :mod:`llm_rosetta.api`.  The one
-exception is :func:`load_providers_from_dir`, the call a plugin's
-``llm_rosetta.shim_providers`` entry point makes to register its shim tree.
+exception is :func:`load_providers_from_dir`, the call that registers a shim
+tree from a directory.
 
 Every module under :mod:`llm_rosetta.contracts` is importable while
-``llm_rosetta`` itself is still initialising: plugin entry points run during
-``import llm_rosetta``, so a sidecar or an entry point that imports a contract
+``llm_rosetta`` itself is still initialising: extensions load during
+``import llm_rosetta``, so a sidecar that imports a contract
 must not pull in :mod:`llm_rosetta.api` or a name defined by
 ``llm_rosetta/__init__.py``.
 
@@ -910,8 +910,7 @@ def load_providers_from_dir(
 ) -> list[ProviderShim]:
     """Scan *providers_dir* for provider shims and register them.
 
-    The registration call a plugin's ``llm_rosetta.shim_providers`` entry
-    point makes.  It delegates to the shim loader, imported on call, so this
+    The call that registers a shim tree from a directory.  It delegates to the shim loader, imported on call, so this
     module stays importable while the loader itself is starting up.
 
     Args:

@@ -1,15 +1,15 @@
 """Every contract module imports while ``llm_rosetta`` is still initialising (#1657).
 
-Plugin entry points (``llm_rosetta.shim_providers``) run during
-``import llm_rosetta``: ``shims/__init__`` loads them.  A plugin whose entry
-point or sidecar imports a name the half-initialised package does not have yet
-(``llm_rosetta.api``, ``__version__``) fails, and the loader only logs it, so
-its shims silently never register while every in-process test stays green.
+Extensions load during ``import llm_rosetta``: ``shims/__init__`` registers them.
+An extension whose sidecar imports a name the half-initialised package does not
+have yet (``llm_rosetta.api``, ``__version__``) fails, and the loader only logs
+it, so its shims silently never register while every in-process test stays
+green.
 
-This test installs a real entry point (a ``.dist-info`` on ``sys.path``) for
-the plugin package in ``tests/contracts_plugin``, whose entry point and
-sidecars import every contract module, and checks in a fresh interpreter that
-the plugin's shim is registered with its transforms.
+This test puts a real extension folder (``llm_rosetta_ext/c1657acme`` in
+``tests/contracts_plugin``) on ``sys.path``; its sidecars import every contract
+module.  A fresh interpreter then checks that the shim is registered with its
+transforms.
 """
 
 from __future__ import annotations
@@ -29,24 +29,21 @@ SRC_ROOTS = (
 )
 
 
-def _install_plugin(site: Path, target: str = "register_shims") -> None:
-    shutil.copytree(FIXTURE / "c1657_contracts_plugin", site / "c1657_contracts_plugin")
-    dist_info = site / "c1657_contracts_plugin-0.0.dist-info"
-    dist_info.mkdir()
-    (dist_info / "METADATA").write_text(
-        "Metadata-Version: 2.1\nName: c1657-contracts-plugin\nVersion: 0.0\n",
-        encoding="utf-8",
+def _install_plugin(site: Path, broken: bool = False) -> None:
+    shutil.copytree(
+        FIXTURE / "ext_src" / "llm_rosetta_ext" / "c1657acme",
+        site / "llm_rosetta_ext" / "c1657acme",
     )
-    (dist_info / "entry_points.txt").write_text(
-        f"[llm_rosetta.shim_providers]\nc1657acme = c1657_contracts_plugin:{target}\n",
-        encoding="utf-8",
-    )
+    if broken:
+        (site / "llm_rosetta_ext" / "c1657acme" / "llm" / "transforms.py").write_text(
+            "raise AttributeError('no_such_name')\n", encoding="utf-8"
+        )
 
 
-def _probe(tmp_path: Path, target: str = "register_shims") -> dict:
+def _probe(tmp_path: Path, broken: bool = False) -> dict:
     site = tmp_path / "site"
     site.mkdir()
-    _install_plugin(site, target)
+    _install_plugin(site, broken)
     env = dict(os.environ)
     env["PYTHONPATH"] = os.pathsep.join(str(p) for p in (site, *SRC_ROOTS))
     proc = subprocess.run(
@@ -60,7 +57,7 @@ def _probe(tmp_path: Path, target: str = "register_shims") -> dict:
     return json.loads(proc.stdout.strip().splitlines()[-1])
 
 
-def test_a_plugin_importing_every_contract_registers_during_import(tmp_path):
+def test_an_extension_importing_every_contract_registers_during_import(tmp_path):
     result = _probe(tmp_path)
     assert Path(result["core"]).is_relative_to(SRC_ROOTS[0])
     assert result["warnings"] == []
@@ -69,8 +66,8 @@ def test_a_plugin_importing_every_contract_registers_during_import(tmp_path):
     assert result["ir"] == 1
 
 
-def test_a_failing_entry_point_is_a_warning_naming_the_plugin_and_error(tmp_path):
-    result = _probe(tmp_path, target="no_such_entry_point")
+def test_a_failing_extension_is_a_warning_naming_it_and_the_error(tmp_path):
+    result = _probe(tmp_path, broken=True)
     assert not result["registered"]
     assert len(result["warnings"]) == 1
     assert "c1657acme" in result["warnings"][0]
@@ -87,7 +84,7 @@ def test_a_shim_package_built_for_an_older_core_names_itself(tmp_path, monkeypat
     leaf.mkdir(parents=True)
     (site / "c1657_old_shims" / "__init__.py").write_text("", encoding="utf-8")
     yaml_text = (
-        FIXTURE / "c1657_contracts_plugin/providers/c1657acme/llm/provider.yaml"
+        FIXTURE / "ext_src/llm_rosetta_ext/c1657acme/llm/provider.yaml"
     ).read_text(encoding="utf-8")
     (leaf / "provider.yaml").write_text(
         yaml_text.replace("c1657acme", "c1657old"), encoding="utf-8"
