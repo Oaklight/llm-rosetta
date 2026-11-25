@@ -51,7 +51,24 @@ from llm_rosetta.contracts.cli_login import (
     subprocess_env,
 )
 from llm_rosetta.converters import get_converter_class
-from llm_rosetta.extensions import ExtensionStatus, list_extensions
+from llm_rosetta.extensions import (
+    ExtensionInstallError,
+    ExtensionStatus,
+    ExternalStatus,
+    InstalledExtension,
+    activate_extensions_dir,
+    check_external,
+    configure_extensions_dir,
+    extensions_dir,
+    install_with_pip,
+    install_wheel,
+    install_wheel_url,
+    installed_extensions,
+    list_extensions,
+    missing_dependencies,
+    pip_available,
+    remove_extension,
+)
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.base.helpers import strip_internal_metadata
 from llm_rosetta.fidelity import FidelityChecker
@@ -189,6 +206,21 @@ __all__ = [
     # Installed extensions and what happened to each at load time
     "ExtensionStatus",
     "list_extensions",
+    # Installing extensions (a standard-library installer and directory manager)
+    "ExtensionInstallError",
+    "ExternalStatus",
+    "InstalledExtension",
+    "activate_extensions_dir",
+    "check_external",
+    "configure_extensions_dir",
+    "extensions_dir",
+    "install_wheel",
+    "install_wheel_url",
+    "install_with_pip",
+    "installed_extensions",
+    "missing_dependencies",
+    "pip_available",
+    "remove_extension",
     # Fidelity and profiling
     "DeepProfiler",
     "FidelityChecker",

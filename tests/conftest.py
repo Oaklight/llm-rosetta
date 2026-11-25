@@ -43,6 +43,20 @@ def pytest_runtest_protocol(item, nextitem):
 
 
 @pytest.fixture(autouse=True)
+def _no_ambient_extensions(tmp_path_factory, monkeypatch):
+    """Point the extension directory at an empty path.
+
+    ``load_extensions()`` activates the per-user extension directory when it
+    exists, so a developer's own installs would otherwise leak into the suite.
+    A test that wants an extension installs it into its own directory.
+    """
+    monkeypatch.setenv(
+        "LLM_ROSETTA_EXTENSIONS_DIR",
+        str(tmp_path_factory.getbasetemp() / "no-extensions"),
+    )
+
+
+@pytest.fixture(autouse=True)
 def _clear_tool_conversion_caches():
     """Ensure each test starts and ends with clean conversion caches.
 

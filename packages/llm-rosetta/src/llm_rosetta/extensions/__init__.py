@@ -18,14 +18,50 @@ from ._discovery import (
     NAMESPACE,
     discover,
 )
+from ._dirs import (
+    ENV_VAR,
+    ExtensionInstallError,
+    ExtensionsDirError,
+    activate_extensions_dir,
+    configure_extensions_dir,
+    extensions_dir,
+)
+from ._install import (
+    ExternalStatus,
+    InstalledExtension,
+    check_external,
+    install_with_pip,
+    install_wheel,
+    install_wheel_url,
+    installed_extensions,
+    missing_dependencies,
+    pip_available,
+    remove_extension,
+)
 from ._load import ExtensionStatus, list_extensions, load_extensions
 
 __all__ = [
     "ENTRY_POINT_GROUP",
+    "ENV_VAR",
     "LEGACY_ENTRY_POINT_GROUP",
     "NAMESPACE",
+    "ExtensionInstallError",
     "ExtensionStatus",
+    "ExtensionsDirError",
+    "ExternalStatus",
+    "InstalledExtension",
+    "activate_extensions_dir",
+    "check_external",
+    "configure_extensions_dir",
     "discover",
+    "extensions_dir",
+    "install_with_pip",
+    "install_wheel",
+    "install_wheel_url",
+    "installed_extensions",
     "list_extensions",
     "load_extensions",
+    "missing_dependencies",
+    "pip_available",
+    "remove_extension",
 ]

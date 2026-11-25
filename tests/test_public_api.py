@@ -163,6 +163,21 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             # Installed extensions and what happened to each at load time
             "ExtensionStatus",
             "list_extensions",
+            # Installing extensions (a standard-library installer and directory manager)
+            "ExtensionInstallError",
+            "ExternalStatus",
+            "InstalledExtension",
+            "activate_extensions_dir",
+            "check_external",
+            "configure_extensions_dir",
+            "extensions_dir",
+            "install_wheel",
+            "install_wheel_url",
+            "install_with_pip",
+            "installed_extensions",
+            "missing_dependencies",
+            "pip_available",
+            "remove_extension",
             # Fidelity and profiling
             "DeepProfiler",
             "FidelityChecker",
@@ -177,7 +192,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "SURFACE_VERSION",
             "__version__",
         ],
-        "max_count": 71,
+        "max_count": 85,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
