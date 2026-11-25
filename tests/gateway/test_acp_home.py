@@ -407,10 +407,21 @@ class TestTheBuilderWiresTheExchange:
         assert seen["LLM_ROSETTA_ACP_HOME"] == info.acp_state_dir
         assert seen["CLAUDE_CONFIG_DIR"] == f"{info.acp_state_dir}/claude"
 
-    def test_a_cli_lane_wires_its_own_login_profile_into_the_exchange(self, tmp_path):
+    def test_a_cli_lane_wires_its_own_login_profile_into_the_exchange(
+        self, tmp_path, monkeypatch
+    ):
         """The direct CLI lane must not read the gateway process's ~/.claude."""
         from llm_rosetta.contracts.shim import ConnectionConfig, ProviderShim
         from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
+        from llm_rosetta_gateway.transport import registry
+
+        # The lane id belongs to an installed transport package; this test
+        # exercises profile wiring, not discovery.
+        monkeypatch.setattr(
+            registry,
+            "installed_transport_names",
+            lambda: ("acp", "claude_cli", "http"),
+        )
 
         seen: dict[str, str] = {}
 

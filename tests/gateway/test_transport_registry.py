@@ -46,7 +46,6 @@ class TestWhatIsInstalled:
     def test_the_builtins_are_listed(self):
         assert registry.installed_transport_names() == (
             "acp",
-            "claude_cli",
             "http",
         )
 
@@ -70,8 +69,8 @@ class TestBuildingTheLaneTable:
         built = registry.build_lane_transports(timeout=60.0)
 
         assert "http" not in built
+        assert set(built) == {"acp"}
         assert isinstance(built["acp"], registry.AcpTransport)
-        assert isinstance(built["claude_cli"], registry.ClaudeCliTransport)
 
     def test_a_plugin_receives_the_server_timeout(self, monkeypatch):
         timeouts: list[float | None] = []
@@ -150,7 +149,7 @@ class TestBuildingTheLaneTable:
 
         built = registry.build_lane_transports(timeout=60.0, override=override)
 
-        assert set(built) == {"acp", "claude_cli", "carrier-pigeon"}
+        assert set(built) == {"acp", "carrier-pigeon"}
         assert all(value is override for value in built.values())
         assert loaded == []
 

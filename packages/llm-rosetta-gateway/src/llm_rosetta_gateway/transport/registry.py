@@ -4,7 +4,8 @@ A provider names its transport in ``connection.transport``.  The gateway
 ships ``http`` (the proxy's own upstream call) and ``acp`` (a local agent
 CLI over stdio).  Any other lane is supplied by an installed Python package
 that publishes an entry point in :data:`TRANSPORT_ENTRY_POINT_GROUP`; the
-entry-point name is the id a provider writes.
+entry-point name is the id a provider writes.  The official Claude Code CLI
+(``claude_cli``) is shipped this way by ``llm-rosetta-shim-contrib``.
 
 Discovery reads package metadata only.  Config validation therefore knows
 every installed id without importing a plugin, and the plugin module loads
@@ -30,7 +31,6 @@ from typing import Any
 
 from ._base import UpstreamTransport
 from .acp import AcpTransport
-from .claude_cli import ClaudeCliTransport
 from .http import HttpTransport
 
 logger = logging.getLogger("llm-rosetta-gateway")
@@ -46,7 +46,6 @@ TransportFactory = Callable[..., UpstreamTransport]
 BUILTIN_TRANSPORTS: dict[str, TransportFactory] = {
     "http": HttpTransport,
     "acp": AcpTransport,
-    "claude_cli": ClaudeCliTransport,
 }
 
 
