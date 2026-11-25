@@ -263,6 +263,27 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
         ],
         "max_count": 13,
     },
+    "llm_rosetta.contracts.extension": {
+        "items": [
+            "MANIFEST_FILENAME",
+            "MATURITY_LEVELS",
+            "PLATFORMS",
+            "SCHEMA_FILENAME",
+            "ExtensionManifest",
+            "ExtensionManifestInvalid",
+            "ExtensionRequirement",
+            "ExternalProgram",
+            "TransportOwner",
+            "UnresolvedTransport",
+            "compatibility_problems",
+            "current_platform",
+            "load_extension_schema",
+            "parse_extension_manifest",
+            "resolve_transport",
+            "validate_extension_manifest",
+        ],
+        "max_count": 16,
+    },
     "llm_rosetta.contracts.shim_manifest": {
         "items": [
             "MANIFEST_VERSION",
