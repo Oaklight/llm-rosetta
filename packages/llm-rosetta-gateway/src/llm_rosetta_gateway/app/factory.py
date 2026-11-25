@@ -378,29 +378,28 @@ def _lane_transports(
     caller (or a test) may replace after the app is built, and a registry copy
     of it would keep routing to the object it replaced.
 
+    A lane this distribution does not ship comes from an installed package's
+    entry point; :func:`transport.registry.build_lane_transports` loads it
+    here, once, so a broken plugin fails startup rather than a request.
+
     An embedder that supplies its own transport supplies it for every lane
-    too: the gateway does not silently start local processes behind its back.
+    too: the gateway does not silently start local processes behind its back,
+    and no plugin is imported in that case.
 
     Args:
         ext: The caller's extensions, whose ``transport`` wins when set.
-        transport: The transport to use for every lane, when the caller has one.
+        transport: The transport to use for every lane, when the caller has
+            one.
         timeout: The server's own timeout, which an agent turn adopts; ``None``
-            leaves the ACP transport on its default, because a turn has no
+            leaves a transport on its own default, because a turn has no
             server-side deadline to inherit.
     """
-    from ..transport import AcpTransport, ClaudeCliTransport
+    from ..transport.registry import build_lane_transports
 
-    if ext.transport is not None:
-        return {"acp": transport, "claude_cli": transport}
-    if timeout is None:
-        return {
-            "acp": AcpTransport(),
-            "claude_cli": ClaudeCliTransport(),
-        }
-    return {
-        "acp": AcpTransport(timeout=timeout),
-        "claude_cli": ClaudeCliTransport(timeout=timeout),
-    }
+    return build_lane_transports(
+        timeout=timeout,
+        override=transport if ext.transport is not None else None,
+    )
 
 
 async def create_app(
