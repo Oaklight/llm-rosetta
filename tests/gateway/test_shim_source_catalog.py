@@ -36,7 +36,7 @@ def _record(version: str, *, surface=SURFACE_VERSION, ir=IR_VERSION, tags=(), **
     return {
         "version": version,
         "commit": "c" * 40,
-        "archive": f"{version}/acme.tar.gz",
+        "archive": f"{version}/acme.whl",
         "sha256": "0" * 64,
         "requires": {"surface": surface, "ir": ir},
         "shims": kw.pop("shims", ["acme--chat_completions"]),

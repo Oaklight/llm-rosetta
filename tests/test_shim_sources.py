@@ -1,20 +1,16 @@
-"""Tests for declarative external shim sources (local directories, archive safety)."""
+"""Tests for declarative external shim sources (local directories)."""
 
 from __future__ import annotations
 
 import importlib
-import io
 import json
 import sys
-import tarfile
-import zipfile
 from pathlib import Path
 
 import pytest
 
 from llm_rosetta.shims import get_shim, list_shims, register_shim
 from llm_rosetta_gateway.shims import ShimSourceError, rebuild_shims
-from llm_rosetta_gateway.shims._archive import _extract_archive
 from llm_rosetta_gateway.shims import sources as sources_mod
 from llm_rosetta.contracts.shim import ProviderShim
 from llm_rosetta.shims.provider_shim import _reset_registry
@@ -49,18 +45,6 @@ def _write_provider(root: Path, *parts: str, name: str | None = None) -> None:
     (directory / "provider.yaml").write_text(
         PROVIDER_YAML.format(name=name or parts[-1], slug=slug)
     )
-
-
-def _tar_bytes(files: dict[str, bytes], root: str | None = "repo-abc123") -> bytes:
-    """Build an in-memory tar.gz; members are nested under *root* if given."""
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
-        for path, content in files.items():
-            full = f"{root}/{path}" if root else path
-            info = tarfile.TarInfo(full)
-            info.size = len(content)
-            tf.addfile(info, io.BytesIO(content))
-    return buf.getvalue()
 
 
 class TestLocalDirs:
@@ -265,68 +249,3 @@ class TestExtensionTier:
         shim = get_shim("dup--x")
         assert shim is not None
         assert shim.connection.base_url == "https://source.example/v1"
-
-
-class TestSafety:
-    """Archive extraction refuses members that could escape the destination."""
-
-    def _extract(self, data: bytes, tmp_path: Path, subpath: str = "") -> Path:
-        dest = tmp_path / "out"
-        dest.mkdir()
-        _extract_archive(
-            data,
-            dest,
-            archive="auto",
-            url="https://example.test/repo.tar.gz",
-            declared_path=subpath,
-        )
-        return dest
-
-    def test_a_clean_archive_is_stripped_to_its_root(self, tmp_path: Path):
-        data = _tar_bytes({"providers/rem/provider.yaml": b"name: x"})
-        dest = self._extract(data, tmp_path)
-        assert (dest / "providers" / "rem" / "provider.yaml").is_file()
-
-    def test_traversal_member_rejected(self, tmp_path: Path):
-        data = _tar_bytes({"../evil.yaml": b"x"}, root="repo-abc")
-        with pytest.raises(ShimSourceError, match="traversal"):
-            self._extract(data, tmp_path)
-
-    def test_backslash_traversal_rejected(self, tmp_path: Path):
-        """``..\\`` must not slip past the traversal check on a POSIX host."""
-        data = _tar_bytes({"..\\..\\evil.yaml": b"x"}, root="repo-abc")
-        with pytest.raises(ShimSourceError, match="traversal"):
-            self._extract(data, tmp_path)
-
-    def test_drive_prefixed_member_rejected_before_strip(self, tmp_path: Path):
-        """A lone ``C:/x`` member must not be laundered into ``x`` by the strip."""
-        data = _tar_bytes({"C:/evil.yaml": b"x"}, root=None)
-        with pytest.raises(ShimSourceError, match="absolute path"):
-            self._extract(data, tmp_path)
-
-    def test_symlink_member_rejected(self, tmp_path: Path):
-        buf = io.BytesIO()
-        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
-            info = tarfile.TarInfo("repo-abc/link")
-            info.type = tarfile.SYMTYPE
-            info.linkname = "/etc/passwd"
-            tf.addfile(info)
-        with pytest.raises(ShimSourceError, match="link"):
-            self._extract(buf.getvalue(), tmp_path)
-
-    def test_zip_archive(self, tmp_path: Path):
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w") as zf:
-            zf.writestr(
-                "repo-abc/providers/rem/provider.yaml",
-                PROVIDER_YAML.format(name="rem--chat_completions", slug="rem"),
-            )
-        dest = self._extract(buf.getvalue(), tmp_path)
-        assert (dest / "providers" / "rem" / "provider.yaml").is_file()
-
-    def test_zip_traversal_member_rejected(self, tmp_path: Path):
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w") as zf:
-            zf.writestr("repo-abc/../evil.yaml", "x")
-        with pytest.raises(ShimSourceError, match="traversal"):
-            self._extract(buf.getvalue(), tmp_path)

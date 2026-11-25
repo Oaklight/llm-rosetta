@@ -370,7 +370,10 @@ def _install_lifecycle_hooks(app: App) -> None:
 
 
 def _lane_transports(
-    ext: GatewayExtensions, transport: Any, timeout: float | None
+    ext: GatewayExtensions,
+    transport: Any,
+    timeout: float | None,
+    config: GatewayConfig,
 ) -> dict[str, Any]:
     """Build the non-HTTP transports a provider may name.
 
@@ -378,13 +381,15 @@ def _lane_transports(
     caller (or a test) may replace after the app is built, and a registry copy
     of it would keep routing to the object it replaced.
 
-    A lane this distribution does not ship comes from an installed package's
-    entry point; :func:`transport.registry.build_lane_transports` loads it
-    here, once, so a broken plugin fails startup rather than a request.
+    A lane this distribution does not ship comes from an installed extension;
+    :func:`transport.registry.build_lane_transports` imports its transport
+    module here, once per (extension, transport), for the extensions a shim or
+    a configured provider references, so a broken module fails startup rather
+    than a request.
 
     An embedder that supplies its own transport supplies it for every lane
     too: the gateway does not silently start local processes behind its back,
-    and no plugin is imported in that case.
+    and no extension code is imported in that case.
 
     Args:
         ext: The caller's extensions, whose ``transport`` wins when set.
@@ -393,12 +398,20 @@ def _lane_transports(
         timeout: The server's own timeout, which an agent turn adopts; ``None``
             leaves a transport on its own default, because a turn has no
             server-side deadline to inherit.
+        config: The gateway config, whose providers say which extension
+            transports are in use.
     """
     from ..transport.registry import build_lane_transports
 
+    wanted = {
+        (owner, info.transport)
+        for info in config.providers.values()
+        if (owner := getattr(info, "transport_owner", None))
+    }
     return build_lane_transports(
         timeout=timeout,
         override=transport if ext.transport is not None else None,
+        wanted=wanted,
     )
 
 
@@ -431,7 +444,10 @@ async def create_app(
     ext = extensions or GatewayExtensions()
 
     if shim_source_report is None and load_shim_sources and config.shims:
+        from ..config.settings import configure_extensions_for
         from ..shims.shim_sources import apply_shim_section
+
+        configure_extensions_for(config.data_dir, config_path or config.config_path)
 
         shim_source_report = apply_shim_section(
             config.shims, config_path, proxy=config.proxy
@@ -453,7 +469,7 @@ async def create_app(
         if ext.transport is not None
         else HttpTransport(timeout=config.upstream_timeout)
     )
-    transports = _lane_transports(ext, transport, config.upstream_timeout)
+    transports = _lane_transports(ext, transport, config.upstream_timeout, config)
 
     app = App(
         max_body_size=ext.max_body_size

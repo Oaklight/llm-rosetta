@@ -742,14 +742,14 @@ def _resolve_credential(
 
 def _resolve_lane_transport(
     cfg: dict[str, Any], shim: Any | None, provider_key: str
-) -> str:
-    """Return the transport that carries one provider's lane.
+) -> tuple[str, str | None]:
+    """Return the transport that carries one provider's lane, and who owns it.
 
-    A config key wins over the shim's declaration; a name the gateway has no
-    transport for is refused here, naming the provider it belongs to, rather
-    than on that provider's first request.  The ids include the ones an
-    installed transport package publishes: discovery reads package metadata,
-    so this check imports no plugin.
+    A config key wins over the shim's declaration.  The name resolves from the
+    shim's own scope (its extension's transports, then the gateway's, then the
+    extensions it requires), so a name the shim cannot reach is refused here,
+    naming the provider it belongs to, rather than on that provider's first
+    request.  Resolution reads manifests only: no extension code is imported.
 
     Args:
         cfg: The provider's own config block.
@@ -758,26 +758,29 @@ def _resolve_lane_transport(
         provider_key: The config key, used in the error message.
 
     Returns:
-        The transport name.
+        ``(transport name, owning extension id or None for a built-in)``.
 
     Raises:
-        ValueError: The name is not one the gateway or an installed package
-            supplies.
+        ValueError: The name is not reachable from the shim's scope.
     """
-    from ..transport.registry import installed_transport_names
+    from llm_rosetta.contracts.extension import UnresolvedTransport
+
+    from ..transport.registry import reachable_transport_names, resolve_lane
 
     lane_transport = str(
         cfg.get("transport")
         or (shim.connection.transport if shim is not None else "http")
     )
-    available = installed_transport_names()
-    if lane_transport not in available:
+    shim_name = shim.name if shim is not None else None
+    try:
+        lane = resolve_lane(lane_transport, shim_name)
+    except UnresolvedTransport as exc:
+        available = reachable_transport_names(shim_name)
         raise ValueError(
-            f"Provider '{provider_key}': unknown transport {lane_transport!r}; "
-            f"available: {', '.join(available)}. Install the package that "
-            "provides it, or name a transport this gateway ships."
-        )
-    return lane_transport
+            f"Provider '{provider_key}': unknown transport {lane_transport!r}: "
+            f"{exc}. Reachable from this shim: {', '.join(available)}."
+        ) from exc
+    return lane.name, lane.owner
 
 
 def _argv_value(value: Any, provider_key: str, label: str) -> tuple[str, ...] | None:
@@ -1519,7 +1522,7 @@ def build_provider_info(
     # Which transport carries this lane.  A config key wins over the shim's
     # declaration, and a name with no transport behind it is refused here —
     # beside the provider it belongs to — rather than on its first request.
-    lane_transport = _resolve_lane_transport(cfg, shim, provider_key)
+    lane_transport, transport_owner = _resolve_lane_transport(cfg, shim, provider_key)
     acp_limits = _resolve_acp_limits(cfg, provider_key)
 
     quota = _resolve_quota_config(cfg, shim, provider_key)
@@ -1626,6 +1629,7 @@ def build_provider_info(
         ),
         stream_required=bool(shim.connection.stream_required if shim else False),
         transport=lane_transport,
+        transport_owner=transport_owner,
         acp_argv=acp_argv,
         acp_argv_custom=(
             cfg.get("acp_argv") is not None

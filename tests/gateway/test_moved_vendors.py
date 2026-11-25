@@ -12,15 +12,14 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import io
 import json
 import logging
-import tarfile
 from pathlib import Path
 from typing import Any
 
 import pytest
 
+from _ext_wheels import tree_wheel
 from _moved_vendors import MOVED_VENDORS_DIR
 from llm_rosetta.api import get_shim, retired_names
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
@@ -49,20 +48,9 @@ COMMIT = "d" * 40
 PUBLISHED = ("opencode", "openai_chatgpt", "kilo", "xai", "siliconflow")
 
 
-def _vendor_archive(vendor: str) -> bytes:
-    """``providers/<vendor>/...`` from the frozen copy, as the producers pack it."""
-    buf = io.BytesIO()
-    root = MOVED_VENDORS_DIR / vendor
-    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        for path in sorted(root.rglob("*")):
-            if "__pycache__" in path.parts or not path.is_file():
-                continue
-            rel = path.relative_to(MOVED_VENDORS_DIR)
-            data = path.read_bytes()
-            info = tarfile.TarInfo(f"providers/{rel.as_posix()}")
-            info.size = len(data)
-            tar.addfile(info, io.BytesIO(data))
-    return buf.getvalue()
+def _vendor_archive(vendor: str, shims: tuple[str, ...]) -> bytes:
+    """``llm_rosetta_ext/<vendor>/...`` from the frozen copy, as a wheel."""
+    return tree_wheel(vendor, "0.5.0", MOVED_VENDORS_DIR / vendor, list(shims))
 
 
 class FakeContrib:
@@ -75,8 +63,8 @@ class FakeContrib:
         self.down = False
         rows = {row.vendor: row for row in retired_names.MOVED_VENDORS}
         for vendor in vendors:
-            data = _vendor_archive(vendor)
-            archive = f"0.5.0/{vendor}.tar.gz"
+            data = _vendor_archive(vendor, rows[vendor].shims)
+            archive = f"0.5.0/{vendor}-0.5.0-py3-none-any.whl"
             self.files[DIST + archive] = data
             self.records[vendor] = {
                 "versions": [
@@ -377,7 +365,7 @@ def _stale_record(vendor: str) -> dict[str, Any]:
             {
                 "version": "0.4.0",
                 "commit": COMMIT,
-                "archive": f"0.4.0/{vendor}.tar.gz",
+                "archive": f"0.4.0/{vendor}-0.4.0-py3-none-any.whl",
                 "sha256": "0" * 64,
                 "requires": {"surface": SURFACE_VERSION, "ir": IR_VERSION},
                 "shims": [f"{vendor}--chat_completions"],

@@ -152,7 +152,10 @@ async def _probe_agent_lane(
     The lane has no host to dial.  A transport that can run a short turn does
     so; one that cannot says plainly that the next request is the only probe.
     """
-    transport = (getattr(request.app, "transports", {}) or {}).get(lane)
+    # A transport is keyed by its owning extension too, which only the
+    # provider's resolved lane knows.
+    key = getattr(pinfo, "transport_key", lane) if pinfo is not None else lane
+    transport = (getattr(request.app, "transports", {}) or {}).get(key)
     lane_probe = getattr(transport, "probe_provider", None)
     if not callable(lane_probe) or pinfo is None:
         return JSONResponse(

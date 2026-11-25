@@ -55,23 +55,23 @@
           "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
         },
         "commit": {
-          "description": "The source commit the archive was built from.",
+          "description": "The source commit the wheel was built from.",
           "type": "string",
           "pattern": "^[0-9a-f]{40}$"
         },
         "archive": {
-          "description": "Archive path relative to the directory that holds manifest.json (the dist branch root).",
+          "description": "Wheel path relative to the directory that holds manifest.json (the dist branch root). The wheel is a pure-Python extension wheel: one llm_rosetta_ext/<vendor>/ folder with its plugin.yaml.",
           "type": "string",
-          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\\.tar\\.gz$"
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\\.whl$"
         },
         "sha256": {
-          "description": "Lowercase hex digest of the archive bytes.",
+          "description": "Lowercase hex digest of the wheel bytes.",
           "type": "string",
           "pattern": "^[0-9a-f]{64}$"
         },
         "requires": {"$ref": "#/$defs/requires"},
         "shims": {
-          "description": "The shim names the archive registers. Each is the vendor key itself (a bare shim such as 'xai'), '<vendor>--<name>', or '<vendor>_<lane>--<name>' (a lane of the vendor, such as 'alcf_sophia--chat_completions'); the validator refuses a name that carries another vendor's prefix, including a lane prefix that is itself a vendor key of the same manifest.",
+          "description": "The shim names the wheel registers. Each is the vendor key itself (a bare shim such as 'xai'), '<vendor>--<name>', or '<vendor>_<lane>--<name>' (a lane of the vendor, such as 'alcf_sophia--chat_completions'); the validator refuses a name that carries another vendor's prefix, including a lane prefix that is itself a vendor key of the same manifest.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,

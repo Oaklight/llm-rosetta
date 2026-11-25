@@ -1,11 +1,10 @@
-"""Install stamps, atomic directory swap and file locking for the shim cache."""
+"""Install stamps and file locking for the shim cache."""
 
 from __future__ import annotations
 
 import contextlib
 import json
 import os
-import shutil
 import uuid
 from collections.abc import Mapping
 from pathlib import Path
@@ -29,19 +28,6 @@ def _write_stamp(path: Path, stamp: Mapping[str, Any]) -> None:
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(dict(stamp), f, indent=2, sort_keys=True)
     os.replace(tmp, path)
-
-
-def _atomic_replace(src: Path, dest: Path) -> None:
-    """Replace directory *dest* with *src* as atomically as the OS allows."""
-    if dest.exists():
-        old = dest.with_name(f"{dest.name}.old-{uuid.uuid4().hex}")
-        os.replace(dest, old)
-        try:
-            os.replace(src, dest)
-        finally:
-            shutil.rmtree(old, ignore_errors=True)
-    else:
-        os.replace(src, dest)
 
 
 @contextlib.contextmanager

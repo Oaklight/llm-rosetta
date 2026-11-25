@@ -9,7 +9,7 @@
         {
           "version": "0.4.0",
           "commit": "1111111111111111111111111111111111111111",
-          "archive": "0.4.0/kilo_free.tar.gz",
+          "archive": "0.4.0/kilo_free.whl",
           "sha256": "bedd6ed98eadb64eaffee1e5c818560f6a1c1991cade717db20cab6594d624ea",
           "requires": {
             "surface": 1,
@@ -36,7 +36,7 @@
         {
           "version": "0.4.0",
           "commit": "1111111111111111111111111111111111111111",
-          "archive": "0.4.0/llm7.tar.gz",
+          "archive": "0.4.0/llm7.whl",
           "sha256": "1f4633635a83ad2dac7b684f0fb88407d8b7b79d2e9907d246fc8961f8e82894",
           "requires": {
             "surface": 1,
@@ -63,7 +63,7 @@
         {
           "version": "0.4.0",
           "commit": "1111111111111111111111111111111111111111",
-          "archive": "0.4.0/opencode_zen_free.tar.gz",
+          "archive": "0.4.0/opencode_zen_free.whl",
           "sha256": "0f4ff385640b53ed2bcac1f5a3ad0abb47643317af47fe1a972cbff10ad4f57d",
           "requires": {
             "surface": 1,
@@ -90,7 +90,7 @@
         {
           "version": "0.3.0",
           "commit": "1111111111111111111111111111111111111111",
-          "archive": "0.3.0/opendesign.tar.gz",
+          "archive": "0.3.0/opendesign.whl",
           "sha256": "9f3a04ebfcc4b22865c4cdeedf621da55c309a13bc06890c6d0cc1c989ceb5d8",
           "requires": {
             "surface": 1,
@@ -120,7 +120,7 @@
         {
           "version": "0.4.0",
           "commit": "1111111111111111111111111111111111111111",
-          "archive": "0.4.0/ovhcloud.tar.gz",
+          "archive": "0.4.0/ovhcloud.whl",
           "sha256": "10d866063c5d1b5820f94117cdefe3a5c5c80edf078d75d14d36feb3bf2c856e",
           "requires": {
             "surface": 1,

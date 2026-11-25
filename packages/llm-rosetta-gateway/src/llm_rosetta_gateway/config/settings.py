@@ -82,6 +82,41 @@ def resolve_data_dir(configured: str | None, config_path: str | None) -> str | N
     return None
 
 
+def configure_extensions_for(
+    configured: str | None, config_path: str | None
+) -> str | None:
+    """Point core's extensions directory at ``<data dir>/extensions``.
+
+    This is the one place the gateway chooses where extensions live.  Call it
+    once at startup, before the first shim load, so a wheel installed by a
+    manifest source and an extension found at start-up are the same directory.
+    With ``LLM_ROSETTA_EXTENSIONS_DIR`` set, the operator's directory wins and
+    nothing is changed.  With no data directory to derive (no
+    ``server.data_dir`` and no config file) core's own default applies (the
+    per-user directory) and nothing is changed.
+
+    Args:
+        configured: The value in ``server.data_dir``, or ``None``.
+        config_path: Path of the config document, when the caller has one.
+
+    Returns:
+        The extensions directory that was set, or ``None`` when none was.
+    """
+    from llm_rosetta.api import EXTENSIONS_DIR_ENV, configure_extensions_dir
+
+    if os.environ.get(EXTENSIONS_DIR_ENV):
+        # The operator named a directory.  The ``llm-rosetta ext`` commands read
+        # the same variable, so installing with them and serving from here meet
+        # in one place; the data directory must not move it.
+        return None
+    data_dir = resolve_data_dir(configured, config_path)
+    if data_dir is None:
+        return None
+    target = os.path.abspath(os.path.join(data_dir, "extensions"))
+    configure_extensions_dir(target)
+    return target
+
+
 DEFAULT_MAX_BODY_SIZE = 50_000_000
 MIN_MAX_BODY_SIZE = 1_000_000
 

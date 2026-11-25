@@ -372,3 +372,41 @@ class TestDiscovery:
             and "llm_rosetta.extensions" in r.getMessage()
             for r in caplog.records
         ), caplog.text
+
+
+class TestImportExtensionModule:
+    def test_it_imports_a_module_of_an_installed_extension(self, path):
+        from llm_rosetta.extensions import import_extension_module
+
+        folder = _extension(path, "acme")
+        (folder / "transport.py").write_text("VALUE = 7\n")
+
+        module = import_extension_module("acme", "transport")
+
+        assert module.__name__ == "llm_rosetta_ext.acme.transport"
+        assert module.VALUE == 7
+
+    def test_a_module_that_does_not_exist_raises_import_error(self, path):
+        from llm_rosetta.extensions import import_extension_module
+
+        _extension(path, "acme")
+
+        with pytest.raises(ModuleNotFoundError):
+            import_extension_module("acme", "transport")
+
+    @pytest.mark.parametrize(
+        ("ext_id", "submodule"),
+        [
+            ("../x", ""),
+            ("Acme", ""),
+            ("", ""),
+            ("acme", "a/b"),
+            ("acme", "..x"),
+            ("acme", "a..b"),
+        ],
+    )
+    def test_a_name_that_is_not_a_plain_module_path_is_refused(self, ext_id, submodule):
+        from llm_rosetta.extensions import import_extension_module
+
+        with pytest.raises(ValueError):
+            import_extension_module(ext_id, submodule)

@@ -19,6 +19,21 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _no_leaked_extensions_dir():
+    """The gateway points core's extensions directory at its data directory.
+
+    That setting is process-wide, so a test that starts a gateway must not
+    leave its temporary directory behind for the next one.
+    """
+    from llm_rosetta.api import configure_extensions_dir
+
+    configure_extensions_dir(None)
+    yield
+    configure_extensions_dir(None)
+
+
 # ---------------------------------------------------------------------------
 # Minimal httpbin-compatible handler
 # ---------------------------------------------------------------------------

@@ -16,9 +16,10 @@ Security
 --------
 A shim directory may ship a ``transforms.py`` that is executed on load, so a
 declared source is **code execution** — the same trust level as ``pip
-install``ing a plugin package.  Only add sources you trust.  Extraction rejects
-absolute paths, ``..`` traversal, symlink/hardlink and device members, and both
-the download and the extracted tree are size-capped.
+install``ing a plugin package.  Only add sources you trust.  A downloaded wheel is
+installed by core's standard-library installer, which rejects absolute paths,
+``..`` traversal, links and device members and caps the extracted size; the
+download itself is size-capped here.
 """
 
 from __future__ import annotations
@@ -82,13 +83,14 @@ def rebuild_shims(
     manifests: ManifestPlan | None = None,
     force_refresh: bool = False,
 ) -> ShimLoadReport:
-    """Rebuild the shim registry from built-ins, entry points and sources.
+    """Rebuild the shim registry from built-ins, extensions and sources.
 
     The registry is cleared and repopulated in a fixed order — built-ins, then
-    entry-point plugins, then manifest installs, then ``extra_dirs`` in order —
-    so a later source overrides an earlier one of the same shim name.  Manifest installs are the exception to that
-    rule against core: a vendor whose shim names core registers is not
-    loaded (core wins, see :mod:`.manifest_sources`).
+    the installed extensions (those a manifest install just placed in the
+    extensions directory included), then ``extra_dirs`` in order — so a later
+    source overrides an earlier one of the same shim name.  An extension is the
+    exception to that rule against core: one whose shim names another owner
+    holds is not loaded (core wins, see :mod:`.manifest_sources`).
     Idempotent: calling twice with the same inputs yields the same registry.
 
     Args:

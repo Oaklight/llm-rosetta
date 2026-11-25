@@ -22,7 +22,13 @@ from .observability.logging import get_logger
 if TYPE_CHECKING:
     from .config import GatewayConfig
 
-__all__ = ["AdminConfigAccess", "AdminContext", "AdminShimSources", "admin_context"]
+__all__ = [
+    "AdminConfigAccess",
+    "AdminContext",
+    "AdminExtensions",
+    "AdminShimSources",
+    "admin_context",
+]
 
 logger = get_logger()
 
@@ -62,7 +68,25 @@ class AdminShimSources(Protocol):
 
 
 @runtime_checkable
-class AdminContext(AdminConfigAccess, AdminShimSources, Protocol):
+class AdminExtensions(Protocol):
+    """What the installed extensions look like (epic #1703)."""
+
+    def extension_listing(self) -> list[dict[str, Any]]:
+        """Every extension found or installed, one JSON-safe record each.
+
+        A record holds ``id``, ``version``, ``source`` (``entry point``,
+        ``namespace`` or ``extensions directory``), ``state`` (``loaded``,
+        ``skipped``, ``failed`` or ``installed`` when it is on disk and not yet
+        loaded), ``reason``, ``path``, ``maturity``, ``shims`` (the names it
+        registered), ``transports``, ``external`` (one status per program it
+        drives) and ``missing_dependencies``.  Blocking: it runs the external
+        programs' version checks, so call it off the loop.
+        """
+        ...
+
+
+@runtime_checkable
+class AdminContext(AdminConfigAccess, AdminShimSources, AdminExtensions, Protocol):
     """Everything the admin panel may ask of the running gateway.
 
     Capabilities are added as base classes, one per concern: config,

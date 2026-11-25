@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -16,18 +15,12 @@ logger = logging.getLogger("llm_rosetta_gateway.shims.sources")
 
 #: Download cap for a vendor archive.
 MAX_ARCHIVE_BYTES = 50 * 1024 * 1024
-#: Cap on the total uncompressed size written to disk.
-MAX_EXTRACTED_BYTES = 256 * 1024 * 1024
-#: Cap on the number of archive members.
-MAX_ARCHIVE_MEMBERS = 20_000
 #: Default re-fetch interval for an unpinned remote (seconds).
 REMOTE_TTL_SECONDS = 24 * 3600
 #: HTTP timeout for fetch + ref resolution (seconds).
 HTTP_TIMEOUT = 30.0
 #: Default cache directory name, resolved next to the config file by the gateway.
 DEFAULT_CACHE_DIRNAME = "shims-cache"
-
-_DRIVE_RE = re.compile(r"^[A-Za-z]:$")
 
 HttpGet = Callable[..., bytes]
 
@@ -105,6 +98,12 @@ class ShimSourceStatus:
         skipped: Why a selected vendor was not installed (promoted to core,
             core ships the name, no compatible version) — a decision, not a
             failure, so ``ok`` stays true.
+        extension: The id of the installed extension a vendor install carries.
+            ``None`` otherwise.
+        state: What loading the extension did: ``"loaded"``, ``"skipped"`` or
+            ``"failed"`` (core's own words); ``None`` before it was loaded.
+        note: A sentence the operator should read though nothing failed, such
+            as the required extensions that are not installed.
     """
 
     kind: Literal["path", "remote"]
@@ -128,6 +127,9 @@ class ShimSourceStatus:
     vendor: str | None = None
     release: dict[str, Any] | None = None
     skipped: str | None = None
+    extension: str | None = None
+    state: str | None = None
+    note: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-safe view for the admin API."""
@@ -153,6 +155,9 @@ class ShimSourceStatus:
             "vendor": self.vendor,
             "release": dict(self.release) if self.release else None,
             "skipped": self.skipped,
+            "extension": self.extension,
+            "state": self.state,
+            "note": self.note,
         }
 
 

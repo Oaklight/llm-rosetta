@@ -415,12 +415,12 @@ class TestTheBuilderWiresTheExchange:
         from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
         from llm_rosetta_gateway.transport import registry
 
-        # The lane id belongs to an installed transport package; this test
-        # exercises profile wiring, not discovery.
+        # The lane id belongs to an installed extension's transport; this test
+        # exercises profile wiring, not scope resolution.
         monkeypatch.setattr(
             registry,
-            "installed_transport_names",
-            lambda: ("acp", "claude_cli", "http"),
+            "resolve_lane",
+            lambda name, shim_name=None: registry.LaneRef(name, "claude"),
         )
 
         seen: dict[str, str] = {}

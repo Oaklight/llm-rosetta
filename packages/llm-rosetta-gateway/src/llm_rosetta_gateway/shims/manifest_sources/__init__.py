@@ -12,8 +12,12 @@ them.  Per selected vendor this module:
 2. keeps the installed version when it is still compatible and not older than
    that choice — a gateway upgrades only when a newer installable version
    appears, never because the manifest was re-read;
-3. otherwise downloads ``<dist root>/<archive>``, checks its sha256 against
-   the record and installs it into the shim cache atomically.
+3. otherwise downloads the wheel ``<dist root>/<archive>``, checks its sha256
+   against the record and installs it into the extensions directory with
+   core's standard-library installer
+   (:func:`llm_rosetta.api.install_wheel`).  The installed extension is
+   then an ordinary extension: the registry rebuild's ``load_providers()``
+   loads it, and its load result is the vendor's status.
 
 When the manifest cannot be fetched the last fetched copy is used, and when a
 download fails the last good install is kept (marked ``stale``), the same
@@ -28,17 +32,20 @@ the manifest with the newer ``generated_at`` is used (the first on a tie).  A
 cached manifest is never replaced by an older one: it is kept and marked
 ``stale`` until a fetch returns one at least as new.
 
-Precedence (S3): core wins per shim — a shim name core already registers is
-not loaded from the source, and the ignored names are logged with the source
-and vendor; the vendor's other shims still install.  A vendor whose installable
+Precedence (S3): core wins — a shim name core already registers is not
+replaced, and the loader refuses an extension whose declared names another
+owner holds (the status says which).  A vendor all of whose shims are held is
+skipped before it is downloaded.  A vendor whose installable
 record says ``promoted_to: core@X`` is not installed once this core is at
 ``X`` or later (a dev or pre-release of ``X`` is before it) and core really
 registers the record's shims.
 
-The release record is authoritative for what registers: an archive without a
-``shims.yaml`` loads only the shim names its record lists.
+An installed extension loads whether or not ``shims.install`` still selects it;
+the selection decides what is installed and kept current, ``shims.disable``
+what is switched off.  An extension's ``requires.extensions`` that are not
+installed are reported in the vendor's ``note``, not installed on its behalf.
 
-Like any shim source, an installed vendor may ship a ``transforms.py`` that
-runs on load: a manifest source is code execution at the trust level of the
-repository that publishes it.
+An installed extension may ship sidecar code that runs on load: a manifest
+source is code execution at the trust level of the repository that publishes
+it.
 """

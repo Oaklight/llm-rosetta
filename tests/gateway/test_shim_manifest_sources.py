@@ -7,18 +7,21 @@ Every test serves a fake manifest and fake archives through an injected
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import logging
-import tarfile
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from _ext_wheels import build_wheel, shim_yaml
 from llm_rosetta.api import (
+    configure_extensions_dir,
+    extensions_dir,
     get_shim,
+    installed_extensions,
+    list_extensions,
     list_shims,
     restore_registry,
     snapshot_registry,
@@ -84,22 +87,10 @@ def logs(log_handler):
 
 
 def _archive(vendor: str, shims: list[str], marker: str = "v") -> bytes:
-    """A vendor archive: ``providers/<vendor>/<lane>/provider.yaml`` per shim."""
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        for shim in shims:
-            lane = shim.split("--", 1)[0]
-            body = (
-                f"name: {shim}\n"
-                "format: chat_completions\nmodel_type: llm\n"
-                "connection:\n"
-                f"  base_url: https://{lane}.{marker}.example/v1\n"
-                "  api_key_env: ACME_API_KEY\n"
-            ).encode()
-            info = tarfile.TarInfo(f"providers/{vendor}/{lane}/provider.yaml")
-            info.size = len(body)
-            tar.addfile(info, io.BytesIO(body))
-    return buf.getvalue()
+    """A vendor wheel: ``llm_rosetta_ext/<vendor>/`` with one leaf per shim."""
+    return build_wheel(
+        vendor, marker if marker[:1].isdigit() else "0.1.0", shims, marker=marker
+    )
 
 
 def _release(
@@ -117,7 +108,7 @@ def _release(
     return {
         "version": version,
         "commit": COMMIT,
-        "archive": f"{version}/{vendor}.tar.gz",
+        "archive": f"{version}/{vendor}-{version}-py3-none-any.whl",
         "sha256": sha256 or hashlib.sha256(data).hexdigest(),
         "requires": {"surface": surface, "ir": ir},
         "shims": shims,
@@ -200,7 +191,7 @@ class TestSelection:
         assert status.ok and status.release["version"] == "0.1.0"
         assert status.shim_names == ("acme--chat_completions",)
         assert get_shim("acme--chat_completions") is not None
-        assert DIST + "0.1.0/acme.tar.gz" in http.calls
+        assert DIST + "0.1.0/acme-0.1.0-py3-none-any.whl" in http.calls
         assert not any("0.2.0/" in c or "0.3.0/" in c for c in http.calls)
 
     def test_a_surface_mismatch_is_skipped_with_a_warning(self, tmp_path, logs):
@@ -295,6 +286,8 @@ class TestIntegrity:
         assert "sha256 mismatch" in status.error
         assert get_shim("acme--chat_completions") is None
         assert not list((tmp_path / "shims-cache").rglob("provider.yaml"))
+        assert not list(extensions_dir().rglob("plugin.yaml"))
+        assert installed_extensions() == []
 
     def test_a_sha_mismatch_on_upgrade_keeps_the_last_good_install(self, tmp_path):
         http = FakeHttp()
@@ -309,6 +302,190 @@ class TestIntegrity:
         assert status.release["version"] == "0.1.0"
         shim = get_shim("acme--chat_completions")
         assert shim is not None and "0.1.0" in str(shim.connection.base_url)
+
+
+class TestWheelInstall:
+    """A release is a wheel: core installs it and the one loader loads it."""
+
+    def test_an_installed_wheel_is_visible_without_a_restart(self, tmp_path):
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+        assert get_shim("acme--chat_completions") is None
+
+        report = _apply(tmp_path, _url_section("acme"), http)
+
+        status = _vendor_status(report, "acme")
+        assert status.ok and status.state == "loaded"
+        assert (status.extension, status.error, status.note) == ("acme", None, None)
+        assert status.release["version"] == "0.1.0"
+        assert status.shim_names == ("acme--chat_completions",)
+        assert status.resolved_dir == str(extensions_dir() / "llm_rosetta_ext" / "acme")
+        assert get_shim("acme--chat_completions") is not None
+        loaded = {item.id: item for item in list_extensions()}
+        assert loaded["acme"].state == "loaded"
+        assert [item.id for item in installed_extensions()] == ["acme"]
+        assert report.total_shims == len(list_shims())
+
+    def test_the_gateways_data_directory_is_where_it_installs(
+        self, tmp_path, monkeypatch
+    ):
+        from llm_rosetta_gateway.config.settings import configure_extensions_for
+
+        monkeypatch.delenv("LLM_ROSETTA_EXTENSIONS_DIR", raising=False)
+
+        config = str(tmp_path / "config.jsonc")
+        target = configure_extensions_for(None, config)
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+
+        _apply(tmp_path, _url_section("acme"), http)
+
+        assert target == str(tmp_path / "data" / "extensions")
+        assert (tmp_path / "data" / "extensions" / "llm_rosetta_ext" / "acme").is_dir()
+        assert extensions_dir() == tmp_path / "data" / "extensions"
+
+    def test_an_operator_chosen_directory_beats_the_data_directory(
+        self, tmp_path, monkeypatch
+    ):
+        from llm_rosetta.api import EXTENSIONS_DIR_ENV
+        from llm_rosetta_gateway.config.settings import configure_extensions_for
+
+        chosen = tmp_path / "chosen"
+        monkeypatch.setenv(EXTENSIONS_DIR_ENV, str(chosen))
+        configure_extensions_dir(None)
+
+        assert configure_extensions_for(None, str(tmp_path / "config.jsonc")) is None
+        assert extensions_dir() == chosen
+
+    def test_no_data_directory_leaves_core_its_own_default(self):
+        from llm_rosetta_gateway.config.settings import configure_extensions_for
+
+        before = extensions_dir()
+        assert configure_extensions_for(None, None) is None
+        assert extensions_dir() == before
+        configure_extensions_dir(None)
+
+    def test_an_upgrade_replaces_the_installed_extension(self, tmp_path):
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+        _apply(tmp_path, _url_section("acme"), http)
+        http.publish("acme", "0.2.0", ["acme--chat_completions"])
+
+        report = _apply(tmp_path, _url_section("acme"), http, force_refresh=True)
+
+        assert _vendor_status(report, "acme").release["version"] == "0.2.0"
+        (item,) = installed_extensions()
+        assert item.version == "0.2.0"
+        shim = get_shim("acme--chat_completions")
+        assert shim is not None and "0.2.0" in str(shim.connection.base_url)
+
+    def test_a_wheel_this_core_cannot_run_is_refused_before_extraction(self, tmp_path):
+        """The record is compatible, the wheel's own manifest is not."""
+        http = FakeHttp()
+        data = build_wheel(
+            "acme", "0.1.0", ["acme--chat_completions"], surface=SURFACE_VERSION + 1
+        )
+        http.publish("acme", "0.1.0", ["acme--chat_completions"], data=data)
+
+        report = _apply(tmp_path, _url_section("acme"), http)
+
+        status = _vendor_status(report, "acme")
+        assert status.ok is False
+        assert (status.error or "").startswith("ShimSourceError:")
+        assert f"surface {SURFACE_VERSION + 1}" in (status.error or "")
+        assert installed_extensions() == []
+        assert not list(extensions_dir().rglob("*"))
+        assert get_shim("acme--chat_completions") is None
+
+    def test_a_wheel_of_another_extension_is_refused_and_taken_back(self, tmp_path):
+        http = FakeHttp()
+        data = build_wheel("other", "0.1.0", ["other--chat_completions"])
+        http.publish("acme", "0.1.0", ["acme--chat_completions"], data=data)
+
+        report = _apply(tmp_path, _url_section("acme"), http)
+
+        status = _vendor_status(report, "acme")
+        assert status.ok is False
+        assert "holds extension 'other', not 'acme'" in (status.error or "")
+        assert installed_extensions() == []
+        assert get_shim("other--chat_completions") is None
+
+    def test_an_unsafe_wheel_installs_nothing(self, tmp_path):
+        import io
+        import zipfile
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("llm_rosetta_ext/acme/plugin.yaml", "id: acme\n")
+            zf.writestr("../escape.txt", "x")
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"], data=buf.getvalue())
+
+        report = _apply(tmp_path, _url_section("acme"), http)
+
+        status = _vendor_status(report, "acme")
+        assert status.ok is False and "cannot install the wheel" in status.error
+        assert installed_extensions() == []
+        assert not (tmp_path.parent / "escape.txt").exists()
+
+    def test_a_missing_required_extension_is_reported_not_installed(self, tmp_path):
+        http = FakeHttp()
+        data = build_wheel(
+            "acme",
+            "0.1.0",
+            ["acme--chat_completions"],
+            requires_extensions=("lanes",),
+        )
+        http.publish("acme", "0.1.0", ["acme--chat_completions"], data=data)
+
+        report = _apply(tmp_path, _url_section("acme"), http)
+
+        status = _vendor_status(report, "acme")
+        assert status.ok and status.state == "loaded"
+        assert status.note == (
+            "extension 'acme' requires extension(s) 'lanes', which is not installed"
+        )
+        assert [item.id for item in installed_extensions()] == ["acme"]
+
+        # Selecting the dependency too clears the note on the next run.
+        http.publish("lanes", "0.1.0", ["lanes--chat_completions"])
+        report = _apply(
+            tmp_path, _url_section("acme", "lanes"), http, force_refresh=True
+        )
+        assert _vendor_status(report, "acme").note is None
+        assert sorted(item.id for item in installed_extensions()) == ["acme", "lanes"]
+
+    def test_an_extension_that_fails_to_load_is_reported_with_its_reason(
+        self, tmp_path
+    ):
+        http = FakeHttp()
+        data = build_wheel(
+            "acme",
+            "0.1.0",
+            ["acme--chat_completions"],
+            members={
+                "llm/chat_completions/transforms.py": "raise RuntimeError('boom')\n"
+            },
+        )
+        http.publish("acme", "0.1.0", ["acme--chat_completions"], data=data)
+
+        report = _apply(tmp_path, _url_section("acme"), http)
+
+        status = _vendor_status(report, "acme")
+        assert status.ok is False and status.state == "failed"
+        assert "RuntimeError" in (status.error or "") and "boom" in (status.error or "")
+        assert status.release["version"] == "0.1.0"
+        assert get_shim("acme--chat_completions") is None
+
+    def test_the_status_serialises_the_extension_fields(self, tmp_path):
+        http = FakeHttp()
+        http.publish("acme", "0.1.0", ["acme--chat_completions"])
+
+        report = _apply(tmp_path, _url_section("acme"), http)
+
+        row = report.to_dict()["sources"][0]
+        assert (row["extension"], row["state"], row["note"]) == ("acme", "loaded", None)
+        json.dumps(report.to_dict())
 
 
 class TestUpgrades:
@@ -400,10 +577,10 @@ class TestUpgrades:
         _apply(tmp_path, _url_section("acme"), http)
         http.publish("acme", "0.2.0", ["acme--chat_completions"])
 
-        def full(src, dest):
+        def full(*_a, **_kw):
             raise OSError(28, "No space left on device")
 
-        monkeypatch.setattr(install, "_atomic_replace", full)
+        monkeypatch.setattr(install, "install_wheel", full)
         report = _apply(tmp_path, _url_section("acme"), http, force_refresh=True)
 
         status = _vendor_status(report, "acme")
@@ -419,10 +596,10 @@ class TestUpgrades:
         http = FakeHttp()
         http.publish("acme", "0.1.0", ["acme--chat_completions"])
 
-        def full(src, dest):
+        def full(*_a, **_kw):
             raise OSError(28, "No space left on device")
 
-        monkeypatch.setattr(install, "_atomic_replace", full)
+        monkeypatch.setattr(install, "install_wheel", full)
         report = _apply(tmp_path, _url_section("acme"), http)
 
         status = _vendor_status(report, "acme")
@@ -436,7 +613,7 @@ class TestUpgrades:
     def test_a_write_denied_while_extracting_is_the_same_failure(
         self, tmp_path, monkeypatch
     ):
-        """EPERM during extraction leaves no half-swapped vendor directory."""
+        """EPERM while installing leaves no extension folder behind."""
         from llm_rosetta_gateway.shims.manifest_sources import install
 
         http = FakeHttp()
@@ -445,17 +622,14 @@ class TestUpgrades:
         def denied(*_a, **_kw):
             raise OSError(1, "Operation not permitted")
 
-        monkeypatch.setattr(install, "_extract_archive", denied)
+        monkeypatch.setattr(install, "install_wheel", denied)
         report = _apply(tmp_path, _url_section("acme"), http)
 
         status = _vendor_status(report, "acme")
         assert status.ok is False
         assert (status.error or "").startswith("ShimSourceError:")
         assert "Operation not permitted" in (status.error or "")
-        vendor_dirs = [
-            p for p in tmp_path.rglob("acme") if p.is_dir() and p.parent.name != ".tmp"
-        ]
-        assert vendor_dirs == []
+        assert list(tmp_path.rglob("llm_rosetta_ext/acme")) == []
 
     def test_an_unreachable_source_with_nothing_cached_fails(self, tmp_path):
         http = FakeHttp()
@@ -554,6 +728,7 @@ class TestPluginOwnedSkipReachesTheStatus:
                 kind="remote",
                 location="https://example.test/demo/manifest.json",
                 resolved_dir="/tmp/demo",
+                extension="demo",
                 source="demo",
                 vendor="demo",
                 release={"shims": ["demo--chat_completions"]},
@@ -567,6 +742,29 @@ class TestPluginOwnedSkipReachesTheStatus:
             "already provided by installed plugin demo-shim 0.1.0: "
             "demo--chat_completions"
         )
+
+
+class TestAnInstalledExtensionTheLoaderDidNotFind:
+    def test_it_is_a_failure_that_names_the_extension(self):
+        from llm_rosetta_gateway.shims._types import ShimSourceStatus
+        from llm_rosetta_gateway.shims.manifest_sources.status import (
+            scan_manifest_status,
+        )
+
+        status = ShimSourceStatus(
+            kind="remote",
+            location="https://example.test/ghost/manifest.json",
+            extension="ghost",
+            source="demo",
+            vendor="ghost",
+            release={"shims": ["ghost--chat_completions"]},
+        )
+
+        scanned = scan_manifest_status(status, set())
+
+        assert scanned.ok is False
+        assert "extension 'ghost' was installed but not found" in (scanned.error or "")
+        assert scanned.shim_names == ()
 
 
 class TestPrecedence:
@@ -589,7 +787,7 @@ class TestPrecedence:
             for m in logs
         ), logs
         # The estimate saves the download too.
-        assert not any(c.endswith(".tar.gz") for c in http.calls)
+        assert not any(c.endswith(".whl") for c in http.calls)
 
     def test_a_promoted_vendor_is_not_installed_from_the_source(self, tmp_path, logs):
         core_name = _core_name()
@@ -607,7 +805,7 @@ class TestPrecedence:
             f"contrib:{vendor}: skipped (promoted to core@0.1.0)"
         ]
         assert any(f"{vendor} 0.1.0 says promoted_to core@0.1.0" in m for m in logs)
-        assert not any(c.endswith(".tar.gz") for c in http.calls)
+        assert not any(c.endswith(".whl") for c in http.calls)
 
     def test_a_promotion_core_does_not_bear_out_installs_with_a_warning(
         self, tmp_path, logs
@@ -672,41 +870,51 @@ class TestPrecedence:
 
         assert _vendor_status(report, "acme").shim_names == ("acme--chat_completions",)
 
-    def test_a_partial_clash_refuses_only_the_core_names(self, tmp_path, logs):
+    def test_a_partial_clash_refuses_the_extension_as_a_whole(self, tmp_path, logs):
+        """The loader refuses an extension whose declared names are held."""
         core_name = _core_name()
         # A promoted or clashing vendor ships its own names (#1660: a manifest
         # shim name must belong to its vendor), so the vendor is core's.
         vendor = core_name.split("--", 1)[0]
         before = get_shim(core_name)
         http = FakeHttp()
-        http.publish(vendor, "0.1.0", [core_name, f"{vendor}--fake_lane"])
+        http.publish(vendor, "0.1.0", [core_name, f"{vendor}_lane--chat_completions"])
 
         report = _apply(tmp_path, _url_section(vendor), http)
 
         status = _vendor_status(report, vendor)
         assert status.skipped is None
-        assert status.shim_names == (f"{vendor}--fake_lane",)
+        assert status.ok is False and status.state == "failed"
+        assert "already registered by another owner" in (status.error or "")
+        assert core_name in (status.error or "")
+        assert get_shim(f"{vendor}_lane--chat_completions") is None
         after = get_shim(core_name)
         assert before is not None and after is not None
         assert after.connection.base_url == before.connection.base_url
         assert any(
-            f"already provided by core: {core_name}; those shims are ignored" in m
+            f"already provided by core: {core_name}; the loader refuses" in m
             for m in logs
         ), logs
 
-    def test_the_release_record_bounds_what_registers(self, tmp_path, logs):
-        """An archive without shims.yaml loads only the record's names."""
+    def test_the_manifest_in_the_wheel_bounds_what_registers(self, tmp_path):
+        """A leaf the wheel's plugin.yaml does not declare never registers."""
         http = FakeHttp()
-        data = _archive("acme", ["acme--chat_completions", "sneaky--chat_completions"])
+        data = build_wheel(
+            "acme",
+            "0.1.0",
+            ["acme--chat_completions"],
+            members={
+                "sneaky/llm/chat_completions/provider.yaml": shim_yaml(
+                    "acme_sneaky--chat_completions"
+                )
+            },
+        )
         http.publish("acme", "0.1.0", ["acme--chat_completions"], data=data)
 
         report = _apply(tmp_path, _url_section("acme"), http)
 
         assert _vendor_status(report, "acme").shim_names == ("acme--chat_completions",)
-        assert get_shim("sneaky--chat_completions") is None
-        assert any(
-            "'sneaky--chat_completions' is not in the release record" in m for m in logs
-        ), logs
+        assert get_shim("acme_sneaky--chat_completions") is None
 
     def test_an_explicit_path_overrides_a_manifest_install(self, tmp_path):
         http = FakeHttp()
@@ -1013,7 +1221,7 @@ class TestFreshnessGuard:
 
         status = _vendor_status(report, "acme")
         assert status.ok and not status.stale
-        assert status.archive_url == MIRROR_DIST + "0.1.0/acme.tar.gz"
+        assert status.archive_url == MIRROR_DIST + "0.1.0/acme-0.1.0-py3-none-any.whl"
         assert get_shim("acme--chat_completions") is not None
         assert legs.manifest_calls() == [MANIFEST, MIRROR]
         assert _cached_generated_at(tmp_path) == NEW
@@ -1199,7 +1407,10 @@ class TestFreshnessGuardEdges:
 
         assert legs.manifest_calls() == [MANIFEST, MIRROR]
         status = _vendor_status(report, "acme")
-        assert status.ok and status.archive_url == MIRROR_DIST + "0.1.0/acme.tar.gz"
+        assert (
+            status.ok
+            and status.archive_url == MIRROR_DIST + "0.1.0/acme-0.1.0-py3-none-any.whl"
+        )
         assert any("does not list acme" in m for m in log_handler.at(logging.INFO)), (
             log_handler.messages
         )

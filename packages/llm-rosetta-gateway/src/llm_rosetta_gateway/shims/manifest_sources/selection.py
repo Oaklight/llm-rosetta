@@ -260,7 +260,8 @@ def _skip_reason(
     A promotion this core honours, a record every shim of which core or an
     installed plugin already registers, or a legacy include that names none of
     the vendor's shims.  A *partial* clash is not a reason: the vendor installs
-    and the scan refuses the already registered names one by one (they win).
+    and the extension loader decides: it refuses an extension whose declared
+    shim names another owner holds (the holder wins), and the status says so.
     """
     promoted = _promotion(chosen, core_version, core_names, source_id)
     if promoted:
@@ -277,8 +278,9 @@ def _skip_reason(
         return reason
     if clash:
         logger.warning(
-            "Shim source %s: vendor %r: already provided by %s: %s; those "
-            "shims are ignored and the rest install",
+            "Shim source %s: vendor %r: already provided by %s: %s; the "
+            "loader refuses an extension whose shim names are held, so it "
+            "will not load",
             source_id,
             chosen.vendor,
             _provided_by(clash),
