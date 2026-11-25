@@ -404,7 +404,9 @@ async def test_provider_credential(request: Any, name: str) -> Response:
         return _error(exc)
 
     lane = getattr(pinfo, "transport", "http") or "http"
-    transport = (getattr(request.app, "transports", {}) or {}).get(lane)
+    transport = (getattr(request.app, "transports", {}) or {}).get(
+        getattr(pinfo, "transport_key", lane)
+    )
     lane_probe = getattr(transport, "probe_provider", None)
     if lane != "http" and callable(lane_probe):
         result = await lane_probe(pinfo)

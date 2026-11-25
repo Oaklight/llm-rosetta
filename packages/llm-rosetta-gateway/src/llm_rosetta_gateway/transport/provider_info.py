@@ -242,6 +242,7 @@ class ProviderInfo:
         request_id_format: str | None = None,
         stream_required: bool = False,
         transport: str = "http",
+        transport_owner: str | None = None,
         acp_argv: tuple[str, ...] | None = None,
         acp_env: dict[str, str] | None = None,
         acp_env_unset: tuple[str, ...] = (),
@@ -339,6 +340,10 @@ class ProviderInfo:
         # gateway picks the transport by this name, so a provider that names
         # one it has not got fails at config load, not on its first request.
         self.transport = transport
+        # The extension that provides ``transport``; ``None`` for a built-in.
+        # Two extensions may declare the same id, so the owner is part of the
+        # lane's identity (:attr:`transport_key`).
+        self.transport_owner = transport_owner
         # The agent command an ``acp`` transport starts, when the shim
         # declares one; ``None`` takes the transport's default.
         self.acp_argv = acp_argv
@@ -484,6 +489,12 @@ class ProviderInfo:
         than :attr:`ready`.
         """
         return self.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
+
+    @property
+    def transport_key(self) -> str:
+        """The key of this provider's lane in ``app.transports``."""
+        owner = getattr(self, "transport_owner", None)
+        return self.transport if owner is None else f"{owner}:{self.transport}"
 
     @property
     def ready(self) -> bool:

@@ -8,10 +8,10 @@ live in sub-packages:
 * :mod:`transport.http` — HTTP REST + SSE streaming (current).
 * :mod:`transport.acp` — a local agent CLI over the Agent Client Protocol.
 
-A lane this distribution does not ship comes from an installed package that
-publishes an entry point in :data:`TRANSPORT_ENTRY_POINT_GROUP`; see
-:mod:`transport.registry`.  The official Claude Code CLI is one: its shim
-ships the transport in ``llm-rosetta-shim-contrib``.
+A lane this distribution does not ship comes from an installed extension: its
+manifest declares the transport and ``llm_rosetta_ext.<id>.transport`` builds
+it, scoped to the extension that declares it; see :mod:`transport.registry`.
+The official Claude Code CLI is one, shipped by the ``claude`` extension.
 """
 
 from ._base import (
@@ -37,28 +37,32 @@ from .provider_info import (
 )
 from .registry import (
     BUILTIN_TRANSPORTS,
-    TRANSPORT_ENTRY_POINT_GROUP,
+    TRANSPORTS_ATTRIBUTE,
+    LaneRef,
     TransportPluginError,
     build_lane_transports,
-    clear_transport_cache,
-    installed_transport_names,
+    lane_key,
+    reachable_transport_names,
+    resolve_lane,
 )
 from .sse_format import SSE_FORMATTERS, format_sse_done
 
-#: Transport names this distribution ships.  An installed package adds more
-#: through :data:`TRANSPORT_ENTRY_POINT_GROUP`; use
-#: :func:`installed_transport_names` to see every id a provider may name.
+#: Transport names this distribution ships.  An installed extension adds more,
+#: scoped to itself; use :func:`reachable_transport_names` to see the ids a
+#: shim may name.
 TRANSPORT_NAMES: tuple[str, ...] = tuple(BUILTIN_TRANSPORTS)
 
 __all__ = [
     # Transport names
     "TRANSPORT_NAMES",
     "BUILTIN_TRANSPORTS",
-    "TRANSPORT_ENTRY_POINT_GROUP",
+    "TRANSPORTS_ATTRIBUTE",
+    "LaneRef",
     "TransportPluginError",
     "build_lane_transports",
-    "clear_transport_cache",
-    "installed_transport_names",
+    "lane_key",
+    "reachable_transport_names",
+    "resolve_lane",
     # Protocol + response types
     "LaneProbe",
     "LaneReadingSink",

@@ -1,33 +1,51 @@
-"""The transport table: what this gateway ships and what a package adds.
+"""The transport table: what this gateway ships and what an extension adds.
 
-A provider names its transport in ``connection.transport``.  The gateway
-ships ``http`` (the proxy's own upstream call) and ``acp`` (a local agent
-CLI over stdio).  Any other lane is supplied by an installed Python package
-that publishes an entry point in :data:`TRANSPORT_ENTRY_POINT_GROUP`; the
-entry-point name is the id a provider writes.  The official Claude Code CLI
-(``claude_cli``) is shipped this way by ``llm-rosetta-shim-contrib``.
+A provider names its transport in ``connection.transport``.  The gateway ships
+``http`` (the proxy's own upstream call) and ``acp`` (a local agent CLI over
+stdio).  Any other lane is supplied by an installed *extension*: its
+``plugin.yaml`` lists the ids under ``provides.transports`` and its module
+``llm_rosetta_ext.<id>.transport`` builds them.
 
-Discovery reads package metadata only.  Config validation therefore knows
-every installed id without importing a plugin, and the plugin module loads
-once, at app creation, where a broken one fails startup instead of a
-request.
+Scope, not a global table.  A shim's transport resolves from the shim's own
+extension: the extension's own transports first, then a gateway built-in, then
+the transports of the extensions it lists under ``requires.extensions``
+(:func:`llm_rosetta.contracts.extension.resolve_transport`).  Two extensions may declare the same
+id and each shim reaches its own; an extension may not claim a built-in id; a
+shim that is not part of an extension reaches the built-ins only.  Resolution
+reads manifests, so config validation (:func:`reachable_transport_names`,
+:func:`resolve_lane`) imports no extension code.
 
-The factory contract is a callable that accepts the server's upstream
-timeout as a keyword and returns an :class:`UpstreamTransport`::
+The factory convention.  The transport module (a module or a package) exposes::
+
+    TRANSPORTS: dict[str, Callable[..., UpstreamTransport]]
+
+mapping every transport id the manifest declares to a callable that accepts the
+server's upstream timeout as ``timeout=`` and returns an
+:class:`UpstreamTransport`::
 
     def __init__(self, *, timeout: float = 300.0) -> None: ...
 
-When the gateway has no timeout to pass, it calls the factory with no
-arguments and the factory keeps its own default.
+When the gateway has no timeout to pass it calls the factory with no arguments.
+:func:`build_lane_transports` imports the module once, at app creation, for each
+loaded extension that a shim or a configured provider references, so a broken
+module fails startup (naming the extension) instead of a request.  The instance
+is keyed ``"<extension id>:<transport id>"`` (:func:`lane_key`); a built-in
+keeps its bare id.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
-from functools import lru_cache
-from importlib import metadata
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 from typing import Any
+
+from llm_rosetta.api import get_shim, import_extension_module, list_extensions
+from llm_rosetta.contracts.extension import (
+    ExtensionManifest,
+    UnresolvedTransport,
+    resolve_transport,
+)
 
 from ._base import UpstreamTransport
 from .acp import AcpTransport
@@ -35,10 +53,10 @@ from .http import HttpTransport
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
-#: Entry-point group a transport package publishes.
-TRANSPORT_ENTRY_POINT_GROUP = "llm_rosetta_gateway.transports"
+#: The module attribute an extension's transport module exposes.
+TRANSPORTS_ATTRIBUTE = "TRANSPORTS"
 
-#: What an entry point must resolve to.
+#: What a ``TRANSPORTS`` entry must be.
 TransportFactory = Callable[..., UpstreamTransport]
 
 #: The transports this distribution ships.  ``http`` is not a lane transport:
@@ -50,115 +68,265 @@ BUILTIN_TRANSPORTS: dict[str, TransportFactory] = {
 
 
 class TransportPluginError(RuntimeError):
-    """An installed package cannot supply the transport it claims."""
+    """An extension cannot supply the transport it claims."""
 
 
-@lru_cache(maxsize=1)
-def _entry_points() -> tuple[metadata.EntryPoint, ...]:
-    """The installed transport entry points, in metadata order."""
-    found = metadata.entry_points()
-    if hasattr(found, "select"):
-        return tuple(found.select(group=TRANSPORT_ENTRY_POINT_GROUP))
-    return tuple(found.get(TRANSPORT_ENTRY_POINT_GROUP, ()))
+@dataclass(frozen=True)
+class LaneRef:
+    """The transport one lane resolved to.
 
-
-def clear_transport_cache() -> None:
-    """Forget the metadata scan, so the next call sees a new install.
-
-    Tests call this after faking the entry-point table; a long-running
-    process calls it if it installs a transport package at runtime.
+    Attributes:
+        name: The ``connection.transport`` value.
+        owner: The extension that provides it; ``None`` for a built-in.
     """
-    _entry_points.cache_clear()
+
+    name: str
+    owner: str | None = None
+
+    @property
+    def key(self) -> str:
+        """The key the lane's instance has in ``app.transports``."""
+        return lane_key(self.name, self.owner)
 
 
-def installed_transport_names() -> tuple[str, ...]:
-    """Every transport id a provider may name.
+def lane_key(name: str, owner: str | None = None) -> str:
+    """Return the ``app.transports`` key of a transport.
 
-    The names come from package metadata; no plugin module is imported.
+    Args:
+        name: The transport id.
+        owner: The providing extension, or ``None`` for a built-in.
 
     Returns:
-        The built-in ids and the installed entry-point names, sorted.
+        ``name`` for a built-in, ``"<owner>:<name>"`` otherwise.
+    """
+    return name if owner is None else f"{owner}:{name}"
+
+
+def _loaded() -> dict[str, tuple[ExtensionManifest, tuple[str, ...]]]:
+    """The loaded extensions: id -> (manifest, shim names it registered)."""
+    return {
+        item.id: (item.manifest, item.shims)
+        for item in list_extensions()
+        if item.state == "loaded" and item.manifest is not None
+    }
+
+
+def loaded_manifests() -> dict[str, ExtensionManifest]:
+    """Return the manifest of every extension the last load accepted."""
+    return {ext_id: manifest for ext_id, (manifest, _) in _loaded().items()}
+
+
+def owning_extension(shim_name: str | None) -> str | None:
+    """Return the extension that registered a shim, or ``None``.
+
+    Built-in shims and shims from a directory source have no owner.
+    """
+    if not shim_name:
+        return None
+    for ext_id, (_, shims) in _loaded().items():
+        if shim_name in shims:
+            return ext_id
+    return None
+
+
+def _refuse_builtin_claims(manifests: Mapping[str, ExtensionManifest]) -> None:
+    """Refuse an extension that declares a transport id the gateway ships."""
+    for ext_id in sorted(manifests):
+        claimed = sorted(set(manifests[ext_id].transports) & set(BUILTIN_TRANSPORTS))
+        if claimed:
+            raise TransportPluginError(
+                f"Extension {ext_id!r} claims transport {', '.join(map(repr, claimed))}, "
+                "which this gateway already ships; refusing to let it shadow "
+                "the built-in transport"
+            )
+
+
+def resolve_lane(name: str, shim_name: str | None = None) -> LaneRef:
+    """Resolve a ``connection.transport`` value from the shim's own scope.
+
+    Args:
+        name: The transport id the shim (or the provider's config) names.
+        shim_name: The shim; its extension is the scope.  ``None`` or a shim
+            that is not part of an extension reaches the built-ins only.
+
+    Returns:
+        The lane reference.
+
+    Raises:
+        UnresolvedTransport: Nothing the shim's extension may reach provides
+            *name*.
+        TransportPluginError: The shim's extension claims a built-in id.
+    """
+    manifests = loaded_manifests()
+    owner_id = owning_extension(shim_name)
+    if owner_id is None:
+        if name in BUILTIN_TRANSPORTS:
+            return LaneRef(name)
+        raise UnresolvedTransport(
+            f"transport {name!r} is not one this gateway ships "
+            f"({', '.join(sorted(BUILTIN_TRANSPORTS))}); only the shims of an "
+            "extension can name an extension's transport"
+        )
+    _refuse_builtin_claims({owner_id: manifests[owner_id]})
+    owner = resolve_transport(name, manifests[owner_id], manifests, BUILTIN_TRANSPORTS)
+    return LaneRef(name, owner.extension)
+
+
+def reachable_transport_names(shim_name: str | None = None) -> tuple[str, ...]:
+    """Return the transport ids a shim could name, from manifests only.
+
+    No extension code is imported.
+
+    Args:
+        shim_name: The shim whose scope is asked for; ``None`` asks for the
+            built-ins alone.
+
+    Returns:
+        The built-in ids, the shim's extension's own ids and the ids of the
+        extensions it requires (when loaded), sorted.
     """
     names = set(BUILTIN_TRANSPORTS)
-    names.update(entry_point.name for entry_point in _entry_points())
+    manifests = loaded_manifests()
+    owner_id = owning_extension(shim_name)
+    if owner_id is not None:
+        manifest = manifests[owner_id]
+        names.update(manifest.transports)
+        for dependency in manifest.requires.extensions:
+            if dependency in manifests:
+                names.update(manifests[dependency].transports)
     return tuple(sorted(names))
 
 
-def _plugin_source(entry_point: metadata.EntryPoint) -> str:
-    """Name the distribution behind an entry point, for an error message."""
-    dist = getattr(entry_point, "dist", None)
-    if dist is not None and getattr(dist, "name", None):
-        return f"{dist.name} {getattr(dist, 'version', '')}".strip()
-    return getattr(entry_point, "value", entry_point.name)
+def _build(
+    factory: TransportFactory, timeout: float | None, *, label: str
+) -> UpstreamTransport:
+    """Call a factory with the server timeout when there is one.
+
+    A factory that cannot start (a constructor that does not take ``timeout=``,
+    a missing program) is reported with the transport it belongs to, so the
+    operator is not left with a bare ``TypeError`` from a plugin.
+    """
+    try:
+        if timeout is None:
+            return factory()
+        return factory(timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 - name the transport that broke
+        raise TransportPluginError(
+            f"Transport {label} failed to start: {type(exc).__name__}: {exc}"
+        ) from exc
 
 
-def _build(factory: TransportFactory, timeout: float | None) -> UpstreamTransport:
-    """Call a factory with the server timeout when there is one."""
-    if timeout is None:
-        return factory()
-    return factory(timeout=timeout)
+def _factory(ext_id: str, name: str) -> TransportFactory:
+    """Import ``llm_rosetta_ext.<id>.transport`` and return the factory for *name*."""
+    module_name = f"llm_rosetta_ext.{ext_id}.transport"
+    try:
+        module = import_extension_module(ext_id, "transport")
+    except Exception as exc:  # noqa: BLE001 - name the extension that broke
+        raise TransportPluginError(
+            f"Extension {ext_id!r}: transport module {module_name} failed to "
+            f"import: {type(exc).__name__}: {exc}"
+        ) from exc
+    table = getattr(module, TRANSPORTS_ATTRIBUTE, None)
+    if not isinstance(table, Mapping):
+        raise TransportPluginError(
+            f"Extension {ext_id!r}: {module_name} does not expose a "
+            f"{TRANSPORTS_ATTRIBUTE} mapping of transport id to factory"
+        )
+    if name not in table:
+        raise TransportPluginError(
+            f"Extension {ext_id!r} declares transport {name!r}, but "
+            f"{module_name}.{TRANSPORTS_ATTRIBUTE} has no entry for it"
+        )
+    factory = table[name]
+    if not callable(factory):
+        raise TransportPluginError(
+            f"Extension {ext_id!r}: transport {name!r} resolved to {factory!r}, "
+            "which is not callable"
+        )
+    return factory
+
+
+def _referenced_by_shims(
+    loaded: Mapping[str, tuple[ExtensionManifest, tuple[str, ...]]],
+) -> set[tuple[str, str]]:
+    """The (extension, transport) pairs the loaded shims name by default."""
+    manifests = {ext_id: manifest for ext_id, (manifest, _) in loaded.items()}
+    found: set[tuple[str, str]] = set()
+    for ext_id, (manifest, shim_names) in loaded.items():
+        for shim_name in shim_names:
+            shim = get_shim(shim_name)
+            name = shim.connection.transport if shim is not None else "http"
+            if name in BUILTIN_TRANSPORTS:
+                continue
+            try:
+                owner = resolve_transport(name, manifest, manifests, BUILTIN_TRANSPORTS)
+            except UnresolvedTransport as exc:
+                logger.warning("Shim %r: %s", shim_name, exc)
+                continue
+            if owner.extension is not None:
+                found.add((owner.extension, name))
+    return found
 
 
 def build_lane_transports(
-    *, timeout: float | None = None, override: Any | None = None
+    *,
+    timeout: float | None = None,
+    override: Any | None = None,
+    wanted: Iterable[tuple[str, str]] = (),
 ) -> dict[str, UpstreamTransport]:
-    """Build the transport instance each non-HTTP lane id resolves to.
+    """Build the transport instance each non-HTTP lane resolves to.
 
     ``http`` is deliberately absent: that slot is ``app.transport``, which a
     caller (or a test) may replace after the app is built, and a registry copy
     would keep routing to the object it replaced.
 
-    A plugin that claims a built-in id is refused: silently shadowing the
-    gateway's own transport would change what every provider of that id
-    reaches.
+    One instance exists per (extension id, transport id).  An extension's
+    transport module is imported only when the extension is loaded and a loaded
+    shim of it (or a dependent's), or an entry of *wanted*, names the transport.
 
     Args:
         timeout: The server's upstream timeout; ``None`` leaves each factory's
             own default in place.
-        override: When set, every lane id maps to this object and no plugin is
-            imported.  An embedder that supplies its own transport supplies it
-            for every lane too: the gateway does not start local processes
-            behind its back.
+        override: When set, every lane key maps to this object and no extension
+            code is imported.  An embedder that supplies its own transport
+            supplies it for every lane too: the gateway does not start local
+            processes behind its back.
+        wanted: Further ``(extension id, transport id)`` pairs to build, such
+            as the ones the configured providers resolved to.
 
     Returns:
-        One instance per lane id, excluding ``http``.
+        One instance per lane key, excluding ``http``.
 
     Raises:
-        TransportPluginError: A plugin claims a built-in id, fails to import,
-            or does not resolve to a callable.
+        TransportPluginError: An extension claims a built-in id, fails to
+            import its transport module, or does not expose a callable factory
+            for a transport it declares.
     """
+    loaded = _loaded()
+    manifests = {ext_id: manifest for ext_id, (manifest, _) in loaded.items()}
     if override is not None:
-        return {
-            name: override for name in installed_transport_names() if name != "http"
-        }
+        keys = [name for name in BUILTIN_TRANSPORTS if name != "http"]
+        keys += [
+            lane_key(name, ext_id)
+            for ext_id, manifest in manifests.items()
+            for name in manifest.transports
+        ]
+        return {key: override for key in keys}
 
+    _refuse_builtin_claims(manifests)
     transports: dict[str, UpstreamTransport] = {
-        name: _build(factory, timeout)
+        name: _build(factory, timeout, label=repr(name))
         for name, factory in BUILTIN_TRANSPORTS.items()
         if name != "http"
     }
-    for entry_point in _entry_points():
-        name = entry_point.name
-        if name in BUILTIN_TRANSPORTS:
-            raise TransportPluginError(
-                f"Transport package {_plugin_source(entry_point)} claims {name!r}, "
-                "which this gateway already ships; refusing to let it shadow "
-                "the built-in transport"
-            )
-        try:
-            factory = entry_point.load()
-        except Exception as exc:  # noqa: BLE001 - name the package that broke
-            raise TransportPluginError(
-                f"Transport entry point {name!r} from "
-                f"{_plugin_source(entry_point)} failed to load: "
-                f"{type(exc).__name__}: {exc}"
-            ) from exc
-        if not callable(factory):
-            raise TransportPluginError(
-                f"Transport entry point {name!r} from "
-                f"{_plugin_source(entry_point)} resolved to {factory!r}, "
-                "which is not callable"
-            )
-        transports[name] = _build(factory, timeout)
-        logger.debug("Loaded transport %r from %s", name, _plugin_source(entry_point))
+    pairs = _referenced_by_shims(loaded) | {
+        (ext_id, name) for ext_id, name in wanted if ext_id in manifests
+    }
+    for ext_id, name in sorted(pairs):
+        if name not in manifests[ext_id].transports:
+            continue
+        transports[lane_key(name, ext_id)] = _build(
+            _factory(ext_id, name), timeout, label=f"{name!r} of extension {ext_id!r}"
+        )
+        logger.debug("Built transport %r of extension %r", name, ext_id)
     return transports

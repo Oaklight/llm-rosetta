@@ -405,7 +405,11 @@ async def _handle_llm(
     # (an embedder's transport, a test's stub) is honoured.
     lane_transport = (
         getattr(request.app, "transports", {}).get(
-            getattr(provider_info, "transport", "http")
+            getattr(
+                provider_info,
+                "transport_key",
+                getattr(provider_info, "transport", "http"),
+            )
         )
         or request.app.transport
     )

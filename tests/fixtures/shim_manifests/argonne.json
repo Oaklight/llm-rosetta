@@ -9,7 +9,7 @@
         {
           "version": "0.4.0",
           "commit": "2222222222222222222222222222222222222222",
-          "archive": "0.4.0/alcf.tar.gz",
+          "archive": "0.4.0/alcf.whl",
           "sha256": "89bafce247f1ca2c9057b35a0de7d4d3bb8d630890ac4d6ac4131ebdce31da3d",
           "requires": {
             "surface": 1,
@@ -40,7 +40,7 @@
         {
           "version": "0.4.0",
           "commit": "2222222222222222222222222222222222222222",
-          "archive": "0.4.0/argo.tar.gz",
+          "archive": "0.4.0/argo.whl",
           "sha256": "43f62cb2ff6524987bbe786e023c810eca432ab4536e410bd743369315ac87bf",
           "requires": {
             "surface": 1,
@@ -72,7 +72,7 @@
         {
           "version": "0.4.0",
           "commit": "2222222222222222222222222222222222222222",
-          "archive": "0.4.0/asksage.tar.gz",
+          "archive": "0.4.0/asksage.whl",
           "sha256": "00434840a20b32bc64097905ecc496488791494baa47d42d394421447c4c3569",
           "requires": {
             "surface": 1,

@@ -332,16 +332,6 @@ def _source_root(cache_root: str | os.PathLike[str], spec: ManifestSourceSpec) -
     return Path(cache_root) / MANIFEST_CACHE_DIRNAME / f"{slug or 'source'}-{digest}"
 
 
-def _scan_root(vendor_dir: Path) -> Path:
-    """The directory to scan inside an installed vendor archive.
-
-    The archive holds ``providers/<vendor>/...``; an archive laid out from the
-    vendor directory itself is scanned from its root.
-    """
-    providers = vendor_dir / "providers"
-    return providers if providers.is_dir() else vendor_dir
-
-
 def _dist_root(manifest_url: str) -> str:
     """The URL prefix a manifest's relative archive paths resolve against."""
     return manifest_url.rsplit("/", 1)[0] + "/"

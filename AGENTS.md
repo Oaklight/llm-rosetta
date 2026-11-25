@@ -157,13 +157,13 @@ supported format and forwards them to any configured upstream provider.
 | `config/` | Config package: JSONC loading, locking, parsing, resolution; `providers.py` is the provider registry and factory that resolve shim config into runtime `ProviderInfo` (key rotation, auth headers) |
 | `pipelines/` | Typed request handlers (embeddings, rerank, decision) behind `handle_typed_request` |
 | `model_types/` | The model-type registry (`__init__.py`): descriptors, routes, formats, config keys; `source_formats.py` holds the source detectors its typed-route descriptors carry (embedding, rerank, decision) |
-| `shims/` | External shim sources (`shim_sources.py`), the `manifest_sources/` package (plan, selection, freshness, install, status), manifest-source catalogue; the `shims` config section |
+| `shims/` | External shim sources (`shim_sources.py`), the `manifest_sources/` package (plan, selection, freshness, install, status; a release is a wheel that core's `install_wheel` places in `<data dir>/extensions`), manifest-source catalogue, the admin's extension listing (`extension_view.py`); the `shims` config section |
 | `routing/` | Candidate selection: the route container plus the pluggable strategies (weighted round-robin, affinity) |
 | `jobs/` | Background jobs: the envelope (`model.py`), store, queue, worker, handlers |
 | `quota/` | Provider quota probing and quota-aware credential rotation: `service.py` runs the probes (callers import every quota function from it), `allowance.py` answers what routing and admin read, `signals.py` records what live requests report |
 | `maintenance/` | Maintenance steps: backfills, config, dumps, keystore, migrations, startup, the retired-name guard (`names.py`); `migrate_0140.py` is the `migrate` command (`llm-rosetta migrate`) |
 | `middleware/` | Auth, rate limiting, error format, hop limit, headers |
-| `transport/` | Upstream transports: `http` (HTTP/SSE), `acp` (a local agent CLI over stdio JSON-RPC; its body/event codec is `acp_chunks.py`), `claude_cli` (the official Claude Code CLI as a model client, with a per-turn loopback relay in `claude_cli_relay.py`); a provider picks one with `connection.transport` |
+| `transport/` | Upstream transports: `http` (HTTP/SSE), `acp` (a local agent CLI over stdio JSON-RPC; its body/event codec is `acp_chunks.py`); a provider picks one with `connection.transport`. An extension adds transports scoped to itself (the `claude` extension ships `claude_cli`): its manifest declares them and `llm_rosetta_ext.<id>.transport` exposes `TRANSPORTS`; `registry.py` resolves a shim's name from its own extension, then the built-ins, then the extensions it requires, and builds each once at app creation |
 | `ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
 | `admin/` | Admin panel and its routes, over the observability layer; reaches the gateway through `admin_api.py` (see *Admin boundary*) |
 | `admin_api.py` | The `AdminContext` protocols admin depends on; `create_app` exposes the adapter (`app/admin_context.py`) as `app.admin` |

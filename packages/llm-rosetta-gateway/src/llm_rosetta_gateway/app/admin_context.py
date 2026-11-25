@@ -28,3 +28,9 @@ class GatewayAdminContext:
         from ..shims.source_view import catalogue_payload
 
         return catalogue_payload(config, report, refresh=refresh)
+
+    def extension_listing(self) -> list[dict[str, Any]]:
+        """Every extension found or installed, one JSON-safe record each."""
+        from ..shims.extension_view import extension_listing
+
+        return extension_listing()

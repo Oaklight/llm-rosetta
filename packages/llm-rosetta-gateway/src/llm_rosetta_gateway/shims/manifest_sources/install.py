@@ -1,6 +1,11 @@
-"""Install: downloading a release and placing it in the shim cache.
+"""Install: downloading a release wheel and placing it in the extensions directory.
 
 :func:`install_from_manifests` is the entry point the registry rebuild calls.
+A release is a wheel of one extension (``llm_rosetta_ext/<vendor>/``); core's
+:func:`~llm_rosetta.api.install_wheel` checks and extracts it into the
+extensions directory, which :func:`~llm_rosetta.api.configure_extensions_dir`
+points at the gateway's data directory.  The install stamp stays in the source
+cache: it records which release was installed and from where.
 """
 
 from __future__ import annotations
@@ -8,20 +13,26 @@ from __future__ import annotations
 import hashlib
 import os
 import posixpath
-import shutil
-import uuid
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from llm_rosetta.api import (
+    ExtensionInstallError,
+    InstalledExtension,
+    extensions_dir,
+    install_wheel,
+    installed_extensions,
+    missing_dependencies,
+    remove_extension,
+)
 from llm_rosetta.contracts.shim_manifest import (
     VendorRelease,
     requirement_problem,
 )
 
-from .._archive import _extract_archive
-from .._cache import _atomic_replace, _file_lock, _read_stamp, _write_stamp
+from .._cache import _file_lock, _read_stamp, _write_stamp
 from .._legs import _is_unreachable
 from .._types import (
     HTTP_TIMEOUT,
@@ -44,7 +55,6 @@ from .plan import (
     _dist_root,
     _headers_for,
     _manifest_legs,
-    _scan_root,
     _source_root,
 )
 from .selection import (
@@ -69,11 +79,12 @@ def install_from_manifests(
     force_refresh: bool = False,
     core_names: Collection[str] = (),
     core_version: str | None = None,
+    extensions_root: str | os.PathLike[str] | None = None,
 ) -> list[ShimSourceStatus]:
     """Fetch every planned manifest and install the selected vendors.
 
-    The registry is not touched: each returned status carries the directory
-    to scan, and :func:`scan_manifest_status` loads it.
+    The registry is not touched: each returned status carries the extension
+    id, and :func:`scan_manifest_status` reads the outcome of loading it.
 
     Args:
         plan: The sources and the selectors.
@@ -87,12 +98,16 @@ def install_from_manifests(
             not downloaded (the scan step re-checks against the live set).
         core_version: The running core's version, for ``promoted_to``;
             :data:`llm_rosetta.api.__version__` by default.
+        extensions_root: The extensions directory the wheels install into;
+            :func:`llm_rosetta.api.extensions_dir` by default.
 
     Returns:
         One status per selected vendor, or per failed source.
     """
     if core_version is None:
         from llm_rosetta.api import __version__ as core_version
+    dest = Path(extensions_root) if extensions_root is not None else extensions_dir()
+    have = {item.id: item for item in installed_extensions(dest)}
     statuses: list[ShimSourceStatus] = []
     claimed: dict[str, str] = {}
     matched: set[str] = set()
@@ -138,6 +153,8 @@ def install_from_manifests(
                     proxy=proxy,
                     core_names=core_names,
                     core_version=core_version,
+                    dest=dest,
+                    have=have,
                 )
                 if state.stale_reason and status.ok and not status.skipped:
                     status = replace(
@@ -147,7 +164,7 @@ def install_from_manifests(
     statuses.extend(
         _unmatched_rows(plan.selectors, matched, answered, claimed, overridden)
     )
-    return statuses
+    return _with_dependency_notes(statuses, dest)
 
 
 def _unanswered_source(
@@ -178,6 +195,8 @@ def _install_vendor(
     proxy: str | None,
     core_names: Collection[str],
     core_version: str,
+    dest: Path,
+    have: Mapping[str, InstalledExtension],
 ) -> ShimSourceStatus:
     """Decide on one vendor and install it when needed."""
     assert state.manifest is not None
@@ -201,10 +220,16 @@ def _install_vendor(
         if skip:
             return replace(base, skipped=skip)
 
-    vendor_dir = root / vendor
     stamp_path = root / f"{vendor}.stamp.json"
     stamp = _read_stamp(stamp_path)
-    installed = _installed_release(stamp, vendor) if vendor_dir.is_dir() else None
+    # Installed means: the stamp records a release and the extensions
+    # directory really holds that version of the extension.
+    present = have.get(vendor)
+    installed = (
+        _installed_release(stamp, vendor)
+        if present is not None and present.version == stamp.get("version")
+        else None
+    )
     usable = installed is not None and requirement_problem(installed.requires) is None
     if installed is not None and installed.version not in {r.version for r in releases}:
         logger.warning(
@@ -228,47 +253,33 @@ def _install_vendor(
         )
         if kept is None:
             return replace(base, skipped=why)
-        return _kept_or_failed(base, vendor_dir, kept, stamp, state, why)
+        return _kept_or_failed(base, present, kept, stamp, state, why)
 
     if chosen is None:
         kept = installed if usable else None
         if not pin_problem and kept is not None:
-            return _installed_status(base, vendor_dir, kept, stamp, state)
+            return _installed_status(base, present, kept, stamp, state)
         error = _no_release_error(vendor, selector, pin_problem, passed_over)
-        return _kept_or_failed(base, vendor_dir, kept, stamp, state, error)
+        return _kept_or_failed(base, present, kept, stamp, state, error)
 
     if usable and installed is not None and _keeps(installed, chosen, selector):
-        return _installed_status(base, vendor_dir, installed, stamp, state)
+        return _installed_status(base, present, installed, stamp, state)
 
     try:
-        archive_url = _download_release(
-            spec, state, chosen, vendor_dir, http_get=http_get, proxy=proxy
+        archive_url, fresh = _download_release(
+            spec, state, chosen, vendor, dest, http_get=http_get, proxy=proxy
         )
     except ShimSourceError as exc:
-        mismatch = isinstance(exc, ShimArchiveMismatch)
+        kept = installed if usable else None
         logger.warning(
             "Shim source %s: cannot install %s %s: %s%s",
             source_id,
             vendor,
             chosen.version,
             exc,
-            f"; keeping {installed.version}" if usable and installed else "",
+            f"; keeping {kept.version}" if kept else "",
         )
-        if usable and installed is not None:
-            status = _installed_status(base, vendor_dir, installed, stamp, state)
-            return replace(
-                status,
-                stale=True,
-                error=str(exc),
-                checksum_ok=False if mismatch else None,
-            )
-        return replace(
-            base,
-            ok=False,
-            error=f"{type(exc).__name__}: {exc}",
-            unreachable=isinstance(exc, ShimSourceUnreachable),
-            checksum_ok=False if mismatch else None,
-        )
+        return _install_failed(base, present, kept, stamp, state, exc)
 
     record = {
         **chosen.to_dict(),
@@ -288,7 +299,8 @@ def _install_vendor(
         )
     return replace(
         base,
-        resolved_dir=str(_scan_root(vendor_dir)),
+        resolved_dir=str(fresh.path),
+        extension=vendor,
         resolved_ref=chosen.commit,
         checksum_ok=True,
         archive_url=archive_url,
@@ -297,24 +309,51 @@ def _install_vendor(
     )
 
 
+def _install_failed(
+    base: ShimSourceStatus,
+    present: InstalledExtension | None,
+    kept: VendorRelease | None,
+    stamp: Mapping[str, Any],
+    state: _ManifestState,
+    exc: ShimSourceError,
+) -> ShimSourceStatus:
+    """The row for a download or install that failed: keep the last good one."""
+    mismatch = isinstance(exc, ShimArchiveMismatch)
+    if kept is not None:
+        status = _installed_status(base, present, kept, stamp, state)
+        return replace(
+            status,
+            stale=True,
+            error=str(exc),
+            checksum_ok=False if mismatch else None,
+        )
+    return replace(
+        base,
+        ok=False,
+        error=f"{type(exc).__name__}: {exc}",
+        unreachable=isinstance(exc, ShimSourceUnreachable),
+        checksum_ok=False if mismatch else None,
+    )
+
+
 def _kept_or_failed(
     base: ShimSourceStatus,
-    vendor_dir: Path,
+    present: InstalledExtension | None,
     installed: VendorRelease | None,
     stamp: Mapping[str, Any],
     state: _ManifestState,
     error: str,
 ) -> ShimSourceStatus:
     """The installed release kept (stale, with *error*), or a failed row."""
-    if installed is None:
+    if installed is None or present is None:
         return replace(base, ok=False, error=error)
-    status = _installed_status(base, vendor_dir, installed, stamp, state)
+    status = _installed_status(base, present, installed, stamp, state)
     return replace(status, stale=True, error=error)
 
 
 def _installed_status(
     base: ShimSourceStatus,
-    vendor_dir: Path,
+    present: InstalledExtension | None,
     installed: VendorRelease,
     stamp: Mapping[str, Any],
     state: _ManifestState,
@@ -323,7 +362,8 @@ def _installed_status(
     archive_url = stamp.get("archive_url")
     return replace(
         base,
-        resolved_dir=str(_scan_root(vendor_dir)),
+        resolved_dir=str(present.path) if present is not None else None,
+        extension=base.vendor,
         resolved_ref=installed.commit,
         from_cache=True,
         stale=state.stale,
@@ -333,28 +373,67 @@ def _installed_status(
     )
 
 
+def _with_dependency_notes(
+    statuses: list[ShimSourceStatus], dest: Path
+) -> list[ShimSourceStatus]:
+    """Name, per installed vendor, the required extensions that are not installed.
+
+    Read once every install of the run is done, so the order the vendors were
+    installed in does not decide the answer.  Dependencies are reported, never
+    installed on the extension's behalf.
+    """
+    if not any(status.extension for status in statuses):
+        return statuses
+    by_id = {item.id: item for item in installed_extensions(dest)}
+    out: list[ShimSourceStatus] = []
+    for status in statuses:
+        item = by_id.get(status.extension or "")
+        if item is None or item.manifest is None or not status.ok or status.skipped:
+            out.append(status)
+            continue
+        missing = missing_dependencies(item.manifest, by_id)
+        if not missing:
+            out.append(status)
+            continue
+        names = ", ".join(repr(name) for name in missing)
+        out.append(
+            replace(
+                status,
+                note=(
+                    f"extension {item.id!r} requires extension(s) {names}, which "
+                    f"{'is' if len(missing) == 1 else 'are'} not installed"
+                ),
+            )
+        )
+    return out
+
+
 def _download_release(
     spec: ManifestSourceSpec,
     state: _ManifestState,
     release: VendorRelease,
-    vendor_dir: Path,
+    vendor: str,
+    dest: Path,
     *,
     http_get: HttpGet,
     proxy: str | None,
-) -> str:
-    """Download, verify and install *release* into *vendor_dir*.
+) -> tuple[str, InstalledExtension]:
+    """Download, verify and install the wheel of *release* into *dest*.
 
-    The archive is resolved against the dist root of each manifest URL, the
-    one that served the manifest first.  A digest mismatch on one URL moves on
-    to the next (a stale CDN copy), but never installs.
+    The wheel is resolved against the dist root of each manifest URL, the one
+    that served the manifest first.  A digest mismatch on one URL moves on to
+    the next (a stale CDN copy), but never installs.  Core's
+    :func:`~llm_rosetta.api.install_wheel` then checks the wheel itself (a safe
+    zip, one extension, a valid manifest, a surface this core runs) before it
+    writes anything.
 
     Returns:
-        The archive URL that was installed.
+        The wheel URL that was installed and the installed extension.
 
     Raises:
         ShimArchiveMismatch: Every URL that answered served other bytes.
         ShimSourceUnreachable: No URL answered.
-        ShimSourceError: Another failure (HTTP error, unusable archive).
+        ShimSourceError: Another failure (HTTP error, a wheel core refuses).
     """
     failures: list[str] = []
     mismatch = False
@@ -386,11 +465,11 @@ def _download_release(
             )
             continue
         try:
-            _install_tree(data, vendor_dir, url)
+            installed = _install_wheel(data, release, vendor, dest)
         except ShimSourceError as exc:
             failures.append(f"{url}: {exc}")
             continue
-        return url
+        return url, installed
     detail = "; ".join(failures)
     if mismatch:
         raise ShimArchiveMismatch(detail)
@@ -399,20 +478,19 @@ def _download_release(
     raise ShimSourceError(detail)
 
 
-def _install_tree(data: bytes, vendor_dir: Path, url: str) -> None:
-    """Extract *data* next to *vendor_dir* and swap it in atomically."""
-    tmp_root = vendor_dir.parent / ".tmp"
-    tmp_root.mkdir(parents=True, exist_ok=True)
-    tmp_dir = tmp_root / f"extract-{uuid.uuid4().hex}"
+def _install_wheel(
+    data: bytes, release: VendorRelease, vendor: str, dest: Path
+) -> InstalledExtension:
+    """Install *data* with core's installer and check it is the vendor's wheel."""
     try:
-        tmp_dir.mkdir()
-        # ``providers`` as the declared path keeps a ``providers/`` root from
-        # being stripped as the archive's single top-level directory.
-        _extract_archive(
-            data, tmp_dir, archive="tar.gz", url=url, declared_path="providers"
+        installed = install_wheel(data, sha256=release.sha256, dest=dest)
+    except (ExtensionInstallError, OSError) as exc:
+        raise ShimSourceError(f"cannot install the wheel: {exc}") from exc
+    if installed.id != vendor:
+        # The record names a vendor and the digest vouches for the bytes, so a
+        # wheel of another extension is a publisher error.  Take it back out.
+        remove_extension(installed.id, dest)
+        raise ShimSourceError(
+            f"the wheel holds extension {installed.id!r}, not {vendor!r}"
         )
-        _atomic_replace(tmp_dir, vendor_dir)
-    except OSError as exc:
-        raise ShimSourceError(f"cannot install locally: {exc}") from exc
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+    return installed

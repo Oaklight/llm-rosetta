@@ -13,10 +13,13 @@ an extension, and the first extension to register a name wins over a later one.
 
 from __future__ import annotations
 
+import importlib
 import logging
+import re
 import threading
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 from llm_rosetta._vendor.yaml import load as yaml_load
 from llm_rosetta.contracts.extension import (
@@ -31,6 +34,7 @@ from llm_rosetta.contracts.shim import ProviderShim
 from ._dirs import activate_if_present
 from ._discovery import (
     ENTRY_POINT_GROUP,
+    NAMESPACE,
     LEGACY_ENTRY_POINT_GROUP,
     FoundExtension,
     discover,
@@ -80,6 +84,37 @@ def list_extensions() -> tuple[ExtensionStatus, ...]:
     """
     with _STATUS_LOCK:
         return tuple(_STATUS)
+
+
+_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_]*$")
+_SUBMODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$")
+
+
+def import_extension_module(ext_id: str, submodule: str = "") -> ModuleType:
+    """Import a module of an installed extension, by extension id.
+
+    The loader reads manifests and shims without importing extension code; a
+    host that needs the code (a transport, say) asks for it here, by name.  The
+    module is ``llm_rosetta_ext.<ext_id>[.<submodule>]``.
+
+    Args:
+        ext_id: The extension id.
+        submodule: A dotted path below the extension folder; empty for the
+            extension package itself.
+
+    Returns:
+        The imported module.
+
+    Raises:
+        ValueError: *ext_id* or *submodule* is not a plain module name.
+        ImportError: The module does not exist or fails to import.
+    """
+    if not _ID_RE.match(ext_id):
+        raise ValueError(f"{ext_id!r} is not an extension id")
+    if submodule and not _SUBMODULE_RE.match(submodule):
+        raise ValueError(f"{submodule!r} is not a module path")
+    name = f"{NAMESPACE}.{ext_id}" + (f".{submodule}" if submodule else "")
+    return importlib.import_module(name)
 
 
 def _read_manifest(folder: Path) -> ExtensionManifest:

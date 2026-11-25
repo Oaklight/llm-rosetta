@@ -43,17 +43,42 @@ def pytest_runtest_protocol(item, nextitem):
 
 
 @pytest.fixture(autouse=True)
-def _no_ambient_extensions(tmp_path_factory, monkeypatch):
-    """Point the extension directory at an empty path.
+def _no_ambient_extensions(tmp_path_factory, monkeypatch, request):
+    """Give every test its own, empty extensions directory.
 
     ``load_extensions()`` activates the per-user extension directory when it
     exists, so a developer's own installs would otherwise leak into the suite.
-    A test that wants an extension installs it into its own directory.
+    A test that wants an extension installs it into its own directory (the
+    gateway installs manifest wheels into the directory core names), and that
+    install must not be seen by the next test: the path is unique per test, and
+    what activating it left behind (``sys.path``, the cached ``llm_rosetta_ext``
+    namespace and the extension modules, the last load's status list and the
+    shim-to-extension attribution) is undone.
     """
+    import hashlib
+    import importlib
+    import sys
+
+    key = hashlib.sha256(request.node.nodeid.encode()).hexdigest()[:12]
     monkeypatch.setenv(
         "LLM_ROSETTA_EXTENSIONS_DIR",
-        str(tmp_path_factory.getbasetemp() / "no-extensions"),
+        str(tmp_path_factory.getbasetemp() / f"no-extensions-{key}"),
     )
+    from llm_rosetta.shims._loader import _PLUGIN_SOURCES
+
+    path = list(sys.path)
+    sources = dict(_PLUGIN_SOURCES)
+    yield
+    sys.path[:] = path
+    _PLUGIN_SOURCES.clear()
+    _PLUGIN_SOURCES.update(sources)
+    for name in [n for n in sys.modules if n.split(".")[0] == "llm_rosetta_ext"]:
+        del sys.modules[name]
+    importlib.invalidate_caches()
+    from llm_rosetta.extensions import _load
+
+    with _load._STATUS_LOCK:
+        _load._STATUS.clear()
 
 
 @pytest.fixture(autouse=True)

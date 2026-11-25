@@ -611,9 +611,22 @@ def _apply_shim_sources_or_exit(
     section raises ``ValueError``; a ``strict`` source failure raises
     ``ShimSourceError`` — either way the process exits.
     """
+    from ..config.settings import configure_extensions_for
     from ..shims.moved import moved_references
 
-    if not raw_config.get("shims") and not moved_references(raw_config):
+    # Where extensions live is chosen once, before the first shim load.  An
+    # extensions directory that already holds extensions needs a rebuild even
+    # with no ``shims`` section, so they are loaded.
+    server = raw_config.get("server")
+    extensions = configure_extensions_for(
+        server.get("data_dir") if isinstance(server, dict) else None, config_path
+    )
+    has_extensions = extensions is not None and os.path.isdir(extensions)
+    if (
+        not raw_config.get("shims")
+        and not moved_references(raw_config)
+        and not has_extensions
+    ):
         return None
     try:
         return apply_shim_sources(raw_config, config_path)

@@ -185,6 +185,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "ExtensionStatus",
             "list_extensions",
             # Installing extensions (a standard-library installer and directory manager)
+            "EXTENSIONS_DIR_ENV",
             "ExtensionInstallError",
             "ExternalStatus",
             "InstalledExtension",
@@ -192,6 +193,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "check_external",
             "configure_extensions_dir",
             "extensions_dir",
+            "import_extension_module",
             "install_wheel",
             "install_wheel_url",
             "install_with_pip",
@@ -213,7 +215,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "SURFACE_VERSION",
             "__version__",
         ],
-        "max_count": 104,
+        "max_count": 106,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count

@@ -4,7 +4,7 @@ A shim source repository (``llm-rosetta-shim-contrib``,
 ``llm-rosetta-shim-argonne``) publishes one ``manifest.json`` on its ``dist``
 branch, with one record per released vendor version (#1660).  A host such as
 the gateway reads it, picks per vendor the newest version this core can run,
-downloads that version's archive and checks its digest.
+downloads that version's wheel and checks its digest.
 
 The format is stated once, in ``shim_manifest.schema.json`` beside this module
 (JSON Schema draft 2020-12).  :func:`validate_manifest` interprets the subset
@@ -85,11 +85,11 @@ class VendorRelease:
     Attributes:
         vendor: The vendor directory name (the manifest's key).
         version: The per-vendor semantic version.
-        commit: The source commit the archive was built from.
-        archive: Archive path relative to the manifest's directory.
-        sha256: Lowercase hex digest of the archive.
+        commit: The source commit the wheel was built from.
+        archive: Wheel (``.whl``) path relative to the manifest's directory.
+        sha256: Lowercase hex digest of the wheel.
         requires: The compatibility floor.
-        shims: The shim names the archive registers.
+        shims: The shim names the wheel registers.
         tags: Selection tags (``tier:free`` and so on).
         maturity: ``experimental``, ``beta`` or ``stable``.
         since: The date the maturity was reached, when stated.

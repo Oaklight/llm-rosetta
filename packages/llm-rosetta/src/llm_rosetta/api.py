@@ -70,6 +70,9 @@ from llm_rosetta.contracts.command import (
 )
 from llm_rosetta.converters import get_converter_class
 from llm_rosetta.extensions import (
+    ENV_VAR as EXTENSIONS_DIR_ENV,
+)
+from llm_rosetta.extensions import (
     ExtensionInstallError,
     ExtensionStatus,
     ExternalStatus,
@@ -78,6 +81,7 @@ from llm_rosetta.extensions import (
     check_external,
     configure_extensions_dir,
     extensions_dir,
+    import_extension_module,
     install_with_pip,
     install_wheel,
     install_wheel_url,
@@ -251,6 +255,7 @@ __all__ = [
     "ExtensionStatus",
     "list_extensions",
     # Installing extensions (a standard-library installer and directory manager)
+    "EXTENSIONS_DIR_ENV",
     "ExtensionInstallError",
     "ExternalStatus",
     "InstalledExtension",
@@ -258,6 +263,7 @@ __all__ = [
     "check_external",
     "configure_extensions_dir",
     "extensions_dir",
+    "import_extension_module",
     "install_wheel",
     "install_wheel_url",
     "install_with_pip",

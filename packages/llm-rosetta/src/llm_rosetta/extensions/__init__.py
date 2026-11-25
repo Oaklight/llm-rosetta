@@ -38,7 +38,12 @@ from ._install import (
     pip_available,
     remove_extension,
 )
-from ._load import ExtensionStatus, list_extensions, load_extensions
+from ._load import (
+    ExtensionStatus,
+    import_extension_module,
+    list_extensions,
+    load_extensions,
+)
 
 __all__ = [
     "ENTRY_POINT_GROUP",
@@ -55,6 +60,7 @@ __all__ = [
     "configure_extensions_dir",
     "discover",
     "extensions_dir",
+    "import_extension_module",
     "install_with_pip",
     "install_wheel",
     "install_wheel_url",

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from collections.abc import Collection, Sequence
 from dataclasses import replace
-from pathlib import Path
 from typing import Any
 
 from llm_rosetta.contracts.shim_manifest import (
@@ -28,21 +27,29 @@ from .selection import _provided_by
 def scan_manifest_status(
     status: ShimSourceStatus, core_names: Collection[str]
 ) -> ShimSourceStatus:
-    """Load one installed vendor into the registry being built.
+    """Report how one installed vendor's extension loaded.
 
-    *core_names* is the authoritative set (built-ins and plugins, just
-    registered): those names are refused by name (core wins) and the vendor's
-    other shims load; a vendor all of whose shims core registers is skipped.
-    When the archive ships no ``shims.yaml``, only the names its release record
-    lists may register, and any other is refused with a WARNING.
+    The extension is already in the extensions directory, and the registry
+    rebuild that calls this has just run ``load_providers()``, which loads every
+    installed extension through the one loader and records its outcome.  This
+    function reads that outcome (:func:`~llm_rosetta.api.list_extensions`) and
+    folds it into the vendor's status: the loaded shims, or the state and
+    reason it was skipped or failed.
+
+    *core_names* is the live registry.  A vendor all of whose shims are
+    registered by something other than an extension is skipped (core wins), as
+    a promotion to core would; when only some clash, the loader refuses the
+    extension as a whole and the reason says which names are held.
     """
-    from .._scan import _scan_dir
-    from ..manifest import MANIFEST_FILENAME
+    from llm_rosetta.api import list_extensions
 
-    if not status.ok or status.skipped or not status.resolved_dir:
+    if not status.ok or status.skipped or not status.extension:
         return status
     record_shims = (status.release or {}).get("shims") or ()
-    clash = sorted(set(record_shims) & set(core_names))
+    items = list_extensions()
+    by_extension = {item.id: item for item in items}
+    held_by_extensions = {name for item in items for name in item.shims}
+    clash = sorted((set(record_shims) & set(core_names)) - held_by_extensions)
     if clash and set(clash) == set(record_shims):
         reason = f"already provided by {_provided_by(clash)}: " + ", ".join(clash)
         logger.warning(
@@ -52,31 +59,35 @@ def scan_manifest_status(
             reason,
         )
         return replace(status, skipped=reason)
-    scanned = _scan_dir(
-        Path(status.resolved_dir),
-        kind="remote",
-        location=status.location,
-        name=status.name,
-        from_cache=status.from_cache,
-        stale=status.stale,
-        fetched_at=status.fetched_at,
-        resolved_ref=status.resolved_ref,
-        refuse=core_names,
-        only=(
-            None
-            if (Path(status.resolved_dir) / MANIFEST_FILENAME).is_file()
-            else frozenset(record_shims)
-        ),
-    )
+
+    item = by_extension.get(status.extension)
+    if item is None:
+        return replace(
+            status,
+            ok=False,
+            error=(
+                f"extension {status.extension!r} was installed but not found "
+                "by the loader; is the extensions directory on the import path?"
+            ),
+        )
+    base = replace(status, state=item.state, resolved_dir=str(item.path))
+    if item.state == "skipped":
+        return replace(base, skipped=item.reason or "skipped")
+    if item.state != "loaded":
+        return replace(base, ok=False, error=item.reason or "failed to load")
+    if record_shims and set(item.shims) != set(record_shims):
+        logger.warning(
+            "Shim source %s: vendor %r registered %s, but its release record lists %s",
+            status.source,
+            status.vendor,
+            ", ".join(item.shims) or "nothing",
+            ", ".join(record_shims),
+        )
     return replace(
-        scanned,
-        leg=status.leg,
-        archive_url=status.archive_url,
-        checksum_ok=status.checksum_ok,
-        error=scanned.error or status.error,
-        source=status.source,
-        vendor=status.vendor,
-        release=status.release,
+        base,
+        shim_names=tuple(item.shims),
+        shim_count=len(item.shims),
+        manifest_shims=tuple(item.manifest.shims) if item.manifest else (),
     )
 
 
