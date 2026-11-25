@@ -438,54 +438,39 @@ class TestLogoLocalization:
         assert (root.parent / "assets" / "acme.svg").is_file()
 
 
-class TestGatewayCommand:
-    """``llm-rosetta-gateway shims new`` is the installed entry point."""
+class TestScriptExitCode:
+    """``scripts/dev/new_shim.py`` is the one command that writes a shim tree.
 
-    @staticmethod
-    def _argv(root: Path, *extra: str) -> list[str]:
-        return ["llm-rosetta-gateway", "shims", "new", *extra, "--root", str(root)]
+    The gateway's ``shims new`` is gone (``llm-rosetta ext new`` creates an
+    extension folder instead), so the wrapper is where the scaffolder's exit
+    code reaches a shell.
+    """
 
-    def test_the_subcommand_scaffolds(self, monkeypatch, root, tmp_path):
-        from llm_rosetta_gateway import cli
-
-        monkeypatch.setattr(
-            "sys.argv",
-            self._argv(
-                root,
+    def test_it_scaffolds(self, new_shim, root):
+        code = new_shim.main(
+            [
                 "acme",
                 "--no-input",
                 "--base-url",
                 "https://api.acme.example/v1",
-            ),
+                "--root",
+                str(root),
+            ]
         )
-        config = tmp_path / "config.jsonc"
-        config.write_text("{}\n", encoding="utf-8")
-        monkeypatch.setattr(cli, "discover_config", lambda _path: str(config))
 
-        with pytest.raises(SystemExit) as exit_info:
-            cli.main()
-
-        assert exit_info.value.code == 0
+        assert code == 0
         assert (root / "acme" / "llm" / "provider.yaml").is_file()
 
-    def test_a_failed_load_check_reaches_the_shell(self, monkeypatch, root, tmp_path):
-        from llm_rosetta_gateway import cli
-
+    def test_a_failed_load_check_reaches_the_shell(self, new_shim, monkeypatch, root):
         def refuse(*_args, **_kwargs):
             raise ValueError("'chat_completions' is not an embeddings format")
 
-        monkeypatch.setattr(providers_module, "load_providers_from_dir", refuse)
-        monkeypatch.setattr(
-            "sys.argv", self._argv(root, "acme", "--no-input", "--check")
-        )
-        config = tmp_path / "config.jsonc"
-        config.write_text("{}\n", encoding="utf-8")
-        monkeypatch.setattr(cli, "discover_config", lambda _path: str(config))
+        # Undone before the registry fixture reloads the built-ins on teardown.
+        with monkeypatch.context() as patch:
+            patch.setattr(providers_module, "load_providers_from_dir", refuse)
+            code = new_shim.main(["acme", "--no-input", "--check", "--root", str(root)])
 
-        with pytest.raises(SystemExit) as exit_info:
-            cli.main()
-
-        assert exit_info.value.code == 1
+        assert code == 1
 
 
 class TestFormatChoice:

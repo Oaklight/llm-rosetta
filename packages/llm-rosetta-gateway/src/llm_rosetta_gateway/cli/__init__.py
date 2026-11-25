@@ -11,8 +11,16 @@ import sys
 from typing import TYPE_CHECKING, Any, NoReturn
 
 import asyncio
+from collections.abc import Sequence
 
+from llm_rosetta.api import CommandSpec
 from llm_rosetta.api import __version__ as _core_version
+from llm_rosetta.api import (
+    CORE_COMMAND_NAMES,
+    register_command,
+    resolve_command,
+    run_cli,
+)
 
 from .. import __version__ as _gateway_version
 from ..shims import ShimSourceError
@@ -466,64 +474,6 @@ def _cmd_db_export_errors(args: argparse.Namespace) -> None:
     print(f"Exported {written} bytes to {output}")
 
 
-def _dispatch_shims(args: argparse.Namespace, sub: Any) -> None:
-    """Run the ``shims`` action the operator named.
-
-    Args:
-        args: The parsed arguments, whose ``shim_action`` names the action.
-        sub: The subparsers, whose help is printed when no action was named.
-    """
-    if args.shim_action == "new":
-        _cmd_shims_new(args)
-    elif args.shim_action == "check":
-        _cmd_shims_check(args)
-    elif args.shim_action == "migrate":
-        _cmd_shims_migrate(args)
-    else:
-        sub.choices["shims"].print_help()
-
-
-def _cmd_shims_new(args: argparse.Namespace) -> None:
-    """Scaffold a new shim — the one command that writes files, not config.
-
-    It touches no gateway config: the files it writes belong to a provider
-    package, which a gateway reads through ``shims.paths`` or a remote.  The
-    exit code is the scaffolder's, so a failed load check reaches the shell.
-    """
-    from llm_rosetta.api import run_scaffold
-
-    raise SystemExit(run_scaffold(args))
-
-
-def _cmd_shims_check(args: argparse.Namespace) -> None:
-    """Report a shim tree that does not follow the contract.
-
-    Read-only: it loads nothing, writes nothing and needs no config, so it can
-    run against a package repository whose gateway is not set up yet.
-    """
-    from pathlib import Path
-
-    from llm_rosetta.api import run_scaffold_check
-
-    raise SystemExit(run_scaffold_check(Path(args.root).expanduser().resolve()))
-
-
-def _cmd_shims_migrate(args: argparse.Namespace) -> None:
-    """Move a shim tree onto the contract, dry-run unless ``--write``.
-
-    The moves are directory-level and do not touch imports, so a repository
-    with relative imports one level up needs a hand afterwards; the command
-    says so when it applies.
-    """
-    from pathlib import Path
-
-    from llm_rosetta.api import run_scaffold_migrate
-
-    raise SystemExit(
-        run_scaffold_migrate(Path(args.root).expanduser().resolve(), write=args.write)
-    )
-
-
 def _write_record_file(path: str, text: str) -> None:
     """Write the record so only its owner can read it.
 
@@ -646,43 +596,6 @@ def _cmd_credential(args: argparse.Namespace) -> None:
             f"({state_dir}) — delete it there if the gateway is elsewhere.",
             file=sys.stderr,
         )
-
-
-def _dispatch_subcommand(args: argparse.Namespace, sub: Any) -> bool:
-    """Handle subcommands; return True if one matched."""
-    if args.command == "init":
-        _cmd_init(args)
-        return True
-    if args.command == "add":
-        if args.add_type == "provider":
-            _cmd_add_provider(args)
-        elif args.add_type == "model":
-            _cmd_add_model(args)
-        else:
-            sub.choices["add"].print_help()
-        return True
-    if args.command == "shims":
-        _dispatch_shims(args, sub)
-        return True
-    if args.command == "credential":
-        _cmd_credential(args)
-        return True
-    if args.command == "set-password":
-        _cmd_set_password(args)
-        return True
-    if args.command == "db":
-        if args.db_type == "cleanup":
-            _cmd_db_cleanup(args)
-        elif args.db_type == "cleanup-logs":
-            _cmd_db_cleanup_logs(args)
-        elif args.db_type == "cleanup-errors":
-            _cmd_db_cleanup_errors(args)
-        elif args.db_type == "export-errors":
-            _cmd_db_export_errors(args)
-        else:
-            sub.choices["db"].print_help()
-        return True
-    return False
 
 
 def _apply_shim_sources_or_exit(
@@ -814,13 +727,76 @@ def _load_startup_config(
     return config, shim_source_report
 
 
-def main() -> None:  # noqa: C901
-    """Parse CLI arguments and either run a subcommand or start the server."""
-    from ..app import create_app
+_SERVE_PROG = "llm-rosetta-gateway"
 
+#: What each command is, for the dispatcher's help text.  The entry points in
+#: pyproject.toml name the same targets; ``main()`` registers these explicitly so
+#: a host without package metadata (the Nuitka binary) still finds them.
+_OWNER = "llm-rosetta-gateway"
+_COMMANDS: tuple[CommandSpec, ...] = (
+    CommandSpec(
+        "serve",
+        "Start the gateway server (the default)",
+        "llm_rosetta_gateway.cli:serve_main",
+    ),
+    CommandSpec(
+        "init",
+        "Create a template config.jsonc",
+        "llm_rosetta_gateway.cli:init_main",
+    ),
+    CommandSpec(
+        "add",
+        "Add a provider or model to the config",
+        "llm_rosetta_gateway.cli:add_main",
+    ),
+    CommandSpec(
+        "credential",
+        "Run a shim's interactive sign-in and print its credential record",
+        "llm_rosetta_gateway.cli:credential_main",
+    ),
+    CommandSpec(
+        "password",
+        "Set or change the admin password (forgot-password recovery)",
+        "llm_rosetta_gateway.cli:password_main",
+    ),
+    CommandSpec(
+        "db",
+        "Database maintenance: cleanup and error-dump export",
+        "llm_rosetta_gateway.cli:db_main",
+    ),
+    CommandSpec(
+        "usage",
+        "Report token usage and cost from the gateway database",
+        "llm_rosetta_gateway.observability.usage.cli:main",
+    ),
+    CommandSpec(
+        "migrate",
+        "Migrate a config and database off the names 0.14.0 retires",
+        "llm_rosetta_gateway.maintenance.migrate_0140:main",
+    ),
+)
+
+#: ``set-password`` is what 0.13.0 called ``password``.
+_ALIASES = {"set-password": "password"}
+
+
+def register_commands() -> None:
+    """Register the gateway's commands with the ``llm-rosetta`` dispatcher.
+
+    Package metadata declares the same commands, but a host that has none (the
+    Nuitka binary) relies on this call.  Registering twice is a no-op.
+    """
+    for spec in _COMMANDS:
+        register_command(spec, owner=_OWNER)
+
+
+def _serve_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="llm-rosetta-gateway",
+        prog=_SERVE_PROG,
         description="llm-rosetta Gateway — cross-provider LLM proxy",
+        epilog="commands: "
+        + ", ".join(spec.name for spec in _COMMANDS if spec.name != "serve")
+        + f"  (see '{_SERVE_PROG} <command> --help')",
     )
     parser.add_argument(
         "--config",
@@ -885,146 +861,33 @@ def main() -> None:  # noqa: C901
         choices=["debug", "info", "warning", "error"],
         help="Log level (default: info)",
     )
+    return parser
 
-    # ``init`` subcommand
-    sub = parser.add_subparsers(dest="command")
-    sub.add_parser(
-        "init", help="Create a template config.jsonc at ~/.config/llm-rosetta-gateway/"
-    )
 
-    # ``add`` subcommands
-    add_parser = sub.add_parser("add", help="Add a provider or model to the config")
-    add_sub = add_parser.add_subparsers(dest="add_type")
-
-    _provider_list = ", ".join(_KNOWN_PROVIDERS)
-    prov_parser = add_sub.add_parser("provider", help="Add a provider entry")
-    prov_parser.add_argument(
-        "name",
-        help=f"Provider type. Built-in types: {_provider_list}",
+def _command_parser(name: str, description: str) -> argparse.ArgumentParser:
+    """Return the parser of a gateway command that reads a config file."""
+    parser = argparse.ArgumentParser(
+        prog=f"llm-rosetta {name}", description=description
     )
-    prov_parser.add_argument(
-        "--api-key", default=None, help="API key or ${ENV_VAR} placeholder"
-    )
-    prov_parser.add_argument("--base-url", default=None, help="Provider base URL")
-
-    model_parser = add_sub.add_parser("model", help="Add a model routing entry")
-    model_parser.add_argument("name", help="Model name (e.g. gpt-4o)")
-    model_parser.add_argument("--provider", default=None, help="Target provider name")
-
-    # ``shims`` subcommands
-    shims_parser = sub.add_parser("shims", help="Manage external shim sources")
-    shim_sub = shims_parser.add_subparsers(dest="shim_action")
-    # ``shims new`` — the same flags the repository's scripts/dev/new_shim.py
-    # offers; the module owns them, so the two entry points cannot drift.
-    from llm_rosetta.api import add_scaffold_arguments as _add_scaffold_args
-
-    new_parser = shim_sub.add_parser(
-        "new", help="Create the files for a new provider shim"
-    )
-    _add_scaffold_args(new_parser, default_root="providers")
-
-    # ``shims check`` — report a tree that does not follow the contract.
-    check_parser = shim_sub.add_parser(
-        "check", help="Report a shim tree that does not follow the contract"
-    )
-    check_parser.add_argument(
-        "--root",
-        default="providers",
-        help="Directory a gateway scans (a providers tree)",
-    )
-
-    # ``shims migrate`` — move a tree onto the contract.
-    migrate_parser = shim_sub.add_parser(
-        "migrate", help="Move a shim tree onto the contract"
-    )
-    migrate_parser.add_argument(
-        "--root",
-        default="providers",
-        help="Directory a gateway scans (a providers tree)",
-    )
-    migrate_parser.add_argument(
-        "--write",
-        action="store_true",
-        help="Apply the moves; without it the command only plans them",
-    )
-
-    # ``credential`` subcommand
-    cred_parser = sub.add_parser(
-        "credential",
-        help="Run a shim's interactive sign-in and print its credential record",
-    )
-    cred_parser.add_argument("provider", help="Configured provider name")
-    cred_parser.add_argument(
+    parser.add_argument(
         "--config",
         "-c",
-        # SUPPRESS, not None: a subparser default would overwrite a --config
-        # given before the subcommand.
-        default=argparse.SUPPRESS,
+        default=None,
         help="Path to config file (auto-discovered if omitted)",
     )
-    cred_parser.add_argument(
-        "--out",
-        default=None,
-        help="Write the record to this file (mode 0600) instead of stdout",
-    )
+    return parser
 
-    # ``set-password`` subcommand
-    pw_parser = sub.add_parser(
-        "set-password",
-        help="Set or change admin password (for forgot-password recovery)",
-    )
-    pw_parser.add_argument(
-        "config", nargs="?", default=None, help="Path to config file"
-    )
 
-    # ``db`` subcommands
-    db_parser = sub.add_parser("db", help="Database maintenance commands")
-    db_parser.add_argument(
-        "--data-dir",
-        default=argparse.SUPPRESS,
-        help="Directory containing gateway.db (overrides config)",
-    )
-    db_sub = db_parser.add_subparsers(dest="db_type")
-    cleanup_parser = db_sub.add_parser(
-        "cleanup", help="Delete all records older than max-age-days and vacuum"
-    )
-    cleanup_parser.add_argument(
-        "--max-age-days",
-        type=int,
-        default=90,
-        help="Delete records older than this many days (default: 90)",
-    )
-    cl_parser = db_sub.add_parser(
-        "cleanup-logs", help="Delete request logs older than max-age-days"
-    )
-    cl_parser.add_argument(
-        "--max-age-days", type=int, default=90, help="Max age in days (default: 90)"
-    )
-    ce_parser = db_sub.add_parser(
-        "cleanup-errors", help="Delete error dumps older than max-age-days"
-    )
-    ce_parser.add_argument(
-        "--max-age-days", type=int, default=90, help="Max age in days (default: 90)"
-    )
-    export_parser = db_sub.add_parser(
-        "export-errors", help="Export error dumps to a tar.gz file"
-    )
-    export_parser.add_argument("--start", default=None, help="Start date (YYYY-MM-DD)")
-    export_parser.add_argument("--end", default=None, help="End date (YYYY-MM-DD)")
-    export_parser.add_argument(
-        "-o", "--output", default=None, help="Output file (default: error-dumps.tar.gz)"
-    )
+def serve_main(argv: Sequence[str] | None = None) -> int:  # noqa: C901
+    """Start the gateway server (the default)."""
+    from ..app import create_app
 
-    args = parser.parse_args()
+    args = _serve_parser().parse_args(None if argv is None else list(argv))
 
     # --- edit mode ---
     if args.edit:
         _open_in_editor(args.config)
-        return
-
-    # --- subcommands ---
-    if _dispatch_subcommand(args, sub):
-        return
+        return 0
 
     # --- normal server startup ---
     if not args.no_banner:
@@ -1111,3 +974,225 @@ def main() -> None:  # noqa: C901
         asyncio.run(_run())
     except KeyboardInterrupt:
         pass
+    return 0
+
+
+def init_main(argv: Sequence[str] | None = None) -> int:
+    """Create a template config.jsonc"""
+    parser = _command_parser("init", "Create a template config.jsonc")
+    args = parser.parse_args(None if argv is None else list(argv))
+    _cmd_init(args)
+    return 0
+
+
+def add_main(argv: Sequence[str] | None = None) -> int:
+    """Add a provider or model to the config"""
+    parser = _command_parser("add", "Add a provider or model to the config")
+    add_sub = parser.add_subparsers(dest="add_type")
+
+    _provider_list = ", ".join(_KNOWN_PROVIDERS)
+    prov_parser = add_sub.add_parser("provider", help="Add a provider entry")
+    prov_parser.add_argument(
+        "name",
+        help=f"Provider type. Built-in types: {_provider_list}",
+    )
+    prov_parser.add_argument(
+        "--api-key", default=None, help="API key or ${ENV_VAR} placeholder"
+    )
+    prov_parser.add_argument("--base-url", default=None, help="Provider base URL")
+
+    model_parser = add_sub.add_parser("model", help="Add a model routing entry")
+    model_parser.add_argument("name", help="Model name (e.g. gpt-4o)")
+    model_parser.add_argument("--provider", default=None, help="Target provider name")
+
+    args = parser.parse_args(None if argv is None else list(argv))
+    if args.add_type == "provider":
+        _cmd_add_provider(args)
+    elif args.add_type == "model":
+        _cmd_add_model(args)
+    else:
+        parser.print_help()
+    return 0
+
+
+def credential_main(argv: Sequence[str] | None = None) -> int:
+    """Run a shim's interactive sign-in and print its credential record"""
+    parser = _command_parser(
+        "credential", "Run a shim's interactive sign-in and print its credential record"
+    )
+    parser.add_argument("provider", help="Configured provider name")
+    parser.add_argument(
+        "--out",
+        default=None,
+        help="Write the record to this file (mode 0600) instead of stdout",
+    )
+    # The sign-in loads the same document the server would, with the same
+    # overrides, so these flags exist here too.
+    parser.add_argument("--proxy", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--data-dir", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--tls-cert", default=None, help=argparse.SUPPRESS)
+    parser.add_argument("--tls-key", default=None, help=argparse.SUPPRESS)
+    args = parser.parse_args(None if argv is None else list(argv))
+    _cmd_credential(args)
+    return 0
+
+
+def password_main(argv: Sequence[str] | None = None) -> int:
+    """Set or change the admin password (forgot-password recovery)"""
+    parser = argparse.ArgumentParser(
+        prog="llm-rosetta password",
+        description="Set or change admin password (for forgot-password recovery)",
+    )
+    parser.add_argument(
+        "config_path", nargs="?", default=None, help="Path to config file"
+    )
+    parser.add_argument(
+        "--config", "-c", dest="config_flag", default=None, help="Path to config file"
+    )
+    args = parser.parse_args(None if argv is None else list(argv))
+    args.config = args.config_flag or args.config_path
+    _cmd_set_password(args)
+    return 0
+
+
+def db_main(argv: Sequence[str] | None = None) -> int:
+    """Database maintenance: cleanup and error-dump export"""
+    parser = _command_parser("db", "Database maintenance commands")
+    parser.add_argument(
+        "--data-dir",
+        default=None,
+        help="Directory containing gateway.db (overrides config)",
+    )
+    db_sub = parser.add_subparsers(dest="db_type")
+    cleanup_parser = db_sub.add_parser(
+        "cleanup", help="Delete all records older than max-age-days and vacuum"
+    )
+    cleanup_parser.add_argument(
+        "--max-age-days",
+        type=int,
+        default=90,
+        help="Delete records older than this many days (default: 90)",
+    )
+    cl_parser = db_sub.add_parser(
+        "cleanup-logs", help="Delete request logs older than max-age-days"
+    )
+    cl_parser.add_argument(
+        "--max-age-days", type=int, default=90, help="Max age in days (default: 90)"
+    )
+    ce_parser = db_sub.add_parser(
+        "cleanup-errors", help="Delete error dumps older than max-age-days"
+    )
+    ce_parser.add_argument(
+        "--max-age-days", type=int, default=90, help="Max age in days (default: 90)"
+    )
+    export_parser = db_sub.add_parser(
+        "export-errors", help="Export error dumps to a tar.gz file"
+    )
+    export_parser.add_argument("--start", default=None, help="Start date (YYYY-MM-DD)")
+    export_parser.add_argument("--end", default=None, help="End date (YYYY-MM-DD)")
+    export_parser.add_argument(
+        "-o", "--output", default=None, help="Output file (default: error-dumps.tar.gz)"
+    )
+    args = parser.parse_args(None if argv is None else list(argv))
+    if args.db_type == "cleanup":
+        _cmd_db_cleanup(args)
+    elif args.db_type == "cleanup-logs":
+        _cmd_db_cleanup_logs(args)
+    elif args.db_type == "cleanup-errors":
+        _cmd_db_cleanup_errors(args)
+    elif args.db_type == "export-errors":
+        _cmd_db_export_errors(args)
+    else:
+        parser.print_help()
+    return 0
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
+#: Server options that take a value, so the token after one is not a command.
+_VALUE_OPTIONS = frozenset(
+    {
+        "--config",
+        "-c",
+        "--host",
+        "--port",
+        "--socket",
+        "-S",
+        "--tls-cert",
+        "--tls-key",
+        "--proxy",
+        "--data-dir",
+        "--log-level",
+    }
+)
+
+#: The options that came before a command and still reach it, per command.
+_CARRIED: dict[str, tuple[str, ...]] = {
+    "credential": ("config", "proxy", "data_dir", "tls_cert", "tls_key"),
+    "db": ("config", "data_dir"),
+}
+
+
+def _first_positional(argv: Sequence[str]) -> int | None:
+    """Return the index of the first token that is neither option nor value."""
+    i = 0
+    while i < len(argv):
+        token = argv[i]
+        if token.startswith("-"):
+            i += 2 if token in _VALUE_OPTIONS else 1
+            continue
+        return i
+    return None
+
+
+def _carry(prefix: Sequence[str], command: str) -> list[str]:
+    """Parse the options before a command and forward the ones it reads."""
+    parsed = _serve_parser().parse_args(list(prefix))
+    forwarded: list[str] = []
+    for name in _CARRIED.get(command, ("config",)):
+        value = getattr(parsed, name)
+        if value:
+            forwarded += ["--" + name.replace("_", "-"), value]
+    return forwarded
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Run ``llm-rosetta-gateway``: a subcommand, or the server when none is named.
+
+    Equivalent to ``llm-rosetta <command>`` and ``llm-rosetta serve``: an
+    argument list that is empty or starts with an option starts the server.
+
+    Args:
+        argv: Arguments without the program name; ``sys.argv[1:]`` by default.
+
+    Returns:
+        The exit code.
+    """
+    args = list(sys.argv[1:] if argv is None else argv)
+    register_commands()
+    at = _first_positional(args)
+    if at is None:
+        return int(serve_main(args) or 0)
+    name = _ALIASES.get(args[at], args[at])
+    if name in CORE_COMMAND_NAMES:
+        # ``ext`` and ``help`` belong to the core dispatcher.  The gateway
+        # binary has no ``llm-rosetta`` script beside it, so this is how an
+        # operator without Python or pip installs an extension; the gateway's
+        # own commands are registered above, so ``help`` lists them too.
+        if at != 0:
+            _serve_parser().error(
+                f"options before {name!r} are not accepted: {' '.join(args[:at])}"
+            )
+        return int(run_cli(args) or 0)
+    if name not in {spec.name for spec in _COMMANDS}:
+        _serve_parser().error(
+            f"argument command: invalid choice: {args[at]!r} (choose from "
+            + ", ".join(spec.name for spec in _COMMANDS)
+            + ")"
+        )
+    if name == "serve":
+        return int(serve_main(args[:at] + args[at + 1 :]) or 0)
+    forwarded = _carry(args[:at], name)
+    return int(resolve_command(name)(forwarded + args[at + 1 :]) or 0)
