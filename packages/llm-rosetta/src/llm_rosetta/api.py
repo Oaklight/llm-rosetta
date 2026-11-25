@@ -50,6 +50,7 @@ from llm_rosetta.contracts.cli_login import (
     run_capture,
     subprocess_env,
 )
+from llm_rosetta.cli import main as run_cli
 from llm_rosetta.contracts.command import (
     COMMAND_ENTRY_POINT_GROUP,
     CORE_COMMAND_NAMES,
@@ -245,6 +246,7 @@ __all__ = [
     "register_command",
     "registered_commands",
     "resolve_command",
+    "run_cli",
     # Installed extensions and what happened to each at load time
     "ExtensionStatus",
     "list_extensions",

@@ -225,7 +225,7 @@ NUITKA_FLAGS = \
 # Build native binary (glibc on Linux, system libc on macOS, MSVC on Windows)
 build-binary:
 	@echo "Building native binary: $(BINARY_NAME)..."
-	@printf 'from llm_rosetta_gateway import main\nmain()\n' > $(NUITKA_ENTRY)
+	@printf 'from llm_rosetta_gateway import main\nraise SystemExit(main())\n' > $(NUITKA_ENTRY)
 	python -m nuitka $(NUITKA_FLAGS) \
 		--output-filename=$(BINARY_NAME)$(if $(filter windows,$(BINARY_OS)),.exe,) \
 		$(NUITKA_ENTRY); \
@@ -247,7 +247,7 @@ build-binary-musl:
 			pip install --break-system-packages patchelf -q && \
 			pip install --break-system-packages -e "." -q && \
 			pip install --break-system-packages "nuitka[onefile]" ordered-set -q && \
-			printf "from llm_rosetta_gateway import main\nmain()\n" > /tmp/_entry.py && \
+			printf "from llm_rosetta_gateway import main\nraise SystemExit(main())\n" > /tmp/_entry.py && \
 			python -m nuitka \
 				--standalone --onefile \
 				--jobs=$$(nproc) \

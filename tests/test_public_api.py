@@ -180,6 +180,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "register_command",
             "registered_commands",
             "resolve_command",
+            "run_cli",
             # Installed extensions and what happened to each at load time
             "ExtensionStatus",
             "list_extensions",
@@ -212,7 +213,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "SURFACE_VERSION",
             "__version__",
         ],
-        "max_count": 103,
+        "max_count": 104,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
