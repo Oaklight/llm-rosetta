@@ -318,7 +318,9 @@ class TestHelp:
 
         assert cli.main(["help"]) == 0
 
-        assert seen == []
+        # The namespace scan that lists extension areas imports the empty
+        # ``llm_rosetta_ext`` package, never an extension or a command module.
+        assert [n for n in seen if n != "llm_rosetta_ext"] == []
         assert {n for n in sys.modules if n.startswith("llm_rosetta_gateway")} == before
 
     def test_an_entry_point_summary_is_the_docstring_first_line(

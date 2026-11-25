@@ -12,6 +12,14 @@ named, never allowed to stop the others.
 
 from __future__ import annotations
 
+from ._commands import (
+    COMMANDS_ATTRIBUTE,
+    COMMANDS_MODULE,
+    ExtensionArea,
+    area_verbs,
+    extension_areas,
+    resolve_extension_command,
+)
 from ._discovery import (
     ENTRY_POINT_GROUP,
     LEGACY_ENTRY_POINT_GROUP,
@@ -48,30 +56,36 @@ from ._load import (
 )
 
 __all__ = [
+    "COMMANDS_ATTRIBUTE",
+    "COMMANDS_MODULE",
     "ENTRY_POINT_GROUP",
     "ENV_VAR",
     "LEGACY_ENTRY_POINT_GROUP",
     "NAMESPACE",
-    "RetiredEntryPoint",
+    "ExtensionArea",
     "ExtensionInstallError",
     "ExtensionStatus",
     "ExtensionsDirError",
     "ExternalStatus",
     "InstalledExtension",
+    "RetiredEntryPoint",
     "activate_extensions_dir",
+    "area_verbs",
     "check_external",
     "configure_extensions_dir",
     "discover",
+    "extension_areas",
     "extensions_dir",
     "import_extension_module",
-    "install_with_pip",
     "install_wheel",
     "install_wheel_url",
+    "install_with_pip",
     "installed_extensions",
     "list_extensions",
     "load_extensions",
     "missing_dependencies",
     "pip_available",
     "remove_extension",
+    "resolve_extension_command",
     "retired_entry_points",
 ]

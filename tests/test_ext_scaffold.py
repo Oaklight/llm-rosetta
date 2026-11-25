@@ -191,6 +191,7 @@ def test_the_template_files_are_shipped_as_package_data():
 def test_the_template_has_no_orphan_file(tmp_path):
     used = {src for src, _ in ext_scaffold._BASE_TEMPLATES}
     used |= {src for src, _ in ext_scaffold._TRANSPORT_TEMPLATES}
+    used |= {src for src, _ in ext_scaffold._COMMAND_TEMPLATES}
     used |= {"pyproject.toml.tmpl", "llm/format/provider.yaml.tmpl"}
     found = {
         p.relative_to(ext_scaffold.EXT_TEMPLATE_DIR).as_posix()

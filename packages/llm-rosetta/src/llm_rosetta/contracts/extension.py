@@ -30,11 +30,12 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
+from llm_rosetta.contracts.command import CORE_COMMAND_NAMES
 from llm_rosetta.contracts.shim_manifest import (
     MATURITY_LEVELS,
     ShimRequirement,
@@ -117,6 +118,8 @@ class ExtensionManifest:
         requires: What it needs from the host.
         shims: The shim names it registers.
         transports: The transport ids it implements.
+        commands: The CLI verbs it adds under ``llm-rosetta <id>``, each mapped
+            to its summary per language.
         tags: Free-form tags (``tier:free``, ``auth:cli``).
         homepage: Where to read about it.
         external: Programs it drives.
@@ -131,6 +134,7 @@ class ExtensionManifest:
     requires: ExtensionRequirement
     shims: tuple[str, ...] = ()
     transports: tuple[str, ...] = ()
+    commands: Mapping[str, Mapping[str, str]] = field(default_factory=dict)
     tags: tuple[str, ...] = ()
     homepage: str | None = None
     external: tuple[ExternalProgram, ...] = ()
@@ -171,7 +175,9 @@ def validate_extension_manifest(document: Any) -> list[str]:
     """Check *document* against the schema and the rules the schema cannot say.
 
     Beyond the schema: ``provides`` is not empty, every shim name belongs to the
-    extension id, and an extension does not require itself.
+    extension id, an extension that adds commands has an id the dispatcher can
+    spell and does not take a core command name, and an extension does not
+    require itself.
 
     Args:
         document: The parsed ``plugin.yaml`` value.
@@ -188,8 +194,16 @@ def validate_extension_manifest(document: Any) -> list[str]:
     provides = document["provides"]
     shims = provides.get("shims", [])
     transports = provides.get("transports", [])
-    if not shims and not transports:
-        problems.append("$.provides: lists no shim and no transport")
+    commands = provides.get("commands", {})
+    if not shims and not transports and not commands:
+        problems.append("$.provides: lists no shim, no transport and no command")
+    if commands:
+        area = command_area(ext_id)
+        if area in CORE_COMMAND_NAMES:
+            problems.append(
+                f"$.provides.commands: the area {area!r} is a core command name; "
+                "rename the extension"
+            )
     for index, name in enumerate(shims):
         if not _shim_belongs_to(name, ext_id):
             problems.append(
@@ -231,6 +245,10 @@ def parse_extension_manifest(document: Any) -> ExtensionManifest:
         ),
         shims=tuple(provides.get("shims", ())),
         transports=tuple(provides.get("transports", ())),
+        commands={
+            verb: dict(summary)
+            for verb, summary in provides.get("commands", {}).items()
+        },
         tags=tuple(document.get("tags", ())),
         homepage=document.get("homepage"),
         external=tuple(
@@ -245,6 +263,18 @@ def parse_extension_manifest(document: Any) -> ExtensionManifest:
         platforms=tuple(document.get("platforms", ())),
         summary=dict(summary) if summary is not None else None,
     )
+
+
+def command_area(ext_id: str) -> str:
+    """Spell an extension id as the CLI area name: underscores become hyphens.
+
+    Args:
+        ext_id: The extension id (``[a-z][a-z0-9_]*``).
+
+    Returns:
+        The word after ``llm-rosetta`` that selects the extension's commands.
+    """
+    return ext_id.replace("_", "-")
 
 
 def current_platform() -> str:
@@ -352,6 +382,7 @@ __all__ = [
     "ExternalProgram",
     "TransportOwner",
     "UnresolvedTransport",
+    "command_area",
     "compatibility_problems",
     "current_platform",
     "load_extension_schema",

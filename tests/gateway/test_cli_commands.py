@@ -192,12 +192,51 @@ class TestTheServerStart:
         assert capsys.readouterr().out.startswith("llm-rosetta-gateway ")
 
     def test_an_unknown_command_is_exit_2_with_the_choices(self, capsys):
-        with pytest.raises(SystemExit) as info:
-            cli.main(["frobnicate"])
-
-        assert info.value.code == 2
+        assert cli.main(["frobnicate"]) == 2
         err = capsys.readouterr().err
         assert "frobnicate" in err and "credential" in err
+
+    def test_options_before_an_unknown_command_are_refused(self, capsys):
+        with pytest.raises(SystemExit) as info:
+            cli.main(["--config", "x.jsonc", "frobnicate"])
+
+        assert info.value.code == 2
+        assert "options before 'frobnicate'" in capsys.readouterr().err
+
+    def test_an_installed_extension_command_runs_from_the_gateway_binary(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """The Nuitka binary's only entry is this ``main``: ``<bin> acme run``."""
+        import importlib
+        import sys
+
+        from llm_rosetta.api import configure_extensions_dir
+
+        folder = tmp_path / "llm_rosetta_ext" / "acme"
+        folder.mkdir(parents=True)
+        (folder / "__init__.py").write_text("", encoding="utf-8")
+        (folder / "plugin.yaml").write_text(
+            "id: acme\nname: acme\nversion: 0.1.0\nmaturity: experimental\n"
+            "requires:\n  surface: 1\n  ir: 1\nprovides:\n  commands:\n    run: { en: x }\n",
+            encoding="utf-8",
+        )
+        (folder / "commands.py").write_text(
+            "def run(argv):\n    print('ran', *argv)\n    return 0\n"
+            "COMMANDS = {'run': run}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(sys, "path", list(sys.path))
+        configure_extensions_dir(tmp_path)
+        try:
+            assert cli.main(["acme", "run", "x"]) == 0
+            assert capsys.readouterr().out.strip() == "ran x"
+        finally:
+            configure_extensions_dir(None)
+            for name in [
+                n for n in sys.modules if n.split(".")[0] == "llm_rosetta_ext"
+            ]:
+                del sys.modules[name]
+            importlib.invalidate_caches()
 
     def test_a_word_after_double_dash_is_not_a_command(self, tmp_path):
         target = tmp_path / "config.jsonc"
@@ -210,9 +249,8 @@ class TestTheServerStart:
 
     def test_the_shims_scaffold_commands_are_gone(self, capsys):
         for word in ("shims",):
-            with pytest.raises(SystemExit) as info:
-                cli.main([word, "new", "acme"])
-            assert info.value.code == 2
+            assert cli.main([word, "new", "acme"]) == 2
+            assert word in capsys.readouterr().err
 
 
 class TestCoreCommandsFromTheGatewayEntry:
