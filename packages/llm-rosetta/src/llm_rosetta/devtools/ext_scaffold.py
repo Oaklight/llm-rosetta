@@ -49,6 +49,9 @@ NAMESPACE = "llm_rosetta_ext"
 #: The shape of an extension id: the vendor key and the import name.
 ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
+#: A command verb: what follows ``llm-rosetta <id>``.
+COMMAND_VERB = re.compile(r"^[a-z][a-z0-9-]*$")
+
 #: Names a folder under ``packages/`` cannot take: they are the repository's own.
 RESERVED_IDS = frozenset(
     {"scripts", "skills", "docs", "tests", "packages", "core", "contrib"}
@@ -70,6 +73,7 @@ _BASE_TEMPLATES = (
     ("README.md.tmpl", "README.md"),
     ("tests/test_extension.py.tmpl", "tests/test_extension.py"),
 )
+_COMMAND_TEMPLATES = (("commands.py.tmpl", "commands.py"),)
 _TRANSPORT_TEMPLATES = (
     ("transport/__init__.py.tmpl", "transport/__init__.py"),
     ("transport/transport.py.tmpl", "transport/transport.py"),
@@ -118,7 +122,12 @@ def _quote(items: list[str]) -> str:
 
 
 def render_extension(
-    ext_id: str, *, format_: str, name: str | None = None, transport: bool = False
+    ext_id: str,
+    *,
+    format_: str,
+    name: str | None = None,
+    transport: bool = False,
+    command: str | None = None,
 ) -> dict[str, str]:
     """Render the files of a new extension.
 
@@ -127,6 +136,8 @@ def render_extension(
         format_: A chat format from the catalog.
         name: The display name; the id by default.
         transport: Add a ``transport/`` package and declare it.
+        command: Add a ``commands.py`` with this verb and declare it, so
+            ``llm-rosetta <id> <verb>`` runs it.
 
     Returns:
         The file contents, keyed by path relative to the extension folder.
@@ -147,6 +158,11 @@ def render_extension(
         raise ExtensionScaffoldError(
             "name may not contain a quote, a backslash or a control character"
         )
+    if command is not None and not COMMAND_VERB.match(command):
+        raise ExtensionScaffoldError(
+            f"command {command!r}: a verb is lowercase letters, digits and "
+            "hyphens, and starts with a letter"
+        )
     transport_id = ext_id if transport else ""
     shim = f"{ext_id}--{format_}"
     templates = list(_BASE_TEMPLATES) + [
@@ -154,6 +170,8 @@ def render_extension(
     ]
     if transport:
         templates.extend(_TRANSPORT_TEMPLATES)
+    if command is not None:
+        templates.extend(_COMMAND_TEMPLATES)
     packages = [f"{NAMESPACE}.{ext_id}"]
     for _, target in templates:
         if target.endswith("/__init__.py") and not target.startswith("tests/"):
@@ -167,6 +185,9 @@ def render_extension(
         "surface": str(SURFACE_VERSION),
         "ir": str(IR_VERSION),
         "transport_id": transport_id,
+        "command": command or "",
+        "command_function": (command or "").replace("-", "_"),
+        "command_summary": f"Run {ext_id} {command}." if command else "",
         "transport_class": _class_name(ext_id) if transport else "",
         "api_key_env": ext_id.upper() + "_API_KEY",
         "distribution": distribution_name(ext_id),
@@ -197,6 +218,7 @@ def run_ext_new(args: argparse.Namespace) -> int:
             format_=getattr(args, "format", "") or "chat_completions",
             name=getattr(args, "name", None),
             transport=bool(getattr(args, "transport", False)),
+            command=getattr(args, "command", None),
         )
     except ExtensionScaffoldError as exc:
         print(f"error   {exc}", file=sys.stderr)
@@ -242,6 +264,12 @@ def add_ext_arguments(parser: argparse.ArgumentParser, *, command: str = "new") 
             "--transport",
             action="store_true",
             help="Add a transport/ package and declare it in plugin.yaml",
+        )
+        parser.add_argument(
+            "--command",
+            metavar="VERB",
+            help="Add commands.py with this verb and declare it, so "
+            "'llm-rosetta <id> VERB' runs it",
         )
     elif command == "check":
         parser.add_argument(
@@ -449,6 +477,67 @@ def _check_wheel(folder: Path, build: bool, result: ExtCheckResult) -> None:
         result.problems.append(f"wheel ships {extra}, which is not in the folder")
 
 
+def _literal_keys(tree: ast.Module, name: str) -> set[str] | None:
+    """Return the string keys of the module-level dict literal *name*, if any."""
+    keys: set[str] | None = None
+    for node in tree.body:
+        targets = (
+            node.targets
+            if isinstance(node, ast.Assign)
+            else [node.target]
+            if isinstance(node, ast.AnnAssign)
+            else []
+        )
+        value = getattr(node, "value", None)
+        if any(isinstance(t, ast.Name) and t.id == name for t in targets) and (
+            isinstance(value, ast.Dict)
+        ):
+            keys = {
+                key.value
+                for key in value.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            }
+    return keys
+
+
+def _command_problems(folder: Path, declared: tuple[str, ...]) -> list[str]:
+    """Check ``commands.py`` against ``provides.commands``.
+
+    The dispatcher reads a ``COMMANDS`` mapping (verb to callable) from
+    ``llm_rosetta_ext.<id>.commands`` when a verb runs.  The check is static,
+    so it never imports the extension.
+    """
+    module = next(
+        (
+            path
+            for path in (folder / "commands.py", folder / "commands" / "__init__.py")
+            if path.is_file()
+        ),
+        None,
+    )
+    if module is None:
+        return [
+            f"provides.commands lists {', '.join(declared)} but the folder has "
+            "no commands module"
+        ]
+    try:
+        tree = ast.parse(module.read_text(encoding="utf-8"))
+    except SyntaxError as exc:
+        return [f"{module.name} does not parse: {exc}"]
+    keys = _literal_keys(tree, "COMMANDS")
+    if keys is None:
+        return [
+            "the commands module has no COMMANDS mapping (a dict literal of verb "
+            f"to callable); the dispatcher needs it to run {', '.join(declared)}"
+        ]
+    if keys != set(declared):
+        return [
+            f"COMMANDS has {sorted(keys)} but provides.commands lists "
+            f"{sorted(declared)}"
+        ]
+    return []
+
+
 def _transport_problems(folder: Path, declared: tuple[str, ...]) -> list[str]:
     """Check the transport module against ``provides.transports``.
 
@@ -473,24 +562,7 @@ def _transport_problems(folder: Path, declared: tuple[str, ...]) -> list[str]:
         tree = ast.parse(module.read_text(encoding="utf-8"))
     except SyntaxError as exc:
         return [f"{module.name} does not parse: {exc}"]
-    keys: set[str] | None = None
-    for node in tree.body:
-        targets = (
-            node.targets
-            if isinstance(node, ast.Assign)
-            else [node.target]
-            if isinstance(node, ast.AnnAssign)
-            else []
-        )
-        value = getattr(node, "value", None)
-        if any(
-            isinstance(t, ast.Name) and t.id == "TRANSPORTS" for t in targets
-        ) and isinstance(value, ast.Dict):
-            keys = {
-                key.value
-                for key in value.keys
-                if isinstance(key, ast.Constant) and isinstance(key.value, str)
-            }
+    keys = _literal_keys(tree, "TRANSPORTS")
     if keys is None:
         return [
             f"the transport module has no TRANSPORTS mapping (a dict literal of "
@@ -544,6 +616,8 @@ def check_extension(folder: Path, *, build: bool = True) -> ExtCheckResult:
         result.problems.append("missing tests/")
     if manifest.transports:
         result.problems.extend(_transport_problems(folder, manifest.transports))
+    if manifest.commands:
+        result.problems.extend(_command_problems(folder, tuple(manifest.commands)))
     try:
         registered = _tree_shims(folder)
     except Exception as exc:  # noqa: BLE001 - name the loader's complaint

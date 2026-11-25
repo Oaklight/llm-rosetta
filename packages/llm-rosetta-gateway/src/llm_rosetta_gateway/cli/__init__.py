@@ -1200,11 +1200,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         return int(run_cli(args) or 0)
     if name not in {spec.name for spec in _COMMANDS}:
-        _serve_parser().error(
-            f"argument command: invalid choice: {args[at]!r} (choose from "
-            + ", ".join(spec.name for spec in _COMMANDS)
-            + ")"
-        )
+        # Not one of the gateway's commands: an installed extension may own
+        # the name (``llm-rosetta-gateway argo tunnel``), and the dispatcher
+        # also words the refusal when nothing does.
+        if at != 0:
+            _serve_parser().error(
+                f"options before {args[at]!r} are not accepted: {' '.join(args[:at])}"
+            )
+        return int(run_cli(args) or 0)
     if name == "serve":
         return int(serve_main(args[:at] + args[at + 1 :]) or 0)
     forwarded = _carry(args[:at], name)

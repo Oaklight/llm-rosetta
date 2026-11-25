@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Oaklight/llm-rosetta/blob/master/packages/llm-rosetta/src/llm_rosetta/contracts/extension_manifest.schema.json",
   "title": "llm-rosetta extension manifest (plugin.yaml)",
-  "description": "What one extension folder declares beside its code: who it is, which core it needs, and which shims and transports it provides.",
+  "description": "What one extension folder declares beside its code: who it is, which core it needs, and which shims, transports and commands it provides.",
   "type": "object",
   "required": ["id", "name", "version", "maturity", "requires", "provides"],
   "additionalProperties": false,
@@ -50,7 +50,7 @@
       }
     },
     "provides": {
-      "description": "What the extension registers. At least one of 'shims' and 'transports' is not empty.",
+      "description": "What the extension registers. At least one of 'shims', 'transports' and 'commands' is not empty.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -65,6 +65,17 @@
           "type": "array",
           "uniqueItems": true,
           "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "maxLength": 64 }
+        },
+        "commands": {
+          "description": "Verbs this extension adds to the CLI under its own area, each with its one-line summary: 'llm-rosetta <id> <verb>' (underscores in the id are written as hyphens). The extension's commands module exposes a COMMANDS mapping of verb to callable. The summary lives here so help never imports the extension, and survives a build that strips docstrings.",
+          "type": "object",
+          "propertyNames": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$", "maxLength": 32 },
+          "additionalProperties": {
+            "description": "One-line summary per language; 'en' is required.",
+            "type": "object",
+            "required": ["en"],
+            "additionalProperties": { "type": "string", "minLength": 1 }
+          }
         }
       }
     },

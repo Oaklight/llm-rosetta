@@ -106,7 +106,9 @@ class TestSchema:
 class TestRules:
     def test_provides_cannot_be_empty(self):
         problems = validate_extension_manifest(_doc(provides={}))
-        assert any("no shim and no transport" in p for p in problems), problems
+        assert any("no shim, no transport and no command" in p for p in problems), (
+            problems
+        )
 
     def test_a_transport_only_extension_is_valid(self):
         doc = _doc(id="acp_pty", provides={"transports": ["acp_pty"]})
