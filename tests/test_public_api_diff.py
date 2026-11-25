@@ -29,6 +29,7 @@ NO_ALL_REEXPORTED = {
 
 #: Top-level modules that declare ``__all__`` but are implementation detail.
 INTERNAL_TOP_LEVEL = {
+    "llm_rosetta.extensions",
     "llm_rosetta.formats",
     "llm_rosetta.model_vocabulary",
     "llm_rosetta.profiling",

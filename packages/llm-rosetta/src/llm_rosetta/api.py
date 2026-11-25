@@ -51,6 +51,7 @@ from llm_rosetta.contracts.cli_login import (
     subprocess_env,
 )
 from llm_rosetta.converters import get_converter_class
+from llm_rosetta.extensions import ExtensionStatus, list_extensions
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.base.helpers import strip_internal_metadata
 from llm_rosetta.fidelity import FidelityChecker
@@ -185,6 +186,9 @@ __all__ = [
     "complete_cli_login",
     "run_capture",
     "subprocess_env",
+    # Installed extensions and what happened to each at load time
+    "ExtensionStatus",
+    "list_extensions",
     # Fidelity and profiling
     "DeepProfiler",
     "FidelityChecker",

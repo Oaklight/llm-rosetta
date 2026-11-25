@@ -1,4 +1,4 @@
-"""Provider shim loading — built-in directory scan + plugin entry points.
+"""Provider shim loading — built-in directory scan + installed extensions.
 
 Shim lifecycle
 --------------
@@ -6,8 +6,9 @@ Shim lifecycle
 
 1. ``load_providers()`` scans the bundled ``builtin/`` directory via
    ``load_providers_from_dir()``, registering each shim found.
-2. It then discovers ``llm_rosetta.shim_providers`` entry points and
-   calls each plugin callable, which may register additional shims.
+2. It then registers the shims of every installed extension
+   (:mod:`llm_rosetta.extensions`), each read through the same vendor-tree
+   loader.
 
 **Usage** (per request):
 
@@ -44,33 +45,20 @@ differ keeps the difference on the leaf.  ``auth.py`` beside the manifest is
 the vendor's credential exchange, attached to every leaf.  A vendor that ships
 no manifest keeps declaring everything in each leaf, unchanged.
 
-Plugin shims
-------------
-Downstream packages register shims via entry points::
-
-    # pyproject.toml
-    [project.entry-points."llm_rosetta.shim_providers"]
-    my_provider = "my_package.shims:register_shims"
-
-The callable receives no arguments.  Most plugins simply call
-``load_providers_from_dir()`` to scan their own YAML directory::
-
-    from pathlib import Path
-    from llm_rosetta.shims import load_providers_from_dir
-
-    def register_shims():
-        return load_providers_from_dir(Path(__file__).parent / "providers")
-
-For advanced use cases (conditional registration, dynamic shims),
-call ``register_shim()`` directly instead of scanning a directory.
-The callable may optionally return ``list[ProviderShim]`` for inclusion
-in ``load_providers()``'s combined result.
+Extension shims
+---------------
+An extension is a folder with a ``plugin.yaml`` beside its code, imported as
+``llm_rosetta_ext.<id>``.  Its ``provider.yaml`` at the folder root is the
+vendor manifest and ``llm/<format>/provider.yaml`` holds the lanes, the same
+shape a built-in vendor directory has.  Core reads ``plugin.yaml`` first,
+checks that this core can run it, and then loads the tree through
+``load_providers_from_dir()``; see :mod:`llm_rosetta.extensions`.  The 0.13.0
+``llm_rosetta.shim_providers`` entry point group was retired in 0.14.0.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable, Collection
-from importlib.metadata import entry_points
 from pathlib import Path
 from typing import Any
 
@@ -336,8 +324,10 @@ def load_providers() -> list[ProviderShim]:
     """Load built-in provider shims and any plugin shims.
 
     1. Scans the bundled ``builtin/`` directory.
-    2. Discovers entry points in the ``llm_rosetta.shim_providers`` group
-       and calls each one to let plugins register their own shims.
+    2. Discovers the installed extensions (``llm_rosetta_ext.<id>`` folders and
+       the ``llm_rosetta.extensions`` entry points) and registers their shims;
+       entry points left in the retired ``llm_rosetta.shim_providers`` group
+       are reported, not run.
     3. Registers built-in model list transforms for providers without
        shim directories (Jina, Cohere).
 
@@ -348,8 +338,11 @@ def load_providers() -> list[ProviderShim]:
     # 1. Built-in shims
     shims = load_providers_from_dir(_PROVIDERS_DIR)
 
-    # 2. Plugin shims via entry points
-    shims.extend(_load_plugin_shims())
+    # 2. Extensions: installed folders that provide shims
+    _PLUGIN_SOURCES.clear()
+    from llm_rosetta.extensions import load_extensions
+
+    shims.extend(load_extensions())
 
     # 3. Built-in transforms for providers without shim directories
     register_model_list_transform("jina", _jina_model_list_transform)
@@ -385,60 +378,3 @@ def plugin_source(name: str) -> str | None:
         ``None`` for a shim that came from a directory.
     """
     return _PLUGIN_SOURCES.get(name)
-
-
-def _load_plugin_shims() -> list[ProviderShim]:
-    """Discover and invoke ``llm_rosetta.shim_providers`` entry points.
-
-    Each entry point should be a callable that registers shims via
-    :func:`register_shim` when called (no arguments).  The callable may
-    optionally return a ``list[ProviderShim]`` for inclusion in the
-    combined result of :func:`load_providers`.
-
-    Errors in individual plugins are logged and do not prevent other
-    plugins from loading.
-    """
-    registered: list[ProviderShim] = []
-    _PLUGIN_SOURCES.clear()
-
-    eps = entry_points()
-    # Python 3.12+: eps.select(); Python 3.10–3.11: dict-style
-    if hasattr(eps, "select"):
-        plugin_eps = eps.select(group="llm_rosetta.shim_providers")
-    else:
-        plugin_eps = eps.get("llm_rosetta.shim_providers", [])
-
-    from ..provider_shim import list_shims as _list_shims
-
-    for ep in plugin_eps:
-        known = {shim.name for shim in _list_shims()}
-        try:
-            loader = ep.load()
-            result = loader()
-            if isinstance(result, list):
-                registered.extend(result)
-            # Whatever this entry point just registered has no file on disk;
-            # name the distribution so the inventory can say where it lives.
-            dist = getattr(ep, "dist", None)
-            label = (
-                f"{dist.name} {dist.version}"
-                if dist is not None and getattr(dist, "name", None)
-                else ep.name
-            )
-            for shim in _list_shims():
-                if shim.name not in known:
-                    _PLUGIN_SOURCES.setdefault(shim.name, label)
-            logger.info("Loaded plugin shims from entry point: %s", ep.name)
-        except Exception as exc:
-            # The entry point runs during ``import llm_rosetta``; a raise here
-            # cannot propagate, so the warning names the plugin and the error.
-            logger.warning(
-                "Failed to load plugin shim entry point: %s (%s: %s); its shims "
-                "are not registered",
-                ep.name,
-                type(exc).__name__,
-                exc,
-                exc_info=True,
-            )
-
-    return registered

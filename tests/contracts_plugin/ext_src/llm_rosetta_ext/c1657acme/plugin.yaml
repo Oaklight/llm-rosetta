@@ -1,0 +1,9 @@
+id: c1657acme
+name: c1657 contracts fixture
+version: 0.0.1
+maturity: experimental
+requires:
+  surface: 1
+  ir: 1
+provides:
+  shims: [c1657acme]

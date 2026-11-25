@@ -18,7 +18,6 @@ from llm_rosetta.shims.provider_shim import (
 )
 from llm_rosetta.shims._loader import (
     _TYPE_DIRS,
-    _load_plugin_shims,
     _load_transforms,
     load_providers,
     load_providers_from_dir,
@@ -817,111 +816,6 @@ class TestLoadProvidersFromDir:
         _reset_registry()
         assert not any(m.startswith("_llm_rosetta_plugin_shims") for m in sys.modules)
         load_providers()  # restore built-ins for the remaining tests
-
-
-class TestPluginEntryPoints:
-    """Tests for the entry-point plugin loader."""
-
-    def test_invokes_entry_points(self, monkeypatch):
-        """_load_plugin_shims discovers and calls entry points."""
-        calls: list[str] = []
-
-        class FakeEP:
-            name = "fake"
-
-            def load(self):
-                def register():
-                    calls.append("called")
-
-                return register
-
-        class FakeEPs:
-            def select(self, *, group: str):
-                assert group == "llm_rosetta.shim_providers"
-                return [FakeEP()]
-
-        monkeypatch.setattr("llm_rosetta.shims._loader.entry_points", lambda: FakeEPs())
-        _load_plugin_shims()
-        assert calls == ["called"]
-
-    def test_names_the_distribution_behind_a_plugin_shim(self, monkeypatch):
-        """The plugin source map says which distribution registered a name."""
-        from llm_rosetta.contracts.shim import ProviderShim
-        from llm_rosetta.shims.provider_shim import register_shim
-
-        class FakeDist:
-            name = "demo-shim"
-            version = "0.1.0"
-
-        class FakeEP:
-            name = "demo"
-            dist = FakeDist()
-
-            def load(self):
-                def register():
-                    register_shim(
-                        ProviderShim(
-                            name="demo--chat_completions", format="chat_completions"
-                        )
-                    )
-
-                return register
-
-        class FakeEPs:
-            def select(self, *, group: str):
-                return [FakeEP()]
-
-        monkeypatch.setattr(providers_mod, "entry_points", lambda: FakeEPs())
-        try:
-            _load_plugin_shims()
-            assert providers_mod.plugin_source("demo--chat_completions") == (
-                "demo-shim 0.1.0"
-            )
-        finally:
-            providers_mod._PLUGIN_SOURCES.clear()
-
-    def test_collects_returned_shims(self, monkeypatch):
-        """Entry points that return list[ProviderShim] are collected."""
-        from llm_rosetta.contracts.shim import ProviderShim
-
-        test_shim = ProviderShim(name="ep-test", format="chat_completions")
-
-        class FakeEP:
-            name = "returner"
-
-            def load(self):
-                def register():
-                    return [test_shim]
-
-                return register
-
-        class FakeEPs:
-            def select(self, *, group: str):
-                return [FakeEP()]
-
-        monkeypatch.setattr("llm_rosetta.shims._loader.entry_points", lambda: FakeEPs())
-        result = _load_plugin_shims()
-        assert test_shim in result
-
-    def test_handles_plugin_errors_gracefully(self, monkeypatch):
-        """A failing plugin does not crash the loader."""
-
-        class BadEP:
-            name = "bad"
-
-            def load(self):
-                def register():
-                    raise RuntimeError("plugin broken")
-
-                return register
-
-        class FakeEPs:
-            def select(self, *, group: str):
-                return [BadEP()]
-
-        monkeypatch.setattr("llm_rosetta.shims._loader.entry_points", lambda: FakeEPs())
-        result = _load_plugin_shims()
-        assert result == []
 
 
 class TestDeclaredGrouping:
@@ -2050,12 +1944,12 @@ class TestBuiltinVendorManifests:
 def _snapshot_rows() -> list[dict]:
     """The registry facts a directory move must not change.
 
-    Built-ins only.  ``load_providers()`` also runs every installed
-    ``llm_rosetta.shim_providers`` entry point, so the registry it returns
-    depends on which shim packages happen to be installed — and this test is
-    about the tree, not the machine.  A plugin shim is identified by the
-    distribution that registered it; regenerating the snapshot on a machine
-    with a plugin installed must not add its rows.
+    Built-ins only.  ``load_providers()`` also registers every installed
+    extension, so the registry it returns depends on which extensions happen
+    to be installed — and this test is about the tree, not the machine.  An
+    extension shim is identified by the extension that registered it;
+    regenerating the snapshot on a machine with an extension installed must not
+    add its rows.
     """
     from llm_rosetta.shims import list_shims
     from llm_rosetta.shims._loader import plugin_source

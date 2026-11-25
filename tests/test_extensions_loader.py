@@ -1,0 +1,374 @@
+"""The extension loader (#1703 E4): discovery, gating, registration, isolation."""
+
+from __future__ import annotations
+
+import importlib
+import logging
+import sys
+import textwrap
+from pathlib import Path
+
+import pytest
+
+from llm_rosetta.contracts import SURFACE_VERSION
+from llm_rosetta.extensions import _discovery, list_extensions, load_extensions
+from llm_rosetta.shims import get_shim, list_shims
+from llm_rosetta.shims._loader import plugin_source
+from llm_rosetta.shims._loader import _PLUGIN_SOURCES
+from llm_rosetta.shims.provider_shim import unregister_shim
+
+
+@pytest.fixture(autouse=True)
+def _isolated_registry(monkeypatch):
+    """Leave the live registry, provenance map and namespace cache as found."""
+    before = {shim.name: shim for shim in list_shims()}
+    sources = dict(_PLUGIN_SOURCES)
+    monkeypatch.setattr(_discovery, "_entry_points", lambda group: [])
+    yield
+    for shim in list_shims():
+        if shim.name not in before:
+            unregister_shim(shim.name)
+    _PLUGIN_SOURCES.clear()
+    _PLUGIN_SOURCES.update(sources)
+    for name in [n for n in sys.modules if n.split(".")[0] == "llm_rosetta_ext"]:
+        del sys.modules[name]
+    importlib.invalidate_caches()
+
+
+def _manifest(ext_id: str, **override) -> str:
+    shims = override.pop("shims", [f"{ext_id}--chat_completions"])
+    surface = override.pop("surface", SURFACE_VERSION)
+    return textwrap.dedent(f"""\
+        id: {override.pop("id", ext_id)}
+        name: {ext_id} test
+        version: 0.1.0
+        maturity: experimental
+        requires:
+          surface: {surface}
+          ir: 1
+        provides:
+          shims: [{", ".join(shims)}]
+        """)
+
+
+def _extension(root: Path, ext_id: str, *, manifest: str | None = None, leaf=None):
+    folder = root / "llm_rosetta_ext" / ext_id
+    (folder / "llm" / "chat_completions").mkdir(parents=True)
+    (folder / "plugin.yaml").write_text(
+        manifest if manifest is not None else _manifest(ext_id)
+    )
+    (folder / "provider.yaml").write_text(
+        "connection:\n  base_url: https://example.invalid\n"
+    )
+    (folder / "llm" / "chat_completions" / "provider.yaml").write_text(
+        leaf
+        if leaf is not None
+        else f"name: {ext_id}--chat_completions\nmodel_type: llm\nformat: chat_completions\n"
+    )
+    return folder
+
+
+@pytest.fixture
+def path(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(tmp_path))
+    importlib.invalidate_caches()
+    return tmp_path
+
+
+def _status(ext_id: str):
+    return next(s for s in list_extensions() if s.id == ext_id)
+
+
+class TestLoading:
+    def test_an_extension_registers_its_shims_and_is_attributed(self, path):
+        _extension(path, "acme")
+
+        loaded = load_extensions()
+
+        assert [s.name for s in loaded] == ["acme--chat_completions"]
+        assert get_shim("acme--chat_completions") is not None
+        assert plugin_source("acme--chat_completions") == "acme 0.1.0"
+        status = _status("acme")
+        assert status.state == "loaded" and status.reason is None
+        assert status.shims == ("acme--chat_completions",)
+        assert status.source == "namespace"
+
+    def test_the_vendor_manifest_reaches_the_leaf(self, path):
+        _extension(path, "acme")
+        load_extensions()
+        shim = get_shim("acme--chat_completions")
+        assert shim is not None
+        assert shim.connection.base_url == "https://example.invalid"
+
+    def test_a_transport_only_extension_loads_without_shims(self, path):
+        folder = path / "llm_rosetta_ext" / "lane"
+        folder.mkdir(parents=True)
+        (folder / "plugin.yaml").write_text(
+            textwrap.dedent("""\
+                id: lane
+                name: lane
+                version: 0.1.0
+                maturity: beta
+                requires: {surface: 1, ir: 1}
+                provides: {transports: [lane]}
+                """).replace("surface: 1", f"surface: {SURFACE_VERSION}")
+        )
+        assert load_extensions() == []
+        assert _status("lane").state == "loaded"
+
+    def test_no_extension_installed_is_not_an_error(self):
+        assert load_extensions() == []
+        assert list_extensions() == ()
+
+    def test_the_status_is_rebuilt_on_every_load(self, path):
+        _extension(path, "acme")
+        load_extensions()
+        assert [s.id for s in list_extensions()] == ["acme"]
+        (path / "llm_rosetta_ext" / "acme" / "plugin.yaml").unlink()
+        (path / "llm_rosetta_ext" / "acme" / "provider.yaml").unlink()
+        unregister_shim("acme--chat_completions")
+        for name in [n for n in sys.modules if n.split(".")[0] == "llm_rosetta_ext"]:
+            del sys.modules[name]
+        importlib.invalidate_caches()
+        load_extensions()
+        assert list_extensions() == ()
+
+
+class TestReload:
+    def test_loading_twice_replaces_the_extensions_own_shims(self, path):
+        _extension(path, "acme")
+
+        load_extensions()
+        again = load_extensions()
+
+        assert [s.name for s in again] == ["acme--chat_completions"]
+        status = _status("acme")
+        assert status.state == "loaded" and status.reason is None
+        assert get_shim("acme--chat_completions") is not None
+        assert plugin_source("acme--chat_completions") == "acme 0.1.0"
+
+    def test_a_reload_after_the_extension_broke_removes_its_shims(self, path):
+        folder = _extension(path, "acme")
+        load_extensions()
+        (folder / "plugin.yaml").write_text("id: acme\nname: x\n")
+
+        load_extensions()
+
+        assert _status("acme").state == "failed"
+        # the manifest could not be read, so the old registration is not kept
+        # on its word; the next successful load registers it again
+        (folder / "plugin.yaml").write_text(_manifest("acme"))
+        load_extensions()
+        assert _status("acme").state == "loaded"
+
+    def test_a_reload_keeps_a_name_that_another_extension_holds(self, path):
+        # ``aaa_x--chat`` belongs to ``aaa`` (a lane form) and to ``aaa_x``
+        # (the id itself): both may declare it, and only one can own it.
+        _extension(
+            path,
+            "aaa",
+            manifest=_manifest("aaa", shims=["aaa_x--chat_completions"]),
+            leaf="name: aaa_x--chat_completions\nmodel_type: llm\nformat: chat_completions\n",
+        )
+        _extension(
+            path,
+            "aaa_x",
+            manifest=_manifest("aaa_x", shims=["aaa_x--chat_completions"]),
+            leaf="name: aaa_x--chat_completions\nmodel_type: llm\nformat: chat_completions\n",
+        )
+
+        for _ in range(2):
+            load_extensions()
+            assert _status("aaa").state == "loaded"
+            second = _status("aaa_x")
+            assert second.state == "failed"
+            assert "already registered" in (second.reason or "")
+            assert plugin_source("aaa_x--chat_completions") == "aaa 0.1.0"
+
+
+class TestGating:
+    def test_an_incompatible_surface_is_skipped_and_registers_nothing(self, path):
+        _extension(
+            path, "acme", manifest=_manifest("acme", surface=SURFACE_VERSION + 1)
+        )
+
+        assert load_extensions() == []
+
+        status = _status("acme")
+        assert status.state == "skipped"
+        assert "surface" in (status.reason or "")
+        assert get_shim("acme--chat_completions") is None
+
+    def test_an_invalid_manifest_fails_with_the_problem(self, path):
+        _extension(path, "acme", manifest="id: acme\nname: x\n")
+        load_extensions()
+        status = _status("acme")
+        assert status.state == "failed"
+        assert "invalid extension manifest" in (status.reason or "")
+
+    def test_a_manifest_id_that_differs_from_the_folder_fails(self, path):
+        _extension(
+            path, "acme", manifest=_manifest("acme", id="other", shims=["other--x"])
+        )
+        load_extensions()
+        status = next(s for s in list_extensions() if s.path.name == "acme")
+        assert status.state == "failed" and "folder" in (status.reason or "")
+        assert get_shim("other--x") is None
+
+    def test_a_dir_with_provider_yaml_but_no_manifest_is_named(self, path):
+        folder = _extension(path, "acme")
+        (folder / "plugin.yaml").unlink()
+        load_extensions()
+        status = _status("acme")
+        assert status.state == "failed" and "no plugin.yaml" in (status.reason or "")
+        assert get_shim("acme--chat_completions") is None
+
+    def test_one_bad_extension_does_not_stop_the_others(self, path):
+        _extension(path, "aaa", manifest="not: [valid")
+        _extension(path, "bbb")
+        load_extensions()
+        assert _status("aaa").state == "failed"
+        assert _status("bbb").state == "loaded"
+        assert get_shim("bbb--chat_completions") is not None
+
+
+class TestIsolation:
+    def test_a_declared_shim_that_is_not_provided_rolls_the_extension_back(self, path):
+        _extension(
+            path,
+            "acme",
+            manifest=_manifest(
+                "acme", shims=["acme--chat_completions", "acme--missing"]
+            ),
+        )
+        load_extensions()
+        status = _status("acme")
+        assert status.state == "failed"
+        assert "acme--missing" in (status.reason or "")
+        assert get_shim("acme--chat_completions") is None
+        assert plugin_source("acme--chat_completions") is None
+
+    def test_a_sidecar_that_raises_rolls_the_extension_back(self, path):
+        folder = _extension(
+            path,
+            "acme",
+            manifest=_manifest(
+                "acme", shims=["acme--chat_completions", "acme--messages"]
+            ),
+        )
+        second = folder / "llm" / "messages"
+        second.mkdir()
+        (second / "provider.yaml").write_text(
+            "name: acme--messages\nmodel_type: llm\nformat: messages\n"
+        )
+        (second / "transforms.py").write_text("raise RuntimeError('boom')\n")
+
+        load_extensions()
+
+        status = _status("acme")
+        assert status.state == "failed"
+        assert "RuntimeError" in (status.reason or "") and "boom" in (
+            status.reason or ""
+        )
+        assert get_shim("acme--chat_completions") is None
+        assert plugin_source("acme--chat_completions") is None
+
+    def test_an_undeclared_shim_in_the_tree_is_not_registered(self, path):
+        folder = _extension(path, "acme")
+        extra = folder / "llm" / "messages"
+        extra.mkdir()
+        (extra / "provider.yaml").write_text(
+            "name: acme--messages\nmodel_type: llm\nformat: messages\n"
+        )
+        load_extensions()
+        assert _status("acme").state == "loaded"
+        assert get_shim("acme--messages") is None
+
+    def test_a_core_built_in_is_never_replaced(self, path):
+        builtin = next(s for s in list_shims() if "--" in s.name)
+        vendor = builtin.name.partition("--")[0]
+        _extension(
+            path,
+            vendor,
+            manifest=_manifest(vendor, shims=[builtin.name]),
+            leaf=f"name: {builtin.name}\nmodel_type: llm\nformat: chat_completions\n",
+        )
+
+        load_extensions()
+
+        status = _status(vendor)
+        assert status.state == "failed"
+        assert "already registered" in (status.reason or "")
+        assert get_shim(builtin.name) is builtin
+
+    def test_the_second_folder_with_the_same_id_is_refused(self, tmp_path, monkeypatch):
+        first, second = tmp_path / "one", tmp_path / "two"
+        _extension(first, "acme")
+        _extension(second, "acme")
+        monkeypatch.syspath_prepend(str(second))
+        monkeypatch.syspath_prepend(str(first))
+        importlib.invalidate_caches()
+
+        load_extensions()
+
+        states = sorted(s.state for s in list_extensions() if s.id == "acme")
+        assert states == ["failed", "loaded"]
+        failed = next(s for s in list_extensions() if s.state == "failed")
+        assert "already provided" in (failed.reason or "")
+
+
+class TestDiscovery:
+    def test_an_entry_point_and_the_namespace_find_one_extension_once(
+        self, path, monkeypatch
+    ):
+        _extension(path, "acme")
+
+        class _Entry:
+            name = "acme"
+            value = "llm_rosetta_ext.acme"
+
+        monkeypatch.setattr(
+            _discovery,
+            "_entry_points",
+            lambda group: [_Entry()] if group == _discovery.ENTRY_POINT_GROUP else [],
+        )
+        load_extensions()
+        assert [s.id for s in list_extensions()] == ["acme"]
+        assert _status("acme").source == "entry point"
+
+    def test_an_entry_point_that_cannot_be_located_is_reported(self, monkeypatch):
+        class _Entry:
+            name = "ghost"
+            value = "llm_rosetta_ext.ghost"
+
+        monkeypatch.setattr(
+            _discovery,
+            "_entry_points",
+            lambda group: [_Entry()] if group == _discovery.ENTRY_POINT_GROUP else [],
+        )
+        load_extensions()
+        status = _status("ghost")
+        assert status.state == "failed"
+
+    def test_the_retired_group_is_reported_and_never_run(self, monkeypatch, caplog):
+        class _Entry:
+            name = "old_plugin"
+            value = "old_package:register"
+
+            def load(self):  # pragma: no cover - must not be called
+                raise AssertionError("a retired entry point was run")
+
+        monkeypatch.setattr(
+            _discovery,
+            "_entry_points",
+            lambda group: (
+                [_Entry()] if group == _discovery.LEGACY_ENTRY_POINT_GROUP else []
+            ),
+        )
+        with caplog.at_level(logging.ERROR, logger="llm_rosetta.shims.providers"):
+            assert load_extensions() == []
+        assert any(
+            "old_plugin" in r.getMessage()
+            and "llm_rosetta.extensions" in r.getMessage()
+            for r in caplog.records
+        ), caplog.text
