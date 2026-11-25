@@ -78,9 +78,10 @@ def _healthy(base_url: str) -> bool:
 def running_gateway(*, keep: bool = False, timeout: float = 30.0) -> Iterator[str]:
     """Run a throwaway gateway and yield its base URL.
 
-    The gateway is the package in this working tree (``python -m
-    llm_rosetta_gateway``), so the matrix renders the CSS of the branch being
-    reviewed rather than whatever is installed globally.
+    The gateway is the package in this working tree (``llm_rosetta_gateway.main``,
+    the function the ``llm-rosetta-gateway`` script runs), so the matrix renders
+    the CSS of the branch being reviewed rather than whatever is installed
+    globally.
 
     Args:
         keep: Leave the temporary config, data directory and log on disk and
@@ -104,8 +105,8 @@ def running_gateway(*, keep: bool = False, timeout: float = 30.0) -> Iterator[st
     proc = subprocess.Popen(
         [
             sys.executable,
-            "-m",
-            "llm_rosetta_gateway",
+            "-c",
+            "from llm_rosetta_gateway import main; main()",
             "--config",
             str(config),
             "--port",

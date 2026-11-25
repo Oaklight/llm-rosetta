@@ -152,7 +152,13 @@ def test_the_cli_prints_one_line_and_exits_1(tmp_path: Path) -> None:
         ]
     )
     result = subprocess.run(
-        [sys.executable, "-m", "llm_rosetta_gateway", "--config", str(path)],
+        [
+            sys.executable,
+            "-c",
+            "from llm_rosetta_gateway import main; raise SystemExit(main())",
+            "--config",
+            str(path),
+        ],
         capture_output=True,
         text=True,
         env=env,

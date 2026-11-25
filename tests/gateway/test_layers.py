@@ -74,13 +74,12 @@ LAYERS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("operations", ("ops",)),
     ("engine", ("pipelines", "proxy")),
     ("serving", ("admin", "admin_api", "app")),
-    ("entry", ("__init__", "__main__", "cli")),
+    ("entry", ("__init__", "cli")),
 )
 
 #: The modules the package root keeps, and why each is not in a package.
 ROOT_MODULES: dict[str, str] = {
     "__init__": "the package: version and lazy public names",
-    "__main__": "python -m llm_rosetta_gateway",
     "admin_api": "the surface admin depends on; its own boundary",
     "surface": "the core surface level this gateway needs; its boundary with core",
     "updates": "reads the changelog the release workflow writes beside the "
