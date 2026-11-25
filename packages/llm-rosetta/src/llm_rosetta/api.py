@@ -214,7 +214,7 @@ __all__ = [
     "staging_registry",
     "unregister_shim",
     "validate_shim_declaration",
-    # Shim scaffolding (the ``shims new`` / ``check`` / ``migrate`` commands)
+    # Shim scaffolding (``scripts/dev/new_shim.py`` and the tree check)
     "add_scaffold_arguments",
     "run_scaffold",
     "run_scaffold_check",

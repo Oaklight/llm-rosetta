@@ -71,7 +71,7 @@ def test_the_route_reports_the_file_and_the_json_path(monkeypatch):
     assert body["error"].startswith(
         "Failed to read config: " + _CONFIG_PATH + ": models.emb.type: "
     )
-    assert "llm-rosetta-migrate" in body["error"]
+    assert "llm-rosetta migrate" in body["error"]
 
 
 def test_a_current_spelling_still_loads(monkeypatch):

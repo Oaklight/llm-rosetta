@@ -530,7 +530,7 @@ class TestBackfillTotalTokens:
 
     @pytest.mark.asyncio
     async def test_the_retired_anthropic_spelling_is_not_repaired(self, pm):
-        """Only ``llm-rosetta-migrate --db`` rewrites the tag, then the repair runs."""
+        """Only ``llm-rosetta migrate --db`` rewrites the tag, then the repair runs."""
         await pm.insert_log_entries(
             [
                 self._row("legacy", target="anthropic", total=45, cache_read_tokens=20),

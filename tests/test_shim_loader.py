@@ -996,7 +996,7 @@ class TestShimPair:
         """``embedding`` is an error that names ``embeddings`` and the migrate command."""
         with pytest.raises(ValueError, match="'embeddings'") as info:
             self._load(tmp_path, "name: x\nmodel_type: embedding\nformat: openai\n")
-        assert "llm-rosetta-migrate" in str(info.value)
+        assert "llm-rosetta migrate" in str(info.value)
 
     def test_mismatched_pair_is_refused(self, tmp_path: Path):
         with pytest.raises(ValueError, match="not a embeddings format"):

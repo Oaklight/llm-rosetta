@@ -356,7 +356,7 @@ def _backup_previous(path: str) -> None:
 
     One rolling copy of the file as it was before the last gateway write:
     each write replaces the previous ``.prev``.  The name is one no other tool
-    writes — ``llm-rosetta-migrate --write`` and operators keep their own
+    writes — ``llm-rosetta migrate --write`` and operators keep their own
     ``<path>.bak``, which a rolling copy must never overwrite.  The copy goes
     to a temporary file first, so a reader never sees half of it.
     """

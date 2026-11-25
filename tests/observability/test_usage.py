@@ -712,7 +712,7 @@ class TestRetiredModelTypeSpellings:
         usage = dict(prompt_tokens=1)
         with pytest.raises(ValueError, match=f"'{new}'"):
             token_total(usage, old)
-        with pytest.raises(ValueError, match="llm-rosetta-migrate"):
+        with pytest.raises(ValueError, match="llm-rosetta migrate"):
             usage_columns(usage, old)
 
     def test_an_unknown_type_is_still_a_key_error(self):

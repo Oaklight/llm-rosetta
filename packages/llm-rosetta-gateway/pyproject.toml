@@ -31,8 +31,6 @@ Issues = "https://github.com/Oaklight/llm-rosetta/issues"
 
 [project.scripts]
 llm-rosetta-gateway = "llm_rosetta_gateway:main"
-llm-rosetta-usage = "llm_rosetta_gateway.observability.usage.cli:main"
-llm-rosetta-migrate = "llm_rosetta_gateway.maintenance.migrate_0140:main"
 
 # The gateway's commands for the ``llm-rosetta`` dispatcher (and, for ``serve``,
 # the one ``llm-rosetta-gateway`` runs).  ``main()`` registers the same specs

@@ -1,7 +1,8 @@
 # Shim template
 
 This directory is the single source of truth for a provider shim's shape.
-`llm-rosetta-gateway shims new` renders these files; the loader that reads the
+`scripts/dev/new_shim.py` renders these files (`llm-rosetta ext new` renders an
+extension folder, whose tree has this shape); the loader that reads the
 result lives in `llm_rosetta/shims/_loader/`. Nothing here is a shim itself:
 the leading `_` keeps the directory out of every scan.
 
@@ -55,7 +56,7 @@ loads, the floor in it is not checked, and nothing says so.
 Three rules decide the path.  The loader also reads two older shapes — a
 leaf directly under the vendor, and a leaf under `<vendor>/<format>/` — so an
 existing package keeps loading; they are tolerated, not the contract, and
-`shims check` reports both.
+the tree check reports both.
 
 1. **The vendor directory is never a leaf.** `provider.yaml` there is a
    manifest, and every leaf sits below it.  A manifest carries `connection:`,
@@ -94,7 +95,7 @@ fields:
 The block is data: changing the form for a vendor is a change to the YAML, not
 to the gateway or the panel.  Entries are validated at load — a missing `key`
 or `label`, a duplicate key, or a non-boolean `required` is refused with the
-file named — and `shims check` reports the same finding before the tree is
+file named — and the tree check reports the same finding before the tree is
 installed.  Nothing declared here is a secret: the values live on the provider
 entry and are echoed to the authenticated panel, so a credential belongs in
 `api_key` or in the exchange's own record.
@@ -102,26 +103,22 @@ entry and are echoed to the authenticated panel, so a credential belongs in
 ## Create a shim
 
 ```bash
-# installed gateway, interactive
-llm-rosetta-gateway shims new acme --format chat_completions
-
-# a lane under an existing vendor
-llm-rosetta-gateway shims new acme --lane metis --format chat_completions
-
-# a whole external package
-llm-rosetta-gateway shims new acme --format chat_completions \
-    --package llm-rosetta-shim-acme
-
 # inside a checkout, into the built-in tree
 python scripts/dev/new_shim.py acme --format chat_completions
+
+# a lane under an existing vendor
+python scripts/dev/new_shim.py acme --lane metis --format chat_completions
+
+# an installable extension folder (a tree of this shape plus plugin.yaml)
+llm-rosetta ext new acme
 ```
 
 Every run loads its own output through the real loader before it reports
 success, so a shape no gateway could read fails at creation rather than at
-startup. Check an existing tree with:
+startup. Check an extension folder with `llm-rosetta ext check <folder>`, or a bare tree with:
 
 ```bash
-llm-rosetta-gateway shims check --root src/llm_rosetta_shim_acme/providers
+python -c "import sys; from pathlib import Path; from llm_rosetta.api import run_scaffold_check; sys.exit(run_scaffold_check(Path(sys.argv[1])))" src/llm_rosetta_shim_acme/providers
 ```
 
 ## How the template directory maps to a shim

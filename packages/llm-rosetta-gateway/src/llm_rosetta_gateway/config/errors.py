@@ -7,7 +7,7 @@ class RetiredConfigName(ValueError):
     """A config document spells a name that was retired.
 
     A :class:`ValueError` carrying the retired-names message (it ends with the
-    ``llm-rosetta-migrate`` command), plus where the name sits: the config file
+    ``llm-rosetta migrate`` command), plus where the name sits: the config file
     and the JSON path inside it (``models.m.capabilities[0]``).  The message
     reads ``<file>: <json path>: <retired-names message>``; either location part
     is left out until it is known.

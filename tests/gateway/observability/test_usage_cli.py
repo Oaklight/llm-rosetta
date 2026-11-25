@@ -1,4 +1,4 @@
-"""Tests for ``llm-rosetta-usage``.
+"""Tests for ``llm-rosetta usage``.
 
 The CLI's claim is narrow and worth holding to: it reads one store through the
 same code the gateway does and prints the same report, so what it prints can be
@@ -568,8 +568,8 @@ class TestItsEdges:
 
 
 class TestItIsWiredUp:
-    def test_the_console_script_points_at_main(self):
-        """The entry point is what a shell runs; a rename here breaks it."""
+    def test_the_command_points_at_main(self):
+        """The entry point is what ``llm-rosetta usage`` runs; a rename here breaks it."""
         pyproject = (
             Path(__file__).resolve().parents[3]
             / "packages"
@@ -577,7 +577,7 @@ class TestItIsWiredUp:
             / "pyproject.toml"
         )
         text = pyproject.read_text()
-        assert (
-            'llm-rosetta-usage = "llm_rosetta_gateway.observability.usage.cli:main"'
-            in text
-        ), "the console script must keep pointing at the module's main()"
+        assert 'usage = "llm_rosetta_gateway.observability.usage.cli:main"' in text, (
+            "the command must keep pointing at the module's main()"
+        )
+        assert "llm-rosetta-usage" not in text, "the old console script is removed"
