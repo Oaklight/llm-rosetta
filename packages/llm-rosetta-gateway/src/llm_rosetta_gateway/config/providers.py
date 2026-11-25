@@ -747,7 +747,9 @@ def _resolve_lane_transport(
 
     A config key wins over the shim's declaration; a name the gateway has no
     transport for is refused here, naming the provider it belongs to, rather
-    than on that provider's first request.
+    than on that provider's first request.  The ids include the ones an
+    installed transport package publishes: discovery reads package metadata,
+    so this check imports no plugin.
 
     Args:
         cfg: The provider's own config block.
@@ -759,18 +761,21 @@ def _resolve_lane_transport(
         The transport name.
 
     Raises:
-        ValueError: The name is not one the gateway ships.
+        ValueError: The name is not one the gateway or an installed package
+            supplies.
     """
-    from ..transport import TRANSPORT_NAMES
+    from ..transport.registry import installed_transport_names
 
     lane_transport = str(
         cfg.get("transport")
         or (shim.connection.transport if shim is not None else "http")
     )
-    if lane_transport not in TRANSPORT_NAMES:
+    available = installed_transport_names()
+    if lane_transport not in available:
         raise ValueError(
             f"Provider '{provider_key}': unknown transport {lane_transport!r}; "
-            f"available: {', '.join(TRANSPORT_NAMES)}"
+            f"available: {', '.join(available)}. Install the package that "
+            "provides it, or name a transport this gateway ships."
         )
     return lane_transport
 
