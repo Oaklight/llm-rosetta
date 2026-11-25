@@ -1,7 +1,7 @@
 # shim 模板
 
-这个目录是 provider shim 形状的唯一出处。`llm-rosetta-gateway shims new`
-按这里的文件渲染；读取结果的 loader 在 `llm_rosetta/shims/_loader/`。这里
+这个目录是 provider shim 形状的唯一出处。`scripts/dev/new_shim.py`
+按这里的文件渲染（`llm-rosetta ext new` 渲染扩展目录，其中的树就是这个形状）；读取结果的 loader 在 `llm_rosetta/shims/_loader/`。这里
 本身不是 shim：目录名以 `_` 开头，任何扫描都会跳过。
 
 手写 shim 之前先读这份文件。模板和某个 shim 不一致时，以模板为准，那个 shim
@@ -50,7 +50,7 @@ helper 模块在被其中某个文件 import 之前是惰性的。`transforms.py
 
 三条规则决定路径。loader 另外还能读两种旧形状——叶子直接放在 vendor 下，以及
 叶子放在 `<vendor>/<format>/` 下——已有的包因此照旧能加载；它们是兼容，不是
-约定，`shims check` 会报出这两类。
+约定，树检查会报出这两类。
 
 1. **vendor 目录永远不是叶子。** 那里的 `provider.yaml` 是 manifest，所有
    叶子都在它下面。manifest 只写 `connection:`、`logo`、`group`、
@@ -84,32 +84,28 @@ fields:
 
 这个块是数据：为某个 vendor 改表单就是改 YAML，不需要动 gateway 或面板。
 条目在加载时校验——缺 `key` 或 `label`、key 重复、`required` 不是布尔值——
-都会带着文件名被拒绝；`shims check` 会在安装这棵树之前报出同样的发现。
+都会带着文件名被拒绝；树检查会在安装这棵树之前报出同样的发现。
 这里声明的都不是机密：值存在服务方条目里、会回传给已认证的面板，因此真正的
 凭据应放在 `api_key` 或 exchange 自己的记录里。
 
 ## 创建一个 shim
 
 ```bash
-# 已安装的 gateway，交互式
-llm-rosetta-gateway shims new acme --format chat_completions
-
-# 给已有 vendor 增加一个 lane
-llm-rosetta-gateway shims new acme --lane metis --format chat_completions
-
-# 生成一个完整的外部包
-llm-rosetta-gateway shims new acme --format chat_completions \
-    --package llm-rosetta-shim-acme
-
 # 在仓库检出内，写入内置树
 python scripts/dev/new_shim.py acme --format chat_completions
+
+# 给已有 vendor 增加一个 lane
+python scripts/dev/new_shim.py acme --lane metis --format chat_completions
+
+# 可安装的扩展目录（这个形状的树加上 plugin.yaml）
+llm-rosetta ext new acme
 ```
 
 每次运行都会用真实 loader 加载自己的产物，再报告成功，所以 gateway 读不了的
-形状在创建时就失败，而不是等到启动。检查已有树：
+形状在创建时就失败，而不是等到启动。检查扩展目录用 `llm-rosetta ext check <目录>`，检查单独的树用：
 
 ```bash
-llm-rosetta-gateway shims check --root src/llm_rosetta_shim_acme/providers
+python -c "import sys; from pathlib import Path; from llm_rosetta.api import run_scaffold_check; sys.exit(run_scaffold_check(Path(sys.argv[1])))" src/llm_rosetta_shim_acme/providers
 ```
 
 ## 模板目录如何对应到 shim

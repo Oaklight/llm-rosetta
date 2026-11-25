@@ -456,6 +456,32 @@ class TestRegistration:
         )
 
 
+class TestConsoleScripts:
+    """One released console script stays; the unreleased ones are commands."""
+
+    CORE = PYPROJECT.parents[1] / "llm-rosetta" / "pyproject.toml"
+
+    @staticmethod
+    def _scripts(path: Path) -> dict[str, str]:
+        text = path.read_text(encoding="utf-8")
+        section = text.split("[project.scripts]", 1)[1]
+        section = re.split(r"^\[", section, maxsplit=1, flags=re.M)[0]
+        return dict(re.findall(r'^([a-z][a-z-]*)\s*=\s*"([^"]+)"', section, flags=re.M))
+
+    def test_the_gateway_keeps_only_its_released_script(self):
+        assert self._scripts(PYPROJECT) == {
+            "llm-rosetta-gateway": "llm_rosetta_gateway:main"
+        }
+
+    def test_core_ships_the_dispatcher(self):
+        assert self._scripts(self.CORE) == {"llm-rosetta": "llm_rosetta.cli:main"}
+
+    def test_the_entry_script_target_is_the_function_main_runs(self):
+        import llm_rosetta_gateway
+
+        assert llm_rosetta_gateway.main is cli.main
+
+
 class TestEntryPoints:
     def test_pyproject_declares_exactly_the_registered_commands(self):
         declared = {e.name: e.value for e in _declared_entry_points()}

@@ -152,7 +152,7 @@ _SHAPES_BY_KEY: Mapping[str, UsageShape] = MappingProxyType(
 
 #: API standard -> the shape its usage payload takes, derived from the format
 #: catalog.  A row written under a retired spelling (``openai_chat``,
-#: ``anthropic``, ...) names no standard here: ``llm-rosetta-migrate --db``
+#: ``anthropic``, ...) names no standard here: ``llm-rosetta migrate --db``
 #: rewrites such a row to the current name, and until it has run the row is
 #: unknown to this table (:func:`shape_for` answers ``None``).
 STANDARD_SHAPES: Mapping[str, UsageShape] = MappingProxyType(

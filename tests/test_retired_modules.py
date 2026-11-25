@@ -1,7 +1,7 @@
 """The removed-import-path table in ``retired_names`` (#919).
 
 ``RETIRED_MODULES`` is data: a removed module path and what to import
-instead.  ``llm-rosetta-migrate --scan`` reads it (see
+instead.  ``llm-rosetta migrate --scan`` reads it (see
 ``tests/gateway/test_migrate_scan_imports.py``).  These tests pin the table's
 shape and the message.
 """

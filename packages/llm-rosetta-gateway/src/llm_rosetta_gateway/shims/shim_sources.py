@@ -148,11 +148,11 @@ def _check_qualifiers(
 #: ``shims`` keys 0.14.x read and 0.15.0 refuses, with what replaced them.
 RETIRED_KEYS: dict[str, str] = {
     "presets": "declare the vendor in 'shims.install' (for example "
-    "'argonne:alcf'); 'llm-rosetta-migrate --config <path>' rewrites the key",
+    "'argonne:alcf'); 'llm-rosetta migrate --config <path>' rewrites the key",
     "include": "it selected shims of a preset; use 'shims.install' selectors and "
-    "'shims.disabled'; 'llm-rosetta-migrate --config <path>' rewrites it",
+    "'shims.disabled'; 'llm-rosetta migrate --config <path>' rewrites it",
     "exclude": "it selected shims of a preset; use '!<source>:<vendor>' in "
-    "'shims.install' and 'shims.disabled'; 'llm-rosetta-migrate --config <path>' "
+    "'shims.install' and 'shims.disabled'; 'llm-rosetta migrate --config <path>' "
     "rewrites it",
     "remotes": "an explicit archive URL has no manifest equivalent; publish a "
     "manifest source ('shims.sources') or point 'shims.paths' at a local copy",

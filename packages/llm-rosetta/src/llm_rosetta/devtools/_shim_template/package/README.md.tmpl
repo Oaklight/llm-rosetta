@@ -6,7 +6,7 @@ The provider tree is generated and checked by the core CLI; do not hand-write
 its shape:
 
 ```bash
-llm-rosetta-gateway shims check --root src/{{package}}/providers
+python -c "import sys; from pathlib import Path; from llm_rosetta.api import run_scaffold_check; sys.exit(run_scaffold_check(Path(sys.argv[1])))" src/{{package}}/providers
 ```
 
 The contract it follows is documented in `llm_rosetta/shims/_shim_template/`.

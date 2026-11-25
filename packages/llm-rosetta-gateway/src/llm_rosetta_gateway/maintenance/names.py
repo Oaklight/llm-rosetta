@@ -20,7 +20,7 @@ def _retired_error(
 
     The message is the retired-names diagnostic: it names the replacement, the
     standalone package's ``shims.install`` entry when there is one, and ends with the
-    ``llm-rosetta-migrate`` command.
+    ``llm-rosetta migrate`` command.
     """
     from llm_rosetta.api import retired_names
 

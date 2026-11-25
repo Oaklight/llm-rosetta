@@ -144,7 +144,7 @@ class _UsageMixin(_StoreState):
             logger.warning(
                 "%d request_log rows carry a retired provider tag (%s); their "
                 "usage totals are not repaired and reports list them under the "
-                "old name; run 'llm-rosetta-migrate --db <data dir>' (add "
+                "old name; run 'llm-rosetta migrate --db <data dir>' (add "
                 "--write to apply), see the migration guide",
                 count,
                 ", ".join(retired),

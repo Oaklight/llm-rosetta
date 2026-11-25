@@ -7,9 +7,9 @@ shape, either from flags or by asking for each field, and then *loads* it: the
 last step runs the real loader over the new leaf, so a scaffold no gateway
 could use fails here rather than at startup.
 
-The same code backs two entry points: ``llm-rosetta-gateway shims new`` (the
-installed command) and ``scripts/dev/new_shim.py`` (a repository checkout, where
-the built-in tree is the default target).
+The command is ``scripts/dev/new_shim.py`` (a repository checkout, where the
+built-in tree is the default target); ``llm-rosetta ext new`` renders an
+extension folder from its own templates.
 
 Layouts::
 
@@ -402,8 +402,9 @@ def inspect_target(root: Path, vendor: str, name: str) -> tuple[str | None, list
         if legacy:
             notes.append(
                 f"{vendor} still holds format directories directly under it "
-                f"({', '.join(legacy)}); `llm-rosetta-gateway shims check --root "
-                f"{root}` reports the canonical path"
+                f"({', '.join(legacy)}); the tree check (`run_scaffold_check`, or "
+                f"`llm-rosetta ext check` on an extension folder) reports the "
+                f"canonical path"
             )
     return None, notes
 
@@ -1335,7 +1336,7 @@ def _run(args: argparse.Namespace) -> int:
     if shape.leaf_only:
         print(
             "note: this package models each provider as its own vendor leaf; "
-            "the scaffold now writes <vendor>/<type>/ — run `shims check` for "
+            "the scaffold now writes <vendor>/<type>/ — run the tree check for "
             "the canonical path of what is already there"
         )
     base_url = args.base_url or None

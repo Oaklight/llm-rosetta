@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Repository wrapper around :mod:`llm_rosetta.devtools.scaffold`.
 
-The command is installed as ``llm-rosetta-gateway shims new``; this copy exists
-so a checkout can scaffold into the built-in tree — which is not writable in an
-installed package — without remembering that path.  Keep it a wrapper: the flags
-and the prompts live in the module, so the two entry points cannot drift.
+The gateway's ``shims new`` is gone (``llm-rosetta ext new`` creates an extension
+folder).  This command is how a checkout scaffolds into the built-in tree, which
+is not writable in an installed package, without remembering that path.  Keep it
+a wrapper: the flags and the prompts live in the module.
 """
 
 from __future__ import annotations

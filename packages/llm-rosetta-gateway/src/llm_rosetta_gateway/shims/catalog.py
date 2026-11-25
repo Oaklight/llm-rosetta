@@ -10,7 +10,7 @@ Shims page lists what a source's manifest publishes.
 ``shims.presets`` keys named.  Two things still read it: the sentence a missing
 standalone shim gets (:func:`source_package_advice`, and
 :func:`legacy_shim_migration_advice` for an older spelling), which names the
-``shims.install`` entry to declare, and ``llm-rosetta-migrate``, which rewrites
+``shims.install`` entry to declare, and ``llm-rosetta migrate``, which rewrites
 an old ``shims.presets`` key into that entry.  The retired-names table
 (``llm_rosetta.retired_names``) names the replacement of the older spellings;
 a test here keeps the two lists in step.

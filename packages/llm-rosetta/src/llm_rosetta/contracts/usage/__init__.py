@@ -52,7 +52,7 @@ be attributed, and where the rows are stored::
     report.to_payload({bucket: key_id for ...})
 
 The shell entry point that reads one store and prints the same report —
-``llm-rosetta-usage`` — ships with the gateway distribution, because only the
+``llm-rosetta usage`` — ships with the gateway distribution, because only the
 gateway writes that store: :mod:`llm_rosetta_gateway.observability.usage.cli`.
 """
 

@@ -22,5 +22,5 @@ jobs:
         run: pytest
       - name: The tree still satisfies the shim contract
         run: |
-          pip install llm-rosetta-gateway
-          llm-rosetta-gateway shims check --root src/{{package}}/providers
+          pip install llm-rosetta
+          python -c "import sys; from pathlib import Path; from llm_rosetta.api import run_scaffold_check; sys.exit(run_scaffold_check(Path(sys.argv[1])))" src/{{package}}/providers

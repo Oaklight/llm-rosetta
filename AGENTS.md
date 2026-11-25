@@ -109,7 +109,7 @@ module per family (their dialects differ in parameters, not in message
 structure).  The model-type vocabulary is `llm`, `embeddings`, `rerank`,
 `decisions`; the category follows its endpoint's spelling.  `embedding` and
 `decision` were retired in 0.14.0: every boundary that reads a model type
-rejects them with the replacement and the `llm-rosetta-migrate` command.
+rejects them with the replacement and the `llm-rosetta migrate` command.
 
 | Model type | Formats | Module |
 |-----------|---------|--------|
@@ -142,7 +142,7 @@ declare the differences.
 | Loader | `shims/_loader/` | Reads a shim tree: directory walk, `provider.yaml` parsing, sidecars, vendor manifests, `provider.schema.json` (internal) |
 | Built-in shims | `shims/builtin/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type |
 | Vendor manifest | `shims/builtin/<vendor>/provider.yaml` | Optional per-vendor defaults every leaf inherits: `connection:` (the credential) plus the vendor's own `logo` / `group` / `group_label`; `auth.py` sits beside it |
-| Tree contract | `devtools/_shim_template/` | The path rules (`<vendor>[/<lane>]/<type>[/<format>]/provider.yaml`), the file allow-list, and the skeleton `shims new` renders; `shims check` reports a tree that departs from it, `shims migrate --write` moves one onto it |
+| Tree contract | `devtools/_shim_template/` | The path rules (`<vendor>[/<lane>]/<type>[/<format>]/provider.yaml`), the file allow-list, and the skeleton `scripts/dev/new_shim.py` renders; `llm-rosetta ext check` reports an extension folder (its tree included) that departs from it |
 | External shim sources | `llm_rosetta_gateway/shims/` | Manifest installs (`manifest_sources/`: plan, selection, freshness, install, status), directory loader, manifest-source catalogue |
 
 ### Gateway
@@ -161,14 +161,14 @@ supported format and forwards them to any configured upstream provider.
 | `routing/` | Candidate selection: the route container plus the pluggable strategies (weighted round-robin, affinity) |
 | `jobs/` | Background jobs: the envelope (`model.py`), store, queue, worker, handlers |
 | `quota/` | Provider quota probing and quota-aware credential rotation: `service.py` runs the probes (callers import every quota function from it), `allowance.py` answers what routing and admin read, `signals.py` records what live requests report |
-| `maintenance/` | Maintenance steps: backfills, config, dumps, keystore, migrations, startup, the retired-name guard (`names.py`); `migrate_0140.py` is the `llm-rosetta-migrate` console script |
+| `maintenance/` | Maintenance steps: backfills, config, dumps, keystore, migrations, startup, the retired-name guard (`names.py`); `migrate_0140.py` is the `migrate` command (`llm-rosetta migrate`) |
 | `middleware/` | Auth, rate limiting, error format, hop limit, headers |
 | `transport/` | Upstream transports: `http` (HTTP/SSE), `acp` (a local agent CLI over stdio JSON-RPC; its body/event codec is `acp_chunks.py`), `claude_cli` (the official Claude Code CLI as a model client, with a per-turn loopback relay in `claude_cli_relay.py`); a provider picks one with `connection.transport` |
 | `ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
 | `admin/` | Admin panel and its routes, over the observability layer; reaches the gateway through `admin_api.py` (see *Admin boundary*) |
 | `admin_api.py` | The `AdminContext` protocols admin depends on; `create_app` exposes the adapter (`app/admin_context.py`) as `app.admin` |
-| `observability/` | Telemetry: the gateway logger and its formatters (`logging.py`), metrics, request log, SQLite persistence, ops log, error dumps, capture, retention, sanitizing, profiler state; `observability/usage/cli.py` is the `llm-rosetta-usage` console script |
-| `cli/` | The `llm-rosetta-gateway` console script and `python -m llm_rosetta_gateway` (`cli/__init__.py`), and the startup banner |
+| `observability/` | Telemetry: the gateway logger and its formatters (`logging.py`), metrics, request log, SQLite persistence, ops log, error dumps, capture, retention, sanitizing, profiler state; `observability/usage/cli.py` is the `usage` command (`llm-rosetta usage`) |
+| `cli/` | The gateway's commands (`serve`, `init`, `add`, `credential`, `password`, `db`) as `CommandSpec`s that `main()` registers and `pyproject.toml` declares under `llm_rosetta.commands`, the `llm-rosetta-gateway` console script (`llm-rosetta-gateway [args]` is `llm-rosetta serve [args]` when the arguments are empty or start with an option) and `python -m llm_rosetta_gateway` (`cli/__init__.py`), and the startup banner |
 | `keystore/` | The SQLite-backed API key store (`__init__.py`); its import path is unchanged, so argo-proxy's `KeyContext` import still resolves |
 | `updates.py` | Release check and self-update; stays at the root because it reads the changelog the release workflow writes beside the package root |
 | `surface.py` | The core surface level the gateway asserts at startup (see *Host surface*) |
@@ -252,7 +252,8 @@ Core modules (`packages/llm-rosetta/src/llm_rosetta/`):
 | `converters/` | One package per `(model_type, format)`; `base/` is the abstract contract; `registry.py` binds formats to classes |
 | `ir/` | IR logic: `primitives/`, `tools/`, `passes/` |
 | `types/` | Typed IR dataclasses in `types/ir/`; provider shapes for reference in `types/messages/`, `types/openai/`, `types/google/` |
-| `contracts/` | The extension contracts: `shim.py`, `transform.py`, `auth.py`, `quota.py`, `routing.py`, `usage/` |
+| `contracts/` | The extension contracts: `shim.py`, `transform.py`, `auth.py`, `quota.py`, `routing.py`, `command.py` (a subcommand a distribution adds to `llm-rosetta`), `usage/` |
+| `cli.py` | The `llm-rosetta` dispatcher (`python -m llm_rosetta`): it owns `ext` (`list`, `install`, `remove`, `doctor`, `new`, `check`; `extensions/_cli.py`) and `help`, and runs every other command from the `llm_rosetta.commands` entry point group or `register_command`; it never starts a server |
 | `shims/` | `provider_shim.py` (the registry), `_loader/` (the code that reads a shim tree), `builtin/` (the bundled vendor data: one manifest per vendor/model-type/format), and `providers/` (the 0.13.0 loader path: forwards its names, deprecated, until 0.15.0) |
 | `pipeline/` | Chat and typed conversion pipelines |
 | `fidelity/` | Fidelity baseline and checker |
@@ -278,7 +279,7 @@ Conventions the filesystem does not show:
   and will be removed in a later release. Do not add code to it.
 - Provider-type, shim and model-type names that were renamed have no alias.
   A retired spelling raises, naming its replacement and the
-  `llm-rosetta-migrate` command (`retired_names.py`); to retire another name,
+  `llm-rosetta migrate` command (`retired_names.py`); to retire another name,
   add a row there. Do not add a translating table.
 - The 0.13.0 converter compat packages and class aliases are removed.
   The packages are `converters/{embedding,openai_chat,openai_responses,anthropic,
