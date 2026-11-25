@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "{{distribution}}"
+version = "0.1.0"
+description = "llm-rosetta extension: {{name}}"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+# Standard library only beyond core: an extension must run where pip is absent.
+dependencies = ["llm-rosetta>={{core_floor}}"]
+
+[project.entry-points."llm_rosetta.extensions"]
+{{id}} = "llm_rosetta_ext.{{id}}"
+
+# The folder is the package: no src/ and no inner directory.
+[tool.setuptools]
+package-dir = { "llm_rosetta_ext.{{id}}" = "." }
+packages = [{{packages}}]
+
+[tool.setuptools.package-data]
+"llm_rosetta_ext.{{id}}" = [{{package_data}}]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

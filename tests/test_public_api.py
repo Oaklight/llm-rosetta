@@ -153,6 +153,10 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "run_scaffold",
             "run_scaffold_check",
             "run_scaffold_migrate",
+            # Extension authoring
+            "add_ext_arguments",
+            "run_ext_check",
+            "run_ext_new",
             # Vendor CLI sign-in
             "CliLoginError",
             "begin_cli_login",
@@ -192,7 +196,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "SURFACE_VERSION",
             "__version__",
         ],
-        "max_count": 85,
+        "max_count": 88,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
