@@ -437,7 +437,7 @@ class TestTheBuilderWiresTheExchange:
                 raise AssertionError("a vendor-managed exchange mints nothing")
 
             def account_id(self, ctx):
-                seen.update(ctx.config.get("acp_env") or {})
+                seen.update(ctx.config.get("transport_options", {}).get("env") or {})
                 return None
 
         name = "__test_cli_home_exchange__"
@@ -449,7 +449,9 @@ class TestTheBuilderWiresTheExchange:
                     base_url="http://claude.local",
                     transport="claude_cli",
                     keyless=True,
-                    cli_env={"CLAUDE_CONFIG_DIR": "{acp_home}/claude"},
+                    transport_options={
+                        "env": {"CLAUDE_CONFIG_DIR": "{acp_home}/claude"}
+                    },
                 ),
                 auth=Exchange(),
             )
@@ -466,7 +468,7 @@ class TestTheBuilderWiresTheExchange:
             unregister_shim(name)
 
         assert info.auth_context is not None
-        assert seen == info.cli_env
+        assert seen == info.transport_options["env"]
         assert seen["CLAUDE_CONFIG_DIR"] == f"{info.acp_state_dir}/claude"
 
 

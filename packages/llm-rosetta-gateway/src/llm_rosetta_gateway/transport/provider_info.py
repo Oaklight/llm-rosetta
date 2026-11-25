@@ -17,7 +17,7 @@ from __future__ import annotations
 import hashlib
 import itertools
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from typing import Any
 
@@ -246,12 +246,7 @@ class ProviderInfo:
         acp_env: dict[str, str] | None = None,
         acp_env_unset: tuple[str, ...] = (),
         acp_session_meta: dict[str, Any] | None = None,
-        cli_argv: tuple[str, ...] | None = None,
-        cli_env: dict[str, str] | None = None,
-        cli_env_unset: tuple[str, ...] = (),
-        cli_args: tuple[str, ...] = (),
-        cli_upstream: str | None = None,
-        cli_processes: int = 1,
+        transport_options: Mapping[str, Any] | None = None,
         acp_argv_custom: bool = False,
         acp_harden: bool = True,
         acp_state_dir: str | None = None,
@@ -362,27 +357,9 @@ class ProviderInfo:
         # declares it in the shim; one whose profile already disables tools
         # leaves it empty.
         self.acp_session_meta = dict(acp_session_meta or {})
-        # The model-client command a ``claude_cli`` transport starts, when the
-        # shim declares one; ``None`` takes the transport's default.  Its
-        # process builds and signs the upstream request itself, so the gateway
-        # never holds the credential.
-        self.cli_argv = tuple(cli_argv) if cli_argv else None
-        # Environment overrides layered over the gateway's own environment for
-        # that process, and the names removed before they apply.  A variable
-        # the lane must not inherit (an API key that outranks the stored
-        # subscription) is declared by the shim, not guessed here.
-        self.cli_env = dict(cli_env or {})
-        self.cli_env_unset = tuple(cli_env_unset or ())
-        # Flags the lane adds to the transport's own, appended last so a
-        # repeated option takes the shim's value.
-        self.cli_args = tuple(cli_args or ())
-        # Where the relay forwards the CLI's request.  ``None`` is Anthropic's
-        # own API; an organization gateway is named by the shim.
-        self.cli_upstream = str(cli_upstream) if cli_upstream else None
-        # How many CLI processes this provider may run at once.  A turn holds
-        # one process for its whole life (~250 MB), so the cap is a deployment
-        # fact and requests beyond it wait instead of failing.
-        self.cli_processes = max(1, int(cli_processes or 1))
+        # The lane's own options, after the entry is overlaid on the shim's.
+        # Opaque here: the transport named in ``transport`` validates them.
+        self.transport_options: Mapping[str, Any] = dict(transport_options or {})
         # Whether the operator wrote ``acp_argv`` in the provider entry (as
         # opposed to the shim declaring it).  Whether that command still gets
         # the gateway-owned profile is :attr:`acp_harden`'s decision: the
