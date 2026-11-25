@@ -143,8 +143,9 @@ def _merged_connection(
 ) -> tuple[dict[str, Any], Path | None]:
     """Merge a leaf's connection values over its vendor manifest's.
 
-    The leaf wins per field, and ``headers`` merges per key, so a lane that
-    needs one extra header adds it without restating the rest.  A vendor whose
+    The leaf wins per field, and ``headers`` and ``transport_options`` merge
+    per key (a nested option value is replaced whole), so a lane that needs
+    one extra header or option adds it without restating the rest.  A vendor whose
     lanes genuinely differ (ALCF's per-cluster ``base_url``) keeps the
     difference on the leaf.
 
@@ -164,6 +165,10 @@ def _merged_connection(
     leaf_headers = leaf.get("headers")
     if isinstance(manifest_headers, dict) or isinstance(leaf_headers, dict):
         merged["headers"] = {**(manifest_headers or {}), **(leaf_headers or {})}
+    manifest_options = manifest.connection.get("transport_options")
+    leaf_options = leaf.get("transport_options")
+    if isinstance(manifest_options, dict) and isinstance(leaf_options, dict):
+        merged["transport_options"] = {**manifest_options, **leaf_options}
     from_manifest = (
         "token_command" not in leaf and "token_command" in manifest.connection
     )

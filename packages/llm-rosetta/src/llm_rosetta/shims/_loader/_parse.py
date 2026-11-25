@@ -237,37 +237,27 @@ def _parse_connection_env_unset(
     return names
 
 
-def _parse_connection_env(
-    raw: Any, shim_name: str, field: str = "cli_env"
-) -> dict[str, str] | None:
-    """Read a shim's ``connection.<field>`` as a string mapping.
+def _parse_transport_options(raw: Any, shim_name: str) -> dict[str, Any] | None:
+    """Read a shim's ``connection.transport_options`` as an object.
 
-    The values are handed to a subprocess environment, so a non-string would
-    fail at spawn time on the operator's machine; refusing it here puts the
-    error beside the file that has it.
+    Core does not know any transport's option names; the transport the lane
+    names validates the content.  Only the shape is checked here.
 
     Args:
-        raw: The declared value: a mapping of string to string, or ``None``.
+        raw: The declared value: a mapping, or ``None``.
         shim_name: The shim's name, for the message.
-        field: The connection key being parsed, for the message.
 
     Returns:
         A copy of the mapping, or ``None`` when the shim declares none.
 
     Raises:
-        ValueError: The value is not a mapping of strings.
+        ValueError: The value is not a mapping.
     """
     if raw is None:
         return None
     if not isinstance(raw, dict):
-        raise ValueError(
-            f"{shim_name}: connection.{field} must be a mapping of "
-            f"environment variable names to values"
-        )
-    env = {str(key): str(value) for key, value in raw.items()}
-    if any(not key for key in env):
-        raise ValueError(f"{shim_name}: connection.{field} has an empty name")
-    return env
+        raise ValueError(f"{shim_name}: connection.transport_options must be a mapping")
+    return dict(raw)
 
 
 def _parse_connection_token_command(

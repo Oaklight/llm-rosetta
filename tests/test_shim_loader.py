@@ -1186,48 +1186,45 @@ class TestClaudeCliConnection:
         assert len(shims) == 1
         return shims[0]
 
-    def test_argv_env_and_removals_are_read(self, tmp_path):
+    def test_transport_options_are_read_whole(self, tmp_path):
         shim = self._load(
             tmp_path,
             "  base_url: https://vendor.example/v1\n"
             "  transport: claude_cli\n"
-            '  cli_argv: ["claude"]\n'
-            "  cli_env:\n"
-            '    CLAUDE_CODE_ENTRYPOINT: "llm-rosetta"\n'
-            "  cli_env_unset: [ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL]\n"
-            '  cli_args: ["--setting-sources", "user"]\n',
+            "  transport_options:\n"
+            '    argv: ["claude"]\n'
+            "    env:\n"
+            '      CLAUDE_CODE_ENTRYPOINT: "llm-rosetta"\n'
+            "    retries: 3\n",
         )
 
         assert shim.connection.transport == "claude_cli"
-        assert shim.connection.cli_argv == ("claude",)
-        assert shim.connection.cli_env == {"CLAUDE_CODE_ENTRYPOINT": "llm-rosetta"}
-        assert shim.connection.cli_env_unset == (
-            "ANTHROPIC_API_KEY",
-            "ANTHROPIC_BASE_URL",
-        )
-        assert shim.connection.cli_args == ("--setting-sources", "user")
+        assert shim.connection.transport_options == {
+            "argv": ["claude"],
+            "env": {"CLAUDE_CODE_ENTRYPOINT": "llm-rosetta"},
+            "retries": 3,
+        }
 
-    def test_a_shim_without_them_declares_nothing(self, tmp_path):
+    def test_an_extension_transport_name_is_not_checked_by_the_loader(self, tmp_path):
+        shim = self._load(
+            tmp_path,
+            "  base_url: https://vendor.example/v1\n  transport: some_future_lane\n",
+        )
+
+        assert shim.connection.transport == "some_future_lane"
+
+    def test_a_shim_without_options_declares_none(self, tmp_path):
         shim = self._load(tmp_path, "  base_url: https://vendor.example/v1\n")
 
-        assert shim.connection.cli_argv is None
-        assert shim.connection.cli_env is None
-        assert shim.connection.cli_env_unset == ()
-        assert shim.connection.cli_args == ()
+        assert shim.connection.transport_options is None
 
-    @pytest.mark.parametrize("declaration", ["claude", "[]", "['']"])
-    def test_a_malformed_argv_is_refused(self, tmp_path, declaration):
-        with pytest.raises(ValueError, match="cli_argv"):
+    @pytest.mark.parametrize("declaration", ["claude", "[argv]", "7"])
+    def test_non_object_options_are_refused(self, tmp_path, declaration):
+        with pytest.raises(ValueError, match="transport_options must be a mapping"):
             self._load(
                 tmp_path,
-                f"  base_url: https://vendor.example/v1\n  cli_argv: {declaration}\n",
-            )
-
-    def test_a_malformed_env_is_refused(self, tmp_path):
-        with pytest.raises(ValueError, match="cli_env must be a mapping"):
-            self._load(
-                tmp_path,
-                "  base_url: https://vendor.example/v1\n  cli_env: ANTHROPIC_API_KEY\n",
+                "  base_url: https://vendor.example/v1\n"
+                f"  transport_options: {declaration}\n",
             )
 
 
@@ -1424,6 +1421,37 @@ class TestVendorManifest:
         assert shims["acme_b"].connection.auth_header == "x-access-tokens"
         assert shims["acme_a"].connection.headers == {"X-Shared": "1"}
         assert shims["acme_b"].connection.headers == {"X-Shared": "1", "X-Lane": "2"}
+
+    def test_transport_options_merge_per_key_and_replace_nested_values(self, tmp_path):
+        self._vendor(
+            tmp_path,
+            "connection:\n"
+            "  transport: claude_cli\n"
+            "  transport_options:\n"
+            '    argv: ["claude"]\n'
+            "    env:\n"
+            '      A: "1"\n'
+            '      B: "2"\n',
+            {
+                "a": self._leaf("a"),
+                "b": self._leaf(
+                    "b",
+                    '  transport_options:\n    args: ["--x"]\n    env:\n      A: "9"\n',
+                ),
+            },
+        )
+
+        shims = {s.name: s for s in load_providers_from_dir(tmp_path)}
+
+        assert shims["acme_a"].connection.transport_options == {
+            "argv": ["claude"],
+            "env": {"A": "1", "B": "2"},
+        }
+        assert shims["acme_b"].connection.transport_options == {
+            "argv": ["claude"],
+            "args": ["--x"],
+            "env": {"A": "9"},
+        }
 
     def test_the_manifest_declares_the_allowance_once(self, tmp_path):
         """An allowance is an account fact: one control plane, every lane."""

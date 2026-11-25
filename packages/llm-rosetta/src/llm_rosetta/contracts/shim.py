@@ -213,9 +213,11 @@ class ConnectionConfig:
 
     ``"http"`` (the default) posts a JSON body to a URL.  ``"acp"`` runs a
     local agent CLI and speaks the Agent Client Protocol to it over stdio —
-    no URL is dialed, and the request body is the lane's own turn shape.  The
-    gateway refuses a name it has no transport for at config load rather than
-    on the first request.
+    no URL is dialed, and the request body is the lane's own turn shape.  Any
+    other lowercase identifier names a transport an installed package
+    supplies; its settings go in :attr:`transport_options`.  The gateway
+    refuses a name it has no transport for at config load rather than on the
+    first request.
     """
     acp_argv: tuple[str, ...] | None = None
     """The agent command an ``acp`` transport starts.
@@ -296,53 +298,15 @@ class ConnectionConfig:
     ``api_key`` / ``token_command`` mutual exclusion for this shim, because the
     key is an input rather than a second credential.
     """
-    cli_argv: tuple[str, ...] | None = None
-    """The model-client command a ``claude_cli`` transport starts.
+    transport_options: dict[str, Any] | None = None
+    """The lane's own options, opaque to core and to the host.
 
-    The lane reaches its model by running a vendor CLI that builds and signs
-    the upstream request itself; the gateway never holds the credential.  The
-    command is a vendor fact, so the shim declares it rather than the operator
-    (``["claude"]``, or an absolute path when the binary is not on ``PATH``).
-    ``None`` takes the transport's own default.  Only read when ``transport``
-    is ``"claude_cli"``.
-    """
-    cli_env: dict[str, str] | None = None
-    """Environment overrides for the process a ``claude_cli`` transport starts.
-
-    Layered over the gateway's own environment, so ``PATH`` and the CLI's
-    login store keep working.  A vendor declares here the variables its CLI
-    needs for a correct, non-interactive lane (the caller name a subscription
-    meters by, a switch that keeps the CLI from offering its own tools).  Only
-    read when ``transport`` is ``"claude_cli"``.
-    """
-    cli_env_unset: tuple[str, ...] = ()
-    """Environment variable names removed before :attr:`cli_env` is applied.
-
-    The gateway copies its environment so the CLI keeps its login, but a
-    variable that redirects it (``ANTHROPIC_API_KEY`` bills the API instead of
-    the stored subscription; ``ANTHROPIC_BASE_URL`` points it at another host)
-    would silently change what the lane does.  Removed from the child before
-    the shim's own overrides are layered on.  Only read when ``transport`` is
-    ``"claude_cli"``.
-    """
-    cli_args: tuple[str, ...] = ()
-    """Extra arguments appended to the ``claude_cli`` command.
-
-    The transport owns the flags that keep the CLI a model client (no tools,
-    no session persistence, one turn).  A lane that needs one more — the
-    ``--setting-sources user`` that lets a host's ``apiKeyHelper`` supply the
-    credential, a ``--settings`` file, a ``--permission-prompts`` mode — names
-    it here.  Appended after the transport's own flags, so a repeated option
-    takes this value.  Only read when ``transport`` is ``"claude_cli"``.
-    """
-    cli_upstream: str | None = None
-    """Where the relay forwards the CLI's request.
-
-    ``None`` means Anthropic's own API.  An organization that fronts the API
-    with its own gateway names that host here; the CLI's request is forwarded
-    to it with the CLI's own authorization headers.  ``https://`` only, except
-    for a loopback host (tests and a local gateway).  Only read when
-    ``transport`` is ``"claude_cli"``.
+    The transport named in :attr:`transport` reads and validates them; neither
+    core nor the gateway knows an option's name.  A vendor declares here the
+    facts its lane needs (a command, its environment, an upstream) and an
+    operator may overlay them per provider entry.  Values are any JSON value.
+    A vendor manifest and a leaf merge key by key, the leaf winning per key;
+    a nested value is replaced whole, not merged.
     """
 
 

@@ -463,7 +463,7 @@
         },
         "transport": {
           "type": "string",
-          "description": "How this lane reaches its upstream: 'http' (the default), 'acp', which drives an agent CLI over stdio JSON-RPC instead of POSTing a body, or 'claude_cli', which runs the Claude Code CLI as a model client and reads its upstream request through a loopback relay."
+          "description": "How this lane reaches its upstream: 'http' (the default), 'acp', which drives an agent CLI over stdio JSON-RPC instead of POSTing a body, or the id of a transport an installed package supplies (any lowercase identifier, e.g. 'claude_cli')."
         },
         "api_key_env": {
           "type": "string",
@@ -565,42 +565,10 @@
           "description": "Extra `_meta` the gateway sends on session/new, session/load and session/resume. Vendor-specific session switches live here; e.g. Claude's adapter needs {disableBuiltInTools: true} to stop offering its own tools. Only read when transport is 'acp'.",
           "additionalProperties": true
         },
-        "cli_argv": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "description": "The model-client command a 'claude_cli' lane starts, as argv (e.g. ['claude']). The CLI builds and signs the upstream request itself; the gateway never holds its credential. Only read when transport is 'claude_cli'."
-        },
-        "cli_env": {
+        "transport_options": {
           "type": "object",
-          "description": "Environment overrides for the process a 'claude_cli' lane starts. The gateway layers them over its own environment. Only read when transport is 'claude_cli'.",
-          "additionalProperties": {
-            "type": "string"
-          }
-        },
-        "cli_env_unset": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "description": "Environment variable names removed from the inherited environment before cli_env is applied. A vendor uses this for variables that would redirect its CLI away from the signed-in account. Only read when transport is 'claude_cli'.",
-          "uniqueItems": true
-        },
-        "cli_args": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "description": "Extra arguments appended after the transport's own flags, so a repeated option takes this value. For example --setting-sources user when the host's apiKeyHelper supplies the credential. Only read when transport is 'claude_cli'."
-        },
-        "cli_upstream": {
-          "type": "string",
-          "format": "uri",
-          "description": "Where the loopback relay forwards the CLI's request. Omit for Anthropic's own API. https:// only, except for a loopback host. Only read when transport is 'claude_cli'."
+          "description": "The lane's own options, opaque to the loader and the host. The transport named in 'transport' reads and validates them. A vendor manifest and a leaf merge key by key (the leaf wins per key; a nested value is replaced whole).",
+          "additionalProperties": true
         },
         "token_refresh_interval": {
           "type": "integer",

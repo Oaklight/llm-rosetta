@@ -7,8 +7,9 @@ stdlib types, so an extension can import it without importing the host.
 
 The provider surface is a Protocol, not a class: the host passes its own
 runtime provider object, and the transport reads the fields it needs.  A
-lane's own options (a CLI command, its environment) are not part of this
-contract; they stay with the lane and the host that resolves them.
+lane's own options (a CLI command, its environment) are opaque to the
+contract: the host hands them over as ``transport_options`` and the transport
+validates them.
 
 :class:`LaneProbe` and :meth:`UpstreamStream.lane_profile` are optional
 capabilities a host may use when present.  A transport that does not answer a
@@ -19,7 +20,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -138,6 +139,13 @@ class TransportProvider(Protocol):
 
     transport: str
     """The lane id that selected this transport."""
+
+    transport_options: Mapping[str, Any]
+    """The lane's options after the provider entry is overlaid on the shim's.
+
+    Opaque to the host; the transport reads and validates it.  Empty when the
+    lane has none.
+    """
 
     def auth_headers(self) -> dict[str, str]:
         """Build the auth headers for one upstream request."""
