@@ -21,6 +21,8 @@ One module per contract:
   ``auth.py``;
 - :mod:`llm_rosetta.contracts.quota` — the allowance probe a shim ships in
   ``quota.py``;
+- :mod:`llm_rosetta.contracts.cli_login` — the vendor CLI sign-in driver an
+  ``auth.py`` sidecar uses (standard library only);
 - :mod:`llm_rosetta.contracts.routing` — the resolved route and the router
   protocol;
 - :mod:`llm_rosetta.contracts.transport` — the upstream transport protocol,

@@ -42,6 +42,14 @@ from llm_rosetta import (
 )
 from llm_rosetta.ir.passes.tool_names import ToolNameMap
 from llm_rosetta.contracts import SURFACE_VERSION
+from llm_rosetta.contracts.cli_login import (
+    CliLoginError,
+    begin_cli_login,
+    cancel_cli_login,
+    complete_cli_login,
+    run_capture,
+    subprocess_env,
+)
 from llm_rosetta.converters import get_converter_class
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.base.helpers import strip_internal_metadata
@@ -170,6 +178,13 @@ __all__ = [
     "run_scaffold",
     "run_scaffold_check",
     "run_scaffold_migrate",
+    # Vendor CLI sign-in (an ``auth.py`` sidecar imports it from the contracts)
+    "CliLoginError",
+    "begin_cli_login",
+    "cancel_cli_login",
+    "complete_cli_login",
+    "run_capture",
+    "subprocess_env",
     # Fidelity and profiling
     "DeepProfiler",
     "FidelityChecker",
