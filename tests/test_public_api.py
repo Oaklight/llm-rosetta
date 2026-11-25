@@ -153,6 +153,13 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "run_scaffold",
             "run_scaffold_check",
             "run_scaffold_migrate",
+            # Vendor CLI sign-in
+            "CliLoginError",
+            "begin_cli_login",
+            "cancel_cli_login",
+            "complete_cli_login",
+            "run_capture",
+            "subprocess_env",
             # Fidelity and profiling
             "DeepProfiler",
             "FidelityChecker",
@@ -167,7 +174,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "SURFACE_VERSION",
             "__version__",
         ],
-        "max_count": 63,
+        "max_count": 69,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count
@@ -346,6 +353,19 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "credential_for",
         ],
         "max_count": 11,
+    },
+    # The vendor CLI sign-in driver (#1703 E3): an ``auth.py`` sidecar imports it
+    # from here, and ``api`` re-exports the same objects.
+    "llm_rosetta.contracts.cli_login": {
+        "items": [
+            "CliLoginError",
+            "begin_cli_login",
+            "cancel_cli_login",
+            "complete_cli_login",
+            "run_capture",
+            "subprocess_env",
+        ],
+        "max_count": 6,
     },
     # The upstream transport contract (#1696): a host and an installed lane
     # package share these names without either importing the other.
