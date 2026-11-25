@@ -14,7 +14,9 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
+
+from llm_rosetta.contracts.transport import TransportProvider
 
 from llm_rosetta_gateway._vendor.httpclient import (
     HttpClientError,
@@ -119,13 +121,14 @@ class HttpTransport:
 
     async def send(
         self,
-        provider_info: ProviderInfo,
+        provider_info: TransportProvider,
         url: str,
         body: dict[str, Any],
         *,
         extra_headers: dict[str, str] | None = None,
     ) -> UpstreamResponse:
         """Send a non-streaming request and return the full response."""
+        provider_info = cast(ProviderInfo, provider_info)
         headers = self._build_headers(provider_info, extra_headers)
         client = self._pool.get(provider_info.proxy_url)
         try:
@@ -151,13 +154,14 @@ class HttpTransport:
 
     async def send_streaming(
         self,
-        provider_info: ProviderInfo,
+        provider_info: TransportProvider,
         url: str,
         body: dict[str, Any],
         *,
         extra_headers: dict[str, str] | None = None,
     ) -> HttpUpstreamStream:
         """Send a streaming request and return an async chunk iterator."""
+        provider_info = cast(ProviderInfo, provider_info)
         headers = self._build_headers(provider_info, extra_headers)
         client = self._pool.get(provider_info.proxy_url)
         try:

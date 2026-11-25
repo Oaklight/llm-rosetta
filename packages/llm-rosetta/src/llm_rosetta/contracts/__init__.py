@@ -21,6 +21,8 @@ One module per contract:
   ``quota.py``;
 - :mod:`llm_rosetta.contracts.routing` — the resolved route and the router
   protocol;
+- :mod:`llm_rosetta.contracts.transport` — the upstream transport protocol,
+  its response types and the provider view a lane reads;
 - :mod:`llm_rosetta.contracts.usage` — usage metering semantics and the report
   (the package, never one of its submodules).
 

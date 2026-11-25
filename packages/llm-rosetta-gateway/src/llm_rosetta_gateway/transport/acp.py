@@ -48,7 +48,7 @@ import os
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
 from .._vendor.acp import (
     ACPClient,
@@ -59,7 +59,12 @@ from .._vendor.acp import (
     PermissionOptionKind,
 )
 from .._vendor.jsonrpc import METHOD_NOT_FOUND, JSONRPCException
-from ..transport._base import UpstreamConnectionError, UpstreamResponse, UpstreamStream
+from ..transport._base import (
+    TransportProvider,
+    UpstreamConnectionError,
+    UpstreamResponse,
+    UpstreamStream,
+)
 from ..transport.provider_info import ProviderInfo
 from .acp_chunks import (
     CHUNK_ERROR,
@@ -2033,7 +2038,7 @@ class AcpTransport:
 
     async def send(
         self,
-        provider_info: ProviderInfo,
+        provider_info: TransportProvider,
         url: str,
         body: dict[str, Any],
         *,
@@ -2046,6 +2051,7 @@ class AcpTransport:
         agent broke", so the error chunk becomes the response's status and
         text, the same way a refused session does.
         """
+        provider_info = cast(ProviderInfo, provider_info)
         updates: list[dict[str, Any]] = []
         # One budget for the whole turn.  Computed before the session is
         # acquired, because opening one is a request to the same agent.
@@ -2093,7 +2099,7 @@ class AcpTransport:
 
     async def send_streaming(
         self,
-        provider_info: ProviderInfo,
+        provider_info: TransportProvider,
         url: str,
         body: dict[str, Any],
         *,
@@ -2105,6 +2111,7 @@ class AcpTransport:
         refusal then becomes ``stream.status_code`` and ``read_error()``,
         which is what a caller needs before it commits to a 200 SSE response.
         """
+        provider_info = cast(ProviderInfo, provider_info)
         try:
             # The budget is set before the session is opened: opening one is a
             # request to the same agent, and it is passed on to the prompt so

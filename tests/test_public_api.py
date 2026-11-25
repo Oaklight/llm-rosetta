@@ -326,6 +326,21 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
         ],
         "max_count": 11,
     },
+    # The upstream transport contract (#1696): a host and an installed lane
+    # package share these names without either importing the other.
+    "llm_rosetta.contracts.transport": {
+        "items": [
+            "LaneProbe",
+            "LaneReadingSink",
+            "TransportProvider",
+            "UpstreamConnectionError",
+            "UpstreamResponse",
+            "UpstreamStream",
+            "UpstreamTimeoutError",
+            "UpstreamTransport",
+        ],
+        "max_count": 8,
+    },
     # ``api`` re-exports the module object, so its ``__all__`` is the surface a
     # host reads through ``api.retired_names`` (#919 decision 4, #1630).  Every
     # attribute the gateway and core use is listed.

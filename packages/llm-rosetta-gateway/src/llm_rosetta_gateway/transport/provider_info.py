@@ -570,6 +570,29 @@ class ProviderInfo:
             return self._auth_header_fn("")
         return self._auth_header_fn(key)
 
+    def record_lane_reading(self, update: dict[str, Any]) -> bool:
+        """Persist one allowance reading a process lane's turn reported.
+
+        A process transport reads the upstream's rate-limit headers itself and
+        hands the shaped update here; the gateway owns the lane's profile and
+        its in-memory reading, so the transport needs no gateway import.
+
+        Args:
+            update: A ``session/update`` shaped mapping.
+
+        Returns:
+            Whether the update carried an allowance.
+        """
+        from .acp_quota import record_reading
+
+        return record_reading(update, self)
+
+    def lane_reading(self) -> Any | None:
+        """Return this lane's last stored allowance reading, if any."""
+        from .acp_quota import lanes_reading
+
+        return lanes_reading(self)
+
     def active_key(self) -> str | None:
         """Return the credential this request went out with, if any."""
         return _ACTIVE_CREDENTIAL.get()

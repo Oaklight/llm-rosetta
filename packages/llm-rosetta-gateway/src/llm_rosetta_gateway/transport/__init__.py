@@ -7,14 +7,17 @@ live in sub-packages:
 
 * :mod:`transport.http` — HTTP REST + SSE streaming (current).
 * :mod:`transport.acp` — a local agent CLI over the Agent Client Protocol.
-* :mod:`transport.claude_cli` — the Claude Code CLI as a model client.
 
 A lane this distribution does not ship comes from an installed package that
 publishes an entry point in :data:`TRANSPORT_ENTRY_POINT_GROUP`; see
-:mod:`transport.registry`.
+:mod:`transport.registry`.  The official Claude Code CLI is one: its shim
+ships the transport in ``llm-rosetta-shim-contrib``.
 """
 
 from ._base import (
+    LaneProbe,
+    LaneReadingSink,
+    TransportProvider,
     UpstreamConnectionError,
     UpstreamTimeoutError,
     UpstreamResponse,
@@ -22,7 +25,6 @@ from ._base import (
     UpstreamTransport,
 )
 from .acp import AcpTransport, AcpTurnError
-from .claude_cli import ClaudeCliTransport
 from .http import HttpTransport
 from .provider_info import (
     TOKEN_PENDING_SENTINEL,
@@ -58,6 +60,9 @@ __all__ = [
     "clear_transport_cache",
     "installed_transport_names",
     # Protocol + response types
+    "LaneProbe",
+    "LaneReadingSink",
+    "TransportProvider",
     "UpstreamConnectionError",
     "UpstreamTimeoutError",
     "UpstreamResponse",
@@ -68,8 +73,6 @@ __all__ = [
     # Local agent CLI over ACP
     "AcpTransport",
     "AcpTurnError",
-    # The Claude Code CLI as a model client
-    "ClaudeCliTransport",
     # Provider config
     "TOKEN_PENDING_SENTINEL",
     "AuthHeaderFn",
