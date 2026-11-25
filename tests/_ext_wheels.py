@@ -82,6 +82,7 @@ def build_wheel(
     members: Mapping[str, bytes | str] | None = None,
     transport_of: Mapping[str, str] | None = None,
     manifest: str | None = None,
+    requires_python: str | None = None,
     **plugin: Any,
 ) -> bytes:
     """A pure-Python extension wheel holding ``llm_rosetta_ext/<id>/``.
@@ -89,9 +90,13 @@ def build_wheel(
     Every ``<id>--<format>`` shim gets ``llm/<format>/provider.yaml``.  *members*
     adds files under the extension folder (``transport.py``, ``auth.py``); a
     name starting with ``../`` is written at the wheel root instead.
-    *transport_of* maps a shim name to the ``connection.transport`` it declares.
+    *transport_of* maps a shim name to the ``connection.transport`` it declares;
+    *requires_python* is written as the wheel's ``Requires-Python``.
     """
     base = f"llm_rosetta_ext/{ext_id}"
+    metadata = "Name: x\n" + (
+        f"Requires-Python: {requires_python}\n" if requires_python else ""
+    )
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
@@ -108,7 +113,7 @@ def build_wheel(
         for name, payload in (members or {}).items():
             path = name[3:] if name.startswith("../") else f"{base}/{name}"
             zf.writestr(path, payload)
-        zf.writestr(f"{ext_id}-{version}.dist-info/METADATA", "Name: x\n")
+        zf.writestr(f"{ext_id}-{version}.dist-info/METADATA", metadata)
         zf.writestr(f"{ext_id}-{version}.dist-info/RECORD", f"{base}/plugin.yaml,,\n")
     return buf.getvalue()
 
