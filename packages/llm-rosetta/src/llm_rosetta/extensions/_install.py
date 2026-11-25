@@ -30,7 +30,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
@@ -241,6 +241,83 @@ def _manifest_from(archive: zipfile.ZipFile, ext_id: str) -> ExtensionManifest:
         ) from exc
 
 
+_SPEC_RE = re.compile(r"^(>=|<=|==|!=|>|<)\s*(\d+(?:\.\d+)*)$")
+
+
+def _dotted(text: str) -> tuple[int, ...]:
+    return tuple(int(part) for part in text.split("."))
+
+
+def _compare(found: tuple[int, ...], want: tuple[int, ...]) -> int:
+    width = max(len(found), len(want))
+    a = found + (0,) * (width - len(found))
+    b = want + (0,) * (width - len(want))
+    return (a > b) - (a < b)
+
+
+def python_requirement_problem(
+    spec: str, version: Sequence[int] | None = None
+) -> str | None:
+    """Say why a ``Requires-Python`` specifier excludes an interpreter.
+
+    The specifier is a comma-separated list of ``>=``, ``>``, ``<=``, ``<``,
+    ``==`` and ``!=`` clauses on dotted versions (``>=3.10,<4``).  A clause
+    outside that set is refused rather than ignored: an installer that skips a
+    constraint it cannot read would install what cannot run.
+
+    Args:
+        spec: The specifier, as a wheel's ``METADATA`` writes it.
+        version: The interpreter version as integers; ``sys.version_info`` by
+            default.
+
+    Returns:
+        One sentence naming the clause that fails, or ``None`` when the
+        interpreter satisfies every clause.
+    """
+    running = tuple(version) if version is not None else tuple(sys.version_info[:3])
+    shown = ".".join(str(part) for part in running)
+    for clause in (item.strip() for item in spec.split(",")):
+        if not clause:
+            continue
+        match = _SPEC_RE.match(clause)
+        if match is None:
+            return (
+                f"declares Requires-Python {spec!r}, which this installer cannot read"
+            )
+        op, number = match.groups()
+        order = _compare(running, _dotted(number))
+        holds = {
+            ">=": order >= 0,
+            ">": order > 0,
+            "<=": order <= 0,
+            "<": order < 0,
+            "==": order == 0,
+            "!=": order != 0,
+        }[op]
+        if not holds:
+            return f"needs Python {spec} but this is Python {shown}"
+    return None
+
+
+def _requires_python(archive: zipfile.ZipFile) -> str | None:
+    """Read ``Requires-Python`` from the wheel's ``METADATA``, if it has one."""
+    for info in archive.infolist():
+        parts = PurePosixPath(info.filename).parts
+        if (
+            len(parts) == 2
+            and parts[0].endswith(".dist-info")
+            and parts[1] == "METADATA"
+            and info.file_size <= MAX_MANIFEST_BYTES
+        ):
+            for line in archive.read(info).decode("utf-8", "replace").splitlines():
+                if not line.strip():
+                    return None
+                name, _, value = line.partition(":")
+                if name.strip().lower() == "requires-python":
+                    return value.strip() or None
+    return None
+
+
 def _inspect(
     archive: zipfile.ZipFile,
 ) -> tuple[ExtensionManifest, list[tuple[zipfile.ZipInfo, tuple[str, ...]]]]:
@@ -295,6 +372,13 @@ def _inspect(
             f"extension {manifest.id} {manifest.version} cannot run here: "
             + "; ".join(problems)
         )
+    spec = _requires_python(archive)
+    if spec is not None:
+        python_problem = python_requirement_problem(spec)
+        if python_problem is not None:
+            raise ExtensionInstallError(
+                f"extension {manifest.id} {manifest.version} {python_problem}"
+            )
     return manifest, planned
 
 
@@ -505,6 +589,37 @@ def install_wheel(
     )
 
 
+def inspect_wheel(
+    source: str | os.PathLike[str] | bytes | bytearray, *, sha256: str | None = None
+) -> ExtensionManifest:
+    """Run every check :func:`install_wheel` runs, and write nothing.
+
+    Args:
+        source: A path to a ``.whl`` file, or its bytes.
+        sha256: The expected hex digest of the wheel; verified when given.
+
+    Returns:
+        The wheel's manifest.
+
+    Raises:
+        ExtensionInstallError: For the same reasons :func:`install_wheel` would.
+    """
+    data = _read_source(source)
+    if sha256 is not None:
+        actual = hashlib.sha256(data).hexdigest()
+        if actual != sha256.strip().lower():
+            raise ExtensionInstallError(
+                f"sha256 mismatch: expected {sha256.strip().lower()}, got {actual}"
+            )
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(data))
+    except zipfile.BadZipFile as exc:
+        raise ExtensionInstallError(f"not a valid wheel (zip) file: {exc}") from exc
+    with archive:
+        manifest, _ = _inspect(archive)
+    return manifest
+
+
 def _url_allowed(url: str) -> str | None:
     """Return why *url* may not be fetched, or ``None``."""
     parts = urllib.parse.urlsplit(url)
@@ -534,6 +649,52 @@ class _CheckedRedirect(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+def fetch_bytes(
+    url: str, *, limit: int = MAX_UNPACKED_BYTES, timeout: float = 30.0
+) -> bytes:
+    """Download a URL into memory, refusing what the installer would refuse.
+
+    Args:
+        url: An ``https`` URL (``http`` only for a loopback host).
+        limit: The most bytes accepted.
+        timeout: Seconds for each network operation.
+
+    Returns:
+        The body.
+
+    Raises:
+        ExtensionInstallError: The URL is not allowed, a redirect leaves the
+            allowed set, the body exceeds *limit*, or the download fails.
+    """
+    problem = _url_allowed(url)
+    if problem is not None:
+        raise ExtensionInstallError(problem)
+    host = (urllib.parse.urlsplit(url).hostname or "").lower()
+    handlers: list[urllib.request.BaseHandler] = [_CheckedRedirect()]
+    if urllib.parse.urlsplit(url).scheme == "http" or host in _LOOPBACK:
+        handlers.append(urllib.request.ProxyHandler({}))
+    opener = urllib.request.build_opener(*handlers)
+    chunks: list[bytes] = []
+    total = 0
+    try:
+        with opener.open(url, timeout=timeout) as response:
+            while True:
+                chunk = response.read(64 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > limit:
+                    raise ExtensionInstallError(
+                        f"download exceeds the {limit} byte cap"
+                    )
+                chunks.append(chunk)
+    except ExtensionInstallError:
+        raise
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise ExtensionInstallError(f"cannot download {url}: {exc}") from exc
+    return b"".join(chunks)
+
+
 def install_wheel_url(
     url: str,
     *,
@@ -559,37 +720,8 @@ def install_wheel_url(
     """
     if not sha256 or not sha256.strip():
         raise ExtensionInstallError("a sha256 is required to install from a URL")
-    problem = _url_allowed(url)
-    if problem is not None:
-        raise ExtensionInstallError(problem)
-    host = (urllib.parse.urlsplit(url).hostname or "").lower()
-    handlers: list[urllib.request.BaseHandler] = [_CheckedRedirect()]
-    if urllib.parse.urlsplit(url).scheme == "http" or host in _LOOPBACK:
-        handlers.append(urllib.request.ProxyHandler({}))
-    opener = urllib.request.build_opener(*handlers)
-    with tempfile.TemporaryDirectory(prefix="llm-rosetta-ext-") as tmp:
-        wheel = Path(tmp) / "download.whl"
-        total = 0
-        try:
-            with (
-                opener.open(url, timeout=timeout) as response,
-                open(wheel, "wb") as out,
-            ):
-                while True:
-                    chunk = response.read(64 * 1024)
-                    if not chunk:
-                        break
-                    total += len(chunk)
-                    if total > MAX_UNPACKED_BYTES:
-                        raise ExtensionInstallError(
-                            f"download exceeds the {MAX_UNPACKED_BYTES} byte cap"
-                        )
-                    out.write(chunk)
-        except ExtensionInstallError:
-            raise
-        except (urllib.error.URLError, OSError, ValueError) as exc:
-            raise ExtensionInstallError(f"cannot download {url}: {exc}") from exc
-        return install_wheel(wheel, sha256=sha256, dest=dest)
+    data = fetch_bytes(url, timeout=timeout)
+    return install_wheel(data, sha256=sha256, dest=dest)
 
 
 # --------------------------------------------------------------------------- #
