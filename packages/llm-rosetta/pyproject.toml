@@ -63,6 +63,9 @@ dev = [
 
 all = ["llm-rosetta[conformance,gateway,dev]"]
 
+[project.scripts]
+llm-rosetta = "llm_rosetta.cli:main"
+
 [project.urls]
 Documentation = "https://llm-rosetta.readthedocs.io"
 Repository = "https://github.com/Oaklight/llm-rosetta"

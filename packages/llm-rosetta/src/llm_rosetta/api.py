@@ -50,6 +50,23 @@ from llm_rosetta.contracts.cli_login import (
     run_capture,
     subprocess_env,
 )
+from llm_rosetta.contracts.command import (
+    COMMAND_ENTRY_POINT_GROUP,
+    CORE_COMMAND_NAMES,
+    CommandCatalog,
+    CommandConflict,
+    CommandError,
+    CommandLoadError,
+    CommandNameError,
+    CommandSpec,
+    RegisteredCommand,
+    UnknownCommand,
+    command_catalog,
+    command_summary,
+    register_command,
+    registered_commands,
+    resolve_command,
+)
 from llm_rosetta.converters import get_converter_class
 from llm_rosetta.extensions import (
     ExtensionInstallError,
@@ -212,6 +229,22 @@ __all__ = [
     "complete_cli_login",
     "run_capture",
     "subprocess_env",
+    # Subcommands a distribution adds to the ``llm-rosetta`` dispatcher
+    "COMMAND_ENTRY_POINT_GROUP",
+    "CORE_COMMAND_NAMES",
+    "CommandCatalog",
+    "CommandConflict",
+    "CommandError",
+    "CommandLoadError",
+    "CommandNameError",
+    "CommandSpec",
+    "RegisteredCommand",
+    "UnknownCommand",
+    "command_catalog",
+    "command_summary",
+    "register_command",
+    "registered_commands",
+    "resolve_command",
     # Installed extensions and what happened to each at load time
     "ExtensionStatus",
     "list_extensions",

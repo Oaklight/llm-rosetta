@@ -740,36 +740,72 @@ def pip_available() -> bool:
     return importlib.util.find_spec("pip") is not None
 
 
-def install_with_pip(spec: str, dest: str | os.PathLike[str] | None = None) -> int:
-    """Install *spec* into the extensions directory with pip.
+def install_with_pip(
+    spec: str, dest: str | os.PathLike[str] | None = None
+) -> InstalledExtension:
+    """Build *spec* into a wheel with pip and install that wheel.
 
-    Runs ``python -m pip install --no-deps --upgrade --target <dest> <spec>``.
+    pip is only the wheel builder here, never the installer: ``pip install
+    --target`` into the shared extensions directory replaces the whole
+    ``llm_rosetta_ext`` folder (the namespace every extension lives in) and
+    would delete the code of every other installed extension while leaving
+    their metadata behind.  The wheel pip builds goes through
+    :func:`install_wheel`, which touches only this extension's own folder and
+    makes the same compatibility and safety checks any wheel gets.
+
+    A local directory is copied first and built from the copy: an extension
+    folder is itself the package, so a build writes ``build/`` and
+    ``*.egg-info`` inside it, and the next build would read them back as
+    package content.
 
     Args:
         spec: A requirement specifier, a path or a URL pip accepts.
         dest: The extensions directory; :func:`extensions_dir` by default.
 
     Returns:
-        pip's exit status.
+        The installed extension.
 
     Raises:
-        ExtensionInstallError: pip is not available.
+        ExtensionInstallError: pip is not available, pip could not build the
+            wheel, it did not produce exactly one wheel, or the wheel is
+            refused by :func:`install_wheel`.
     """
     if not pip_available():
         raise ExtensionInstallError(
             "pip is not available in this interpreter; install a wheel with "
             "install_wheel instead"
         )
-    target = Path(dest) if dest is not None else extensions_dir()
-    command = [
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "--no-deps",
-        "--upgrade",
-        "--target",
-        str(target),
-        spec,
-    ]
-    return subprocess.run(command, check=False).returncode
+    with tempfile.TemporaryDirectory(prefix="llm-rosetta-pip-") as tmp:
+        work = Path(tmp)
+        source = spec
+        if Path(spec).is_dir():
+            clean = work / "src" / Path(spec).resolve().name
+            shutil.copytree(
+                spec,
+                clean,
+                ignore=shutil.ignore_patterns(
+                    "build", "*.egg-info", "__pycache__", "*.pyc"
+                ),
+            )
+            source = str(clean)
+        out = work / "wheels"
+        out.mkdir()
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "wheel", "--no-deps", "-w", str(out), source],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            tail = (result.stderr or result.stdout or "").strip().splitlines()[-5:]
+            raise ExtensionInstallError(
+                f"pip could not build a wheel for {spec!r} "
+                f"(exit {result.returncode}): " + " | ".join(tail)
+            )
+        wheels = sorted(out.glob("*.whl"))
+        if len(wheels) != 1:
+            raise ExtensionInstallError(
+                f"pip produced {len(wheels)} wheels for {spec!r}; an extension "
+                "builds exactly one (it has no dependencies)"
+            )
+        return install_wheel(wheels[0], dest=dest)
