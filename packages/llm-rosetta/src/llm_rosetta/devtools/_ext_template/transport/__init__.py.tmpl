@@ -1,0 +1,11 @@
+"""The ``{{transport_id}}`` transport."""
+
+from __future__ import annotations
+
+from .transport import {{transport_class}}
+
+#: Transport id to factory.  The gateway reads this mapping when it builds a
+#: lane; each factory accepts ``timeout=`` and returns an ``UpstreamTransport``.
+TRANSPORTS = {"{{transport_id}}": {{transport_class}}}
+
+__all__ = ["TRANSPORTS", "{{transport_class}}"]

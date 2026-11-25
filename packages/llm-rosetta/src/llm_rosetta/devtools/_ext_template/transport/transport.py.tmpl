@@ -1,0 +1,51 @@
+"""The ``{{transport_id}}`` transport: how a host reaches the {{name}} lane.
+
+A shim selects it with ``connection.transport: {{transport_id}}``.  The host
+imports this module only when such a lane is built.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from llm_rosetta.contracts.transport import (
+    TransportProvider,
+    UpstreamResponse,
+    UpstreamStream,
+    UpstreamTransport,
+)
+
+
+class {{transport_class}}(UpstreamTransport):
+    """Send requests to the {{name}} lane.
+
+    TODO: implement ``send`` and ``send_streaming``.
+    """
+
+    def __init__(self, *, timeout: float | None = None) -> None:
+        # The gateway builds the lane with ``factory(timeout=...)``, or with no
+        # argument when it has no timeout to pass.
+        self.timeout = timeout
+
+    async def send(
+        self,
+        provider_info: TransportProvider,
+        url: str,
+        body: dict[str, Any],
+        *,
+        extra_headers: dict[str, str] | None = None,
+    ) -> UpstreamResponse:
+        raise NotImplementedError("send")
+
+    async def send_streaming(
+        self,
+        provider_info: TransportProvider,
+        url: str,
+        body: dict[str, Any],
+        *,
+        extra_headers: dict[str, str] | None = None,
+    ) -> UpstreamStream:
+        raise NotImplementedError("send_streaming")
+
+    async def close(self) -> None:
+        return None

@@ -1,0 +1,9 @@
+"""The extension folder follows the layout `llm-rosetta ext check` enforces."""
+
+from pathlib import Path
+
+from llm_rosetta.api import run_ext_check
+
+
+def test_folder_passes_ext_check():
+    assert run_ext_check(Path(__file__).resolve().parent.parent, build=False) == 0

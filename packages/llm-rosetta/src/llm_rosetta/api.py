@@ -127,6 +127,11 @@ from llm_rosetta.shims._loader import (
 # The four scaffold names are renamed at the import line, so each object keeps
 # its internal name: ``run_scaffold.__name__`` is ``"run"``, and
 # ``add_scaffold_arguments.__name__`` is ``"add_arguments"``.
+from llm_rosetta.devtools.ext_scaffold import (
+    add_ext_arguments,
+    run_ext_check,
+    run_ext_new,
+)
 from llm_rosetta.devtools.scaffold import add_arguments as add_scaffold_arguments
 from llm_rosetta.devtools.scaffold import run as run_scaffold
 from llm_rosetta.devtools.scaffold import run_check as run_scaffold_check
@@ -196,6 +201,10 @@ __all__ = [
     "run_scaffold",
     "run_scaffold_check",
     "run_scaffold_migrate",
+    # Extension authoring (the ``ext new`` / ``ext check`` commands)
+    "add_ext_arguments",
+    "run_ext_check",
+    "run_ext_new",
     # Vendor CLI sign-in (an ``auth.py`` sidecar imports it from the contracts)
     "CliLoginError",
     "begin_cli_login",

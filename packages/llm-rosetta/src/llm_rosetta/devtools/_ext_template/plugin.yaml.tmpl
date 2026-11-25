@@ -1,0 +1,14 @@
+# One manifest per extension folder; the schema is contracts/extension_manifest.schema.json.
+id: {{id}}
+name: {{name_yaml}}
+version: 0.1.0
+maturity: experimental
+requires:
+  surface: {{surface}}
+  ir: {{ir}}
+provides:
+  shims: [{{shim}}]
+  transports: [{{transport_id}}]
+summary:
+  en: "{{name}} lane for llm-rosetta."
+  zh: "llm-rosetta 的 {{name}} 通道。"
