@@ -38,7 +38,7 @@ from ._discovery import (
     LEGACY_ENTRY_POINT_GROUP,
     FoundExtension,
     discover,
-    legacy_entry_point_names,
+    retired_entry_points,
 )
 
 logger = logging.getLogger("llm_rosetta.shims.providers")
@@ -245,12 +245,13 @@ def _load_one(
 
 
 def _report_legacy_entry_points() -> None:
-    for name in legacy_entry_point_names():
+    for entry in retired_entry_points():
         logger.error(
-            "Entry point %r in the group %r is not loaded: the group was retired "
-            "in 0.14.0. Publish the shims as an extension (group %r, a folder "
-            "with a plugin.yaml imported as llm_rosetta_ext.<id>).",
-            name,
+            "Entry point %r from %s in the group %r is not loaded: the group was "
+            "retired in 0.14.0. Publish the shims as an extension (group %r, a "
+            "folder with a plugin.yaml imported as llm_rosetta_ext.<id>).",
+            entry.name,
+            entry.distribution or "an unknown distribution",
             LEGACY_ENTRY_POINT_GROUP,
             ENTRY_POINT_GROUP,
         )

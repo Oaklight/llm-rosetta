@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import importlib
 import logging
 import sys
@@ -410,3 +411,73 @@ class TestImportExtensionModule:
 
         with pytest.raises(ValueError):
             import_extension_module(ext_id, submodule)
+
+
+class _Dist:
+    name = "llm-rosetta-shim-argo"
+    version = "0.3.1"
+
+
+class _Retired:
+    def __init__(self, name="argo", value="argo_shim:register", dist=None):
+        self.name = name
+        self.value = value
+        self.dist = dist
+
+    def load(self):  # pragma: no cover - must not be called
+        raise AssertionError("a retired entry point was run")
+
+
+def _only_retired(monkeypatch, entries):
+    monkeypatch.setattr(
+        _discovery,
+        "_entry_points",
+        lambda group: (
+            list(entries) if group == _discovery.LEGACY_ENTRY_POINT_GROUP else []
+        ),
+    )
+
+
+class TestRetiredEntryPoints:
+    def test_it_reads_name_value_and_distribution(self, monkeypatch):
+        _only_retired(monkeypatch, [_Retired(dist=_Dist())])
+
+        [found] = _discovery.retired_entry_points()
+
+        assert found == _discovery.RetiredEntryPoint(
+            "argo", "argo_shim:register", "llm-rosetta-shim-argo 0.3.1"
+        )
+
+    def test_a_missing_distribution_is_none(self, monkeypatch):
+        _only_retired(monkeypatch, [_Retired()])
+
+        assert _discovery.retired_entry_points()[0].distribution is None
+
+    def test_it_is_frozen(self):
+        found = _discovery.RetiredEntryPoint("a", "b")
+        with pytest.raises(dataclasses.FrozenInstanceError):
+            setattr(found, "name", "c")
+
+    def test_describe_names_the_distribution(self):
+        found = _discovery.RetiredEntryPoint("argo", "v", "pkg 1.0")
+        assert found.describe() == (
+            "retired entry point argo from pkg 1.0: the group "
+            "llm_rosetta.shim_providers was retired in 0.14.0; its shims are not "
+            "loaded; publish them as an extension (llm-rosetta ext new)"
+        )
+
+    def test_describe_without_a_distribution(self):
+        found = _discovery.RetiredEntryPoint("argo", "v")
+        assert "from an unknown distribution:" in found.describe()
+
+    def test_the_loader_log_names_the_distribution(self, monkeypatch, caplog):
+        _only_retired(monkeypatch, [_Retired(dist=_Dist())])
+        with caplog.at_level(logging.ERROR, logger="llm_rosetta.shims.providers"):
+            load_extensions()
+        assert "from llm-rosetta-shim-argo 0.3.1 in the group" in caplog.text
+
+    def test_the_loader_log_without_a_distribution(self, monkeypatch, caplog):
+        _only_retired(monkeypatch, [_Retired()])
+        with caplog.at_level(logging.ERROR, logger="llm_rosetta.shims.providers"):
+            load_extensions()
+        assert "from an unknown distribution in the group" in caplog.text

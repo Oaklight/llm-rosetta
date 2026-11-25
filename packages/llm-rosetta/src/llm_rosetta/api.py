@@ -77,6 +77,7 @@ from llm_rosetta.extensions import (
     ExtensionStatus,
     ExternalStatus,
     InstalledExtension,
+    RetiredEntryPoint,
     activate_extensions_dir,
     check_external,
     configure_extensions_dir,
@@ -90,6 +91,7 @@ from llm_rosetta.extensions import (
     missing_dependencies,
     pip_available,
     remove_extension,
+    retired_entry_points,
 )
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.base.helpers import strip_internal_metadata
@@ -259,6 +261,7 @@ __all__ = [
     "ExtensionInstallError",
     "ExternalStatus",
     "InstalledExtension",
+    "RetiredEntryPoint",
     "activate_extensions_dir",
     "check_external",
     "configure_extensions_dir",
@@ -271,6 +274,7 @@ __all__ = [
     "missing_dependencies",
     "pip_available",
     "remove_extension",
+    "retired_entry_points",
     # Fidelity and profiling
     "DeepProfiler",
     "FidelityChecker",

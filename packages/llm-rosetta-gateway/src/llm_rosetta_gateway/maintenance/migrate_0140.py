@@ -35,6 +35,11 @@ selection drops from a kept vendor goes to ``shims.disabled``.  A legacy shim
 name that needs a package gets the install entry, not a preset.  A key that
 cannot be converted (an unknown key) stays.
 
+A pip-installed package that still declares an entry point in the retired
+``llm_rosetta.shim_providers`` group is not migrated (it is code, not config).
+The text report ends with one ``NOTE`` per such entry point, pointing to
+``llm-rosetta ext new``; the exit code and the dry-run semantics are unchanged.
+
 Configs are edited as text (:mod:`.jsonc_spans`): comments, key order and
 formatting outside the rewritten names are untouched.  The database step runs
 in one transaction after a backup, and refuses while a process holds the file.
@@ -58,7 +63,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta.api import FORMATS_BY_TYPE, retired_names
+from llm_rosetta.api import FORMATS_BY_TYPE, retired_entry_points, retired_names
 
 from ..shims.catalog import STANDALONE_VENDORS
 
@@ -1680,6 +1685,11 @@ def _print_text(args: argparse.Namespace, report: dict[str, Any]) -> None:
         f"{rewrites} rewrite(s), {unmapped} unmapped, {mentions} mention(s), "
         f"{imports} removed import(s), {notes} note(s); exit {report['exit_code']}"
     )
+    for old in retired_entry_points():
+        print(
+            f"NOTE: {old.describe()}. This command does not convert installed "
+            "packages: run `llm-rosetta ext new` to scaffold the extension."
+        )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

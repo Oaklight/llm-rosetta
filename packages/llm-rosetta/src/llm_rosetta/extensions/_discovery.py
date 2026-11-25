@@ -49,6 +49,31 @@ class FoundExtension:
     problem: str | None = None
 
 
+@dataclass(frozen=True)
+class RetiredEntryPoint:
+    """One entry point declared in the retired ``llm_rosetta.shim_providers`` group.
+
+    Attributes:
+        name: The entry point's name.
+        value: The entry point's value (``module:attr``); never imported.
+        distribution: The distribution name and version (``"pkg 1.2"``) when
+            the metadata names it, else ``None``.
+    """
+
+    name: str
+    value: str
+    distribution: str | None = None
+
+    def describe(self) -> str:
+        """The one sentence a host shows for this entry point."""
+        origin = self.distribution or "an unknown distribution"
+        return (
+            f"retired entry point {self.name} from {origin}: the group "
+            f"{LEGACY_ENTRY_POINT_GROUP} was retired in 0.14.0; its shims are "
+            "not loaded; publish them as an extension (llm-rosetta ext new)"
+        )
+
+
 def _entry_points(group: str) -> list[metadata.EntryPoint]:
     found = metadata.entry_points()
     if hasattr(found, "select"):
@@ -56,9 +81,25 @@ def _entry_points(group: str) -> list[metadata.EntryPoint]:
     return list(found.get(group, ()))
 
 
-def legacy_entry_point_names() -> list[str]:
-    """Names of entry points left in the retired ``shim_providers`` group."""
-    return [entry.name for entry in _entry_points(LEGACY_ENTRY_POINT_GROUP)]
+def retired_entry_points() -> list[RetiredEntryPoint]:
+    """Return the entry points still declared in the retired 0.13.0 group.
+
+    Nothing is imported or run.  A host shows these so an operator who upgraded
+    sees why a pip-installed shim package no longer provides its shims.
+
+    Returns:
+        One :class:`RetiredEntryPoint` per entry point in the group.
+    """
+    found: list[RetiredEntryPoint] = []
+    for entry in _entry_points(LEGACY_ENTRY_POINT_GROUP):
+        dist = getattr(entry, "dist", None)
+        name = getattr(dist, "name", None) if dist is not None else None
+        version = getattr(dist, "version", None) if dist is not None else None
+        label = None
+        if name:
+            label = f"{name} {version}" if version else str(name)
+        found.append(RetiredEntryPoint(entry.name, entry.value, label))
+    return found
 
 
 def _from_entry_points() -> list[FoundExtension]:

@@ -189,6 +189,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "ExtensionInstallError",
             "ExternalStatus",
             "InstalledExtension",
+            "RetiredEntryPoint",
             "activate_extensions_dir",
             "check_external",
             "configure_extensions_dir",
@@ -201,6 +202,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "missing_dependencies",
             "pip_available",
             "remove_extension",
+            "retired_entry_points",
             # Fidelity and profiling
             "DeepProfiler",
             "FidelityChecker",
@@ -215,7 +217,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "SURFACE_VERSION",
             "__version__",
         ],
-        "max_count": 106,
+        "max_count": 108,
     },
     "llm_rosetta.types.ir": {
         "items": None,  # too many to enumerate; just check count

@@ -1008,3 +1008,56 @@ def test_db_backup_refuses_a_name_that_appeared_after_it_was_chosen(
     result = mig.migrate_db(db, write=True)
     assert result.error is not None
     assert taken.read_bytes() == b"someone else's backup"
+
+
+def _retired_argo():
+    from llm_rosetta.api import RetiredEntryPoint
+
+    return [
+        RetiredEntryPoint("argo", "argo_shim:register", "llm-rosetta-shim-argo 0.3.1")
+    ]
+
+
+def test_a_retired_entry_point_gets_a_note_and_changes_nothing_else(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    path = tmp_path / "config.jsonc"
+    path.write_text("{}\n")
+    assert mig.main(["--config", str(path)]) == 0
+    plain = capsys.readouterr().out
+    assert "retired entry point" not in plain
+
+    monkeypatch.setattr(mig, "retired_entry_points", _retired_argo)
+    assert mig.main(["--config", str(path)]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith(plain)
+    assert (
+        "NOTE: retired entry point argo from llm-rosetta-shim-argo 0.3.1: the group "
+        "llm_rosetta.shim_providers was retired in 0.14.0; its shims are not "
+        "loaded; publish them as an extension (llm-rosetta ext new). "
+    ) in out
+    assert "llm-rosetta ext new` to scaffold" in out
+    assert path.read_text() == "{}\n"
+
+
+def test_the_retired_entry_point_note_keeps_check_and_write_semantics(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(mig, "retired_entry_points", _retired_argo)
+    path = tmp_path / "config.jsonc"
+    path.write_text(json.dumps(_config_for(ROWS[0])))
+    before = path.read_text()
+    assert mig.main(["--config", str(path), "--check"]) == 3
+    assert path.read_text() == before
+    assert mig.main(["--config", str(path), "--write"]) == 0
+    assert path.read_text() != before
+
+
+def test_the_retired_entry_point_note_leaves_json_output_valid(
+    tmp_path, capsys, monkeypatch
+) -> None:
+    monkeypatch.setattr(mig, "retired_entry_points", _retired_argo)
+    path = tmp_path / "config.jsonc"
+    path.write_text("{}\n")
+    assert mig.main(["--config", str(path), "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["exit_code"] == 0
