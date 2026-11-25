@@ -349,6 +349,161 @@ def _lane_profile(stream: Any) -> dict[str, Any]:
         return {}
 
 
+async def _finish_stream_log(
+    *,
+    stream: Any,
+    entry_id: str | None,
+    request_log: Any | None,
+    metrics: Any | None,
+    processor: Any,
+    reported_model: str,
+    t0: float,
+    chunk_count: int,
+    ttfb_ms: float | None,
+    stream_error: UpstreamStreamError | None,
+    dump_ctx: DumpContext | None,
+) -> None:
+    """Write a finished stream's facts back to its request-log row.
+
+    Best-effort: both write-backs already swallow their own failures, and a
+    stream with no row has nothing to record.
+
+    Args:
+        stream: The upstream stream, read for its lane profile.
+        entry_id: The row to update, if the request had one.
+        request_log: The log holding the row.
+        metrics: Optional metrics sink for the usage write-back.
+        processor: The stream processor that accumulated the turn.
+        reported_model: The model name to record.
+        t0: When the stream generator started.
+        chunk_count: Upstream chunks seen.
+        ttfb_ms: Milliseconds to the first chunk, or ``None`` if none came.
+        stream_error: The in-band error, or ``None`` when the turn completed.
+        dump_ctx: The request's dump context, if any.
+    """
+    if not (entry_id and request_log is not None):
+        return
+    stream_profile: dict[str, Any] = {
+        "stream_duration_ms": round((time.monotonic() - t0) * 1000, 2),
+        "stream_chunks": chunk_count,
+        "stream_complete": stream_error is None,
+    }
+    if ttfb_ms is not None:
+        stream_profile["stream_ttfb_ms"] = ttfb_ms
+    if stream_error is not None:
+        stream_profile["stream_error"] = stream_error.message[:500]
+    stream_profile.update(_lane_profile(stream))
+    await _write_back_stream_meta(request_log, entry_id, stream_profile, ttfb_ms)
+    await _write_back_stream_usage(
+        processor,
+        entry_id,
+        request_log,
+        metrics,
+        reported_model,
+        provider_name=dump_ctx.provider_name if dump_ctx else None,
+    )
+
+
+def _finish_stream_capture(
+    *,
+    capture_record: CapturedRequest | None,
+    capture_state: CaptureState | None,
+    stream: Any,
+    upstream_chunks: list[dict[str, Any]] | None,
+) -> None:
+    """Hand a finished stream's upstream chunks to content capture.
+
+    Args:
+        capture_record: The record to complete, if capture is active.
+        capture_state: The capture sink.
+        stream: The upstream stream, read for its status code.
+        upstream_chunks: The chunks accumulated for the record.
+    """
+    if capture_record is None or capture_state is None:
+        return
+    capture_record.upstream_response = upstream_chunks
+    capture_record.status_code = getattr(stream, "status_code", 200)
+    capture_state.record(capture_record)
+
+
+@dataclass
+class _StreamProgress:
+    """What the event generator learns as it forwards a stream's chunks."""
+
+    chunk_count: int = 0
+    ttfb_ms: float | None = None
+    stream_error: UpstreamStreamError | None = None
+
+
+async def _forward_stream_chunks(
+    *,
+    source_provider: ProviderType,
+    stream: Any,
+    processor: Any,
+    model: str,
+    format_sse: Any,
+    chunk_iterator: AsyncIterator[dict[str, Any]] | None,
+    first_chunk: dict[str, Any] | None,
+    t_stream_open: float,
+    upstream_chunks: list[dict[str, Any]] | None,
+    soft_error_patterns: tuple[SoftErrorPattern, ...],
+    dump_ctx: DumpContext | None,
+    entry_id: str | None,
+    progress: _StreamProgress,
+) -> AsyncIterator[str]:
+    """Forward each upstream chunk as the client's SSE text.
+
+    The first chunk also produces the time-to-first-byte reading, taken from
+    the moment the upstream request was sent so it spans connect, headers and
+    the chunk.  A detected in-band error ends the loop after its events.
+
+    Args:
+        source_provider: The client's dialect, used to build error events.
+        stream: The opened upstream stream.
+        processor: The stream processor that turns chunks into source events.
+        model: The model name for error classification.
+        format_sse: The source dialect's SSE formatter.
+        chunk_iterator: The iterator the deadline already advanced, if any.
+        first_chunk: The chunk that iterator produced, if any.
+        t_stream_open: When the upstream request was sent.
+        upstream_chunks: Where to accumulate chunks for capture, if enabled.
+        soft_error_patterns: Error markers the route treats as failures.
+        dump_ctx: The request's dump context, if any.
+        entry_id: The request-log row, if any.
+        progress: The counters and readings to update.
+
+    Yields:
+        SSE strings for the client.
+    """
+    async for chunk in _stream_chunks(stream, chunk_iterator, first_chunk):
+        if progress.chunk_count == 0:
+            progress.ttfb_ms = round((time.perf_counter() - t_stream_open) * 1000, 2)
+        progress.chunk_count += 1
+        if upstream_chunks is not None:
+            upstream_chunks.append(chunk)
+
+        progress.stream_error = await _detect_stream_chunk_error(
+            chunk,
+            soft_error_patterns=soft_error_patterns,
+            stream_status=getattr(stream, "status_code", 200),
+            model=model,
+            dump_ctx=dump_ctx,
+            entry_id=entry_id,
+        )
+        if progress.stream_error is not None:
+            for event in build_stream_error_events(
+                source_provider,
+                progress.stream_error.message,
+                code=progress.stream_error.code,
+                request_id=progress.stream_error.request_id or "",
+            ):
+                yield format_sse(event)
+            break
+
+        for source_event in processor.process_chunk(chunk):
+            yield format_sse(source_event)
+
+
 async def _stream_event_generator(
     *,
     source_provider: ProviderType,
@@ -377,10 +532,8 @@ async def _stream_event_generator(
     rather than always being 200.
     """
     reported_model = reported_model or model
-    chunk_count = 0
+    progress = _StreamProgress()
     t0 = time.monotonic()
-    stream_error: UpstreamStreamError | None = None
-    ttfb_ms: float | None = None
     # The clock the first chunk is measured against: the moment the upstream
     # request was sent, so the reading spans connect, headers and the chunk,
     # the same way the deadline does.
@@ -391,33 +544,22 @@ async def _stream_event_generator(
 
     try:
         async with stream:
-            async for chunk in _stream_chunks(stream, chunk_iterator, first_chunk):
-                if chunk_count == 0:
-                    ttfb_ms = round((time.perf_counter() - t_stream_open) * 1000, 2)
-                chunk_count += 1
-                if upstream_chunks is not None:
-                    upstream_chunks.append(chunk)
-
-                stream_error = await _detect_stream_chunk_error(
-                    chunk,
-                    soft_error_patterns=soft_error_patterns,
-                    stream_status=getattr(stream, "status_code", 200),
-                    model=model,
-                    dump_ctx=dump_ctx,
-                    entry_id=entry_id,
-                )
-                if stream_error is not None:
-                    for event in build_stream_error_events(
-                        source_provider,
-                        stream_error.message,
-                        code=stream_error.code,
-                        request_id=stream_error.request_id or "",
-                    ):
-                        yield format_sse(event)
-                    break
-
-                for source_event in processor.process_chunk(chunk):
-                    yield format_sse(source_event)
+            async for sse_text in _forward_stream_chunks(
+                source_provider=source_provider,
+                stream=stream,
+                processor=processor,
+                model=model,
+                format_sse=format_sse,
+                chunk_iterator=chunk_iterator,
+                first_chunk=first_chunk,
+                t_stream_open=t_stream_open,
+                upstream_chunks=upstream_chunks,
+                soft_error_patterns=soft_error_patterns,
+                dump_ctx=dump_ctx,
+                entry_id=entry_id,
+                progress=progress,
+            ):
+                yield sse_text
 
         # Flush any deferred terminal events and append the SSE [DONE]
         # sentinel for OpenAI-family formats.
@@ -429,48 +571,35 @@ async def _stream_event_generator(
         log_stream_summary(
             model=model,
             duration_s=time.monotonic() - t0,
-            chunk_count=chunk_count,
+            chunk_count=progress.chunk_count,
         )
     except Exception as exc:
-        stream_error = UpstreamStreamError(message=str(exc))
+        progress.stream_error = UpstreamStreamError(message=str(exc))
         for sse_text in _terminal_error_sse(
             source_provider, processor, format_sse, exc
         ):
             yield sse_text
         raise
     finally:
-        # Write back stream profile to request log entry
-        if entry_id and request_log is not None:
-            stream_profile: dict[str, Any] = {
-                "stream_duration_ms": round((time.monotonic() - t0) * 1000, 2),
-                "stream_chunks": chunk_count,
-                "stream_complete": stream_error is None,
-            }
-            if ttfb_ms is not None:
-                stream_profile["stream_ttfb_ms"] = ttfb_ms
-            if stream_error is not None:
-                stream_profile["stream_error"] = stream_error.message[:500]
-            lane_profile = getattr(stream, "lane_profile", None)
-            if callable(lane_profile):
-                stream_profile.update(_lane_profile(stream))
-            await _write_back_stream_meta(
-                request_log, entry_id, stream_profile, ttfb_ms
-            )
-
-            await _write_back_stream_usage(
-                processor,
-                entry_id,
-                request_log,
-                metrics,
-                reported_model,
-                provider_name=dump_ctx.provider_name if dump_ctx else None,
-            )
-
-        # Content capture (streaming): record accumulated upstream chunks
-        if capture_record is not None and capture_state is not None:
-            capture_record.upstream_response = upstream_chunks
-            capture_record.status_code = getattr(stream, "status_code", 200)
-            capture_state.record(capture_record)
+        await _finish_stream_log(
+            stream=stream,
+            entry_id=entry_id,
+            request_log=request_log,
+            metrics=metrics,
+            processor=processor,
+            reported_model=reported_model,
+            t0=t0,
+            chunk_count=progress.chunk_count,
+            ttfb_ms=progress.ttfb_ms,
+            stream_error=progress.stream_error,
+            dump_ctx=dump_ctx,
+        )
+        _finish_stream_capture(
+            capture_record=capture_record,
+            capture_state=capture_state,
+            stream=stream,
+            upstream_chunks=upstream_chunks,
+        )
 
 
 async def _connection_failure_stream(
