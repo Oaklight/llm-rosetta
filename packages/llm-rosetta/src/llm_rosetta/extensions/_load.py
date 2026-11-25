@@ -28,6 +28,7 @@ from llm_rosetta.contracts.extension import (
 )
 from llm_rosetta.contracts.shim import ProviderShim
 
+from ._dirs import activate_if_present
 from ._discovery import (
     ENTRY_POINT_GROUP,
     LEGACY_ENTRY_POINT_GROUP,
@@ -228,6 +229,7 @@ def load_extensions() -> list[ProviderShim]:
         extension, loaded or not, is available from :func:`list_extensions`.
     """
     _report_legacy_entry_points()
+    activate_if_present()
     seen_ids: dict[str, Path] = {}
     statuses: list[ExtensionStatus] = []
     registered: list[ProviderShim] = []
