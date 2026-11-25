@@ -814,3 +814,53 @@ class TestExtScaffold:
     def test_ext_without_an_action_prints_help_and_exits_2(self, capsys):
         assert _ext() == 2
         assert "usage" in capsys.readouterr().out
+
+
+class TestExtDoctorRetiredEntryPoints:
+    @pytest.fixture
+    def retired(self, monkeypatch):
+        from llm_rosetta.extensions import _discovery
+
+        class _Entry:
+            name = "argo"
+            value = "argo_shim:register"
+            dist = SimpleNamespace(name="llm-rosetta-shim-argo", version="0.3.1")
+
+        monkeypatch.setattr(
+            _discovery,
+            "_entry_points",
+            lambda group: (
+                [_Entry()] if group == _discovery.LEGACY_ENTRY_POINT_GROUP else []
+            ),
+        )
+
+    def test_a_retired_entry_point_is_a_problem(self, home, retired, capsys):
+        assert _ext("doctor", "--dir", str(home)) == 1
+        out = capsys.readouterr().out
+        assert (
+            "problem: retired entry point argo from llm-rosetta-shim-argo 0.3.1: "
+            "the group llm_rosetta.shim_providers was retired in 0.14.0; its shims "
+            "are not loaded; publish them as an extension (llm-rosetta ext new)"
+        ) in out
+        assert "1 retired entry point(s)" in out
+        assert "no extensions found" not in out
+
+    def test_it_adds_to_the_count_of_a_sound_extension_run(self, home, retired, capsys):
+        _place(home, "acme", _manifest("acme"))
+
+        assert _ext("doctor", "--dir", str(home)) == 1
+        out = capsys.readouterr().out
+        assert "  ok" in out and "retired entry point argo" in out
+        assert "extension(s) with problems" not in out
+
+    def test_a_single_id_form_does_not_show_it(self, home, retired, capsys):
+        _place(home, "acme", _manifest("acme"))
+
+        assert _ext("doctor", "acme", "--dir", str(home)) == 0
+        assert "retired entry point" not in capsys.readouterr().out
+
+    def test_none_retired_keeps_exit_0(self, home, capsys):
+        _place(home, "acme", _manifest("acme"))
+
+        assert _ext("doctor", "--dir", str(home)) == 0
+        assert "retired entry point" not in capsys.readouterr().out

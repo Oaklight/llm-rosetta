@@ -16,7 +16,9 @@ from ._discovery import (
     ENTRY_POINT_GROUP,
     LEGACY_ENTRY_POINT_GROUP,
     NAMESPACE,
+    RetiredEntryPoint,
     discover,
+    retired_entry_points,
 )
 from ._dirs import (
     ENV_VAR,
@@ -50,6 +52,7 @@ __all__ = [
     "ENV_VAR",
     "LEGACY_ENTRY_POINT_GROUP",
     "NAMESPACE",
+    "RetiredEntryPoint",
     "ExtensionInstallError",
     "ExtensionStatus",
     "ExtensionsDirError",
@@ -70,4 +73,5 @@ __all__ = [
     "missing_dependencies",
     "pip_available",
     "remove_extension",
+    "retired_entry_points",
 ]

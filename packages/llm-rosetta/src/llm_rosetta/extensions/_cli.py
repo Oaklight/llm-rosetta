@@ -19,6 +19,7 @@ from llm_rosetta.contracts.extension import (
 )
 
 from ._dirs import ExtensionInstallError, configure_extensions_dir, extensions_dir
+from ._discovery import retired_entry_points
 from ._install import (
     InstalledExtension,
     check_external,
@@ -296,14 +297,18 @@ def _doctor(ext_id: str | None) -> int:
         if not entries:
             _err(f"{PROG} doctor: no extension {ext_id!r} found")
             return 1
-    if not entries:
+    retired = retired_entry_points() if ext_id is None else []
+    if not entries and not retired:
         print("no extensions found")
         return 0
     failed = 0
     for entry in entries:
         if _check_one(*entry, manifests):
             failed += 1
+    for old in retired:
+        print(f"problem: {old.describe()}")
     if failed:
         print(f"{failed} extension(s) with problems")
-        return 1
-    return 0
+    if retired:
+        print(f"{len(retired)} retired entry point(s)")
+    return 1 if failed or retired else 0
