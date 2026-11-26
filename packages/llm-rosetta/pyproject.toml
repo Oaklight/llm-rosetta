@@ -53,6 +53,8 @@ dev = [
     "pytest-asyncio",
     "llm-comply>=0.2.0",
     "pytest-cov",
+    "hypothesis>=6.100,<7",
+    "crosshair-tool>=0.0.80",
     "pre-commit>=4.0.0",
     "complexipy>=6.2.0,<7",
     "ruff==0.15.20",
