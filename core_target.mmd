@@ -9,7 +9,7 @@ flowchart TB
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]
-      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions"]
+      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions<br/>enforcement(感知 shim 的能力 pass) · tool_locations"]
       CVT["converters/"]
       subgraph IRCORE["ir/(一个包,#1710 已落地)"]
         IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
@@ -44,7 +44,6 @@ flowchart TB
   CVT --> IROPS
   CVT --> IRMODEL
   CVT --> CDECL
-  IROPS --> CDECL
   IROPS --> IRMODEL
   FMT --> IRMODEL
   CXF --> IROPS

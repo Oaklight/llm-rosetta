@@ -20,7 +20,7 @@ current_header = '''flowchart TB
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]
-      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions · typed"]
+      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions · typed<br/>enforcement(感知 shim 的能力 pass,#1745) · tool_locations(#1744)"]
       CVT["converters/<br/>base(含 ConversionError) · llm/各格式 · embeddings · rerank · decisions(各含 lookup) · registry"]
       subgraph IRCORE["ir/(一个包,#1710)"]
         IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
@@ -58,7 +58,7 @@ current_edges = [
  ("CLI","CDECL","","solid",None), ("CLI","EXTS","懒加载","lazy",None),
  ("PIPE","CVT","","solid",None), ("PIPE","IROPS","","solid",None), ("PIPE","CDECL","","solid",None),
  ("CVT","IROPS","","solid",None), ("CVT","IRMODEL","","solid",None), ("CVT","CDECL","","solid",None),
- ("IROPS","IRMODEL","","solid",None), ("IROPS","CDECL","passes 用 shim 数据类","solid",None),
+ ("IROPS","IRMODEL","","solid",None),
  ("SHIM","IROPS","","solid",None), ("SHIM","CDECL","注册 resolver","solid",None), ("SHIM","FMT","","solid",None),
  ("SHIM","EXTS","模块级:注册 shims 处理器;load_providers() 调 load_extensions()(#1735)","solid",GREEN),
  ("EXTS","CDECL","","solid",None), ("EXTS","DEV","ext new / check","lazy",None),
@@ -68,7 +68,7 @@ current_edges = [
  ("CDECL","VOCAB","retired_names","solid",None),
  ("CXF","IROPS","","solid",RED),
  ("DET","FMT","","solid",None), ("FMT","IRMODEL","","solid",None),
- ("CAP","CVT","","solid",None), ("DEV","CDECL","","solid",None),
+ ("CAP","CVT","","solid",None), ("CAP","PIPE","转发 enforcement","solid",None), ("DEV","CDECL","","solid",None),
  ("REF","IRMODEL","转发(带警告)","solid",None),
 ]
 open("core.mmd","w",encoding="utf-8").write(render(current_header, current_edges))
@@ -84,7 +84,7 @@ target_header = '''flowchart TB
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]
-      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions"]
+      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions<br/>enforcement(感知 shim 的能力 pass) · tool_locations"]
       CVT["converters/"]
       subgraph IRCORE["ir/(一个包,#1710 已落地)"]
         IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
@@ -114,7 +114,7 @@ target_edges = [
  ("SHIM","FMT","","solid",None),
  ("PIPE","CVT","","solid",None), ("PIPE","IROPS","","solid",None),
  ("CVT","IROPS","","solid",None), ("CVT","IRMODEL","","solid",None), ("CVT","CDECL","","solid",None),
- ("IROPS","CDECL","","solid",None), ("IROPS","IRMODEL","","solid",None), ("FMT","IRMODEL","","solid",None),
+ ("IROPS","IRMODEL","","solid",None), ("FMT","IRMODEL","","solid",None),
  ("CXF","IROPS","","solid",None), ("CXF","CDECL","","solid",None),
  ("CDECL","FMT","","solid",None),
  ("AUTHOR","CDECL","只用 contracts","solid",None), ("AUTHOR","CXF","","solid",None),

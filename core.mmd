@@ -7,7 +7,7 @@ flowchart TB
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]
-      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions · typed"]
+      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions · typed<br/>enforcement(感知 shim 的能力 pass,#1745) · tool_locations(#1744)"]
       CVT["converters/<br/>base(含 ConversionError) · llm/各格式 · embeddings · rerank · decisions(各含 lookup) · registry"]
       subgraph IRCORE["ir/(一个包,#1710)"]
         IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
@@ -53,7 +53,6 @@ flowchart TB
   CVT --> IRMODEL
   CVT --> CDECL
   IROPS --> IRMODEL
-  IROPS -->|"passes 用 shim 数据类"| CDECL
   SHIM --> IROPS
   SHIM -->|"注册 resolver"| CDECL
   SHIM --> FMT
@@ -68,8 +67,9 @@ flowchart TB
   DET --> FMT
   FMT --> IRMODEL
   CAP --> CVT
+  CAP -->|"转发 enforcement"| PIPE
   DEV --> CDECL
   REF -->|"转发(带警告)"| IRMODEL
 
-  linkStyle 17 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 24 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 16 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 23 stroke:#d33,stroke-width:2.5px,color:#d33
