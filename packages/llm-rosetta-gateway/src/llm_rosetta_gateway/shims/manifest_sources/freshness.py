@@ -131,13 +131,6 @@ def _load_manifest(
                 http_get=http_get,
                 proxy=proxy,
             )
-        if spec.key and manifest.source != spec.key:
-            logger.warning(
-                "Shim source %s: the manifest at %s calls itself %r",
-                spec.key,
-                url,
-                manifest.source,
-            )
         if cached is not None and _older(manifest, cached):
             return _keep_newer_cache(
                 spec, url, manifest, cached, stamp, stamp_path, known_at
@@ -393,6 +386,14 @@ def _read_manifest(
 ) -> ExtensionIndex:
     """Parse a published extension index.
 
+    A catalogue source (``spec.key``, such as ``argonne``) names one repository,
+    and the wheels' sha256 comes from the same document, so an index that gives
+    itself another ``source`` is another repository's trust root (a catalogue
+    entry pointing at the wrong place, or a repository someone else now
+    controls) and is refused, whether it was just fetched or read from the
+    cache.  An index with no ``source`` header makes no claim and is used; a
+    source given as a bare URL has no id to compare.
+
     Args:
         document: The parsed JSON value.
         spec: The source, whose URL a relative wheel ``url`` resolves against.
@@ -400,12 +401,18 @@ def _read_manifest(
             same way as a fetch.
 
     Raises:
-        ValueError: The document is not a valid index.
+        ValueError: The document is not a valid index, or names another source.
     """
     try:
-        return parse_index(document, base=spec.url)
+        manifest = parse_index(document, base=spec.url)
     except ExtensionInstallError as exc:
         raise ValueError(str(exc)) from None
+    if spec.key and manifest.source and manifest.source != spec.key:
+        raise ValueError(
+            f"the index calls itself {manifest.source!r}, not the source "
+            f"{spec.key!r} it was configured as"
+        )
+    return manifest
 
 
 def _fetch_manifest_once(
