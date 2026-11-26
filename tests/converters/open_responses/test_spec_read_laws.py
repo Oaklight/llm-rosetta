@@ -211,9 +211,6 @@ def test_a_completed_body_reads_as_one_choice(converter_cls, output) -> None:
     assert [c["index"] for c in ir["choices"]] == [0]
 
 
-@pytest.mark.xfail(
-    strict=False, reason="#1727: a completed body with output [] reads as no choice"
-)
 @pytest.mark.parametrize("converter_cls", CONVERTERS)
 def test_a_completed_body_with_empty_output_reads_as_one_stop_choice(
     converter_cls,
@@ -358,10 +355,6 @@ def test_the_stream_leg_and_the_body_leg_give_one_finish_reason(
     assert [e["type"] for e in events[-2:]] == ["finish", "stream_end"]
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="#1727: the body leg reads output [] as no choice; the stream says stop",
-)
 @pytest.mark.parametrize("converter_cls", CONVERTERS)
 def test_the_legs_agree_on_a_completed_response_with_no_output(converter_cls) -> None:
     body = _body("completed", [])

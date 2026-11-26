@@ -49,6 +49,8 @@ def _response_status_reason(
             reason = ""
         return RESPONSES_INCOMPLETE_REASON_TO_IR.get(reason, "length")
     status = response.get("status") or "completed"
+    if not isinstance(status, str):
+        return "stop"
     return RESPONSES_STATUS_TO_REASON.get(status, "stop")
 
 

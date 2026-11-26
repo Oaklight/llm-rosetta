@@ -21,7 +21,7 @@ import pytest
 
 pytest.importorskip("hypothesis")
 
-from hypothesis import HealthCheck, assume, given, settings  # noqa: E402
+from hypothesis import HealthCheck, given, settings  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
 from tests.converters.test_leg_agreement import (  # noqa: E402
@@ -102,9 +102,6 @@ def _turns(draw) -> Turn:
         )
     )
     text, reasoning, calls = draw(_TEXT), draw(_TEXT), draw(_calls())
-    # #1721: a turn with no content at all reads back from an Open Responses
-    # body as a response with no choices.
-    assume(text or reasoning or calls)
     # ``tool_calls`` names a turn with a call the client must answer; without
     # one, the dialects that derive the reason from the content write ``stop``.
     answerable = [c for c in calls if c.get("tool_type") != "intrinsic"]

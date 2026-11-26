@@ -441,13 +441,18 @@ class OpenResponsesConverter(
                 **_response_failure_metadata(provider_response, context),
             }
 
-        # Empty output still needs a choice carrying its terminal condition.
-        if message_content or finish_reason_val in {
-            "error",
-            "cancelled",
-            "length",
-            "content_filter",
-        }:
+        # A body whose output converts to content always has a choice, and so
+        # does a finished body with none (#1721): it carries the finish reason.
+        # The one case with no choice is an in-flight status (``in_progress``,
+        # ``queued``) with no converted content, which includes a message whose
+        # content is ``[]`` and a compaction item.  The rule is keyed on that
+        # content, not on the status: an in-flight body *with* content reads as
+        # a terminal choice (#1739).  A tuple, not a set: a non-string status
+        # must not raise on hashing.
+        if message_content or provider_response.get("status") not in (
+            "in_progress",
+            "queued",
+        ):
             ir_msg: dict[str, Any] = {
                 "role": "assistant",
                 "content": message_content,
