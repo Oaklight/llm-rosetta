@@ -17,9 +17,7 @@ Layouts::
                       <root>/<vendor>/<type>/provider.yaml      (non-chat)
     flat              <root>/<vendor>/<format>/provider.yaml      (argo, alcf)
 
-``<root>`` is the directory a gateway scans: the built-in ``providers`` tree, or
-a package's ``providers`` directory (``src/<package>/providers`` in the
-``llm-rosetta-shim-*`` repositories).
+``<root>`` is the directory a gateway scans: the built-in ``providers`` tree.
 """
 
 from __future__ import annotations
@@ -28,22 +26,18 @@ import argparse
 import os
 import re
 import signal
-import subprocess
 import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from collections.abc import Collection
 from typing import Any
-from urllib.parse import urlsplit
 from urllib.request import urlopen
 
 from llm_rosetta.contracts import AUTH_MODULE, QUOTA_MODULE, TRANSFORMS_MODULE
 
 MODEL_TYPES = ("llm", "embeddings", "rerank", "decisions")
 
-#: Largest mark this scaffolder will save.
-MAX_LOGO_BYTES = 1024 * 1024
 
 #: The icon set the admin panel already shows beside a vendor, served by jsDelivr.
 #: One SVG per provider slug; a vendor name that matches one gets it offered.
@@ -54,14 +48,6 @@ LOBEHUB_ICON_URL = (
 #: Suffixes a vendor directory adds around the provider it wraps.
 _VENDOR_SUFFIXES = ("_free", "-free", "_zen", "-zen", "_pro", "-pro")
 
-#: Content types a vendor mark may have, and the suffix each one gets.
-LOGO_SUFFIXES = {
-    "image/svg+xml": ".svg",
-    "image/png": ".png",
-    "image/webp": ".webp",
-    "image/jpeg": ".jpg",
-    "image/gif": ".gif",
-}
 
 #: The format a model type is usually scaffolded with.
 DEFAULT_FORMATS = {
@@ -76,7 +62,6 @@ DEFAULT_FORMATS = {
 #: neither can describe a tree the other does not mean.
 TEMPLATE_DIR = Path(__file__).with_name("_shim_template")
 TREE_DIR = TEMPLATE_DIR / "tree"
-PACKAGE_DIR = TEMPLATE_DIR / "package"
 
 _PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 
@@ -204,49 +189,6 @@ _TYPE_DIR_NAMES = frozenset(MODEL_TYPES)
 _IDENTITY_KEYS = ("name", "format", "base")
 
 
-@dataclass(frozen=True)
-class PackageShape:
-    """What a scan root already holds, and the conventions it follows.
-
-    Attributes:
-        layout: ``"typed"`` or ``"flat"`` when every vendor agrees on one
-            shape, ``None`` when they do not.
-        leaf_vendors: Vendors whose ``provider.yaml`` is a shim, not a manifest
-            — the ``llm-rosetta-shim-free`` bundle shape.
-        typed_vendors: Vendor groups with ``<type>/`` directories.
-        flat_vendors: Vendor groups with ``<format>/`` children.
-    """
-
-    layout: str | None
-    leaf_vendors: tuple[str, ...]
-    typed_vendors: tuple[str, ...]
-    flat_vendors: tuple[str, ...]
-
-    @property
-    def leaf_only(self) -> bool:
-        """True when every vendor is a single leaf directory."""
-        return bool(self.leaf_vendors) and not (self.typed_vendors or self.flat_vendors)
-
-    def describe(self) -> str:
-        """One sentence naming what was found; empty for a root with no shims."""
-        if self.leaf_only:
-            return (
-                f"{len(self.leaf_vendors)} single-lane vendor(s), each a leaf "
-                f"directory — flat layout, no vendor manifest"
-            )
-        parts = []
-        if self.typed_vendors:
-            parts.append(f"{len(self.typed_vendors)} with model-type directories")
-        if self.flat_vendors:
-            parts.append(f"{len(self.flat_vendors)} with format directories")
-        if self.leaf_vendors:
-            parts.append(f"{len(self.leaf_vendors)} single-lane leaf vendor(s)")
-        if not parts:
-            return ""
-        tail = f" — {self.layout} layout" if self.layout else " — mixed shapes"
-        return "; ".join(parts) + tail
-
-
 def _yaml_document(path: Path) -> dict[str, Any] | None:
     """Read a ``provider.yaml`` as a mapping, or ``None`` when it is not one."""
     from llm_rosetta._vendor.yaml import load as yaml_load
@@ -280,46 +222,6 @@ def _vendor_layout(directory: Path) -> str | None:
     if typed:
         return "typed"
     return "flat" if flat else None
-
-
-def detect_package(root: Path) -> PackageShape:
-    """Read the scan root's existing conventions.
-
-    The two shipped shapes are a bundle of single-lane vendors
-    (``llm-rosetta-shim-free``: one directory per provider, the directory name
-    *is* the vendor) and a vendor manifest over model-type directories
-    (``google``: ``llm/<format>`` plus ``embeddings/``).  A root that mixes them
-    has no convention worth copying, so ``layout`` stays ``None``.
-
-    Args:
-        root: The directory a gateway scans.
-
-    Returns:
-        What the root holds, in the terms a new shim has to follow.
-    """
-    leaf: list[str] = []
-    typed: list[str] = []
-    flat: list[str] = []
-    if root.is_dir():
-        for child in sorted(root.iterdir()):
-            if not child.is_dir() or child.name.startswith(("_", ".")):
-                continue
-            provider_yaml = child / "provider.yaml"
-            if provider_yaml.is_file() and _declared_name(provider_yaml) is not None:
-                leaf.append(child.name)
-                continue
-            layout = _vendor_layout(child)
-            if layout == "typed":
-                typed.append(child.name)
-            elif layout == "flat":
-                flat.append(child.name)
-    if typed and not flat and not leaf:
-        layout = "typed"
-    elif (flat or leaf) and not typed:
-        layout = "flat"
-    else:
-        layout = None
-    return PackageShape(layout, tuple(leaf), tuple(typed), tuple(flat))
 
 
 def vendor_name_error(vendor: str) -> str | None:
@@ -409,122 +311,6 @@ def inspect_target(root: Path, vendor: str, name: str) -> tuple[str | None, list
     return None, notes
 
 
-def _append_registry_entry(root: Path, name: str, leaf: Path) -> str | None:
-    """Add the leaf to the package's ``shims.yaml``, when it ships one.
-
-    Returns a note for the operator, or ``None`` when there was nothing to do.
-    The manifest is authoritative for a gateway, so a new directory that is not
-    listed there simply never loads — which makes this the one edit that must
-    not be forgotten.
-    """
-    manifest = root / "shims.yaml"
-    if not manifest.is_file():
-        return None
-    from llm_rosetta._vendor.yaml import load as yaml_load
-
-    document = yaml_load(manifest.read_text(encoding="utf-8")) or {}
-    entries = document.get("shims") if isinstance(document, dict) else None
-    if isinstance(entries, list):
-        declared = {e.get("name") for e in entries if isinstance(e, dict)}
-        if name in declared:
-            return None
-    relative = leaf.relative_to(root).as_posix()
-    if not isinstance(document, dict) or list(document)[-1:] != ["shims"]:
-        return (
-            f"{manifest}: add this entry by hand — the section is not the last "
-            f"key, so appending would move it:\n"
-            f"  - name: {name}\n    path: {relative}"
-        )
-    text = manifest.read_text(encoding="utf-8")
-    if not text.endswith("\n"):
-        text += "\n"
-    text += f"  - name: {name}\n    path: {relative}\n"
-    manifest.write_text(text, encoding="utf-8")
-    return f"updated {manifest}"
-
-
-def _git(*args: str, cwd: Path) -> str | None:
-    """Run one git query, or return ``None`` when git or the query is absent."""
-    try:
-        result = subprocess.run(
-            ["git", *args],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except (OSError, subprocess.SubprocessError):
-        return None
-    return result.stdout.strip() if result.returncode == 0 else None
-
-
-def _assets_dir(root: Path) -> Path | None:
-    """The ``assets/`` directory of the repository the scan root lives in.
-
-    A published shim package keeps its marks at the repository root, beside
-    ``src/``, because they are not part of the archive: a gateway reads the mark
-    from the repository over the CDN, and the archive only ever holds
-    ``providers/``.
-    """
-    top = _git("rev-parse", "--show-toplevel", cwd=root)
-    return Path(top) / "assets" if top else None
-
-
-def _jsdelivr_slug(repo_dir: Path) -> str | None:
-    """``<owner>/<repo>@<ref>`` for the repository *repo_dir* is in.
-
-    Read from the git remote rather than asked for: it is the same repository
-    the package will be published from, so a typo here would produce a mark URL
-    that 404s in the panel and nowhere else.
-    """
-    remote = _git("remote", "get-url", "origin", cwd=repo_dir)
-    if not remote or "github.com" not in remote:
-        return None
-    tail = remote.split("github.com", 1)[1].lstrip(":/")
-    if tail.endswith(".git"):
-        tail = tail[: -len(".git")]
-    parts = [part for part in tail.split("/") if part]
-    if len(parts) < 2:
-        return None
-    branch = _git("symbolic-ref", "--short", "refs/remotes/origin/HEAD", cwd=repo_dir)
-    ref = branch.split("/", 1)[1] if branch and "/" in branch else "main"
-    return f"{parts[0]}/{parts[1]}@{ref}"
-
-
-def _download_logo(url: str) -> tuple[bytes, str]:
-    """Fetch a mark, size-capped and content-typed.
-
-    Args:
-        url: An ``https://`` URL the operator typed.
-
-    Returns:
-        The bytes and the suffix their content type implies.
-
-    Raises:
-        ValueError: On a non-https URL, a non-image answer, or an oversized one.
-    """
-    if urlsplit(url).scheme != "https":
-        raise ValueError("the mark URL must use https")
-    with urlopen(url, timeout=20) as response:  # noqa: S310 - operator-supplied
-        content_type = (response.headers.get_content_type() or "").lower()
-        data = response.read(MAX_LOGO_BYTES + 1)
-    if len(data) > MAX_LOGO_BYTES:
-        raise ValueError(f"the mark is larger than {MAX_LOGO_BYTES} bytes")
-    suffix = LOGO_SUFFIXES.get(content_type)
-    if suffix is None:
-        raise ValueError(
-            f"the URL answered {content_type or 'no type'!r}, not an image"
-        )
-    return data, suffix
-
-
-def is_jsdelivr(url: str) -> bool:
-    """True when *url* is already served by jsDelivr."""
-    host = urlsplit(url).netloc.lower()
-    return host == "jsdelivr.net" or host.endswith(".jsdelivr.net")
-
-
 def lobehub_candidates(vendor: str) -> tuple[str, ...]:
     """Icon slugs to try for *vendor*, most specific first.
 
@@ -581,54 +367,6 @@ def find_lobehub_logo(vendor: str) -> str | None:
     return None
 
 
-def localize_logo(url: str, root: Path, vendor: str) -> tuple[str, str]:
-    """Save a remote mark into the package and return its jsDelivr URL.
-
-    The panel loads a mark from wherever the shim points it, so a third-party
-    URL is a dependency on someone else's host and their uptime.  A published
-    package instead keeps its marks in ``assets/`` and links the CDN copy.
-
-    Nothing is changed when the package cannot be identified (no git remote, no
-    repository around the scan root): the URL is returned unchanged with the
-    reason, and the operator decides.  A URL that already points at jsDelivr is
-    kept as typed — the mark is served from the CDN either way.
-
-    Args:
-        url: The mark URL the operator gave.
-        root: The scan root being scaffolded into.
-        vendor: Vendor directory name; also the asset's file name.
-
-    Returns:
-        ``(url_to_write, note)`` — the jsDelivr URL when the mark was saved,
-        else the original URL, plus a line to print.
-    """
-    if is_jsdelivr(url):
-        return url, f"kept {url}: already served from jsDelivr, nothing to copy"
-    assets = _assets_dir(root)
-    if assets is None:
-        return url, f"kept {url}: the scan root is not inside a git repository"
-    slug = _jsdelivr_slug(assets.parent)
-    if slug is None:
-        return url, f"kept {url}: no github.com 'origin' remote to build a CDN URL"
-    try:
-        data, suffix = _download_logo(url)
-    except Exception as exc:  # noqa: BLE001 - reported, the URL is kept
-        return url, f"kept {url}: {exc}"
-
-    target = assets / f"{vendor}{suffix}"
-    if target.is_file() and target.read_bytes() == data:
-        return (
-            f"https://cdn.jsdelivr.net/gh/{slug}/assets/{target.name}",
-            f"kept existing {target}",
-        )
-    assets.mkdir(parents=True, exist_ok=True)
-    target.write_bytes(data)
-    return (
-        f"https://cdn.jsdelivr.net/gh/{slug}/assets/{target.name}",
-        f"saved   {target}",
-    )
-
-
 def scaffold(
     root: Path,
     vendor: str,
@@ -643,22 +381,17 @@ def scaffold(
     logo: str | None = None,
     group: str | None = None,
     group_label: str | None = None,
-    registry_manifest: bool = True,
     transform: bool = False,
     auth: bool = False,
     quota: bool = False,
-    package: str | None = None,
     check: bool = False,
     name: str | None = None,
 ) -> int:
     """Write the files for one shim from the template.
 
     Args:
-        root: The directory a gateway scans — a built-in ``providers`` tree, or
-            a package's ``providers`` directory.  With *package* it is the
-            repository root instead, and the tree is written under
-            ``src/<package>/providers``.
-        vendor: Vendor directory name, e.g. ``acme``.
+        root: The directory a gateway scans: the built-in ``providers`` tree.
+        vendor: Vendor directory name, e.g. ``together``.
         format_: Wire format, e.g. ``chat_completions``.
         model_type: One of :data:`MODEL_TYPES`.
         lane: A named instance of the vendor (ALCF's clusters), written between
@@ -672,12 +405,9 @@ def scaffold(
         logo: Vendor mark URL, written to the vendor manifest.
         group: Vendor group key.  Defaults to the vendor name in the manifest.
         group_label: Vendor group title.
-        registry_manifest: Add the leaf to ``<root>/shims.yaml`` when that file
-            exists.
         transform: Write a ``transforms.py`` stub beside the leaf.
         auth: Write a vendor-level ``auth.py`` stub for a credential exchange.
         quota: Write a vendor-level ``quota.py`` stub.
-        package: Distribution name; write the external package shell too.
         check: Load the new leaf through the real loader and report.
         name: Shim name.  Defaults to ``<vendor>--<format>``.
 
@@ -702,28 +432,21 @@ def scaffold(
         print(f"error: {root} is not a directory", file=sys.stderr)
         return 2
 
-    scan_root = root
-    if package:
-        package_module = package.replace("-", "_")
-        scan_root = root / "src" / package_module / "providers"
-        scan_root.mkdir(parents=True, exist_ok=True)
-        _write_package_shell(root, package, package_module, vendor)
-
-    error, notes = inspect_target(scan_root, vendor, name)
+    error, notes = inspect_target(root, vendor, name)
     if error:
         print(f"error: {error}", file=sys.stderr)
         return 1
     for note in notes:
         print(f"note: {note}")
 
-    leaf = _resolve_leaf_dir(scan_root, vendor, model_type, lane, format_)
+    leaf = _resolve_leaf_dir(root, vendor, model_type, lane, format_)
     if leaf is None:
         return 1
 
     written: list[Path] = []
     written.extend(
         _write_leaf_files(
-            scan_root,
+            root,
             leaf,
             vendor=vendor,
             name=name,
@@ -742,15 +465,11 @@ def scaffold(
         )
     )
 
-    note = _append_registry_entry(scan_root, name, leaf) if registry_manifest else None
-
     for path in written:
         print(f"wrote   {path}")
-    if note:
-        print(note)
 
     if check:
-        return _check(scan_root, leaf, name)
+        return _check(root, leaf, name)
     print(
         "\nnext: fill in the measured facts, add a test under tests/, and update "
         "docs_en + docs_zh."
@@ -759,7 +478,7 @@ def scaffold(
 
 
 def _resolve_leaf_dir(
-    scan_root: Path,
+    root: Path,
     vendor: str,
     model_type: str,
     lane: str | None,
@@ -771,7 +490,7 @@ def _resolve_leaf_dir(
     first lane lives at ``<type>/provider.yaml`` and the second moves it into
     ``<type>/<its format>/`` so both sit at the same level.
     """
-    type_dir = _type_dir(scan_root, vendor, model_type, lane or None)
+    type_dir = _type_dir(root, vendor, model_type, lane or None)
     uses_formats, move_due = _format_level(type_dir)
     if move_due:
         moved, note = _move_to_format_level(type_dir)
@@ -787,7 +506,7 @@ def _resolve_leaf_dir(
 
 
 def _write_leaf_files(
-    scan_root: Path,
+    root: Path,
     leaf: Path,
     *,
     vendor: str,
@@ -811,7 +530,7 @@ def _write_leaf_files(
         Every file written, in the order it was written.
     """
     written: list[Path] = []
-    manifest = scan_root / vendor / "provider.yaml"
+    manifest = root / vendor / "provider.yaml"
     if not manifest.is_file():
         _write_from_template(
             "tree/vendor/provider.yaml.tmpl",
@@ -852,48 +571,13 @@ def _write_leaf_files(
     for module, wanted in (("auth.py", auth), ("quota.py", quota)):
         if not wanted:
             continue
-        destination = scan_root / vendor / module
+        destination = root / vendor / module
         _write_from_template(
             f"tree/vendor/{module}.tmpl",
             destination,
             {"name": name, "vendor": vendor, "format": format_},
         )
         written.append(destination)
-    return written
-
-
-def _write_package_shell(
-    repo: Path, distribution: str, package_module: str, vendor: str
-) -> list[Path]:
-    """Write the files that make *repo* an installable shim package.
-
-    A file that already exists is left alone: the shell carries the release
-    workflow and the version, which a repository owns once it exists.
-
-    Returns:
-        The files that were written.
-    """
-    from llm_rosetta import __version__ as core_version
-
-    values = {
-        "distribution": distribution,
-        "package": package_module,
-        "vendor": vendor,
-        "core_floor": core_version,
-    }
-    written: list[Path] = []
-    for template in sorted(PACKAGE_DIR.rglob("*.tmpl")):
-        relative = template.relative_to(PACKAGE_DIR).as_posix()
-        destination = repo / relative.removesuffix(".tmpl")
-        if destination.exists():
-            continue
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_text(
-            _render(template.read_text(encoding="utf-8"), values), encoding="utf-8"
-        )
-        written.append(destination)
-    for path in written:
-        print(f"wrote   {path}")
     return written
 
 
@@ -1127,13 +811,10 @@ def _fill_interactively(args: argparse.Namespace) -> None:
     """Ask for every field the command line left out."""
     print("Creating a shim.  Enter accepts the value in brackets.\n")
     args.root = _ask("Scan root (the providers directory)", args.root)
-    shape = detect_package(Path(args.root).expanduser())
-    if shape.describe():
-        print(f"  found {shape.describe()}")
-    args.vendor = args.vendor or _ask("Vendor directory name (e.g. acme)")
+    args.vendor = args.vendor or _ask("Vendor directory name (e.g. together)")
     while (error := vendor_name_error(args.vendor)) is not None:
         print(f"  {error}")
-        args.vendor = _ask("Vendor directory name (e.g. acme)")
+        args.vendor = _ask("Vendor directory name (e.g. together)")
     args.model_type = _ask_choice("Model type", MODEL_TYPES, args.model_type)
     formats = available_formats(args.model_type) or (
         DEFAULT_FORMATS.get(args.model_type, "chat_completions"),
@@ -1160,15 +841,6 @@ def _fill_interactively(args: argparse.Namespace) -> None:
     if icon:
         print(f"  lobehub has an icon for {args.vendor}: {icon}")
     args.logo = _ask("Vendor logo URL (optional)", args.logo or icon or "")
-    if args.logo:
-        if is_jsdelivr(args.logo):
-            print("  already served from jsDelivr; nothing to copy into the package")
-            args.localize_logo = False
-        else:
-            args.localize_logo = _ask_bool(
-                "Save the mark into the package and reference its jsDelivr URL?",
-                True,
-            )
     args.group_label = _ask(
         "Group title (optional)", args.group_label or args.vendor.title()
     )
@@ -1187,7 +859,7 @@ def add_arguments(parser: argparse.ArgumentParser, *, default_root: str) -> None
         default_root: The scan root used when ``--root`` is omitted.
     """
     parser.add_argument(
-        "vendor", nargs="?", default="", help="Vendor directory name, e.g. acme"
+        "vendor", nargs="?", default="", help="Vendor directory name, e.g. together"
     )
     parser.add_argument("--name", help="Shim name; default '<vendor>--<format>'")
     parser.add_argument(
@@ -1230,12 +902,6 @@ def add_arguments(parser: argparse.ArgumentParser, *, default_root: str) -> None
         action="store_true",
         help="Check that --base-url answers, and report what it answered",
     )
-    parser.add_argument(
-        "--localize-logo",
-        action="store_true",
-        help="Save the mark into the package's assets/ and reference its "
-        "jsDelivr URL (the interactive mode asks)",
-    )
     parser.add_argument("--group", help="Group key; default the vendor name")
     parser.add_argument("--group-label", help="Group title")
     parser.add_argument(
@@ -1247,17 +913,6 @@ def add_arguments(parser: argparse.ArgumentParser, *, default_root: str) -> None
         "--quota",
         action="store_true",
         help="Write a vendor-level quota.py stub",
-    )
-    parser.add_argument(
-        "--package",
-        metavar="DISTRIBUTION",
-        help="Write the external package shell into --root as well, e.g. "
-        "llm-rosetta-shim-acme; the tree then goes to src/<package>/providers",
-    )
-    parser.add_argument(
-        "--no-registry-manifest",
-        action="store_true",
-        help="Do not add the leaf to the package's shims.yaml",
     )
     parser.add_argument(
         "--transform", action="store_true", help="Add a transforms.py stub"
@@ -1332,13 +987,6 @@ def _run(args: argparse.Namespace) -> int:
         )
         return 2
     root = Path(args.root).expanduser().resolve()
-    shape = detect_package(root)
-    if shape.leaf_only:
-        print(
-            "note: this package models each provider as its own vendor leaf; "
-            "the scaffold now writes <vendor>/<type>/ — run the tree check for "
-            "the canonical path of what is already there"
-        )
     base_url = args.base_url or None
     if base_url and args.probe:
         base_url, note = normalize_base_url(base_url)
@@ -1357,9 +1005,6 @@ def _run(args: argparse.Namespace) -> int:
             )
             return 2
         print(f"logo    {logo} (lobehub, {args.vendor})")
-    if logo and args.localize_logo:
-        logo, note = localize_logo(logo, root, args.vendor)
-        print(note)
     if _guard is not None:
         _guard.writing = True
     return scaffold(
@@ -1375,11 +1020,9 @@ def _run(args: argparse.Namespace) -> int:
         logo=logo,
         group=args.group,
         group_label=args.group_label or None,
-        registry_manifest=not args.no_registry_manifest,
         transform=args.transform,
         auth=args.auth,
         quota=args.quota,
-        package=args.package,
         check=args.check,
         name=args.name,
     )
@@ -1614,37 +1257,6 @@ def _field_problems(root: Path) -> list[Finding]:
     return findings
 
 
-def _manifest_problems(root: Path) -> list[Finding]:
-    """Report a ``shims.yaml`` entry whose directory holds no leaf."""
-    manifest = root / "shims.yaml"
-    if not manifest.is_file():
-        return []
-    from llm_rosetta._vendor.yaml import load as yaml_load
-
-    try:
-        document = yaml_load(manifest.read_text(encoding="utf-8")) or {}
-    except Exception as exc:  # noqa: BLE001 - the loader reports the same thing
-        return [Finding(manifest, f"cannot be read: {exc}")]
-    entries = document.get("shims") if isinstance(document, dict) else None
-    if not isinstance(entries, list):
-        return [Finding(manifest, "declares no 'shims' list")]
-    findings: list[Finding] = []
-    for entry in entries:
-        if not isinstance(entry, dict):
-            findings.append(Finding(manifest, "an entry is not a mapping"))
-            continue
-        relative = entry.get("path")
-        name = entry.get("name") or "?"
-        if not isinstance(relative, str) or not relative:
-            findings.append(Finding(manifest, f"{name}: declares no 'path'"))
-            continue
-        if not (root / relative / "provider.yaml").is_file():
-            findings.append(
-                Finding(manifest, f"{name}: {relative}/ holds no provider.yaml")
-            )
-    return findings
-
-
 def check_tree(root: Path) -> list[Finding]:
     """Report every place *root* deviates from the shim tree contract.
 
@@ -1699,7 +1311,6 @@ def check_tree(root: Path) -> list[Finding]:
         if problem:
             findings.append(Finding(provider_yaml, problem))
     findings.extend(_module_problems(root))
-    findings.extend(_manifest_problems(root))
     findings.extend(_token_command_problems(root))
     findings.extend(_field_problems(root))
     return sorted(findings, key=lambda f: str(f.path))
@@ -1916,118 +1527,8 @@ def _move_entries(root: Path, move: Move) -> list[str]:
 _MANIFEST_KEY_ORDER = ("version", "core", "shims")
 
 
-def _manifest_value(value: Any) -> str | None:
-    """Render *value* as a one-line YAML scalar, or ``None`` when it is not one."""
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, (int, float)):
-        return str(value)
-    if value is None:
-        return "null"
-    if isinstance(value, str):
-        return _yaml_scalar(value)
-    return None
-
-
-def _render_manifest_header(document: dict[str, Any]) -> list[str] | None:
-    """The top-level keys, in a stable order, or ``None`` on a non-scalar.
-
-    ``version`` and ``core`` lead; anything else the operator wrote keeps its
-    order behind them, and a missing ``version`` is written rather than lost.
-    """
-    ordered = [key for key in ("version", "core") if key in document]
-    ordered += [key for key in document if key not in _MANIFEST_KEY_ORDER]
-    lines: list[str] = []
-    for key in ordered:
-        rendered = _manifest_value(document[key])
-        if rendered is None:
-            return None
-        lines.append(f"{key}: {rendered}")
-    if "version" not in document:
-        lines.insert(0, "version: 1")
-    return lines
-
-
-def _render_manifest_entry(entry: Any) -> list[str] | None:
-    """One ``shims:`` item, or ``None`` when a value is not a scalar."""
-    if not isinstance(entry, dict):
-        return None
-    ordered = [key for key in ("name", "path") if key in entry]
-    ordered += [key for key in entry if key not in ("name", "path")]
-    lines: list[str] = []
-    for index, key in enumerate(ordered):
-        rendered = _manifest_value(entry[key])
-        if rendered is None:
-            return None
-        lines.append(("  - " if index == 0 else "    ") + f"{key}: {rendered}")
-    return lines
-
-
-def _render_manifest(document: dict[str, Any], entries: list[Any]) -> list[str] | None:
-    """Rebuild ``shims.yaml`` from its parsed document, or refuse.
-
-    Returns:
-        The file's lines, or ``None`` when a value is not a scalar this writer
-        can render — a list or a nested mapping is the operator's to keep, and
-        rewriting it lossily would be worse than leaving the file alone.
-    """
-    header = _render_manifest_header(document)
-    if header is None:
-        return None
-    lines = [*header, "shims:"]
-    for entry in entries:
-        rendered = _render_manifest_entry(entry)
-        if rendered is None:
-            return None
-        lines.extend(rendered)
-    return lines
-
-
-def _rewrite_manifest(root: Path, moves: list[Move]) -> list[str]:
-    """Point every ``shims.yaml`` entry at where its leaf moved to.
-
-    Only ``path`` is rewritten.  Every other key stays as it was — ``core``,
-    and any the writer does not know — and the file is rebuilt from its parsed
-    document, so comments do not survive.  A document holding a value that is
-    not a scalar (a list, a nested mapping) is left untouched with a note
-    instead: a lossy rewrite of the operator's file is worse than a path they
-    fix by hand.
-    """
-    manifest = root / "shims.yaml"
-    if not moves or not manifest.is_file():
-        return []
-    from llm_rosetta._vendor.yaml import load as yaml_load
-
-    document = yaml_load(manifest.read_text(encoding="utf-8")) or {}
-    if not isinstance(document, dict):
-        return [f"left {manifest.relative_to(root)} alone: it is not a mapping"]
-    entries = document.get("shims")
-    if entries is None:
-        entries = []
-    if not isinstance(entries, list):
-        return [f"left {manifest.relative_to(root)} alone: 'shims' is not a list"]
-    relocated = [(Path(str(m.source)), Path(str(m.destination))) for m in moves]
-    for entry in entries:
-        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
-            continue
-        old = root / entry["path"]
-        for source, destination in relocated:
-            if old == source or source in old.parents:
-                suffix = old.relative_to(source)
-                entry["path"] = (destination / suffix).relative_to(root).as_posix()
-                break
-    lines = _render_manifest(document, entries)
-    if lines is None:
-        return [
-            f"left {manifest.relative_to(root)} alone: it holds a value this "
-            "rewrite cannot render; update its paths by hand"
-        ]
-    manifest.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return [f"rewrote {manifest.relative_to(root)}"]
-
-
 def apply_migration(root: Path, moves: list[Move]) -> list[str]:
-    """Perform the planned moves and rewrite ``shims.yaml`` paths.
+    """Perform the planned moves and report what moved.
 
     The moves are directory-level: every file beside the leaf — transforms,
     a leaf exchange, a quota module — travels with it.  Two things move with it
@@ -2053,7 +1554,6 @@ def apply_migration(root: Path, moves: list[Move]) -> list[str]:
     actions: list[str] = []
     for move in moves:
         actions.extend(_move_entries(root, move))
-    actions.extend(_rewrite_manifest(root, moves))
     return actions
 
 

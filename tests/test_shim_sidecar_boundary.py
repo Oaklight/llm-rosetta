@@ -125,7 +125,6 @@ def test_the_scaffolded_vendor_imports_core_only_through_the_contracts(tmp_path)
     root.mkdir()
     argv = ["acme", "--root", str(root), "--base-url", "https://example.invalid/v1"]
     argv += ["--transform", "--auth", "--quota", "--no-input"]
-    argv += ["--no-registry-manifest"]
     assert scaffold.main(argv) == 0
     written = sorted(root.rglob("*.py"))
     assert SIDECAR_NAMES <= frozenset(p.name for p in written)

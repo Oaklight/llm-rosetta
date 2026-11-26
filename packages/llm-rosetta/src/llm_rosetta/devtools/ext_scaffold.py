@@ -247,7 +247,7 @@ def add_ext_arguments(parser: argparse.ArgumentParser, *, command: str = "new") 
         ValueError: *command* is neither.
     """
     if command == "new":
-        parser.add_argument("ext_id", help="Extension id, e.g. acme_free")
+        parser.add_argument("ext_id", help="Extension id, e.g. together")
         parser.add_argument("--name", help="Display name; default the id")
         parser.add_argument(
             "--format",

@@ -25,18 +25,11 @@ working private module; `__init__.py` is the name that stays unread, and a
 | `auth.py` | leaf | no | that leaf's exchange; refused when the vendor has one |
 | `quota.py` | vendor root or leaf | no | `PROBES`, allowance readers |
 | `transforms.py` | leaf | no | field-level transform tuples |
-| `shims.yaml` | the directory the gateway scans | no | the set of shims the package declares |
 
 `auth.py` and `quota.py` are executed as standalone modules: they cannot use
 relative imports and must be self-contained (the standard library is always
 available). `transforms.py` may use relative imports — the loader registers a
 package chain for it — so a helper module beside it works.
-
-`shims.yaml` sits beside the vendor directories, in the directory a gateway is
-pointed at — `shims.paths` for a local tree, the remote's `path` for a fetched
-one (`src/<package>/providers` in the packages this repository publishes). A
-copy one level up, at `src/<package>/shims.yaml`, is never read: the source
-loads, the floor in it is not checked, and nothing says so.
 
 ## Where a leaf lives
 
@@ -104,13 +97,13 @@ entry and are echoed to the authenticated panel, so a credential belongs in
 
 ```bash
 # inside a checkout, into the built-in tree
-python scripts/dev/new_shim.py acme --format chat_completions
+python scripts/dev/new_shim.py together --format chat_completions
 
 # a lane under an existing vendor
-python scripts/dev/new_shim.py acme --lane metis --format chat_completions
+python scripts/dev/new_shim.py alcf --lane metis --format chat_completions
 
 # an installable extension folder (a tree of this shape plus plugin.yaml)
-llm-rosetta ext new acme
+llm-rosetta ext new together
 ```
 
 Every run loads its own output through the real loader before it reports
@@ -118,7 +111,7 @@ success, so a shape no gateway could read fails at creation rather than at
 startup. Check an extension folder with `llm-rosetta ext check <folder>`, or a bare tree with:
 
 ```bash
-python -c "import sys; from pathlib import Path; from llm_rosetta.api import run_scaffold_check; sys.exit(run_scaffold_check(Path(sys.argv[1])))" src/llm_rosetta_shim_acme/providers
+python -c "import sys; from pathlib import Path; from llm_rosetta.api import run_scaffold_check; sys.exit(run_scaffold_check(Path(sys.argv[1])))" src/llm_rosetta/shims/builtin
 ```
 
 ## How the template directory maps to a shim
@@ -127,13 +120,11 @@ The directories under `tree/` use fixed names so an editor can open them:
 `tree/vendor/` becomes `<root>/<vendor>/`, `tree/vendor/type/` becomes
 `<vendor>/<type>/`, and `tree/vendor/type/format/` becomes
 `<vendor>/<type>/<format>/` — or `<vendor>/<type>/` when that type holds a
-single lane, in which case the format level is dropped. `package/src/package/`
-becomes `src/<package>/`.
+single lane, in which case the format level is dropped.
 
-Every file below `tree/` and `package/` carries a `.tmpl` suffix and the
-scaffold strips it when writing. Without the suffix, ruff, setuptools and the
-loader would treat a placeholder file as the real thing — `package/pyproject.toml`
-is not valid TOML while it still says `{{vendor}}`.
+Every file below `tree/` carries a `.tmpl` suffix and the scaffold strips it
+when writing. Without the suffix, ruff and the loader would treat a placeholder
+file as the real thing.
 
 ## Placeholders
 
@@ -141,8 +132,4 @@ The scaffold renders these names. A line whose placeholder renders empty is
 dropped, so an optional field can stay on one line in the template.
 
 `{{vendor}}`, `{{group}}`, `{{group_label}}`, `{{logo}}`, `{{api_key_env}}`,
-`{{name}}`, `{{model_type}}`, `{{format}}`, `{{base_url}}`,
-`{{distribution}}`, `{{package}}`, `{{core_floor}}`.
-
-`{{core_floor}}` is filled from the running core's version, so a package
-generated today always pins a core that can read what was generated.
+`{{name}}`, `{{model_type}}`, `{{format}}`, `{{base_url}}`.
