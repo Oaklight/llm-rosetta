@@ -145,3 +145,29 @@ def test_the_musl_recipe_pins_nuitka():
     block = _flag_blocks()["build-binary-musl"]
     pins = re.findall(r"nuitka\[onefile\]([^\s\"']*)", block)
     assert pins and all(re.fullmatch(r"==\d+(\.\d+)+", pin) for pin in pins), pins
+
+
+def test_the_install_guard_runs_the_recipe_with_the_makefiles_pin():
+    """``binary-recipe.yml`` checks the recipe's install steps on pull requests.
+
+    It reads the Nuitka pin from the Makefile (the one place it lives), installs
+    the two packages the recipe installs, and runs on the files that can break
+    them.
+    """
+    path = ROOT / ".github" / "workflows" / "binary-recipe.yml"
+    if not path.is_file():
+        pytest.skip("the workflow files are not part of this checkout")
+    text = path.read_text(encoding="utf-8")
+    assert "pull_request" in text and "workflow_dispatch" not in text
+    for trigger in (
+        '"Makefile"',
+        "nuitka.yml",
+        "packages/*/pyproject.toml",
+        "docker/**",
+    ):
+        assert trigger in text, trigger
+    assert "-e packages/llm-rosetta -e packages/llm-rosetta-gateway" in text
+    assert "Makefile" in text and "nuitka\\[onefile\\]" in text
+    assert not re.search(r"nuitka\[onefile\]==\d", text), (
+        "the pin is read, not repeated"
+    )
