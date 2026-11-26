@@ -5,7 +5,7 @@ live in the core (``llm_rosetta.contracts.usage``).  What lives here is the
 command that walks a ``gateway.db`` and renders them, because only the gateway
 writes that database.
 
-The command is ``llm-rosetta usage``; the entry point is
+The command is ``llm-rosetta gateway usage``; the entry point is
 :func:`llm_rosetta_gateway.observability.usage.cli.main`.
 """
 

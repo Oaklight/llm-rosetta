@@ -37,16 +37,10 @@ llm-rosetta-gateway = "llm_rosetta_gateway:main"
 # explicitly for a host that has no package metadata, such as the Nuitka binary.
 # The summaries come from each callable's docstring.
 [project.entry-points."llm_rosetta.commands"]
+# ``llm-rosetta gateway <verb>`` runs init, add, credential, password, db, usage
+# and migrate; ``serve`` is the shortcut for ``gateway serve``.
+gateway = "llm_rosetta_gateway.cli:gateway_main"
 serve = "llm_rosetta_gateway.cli:serve_main"
-init = "llm_rosetta_gateway.cli:init_main"
-add = "llm_rosetta_gateway.cli:add_main"
-credential = "llm_rosetta_gateway.cli:credential_main"
-password = "llm_rosetta_gateway.cli:password_main"
-db = "llm_rosetta_gateway.cli:db_main"
-# Reads the gateway's own database, so it ships with the gateway (#1161).
-usage = "llm_rosetta_gateway.observability.usage.cli:main"
-# One-shot migration off the names that 0.14.0 retires.
-migrate = "llm_rosetta_gateway.maintenance.migrate_0140:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

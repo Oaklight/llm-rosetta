@@ -10,7 +10,7 @@ of the tag, ``*`` or legacy preset that selects it:
 - a pin ``<source>:<vendor>@<version>`` holds whatever else selects the vendor;
 
 and the rewrite that spells a legacy ``shims.presets`` key as install entries,
-used by ``llm-rosetta migrate --config``.
+used by ``llm-rosetta gateway migrate --config``.
 """
 
 from __future__ import annotations

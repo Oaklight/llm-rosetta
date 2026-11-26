@@ -2,7 +2,7 @@
 
 ``STANDARD_SHAPES`` no longer lists ``anthropic`` and its siblings, so the total
 repair cannot read such a row.  The gateway keeps serving and says so: a warning
-names the retired tags and ``llm-rosetta migrate --db``.
+names the retired tags and ``llm-rosetta gateway migrate --db``.
 """
 
 from __future__ import annotations
@@ -86,7 +86,7 @@ async def test_an_unmigrated_row_is_left_alone_and_reported(tmp_path, warnings_s
     assert totals["anthropic"] == 15
     message = next(m for m in warnings_seen if "retired provider tag" in m)
     assert "1 request_log rows" in message
-    assert "llm-rosetta migrate --db" in message
+    assert "llm-rosetta gateway migrate --db" in message
 
 
 @pytest.mark.asyncio
@@ -114,7 +114,7 @@ async def test_the_embedding_provider_tag_is_reported_too(tmp_path, warnings_see
     assert count == 1
     message = next(m for m in warnings_seen if "retired provider tag" in m)
     assert "embedding" in message
-    assert "llm-rosetta migrate --db" in message
+    assert "llm-rosetta gateway migrate --db" in message
 
 
 @pytest.mark.asyncio

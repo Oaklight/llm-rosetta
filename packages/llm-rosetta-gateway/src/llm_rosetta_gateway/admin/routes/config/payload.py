@@ -326,7 +326,7 @@ def _normalise_endpoint_flags(masked: dict[str, Any]) -> None:
     (``embeddings: {shim, format, path, enabled}``); this folds the flat
     ``embeddings_*`` keys into it, for the payload only.  The pre-rename
     ``embedding_*`` keys are not read any more: the loader rejects them with
-    the key that replaces each and the ``llm-rosetta migrate`` command.
+    the key that replaces each and the ``llm-rosetta gateway migrate`` command.
     """
     from ....model_types import all_model_types
 

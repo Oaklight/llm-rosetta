@@ -263,7 +263,7 @@ class TestEmbeddingSection:
             )
         message = str(info.value)
         assert "'embedding_format' was renamed to 'embeddings_format'" in message
-        assert "llm-rosetta migrate" in message
+        assert "llm-rosetta gateway migrate" in message
 
     def test_a_quoted_flag_warns_and_leaves_the_endpoint_enabled(self) -> None:
         """``"false"`` is a string, not a switch: say so instead of guessing."""

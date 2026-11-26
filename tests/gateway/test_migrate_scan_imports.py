@@ -1,4 +1,4 @@
-"""``llm-rosetta migrate --scan`` names the replacement of a removed import (#919).
+"""``llm-rosetta gateway migrate --scan`` names the replacement of a removed import (#919).
 
 The scan reads the import statements of ``.py`` files against
 ``retired_names.RETIRED_MODULES``.  A listed path is reported only when it does

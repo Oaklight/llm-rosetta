@@ -59,7 +59,7 @@ class TestLookup:
         ):
             with pytest.raises(ValueError, match=f"'{canonical}'"):
                 get_converter_class(legacy, "openai")
-            with pytest.raises(ValueError, match="llm-rosetta migrate"):
+            with pytest.raises(ValueError, match="llm-rosetta gateway migrate"):
                 converter_map(legacy)
 
 

@@ -5,7 +5,7 @@ a spelling an earlier release accepted for a provider type, a shim or a model
 type.  No spelling is translated any more (the alias tables are gone): a
 name listed here must not fall through to "unknown type" or "no base_url
 configured", so it fails with a message that names its replacement and ends
-with :data:`MIGRATE_HINT`: the ``llm-rosetta migrate`` command when the
+with :data:`MIGRATE_HINT`: the ``llm-rosetta gateway migrate`` command when the
 gateway distribution (which ships it) is installed, else the migration guide.
 This module supplies that message.
 
@@ -31,7 +31,7 @@ Removed import paths
 :data:`RETIRED_MODULES` is a sibling table: a module path that an earlier
 release (or the 0.14.0 development line) let user code import, and what to
 import instead.  It is data only.  Nothing here hooks the import system; the
-reader is ``llm-rosetta migrate --scan``, which reports an import of a listed
+reader is ``llm-rosetta gateway migrate --scan``, which reports an import of a listed
 path only when that path does not resolve in the installed core, so a path
 that still exists is never reported.  Add one :class:`RetiredModule` row when
 a module path is removed or moved.
@@ -45,7 +45,7 @@ name, so nothing here is renamed: a config that names it keeps working once
 the vendor is installed from that repository, which the gateway does by
 itself.  The table is what makes a lookup that finds no such shim say where it
 went instead of "unsupported provider" (:func:`moved_shim_message`), and what
-``llm-rosetta migrate`` reads to report a moved name as a note.  Add one
+``llm-rosetta gateway migrate`` reads to report a moved name as a note.  Add one
 :class:`MovedVendor` row when a vendor leaves core.
 """
 
@@ -68,7 +68,7 @@ MIGRATION_GUIDE_URL = (
 def _migrate_hint(find_spec: Callable[[str], Any] = importlib.util.find_spec) -> str:
     """Return the closing sentence of a retired-name error for this install.
 
-    ``llm-rosetta migrate`` ships with the gateway distribution, so it is
+    ``llm-rosetta gateway migrate`` ships with the gateway distribution, so it is
     named only when ``llm_rosetta_gateway`` is installed.  A core-only user
     (the SDK) gets the migration guide instead.  The check locates the
     package without importing it: core must never import the gateway
@@ -85,14 +85,14 @@ def _migrate_hint(find_spec: Callable[[str], Any] = importlib.util.find_spec) ->
         installed = False
     if installed:
         return (
-            "run 'llm-rosetta migrate --config <path>' (add --write to apply), "
+            "run 'llm-rosetta gateway migrate --config <path>' (add --write to apply), "
             f"see the migration guide ({MIGRATION_GUIDE_URL})"
         )
     return f"see the migration guide ({MIGRATION_GUIDE_URL})"
 
 
 #: The sentence every retired-name error ends with.  With the gateway
-#: installed it names ``llm-rosetta migrate``, the command that rewrites a
+#: installed it names ``llm-rosetta gateway migrate``, the command that rewrites a
 #: config or a database; without it, only the migration guide, which explains
 #: the full table of renames.  Fixed when this module is first imported.
 MIGRATE_HINT = _migrate_hint()
@@ -470,7 +470,7 @@ class MovedVendor:
         vendor: The vendor directory name, which is also the shim-name prefix
             (``opencode`` for ``opencode--chat_completions``).
         shims: The shim names core shipped for the vendor, for the record and
-            for ``llm-rosetta migrate --scan``.  A name the repository adds
+            for ``llm-rosetta gateway migrate --scan``.  A name the repository adds
             later (``<vendor>--<format>``) belongs to the vendor as well.
         probes: The quota probe ids the vendor's ``quota.py`` provides, so a
             ``quota.probe`` that names one is traced to the vendor.

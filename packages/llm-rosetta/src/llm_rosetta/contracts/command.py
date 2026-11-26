@@ -44,6 +44,12 @@ COMMAND_ENTRY_POINT_GROUP = "llm_rosetta.commands"
 #: Names the dispatcher owns; no distribution can register or declare them.
 CORE_COMMAND_NAMES: tuple[str, ...] = ("ext", "help")
 
+#: The names the gateway distribution owns: its ``gateway`` area and the
+#: ``serve`` shortcut.  An extension id spelled like one would be shadowed by
+#: the command, so its manifest is refused (the gateway may not be installed,
+#: and the name must not depend on that).
+GATEWAY_COMMAND_NAMES: tuple[str, ...] = ("gateway", "serve")
+
 #: The owner reported for the core-owned names.
 CORE_OWNER = "llm-rosetta"
 
@@ -56,6 +62,7 @@ _TARGET_RE = re.compile(
 __all__ = [
     "COMMAND_ENTRY_POINT_GROUP",
     "CORE_COMMAND_NAMES",
+    "GATEWAY_COMMAND_NAMES",
     "CORE_OWNER",
     "CommandCatalog",
     "CommandConflict",

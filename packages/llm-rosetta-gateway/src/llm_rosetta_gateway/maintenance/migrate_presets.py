@@ -3,7 +3,7 @@
 The gateway stopped reading ``shims.presets``, ``shims.include``,
 ``shims.exclude`` and the preset-derived remotes in 0.15.0.  This module is the
 one place that still knows what the five legacy preset keys stood for, so
-``llm-rosetta migrate`` can rewrite an old config into the manifest-source
+``llm-rosetta gateway migrate`` can rewrite an old config into the manifest-source
 form (:mod:`llm_rosetta_gateway.shims.manifest_sources`).
 """
 
@@ -67,7 +67,7 @@ def presets_as_install(
 ) -> PresetRewrite:
     """Spell legacy ``shims.presets`` as explicit ``shims.install`` entries.
 
-    The one home of the rewrite: ``llm-rosetta migrate --config`` edits the
+    The one home of the rewrite: ``llm-rosetta gateway migrate --config`` edits the
     file with it, and the admin panel runs it before removing one vendor a
     preset selects.
 

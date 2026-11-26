@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
-from llm_rosetta.contracts.command import CORE_COMMAND_NAMES
+from llm_rosetta.contracts.command import CORE_COMMAND_NAMES, GATEWAY_COMMAND_NAMES
 from llm_rosetta.contracts._schema import _check
 
 #: The manifest file an extension carries beside its code.
@@ -217,6 +217,11 @@ def validate_extension_manifest(document: Any) -> list[str]:
             problems.append(
                 f"$.provides.commands: the area {area!r} is a core command name; "
                 "rename the extension"
+            )
+        elif area in GATEWAY_COMMAND_NAMES:
+            problems.append(
+                f"$.provides.commands: the area {area!r} is a command name of the "
+                "gateway; rename the extension"
             )
     for index, name in enumerate(shims):
         if not _shim_belongs_to(name, ext_id):
