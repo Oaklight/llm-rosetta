@@ -1,10 +1,10 @@
 """Manifest sources, and the shims that stand-alone vendors provide.
 
 A provider shim set that left core lives in a shim source repository that
-publishes a versioned ``manifest.json`` (:data:`SHIM_SOURCES`: ``argonne`` and
-``contrib``).  The gateway reads those manifests through ``shims.sources`` and
-installs vendors through ``shims.install``; the Available view of the admin
-Shims page lists what a source's manifest publishes.
+publishes a versioned extension index, ``index.json`` (:data:`SHIM_SOURCES`:
+``argonne`` and ``contrib``).  The gateway reads those indexes through
+``shims.sources`` and installs vendors through ``shims.install``; the Available
+view of the admin Shims page lists what a source's index publishes.
 
 :data:`STANDALONE_VENDORS` records the five vendor groups that the 0.14.x
 ``shims.presets`` keys named.  Two things still read it: the sentence a missing

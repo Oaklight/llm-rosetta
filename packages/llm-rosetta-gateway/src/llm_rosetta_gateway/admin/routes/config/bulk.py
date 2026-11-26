@@ -85,11 +85,6 @@ def lane_key(name: str, upstream: Any) -> Lane:
     return (name, upstream or None)
 
 
-def _provider_names(entry: Any) -> list[str]:
-    """Return the provider names a model entry already routes through."""
-    return [lane[0] for lane in _lane_keys(entry)]
-
-
 def _lane_keys(entry: Any) -> list[Lane]:
     """The lanes a model entry already lists, in declared order."""
     if isinstance(entry, str):
