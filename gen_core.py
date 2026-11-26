@@ -61,7 +61,7 @@ current_edges = [
  ("IROPS","IRMODEL","","solid",None),
  ("SHIM","IROPS","","solid",None), ("SHIM","CDECL","注册 resolver","solid",None), ("SHIM","FMT","","solid",None),
  ("SHIM","EXTS","模块级:注册 shims 处理器;load_providers() 调 load_extensions()(#1735)","solid",GREEN),
- ("EXTS","CDECL","","solid",None), ("EXTS","DEV","ext new / check","lazy",None),
+ ("EXTS","CDECL","","solid",None), ("DEV","EXTS","ext new / check 的 ExtVerb 记录(#1752)","solid",None), ("CLI","DEV","把 ExtVerb 传给 ext_main","lazy",None),
  ("CDECL","IRMODEL","IREffort · IRMode · IR_VERSION","solid",None),
  ("CDECL","FMT","usage.semantics","solid",None),
  ("DET","CDECL","ProviderType 定义在 contracts.routing(#1738)","solid",None),

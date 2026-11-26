@@ -86,7 +86,8 @@ pre.error { color: #b00; white-space: pre-wrap; }
   SHIM --&gt; FMT
   SHIM --&gt;|"模块级:注册 shims 处理器;load_providers() 调 load_extensions()(#1735)"| EXTS
   EXTS --&gt; CDECL
-  EXTS -.-&gt;|"ext new / check"| DEV
+  DEV --&gt;|"ext new / check 的 ExtVerb 记录(#1752)"| EXTS
+  CLI -.-&gt;|"把 ExtVerb 传给 ext_main"| DEV
   CDECL --&gt;|"IREffort · IRMode · IR_VERSION"| IRMODEL
   CDECL --&gt;|"usage.semantics"| FMT
   DET --&gt;|"ProviderType 定义在 contracts.routing(#1738)"| CDECL
@@ -100,7 +101,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   REF --&gt;|"转发(带警告)"| IRMODEL
 
   linkStyle 16 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 23 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 24 stroke:#d33,stroke-width:2.5px,color:#d33
 </pre></div></div>
 </section>
 <section id="core_target">
