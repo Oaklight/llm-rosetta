@@ -4,7 +4,7 @@ flowchart TB
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
     API["api.py<br/>宿主门面:只做再导出(再导出的边不画)"]
     TESTING["testing.py<br/>测试辅助:snapshot_registry · restore_registry(core 不导入)"]
-    INIT["llm_rosetta/__init__ 组合根<br/>导入完成后调用 load_extensions()"]
+    INIT["llm_rosetta/__init__ 组合根"]
     CLI["cli.py · __main__<br/>分发器 · 注册 commands 处理器"]
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
@@ -32,8 +32,7 @@ flowchart TB
 
   INIT --> PIPE
   INIT --> SHIM
-  INIT -->|"load_extensions()"| EXTS
-  SHIM -->|"注册 shims 处理器"| EXTS
+  SHIM -->|"注册 shims 处理器;load_providers() 调 load_extensions()"| EXTS
   CLI -->|"注册 commands 处理器"| EXTS
   GW -.->|"经 api 注册 transports 处理器"| EXTS
   EXTS --> CDECL
@@ -57,4 +56,3 @@ flowchart TB
   linkStyle 2 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
   linkStyle 3 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
   linkStyle 4 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 5 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c

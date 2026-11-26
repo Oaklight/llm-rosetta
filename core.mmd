@@ -57,8 +57,7 @@ flowchart TB
   SHIM --> IROPS
   SHIM -->|"注册 resolver"| CDECL
   SHIM --> FMT
-  SHIM -.->|"导入时 load_extensions"| EXTS
-  EXTS -.->|"注册 shim"| SHIM
+  SHIM -->|"模块级:注册 shims 处理器;load_providers() 调 load_extensions()(#1735)"| EXTS
   EXTS --> CDECL
   EXTS -.->|"ext new / check"| DEV
   CDECL -->|"IREffort · IRMode · IR_VERSION"| IRMODEL
@@ -72,6 +71,5 @@ flowchart TB
   DEV --> CDECL
   REF -->|"转发(带警告)"| IRMODEL
 
-  linkStyle 17 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 18 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 25 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 17 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 24 stroke:#d33,stroke-width:2.5px,color:#d33

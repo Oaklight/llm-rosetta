@@ -60,8 +60,7 @@ current_edges = [
  ("CVT","IROPS","","solid",None), ("CVT","IRMODEL","","solid",None), ("CVT","CDECL","","solid",None),
  ("IROPS","IRMODEL","","solid",None), ("IROPS","CDECL","passes 用 shim 数据类","solid",None),
  ("SHIM","IROPS","","solid",None), ("SHIM","CDECL","注册 resolver","solid",None), ("SHIM","FMT","","solid",None),
- ("SHIM","EXTS","导入时 load_extensions","lazy",RED),
- ("EXTS","SHIM","注册 shim","lazy",RED),
+ ("SHIM","EXTS","模块级:注册 shims 处理器;load_providers() 调 load_extensions()(#1735)","solid",GREEN),
  ("EXTS","CDECL","","solid",None), ("EXTS","DEV","ext new / check","lazy",None),
  ("CDECL","IRMODEL","IREffort · IRMode · IR_VERSION","solid",None),
  ("CDECL","FMT","usage.semantics","solid",None),
@@ -80,7 +79,7 @@ target_header = '''flowchart TB
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
     API["api.py<br/>宿主门面:只做再导出(再导出的边不画)"]
     TESTING["testing.py<br/>测试辅助:snapshot_registry · restore_registry(core 不导入)"]
-    INIT["llm_rosetta/__init__ 组合根<br/>导入完成后调用 load_extensions()"]
+    INIT["llm_rosetta/__init__ 组合根"]
     CLI["cli.py · __main__<br/>分发器 · 注册 commands 处理器"]
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
@@ -107,8 +106,7 @@ target_header = '''flowchart TB
 '''
 target_edges = [
 ("INIT","PIPE","","solid",None), ("INIT","SHIM","","solid",None),
- ("INIT","EXTS","load_extensions()","solid",GREEN),
- ("SHIM","EXTS","注册 shims 处理器","solid",GREEN),
+ ("SHIM","EXTS","注册 shims 处理器;load_providers() 调 load_extensions()","solid",GREEN),
  ("CLI","EXTS","注册 commands 处理器","solid",GREEN),
  ("GW","EXTS","经 api 注册 transports 处理器","lazy",GREEN),
  ("EXTS","CDECL","","solid",None),

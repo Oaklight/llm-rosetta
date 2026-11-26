@@ -85,8 +85,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   SHIM --&gt; IROPS
   SHIM --&gt;|"注册 resolver"| CDECL
   SHIM --&gt; FMT
-  SHIM -.-&gt;|"导入时 load_extensions"| EXTS
-  EXTS -.-&gt;|"注册 shim"| SHIM
+  SHIM --&gt;|"模块级:注册 shims 处理器;load_providers() 调 load_extensions()(#1735)"| EXTS
   EXTS --&gt; CDECL
   EXTS -.-&gt;|"ext new / check"| DEV
   CDECL --&gt;|"IREffort · IRMode · IR_VERSION"| IRMODEL
@@ -100,9 +99,8 @@ pre.error { color: #b00; white-space: pre-wrap; }
   DEV --&gt; CDECL
   REF --&gt;|"转发(带警告)"| IRMODEL
 
-  linkStyle 17 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 18 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 25 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 17 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 24 stroke:#d33,stroke-width:2.5px,color:#d33
 </pre></div></div>
 </section>
 <section id="core_target">
@@ -115,7 +113,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
     API["api.py&lt;br/&gt;宿主门面:只做再导出(再导出的边不画)"]
     TESTING["testing.py&lt;br/&gt;测试辅助:snapshot_registry · restore_registry(core 不导入)"]
-    INIT["llm_rosetta/__init__ 组合根&lt;br/&gt;导入完成后调用 load_extensions()"]
+    INIT["llm_rosetta/__init__ 组合根"]
     CLI["cli.py · __main__&lt;br/&gt;分发器 · 注册 commands 处理器"]
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
@@ -143,8 +141,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
 
   INIT --&gt; PIPE
   INIT --&gt; SHIM
-  INIT --&gt;|"load_extensions()"| EXTS
-  SHIM --&gt;|"注册 shims 处理器"| EXTS
+  SHIM --&gt;|"注册 shims 处理器;load_providers() 调 load_extensions()"| EXTS
   CLI --&gt;|"注册 commands 处理器"| EXTS
   GW -.-&gt;|"经 api 注册 transports 处理器"| EXTS
   EXTS --&gt; CDECL
@@ -168,7 +165,6 @@ pre.error { color: #b00; white-space: pre-wrap; }
   linkStyle 2 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
   linkStyle 3 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
   linkStyle 4 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 5 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
 </pre></div></div>
 </section>
 <section id="gateway">
