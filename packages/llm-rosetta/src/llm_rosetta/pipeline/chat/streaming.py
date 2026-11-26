@@ -108,10 +108,31 @@ class BaselineStreamProcessor:
         for shape in USAGE_SHAPES:
             result.update(shape.extended(usage))
 
+    #: The objects a dialect nests its usage in, besides the chunk itself:
+    #: Messages ``message_start`` (``message``), Responses ``response.completed``
+    #: (``response``) and Interactions (``interaction``, with ``data`` around
+    #: the whole event when the stream was framed that way).
+    _USAGE_HOLDERS = ("message", "response", "interaction")
+
+    @classmethod
+    def _usage_payload(cls, chunk: dict[str, Any]) -> dict[str, Any] | None:
+        """The usage object of a raw chunk, wherever its dialect keeps it."""
+        for outer in (chunk, chunk.get("data")):
+            if not isinstance(outer, dict):
+                continue
+            usage = outer.get("usage")
+            if isinstance(usage, dict):
+                return usage
+            for key in cls._USAGE_HOLDERS:
+                inner = outer.get(key)
+                if isinstance(inner, dict) and isinstance(inner.get("usage"), dict):
+                    return inner["usage"]
+        return None
+
     @classmethod
     def _extract_usage(cls, chunk: dict[str, Any]) -> dict[str, int] | None:
         """Extract usage from a raw provider chunk (any format)."""
-        usage = chunk.get("usage")
+        usage = cls._usage_payload(chunk)
         if isinstance(usage, dict):
             result: dict[str, int] = {}
             for src, dst in (
@@ -119,6 +140,8 @@ class BaselineStreamProcessor:
                 ("input_tokens", "prompt_tokens"),
                 ("completion_tokens", "completion_tokens"),
                 ("output_tokens", "completion_tokens"),
+                ("total_input_tokens", "prompt_tokens"),
+                ("total_output_tokens", "completion_tokens"),
                 ("total_tokens", "total_tokens"),
             ):
                 v = usage.get(src)
@@ -167,8 +190,31 @@ class BaselineStreamProcessor:
             self._ctx.mark_ended()
         u = self._extract_usage(chunk)
         if u is not None:
-            self._usage = u
+            self._usage = self._merge_snapshot(self._usage, u)
         return [chunk]
+
+    @staticmethod
+    def _merge_snapshot(
+        known: dict[str, int] | None, new: dict[str, int]
+    ) -> dict[str, int]:
+        """Fold one usage snapshot into the record, field by field.
+
+        Every snapshot is cumulative for the fields it carries, so a field the
+        new one names replaces the old and a field it leaves out is kept: a
+        Messages stream states the input in ``message_start`` and only the
+        output in ``message_delta``.  A total the snapshot did not state is the
+        sum of the two halves, not the earlier total.
+        """
+        merged = {**(known or {}), **new}
+        if (
+            "total_tokens" not in new
+            and "prompt_tokens" in merged
+            and "completion_tokens" in merged
+        ):
+            merged["total_tokens"] = (
+                merged["prompt_tokens"] + merged["completion_tokens"]
+            )
+        return merged
 
     def iter_events(self, chunks: Iterable[dict[str, Any]]) -> Iterator[dict[str, Any]]:
         """Iterate over upstream chunks and yield source-format events.
