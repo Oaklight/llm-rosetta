@@ -24,7 +24,7 @@ flowchart TB
     end
   end
   subgraph FOUND["共享基础(被上面各层使用)"]
-    CON["contracts/<br/>外部各方实现或接收的契约<br/>shim 数据类 · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
+    CON["contracts/<br/>外部各方实现或接收的契约<br/>shim 数据类 · resolver(叶子) · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
     FMT["formats/<br/>catalog · detect · spec · batch"]
     TYP["types/<br/>IR 数据类 · 提供方形状(仅参考)"]
     VOCAB["model_vocabulary · retired_names · conversion_warnings"]
@@ -33,20 +33,18 @@ flowchart TB
 
   INIT --> PIPE
   INIT --> CVT
-  INIT --> SHIM
+  INIT -->|"接线(带保护的导入)"| SHIM
   INIT --> DET
   CLI --> CON
   CLI -.->|"懒加载"| EXTS
   PIPE --> CVT
   PIPE --> IR
-  PIPE --> SHIM
   PIPE --> CON
   CVT --> IR
   CVT --> CON
   IR --> CON
-  IR -->|"ir 的 pass 用 shim 契约"| SHIM
   SHIM --> IR
-  SHIM --> CON
+  SHIM -->|"注册 resolver"| CON
   SHIM --> FMT
   SHIM -.->|"导入时 load_extensions"| EXTS
   EXTS -.->|"注册 shim"| SHIM
@@ -61,8 +59,6 @@ flowchart TB
   CAP --> CVT
   DEV --> CON
 
-  linkStyle 13 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 14 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 17 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 18 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 24 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 15 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 16 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 22 stroke:#d33,stroke-width:2.5px,color:#d33

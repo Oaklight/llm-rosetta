@@ -8,7 +8,7 @@ flowchart TB
   end
   subgraph IMPL["实现"]
     subgraph CONV["转换"]
-      PIPE["pipeline/"]
+      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions(typed 三个待从 converters 搬入)"]
       CVT["converters/"]
       IR["ir/"]
     end
@@ -17,7 +17,7 @@ flowchart TB
   end
   subgraph FOUND["共享基础"]
     subgraph CONS["contracts/"]
-      CDECL["声明层(叶子)<br/>shim · auth · quota · routing · usage · transport · command · extension · 清单<br/>只依赖 types / 标准库"]
+      CDECL["声明层(叶子)<br/>shim · resolver(#1708 已落地) · auth · quota · routing · usage · transport · command · extension · 清单<br/>只依赖 types / 标准库"]
       CXF["transform.py<br/>便利再导出 ir 原语<br/>唯一允许依赖 ir 的模块"]
     end
     FMT["formats/ · types/ · model_vocabulary · retired_names"]

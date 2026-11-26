@@ -37,7 +37,7 @@ current_header = '''flowchart TB
     end
   end
   subgraph FOUND["共享基础(被上面各层使用)"]
-    CON["contracts/<br/>外部各方实现或接收的契约<br/>shim 数据类 · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
+    CON["contracts/<br/>外部各方实现或接收的契约<br/>shim 数据类 · resolver(叶子) · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
     FMT["formats/<br/>catalog · detect · spec · batch"]
     TYP["types/<br/>IR 数据类 · 提供方形状(仅参考)"]
     VOCAB["model_vocabulary · retired_names · conversion_warnings"]
@@ -45,15 +45,14 @@ current_header = '''flowchart TB
 '''
 current_edges = [
 ("INIT","PIPE","","solid",None), ("INIT","CVT","","solid",None),
- ("INIT","SHIM","","solid",None), ("INIT","DET","","solid",None),
+ ("INIT","SHIM","接线(带保护的导入)","solid",None), ("INIT","DET","","solid",None),
  ("CLI","CON","","solid",None), ("CLI","EXTS","懒加载","lazy",None),
  ("PIPE","CVT","","solid",None), ("PIPE","IR","","solid",None),
- ("PIPE","SHIM","","solid",None), ("PIPE","CON","","solid",None),
+ ("PIPE","CON","","solid",None),
  ("CVT","IR","","solid",None), ("CVT","CON","","solid",None),
  ("IR","CON","","solid",None),
- ("IR","SHIM","ir 的 pass 用 shim 契约","solid",RED),
- ("SHIM","IR","","solid",RED),
- ("SHIM","CON","","solid",None), ("SHIM","FMT","","solid",None),
+ ("SHIM","IR","","solid",None),
+ ("SHIM","CON","注册 resolver","solid",None), ("SHIM","FMT","","solid",None),
  ("SHIM","EXTS","导入时 load_extensions","lazy",RED),
  ("EXTS","SHIM","注册 shim","lazy",RED),
  ("EXTS","CON","","solid",None), ("EXTS","DEV","ext new / check","lazy",None),
@@ -76,7 +75,7 @@ target_header = '''flowchart TB
   end
   subgraph IMPL["实现"]
     subgraph CONV["转换"]
-      PIPE["pipeline/"]
+      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions(typed 三个待从 converters 搬入)"]
       CVT["converters/"]
       IR["ir/"]
     end
@@ -85,7 +84,7 @@ target_header = '''flowchart TB
   end
   subgraph FOUND["共享基础"]
     subgraph CONS["contracts/"]
-      CDECL["声明层(叶子)<br/>shim · auth · quota · routing · usage · transport · command · extension · 清单<br/>只依赖 types / 标准库"]
+      CDECL["声明层(叶子)<br/>shim · resolver(#1708 已落地) · auth · quota · routing · usage · transport · command · extension · 清单<br/>只依赖 types / 标准库"]
       CXF["transform.py<br/>便利再导出 ir 原语<br/>唯一允许依赖 ir 的模块"]
     end
     FMT["formats/ · types/ · model_vocabulary · retired_names"]

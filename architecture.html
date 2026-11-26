@@ -24,7 +24,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
 
 <section id="core">
   <h2>1. core 现状:组件与依赖</h2>
-  <p class="note">实线是模块顶层导入,虚线是函数内的懒加载。红色是有问题的依赖:shims 与 extensions 互相依赖(导入时加载 vs 注册 shim)、ir 与 shims 互相依赖、contracts 经 transform.py 依赖 ir。contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。api 只是把下面各包再导出一遍,0.14.0 dev 期间还会大改,这些再导出的边不画,免得遮住真正的依赖。未画的:shims/providers 转发层、已弃用的 gateway/ 与 observability/ 转发包。画的是 master(含 PR #1705)的树;extensions/_index、_commands、_probe 在草稿 PR #1707。</p>
+  <p class="note">实线是模块顶层导入,虚线是函数内的懒加载。已解决(#1708):ir、pipeline、formats、auto_detect 不再导入 shims,shim 名字经 contracts/resolver.py 读取(shims 注册,llm_rosetta/__init__ 接线),contracts 也不再导入 shims 和 extensions。仍是红色的依赖:shims 与 extensions 互相依赖(导入时加载 vs 注册 shim)、contracts 经 transform.py 依赖 ir。contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。api 只是把下面各包再导出一遍,0.14.0 dev 期间还会大改,这些再导出的边不画,免得遮住真正的依赖。未画的:shims/providers 转发层、已弃用的 gateway/ 与 observability/ 转发包。画的是 master(含 PR #1705)的树;extensions/_index、_commands、_probe 在草稿 PR #1707。</p>
   <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="core"> <span id="z-core">100%</span></label></div>
   <div class="scroll"><div class="stage" id="stage-core"><pre class="mermaid" id="m-core">flowchart TB
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
@@ -52,7 +52,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
     end
   end
   subgraph FOUND["共享基础(被上面各层使用)"]
-    CON["contracts/&lt;br/&gt;外部各方实现或接收的契约&lt;br/&gt;shim 数据类 · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
+    CON["contracts/&lt;br/&gt;外部各方实现或接收的契约&lt;br/&gt;shim 数据类 · resolver(叶子) · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
     FMT["formats/&lt;br/&gt;catalog · detect · spec · batch"]
     TYP["types/&lt;br/&gt;IR 数据类 · 提供方形状(仅参考)"]
     VOCAB["model_vocabulary · retired_names · conversion_warnings"]
@@ -61,20 +61,18 @@ pre.error { color: #b00; white-space: pre-wrap; }
 
   INIT --&gt; PIPE
   INIT --&gt; CVT
-  INIT --&gt; SHIM
+  INIT --&gt;|"接线(带保护的导入)"| SHIM
   INIT --&gt; DET
   CLI --&gt; CON
   CLI -.-&gt;|"懒加载"| EXTS
   PIPE --&gt; CVT
   PIPE --&gt; IR
-  PIPE --&gt; SHIM
   PIPE --&gt; CON
   CVT --&gt; IR
   CVT --&gt; CON
   IR --&gt; CON
-  IR --&gt;|"ir 的 pass 用 shim 契约"| SHIM
   SHIM --&gt; IR
-  SHIM --&gt; CON
+  SHIM --&gt;|"注册 resolver"| CON
   SHIM --&gt; FMT
   SHIM -.-&gt;|"导入时 load_extensions"| EXTS
   EXTS -.-&gt;|"注册 shim"| SHIM
@@ -89,16 +87,14 @@ pre.error { color: #b00; white-space: pre-wrap; }
   CAP --&gt; CVT
   DEV --&gt; CON
 
-  linkStyle 13 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 14 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 17 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 18 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 24 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 15 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 16 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 22 stroke:#d33,stroke-width:2.5px,color:#d33
 </pre></div></div>
 </section>
 <section id="core_target">
   <h2>2. core 建议目标(未实现,待决定)</h2>
-  <p class="note">绿色是建议新增的接线。extensions 只管包(清单、发现、安装、索引、兼容性、状态),只依赖 contracts,不认识 shim、transport、commands;shims、cli、gateway 各自向它注册种类处理器;由 __init__ 这个组合根在导入完成后调用 load_extensions(),shims 不再在导入时隐式调用它。contracts 拆成声明层(只依赖 types 和标准库)和 transform.py(唯一允许依赖 ir 的便利再导出),并用导入边界测试固定。</p>
+  <p class="note">只画还没做的部分(resolver 与 ir/pipeline 脱离 shims 已在 #1708 落地)。绿色是建议新增的接线。extensions 只管包(清单、发现、安装、索引、兼容性、状态),只依赖 contracts,不认识 shim、transport、commands;shims、cli、gateway 各自向它注册种类处理器;由 __init__ 这个组合根在导入完成后调用 load_extensions(),shims 不再在导入时隐式调用它。contracts 拆成声明层(只依赖 types 和标准库)和 transform.py(唯一允许依赖 ir 的便利再导出),并用导入边界测试固定。</p>
   <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="core_target"> <span id="z-core_target">100%</span></label></div>
   <div class="scroll"><div class="stage" id="stage-core_target"><pre class="mermaid" id="m-core_target">flowchart TB
   AUTHOR(["shim / 扩展作者"])
@@ -110,7 +106,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   end
   subgraph IMPL["实现"]
     subgraph CONV["转换"]
-      PIPE["pipeline/"]
+      PIPE["pipeline/&lt;br/&gt;chat · embeddings · rerank · decisions(typed 三个待从 converters 搬入)"]
       CVT["converters/"]
       IR["ir/"]
     end
@@ -119,7 +115,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   end
   subgraph FOUND["共享基础"]
     subgraph CONS["contracts/"]
-      CDECL["声明层(叶子)&lt;br/&gt;shim · auth · quota · routing · usage · transport · command · extension · 清单&lt;br/&gt;只依赖 types / 标准库"]
+      CDECL["声明层(叶子)&lt;br/&gt;shim · resolver(#1708 已落地) · auth · quota · routing · usage · transport · command · extension · 清单&lt;br/&gt;只依赖 types / 标准库"]
       CXF["transform.py&lt;br/&gt;便利再导出 ir 原语&lt;br/&gt;唯一允许依赖 ir 的模块"]
     end
     FMT["formats/ · types/ · model_vocabulary · retired_names"]
