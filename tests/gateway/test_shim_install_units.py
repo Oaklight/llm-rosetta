@@ -238,7 +238,7 @@ class TestInstall:
         report = _apply(tmp_path, _url_section("contrib:acme@0.3.0"), http)
 
         status = _vendor_status(report, "acme")
-        assert not status.ok and "the manifest does not list" in status.error
+        assert not status.ok and "the index does not list" in status.error
 
 
 class TestSourceView:
@@ -250,7 +250,7 @@ class TestSourceView:
         http.publish("acme", "0.1.0", ["acme--chat_completions"])
         http.publish("acme", "0.2.0", ["acme--chat_completions"])
         http.publish("zed", "0.1.0", ["zed--chat_completions"])
-        spec = ManifestSourceSpec(key=None, url=http.dist + "manifest.json")
+        spec = ManifestSourceSpec(key=None, url=http.dist + "index.json")
 
         out = source_catalogue(
             [spec],
@@ -494,7 +494,11 @@ class TestMigrateReview:
             assert not any(i.action == "rewrite" for i in result.items), key
 
     def test_a_source_declared_by_its_manifest_url_is_not_declared_twice(self):
-        contrib = "https://cdn.jsdelivr.net/gh/Oaklight/llm-rosetta-shim-contrib@dist/manifest.json"
+        from llm_rosetta_gateway.shims.catalog import get_shim_source
+
+        source = get_shim_source("contrib")
+        assert source is not None
+        contrib = source.manifest_url
         text = (
             '{\n  "shims": {\n    "sources": [{"url": "'
             + contrib
@@ -517,7 +521,7 @@ class TestMigrateReview:
 
     def test_an_unknown_url_source_is_reported_not_doubled(self):
         text = (
-            '{"shims": {"sources": [{"url": "https://mirror.example/c/manifest.json"}], '
+            '{"shims": {"sources": [{"url": "https://mirror.example/c/index.json"}], '
             '"presets": ["free"]}}'
         )
 
@@ -525,7 +529,7 @@ class TestMigrateReview:
 
         doc = json.loads(result.new_text)
         assert doc["shims"]["sources"] == [
-            {"url": "https://mirror.example/c/manifest.json"}
+            {"url": "https://mirror.example/c/index.json"}
         ]
         assert any(
             i.action == "note" and i.where == "shims.sources" and i.old == "contrib"
@@ -570,11 +574,11 @@ class TestMigrateReview:
 
         contrib = get_shim_source("contrib")
         assert contrib is not None
-        section = {"presets": ["free"], "sources": [{"url": contrib.fallback_url}]}
+        section = {"presets": ["free"], "sources": [{"url": contrib.manifest_url}]}
 
         new, rewrite = rewrite_presets_section(section)
 
-        assert new["sources"] == [{"url": contrib.fallback_url}]
+        assert new["sources"] == [{"url": contrib.manifest_url}]
         assert rewrite.notes == []
 
 

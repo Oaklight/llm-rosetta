@@ -14,9 +14,6 @@ One module per contract:
   the ``llm-rosetta`` dispatcher (a spec, an entry point group, registration);
 - :mod:`llm_rosetta.contracts.extension` — the manifest (``plugin.yaml``) an
   extension folder carries, the compatibility rule, and the transport scope;
-- :mod:`llm_rosetta.contracts.shim_manifest` — the manifest a shim source
-  repository publishes, its schema, and the rule that picks the newest
-  version this core can run;
 - :mod:`llm_rosetta.contracts.transform` — the transform hook types and the
   primitives a shim's ``transforms.py`` builds from;
 - :mod:`llm_rosetta.contracts.auth` — the credential exchange a shim ships in

@@ -33,9 +33,7 @@ class StandaloneVendor:
         install: The ``shims.install`` selector that installs it.
         vendors: The vendors the selector installs.
         shims: Canonical names of the shims those vendors provide.
-        repos: Every repository URL that named the package, the current one
-            first; an explicit ``shims.remotes`` entry on one of them pinned
-            the preset to the remote path.
+        repos: The repository URLs that publish the package.
     """
 
     key: str
@@ -67,7 +65,7 @@ STANDALONE_VENDORS: tuple[StandaloneVendor, ...] = (
             "alcf_minerva--chat_completions",
             "alcf_sophia--chat_completions",
         ),
-        (_GH + "llm-rosetta-ext-argonne", _GH + "llm-rosetta-shim-alcf"),
+        (_GH + "llm-rosetta-ext-argonne",),
     ),
     StandaloneVendor(
         "argo",
@@ -76,11 +74,7 @@ STANDALONE_VENDORS: tuple[StandaloneVendor, ...] = (
         "argonne:argo",
         ("argo",),
         ("argo--chat_completions", "argo--messages", "argo--open_responses"),
-        (
-            _GH + "llm-rosetta-ext-argonne",
-            _GH + "llm-rosetta-shim-argonne",
-            _GH + "llm-rosetta-shim-argo",
-        ),
+        (_GH + "llm-rosetta-ext-argonne",),
     ),
     StandaloneVendor(
         "free",
@@ -94,11 +88,7 @@ STANDALONE_VENDORS: tuple[StandaloneVendor, ...] = (
             "opencode_zen_free--chat_completions",
             "ovhcloud--chat_completions",
         ),
-        (
-            _GH + "llm-rosetta-ext-contrib",
-            _GH + "llm-rosetta-shim-contrib",
-            _GH + "llm-rosetta-shim-free",
-        ),
+        (_GH + "llm-rosetta-ext-contrib",),
     ),
     StandaloneVendor(
         "asksage",
@@ -113,7 +103,7 @@ STANDALONE_VENDORS: tuple[StandaloneVendor, ...] = (
             "asksage--google_generate",
             "asksage--embeddings",
         ),
-        (_GH + "llm-rosetta-ext-argonne", _GH + "llm-rosetta-shim-asksage"),
+        (_GH + "llm-rosetta-ext-argonne",),
     ),
     StandaloneVendor(
         "opendesign",
@@ -126,7 +116,7 @@ STANDALONE_VENDORS: tuple[StandaloneVendor, ...] = (
             "opendesign--messages",
             "opendesign--open_responses",
         ),
-        (_GH + "llm-rosetta-ext-contrib", _GH + "llm-rosetta-shim-opendesign"),
+        (_GH + "llm-rosetta-ext-contrib",),
     ),
 )
 
@@ -222,13 +212,11 @@ class ShimSource:
             manifest's ``source`` field.
         label: Human-readable name.
         repo: The repository URL.
-        legacy_repos: Earlier names of the repository; GitHub redirects them.
     """
 
     key: str
     label: str
     repo: str
-    legacy_repos: tuple[str, ...] = ()
 
     @property
     def _owner_repo(self) -> tuple[str, str]:
@@ -237,33 +225,14 @@ class ShimSource:
 
     @property
     def manifest_url(self) -> str:
-        """The primary manifest URL: the jsDelivr mirror of the ``dist`` branch."""
+        """The index URL: ``index.json`` of the repository's latest release."""
         owner, name = self._owner_repo
-        return f"https://cdn.jsdelivr.net/gh/{owner}/{name}@dist/manifest.json"
+        return f"https://github.com/{owner}/{name}/releases/latest/download/index.json"
 
     @property
-    def fallback_url(self) -> str:
-        """The fallback manifest URL: the raw ``dist`` branch on GitHub."""
-        owner, name = self._owner_repo
-        return f"https://raw.githubusercontent.com/{owner}/{name}/dist/manifest.json"
-
-    @property
-    def legacy_manifest_urls(self) -> tuple[str, ...]:
-        """The manifest URLs an earlier name of the repository published.
-
-        A config written before a rename names one of these; it is the same
-        source, so it is recognised as this one.
-        """
-        urls: list[str] = []
-        for legacy in self.legacy_repos:
-            owner, name = legacy.rstrip("/").split("/")[-2:]
-            urls.append(
-                f"https://cdn.jsdelivr.net/gh/{owner}/{name}@dist/manifest.json"
-            )
-            urls.append(
-                f"https://raw.githubusercontent.com/{owner}/{name}/dist/manifest.json"
-            )
-        return tuple(urls)
+    def fallback_url(self) -> str | None:
+        """The second index URL, or ``None``: a release asset has one home."""
+        return None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serialisable view."""
@@ -284,19 +253,11 @@ SHIM_SOURCES: tuple[ShimSource, ...] = (
         key="argonne",
         label="Argonne",
         repo="https://github.com/Oaklight/llm-rosetta-ext-argonne",
-        legacy_repos=(
-            "https://github.com/Oaklight/llm-rosetta-shim-argonne",
-            "https://github.com/Oaklight/llm-rosetta-shim-argo",
-        ),
     ),
     ShimSource(
         key="contrib",
         label="Contrib",
         repo="https://github.com/Oaklight/llm-rosetta-ext-contrib",
-        legacy_repos=(
-            "https://github.com/Oaklight/llm-rosetta-shim-contrib",
-            "https://github.com/Oaklight/llm-rosetta-shim-free",
-        ),
     ),
 )
 

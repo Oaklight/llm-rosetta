@@ -57,8 +57,6 @@ def moved_vendor_sources() -> dict[str, str]:
     by_repo: dict[str, str] = {}
     for source in SHIM_SOURCES:
         by_repo[repo_key(source.repo)] = source.key
-        for legacy in source.legacy_repos:
-            by_repo.setdefault(repo_key(legacy), source.key)
     out: dict[str, str] = {}
     for row in retired_names.MOVED_VENDORS:
         key = by_repo.get(repo_key(row.repository))

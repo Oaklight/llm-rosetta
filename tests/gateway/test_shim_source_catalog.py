@@ -12,8 +12,8 @@ from types import SimpleNamespace
 from typing import Any
 
 
+from llm_rosetta.api import parse_index
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
-from llm_rosetta.contracts.shim_manifest import parse_manifest
 from llm_rosetta_gateway.shims.manifest_sources.plan import (
     ManifestPlan,
     ManifestSourceSpec,
@@ -28,36 +28,37 @@ from llm_rosetta_gateway.shims.source_view import (
 )
 from llm_rosetta_gateway.shims.sources import ShimSourceStatus
 
-A = "https://a.example/dist/manifest.json"
-B = "https://b.example/dist/manifest.json"
+A = "https://a.example/dist/index.json"
+B = "https://b.example/dist/index.json"
 
 
 def _record(version: str, *, surface=SURFACE_VERSION, ir=IR_VERSION, tags=(), **kw):
+    """One index entry (also the shape of an install stamp's release record)."""
     return {
         "version": version,
-        "commit": "c" * 40,
-        "archive": f"{version}/acme.whl",
+        "url": f"https://a.example/dist/{version}/acme.whl",
         "sha256": "0" * 64,
-        "requires": {"surface": surface, "ir": ir},
+        "surface": surface,
+        "ir": ir,
         "shims": kw.pop("shims", ["acme--chat_completions"]),
         "tags": list(tags),
         "maturity": kw.pop("maturity", "beta"),
+        "commit": "c" * 40,
         **kw,
     }
 
 
 def _manifest(source: str, vendors: dict[str, list[dict[str, Any]]]) -> dict:
     return {
-        "manifest_version": 1,
+        "index_version": 1,
         "source": source,
-        "repo": f"https://github.com/example/{source}",
         "generated_at": "2026-11-21T00:00:00Z",
-        "vendors": {v: {"versions": r} for v, r in vendors.items()},
+        "extensions": vendors,
     }
 
 
 def _releases(*records):
-    return parse_manifest(_manifest("x", {"acme": list(records)})).vendors["acme"]
+    return parse_index(_manifest("x", {"acme": list(records)}))["acme"]
 
 
 def _status(version: str, *, surface=SURFACE_VERSION, **kw) -> ShimSourceStatus:
@@ -180,12 +181,11 @@ class TestVendorView:
         assert view["core_provides"] == ["acme--x"]
 
     def test_an_unreadable_requirement_is_a_problem(self):
-        assert release_requires_problem({"requires": {}}) is not None
+        assert release_requires_problem({}) is not None
+        assert release_requires_problem(_record("0.1.0")) is None
         assert (
-            release_requires_problem(
-                {"requires": {"surface": SURFACE_VERSION, "ir": IR_VERSION}}
-            )
-            is None
+            release_requires_problem(_record("0.1.0", surface=SURFACE_VERSION + 1))
+            is not None
         )
 
 
@@ -329,9 +329,9 @@ class TestManifestMarks:
     """
 
     def test_the_card_takes_label_and_logo_from_the_installable_record(self, tmp_path):
-        old = _record("0.1.0", label="Kilo", logo="https://cdn.example/old.svg")
+        old = _record("0.1.0", name="Kilo", logo="https://cdn.example/old.svg")
         new = _record(
-            "0.2.0", label="Kilo (Free)", logo="https://cdn.example/kilocode.svg"
+            "0.2.0", name="Kilo (Free)", logo="https://cdn.example/kilocode.svg"
         )
         http = FakeHttp({A: _manifest("contrib", {"acme": [old, new]})})
 
@@ -345,7 +345,7 @@ class TestManifestMarks:
         newest = _record(
             "0.3.0",
             surface=SURFACE_VERSION + 1,
-            label="Acme",
+            name="Acme",
             logo="https://a.example/a.svg",
         )
         http = FakeHttp({A: _manifest("contrib", {"acme": [newest]})})
@@ -367,7 +367,7 @@ class TestManifestMarks:
         assert card["label"] is None and card["logo"] is None
 
     def test_a_bad_logo_costs_the_field_not_the_vendor(self, tmp_path):
-        bad = _record("0.1.0", label="Acme", logo="http://insecure.example/a.svg")
+        bad = _record("0.1.0", name="Acme", logo="http://insecure.example/a.svg")
         http = FakeHttp({A: _manifest("contrib", {"acme": [bad]})})
 
         card = _catalogue(tmp_path, [ManifestSourceSpec(key=None, url=A)], http)[0][
@@ -387,8 +387,8 @@ class TestManifestMarks:
 
 class TestPinnedMarks:
     def test_a_pinned_vendor_is_drawn_from_its_pinned_record(self, tmp_path):
-        old = _record("0.1.0", label="Acme Old", logo="https://a.example/old.svg")
-        new = _record("0.2.0", label="Acme New", logo="https://a.example/new.svg")
+        old = _record("0.1.0", name="Acme Old", logo="https://a.example/old.svg")
+        new = _record("0.2.0", name="Acme New", logo="https://a.example/new.svg")
         http = FakeHttp({A: _manifest("contrib", {"acme": [old, new]})})
         spec = ManifestSourceSpec(key=None, url=A)
 

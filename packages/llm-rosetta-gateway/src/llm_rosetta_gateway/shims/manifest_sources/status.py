@@ -8,11 +8,7 @@ from collections.abc import Collection, Sequence
 from dataclasses import replace
 from typing import Any
 
-from llm_rosetta.contracts.shim_manifest import (
-    SourceManifest,
-    select_release,
-    version_key,
-)
+from llm_rosetta.api import ExtensionIndex, version_key
 
 from .._types import (
     HttpGet,
@@ -21,6 +17,7 @@ from .._types import (
 )
 from .freshness import _fetch_manifest_once
 from .plan import ManifestSourceSpec
+from .releases import select_release
 from .selection import _provided_by
 
 
@@ -38,7 +35,7 @@ def scan_manifest_status(
 
     *core_names* is the live registry.  A vendor all of whose shims are
     registered by something other than an extension is skipped (core wins), as
-    a promotion to core would; when only some clash, the loader refuses the
+    it is not installed; when only some clash, the loader refuses the
     extension as a whole and the reason says which names are held.
     """
     from llm_rosetta.api import list_extensions
@@ -110,7 +107,7 @@ def check_manifest_updates(
     from ..catalog import SHIM_SOURCES
 
     fallbacks = {s.manifest_url: s.fallback_url for s in SHIM_SOURCES}
-    manifests: dict[str, SourceManifest | str] = {}
+    manifests: dict[str, ExtensionIndex | str] = {}
     out: list[dict[str, Any]] = []
     for status in statuses:
         current = (status.release or {}).get("version")
@@ -130,10 +127,10 @@ def check_manifest_updates(
         manifest = manifests[url]
         if isinstance(manifest, str):
             entry["error"] = manifest
-        elif status.vendor not in manifest.vendors:
-            entry["error"] = f"{status.vendor} is no longer in the manifest"
+        elif status.vendor not in manifest:
+            entry["error"] = f"{status.vendor} is no longer in the index"
         else:
-            chosen, _ = select_release(manifest.vendors[status.vendor])
+            chosen, _ = select_release(manifest[status.vendor])
             if chosen is None:
                 entry["error"] = "no version is installable on this core"
             else:

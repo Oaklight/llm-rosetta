@@ -38,7 +38,9 @@ def test_every_contract_module_is_in_the_extension_tier():
     contracts = _CORE / "contracts"
     found = ["llm_rosetta.contracts"]
     for path in sorted(contracts.iterdir()):
-        if path.suffix == ".py" and path.name != "__init__.py":
+        if path.name.startswith("_"):
+            continue  # a private module has no tier
+        if path.suffix == ".py":
             found.append("llm_rosetta.contracts." + path.stem)
         elif (path / "__init__.py").is_file():
             found.append("llm_rosetta.contracts." + path.name)

@@ -20,14 +20,8 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
+from llm_rosetta.api import ExtensionIndex, IndexEntry, version_key
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
-from llm_rosetta.contracts.shim_manifest import (
-    SourceManifest,
-    VendorRelease,
-    requirement_problem,
-    select_release,
-    version_key,
-)
 
 from ._cache import _file_lock
 from ._types import HttpGet, ShimSourceStatus
@@ -40,19 +34,24 @@ from .manifest_sources.plan import (
     parse_source_entry,
     pick_selector,
 )
+from .manifest_sources.releases import (
+    release_from_dict,
+    requirement_problem,
+    select_release,
+)
 from .manifest_sources.selection import _pinned_release
 
 
-def _requires(release: VendorRelease | None) -> dict[str, Any] | None:
+def _requires(release: IndexEntry | None) -> dict[str, Any] | None:
     if release is None:
         return None
-    return {"surface": release.requires.surface, "ir": release.requires.ir}
+    return {"surface": release.surface, "ir": release.ir}
 
 
-def _problem(release: VendorRelease | None) -> str | None:
+def _problem(release: IndexEntry | None) -> str | None:
     if release is None:
         return None
-    return requirement_problem(release.requires)
+    return requirement_problem(release)
 
 
 def _release_from_status(status: ShimSourceStatus | None) -> Mapping[str, Any]:
@@ -61,14 +60,16 @@ def _release_from_status(status: ShimSourceStatus | None) -> Mapping[str, Any]:
 
 def release_requires_problem(release: Mapping[str, Any]) -> str | None:
     """``requirement_problem`` for a release record kept as a plain mapping."""
-    from llm_rosetta.contracts.shim_manifest import ShimRequirement
-
-    requires = release.get("requires") or {}
-    try:
-        req = ShimRequirement(int(requires["surface"]), int(requires["ir"]))
-    except (KeyError, TypeError, ValueError):
+    entry = release_from_dict("installed", release)
+    if entry is None:
         return "the installed release names no readable requirement"
-    return requirement_problem(req)
+    return requirement_problem(entry)
+
+
+def _https_logo(release: IndexEntry | None) -> str | None:
+    """The release's logo URL when it is ``https``; an insecure one is left out."""
+    logo = release.logo if release is not None else None
+    return logo if logo and logo.startswith("https://") else None
 
 
 def _picker(
@@ -83,7 +84,7 @@ def _picker(
 
 def vendor_view(
     vendor: str,
-    releases: Sequence[VendorRelease],
+    releases: Sequence[IndexEntry],
     *,
     source_id: str,
     selectors: Sequence[InstallSelector],
@@ -134,15 +135,19 @@ def vendor_view(
         # The record that would be installed names the vendor and its mark
         # (the newest when nothing is installable); the panel falls back to
         # the installed provider.yaml, then the key and initials.
-        "logo": shown.logo if shown is not None else None,
-        "label": shown.label if shown is not None else None,
+        "logo": _https_logo(shown),
+        "label": shown.name if shown is not None else None,
         "versions": [r.version for r in ordered],
         "newest": newest.version if newest else None,
         "newest_requires": _requires(newest),
         "newest_problem": _problem(newest),
         "installable": installable.version if installable else None,
         "installed": installed.get("version"),
-        "installed_requires": installed.get("requires"),
+        "installed_requires": (
+            {"surface": installed.get("surface"), "ir": installed.get("ir")}
+            if installed
+            else None
+        ),
         "installed_problem": installed_problem,
         "requires_ok": (installed_problem is None) if installed else None,
         "update_available": _has_update(installed, installable),
@@ -163,9 +168,7 @@ def vendor_view(
     }
 
 
-def _has_update(
-    installed: Mapping[str, Any], installable: VendorRelease | None
-) -> bool:
+def _has_update(installed: Mapping[str, Any], installable: IndexEntry | None) -> bool:
     """Whether the release this core would install is newer than the installed one."""
     current = installed.get("version")
     return bool(
@@ -176,17 +179,12 @@ def _has_update(
 
 
 def _described(
-    installed: Mapping[str, Any], record: VendorRelease | None, tags: Sequence[str]
+    installed: Mapping[str, Any], record: IndexEntry | None, tags: Sequence[str]
 ) -> dict[str, Any]:
     """What the source says about the vendor: the installed record first."""
     return {
         "maturity": installed.get("maturity") or (record.maturity if record else None),
-        "since": installed.get("since") or (record.since if record else None),
         "tags": list(installed.get("tags") or tags),
-        "conformance": (
-            dict(record.conformance) if record and record.conformance else None
-        ),
-        "promoted_to": record.promoted_to if record else None,
         "shims": list(record.shims) if record else [],
     }
 
@@ -291,10 +289,10 @@ def source_catalogue(
             )
         catalogue = get_shim_source(spec.key) if spec.key else None
         entry = _configured_entry(spec, raw_sources)
-        manifest: SourceManifest | None = state.manifest
+        manifest: ExtensionIndex | None = state.manifest
         source_id = spec.key or (manifest.source if manifest else None) or spec.url
         vendors: list[dict[str, Any]] = []
-        releases = dict(manifest.vendors) if manifest is not None else {}
+        releases = dict(manifest) if manifest is not None else {}
         for vendor in sorted(releases):
             view = vendor_view(
                 vendor,
@@ -315,8 +313,7 @@ def source_catalogue(
                 "label": catalogue.label if catalogue else source_id,
                 "url": spec.url,
                 "fallback_url": spec.fallback_url,
-                "repo": (manifest.repo if manifest else None)
-                or (catalogue.repo if catalogue else None),
+                "repo": catalogue.repo if catalogue else None,
                 "entry": entry,
                 "configured": entry is not None,
                 "ok": manifest is not None,

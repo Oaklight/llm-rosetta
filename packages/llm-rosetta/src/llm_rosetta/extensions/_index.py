@@ -56,7 +56,7 @@ from pathlib import Path
 from typing import Any
 
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
-from llm_rosetta.contracts.shim_manifest import MATURITY_LEVELS
+from llm_rosetta.contracts.extension import MATURITY_LEVELS
 
 from ._dirs import ExtensionInstallError
 from ._install import (
@@ -166,11 +166,17 @@ class UpdatePlan:
     detail: str | None = None
 
 
-def version_key(version: str) -> tuple[int, int, int, int, str]:
-    """Order ``MAJOR.MINOR.PATCH[-pre]`` strings; a pre-release sorts below its final.
+def version_key(
+    version: str,
+) -> tuple[int, int, int, int, tuple[tuple[int, int, str], ...]]:
+    """Order ``MAJOR.MINOR.PATCH[-pre]`` strings as SemVer 2.0 does.
+
+    A pre-release sorts below its final (``1.0.0-rc.1 < 1.0.0``), and its
+    dot-separated identifiers compare numerically when they are numbers
+    (``rc.2 < rc.10``) and as text otherwise; a number sorts below text.
 
     Args:
-        version: A manifest version.
+        version: An index entry's version.
 
     Returns:
         A tuple that compares in release order.
@@ -183,7 +189,12 @@ def version_key(version: str) -> tuple[int, int, int, int, str]:
     if match is None:
         raise ValueError(f"{version!r} is not MAJOR.MINOR.PATCH[-pre]")
     major, minor, patch, pre = match.groups()
-    return (int(major), int(minor), int(patch), 0 if pre else 1, pre or "")
+    if not pre:
+        return (int(major), int(minor), int(patch), 1, ())
+    parts = tuple(
+        (0, int(p), "") if p.isdigit() else (1, 0, p) for p in pre[1:].split(".")
+    )
+    return (int(major), int(minor), int(patch), 0, parts)
 
 
 def index_location(explicit: str | None = None) -> str:

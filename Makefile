@@ -219,7 +219,6 @@ NUITKA_FLAGS = \
 	--include-data-dir=packages/llm-rosetta/src/llm_rosetta/devtools/_ext_template=llm_rosetta/devtools/_ext_template \
 	--include-data-files=packages/llm-rosetta/src/llm_rosetta/shims/_loader/provider.schema.json=llm_rosetta/shims/_loader/provider.schema.json \
 	--include-data-files=packages/llm-rosetta/src/llm_rosetta/contracts/extension_manifest.schema.json=llm_rosetta/contracts/extension_manifest.schema.json \
-	--include-data-files=packages/llm-rosetta/src/llm_rosetta/contracts/shim_manifest.schema.json=llm_rosetta/contracts/shim_manifest.schema.json \
 	$(NUITKA_NOFOLLOW_FLAGS) \
 	--assume-yes-for-downloads \
 	$(NUITKA_EXTRA_FLAGS)
@@ -268,7 +267,6 @@ build-binary-musl:
 				--include-data-dir=packages/llm-rosetta/src/llm_rosetta/devtools/_ext_template=llm_rosetta/devtools/_ext_template \
 				--include-data-files=packages/llm-rosetta/src/llm_rosetta/shims/_loader/provider.schema.json=llm_rosetta/shims/_loader/provider.schema.json \
 				--include-data-files=packages/llm-rosetta/src/llm_rosetta/contracts/extension_manifest.schema.json=llm_rosetta/contracts/extension_manifest.schema.json \
-				--include-data-files=packages/llm-rosetta/src/llm_rosetta/contracts/shim_manifest.schema.json=llm_rosetta/contracts/shim_manifest.schema.json \
 				$(NUITKA_NOFOLLOW_FLAGS) \
 				--assume-yes-for-downloads \
 				$(NUITKA_EXTRA_FLAGS) \

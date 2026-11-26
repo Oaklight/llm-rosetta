@@ -372,19 +372,9 @@ export function toggleShimSourceVendor(key) {
   });
 }
 
-/** The maturity and conformance line: what the source says about the vendor. */
+/** The maturity line: what the source says about the vendor. */
 function _maturityLine(v) {
-  const parts = [];
-  if (v.maturity && v.since) parts.push(t('shimSrc.since', {maturity: v.maturity, date: v.since}));
-  else if (v.maturity) parts.push(v.maturity);
-  const c = v.conformance;
-  if (c && c.result) {
-    parts.push(c.date
-      ? t('shimSrc.conformanceOn', {result: c.result, date: c.date})
-      : t('shimSrc.conformance', {result: c.result}));
-  }
-  if (v.promoted_to) parts.push(t('shimSrc.promoted', {target: v.promoted_to}));
-  return parts.length ? `<p class="shim-card-hash">${esc(parts.join(' · '))}</p>` : '';
+  return v.maturity ? `<p class="shim-card-hash">${esc(v.maturity)}</p>` : '';
 }
 
 /**

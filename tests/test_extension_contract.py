@@ -18,7 +18,7 @@ from llm_rosetta.contracts.extension import (
     resolve_transport,
     validate_extension_manifest,
 )
-from llm_rosetta.contracts.shim_manifest import (
+from llm_rosetta.contracts._schema import (
     ANNOTATION_KEYWORDS,
     SUPPORTED_KEYWORDS,
 )

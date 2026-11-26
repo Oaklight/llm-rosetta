@@ -6,11 +6,8 @@ about it, and an operator who knows it exists has no key for it.  This check
 compares the account's repositories with the record and says which side to
 edit:
 
-- a repository named ``llm-rosetta-ext-*`` (or the older ``llm-rosetta-shim-*``) that
-  the record does not name
-  (add a ``ShimSource`` — the output prints a skeleton to paste).  The earlier
-  names of a source (``legacy_repos``) and the repositories of the stand-alone
-  vendors it replaced are known, so the archived predecessors do not count;
+- a repository named ``llm-rosetta-ext-*`` that the record does not name
+  (add a ``ShimSource`` — the output prints a skeleton to paste);
 - a source whose repository no longer exists (drop the entry, or fix the URL
   after a rename).
 
@@ -33,11 +30,8 @@ from urllib.request import Request, urlopen
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-#: Repository name prefixes a package can carry.  ``llm-rosetta-ext-`` is the
-#: current convention (extension repositories); ``llm-rosetta-shim-`` is what
-#: the same repositories were called before the 0.14.0 extension system, and the
-#: plural one is kept for a package that was named before that convention settled.
-SHIM_REPO_PREFIXES = ("llm-rosetta-ext-", "llm-rosetta-shim-", "llm-rosetta-shims-")
+#: The name prefix of an extension repository.
+SHIM_REPO_PREFIXES = ("llm-rosetta-ext-",)
 
 
 def _normalise(url: str) -> str:
@@ -76,16 +70,12 @@ def shim_repositories(repos: Iterable[dict[str, Any]]) -> dict[str, str]:
 def compare_catalog(
     repos: dict[str, str],
     catalog: Iterable[Any],
-    known_extra: Iterable[str] = (),
 ) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
     """Diff the repositories against the manifest sources.
 
     Args:
         repos: ``normalised url -> name``, from :func:`shim_repositories`.
         catalog: ``ShimSource`` records (``key`` and ``repo``).
-        known_extra: Repository URLs that are known but not current sources
-            (earlier names, archived stand-alone packages); they are never
-            reported as missing.
 
     Returns:
         ``(missing, stale)`` — repositories the record does not name, and
@@ -93,7 +83,7 @@ def compare_catalog(
         ``(key_or_name, url)``.
     """
     by_url = {pkg.key: _normalise(pkg.repo) for pkg in catalog}
-    known = set(by_url.values()) | {_normalise(url) for url in known_extra}
+    known = set(by_url.values())
     missing = [(name, url) for url, name in sorted(repos.items()) if url not in known]
     stale = [(key, url) for key, url in sorted(by_url.items()) if url not in repos]
     return missing, stale
@@ -211,16 +201,9 @@ def main(argv: list[str] | None = None) -> int:
 
     sys.path.insert(0, str(REPO_ROOT / "packages/llm-rosetta-gateway/src"))
     sys.path.insert(0, str(REPO_ROOT / "packages/llm-rosetta/src"))
-    from llm_rosetta_gateway.shims.catalog import (  # noqa: E402
-        SHIM_SOURCES,
-        STANDALONE_VENDORS,
-    )
+    from llm_rosetta_gateway.shims.catalog import SHIM_SOURCES  # noqa: E402
 
-    known_extra = [url for source in SHIM_SOURCES for url in source.legacy_repos]
-    known_extra += [url for vendor in STANDALONE_VENDORS for url in vendor.repos]
-    missing, stale = compare_catalog(
-        shim_repositories(repos), SHIM_SOURCES, known_extra
-    )
+    missing, stale = compare_catalog(shim_repositories(repos), SHIM_SOURCES)
     return report(args.owner, missing, stale)
 
 

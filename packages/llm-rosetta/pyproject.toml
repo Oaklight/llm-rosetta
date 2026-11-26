@@ -77,7 +77,7 @@ Issues = "https://github.com/Oaklight/llm-rosetta/issues"
 where = ["src"]
 
 [tool.setuptools.package-data]
-"llm_rosetta" = ["py.typed", "contracts/shim_manifest.schema.json", "contracts/extension_manifest.schema.json", "shims/_loader/provider.schema.json", "shims/builtin/*/provider.yaml", "shims/builtin/*/auth.py", "shims/builtin/*/quota.py", "shims/builtin/*/*/provider.yaml", "shims/builtin/*/*/quota.py", "shims/builtin/*/*/*/provider.yaml", "devtools/_shim_template/*.md", "devtools/_shim_template/**/*.tmpl", "devtools/_ext_template/*.tmpl", "devtools/_ext_template/**/*.tmpl"]
+"llm_rosetta" = ["py.typed", "contracts/extension_manifest.schema.json", "shims/_loader/provider.schema.json", "shims/builtin/*/provider.yaml", "shims/builtin/*/auth.py", "shims/builtin/*/quota.py", "shims/builtin/*/*/provider.yaml", "shims/builtin/*/*/quota.py", "shims/builtin/*/*/*/provider.yaml", "devtools/_shim_template/*.md", "devtools/_shim_template/**/*.tmpl", "devtools/_ext_template/*.tmpl", "devtools/_ext_template/**/*.tmpl"]
 
 [tool.setuptools.dynamic]
 version = { attr = "llm_rosetta.__version__" }

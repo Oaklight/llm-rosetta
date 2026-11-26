@@ -316,12 +316,12 @@ const CATALOGUE = {
       ok: true, error: null, stale: false,
       vendors: [
         { vendor: 'llm7', versions: ['0.4.0'], newest: '0.4.0', installable: '0.4.0', installed: null,
-          requires_ok: null, maturity: 'beta', since: '2026-11-13', tags: ['tier:free'],
-          conformance: { date: null, result: 'none' }, shims: ['llm7--chat_completions'],
+          requires_ok: null, maturity: 'beta', tags: ['tier:free'],
+          shims: ['llm7--chat_completions'],
           installed_shims: [], core_provides: [], selected_by: null, state: 'available' },
         { vendor: 'opendesign', versions: ['0.3.0'], newest: '0.3.0', installable: '0.3.0',
-          installed: '0.3.0', requires_ok: true, maturity: 'beta', since: '2026-11-14',
-          tags: ['tier:subscription', 'auth:device'], conformance: { date: null, result: 'none' },
+          installed: '0.3.0', requires_ok: true, maturity: 'beta',
+          tags: ['tier:subscription', 'auth:device'],
           shims: ['opendesign--messages'], installed_shims: ['opendesign--messages'],
           core_provides: [], selected_by: 'contrib:opendesign', selected_origin: 'install',
           state: 'installed' },
@@ -399,7 +399,7 @@ test('the Available view gives every vendor of every source a card, grouped by s
   assert.match(card, /from Contrib/);
   assert.match(card, /installed 0\.3\.0/);
   assert.match(card, /requires matches this core/);
-  assert.match(card, /beta since 2026-11-14/);
+  assert.match(card, /<p class="shim-card-hash">beta<\/p>/);
   assert.match(card, />auth:device</);
   assert.match(card, /Selected by contrib:opendesign/);
   // The other one offers to install.
@@ -631,7 +631,7 @@ test('the Installed search applies the tier and origin filters to source vendors
 function legacyFixture() {
   const vendor = (over) => ({
     versions: ['0.4.0'], newest: '0.4.0', installable: '0.4.0', requires_ok: true,
-    maturity: 'beta', conformance: { date: null, result: 'none' }, core_provides: [],
+    maturity: 'beta', core_provides: [],
     ...over,
   });
   const catalogue = {

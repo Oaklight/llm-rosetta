@@ -329,26 +329,6 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
         ],
         "max_count": 17,
     },
-    "llm_rosetta.contracts.shim_manifest": {
-        "items": [
-            "MANIFEST_VERSION",
-            "MATURITY_LEVELS",
-            "SCHEMA_FILENAME",
-            "ShimManifestInvalid",
-            "ShimRequirement",
-            "SourceManifest",
-            "VendorRelease",
-            "is_prerelease",
-            "load_manifest_schema",
-            "parse_manifest",
-            "promoted_core_version",
-            "requirement_problem",
-            "select_release",
-            "validate_manifest",
-            "version_key",
-        ],
-        "max_count": 15,
-    },
     "llm_rosetta.contracts.transform": {
         "items": [
             "IRTransform",

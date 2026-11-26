@@ -38,7 +38,6 @@ assert _CONTRIB is not None
 CONTRIB_REPO = _CONTRIB.repo
 DIST = _CONTRIB.manifest_url.rsplit("/", 1)[0] + "/"
 MANIFEST_URL = _CONTRIB.manifest_url
-FALLBACK_URL = _CONTRIB.fallback_url
 COMMIT = "d" * 40
 
 #: The moved vendors the fake contrib source publishes.  ``opencode``,
@@ -64,37 +63,35 @@ class FakeContrib:
         rows = {row.vendor: row for row in retired_names.MOVED_VENDORS}
         for vendor in vendors:
             data = _vendor_archive(vendor, rows[vendor].shims)
-            archive = f"0.5.0/{vendor}-0.5.0-py3-none-any.whl"
-            self.files[DIST + archive] = data
-            self.records[vendor] = {
-                "versions": [
-                    {
-                        "version": "0.5.0",
-                        "commit": COMMIT,
-                        "archive": archive,
-                        "sha256": hashlib.sha256(data).hexdigest(),
-                        "requires": {"surface": SURFACE_VERSION, "ir": IR_VERSION},
-                        "shims": list(rows[vendor].shims),
-                        "tags": [],
-                        "maturity": "stable",
-                    }
-                ]
-            }
+            url = f"{DIST}{vendor}-0.5.0-py3-none-any.whl"
+            self.files[url] = data
+            self.records[vendor] = [
+                {
+                    "version": "0.5.0",
+                    "url": url,
+                    "sha256": hashlib.sha256(data).hexdigest(),
+                    "surface": SURFACE_VERSION,
+                    "ir": IR_VERSION,
+                    "shims": list(rows[vendor].shims),
+                    "tags": [],
+                    "maturity": "stable",
+                    "commit": COMMIT,
+                }
+            ]
 
     def manifest(self) -> dict[str, Any]:
         return {
-            "manifest_version": 1,
+            "index_version": 1,
             "source": "contrib",
-            "repo": CONTRIB_REPO,
             "generated_at": "2026-11-21T00:00:00Z",
-            "vendors": self.records,
+            "extensions": self.records,
         }
 
     def __call__(self, url: str, *, headers=None, timeout=None, proxy=None) -> bytes:
         self.calls.append(url)
         if self.down:
             raise ConnectionError(f"down: {url}")
-        if url == DIST + "manifest.json":
+        if url == MANIFEST_URL:
             return json.dumps(self.manifest()).encode()
         if url in self.files:
             return self.files[url]
@@ -302,7 +299,7 @@ class TestAutoInstall:
     ):
         # A URL source: its manifest calls itself "contrib", so the
         # ``contrib:<vendor>`` selector applies to it.
-        raw = dict(OPENCODE, shims={"sources": [DIST + "manifest.json"]})
+        raw = dict(OPENCODE, shims={"sources": [MANIFEST_URL]})
         parsed = parse_shims_section(raw["shims"], None, document=raw)
         assert [s.key for s in parsed.manifests.sources] == [None]
 
@@ -352,73 +349,6 @@ class TestAutoInstall:
         assert cli._apply_shim_sources_or_exit(OPENCODE, "c.jsonc") == "report"
         assert cli._apply_shim_sources_or_exit({"providers": {}}, "c.jsonc") is None
         assert len(seen) == 1
-
-
-#: The vendors contrib's v0.4.0 manifest listed (``dist`` commit d159945824,
-#: generated 2026-11-21T11:59:52Z) — the copy jsDelivr kept serving.
-STALE_CDN_VENDORS = ("kilo_free", "llm7", "opencode_zen_free", "opendesign", "ovhcloud")
-
-
-def _stale_record(vendor: str) -> dict[str, Any]:
-    return {
-        "versions": [
-            {
-                "version": "0.4.0",
-                "commit": COMMIT,
-                "archive": f"0.4.0/{vendor}-0.4.0-py3-none-any.whl",
-                "sha256": "0" * 64,
-                "requires": {"surface": SURFACE_VERSION, "ir": IR_VERSION},
-                "shims": [f"{vendor}--chat_completions"],
-                "tags": ["tier:free"] if vendor != "opendesign" else [],
-                "maturity": "beta",
-            }
-        ]
-    }
-
-
-class LaggingCdn(FakeContrib):
-    """jsDelivr still serves the manifest from before the vendors moved.
-
-    The measured failure (#1660): the CDN answered 200 with the previous
-    manifest (older ``generated_at``, none of the moved vendors) while the raw
-    ``dist`` branch on GitHub already served the new one.
-    """
-
-    RAW_DIST = FALLBACK_URL.rsplit("/", 1)[0] + "/"
-
-    def __call__(self, url: str, *, headers=None, timeout=None, proxy=None) -> bytes:
-        self.calls.append(url)
-        if url == DIST + "manifest.json":
-            stale = {**self.manifest(), "generated_at": "2026-11-21T11:59:52Z"}
-            stale["vendors"] = {v: _stale_record(v) for v in STALE_CDN_VENDORS}
-            return json.dumps(stale).encode()
-        if url == self.RAW_DIST + "manifest.json":
-            fresh = {**self.manifest(), "generated_at": "2026-11-21T16:19:40Z"}
-            return json.dumps(fresh).encode()
-        if url.startswith(self.RAW_DIST):
-            return self.files[DIST + url[len(self.RAW_DIST) :]]
-        raise ConnectionError(f"no route: {url}")
-
-
-class TestALaggingCdn:
-    def test_the_moved_vendor_installs_from_the_fresher_fallback(self, tmp_path, logs):
-        http = LaggingCdn()
-
-        report = _apply(tmp_path, OPENCODE, http)
-
-        status = next(s for s in report.sources if s.vendor == "opencode")
-        assert status.ok and status.archive_url.startswith(LaggingCdn.RAW_DIST)
-        assert get_shim("opencode--chat_completions") is not None
-        manifests = [c for c in http.calls if c.endswith("manifest.json")]
-        assert manifests == [MANIFEST_URL, FALLBACK_URL]
-        assert any(
-            f"using {FALLBACK_URL}" in m and "does not list opencode" in m
-            for m in logs.at(logging.INFO)
-        )
-        # The stale copy is the real one: five vendors, none of them moved.
-        assert json.loads(http(DIST + "manifest.json"))["vendors"].keys() == set(
-            STALE_CDN_VENDORS
-        )
 
 
 class TestTheProbeOnlyCase:

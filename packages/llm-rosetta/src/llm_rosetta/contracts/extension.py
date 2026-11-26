@@ -9,13 +9,12 @@ instead of failing on import.
 
 The format is stated once, in ``extension_manifest.schema.json`` beside this
 module.  :func:`validate_extension_manifest` interprets it with the schema
-interpreter of :mod:`llm_rosetta.contracts.shim_manifest`, so no second copy of
+interpreter of :mod:`llm_rosetta.contracts._schema`, so no second copy of
 the rules and no third-party validator exists.  This module takes the parsed
 mapping; reading the YAML file is the loader's job, which keeps this module
 standard-library only.
 
-Compatibility (:func:`compatibility_problems`) is the rule the shim source
-manifest already states — ``requires.surface`` equals the core's
+Compatibility (:func:`compatibility_problems`) is: ``requires.surface`` equals the core's
 :data:`~llm_rosetta.contracts.SURFACE_VERSION`, ``requires.ir`` does not exceed
 its :data:`~llm_rosetta.contracts.IR_VERSION` — plus ``platforms``.
 
@@ -36,13 +35,7 @@ from typing import Any
 
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
 from llm_rosetta.contracts.command import CORE_COMMAND_NAMES
-from llm_rosetta.contracts.shim_manifest import (
-    MATURITY_LEVELS,
-    ShimRequirement,
-    _check,
-    _shim_belongs_to,
-    requirement_problem,
-)
+from llm_rosetta.contracts._schema import _check
 
 #: The manifest file an extension carries beside its code.
 MANIFEST_FILENAME = "plugin.yaml"
@@ -50,8 +43,29 @@ MANIFEST_FILENAME = "plugin.yaml"
 #: The schema file, shipped beside this module.
 SCHEMA_FILENAME = "extension_manifest.schema.json"
 
+#: The maturity ladder below core, lowest first.
+MATURITY_LEVELS: tuple[str, ...] = ("experimental", "beta", "stable")
+
 #: The platform names ``platforms`` may list.
 PLATFORMS: tuple[str, ...] = ("linux", "darwin", "windows")
+
+
+def _shim_belongs_to(name: str, vendor: str) -> bool:
+    """Whether shim *name* may be provided by extension *vendor*.
+
+    A shim name is the extension id itself (the bare chat shims ``xai``,
+    ``qwen``, kept unchanged so a ``type:`` value keeps resolving),
+    ``<id>--<name>``, or ``<id>_<lane>--<name>`` for an extension that
+    qualifies its lanes (``alcf_sophia--chat_completions`` under ``alcf``).
+
+    Args:
+        name: A shim name from a manifest.
+        vendor: The extension id.
+    """
+    if name == vendor:
+        return True
+    head, sep, _ = name.partition("--")
+    return bool(sep) and (head == vendor or head.startswith(f"{vendor}_"))
 
 
 class ExtensionManifestInvalid(ValueError):
@@ -114,7 +128,7 @@ class ExtensionManifest:
         id: The vendor key, the import name and the identity.
         name: Human-readable name.
         version: The extension's version.
-        maturity: One of :data:`~llm_rosetta.contracts.shim_manifest.MATURITY_LEVELS`.
+        maturity: One of :data:`MATURITY_LEVELS`.
         requires: What it needs from the host.
         shims: The shim names it registers.
         transports: The transport ids it implements.
@@ -307,13 +321,17 @@ def compatibility_problems(
         One sentence per reason; empty when the extension can run.
     """
     problems: list[str] = []
-    reason = requirement_problem(
-        ShimRequirement(surface=manifest.requires.surface, ir=manifest.requires.ir),
-        surface=SURFACE_VERSION if surface is None else surface,
-        ir=IR_VERSION if ir is None else ir,
-    )
-    if reason is not None:
-        problems.append(reason)
+    surface = SURFACE_VERSION if surface is None else surface
+    ir = IR_VERSION if ir is None else ir
+    if manifest.requires.surface != surface:
+        problems.append(
+            f"requires surface {manifest.requires.surface}, "
+            f"this core provides surface {surface}"
+        )
+    if manifest.requires.ir > ir:
+        problems.append(
+            f"requires IR {manifest.requires.ir}, this core reads up to IR {ir}"
+        )
     platform = current_platform() if platform is None else platform
     if manifest.platforms and platform not in manifest.platforms:
         problems.append(

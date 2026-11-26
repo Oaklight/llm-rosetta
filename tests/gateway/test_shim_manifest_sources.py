@@ -28,15 +28,13 @@ from llm_rosetta.testing import restore_registry, snapshot_registry
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
 from llm_rosetta_gateway.shims.shim_sources import (
     apply_shim_sources,
-    describe_shim_sources,
     parse_shims_section,
 )
-from llm_rosetta_gateway.shims.catalog import get_shim_source
 from llm_rosetta_gateway.shims.manifest_sources.plan import parse_selector
 from llm_rosetta_gateway.shims.sources import check_source_updates
 
 DIST = "https://shims.example/dist/"
-MANIFEST = DIST + "manifest.json"
+MANIFEST = DIST + "index.json"
 COMMIT = "c" * 40
 
 
@@ -101,19 +99,20 @@ def _release(
     surface: int = SURFACE_VERSION,
     ir: int = IR_VERSION,
     tags: list[str] | None = None,
-    promoted_to: str | None = None,
     sha256: str | None = None,
+    dist: str = DIST,
 ) -> dict[str, Any]:
+    """One index entry; the wheel is named by an absolute URL under *dist*."""
     return {
         "version": version,
-        "commit": COMMIT,
-        "archive": f"{version}/{vendor}-{version}-py3-none-any.whl",
+        "url": f"{dist}{version}/{vendor}-{version}-py3-none-any.whl",
         "sha256": sha256 or hashlib.sha256(data).hexdigest(),
-        "requires": {"surface": surface, "ir": ir},
+        "surface": surface,
+        "ir": ir,
         "shims": shims,
         "tags": tags or [],
         "maturity": "beta",
-        "promoted_to": promoted_to,
+        "commit": COMMIT,
     }
 
 
@@ -131,24 +130,23 @@ class FakeHttp:
 
     def publish(self, vendor: str, version: str, shims: list[str], **kw: Any) -> None:
         data = kw.pop("data", None) or _archive(vendor, shims, marker=version)
-        record = _release(vendor, version, data, shims, **kw)
+        record = _release(vendor, version, data, shims, dist=self.dist, **kw)
         self.vendors.setdefault(vendor, []).insert(0, record)
-        self.files[self.dist + record["archive"]] = data
+        self.files[record["url"]] = data
 
     def manifest(self) -> dict[str, Any]:
         return {
-            "manifest_version": 1,
+            "index_version": 1,
             "source": self.source,
-            "repo": f"https://github.com/Oaklight/llm-rosetta-shim-{self.source}",
             "generated_at": self.generated_at,
-            "vendors": {v: {"versions": r} for v, r in self.vendors.items()},
+            "extensions": self.vendors,
         }
 
     def __call__(self, url: str, *, headers=None, timeout=None, proxy=None) -> bytes:
         self.calls.append(url)
         if self.down:
             raise ConnectionError(f"down: {url}")
-        if url == self.dist + "manifest.json":
+        if url == self.dist + "index.json":
             return json.dumps(self.manifest()).encode()
         if url in self.files:
             return self.files[url]
@@ -204,7 +202,7 @@ class TestSelection:
 
         assert any(
             "acme 0.2.0 is not installable" in m
-            and f"requires surface {SURFACE_VERSION + 1}" in m
+            and f"needs extension surface {SURFACE_VERSION + 1}" in m
             for m in logs
         ), logs
 
@@ -216,7 +214,7 @@ class TestSelection:
         report = _apply(tmp_path, _url_section("acme"), http)
 
         assert _vendor_status(report, "acme").release["version"] == "0.1.0"
-        assert any(f"requires IR {IR_VERSION + 1}" in m for m in logs), logs
+        assert any(f"needs IR level {IR_VERSION + 1}" in m for m in logs), logs
 
     def test_no_installable_version_fails_the_vendor(self, tmp_path):
         http = FakeHttp()
@@ -551,8 +549,7 @@ class TestUpgrades:
         assert _vendor_status(report, "acme").release["version"] == "0.2.0"
         assert http.calls == [MANIFEST]
         assert any(
-            "manifest no longer lists acme 0.2.0; keeping the install" in m
-            for m in logs
+            "index no longer lists acme 0.2.0; keeping the install" in m for m in logs
         ), logs
 
     def test_an_unreachable_source_keeps_the_last_good_install(self, tmp_path):
@@ -726,7 +723,7 @@ class TestPluginOwnedSkipReachesTheStatus:
             )
             status = ShimSourceStatus(
                 kind="remote",
-                location="https://example.test/demo/manifest.json",
+                location="https://example.test/demo/index.json",
                 resolved_dir="/tmp/demo",
                 extension="demo",
                 source="demo",
@@ -753,7 +750,7 @@ class TestAnInstalledExtensionTheLoaderDidNotFind:
 
         status = ShimSourceStatus(
             kind="remote",
-            location="https://example.test/ghost/manifest.json",
+            location="https://example.test/ghost/index.json",
             extension="ghost",
             source="demo",
             vendor="ghost",
@@ -788,87 +785,6 @@ class TestPrecedence:
         ), logs
         # The estimate saves the download too.
         assert not any(c.endswith(".whl") for c in http.calls)
-
-    def test_a_promoted_vendor_is_not_installed_from_the_source(self, tmp_path, logs):
-        core_name = _core_name()
-        # A promoted or clashing vendor ships its own names (#1660: a manifest
-        # shim name must belong to its vendor), so the vendor is core's.
-        vendor = core_name.split("--", 1)[0]
-        http = FakeHttp()
-        http.publish(vendor, "0.1.0", [core_name], promoted_to="core@0.1.0")
-
-        report = _apply(tmp_path, _url_section(vendor), http)
-
-        status = _vendor_status(report, vendor)
-        assert status.skipped == "promoted to core@0.1.0"
-        assert describe_shim_sources(report) == [
-            f"contrib:{vendor}: skipped (promoted to core@0.1.0)"
-        ]
-        assert any(f"{vendor} 0.1.0 says promoted_to core@0.1.0" in m for m in logs)
-        assert not any(c.endswith(".whl") for c in http.calls)
-
-    def test_a_promotion_core_does_not_bear_out_installs_with_a_warning(
-        self, tmp_path, logs
-    ):
-        http = FakeHttp()
-        http.publish(
-            "acme", "0.1.0", ["acme--chat_completions"], promoted_to="core@0.1.0"
-        )
-
-        report = _apply(tmp_path, _url_section("acme"), http)
-
-        status = _vendor_status(report, "acme")
-        assert status.skipped is None
-        assert status.shim_names == ("acme--chat_completions",)
-        assert any("does not provide acme--chat_completions" in m for m in logs), logs
-
-    def test_a_later_release_without_the_claim_un_promotes(self, tmp_path):
-        core_name = _core_name()
-        vendor = core_name.split("--", 1)[0]
-        http = FakeHttp()
-        http.publish(vendor, "0.1.0", [core_name], promoted_to="core@0.1.0")
-        http.publish(vendor, "0.2.0", [f"{vendor}--fake_lane"])
-
-        report = _apply(tmp_path, _url_section(vendor), http)
-
-        status = _vendor_status(report, vendor)
-        assert status.skipped is None
-        assert status.release["version"] == "0.2.0"
-
-    @pytest.mark.parametrize(
-        ("core", "reached"),
-        [
-            ("0.13.9", False),
-            ("0.14.0.dev35", False),
-            ("0.14.0rc1", False),
-            ("0.14.0", True),
-            ("0.14.0.post1", True),
-            ("0.14.1.dev1", True),
-            ("0.15.0", True),
-        ],
-    )
-    def test_a_dev_or_pre_release_has_not_reached_the_promotion(self, core, reached):
-        from llm_rosetta.contracts.shim_manifest import parse_manifest
-
-        from llm_rosetta_gateway.shims.manifest_sources.selection import _promotion
-
-        http = FakeHttp()
-        http.publish("acme", "0.1.0", ["acme--x"], promoted_to="core@0.14.0")
-        release = parse_manifest(http.manifest()).vendors["acme"][0]
-
-        result = _promotion(release, core, {"acme--x"}, "contrib")
-
-        assert (result == "core@0.14.0") is reached
-
-    def test_a_promotion_to_a_later_core_still_installs(self, tmp_path):
-        http = FakeHttp()
-        http.publish(
-            "acme", "0.1.0", ["acme--chat_completions"], promoted_to="core@99.0.0"
-        )
-
-        report = _apply(tmp_path, _url_section("acme"), http)
-
-        assert _vendor_status(report, "acme").shim_names == ("acme--chat_completions",)
 
     def test_a_partial_clash_refuses_the_extension_as_a_whole(self, tmp_path, logs):
         """The loader refuses an extension whose declared names are held."""
@@ -1019,7 +935,7 @@ class TestConfig:
     def test_a_plain_http_source_url_is_refused(self):
         with pytest.raises(ValueError, match="https"):
             parse_shims_section(
-                {"sources": ["http://shims.example/manifest.json"], "install": ["x"]}
+                {"sources": ["http://shims.example/index.json"], "install": ["x"]}
             )
 
     def test_an_object_source_carries_its_fallback_and_token(self):
@@ -1028,7 +944,7 @@ class TestConfig:
                 "sources": [
                     {
                         "url": MANIFEST,
-                        "fallback": "https://mirror.example/manifest.json",
+                        "fallback": "https://mirror.example/index.json",
                         "token_env": "SHIM_TOKEN",
                     }
                 ],
@@ -1036,7 +952,7 @@ class TestConfig:
             }
         )
         (spec,) = sources.manifests.sources
-        assert spec.fallback_url == "https://mirror.example/manifest.json"
+        assert spec.fallback_url == "https://mirror.example/index.json"
         assert spec.token_env == "SHIM_TOKEN"
 
     def test_the_admin_save_keeps_sources_and_install(self):
@@ -1053,24 +969,6 @@ class TestConfig:
 class TestRecordLevelManifest:
     """One bad record must not take the whole source down (#1660)."""
 
-    def test_a_bad_record_is_skipped_and_the_good_ones_install(self, tmp_path, logs):
-        http = FakeHttp()
-        http.publish("acme", "0.1.0", ["acme--chat_completions"])
-        http.publish("beta", "0.1.0", ["beta--chat_completions"])
-        http.publish("acme", "0.2.0", ["acme--chat_completions"])
-        # A newer producer writes a record this core cannot read.
-        http.vendors["acme"][0]["sha256"] = "not-a-digest"
-
-        report = _apply(tmp_path, _url_section("acme", "beta"), http)
-
-        assert _vendor_status(report, "acme").release["version"] == "0.1.0"
-        assert _vendor_status(report, "beta").ok
-        assert get_shim("acme--chat_completions") is not None
-        assert get_shim("beta--chat_completions") is not None
-        skipped = [m for m in logs if "manifest record vendor 'acme'" in m]
-        assert len(skipped) == 1
-        assert "version '0.2.0' skipped" in skipped[0] and "sha256" in skipped[0]
-
     def test_a_bad_top_level_still_fails_the_source(self, tmp_path, logs):
         http = FakeHttp()
         http.publish("acme", "0.1.0", ["acme--chat_completions"])
@@ -1078,7 +976,7 @@ class TestRecordLevelManifest:
 
         def broken():
             document = manifest()
-            document["manifest_version"] = 99
+            document["index_version"] = 99
             return document
 
         setattr(http, "manifest", broken)
@@ -1087,28 +985,7 @@ class TestRecordLevelManifest:
 
         assert get_shim("acme--chat_completions") is None
         failed = [s for s in report.sources if not s.ok]
-        assert failed and "manifest_version" in (failed[0].error or "")
-
-    def test_a_vendor_with_no_valid_release_says_so(self, tmp_path, logs):
-        http = FakeHttp()
-        http.publish("acme", "0.1.0", ["acme--chat_completions"])
-        http.publish("beta", "0.1.0", ["beta--chat_completions"])
-        http.vendors["acme"][0]["sha256"] = "not-a-digest"
-
-        report = _apply(tmp_path, _url_section("acme", "beta"), http)
-
-        status = _vendor_status(report, "acme")
-        assert status.skipped == (
-            "no valid release: $.vendors.acme.versions[0].sha256: "
-            "'not-a-digest' does not match ^[0-9a-f]{64}$"
-        )
-        assert get_shim("acme--chat_completions") is None
-        assert _vendor_status(report, "beta").ok
-        assert any("manifest record vendor 'acme'" in m for m in logs)
-        assert any(
-            "vendor 'acme' has no valid release" in m and "not installed" in m
-            for m in logs
-        )
+        assert failed and "index_version" in (failed[0].error or "")
 
     def test_an_unlisted_vendor_is_still_not_in_the_manifest(self, tmp_path, logs):
         http = FakeHttp()
@@ -1118,8 +995,12 @@ class TestRecordLevelManifest:
 
         assert _vendor_status(report, "acme").skipped == "not in the manifest"
 
-    def test_a_good_install_is_kept_when_every_record_goes_bad(self, tmp_path, logs):
-        """A record that becomes invalid never uninstalls a working vendor."""
+    def test_a_good_install_is_kept_when_the_index_goes_bad(self, tmp_path, logs):
+        """A record that becomes invalid never uninstalls a working vendor.
+
+        The index is parsed whole, so one bad record makes the fetch fail and the
+        cached index (which still lists the installed version) is used, stale.
+        """
         http = FakeHttp()
         http.publish("acme", "0.1.0", ["acme--chat_completions"])
         _apply(tmp_path, _url_section("acme"), http)
@@ -1130,13 +1011,9 @@ class TestRecordLevelManifest:
 
         status = _vendor_status(report, "acme")
         assert status.ok and status.stale and status.skipped is None
-        assert status.error == (
-            "no valid release: $.vendors.acme.versions[0].sha256: "
-            "'not-a-digest' does not match ^[0-9a-f]{64}$"
-        )
         assert status.release["version"] == "0.1.0"
         assert get_shim("acme--chat_completions") is not None
-        assert any("keeping the installed 0.1.0" in m for m in logs)
+        assert any("using the cached" in m for m in logs)
 
     def test_a_kept_install_still_answers_a_tag_selector(self, tmp_path, logs):
         http = FakeHttp()
@@ -1153,7 +1030,7 @@ class TestRecordLevelManifest:
 
 
 MIRROR_DIST = "https://mirror.example/dist/"
-MIRROR = MIRROR_DIST + "manifest.json"
+MIRROR = MIRROR_DIST + "index.json"
 OLD = "2026-11-21T11:59:00Z"
 NEW = "2026-11-21T16:19:00Z"
 
@@ -1174,7 +1051,7 @@ class TwoLegs:
         self.mirror.publish(vendor, version, shims, data=data, **kw)
 
     def manifest_calls(self) -> list[str]:
-        return [c for c in self.calls if c.endswith("manifest.json")]
+        return [c for c in self.calls if c.endswith("index.json")]
 
     def __call__(self, url: str, **kw: Any) -> bytes:
         self.calls.append(url)
@@ -1200,7 +1077,7 @@ def clock(monkeypatch):
 
 
 def _cached_generated_at(tmp_path: Path) -> str:
-    (doc,) = tmp_path.rglob("manifests/*/manifest.json")
+    (doc,) = tmp_path.rglob("manifests/*/index.json")
     return json.loads(doc.read_text())["generated_at"]
 
 
@@ -1375,13 +1252,13 @@ class TestFreshnessGuard:
     ],
 )
 def test_generated_at_compares_as_time(earlier, later):
-    from llm_rosetta.contracts.shim_manifest import SourceManifest
+    from llm_rosetta.api import ExtensionIndex
     from llm_rosetta_gateway.shims.manifest_sources.freshness import _older
 
-    def manifest(when: str) -> SourceManifest:
-        return SourceManifest(
-            manifest_version=1, source="s", repo="r", generated_at=when, vendors={}
-        )
+    def manifest(when: str) -> ExtensionIndex:
+        index = ExtensionIndex()
+        index.source, index.generated_at = "s", when
+        return index
 
     assert _older(manifest(earlier), manifest(later))
     assert not _older(manifest(later), manifest(earlier))
@@ -1392,8 +1269,10 @@ def test_generated_at_compares_as_time(earlier, later):
 class TestFreshnessGuardEdges:
     """Invalid records, the recheck cooldown and the leg order."""
 
-    def test_a_vendor_only_in_dropped_counts_as_missing(self, tmp_path, log_handler):
-        """A vendor whose every record is invalid is doubt, not presence."""
+    def test_an_invalid_index_leg_falls_through_to_the_next_leg(
+        self, tmp_path, log_handler
+    ):
+        """An index that does not parse is no answer: the other URL is asked."""
         legs = TwoLegs()
         data = _archive("acme", ["acme--chat_completions"])
         legs.primary.publish(
@@ -1410,9 +1289,6 @@ class TestFreshnessGuardEdges:
         assert (
             status.ok
             and status.archive_url == MIRROR_DIST + "0.1.0/acme-0.1.0-py3-none-any.whl"
-        )
-        assert any("does not list acme" in m for m in log_handler.at(logging.INFO)), (
-            log_handler.messages
         )
 
     def test_a_vendor_no_source_publishes_is_checked_once_per_window(
@@ -1500,12 +1376,7 @@ class TestTagSelectorGuard:
     FREE = ("kilo_free", "llm7", "opencode_zen_free", "ovhcloud")
 
     def _legs(self) -> TwoLegs:
-        source = get_shim_source("contrib")
-        assert source is not None
-        legs = TwoLegs(
-            dist=source.manifest_url.rsplit("/", 1)[0] + "/",
-            mirror_dist=source.fallback_url.rsplit("/", 1)[0] + "/",
-        )
+        legs = TwoLegs()
         for vendor in self.FREE[:2]:
             legs.publish(
                 vendor, "0.1.0", [f"{vendor}--chat_completions"], tags=["tier:free"]
@@ -1528,7 +1399,7 @@ class TestTagSelectorGuard:
 
         report = _apply(
             tmp_path,
-            {"sources": ["contrib"], "install": ["contrib:tag:tier:free"]},
+            _legs_section("contrib:tag:tier:free"),
             legs,
         )
 
