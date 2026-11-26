@@ -65,9 +65,11 @@ from ._install import (
 )
 from ._load import (
     ExtensionStatus,
+    KindLoadError,
     import_extension_module,
     list_extensions,
     load_extensions,
+    register_kind_handler,
 )
 
 __all__ = [
@@ -87,6 +89,7 @@ __all__ = [
     "ExternalStatus",
     "IndexEntry",
     "InstalledExtension",
+    "KindLoadError",
     "RetiredEntryPoint",
     "UpdatePlan",
     "activate_extensions_dir",
@@ -111,6 +114,7 @@ __all__ = [
     "parse_index",
     "pip_available",
     "plan_updates",
+    "register_kind_handler",
     "remove_extension",
     "resolve_extension_command",
     "retired_entry_points",

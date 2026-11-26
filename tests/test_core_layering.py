@@ -94,6 +94,28 @@ def test_no_contract_module_imports_the_shim_or_extension_layer():
     assert offenders == []
 
 
+def test_the_extension_loader_imports_neither_the_shim_layer_nor_the_converters():
+    """The extension loader manages packages; the shim layer registers a handler.
+
+    The shim layer imports the extension loader to register its ``shims`` kind
+    handler, never the other way round.  ``devtools`` (the ``ext new`` verb) is
+    the one lazy import that leaves the package.
+    """
+    forbidden = (
+        "llm_rosetta.shims",
+        "llm_rosetta.converters",
+        "llm_rosetta.pipeline",
+        "llm_rosetta.api",
+    )
+    offenders = [
+        f"{path.relative_to(_CORE)}:{line} imports {name}"
+        for path in _files("extensions")
+        for line, name in _imports(path)
+        if name.startswith(forbidden)
+    ]
+    assert offenders == []
+
+
 def test_no_converter_imports_the_pipeline():
     """The converters sit below the pipeline: nothing in them imports it."""
     offenders = [
