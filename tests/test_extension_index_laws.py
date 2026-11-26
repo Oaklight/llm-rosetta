@@ -381,14 +381,18 @@ def test_parse_index_refuses_a_malformed_entry(patch: dict[str, Any]) -> None:
         api.parse_index(document)
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="True == 1, so a document whose index_version is the boolean true is "
-    "read as version 1 (reported to llm-rosetta-03)",
-)
 def test_parse_index_refuses_a_boolean_index_version() -> None:
     with pytest.raises(ExtensionInstallError):
         api.parse_index({"index_version": True, "extensions": {}})
+
+
+@pytest.mark.parametrize("version", [1.0, "1", None, [1]])
+def test_parse_index_refuses_an_index_version_that_is_not_the_integer_one(
+    version: Any,
+) -> None:
+    """``1.0 == 1`` as well: only the integer ``1`` is version 1."""
+    with pytest.raises(ExtensionInstallError):
+        api.parse_index({"index_version": version, "extensions": {}})
 
 
 @pytest.mark.parametrize("raw", [None, 3, "x", []])
@@ -420,8 +424,7 @@ def _requirement_graph(draw):
     """Leaves e0..ek need nothing; every other extension needs only leaves.
 
     A leaf is reached by at most one path below any extension, which is the
-    shape the installer handles today; the shape it does not is the xfail test
-    below.
+    shape the shared-requirement test below adds to.
     """
     leaves = draw(st.integers(1, 3))
     count = leaves + draw(st.integers(0, 3))
@@ -532,12 +535,6 @@ def test_install_from_index_installs_nothing_when_a_requirement_is_unusable(
     assert len(list(itertools.pairwise(fake.log))) == 0
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="a requirement reached by two paths is reported as a cycle: the set of "
-    "installed ids is read once before the loop and the visited set is never "
-    "popped (reported to llm-rosetta-03)",
-)
 def test_install_from_index_installs_a_requirement_shared_by_two_paths(
     machine,
 ) -> None:

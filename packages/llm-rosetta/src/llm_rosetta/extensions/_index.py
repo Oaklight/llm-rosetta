@@ -319,7 +319,9 @@ def parse_index(document: Any, *, base: str = "") -> ExtensionIndex:
     """
     if not isinstance(document, Mapping):
         raise ExtensionInstallError("the index is not a JSON object")
-    if document.get("index_version") != INDEX_VERSION:
+    version = document.get("index_version")
+    # ``True == 1`` and ``1.0 == 1``: only a real integer is a version.
+    if not isinstance(version, int) or isinstance(version, bool) or version != 1:
         raise ExtensionInstallError(
             f"the index has index_version {document.get('index_version')!r}; "
             f"this installer reads {INDEX_VERSION}"
@@ -461,11 +463,11 @@ def install_from_index(
     *,
     version: str | None = None,
     dest: str | os.PathLike[str] | None = None,
-    _seen: set[str] | None = None,
 ) -> list[InstalledExtension]:
     """Install *ext_id* from the index, and the extensions it requires first.
 
-    A required extension that is already installed is left alone.
+    A required extension that is already installed is left alone, and one that
+    several extensions require is installed once.
 
     Args:
         ext_id: The extension id.
@@ -480,20 +482,43 @@ def install_from_index(
         ExtensionInstallError: See :func:`select_entry` and
             :func:`install_wheel`; also a requirement cycle.
     """
-    seen = _seen if _seen is not None else set()
-    if ext_id in seen:
+    return _install_walk(ext_id, index, version, dest, [], set())
+
+
+def _install_walk(
+    ext_id: str,
+    index: Mapping[str, list[IndexEntry]],
+    version: str | None,
+    dest: str | os.PathLike[str] | None,
+    active: list[str],
+    finished: set[str],
+) -> list[InstalledExtension]:
+    """Install *ext_id* below the extensions in *active*.
+
+    *active* is the chain of extensions being installed (a requirement that is
+    in it is a cycle) and *finished* is every one this call has installed.  The
+    installed set is read again for each requirement: an earlier requirement
+    may have installed it.
+    """
+    if ext_id in active:
         raise ExtensionInstallError(
             f"extension requirements form a cycle at {ext_id!r}"
         )
-    seen.add(ext_id)
-    entry = select_entry(index, ext_id, version=version)
-    have = {item.id for item in installed_extensions(dest)}
-    done: list[InstalledExtension] = []
-    for dependency in entry.requires_extensions:
-        if dependency not in have:
-            done.extend(install_from_index(dependency, index, dest=dest, _seen=seen))
-    done.append(install_entry(entry, dest))
-    return done
+    active.append(ext_id)
+    try:
+        entry = select_entry(index, ext_id, version=version)
+        done: list[InstalledExtension] = []
+        for dependency in entry.requires_extensions:
+            if dependency in finished:
+                continue
+            if dependency in {item.id for item in installed_extensions(dest)}:
+                continue
+            done.extend(_install_walk(dependency, index, None, dest, active, finished))
+        done.append(install_entry(entry, dest))
+        finished.add(ext_id)
+        return done
+    finally:
+        active.pop()
 
 
 def plan_updates(

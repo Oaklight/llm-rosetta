@@ -467,6 +467,53 @@ class TestInstallFromIndex:
         with pytest.raises(ExtensionInstallError, match="cycle"):
             install_from_index("a", load_index(str(path)), dest=home)
 
+    def test_a_requirement_shared_by_two_paths_is_installed_once(self, tmp_path, home):
+        """top needs mid and base; mid needs base: a diamond, not a cycle."""
+        need = {"requires_extensions": ["base"]}
+        path = _publish(
+            tmp_path / "pub",
+            {
+                "base": [("0.1.0", _wheel("base", "0.1.0"), {})],
+                "mid": [
+                    (
+                        "0.1.0",
+                        _wheel("mid", "0.1.0", requires_extensions=["base"]),
+                        need,
+                    )
+                ],
+                "top": [
+                    (
+                        "0.1.0",
+                        _wheel("top", "0.1.0", requires_extensions=["mid", "base"]),
+                        {"requires_extensions": ["mid", "base"]},
+                    )
+                ],
+            },
+        )
+
+        done = install_from_index("top", load_index(str(path)), dest=home)
+
+        assert [item.id for item in done] == ["base", "mid", "top"]
+
+    def test_a_cycle_below_a_shared_requirement_is_still_an_error(self, tmp_path, home):
+        path = _publish(
+            tmp_path / "pub",
+            {
+                "a": [("0.1.0", _wheel("a", "0.1.0"), {"requires_extensions": ["b"]})],
+                "b": [("0.1.0", _wheel("b", "0.1.0"), {"requires_extensions": ["a"]})],
+                "top": [
+                    (
+                        "0.1.0",
+                        _wheel("top", "0.1.0"),
+                        {"requires_extensions": ["a", "b"]},
+                    )
+                ],
+            },
+        )
+
+        with pytest.raises(ExtensionInstallError, match="cycle"):
+            install_from_index("top", load_index(str(path)), dest=home)
+
 
 class TestPlan:
     def test_each_status(self, tmp_path, home):
