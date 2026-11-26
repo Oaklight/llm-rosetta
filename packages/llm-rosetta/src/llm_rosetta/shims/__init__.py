@@ -48,9 +48,15 @@ from llm_rosetta.contracts.transform import (
 )
 
 # Scan provider directories and register shims from YAML + transforms.py.
+from llm_rosetta.extensions import register_kind_handler as _register_kind_handler
+
+from ._extension import load_extension_shims as _load_extension_shims
 from ._loader import load_providers as _load_providers
 from ._loader import load_providers_from_dir
 
+# The extension loader knows no shim: this is how it registers one.  It has to
+# be in place before the first load, which runs the installed extensions.
+_register_kind_handler("shims", _load_extension_shims)
 _load_providers()
 
 __all__ = [

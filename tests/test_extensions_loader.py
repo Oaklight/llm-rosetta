@@ -12,7 +12,13 @@ from pathlib import Path
 import pytest
 
 from llm_rosetta.contracts import SURFACE_VERSION
-from llm_rosetta.extensions import _discovery, list_extensions, load_extensions
+from llm_rosetta.extensions import (
+    KindLoadError,
+    _discovery,
+    _load,
+    list_extensions,
+    load_extensions,
+)
 from llm_rosetta.shims import get_shim, list_shims
 from llm_rosetta.shims._loader import plugin_source
 from llm_rosetta.shims._loader import _PLUGIN_SOURCES
@@ -78,6 +84,59 @@ def path(tmp_path, monkeypatch):
 
 def _status(ext_id: str):
     return next(s for s in list_extensions() if s.id == ext_id)
+
+
+class TestKindHandlers:
+    """The loader knows no shim: the shim layer registers a handler for its kind."""
+
+    def test_the_shim_layer_registers_the_shims_kind(self):
+        assert "shims" in _load._KIND_HANDLERS
+
+    def test_an_extension_is_skipped_when_no_handler_owns_its_kind(
+        self, path, monkeypatch
+    ):
+        _extension(path, "acme")
+        monkeypatch.delitem(_load._KIND_HANDLERS, "shims")
+
+        assert load_extensions() == []
+
+        status = _status("acme")
+        assert status.state == "skipped"
+        assert "no shim layer" in status.reason
+        assert get_shim("acme--chat_completions") is None
+
+    def test_a_handler_refusal_fails_that_extension_with_its_message(
+        self, path, monkeypatch
+    ):
+        _extension(path, "acme")
+        _extension(path, "other")
+
+        def refuse(manifest, folder):
+            if manifest.id == "acme":
+                raise KindLoadError("nope, by handler")
+            return []
+
+        monkeypatch.setitem(_load._KIND_HANDLERS, "shims", refuse)
+
+        load_extensions()
+
+        assert _status("acme").state == "failed"
+        assert _status("acme").reason == "nope, by handler"
+        assert _status("other").state == "loaded"
+
+    def test_a_handler_error_is_named_and_does_not_stop_the_rest(
+        self, path, monkeypatch
+    ):
+        _extension(path, "acme")
+
+        def explode(manifest, folder):
+            raise RuntimeError("boom")
+
+        monkeypatch.setitem(_load._KIND_HANDLERS, "shims", explode)
+
+        load_extensions()
+
+        assert _status("acme").reason == "RuntimeError: boom"
 
 
 class TestLoading:

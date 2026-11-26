@@ -1,14 +1,15 @@
-"""Loading the discovered extensions: manifest, compatibility, shim registration.
+"""Loading the discovered extensions: manifest, compatibility, kind handlers.
 
 Each extension is handled alone.  Whatever goes wrong with one (no manifest, an
-invalid one, a core it cannot run on, a shim it declares but does not provide,
-a name another owner already holds) is recorded as that extension's
-:class:`ExtensionStatus` and logged; the others load as if it were absent.  The
-shims an extension registered before it failed are removed again, so a
-half-loaded extension never leaves a half-registered vendor behind.
+invalid one, a core it cannot run on, a kind handler that refuses it) is
+recorded as that extension's :class:`ExtensionStatus` and logged; the others
+load as if it were absent.
 
-Names the registry already holds are never replaced: a core built-in wins over
-an extension, and the first extension to register a name wins over a later one.
+This module manages packages only.  What a ``provides`` kind means is the
+business of the layer that owns it: that layer registers a handler with
+:func:`register_kind_handler` (the shim layer registers ``"shims"``), and a
+kind with no load-time work (commands, transports) needs none.  Nothing here
+imports the shim layer or the converters.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import importlib
 import logging
 import re
 import threading
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -70,6 +72,33 @@ class ExtensionStatus:
     reason: str | None = None
     manifest: ExtensionManifest | None = None
     shims: tuple[str, ...] = ()
+
+
+class KindLoadError(Exception):
+    """A kind handler refused an extension; the message is the reason shown."""
+
+
+#: What a handler receives (the manifest and the extension folder) and what it
+#: hands back: the objects it registered, which :func:`load_extensions` returns.
+KindHandler = Callable[[ExtensionManifest, Path], Sequence[ProviderShim]]
+
+_KIND_HANDLERS: dict[str, KindHandler] = {}
+
+
+def register_kind_handler(kind: str, handler: KindHandler) -> None:
+    """Register the code that loads one ``provides`` kind of an extension.
+
+    The handler runs once per extension that lists the kind, after the manifest
+    and the compatibility checks.  It raises :class:`KindLoadError` (or any
+    exception) to fail the extension, and must undo what it registered before it
+    does, so a half-loaded extension leaves nothing behind.
+
+    Args:
+        kind: The ``provides`` key, e.g. ``"shims"``.
+        handler: ``handler(manifest, folder)``; the later registration of a
+            kind replaces the earlier.
+    """
+    _KIND_HANDLERS[kind] = handler
 
 
 _STATUS: list[ExtensionStatus] = []
@@ -126,31 +155,9 @@ def _read_manifest(folder: Path) -> ExtensionManifest:
     return parse_extension_manifest(document)
 
 
-def _registered_names() -> set[str]:
-    from llm_rosetta.shims.provider_shim import list_shims
-
-    return {shim.name for shim in list_shims()}
-
-
-def _unregister(names: set[str]) -> None:
-    from llm_rosetta.shims.provider_shim import unregister_shim
-
-    for name in names:
-        unregister_shim(name)
-
-
-def _label(manifest: ExtensionManifest) -> str:
-    return f"{manifest.id} {manifest.version}"
-
-
 def _load_one(
     found: FoundExtension, seen_ids: dict[str, Path]
 ) -> tuple[ExtensionStatus, list[ProviderShim]]:
-    from llm_rosetta.shims._loader import (
-        _PLUGIN_SOURCES,
-        load_providers_from_dir,
-    )
-
     def status(state: str, reason: str | None = None, **kw) -> ExtensionStatus:
         return ExtensionStatus(
             id=kw.pop("id", found.hint),
@@ -199,49 +206,16 @@ def _load_one(
     if not manifest.shims:
         return result(LOADED), []
 
-    declared = set(manifest.shims)
-    # A reload replaces what this extension registered last time, so its own
-    # earlier names are not "held by another owner".  Names another owner holds
-    # stay protected.
-    own = {
-        name
-        for name in _registered_names()
-        if (_PLUGIN_SOURCES.get(name) or "").partition(" ")[0] == manifest.id
-    }
-    _unregister(own)
-    for name in own:
-        _PLUGIN_SOURCES.pop(name, None)
-    before = _registered_names()
-    taken = set(before)
+    handler = _KIND_HANDLERS.get("shims")
+    if handler is None:
+        return result(SKIPPED, "no shim layer is loaded to register its shims"), []
     try:
-        loaded = load_providers_from_dir(
-            found.path.parent,
-            on_error="raise",
-            only_paths=(found.path.name,),
-            keep_names=lambda name: name in declared and name not in taken,
-        )
+        loaded = list(handler(manifest, found.path))
+    except KindLoadError as exc:
+        return result(FAILED, str(exc)), []
     except Exception as exc:  # noqa: BLE001 - name the extension, keep going
-        _unregister(_registered_names() - before)
         return result(FAILED, f"{type(exc).__name__}: {exc}"), []
-
-    provided = {shim.name for shim in loaded}
-    missing = sorted(declared - provided)
-    if missing:
-        _unregister(_registered_names() - before)
-        held = sorted(name for name in missing if name in taken)
-        detail = (
-            f"; already registered by another owner: {', '.join(held)}" if held else ""
-        )
-        return (
-            result(
-                FAILED,
-                f"declares shims it does not register: {', '.join(missing)}{detail}",
-            ),
-            [],
-        )
-    for shim in loaded:
-        _PLUGIN_SOURCES.setdefault(shim.name, _label(manifest))
-    return result(LOADED, shims=sorted(provided)), loaded
+    return result(LOADED, shims=sorted(shim.name for shim in loaded)), loaded
 
 
 def _report_legacy_entry_points() -> None:
