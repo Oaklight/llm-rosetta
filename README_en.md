@@ -255,7 +255,7 @@ and OpenAI — plus Cohere, Jina, MiniMax, Voyage and TypeSafe as one real vendo
 per embedding, rerank and decision format. Every other vendor (aggregators, free
 endpoints, OAuth and subscription lanes, and makers such as Moonshot, Qwen,
 Volcengine, xAI and Zhipu) is published in the
-[contrib shim repository](https://github.com/Oaklight/llm-rosetta-shim-contrib)
+[contrib extension repository](https://github.com/Oaklight/llm-rosetta-ext-contrib)
 under the same shim name; the gateway installs one automatically when a config
 names it.
 

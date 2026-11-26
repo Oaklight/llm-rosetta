@@ -225,7 +225,7 @@ Kilo Code 的后端，也可以作为 Ollama 前面的转换代理——见
 Google 和 OpenAI——以及作为 embedding、rerank 和 decision 格式各一个真实提供方的
 Cohere、Jina、MiniMax、Voyage 和 TypeSafe。其余提供方（聚合商、免费端点、OAuth 与订阅
 通道，以及 Moonshot、Qwen、Volcengine、xAI、Zhipu 等厂商）发布在
-[contrib shim 仓库](https://github.com/Oaklight/llm-rosetta-shim-contrib)，shim 名不变；
+[contrib 扩展仓库](https://github.com/Oaklight/llm-rosetta-ext-contrib)，shim 名不变；
 配置引用它们时，网关会自动安装。
 
 大多数 shim 名采用 `<vendor>--<format>` 形式，例如 `openai--open_responses`、

@@ -497,7 +497,7 @@ class TestAnUnreachableSourceOnAColdCache:
         (item,) = result["disabled"]
         assert item["provider"] == "go"
         assert item["category"] == "missing_external_shim"
-        assert "moved from core to llm-rosetta-shim-contrib" in item["reason"]
+        assert "moved from core to llm-rosetta-ext-contrib" in item["reason"]
         assert "source failures" in item["reason"]
         assert raw["providers"]["ds"].get("enabled", True) is True
 
@@ -559,7 +559,9 @@ class TestAnUnreachableSourceOnAColdCache:
 
         (line,) = [m for m in logs.at(logging.WARNING) if "endpoint disabled" in m]
         assert "embeddings_shim names unknown shim 'siliconflow--embedding'" in line
-        assert "moved in 0.14 to the shim repository llm-rosetta-shim-contrib" in line
+        assert (
+            "moved in 0.14 to the extension repository llm-rosetta-ext-contrib" in line
+        )
 
     def test_the_auto_disabled_marker_is_not_read_as_a_face(self, tmp_path, logs):
         raw = json.loads(json.dumps(OPENCODE))

@@ -120,7 +120,7 @@ def test_every_catalogue_entry_points_at_a_shim_repository():
     """A typo in a URL would read as "stale" forever; catch it here instead."""
     for pkg in SHIM_SOURCES:
         assert pkg.repo.startswith("https://github.com/"), pkg.key
-        assert "llm-rosetta-shim" in pkg.repo, pkg.key
+        assert "llm-rosetta-ext-" in pkg.repo, pkg.key
 
 
 def test_the_skeleton_names_the_source_the_repository_holds(capsys):
@@ -154,3 +154,35 @@ def test_offline_run_reads_a_saved_listing(tmp_path, capsys):
 
     assert check.main(["--from-json", str(source)]) == 1
     assert "llm-rosetta-shim-extra" in capsys.readouterr().out
+
+
+def test_an_extension_repository_is_considered_and_its_old_name_is_known():
+    """``llm-rosetta-ext-*`` is the current name; the ``shim`` one is its legacy name."""
+    repos = check.shim_repositories([_repo("llm-rosetta-ext-acme")])
+    assert list(repos.values()) == ["llm-rosetta-ext-acme"]
+    for source in SHIM_SOURCES:
+        current = source.repo.rsplit("/", 1)[1]
+        assert current.startswith("llm-rosetta-ext-"), source.key
+        old = current.replace("llm-rosetta-ext-", "llm-rosetta-shim-")
+        assert any(url.endswith("/" + old) for url in source.legacy_repos), source.key
+
+
+def test_the_skeleton_strips_the_extension_prefix(capsys):
+    check.report(
+        "Oaklight",
+        [("llm-rosetta-ext-acme", "https://github.com/Oaklight/llm-rosetta-ext-acme")],
+        [],
+    )
+    assert 'key="acme"' in capsys.readouterr().out
+
+
+def test_a_manifest_url_of_an_earlier_repository_name_is_the_same_source():
+    """A config written before the rename still names the old repository."""
+    for source in SHIM_SOURCES:
+        old = source.legacy_manifest_urls
+        assert old, source.key
+        assert all(url not in (source.manifest_url, source.fallback_url) for url in old)
+        assert any(
+            "llm-rosetta-shim-" in url and url.endswith("@dist/manifest.json")
+            for url in old
+        )

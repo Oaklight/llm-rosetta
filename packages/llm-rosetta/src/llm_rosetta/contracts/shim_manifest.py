@@ -1,7 +1,7 @@
 """The shim source manifest: what a shim repository publishes, and what installs.
 
-A shim source repository (``llm-rosetta-shim-contrib``,
-``llm-rosetta-shim-argonne``) publishes one ``manifest.json`` on its ``dist``
+A shim source repository (``llm-rosetta-ext-contrib``,
+``llm-rosetta-ext-argonne``) publishes one ``manifest.json`` on its ``dist``
 branch, with one record per released vendor version (#1660).  A host such as
 the gateway reads it, picks per vendor the newest version this core can run,
 downloads that version's wheel and checks its digest.

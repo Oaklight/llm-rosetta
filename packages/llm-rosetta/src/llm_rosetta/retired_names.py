@@ -457,8 +457,9 @@ def check_not_retired(name: object, *kinds: str) -> None:
             raise ValueError(message)
 
 
-#: The shim repository the moved vendors live in now.
-CONTRIB_REPOSITORY = "https://github.com/Oaklight/llm-rosetta-shim-contrib"
+#: The extension repository the moved vendors live in now (it was
+#: ``llm-rosetta-shim-contrib`` before the 0.14.0 extension system).
+CONTRIB_REPOSITORY = "https://github.com/Oaklight/llm-rosetta-ext-contrib"
 
 
 @dataclass(frozen=True)
@@ -485,7 +486,7 @@ class MovedVendor:
 
     @property
     def package(self) -> str:
-        """The repository name, e.g. ``llm-rosetta-shim-contrib``."""
+        """The repository name, e.g. ``llm-rosetta-ext-contrib``."""
         return self.repository.rstrip("/").rsplit("/", 1)[-1]
 
     def owns(self, name: str) -> bool:
@@ -566,11 +567,12 @@ def moved_shim_message(name: object) -> str | None:
         return None
     return (
         f"shim {name!r} is no longer built into llm-rosetta: its vendor "
-        f"{row.vendor!r} moved in {row.moved_in} to the shim repository "
+        f"{row.vendor!r} moved in {row.moved_in} to the extension repository "
         f"{row.package} ({row.repository}) under the same name. The gateway "
-        "installs it automatically from its 'contrib' shim source; a library "
-        "user loads the vendor's directory from that repository with "
-        "llm_rosetta.api.load_providers_from_dir(<checkout>/providers)"
+        "installs it automatically from its 'contrib' source; a library "
+        f"user installs it with `llm-rosetta ext install {row.vendor}` "
+        "(llm_rosetta loads installed extensions on import; call "
+        "llm_rosetta.extensions.load_extensions() to pick up a later install)"
     )
 
 

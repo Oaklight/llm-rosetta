@@ -6,7 +6,8 @@ about it, and an operator who knows it exists has no key for it.  This check
 compares the account's repositories with the record and says which side to
 edit:
 
-- a repository named ``llm-rosetta-shim-*`` that the record does not name
+- a repository named ``llm-rosetta-ext-*`` (or the older ``llm-rosetta-shim-*``) that
+  the record does not name
   (add a ``ShimSource`` — the output prints a skeleton to paste).  The earlier
   names of a source (``legacy_repos``) and the repositories of the stand-alone
   vendors it replaced are known, so the archived predecessors do not count;
@@ -32,10 +33,11 @@ from urllib.request import Request, urlopen
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-#: Repository name prefixes a shim package can carry.  The singular form is
-#: what every published package uses; the plural one is kept for a package
-#: that was named before the convention settled.
-SHIM_REPO_PREFIXES = ("llm-rosetta-shim-", "llm-rosetta-shims-")
+#: Repository name prefixes a package can carry.  ``llm-rosetta-ext-`` is the
+#: current convention (extension repositories); ``llm-rosetta-shim-`` is what
+#: the same repositories were called before the 0.14.0 extension system, and the
+#: plural one is kept for a package that was named before that convention settled.
+SHIM_REPO_PREFIXES = ("llm-rosetta-ext-", "llm-rosetta-shim-", "llm-rosetta-shims-")
 
 
 def _normalise(url: str) -> str:
@@ -136,7 +138,11 @@ def fetch_repositories(owner: str, *, token: str | None = None) -> list[dict[str
 
 def _skeleton(name: str, url: str) -> str:
     """A ``ShimSource`` entry to paste, with the fields only a human can fill."""
-    key = name.removeprefix("llm-rosetta-shim-").removeprefix("llm-rosetta-shims-")
+    key = (
+        name.removeprefix("llm-rosetta-ext-")
+        .removeprefix("llm-rosetta-shim-")
+        .removeprefix("llm-rosetta-shims-")
+    )
     return (
         "    ShimSource(\n"
         f'        key="{key}",\n'
