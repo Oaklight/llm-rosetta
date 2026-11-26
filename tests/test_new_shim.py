@@ -51,21 +51,6 @@ def root(tmp_path: Path) -> Path:
     return providers
 
 
-def _fake_repository(monkeypatch, repo: Path) -> None:
-    """Make *repo* answer like a GitHub shim package."""
-
-    def fake_git(*args: str, cwd: Path) -> str | None:
-        if args[0] == "rev-parse":
-            return str(repo)
-        if args[0] == "remote":
-            return "git@github.com:acme/shim-acme.git"
-        if args[0] == "symbolic-ref":
-            return "origin/main"
-        return None
-
-    monkeypatch.setattr(scaffold, "_git", fake_git)
-
-
 def test_the_typed_layout_creates_a_vendor_manifest_and_a_leaf(new_shim, root):
     code = new_shim.main(
         [
@@ -163,50 +148,31 @@ def test_an_existing_leaf_is_refused(new_shim, root):
     assert code == 1
 
 
-def test_the_package_manifest_gains_the_new_entry(new_shim, root):
-    new_shim.main(["acme", "--root", str(root)])
-    (root / "shims.yaml").write_text(
-        "version: 1\nshims:\n  - name: acme--chat_completions\n"
-        "    path: acme/llm/chat_completions\n",
-        encoding="utf-8",
-    )
+@pytest.mark.parametrize(
+    "flag",
+    [
+        ["--package", "llm-rosetta-shim-acme"],
+        ["--localize-logo"],
+        ["--no-registry-manifest"],
+    ],
+)
+def test_the_external_package_flags_are_gone(new_shim, root, flag, capsys):
+    """An extension folder is the shipped form; the scaffold writes only a tree."""
+    with pytest.raises(SystemExit) as raised:
+        new_shim.main(["acme", "--root", str(root), *flag])
 
-    new_shim.main(["acme", "--root", str(root), "--format", "messages"])
-
-    text = (root / "shims.yaml").read_text(encoding="utf-8")
-    assert text.count("- name:") == 2
-    assert "path: acme/llm/messages" in text
-    assert [s.name for s in load_providers_from_dir(root)] == [
-        "acme--chat_completions",
-        "acme--messages",
-    ]
+    assert raised.value.code == 2
+    assert "unrecognized arguments" in capsys.readouterr().err
+    assert not (root / "acme").exists()
 
 
-def test_the_package_manifest_can_be_left_alone(new_shim, root):
+def test_a_stray_shims_yaml_is_neither_read_nor_written(new_shim, root):
     original = "version: 1\nshims: []\n"
     (root / "shims.yaml").write_text(original, encoding="utf-8")
 
-    new_shim.main(["acme", "--root", str(root), "--no-registry-manifest"])
+    assert new_shim.main(["acme", "--root", str(root)]) == 0
 
     assert (root / "shims.yaml").read_text(encoding="utf-8") == original
-
-
-def test_a_manifest_that_does_not_end_with_the_list_is_left_to_the_operator(
-    new_shim, root, capsys
-):
-    """Appending there would move the key; the script says so instead."""
-    (root / "shims.yaml").write_text(
-        "version: 1\nshims:\n  - name: acme--chat_completions\n"
-        "    path: acme/llm/chat_completions\nstrict: true\n",
-        encoding="utf-8",
-    )
-
-    new_shim.main(["acme", "--root", str(root), "--format", "messages"])
-
-    assert "add this entry by hand" in capsys.readouterr().out
-    assert "- name: acme--messages" not in (root / "shims.yaml").read_text(
-        encoding="utf-8"
-    )
 
 
 def test_the_transform_stub_is_picked_up_by_the_loader(new_shim, root):
@@ -328,114 +294,6 @@ class TestInteractiveMode:
 
         assert code == 2
         assert "vendor name is required" in capsys.readouterr().err
-
-    def test_a_logo_url_offers_to_save_it_into_the_package(
-        self, monkeypatch, root, capsys
-    ):
-
-        _fake_repository(monkeypatch, root.parent)
-        monkeypatch.setattr(scaffold, "_download_logo", lambda url: (b"<svg/>", ".svg"))
-        self._answers(
-            monkeypatch,
-            [
-                str(root),  # scan root
-                "acme",
-                "llm",
-                "chat_completions",
-                "",  # lane
-                "https://api.acme.example/v1",
-                "ACME_API_KEY",
-                "",
-                "",
-                "https://example.com/acme.svg",
-                "y",  # save the mark and use its CDN URL
-                "ACME",
-                "n",
-            ],
-        )
-
-        code = scaffold.main([])
-
-        assert code == 0
-        assert (root.parent / "assets" / "acme.svg").read_bytes() == b"<svg/>"
-        text = (root / "acme" / "provider.yaml").read_text(encoding="utf-8")
-        assert (
-            "logo: https://cdn.jsdelivr.net/gh/acme/shim-acme@main/assets/acme.svg"
-            in (text)
-        )
-        assert "saved   " in capsys.readouterr().out
-
-
-class TestLogoLocalization:
-    """A mark a package ships lives in the repository, not on someone's host."""
-
-    def test_it_saves_the_mark_and_returns_the_cdn_url(self, monkeypatch, root):
-
-        _fake_repository(monkeypatch, root.parent)
-        monkeypatch.setattr(scaffold, "_download_logo", lambda url: (b"<svg/>", ".svg"))
-
-        url, note = scaffold.localize_logo("https://example.com/acme.svg", root, "acme")
-
-        assert (root.parent / "assets" / "acme.svg").read_bytes() == b"<svg/>"
-        assert url == "https://cdn.jsdelivr.net/gh/acme/shim-acme@main/assets/acme.svg"
-        assert note.startswith("saved   ")
-
-    def test_an_unchanged_mark_is_not_rewritten(self, monkeypatch, root):
-
-        _fake_repository(monkeypatch, root.parent)
-        assets = root.parent / "assets"
-        assets.mkdir()
-        (assets / "acme.svg").write_bytes(b"<svg/>")
-        monkeypatch.setattr(scaffold, "_download_logo", lambda url: (b"<svg/>", ".svg"))
-
-        _url, note = scaffold.localize_logo(
-            "https://example.com/acme.svg", root, "acme"
-        )
-
-        assert note.startswith("kept existing")
-
-    def test_outside_a_repository_the_url_is_kept(self, monkeypatch, root):
-
-        monkeypatch.setattr(scaffold, "_git", lambda *args, cwd: None)
-
-        url, note = scaffold.localize_logo("https://example.com/acme.svg", root, "acme")
-
-        assert url == "https://example.com/acme.svg"
-        assert "not inside a git repository" in note
-
-    def test_a_download_failure_keeps_the_url(self, monkeypatch, root):
-
-        _fake_repository(monkeypatch, root.parent)
-
-        def boom(_url):
-            raise ValueError("the mark URL must use https")
-
-        monkeypatch.setattr(scaffold, "_download_logo", boom)
-
-        url, note = scaffold.localize_logo("http://example.com/acme.svg", root, "acme")
-
-        assert url == "http://example.com/acme.svg"
-        assert "must use https" in note
-
-    def test_the_flag_mode_localizes_without_prompting(self, monkeypatch, root):
-
-        _fake_repository(monkeypatch, root.parent)
-        monkeypatch.setattr(scaffold, "_download_logo", lambda url: (b"<svg/>", ".svg"))
-
-        code = scaffold.main(
-            [
-                "acme",
-                "--no-input",
-                "--root",
-                str(root),
-                "--logo",
-                "https://example.com/acme.svg",
-                "--localize-logo",
-            ]
-        )
-
-        assert code == 0
-        assert (root.parent / "assets" / "acme.svg").is_file()
 
 
 class TestScriptExitCode:
@@ -715,9 +573,7 @@ class TestExistingTree:
 
         code = _script().main(["acme", "--no-input", "--root", str(root)])
 
-        out = capsys.readouterr().out
         assert code == 0
-        assert "as its own vendor leaf" in out
         assert (root / "acme" / "llm" / "provider.yaml").is_file()
         # The credential still lives one level up, in the vendor manifest.
         manifest = (root / "acme" / "provider.yaml").read_text(encoding="utf-8")
@@ -814,9 +670,7 @@ class TestExistingTree:
 
         code = _script().main([])
 
-        out = capsys.readouterr().out
         assert code == 0
-        assert "found 1 single-lane vendor" in out
         assert prompts[0].startswith("Scan root")
         assert any(p.startswith("Lane directory") for p in prompts)
         assert (root / "acme" / "llm" / "provider.yaml").is_file()
@@ -942,27 +796,6 @@ class TestLobehubLogo:
 
         assert scaffold.find_lobehub_logo("acme") is None
 
-    def test_a_jsdelivr_url_is_kept_without_a_copy(self, monkeypatch, root):
-
-        _fake_repository(monkeypatch, root.parent)
-
-        def boom(_url):
-            raise AssertionError("a jsDelivr URL must not be downloaded")
-
-        monkeypatch.setattr(scaffold, "_download_logo", boom)
-
-        url, note = scaffold.localize_logo(self.ICON, root, "opencode")
-
-        assert url == self.ICON
-        assert "already served from jsDelivr" in note
-        assert not (root.parent / "assets").exists()
-
-    def test_the_fastly_host_counts_as_jsdelivr_too(self):
-
-        assert scaffold.is_jsdelivr("https://fastly.jsdelivr.net/gh/x/y@main/a.svg")
-        assert scaffold.is_jsdelivr("https://cdn.jsdelivr.net/npm/x/a.svg")
-        assert not scaffold.is_jsdelivr("https://example.com/a.svg")
-
     def test_the_icon_is_offered_as_the_default(self, monkeypatch, root, capsys):
         prompts = self._recording_answers(
             monkeypatch,
@@ -1017,38 +850,10 @@ class TestLobehubLogo:
 
         code = _script().main([])
 
-        out = capsys.readouterr().out
         assert code == 0
-        assert "nothing to copy into the package" in out
         assert not any(prompt.startswith("Save the mark") for prompt in prompts)
         manifest = (root / "acme" / "provider.yaml").read_text(encoding="utf-8")
         assert f"logo: {self.ICON}" in manifest
-
-    def test_a_non_jsdelivr_url_still_offers_to_save_it(self, monkeypatch, root):
-        prompts = self._recording_answers(
-            monkeypatch,
-            [
-                str(root),
-                "acme",
-                "llm",
-                "chat_completions",
-                "",  # lane
-                "",
-                "",
-                "",
-                "",
-                "https://example.com/acme.svg",
-                "n",  # do not save it
-                "",  # group title
-                "n",  # transforms stub
-            ],
-            None,
-        )
-
-        code = _script().main([])
-
-        assert code == 0
-        assert any(prompt.startswith("Save the mark") for prompt in prompts)
 
     def test_the_flag_mode_takes_the_icon(self, monkeypatch, root, capsys):
 
@@ -1092,9 +897,6 @@ class TestTemplate:
         "base_url": "https://api.acme.example/v1",
         "display_name": "Acme",
         "models_path": "https://api.acme.example/v1/models",
-        "distribution": "llm-rosetta-shim-acme",
-        "package": "llm_rosetta_shim_acme",
-        "core_floor": "0.14.0",
     }
 
     def test_every_template_renders(self):
@@ -1130,48 +932,6 @@ class TestTemplate:
 
         assert (root / "acme" / "llm" / "chat_completions" / "transforms.py").is_file()
         assert not (root / "acme" / "llm" / "transforms.py").exists()
-
-    def test_the_package_shell_is_written_beside_the_tree(self, new_shim, tmp_path):
-        repo = tmp_path / "repo"
-        repo.mkdir()
-
-        code = new_shim.main(
-            [
-                "acme",
-                "--root",
-                str(repo),
-                "--package",
-                "llm-rosetta-shim-acme",
-            ]
-        )
-
-        assert code == 0
-        assert (repo / "pyproject.toml").is_file()
-        leaf = (
-            repo
-            / "src"
-            / "llm_rosetta_shim_acme"
-            / "providers"
-            / "acme"
-            / "llm"
-            / "provider.yaml"
-        )
-        assert leaf.is_file()
-        text = (repo / "pyproject.toml").read_text(encoding="utf-8")
-        assert "llm-rosetta-shim-acme" in text
-        assert "llm_rosetta_shim_acme" in text
-        assert "{{" not in text
-
-    def test_an_existing_package_file_is_left_alone(self, new_shim, tmp_path):
-        repo = tmp_path / "repo"
-        repo.mkdir()
-        (repo / "pyproject.toml").write_text("# mine\n", encoding="utf-8")
-
-        new_shim.main(
-            ["acme", "--root", str(repo), "--package", "llm-rosetta-shim-acme"]
-        )
-
-        assert (repo / "pyproject.toml").read_text(encoding="utf-8") == "# mine\n"
 
 
 class TestCheckTree:
@@ -1368,19 +1128,6 @@ class TestCheckTree:
         assert len(findings) == 1
         assert "already ships its exchange" in findings[0].message
 
-    def test_a_manifest_entry_with_no_leaf_is_reported(self, tmp_path: Path):
-
-        self._manifest(tmp_path / "acme")
-        self._leaf(tmp_path / "acme" / "llm", "acme--chat_completions")
-        (tmp_path / "shims.yaml").write_text(
-            "version: 1\nshims:\n  - name: ghost--chat_completions\n    path: ghost\n",
-            encoding="utf-8",
-        )
-
-        findings = check_tree(tmp_path)
-        assert len(findings) == 1
-        assert "holds no provider.yaml" in findings[0].message
-
     def test_a_private_helper_module_is_not_reported(self, tmp_path: Path):
 
         self._manifest(tmp_path / "acme")
@@ -1480,60 +1227,6 @@ class TestMigrate:
         assert "rerun with --write" in out
         assert (tmp_path / "acme" / "provider.yaml").is_file()
         assert not (tmp_path / "acme" / "llm").exists()
-
-    def test_the_manifest_paths_are_rewritten(self, tmp_path: Path):
-
-        self._manifest(tmp_path / "acme")
-        self._leaf(tmp_path / "acme" / "chat_completions", "acme--chat_completions")
-        (tmp_path / "shims.yaml").write_text(
-            "version: 1\nshims:\n  - name: acme--chat_completions\n"
-            "    path: acme/chat_completions\n",
-            encoding="utf-8",
-        )
-
-        apply_migration(tmp_path, plan_migration(tmp_path)[0])
-
-        text = (tmp_path / "shims.yaml").read_text(encoding="utf-8")
-        assert "path: acme/llm" in text
-
-    def test_the_manifest_keeps_the_keys_it_was_not_asked_to_change(
-        self, tmp_path: Path
-    ):
-        """Only ``path`` is the migration's business.
-
-        A package that declares the core floor it needs would otherwise lose it
-        the moment someone runs `shims migrate --write`.
-        """
-
-        self._manifest(tmp_path / "acme")
-        self._leaf(tmp_path / "acme" / "chat_completions", "acme--chat_completions")
-        (tmp_path / "shims.yaml").write_text(
-            "version: 1\ncore: '>=0.16'\nshims:\n"
-            "  - name: acme--chat_completions\n    path: acme/chat_completions\n",
-            encoding="utf-8",
-        )
-
-        apply_migration(tmp_path, plan_migration(tmp_path)[0])
-
-        text = (tmp_path / "shims.yaml").read_text(encoding="utf-8")
-        assert 'core: ">=0.16"' in text
-        assert "path: acme/llm" in text
-
-    def test_a_manifest_it_cannot_render_is_left_alone(self, tmp_path: Path):
-        """A lossy rewrite is worse than a path the operator fixes by hand."""
-
-        self._manifest(tmp_path / "acme")
-        self._leaf(tmp_path / "acme" / "chat_completions", "acme--chat_completions")
-        original = (
-            "version: 1\nmeta:\n  owner: acme\nshims:\n"
-            "  - name: acme--chat_completions\n    path: acme/chat_completions\n"
-        )
-        (tmp_path / "shims.yaml").write_text(original, encoding="utf-8")
-
-        actions = apply_migration(tmp_path, plan_migration(tmp_path)[0])
-
-        assert (tmp_path / "shims.yaml").read_text(encoding="utf-8") == original
-        assert any("left shims.yaml alone" in action for action in actions)
 
     def test_a_second_lane_leaves_the_sibling_lane_where_it_is(self, tmp_path: Path):
         """The flat lane moves down; the lane already at a format level stays.

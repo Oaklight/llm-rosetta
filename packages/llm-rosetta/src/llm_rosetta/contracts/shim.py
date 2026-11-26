@@ -609,8 +609,8 @@ class ProviderShim:
             ``"chat_completions"``, ``"messages"``, ``"openai"``,
             ``"systemone"``).
         logo: URL to the provider's logo image (SVG preferred).
-        display_name: This shim's own human-readable label (e.g. ``"cluster_a"``
-            on ``"acme_cluster_a--chat_completions"``).  The admin UI renders it
+        display_name: This shim's own human-readable label (e.g. ``"metis"``
+            on ``"alcf_metis--chat_completions"``).  The admin UI renders it
             as the shim's row inside its group — for a shim that also declares
             ``group`` or ``group_label``: one declaring neither was written
             against the older schema, where ``display_name`` titled the group
@@ -620,8 +620,8 @@ class ProviderShim:
         group: Top-level group this shim appears under in the admin UI's
             provider-type picker.  Falls back to the segment before ``--`` in
             ``name``, so a shim usually needs no declaration; declare it when
-            one vendor spans several name prefixes (``acme_cluster_a`` and
-            ``acme_cluster_b`` both declaring ``"acme"``).
+            one vendor spans several name prefixes (``alcf_metis`` and
+            ``alcf_sophia`` both declaring ``"alcf"``).
             The group's title — which is also the brand on free-source
             affordances — falls back to the capitalized group key, so a vendor
             that wants more than that declares ``group_label``.

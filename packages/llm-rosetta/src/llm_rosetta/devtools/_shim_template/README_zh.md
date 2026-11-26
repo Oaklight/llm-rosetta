@@ -22,16 +22,10 @@ helper 模块在被其中某个文件 import 之前是惰性的。`transforms.py
 | `auth.py` | 叶子 | 否 | 该叶子的交换；vendor 已有时报错 |
 | `quota.py` | vendor 根或叶子 | 否 | `PROBES`，额度读取器 |
 | `transforms.py` | 叶子 | 否 | 字段级 transform 元组 |
-| `shims.yaml` | gateway 扫描的那个目录 | 否 | 该包声明加载的 shim 集合 |
 
 `auth.py` 和 `quota.py` 以独立模块执行：不能用相对 import，必须自包含
 （标准库总是可用）。`transforms.py` 可以用相对 import——loader 会为它注册
 包链——所以它旁边的 helper 模块能被导入。
-
-`shims.yaml` 与各 vendor 目录并排，放在 gateway 被指向的那个目录里——本地树是
-`shims.paths` 指的目录，拉取来的包是 remote 的 `path`（本仓库发布的包里是
-`src/<package>/providers`）。往上放一层的 `src/<package>/shims.yaml` 永远不会被读：
-源照样加载，里面的 core 下限不会被检查，而且没有任何提示。
 
 ## 叶子放在哪里
 
@@ -92,20 +86,20 @@ fields:
 
 ```bash
 # 在仓库检出内，写入内置树
-python scripts/dev/new_shim.py acme --format chat_completions
+python scripts/dev/new_shim.py together --format chat_completions
 
 # 给已有 vendor 增加一个 lane
-python scripts/dev/new_shim.py acme --lane metis --format chat_completions
+python scripts/dev/new_shim.py alcf --lane metis --format chat_completions
 
 # 可安装的扩展目录（这个形状的树加上 plugin.yaml）
-llm-rosetta ext new acme
+llm-rosetta ext new together
 ```
 
 每次运行都会用真实 loader 加载自己的产物，再报告成功，所以 gateway 读不了的
 形状在创建时就失败，而不是等到启动。检查扩展目录用 `llm-rosetta ext check <目录>`，检查单独的树用：
 
 ```bash
-python -c "import sys; from pathlib import Path; from llm_rosetta.api import run_scaffold_check; sys.exit(run_scaffold_check(Path(sys.argv[1])))" src/llm_rosetta_shim_acme/providers
+python -c "import sys; from pathlib import Path; from llm_rosetta.api import run_scaffold_check; sys.exit(run_scaffold_check(Path(sys.argv[1])))" src/llm_rosetta/shims/builtin
 ```
 
 ## 模板目录如何对应到 shim
@@ -114,11 +108,9 @@ python -c "import sys; from pathlib import Path; from llm_rosetta.api import run
 `<root>/<vendor>/`，`tree/vendor/type/` 对应 `<vendor>/<type>/`，
 `tree/vendor/type/format/` 对应 `<vendor>/<type>/<format>/`——该 type 只有
 一个 lane 时去掉 format 层，写成 `<vendor>/<type>/`。
-`package/src/package/` 对应 `src/<package>/`。
 
-`tree/` 和 `package/` 下的每个文件都带 `.tmpl` 后缀，脚手架写入时去掉。没有
-这个后缀，ruff、setuptools 和 loader 会把占位文件当成真文件——
-`package/pyproject.toml` 在还写着 `{{vendor}}` 时不是合法 TOML。
+`tree/` 下的每个文件都带 `.tmpl` 后缀，脚手架写入时去掉。没有这个后缀，
+ruff 和 loader 会把占位文件当成真文件。
 
 ## 占位符
 
@@ -126,8 +118,4 @@ python -c "import sys; from pathlib import Path; from llm_rosetta.api import run
 占一行。
 
 `{{vendor}}`、`{{group}}`、`{{group_label}}`、`{{logo}}`、`{{api_key_env}}`、
-`{{name}}`、`{{model_type}}`、`{{format}}`、`{{base_url}}`、
-`{{distribution}}`、`{{package}}`、`{{core_floor}}`。
-
-`{{core_floor}}` 填入正在运行的 core 版本，所以今天生成的包一定锁在能读它
-的 core 上。
+`{{name}}`、`{{model_type}}`、`{{format}}`、`{{base_url}}`。
