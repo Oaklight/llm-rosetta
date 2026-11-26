@@ -209,7 +209,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   subgraph FOUNDATION["foundation"]
     TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info"]
     OBS["observability/&lt;br/&gt;logging · metrics · request_log · ops_log · error_dump · capture · retention · usage · persistence"]
-    SHIMS["shims/&lt;br/&gt;extension_view · manifest_sources · source_view(读扩展 index.json,#1728)"]
+    SHIMS["shims/&lt;br/&gt;extension_view · manifest_sources · source_view(读扩展 index.json,#1728)&lt;br/&gt;本地目录来源与 shims.yaml 加载器已删(#1732)"]
     MT["model_types/"]
     UPD["updates.py"]
     SURF["surface.py"]
@@ -296,7 +296,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
     T_KEX["key-examples.js"]
     T_LOGS["logs.js"]
     T_OPS["ops-log.js"]
-    T_SHIMS["shims.js · shims-page.js · shim-sources-editor.js&lt;br/&gt;+ core/shim-sources.js(待替换)"]
+    T_SHIMS["shims.js · shims-page.js · shim-sources-editor.js&lt;br/&gt;+ core/shim-sources.js&lt;br/&gt;后端的编辑、删除、预览路由已删,只读(#1732);前端编辑器是否清理未确认"]
     T_JOBS["jobs.js"]
   end
   COMP["js/components/&lt;br/&gt;provider-picker · provider-row · logo-picker · logo-select · type-picker · fetch-models · test-runner"]
