@@ -55,16 +55,20 @@ def test_the_loader_reads_the_names_from_contracts():
             assert literal not in source, f"{loader} restates {literal}"
 
 
-def test_provider_shim_reexports_the_contract_data_classes():
-    # 0.13.0 shipped the data classes in shims.provider_shim; the module keeps
-    # them, as the same objects, until 0.15.0.
+def test_provider_shim_forwards_the_013_data_classes_it_had():
+    # 0.13.0 shipped ProviderShim and ReasoningCapability in shims.provider_shim;
+    # the module forwards them, as the same objects and with a deprecation
+    # warning, until 0.15.0.  (The forward tests are in test_compat_forwarders.)
+    import warnings
+
     import llm_rosetta.contracts.shim as shim
     import llm_rosetta.shims.provider_shim as provider_shim
 
-    for name in set(shim.__all__) - {"load_providers_from_dir"}:
-        assert getattr(provider_shim, name) is getattr(shim, name), name
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        assert provider_shim.ProviderShim is shim.ProviderShim
+        assert provider_shim.ReasoningCapability is shim.ReasoningCapability
     assert "0.15.0" in (provider_shim.__doc__ or "")
-    assert "llm_rosetta.contracts.shim" in (provider_shim.__doc__ or "")
     # The registry stays internal: the contract holds values, not state.
     for name in ("register_shim", "get_shim", "list_shims", "staging_registry"):
         assert not hasattr(shim, name)

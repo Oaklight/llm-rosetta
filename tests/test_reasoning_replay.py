@@ -168,7 +168,8 @@ class TestReplayCapabilityParsing:
         assert ReasoningCapability().replay_missing == "as_is"
 
     def test_deepseek_and_opencode_declare_the_capability(self):
-        from llm_rosetta.shims.provider_shim import get_shim, match_model_reasoning
+        from llm_rosetta.shims.provider_shim import get_shim
+        from llm_rosetta.contracts.resolver import match_model_reasoning
 
         load_providers_with_moved()
 
@@ -202,13 +203,13 @@ class TestModelFamilyMatching:
         )
 
     def test_exact_key_beats_a_pattern(self):
-        from llm_rosetta.shims.provider_shim import match_model_reasoning
+        from llm_rosetta.contracts.resolver import match_model_reasoning
 
         cap = match_model_reasoning(self._shim(), "deepseek-v4.1-flash")
         assert cap is not None and cap.replay_missing == "as_is"
 
     def test_pattern_covers_the_family(self):
-        from llm_rosetta.shims.provider_shim import match_model_reasoning
+        from llm_rosetta.contracts.resolver import match_model_reasoning
 
         for model in ("deepseek-v9", "deepseek-", "deepseek-v4.1-flash-free"):
             cap = match_model_reasoning(self._shim(), model)
@@ -216,7 +217,7 @@ class TestModelFamilyMatching:
             assert cap.replay_missing == "fill_empty", model
 
     def test_non_matching_model_falls_through(self):
-        from llm_rosetta.shims.provider_shim import match_model_reasoning
+        from llm_rosetta.contracts.resolver import match_model_reasoning
 
         assert match_model_reasoning(self._shim(), "claude-sonnet-4") is None
         assert match_model_reasoning(self._shim(), None) is None

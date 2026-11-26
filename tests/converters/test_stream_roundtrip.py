@@ -44,7 +44,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.ir.primitives import expand_response
 from tests.converters.test_leg_agreement import (

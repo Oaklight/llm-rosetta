@@ -16,7 +16,7 @@ import pytest
 
 from llm_rosetta import get_converter_for_provider
 from llm_rosetta.auto_detect import ProviderType
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 
 
 # ============================================================

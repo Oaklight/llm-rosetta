@@ -241,7 +241,7 @@ class TestACallersOwnSinkWins:
     """A sink the caller installed keeps receiving; the entry point backs off."""
 
     def test_an_installed_sink_is_not_stolen(self):
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
         from llm_rosetta.converters.llm.chat_completions import (
             ChatCompletionsConverter,
         )
@@ -268,7 +268,7 @@ class TestACallersOwnSinkWins:
         caller installed, so one request could deliver two losses to two
         different lists.
         """
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
         from llm_rosetta.converters.llm.chat_completions import (
             ChatCompletionsConverter,
         )
@@ -298,7 +298,7 @@ class TestACallersOwnSinkWins:
         ``warnings=ctx.warnings`` argument, so a caller that installed its own
         sink heard nothing; the entry point's sink is now the one it lands in.
         """
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
         from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
 
         caller = WarningSink(leg="caller")
@@ -665,7 +665,7 @@ class TestTheBaseStreamDefaults:
         ``warnings=ctx.warnings`` argument; a caller with its own sink heard
         nothing.
         """
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
         from llm_rosetta.converters.llm.messages import MessagesConverter
 
         caller = WarningSink(leg="caller")
@@ -689,7 +689,7 @@ class TestTheEntryPointsNameTheirLeg:
     """The act knows its leg; it does not wait for the driver to say."""
 
     def test_a_response_read_on_a_fresh_context_is_a_response(self, monkeypatch):
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
         from llm_rosetta.converters.llm.messages import MessagesConverter
 
         def _read(self, provider_response, *, context, **kwargs):
@@ -718,7 +718,7 @@ class TestTheEntryPointsNameTheirLeg:
         assert warning.leg == "response"
 
     def test_a_request_write_on_a_response_leg_sink_is_a_request(self, monkeypatch):
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
         from llm_rosetta.converters.llm.messages import MessagesConverter
 
         def _write(self, ir_request, *, context, **kwargs):

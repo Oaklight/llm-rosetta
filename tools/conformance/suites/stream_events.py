@@ -92,7 +92,7 @@ def observe(format_name: str) -> dict[str, Any]:
     Returns:
         ``{"chunks": <int>, "recovered": [<IR event type>, ...]}``.
     """
-    from llm_rosetta.converters.base.context import StreamContext
+    from llm_rosetta.ir.context import StreamContext
 
     converter = _dialects()[format_name]()
 

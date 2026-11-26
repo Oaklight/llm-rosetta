@@ -6,7 +6,7 @@ event per choice.  The cross-format Chat→Responses path must likewise
 produce exactly one set of ``*.done`` / ``output_item.done`` SSE events.
 """
 
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from llm_rosetta.converters.llm.chat_completions.converter import (
     ChatCompletionsConverter,
 )

@@ -15,7 +15,7 @@ from typing import Any, Union, cast
 
 import pytest
 
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.base import (
     BaseConfigOps,
     BaseContentOps,

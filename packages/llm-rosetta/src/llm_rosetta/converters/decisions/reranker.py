@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.base.decision_converter import BaseDecisionConverter
 from llm_rosetta.ir.model.decision import (
     DecisionUsageInfo,

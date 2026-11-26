@@ -412,7 +412,7 @@ class TestCrossProviderRoundtrip:
         cohere = CohereRerankConverter()
         ir = jina.response_from_provider(JINA_RESPONSE)
         assert "document" in ir["results"][0]
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
 
         ctx = ConversionContext()
         cohere.response_to_provider(ir, context=ctx)

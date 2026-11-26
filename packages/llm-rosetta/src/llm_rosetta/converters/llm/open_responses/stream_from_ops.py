@@ -21,7 +21,7 @@ from llm_rosetta.ir.model.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
-from ...base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from ...base.helpers.opaque import (
     set_opaque_origin,
 )

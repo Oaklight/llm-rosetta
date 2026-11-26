@@ -1460,7 +1460,7 @@ class TestGroupsToACapableTarget:
         this target declines.  Without the guard a childless container goes
         out, which every upstream that accepts one rejects.
         """
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
         from llm_rosetta.converters.llm.open_responses.converter import (
             OpenResponsesConverter,
         )

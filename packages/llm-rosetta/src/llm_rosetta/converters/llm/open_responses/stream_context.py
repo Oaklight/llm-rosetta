@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from ...base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 
 
 @dataclass

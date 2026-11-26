@@ -36,7 +36,7 @@ from llm_rosetta.ir.model.constraints import Range, RequestConstraints
 from ....ir.passes.tool_names import STRICT_TOOL_NAME_PATTERN
 from ...base import BaseConverter
 from llm_rosetta.conversion_warnings import report_loss
-from ...base.context import (
+from llm_rosetta.ir.context import (
     ConversionContext,
     StreamContext,
 )

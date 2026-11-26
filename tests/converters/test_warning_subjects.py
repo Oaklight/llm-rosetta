@@ -27,7 +27,7 @@ from typing import Any
 
 import pytest
 
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.llm.google_interactions import (

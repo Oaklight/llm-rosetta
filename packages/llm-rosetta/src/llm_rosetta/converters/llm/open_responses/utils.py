@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from ._constants import ResponsesEventType, generate_message_id
 from .stream_context import OpenResponsesStreamContext
 

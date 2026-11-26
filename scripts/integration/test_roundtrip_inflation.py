@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta import get_converter_for_provider
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 
 
 def run_roundtrip(

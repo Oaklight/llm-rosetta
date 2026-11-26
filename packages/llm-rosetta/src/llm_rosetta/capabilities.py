@@ -27,7 +27,7 @@ from llm_rosetta.ir.passes.enforcement import (
     strip_reasoning_for_non_reasoning,
     unwrap_custom_tool_input,
 )
-from llm_rosetta.shims.provider_shim import resolve_shim
+from llm_rosetta.contracts.resolver import resolve_shim
 
 # Deprecated 0.13.0 path, removed in 0.15.0; the replacements are
 # llm_rosetta.contracts.shim, llm_rosetta.converters.base and the pipeline

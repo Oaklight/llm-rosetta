@@ -20,7 +20,7 @@ from llm_rosetta.ir.model.passthrough import ProviderPassthroughItem
 from llm_rosetta.ir.model.request import IRRequest
 from llm_rosetta.ir.model.response import IRResponse
 from ...base import BaseConverter
-from ...base.context import ConversionContext, StreamContext
+from llm_rosetta.ir.context import ConversionContext, StreamContext
 from ....ir.primitives import expand_response
 from ....ir.passes.tool_names import STRICT_TOOL_NAME_PATTERN
 from ...base.helpers.extensions import extension_loss_warning, wire_extensions

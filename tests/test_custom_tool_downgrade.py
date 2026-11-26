@@ -18,7 +18,7 @@ from llm_rosetta.ir.passes import (
     restore_custom_tool_calls,
     unwrap_custom_tool_input,
 )
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.contracts.shim import ProviderShim, ToolsConfig
 from llm_rosetta.shims.provider_shim import register_shim, unregister_shim

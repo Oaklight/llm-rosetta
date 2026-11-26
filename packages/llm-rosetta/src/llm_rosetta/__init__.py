@@ -37,7 +37,7 @@ from .converters import (
 )
 from .converters.base.simple_converter import BaseSimpleConverter
 from . import tool_ops
-from .converters.base.context import ConversionContext, StreamContext
+from .ir.context import ConversionContext, StreamContext
 from .ir.primitives.body import Transform, apply_transforms
 from .contracts.resolver import resolve_format
 from .contracts.shim import ConnectionConfig, ProviderShim, ToolsConfig

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from llm_rosetta.converters.llm.acp import AcpConverter
 
 

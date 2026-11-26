@@ -16,10 +16,11 @@ from llm_rosetta.ir.passes import (
 )
 from llm_rosetta.ir.passes.enforcement import _apply_config_reasoning_override
 from llm_rosetta.conversion_warnings import DOWNGRADED, WarningSink
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.pipeline import apply_ir_transforms
 from llm_rosetta.contracts.shim import ProviderShim, ReasoningCapability
-from llm_rosetta.shims.provider_shim import register_shim, resolve_shim, unregister_shim
+from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
+from llm_rosetta.contracts.resolver import resolve_shim
 from llm_rosetta.contracts.transform import (
     auto_cache_breakpoints,
     truncate_images as truncate_images_transform,

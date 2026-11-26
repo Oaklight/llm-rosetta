@@ -372,7 +372,7 @@ class TestReviewFixes:
         ]
 
     def test_assertion_fold_warns(self, converter):
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
 
         ir = {
             "model": "gpt-6-luna",
@@ -410,7 +410,7 @@ class TestReviewFixes2:
         assert any("unsupported state part" in w for w in warnings)
 
     def test_unsupported_input_part_warns(self, converter):
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
 
         req = {
             "model": "m",
@@ -465,7 +465,7 @@ class TestReviewFixes2:
         )
 
     def test_non_dict_input_message_and_part_warn(self, converter):
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
 
         req = {
             "model": "m",
@@ -486,7 +486,7 @@ class TestReviewFixes2:
         assert "input part" in joined
 
     def test_non_dict_question_and_answer_warn(self, converter):
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
 
         ctx = ConversionContext()
         ir = converter.request_from_provider(

@@ -33,7 +33,7 @@ from llm_rosetta.ir.model.stream import (
 )
 from ...base.errors import require_representable_finish_reason
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
-from ...base.context import (
+from llm_rosetta.ir.context import (
     StreamContext,
 )
 from ...base.tools import (

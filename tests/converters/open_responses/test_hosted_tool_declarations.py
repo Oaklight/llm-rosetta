@@ -25,12 +25,12 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta import ConversionPipeline, get_converter_for_provider
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.llm.open_responses.tool_ops import (
     _RESPONSES_INTRINSIC_TOOLS,
 )
 from llm_rosetta.ir.tools.intrinsic import intrinsic_kind_of
-from llm_rosetta.shims.provider_shim import resolve_shim
+from llm_rosetta.contracts.resolver import resolve_shim
 
 REQUEST: dict[str, Any] = {
     "model": "m",

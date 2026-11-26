@@ -3,7 +3,7 @@
 from typing import Any, cast
 
 from llm_rosetta.converters.base import BaseConverter
-from llm_rosetta.converters.base.context import ConversionContext, StreamContext
+from llm_rosetta.ir.context import ConversionContext, StreamContext
 from llm_rosetta.converters.llm.chat_completions.converter import (
     ChatCompletionsConverter,
 )

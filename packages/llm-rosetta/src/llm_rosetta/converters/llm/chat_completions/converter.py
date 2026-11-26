@@ -45,7 +45,7 @@ from ...base.helpers.citations import (
     report_dropped_citation,
 )
 from ...base.helpers.extensions import wire_extensions
-from ...base.context import ConversionContext, StreamContext
+from llm_rosetta.ir.context import ConversionContext, StreamContext
 from ...base.tools import (
     sanitize_tool_call_id,
 )

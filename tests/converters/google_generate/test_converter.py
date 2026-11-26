@@ -1452,7 +1452,7 @@ class TestGooglePromptBlockHandling:
 
     def test_streaming_prompt_block(self):
         """Streaming chunk with promptFeedback.blockReason → finish + stream_end."""
-        from llm_rosetta.converters.base.context import StreamContext
+        from llm_rosetta.ir.context import StreamContext
 
         ctx = StreamContext()
         ctx.mark_started()

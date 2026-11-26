@@ -197,7 +197,7 @@ class StreamProcessor:
 
     Created by :meth:`ConversionPipeline.create_stream_processor`.
     Converts upstream response chunks one at a time, maintaining
-    :class:`~llm_rosetta.converters.base.context.StreamContext` state
+    :class:`~llm_rosetta.ir.context.StreamContext` state
     across calls.
 
     Each call to :meth:`process_chunk` returns a list of source-format

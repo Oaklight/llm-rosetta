@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from tests.converters.test_roundtrip_property import FORMATS
 from tools.conformance.suites.wire import explained

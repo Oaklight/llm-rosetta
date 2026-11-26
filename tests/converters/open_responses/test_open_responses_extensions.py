@@ -9,7 +9,7 @@ extension items, and the ``phase`` field on messages.
 from __future__ import annotations
 
 from llm_rosetta import convert
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.llm.open_responses import (
     OpenAIResponsesConverter,
     OpenResponsesConverter,

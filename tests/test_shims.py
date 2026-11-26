@@ -13,10 +13,10 @@ from llm_rosetta.shims.provider_shim import (
     get_shim,
     list_shims,
     register_shim,
-    resolve_format,
     resolve_model_type,
     unregister_shim,
 )
+from llm_rosetta.contracts.resolver import resolve_format
 from _moved_vendors import load_providers_with_moved
 from llm_rosetta.shims import builtin as builtins_pkg
 from llm_rosetta.shims._loader import _load_single_provider
@@ -488,7 +488,7 @@ class TestBuiltinShims:
         Completions base default so the other models' effort ladder is
         unchanged.
         """
-        from llm_rosetta.shims.provider_shim import match_model_reasoning
+        from llm_rosetta.contracts.resolver import match_model_reasoning
 
         shim = get_shim("opencode--chat_completions")
         assert shim is not None
@@ -813,7 +813,7 @@ class TestResponsesProfileTraitsBehavior:
 
     def test_deepseek_converter_options_are_spec_level(self):
         """A DeepSeek context contributes no OpenAI profile to the converter."""
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
         from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
 
         shim = get_shim("deepseek--open_responses")
@@ -981,7 +981,7 @@ class TestMultimodalToolResultCapability:
         from typing import Any
 
         from llm_rosetta.auto_detect import convert
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
 
         register_shim(
             ProviderShim(

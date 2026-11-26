@@ -33,7 +33,7 @@ from typing import Any, cast
 import pytest
 
 from llm_rosetta.ir.model import CitationPart
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.base.helpers.citations import citation_url
 from llm_rosetta.converters.llm.chat_completions.converter import (
     ChatCompletionsConverter,

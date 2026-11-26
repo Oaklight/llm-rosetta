@@ -27,7 +27,7 @@ from typing import Any, cast
 import pytest
 
 from llm_rosetta.ir.passes import degrade_intrinsic_history
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
@@ -123,7 +123,7 @@ def test_unknown_definition_chat_is_reported():
     sink is the assertion, not the log: a call that installs no ambient sink
     still has to hand the caller the loss.
     """
-    from llm_rosetta.converters.base.context import ConversionContext
+    from llm_rosetta.ir.context import ConversionContext
 
     converter = ChatCompletionsConverter()
     ctx = ConversionContext()
@@ -153,7 +153,7 @@ def test_a_declined_definition_is_reported_every_time():
     process: the request that created the entry heard about the drop and
     every later one lost the tool in silence.
     """
-    from llm_rosetta.converters.base.context import ConversionContext
+    from llm_rosetta.ir.context import ConversionContext
 
     converter = ChatCompletionsConverter()
     request = cast(

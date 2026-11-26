@@ -8,7 +8,7 @@ tests cover the origin tracking that lets a converter drop a foreign value
 
 from typing import Any, cast
 
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from llm_rosetta.converters.base.helpers.opaque import (
     DUMMY_THOUGHT_SIGNATURE,
     carrier_metadata,

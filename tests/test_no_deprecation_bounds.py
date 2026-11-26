@@ -65,6 +65,14 @@ KEPT_DEPRECATIONS = dict(
             "ConversionPipeline(shim=...) is the older spelling of target_shim",
         ),
         (
+            "llm_rosetta/converters/base/context.py",
+            "0.13.0 module, forwards the context classes to ir.context for one minor",
+        ),
+        (
+            "llm_rosetta/shims/provider_shim.py",
+            "0.13.0 names that moved to contracts forward with a warning for one minor",
+        ),
+        (
             "llm_rosetta/types/ir/__init__.py",
             "0.13.0 package, forwards to llm_rosetta.ir.model for one minor",
         ),
@@ -84,6 +92,10 @@ KEPT_DEPRECATIONS = dict(
 #: the other two).  Shrink only.
 KEPT_SHELLS = dict(
     [
+        (
+            "llm_rosetta/converters/base/context.py",
+            "0.13.0 module kept for one minor (#1706)",
+        ),
         (
             "llm_rosetta/types/ir/extensions.py",
             "0.13.0 module kept for one minor (2026-11-21 compat decision)",

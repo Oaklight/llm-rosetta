@@ -18,7 +18,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from llm_rosetta.ir.tools.intrinsic import get_intrinsic_kind
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.messages import MessagesConverter

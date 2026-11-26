@@ -26,7 +26,7 @@ dotenv.load_dotenv(
     os.path.join(os.path.dirname(__file__), "..", "..", ".env"), override=True
 )
 
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.decisions.embedding import EmbeddingDecisionConverter
 from llm_rosetta.converters.decisions.reranker import RerankerDecisionConverter
 from llm_rosetta.ir.model.decision import (

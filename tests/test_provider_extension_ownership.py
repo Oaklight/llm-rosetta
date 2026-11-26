@@ -18,7 +18,7 @@ from typing import Any
 import pytest
 
 from llm_rosetta import ConversionPipeline
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
 from llm_rosetta.conversion_warnings import WarningSink, recording_to
