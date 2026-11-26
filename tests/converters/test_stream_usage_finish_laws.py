@@ -14,9 +14,11 @@ The rules, as the code states them:
   running totals.
 
 Every test goes through the converter classes the registry binds
-(``test_the_dialects_are_the_registry_s_own``).  Tests marked ``xfail``
-(non-strict) record a place where a dialect disagrees with the rule; each says
-which, and none is fixed here.
+(``test_the_dialects_are_the_registry_s_own``).  The cumulative-snapshot wires
+(Google, Messages) follow the contract of #1749: events are increments, a
+snapshot reader emits differences, and a zero or a decrease resets nothing.
+``test_pin_a_second_finish_for_one_choice`` records behaviour without claiming
+a rule.
 """
 
 from __future__ import annotations
@@ -396,11 +398,6 @@ _ANTHROPIC_LIVE = [
 ]
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="the Messages wire is a cumulative-snapshot wire (the delta repeats "
-    "the input); the contract in #1749 makes the reader emit differences",
-)
 def test_a_live_messages_stream_reads_to_its_final_total() -> None:
     reader = DIALECTS["messages"]()
     events = list(
@@ -441,29 +438,16 @@ def _read_google(snapshots: list[tuple[int, int, int]]) -> list[dict[str, Any]]:
     )
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="a zero placeholder or a decrease must reset nothing: per-field "
-    "high-water mark (#1749)",
-)
 def test_a_zero_placeholder_snapshot_resets_nothing() -> None:
     events = _read_google([(10, 5, 15), (0, 0, 0), (10, 5, 15)])
     assert _summed(events) == (10, 5, 15)
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="a decrease must reset nothing: per-field high-water mark (#1749)",
-)
 def test_a_decreasing_snapshot_does_not_lower_the_total() -> None:
     events = _read_google([(10, 8, 18), (10, 5, 15), (10, 9, 19)])
     assert _summed(events) == (10, 9, 19)
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="the first snapshot passes through whole, reported zeros included (#1749)",
-)
 def test_the_first_snapshot_passes_through_whole() -> None:
     events = _read_google([(3, 0, 3)])
     usage = [e["usage"] for e in events if e["type"] == "usage"]
