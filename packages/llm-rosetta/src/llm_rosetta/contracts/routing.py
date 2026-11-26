@@ -20,10 +20,23 @@ are re-exported so a router needs one import.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
-from llm_rosetta.auto_detect import ProviderType
 from llm_rosetta.contracts.shim import SoftErrorPattern
+
+# Canonical provider/format names.  A retired spelling (``openai_chat``,
+# ``anthropic``, ``google``, ...) is not accepted: it fails with the
+# retired-names message, which names its replacement (see
+# :mod:`llm_rosetta.retired_names`).  The name is importable from
+# :mod:`llm_rosetta.auto_detect` as well; this is its one definition.
+ProviderType = Literal[
+    "chat_completions",
+    "open_responses",
+    "messages",
+    "google_generate",
+    "google_interactions",
+    "decision",
+]
 
 
 @dataclass(slots=True, frozen=True)

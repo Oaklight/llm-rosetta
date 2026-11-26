@@ -5,22 +5,10 @@ LLM Provider Auto-Detection
 Utility functions for auto-detecting LLM provider request body formats
 """
 
-from typing import Any, Literal, cast
+from typing import Any, cast
 
+from .contracts.routing import ProviderType
 from .formats.detect import detect_format as _detect_body
-
-# Canonical provider/format names.  A retired spelling (``openai_chat``,
-# ``anthropic``, ``google``, ...) is not accepted: it fails with the
-# retired-names message, which names its replacement (see
-# :mod:`llm_rosetta.retired_names`).
-ProviderType = Literal[
-    "chat_completions",
-    "open_responses",
-    "messages",
-    "google_generate",
-    "google_interactions",
-    "decision",
-]
 
 
 def detect_provider(body: dict[str, Any]) -> ProviderType | None:
