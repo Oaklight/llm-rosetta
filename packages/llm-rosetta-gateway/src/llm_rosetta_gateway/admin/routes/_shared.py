@@ -181,7 +181,7 @@ def retired_type_error(body: Any) -> Response | None:
     """A 400 answer when the request body names a retired model type.
 
     ``type: embedding`` and ``type: decision`` are no longer accepted; the
-    answer names the replacement and the ``llm-rosetta migrate`` command.
+    answer names the replacement and the ``llm-rosetta gateway migrate`` command.
     Returns ``None`` when the body names no retired type.
     """
     from ...model_types import retired_type_message

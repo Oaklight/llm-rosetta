@@ -41,7 +41,7 @@ def reject_retired_keys(
 
     ``embedding_format``, ``embedding_path``, ``embedding_shim`` and the nested
     ``embedding:`` block are no longer read: the config loader answers with the
-    key that replaces each, and the ``llm-rosetta migrate`` command.
+    key that replaces each, and the ``llm-rosetta gateway migrate`` command.
 
     Args:
         cfg: A provider entry.

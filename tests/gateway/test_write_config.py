@@ -57,7 +57,7 @@ class TestRollingBackup:
 
     The writer drops comments, so the previous bytes are the only way back
     to a hand-annotated file after a panel save.  The name is ``.prev``, not
-    ``.bak``: ``llm-rosetta migrate --write`` keeps the pre-migration original
+    ``.bak``: ``llm-rosetta gateway migrate --write`` keeps the pre-migration original
     as ``<path>.bak``, and so do operators, and neither may be overwritten.
     """
 

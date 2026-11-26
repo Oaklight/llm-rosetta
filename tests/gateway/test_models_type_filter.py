@@ -35,4 +35,4 @@ def test_a_retired_type_is_a_400_naming_the_replacement(old: str, new: str) -> N
     assert response is not None and response.status_code == 400
     message = json.loads(response.body)["error"]
     assert f"'{old}' was renamed to '{new}'" in message
-    assert "llm-rosetta migrate" in message
+    assert "llm-rosetta gateway migrate" in message

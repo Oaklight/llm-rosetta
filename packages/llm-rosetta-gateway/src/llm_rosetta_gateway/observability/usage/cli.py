@@ -1,4 +1,4 @@
-"""``llm-rosetta usage`` — the usage report, read from a shell.
+"""``llm-rosetta gateway usage`` — the usage report, read from a shell.
 
 The gateway renders this report in its admin panel and a library gets it from
 :meth:`~llm_rosetta.contracts.usage.report.UsageReport.build`; this is the
@@ -7,8 +7,8 @@ store, without starting the gateway.  It builds the report with the same code
 and prints it as a table or as JSON, so ``--json`` is the report itself rather
 than a second rendering of it that could disagree with the panel.
 
-    llm-rosetta usage --db /var/lib/llm-rosetta --window 24h
-    llm-rosetta usage --db ./data --by subject,type,model --json
+    llm-rosetta gateway usage --db /var/lib/llm-rosetta --window 24h
+    llm-rosetta gateway usage --db ./data --by subject,type,model --json
 
 The store is opened through
 :class:`~llm_rosetta_gateway.observability.persistence.PersistenceManager` — the
@@ -102,7 +102,7 @@ class _UnreadableSchema(Exception):
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="llm-rosetta usage",
+        prog="llm-rosetta gateway usage",
         description=(
             "Report token usage from an LLM-Rosetta store: the figures the "
             "gateway's admin panel shows, over the same rolling windows."

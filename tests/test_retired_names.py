@@ -175,14 +175,14 @@ def test_message_ends_with_the_migrate_hint(row: retired_names.RetiredName) -> N
 def test_hint_names_the_command_when_the_gateway_is_installed() -> None:
     hint = retired_names._migrate_hint(lambda name: object())
     assert hint.startswith(
-        "run 'llm-rosetta migrate --config <path>' (add --write to apply), "
+        "run 'llm-rosetta gateway migrate --config <path>' (add --write to apply), "
     )
     assert retired_names.MIGRATION_GUIDE_URL in hint
 
 
 def test_hint_names_only_the_guide_for_a_core_only_install() -> None:
     hint = retired_names._migrate_hint(lambda name: None)
-    assert "llm-rosetta migrate" not in hint
+    assert "llm-rosetta gateway migrate" not in hint
     assert hint == f"see the migration guide ({retired_names.MIGRATION_GUIDE_URL})"
 
 
@@ -194,7 +194,7 @@ def test_a_finder_that_refuses_the_gateway_means_core_only(error) -> None:
         raise error(name)
 
     hint = retired_names._migrate_hint(refuse)
-    assert "llm-rosetta migrate" not in hint
+    assert "llm-rosetta gateway migrate" not in hint
 
 
 def test_hint_looks_up_the_gateway_distribution() -> None:
@@ -205,7 +205,7 @@ def test_hint_looks_up_the_gateway_distribution() -> None:
 
 def test_this_install_gets_the_hint_of_its_own_branch() -> None:
     installed = importlib.util.find_spec("llm_rosetta_gateway") is not None
-    assert ("llm-rosetta migrate" in retired_names.MIGRATE_HINT) is installed
+    assert ("llm-rosetta gateway migrate" in retired_names.MIGRATE_HINT) is installed
 
 
 def test_the_guide_url_names_the_migration_guide() -> None:
@@ -217,7 +217,7 @@ def test_computing_the_hint_does_not_import_the_gateway() -> None:
     code = (
         "import sys\n"
         "import llm_rosetta.retired_names as r\n"
-        "assert 'llm-rosetta migrate' in r.MIGRATE_HINT, r.MIGRATE_HINT\n"
+        "assert 'llm-rosetta gateway migrate' in r.MIGRATE_HINT, r.MIGRATE_HINT\n"
         "loaded = sorted(m for m in sys.modules if m.startswith('llm_rosetta_gateway'))\n"
         "assert not loaded, loaded\n"
     )
@@ -243,7 +243,7 @@ def test_a_core_only_interpreter_gets_the_guide() -> None:
         [sys.executable, "-c", code], capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
-    assert "llm-rosetta migrate" not in result.stdout
+    assert "llm-rosetta gateway migrate" not in result.stdout
     assert retired_names.MIGRATION_GUIDE_URL in result.stdout
 
 

@@ -1,4 +1,4 @@
-"""``llm-rosetta migrate`` — the one-shot migration for the 0.14.0 removals.
+"""``llm-rosetta gateway migrate`` — the one-shot migration for the 0.14.0 removals.
 
 Release 0.14.0 removes the alias tables that translated old provider, shim and
 model-type spellings.  A retired name now fails with an error that names its
@@ -6,10 +6,10 @@ replacement; this command is what that error points to.  It rewrites a config
 file, rewrites the persisted tags in a gateway database, and scans source code
 for the old names::
 
-    llm-rosetta migrate --config config.jsonc            # dry run: diff + report
-    llm-rosetta migrate --config config.jsonc --write    # .bak copy, then rewrite
-    llm-rosetta migrate --db /var/lib/llm-rosetta --write
-    llm-rosetta migrate --scan src/ --json
+    llm-rosetta gateway migrate --config config.jsonc            # dry run: diff + report
+    llm-rosetta gateway migrate --config config.jsonc --write    # .bak copy, then rewrite
+    llm-rosetta gateway migrate --db /var/lib/llm-rosetta --write
+    llm-rosetta gateway migrate --scan src/ --json
 
 The names come from :mod:`llm_rosetta.retired_names` and from nothing else, so
 the command keeps working after the alias tables are deleted.  It never
@@ -1557,7 +1557,7 @@ def scan_path(root: Path, skip: Iterable[Path] = ()) -> list[Item]:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="llm-rosetta migrate",
+        prog="llm-rosetta gateway migrate",
         description=(
             "Migrate a gateway config, a gateway database and source code off the "
             "names retired in 0.14.0.  Dry run unless --write is given."
@@ -1667,7 +1667,7 @@ def _exit_code(args: argparse.Namespace, report: dict[str, Any]) -> int:
 
 def _print_text(args: argparse.Namespace, report: dict[str, Any]) -> None:
     mode = "WRITE" if args.write else "dry run (use --write to apply)"
-    print(f"llm-rosetta migrate: {mode}")
+    print(f"llm-rosetta gateway migrate: {mode}")
     for diff in report["diffs"]:
         print(diff, end="" if diff.endswith("\n") else "\n")
     for item in report["items"] + report["notes"]:

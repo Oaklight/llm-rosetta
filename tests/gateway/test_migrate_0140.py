@@ -1,4 +1,4 @@
-"""``llm-rosetta migrate``: the one-shot migration for the 0.14.0 removals (#919).
+"""``llm-rosetta gateway migrate``: the one-shot migration for the 0.14.0 removals (#919).
 
 Config rewrites are checked against the retired-names table itself, so a row
 added to the table without a rewrite fails here.

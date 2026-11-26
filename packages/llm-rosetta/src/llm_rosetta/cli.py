@@ -2,8 +2,8 @@
 
 Core owns two names, ``ext`` (manage extensions) and ``help``.  Every other
 command is contributed by an installed distribution through
-:mod:`llm_rosetta.contracts.command`: the gateway adds ``serve``, ``init`` and
-the rest.  Running ``llm-rosetta`` with no arguments prints the list; it never
+:mod:`llm_rosetta.contracts.command`: the gateway adds ``gateway`` (with the
+verbs ``serve``, ``init`` and the rest) and the ``serve`` shortcut.  Running ``llm-rosetta`` with no arguments prints the list; it never
 starts a server.
 
 Only the named command's module is imported, so a command that is not run costs
@@ -35,8 +35,9 @@ _CORE_SUMMARIES = {
 }
 
 _GATEWAY_HINT = (
-    "Gateway commands (serve, init, add, credential, password, db, usage, "
-    "migrate) need the llm-rosetta-gateway package: pip install llm-rosetta-gateway"
+    "Gateway commands (gateway: serve, init, add, credential, password, db, "
+    "usage, migrate; and the serve shortcut) need the llm-rosetta-gateway "
+    "package: pip install llm-rosetta-gateway"
 )
 
 

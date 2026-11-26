@@ -33,7 +33,10 @@ PYPROJECT = (
     / "llm-rosetta-gateway"
     / "pyproject.toml"
 )
+#: The verbs of ``llm-rosetta gateway <verb>``.
 EXPECTED = ("serve", "init", "add", "credential", "password", "db", "usage", "migrate")
+#: What the dispatcher registers: the ``gateway`` area and the ``serve`` shortcut.
+COMMANDS = ("gateway", "serve")
 
 
 @pytest.fixture(autouse=True)
@@ -194,7 +197,7 @@ class TestTheServerStart:
     def test_an_unknown_command_is_exit_2_with_the_choices(self, capsys):
         assert cli.main(["frobnicate"]) == 2
         err = capsys.readouterr().err
-        assert "frobnicate" in err and "credential" in err
+        assert "frobnicate" in err and "gateway" in err
 
     def test_options_before_an_unknown_command_are_refused(self, capsys):
         with pytest.raises(SystemExit) as info:
@@ -451,7 +454,7 @@ class TestRegistration:
         cli.main(["--config", served["config_file"], "--no-banner"])
 
         names = [item.spec.name for item in registered_commands()]
-        assert sorted(names) == sorted(EXPECTED)
+        assert sorted(names) == sorted(COMMANDS)
         assert {item.owner for item in registered_commands()} == {"llm-rosetta-gateway"}
         assert command_catalog().conflicts == {}
 
@@ -459,14 +462,16 @@ class TestRegistration:
         cli.register_commands()
 
         assert resolve_command("serve") is cli.serve_main
-        assert resolve_command("usage") is usage_cli.main
-        assert resolve_command("migrate") is migrate_0140.main
+        assert resolve_command("gateway") is cli.gateway_main
+        assert cli._verb_main("serve") is cli.serve_main
+        assert cli._verb_main("usage") is usage_cli.main
+        assert cli._verb_main("migrate") is migrate_0140.main
 
     def test_registering_twice_is_a_no_op(self):
         cli.register_commands()
         cli.register_commands()
 
-        assert len(registered_commands()) == len(EXPECTED)
+        assert len(registered_commands()) == len(COMMANDS)
 
     def test_the_dispatcher_runs_serve_after_explicit_registration(self, served):
         cli.register_commands()
@@ -489,6 +494,132 @@ class TestRegistration:
 
         assert "llm-rosetta-gateway" in str(info.value) and "intruder" in str(
             info.value
+        )
+
+
+class TestTheGatewayArea:
+    """``llm-rosetta gateway <verb>``: one area, every verb, and the shortcut."""
+
+    def test_the_area_lists_every_verb_with_its_summary(self, capsys):
+        assert cli.gateway_main(["--help"]) == 0
+
+        out = capsys.readouterr().out
+        for spec in cli._VERBS:
+            assert re.search(rf"^\s+{spec.name}\s+{re.escape(spec.summary)}", out, re.M)
+
+    def test_the_area_without_a_verb_prints_the_list_and_exits_2(self, capsys):
+        assert cli.gateway_main([]) == 2
+
+        assert "usage: llm-rosetta gateway <command>" in capsys.readouterr().out
+
+    def test_an_unknown_verb_is_exit_2_with_the_choices(self, capsys):
+        assert cli.gateway_main(["frobnicate"]) == 2
+
+        err = capsys.readouterr().err
+        assert "frobnicate" in err and "credential" in err
+
+    def test_a_verb_runs_through_the_area(self, tmp_path):
+        config = tmp_path / "config.jsonc"
+
+        assert cli.gateway_main(["init", "--config", str(config)]) == 0
+
+        assert config.is_file()
+
+    def test_the_old_verb_name_still_reaches_password(self, monkeypatch):
+        seen = []
+        monkeypatch.setattr(
+            cli, "password_main", lambda argv=None: seen.append(argv) or 0
+        )
+
+        assert cli.gateway_main(["set-password", "--x"]) == 0
+
+        assert seen == [["--x"]]
+
+    def test_the_dispatcher_runs_a_verb_after_registration(self, tmp_path):
+        cli.register_commands()
+        config = tmp_path / "config.jsonc"
+
+        code = core_cli.main(["gateway", "init", "--config", str(config)])
+
+        assert code == 0 and config.is_file()
+
+    def test_the_dispatcher_lists_the_area_and_the_shortcut(self, capsys):
+        cli.register_commands()
+
+        assert core_cli.main(["help"]) == 0
+
+        out = capsys.readouterr().out
+        assert re.search(r"^\s+gateway\s", out, re.M)
+        assert re.search(r"^\s+serve\s", out, re.M)
+        assert not re.search(r"^\s+(init|add|credential|migrate)\s", out, re.M)
+
+    def test_the_old_top_level_verbs_are_gone_from_the_dispatcher(self, capsys):
+        cli.register_commands()
+
+        assert core_cli.main(["migrate"]) == 2
+
+        assert "unknown command 'migrate'" in capsys.readouterr().err
+
+    def test_the_binary_hands_the_area_word_to_the_dispatcher(self, tmp_path):
+        """``llm-rosetta-gateway gateway init`` is ``llm-rosetta gateway init``."""
+        config = tmp_path / "config.jsonc"
+
+        assert cli.main(["gateway", "init", "--config", str(config)]) == 0
+
+        assert config.is_file()
+
+    def test_the_binary_still_takes_a_bare_verb(self, tmp_path):
+        config = tmp_path / "config.jsonc"
+
+        assert cli.main(["init", "--config", str(config)]) == 0
+
+        assert config.is_file()
+
+
+class TestTheVerbTableAgrees:
+    def test_every_verb_resolves_to_the_callable_its_target_names(self):
+        import importlib
+
+        for spec in cli._VERBS:
+            module, _, attribute = spec.target.partition(":")
+            expected = getattr(importlib.import_module(module), attribute)
+            assert cli._verb_main(spec.name) is expected, spec.name
+
+
+class TestCommandNamesAreUnique:
+    def test_core_gateway_and_verb_names_do_not_overlap(self):
+        gateway = [spec.name for spec in cli._COMMANDS]
+
+        assert len(gateway) == len(set(gateway))
+        assert not set(gateway) & set(command_contract.CORE_COMMAND_NAMES)
+        verbs = [spec.name for spec in cli._VERBS]
+        assert len(verbs) == len(set(verbs))
+        assert not set(verbs) & set(command_contract.CORE_COMMAND_NAMES)
+        assert "gateway" not in verbs
+
+    def test_the_reserved_names_are_exactly_what_the_gateway_registers(self):
+        assert set(command_contract.GATEWAY_COMMAND_NAMES) == {
+            spec.name for spec in cli._COMMANDS
+        }
+
+    @pytest.mark.parametrize("ext_id", ["gateway", "serve"])
+    def test_an_extension_cannot_take_a_gateway_command_name(self, ext_id):
+        from llm_rosetta.contracts import SURFACE_VERSION
+        from llm_rosetta.contracts.extension import validate_extension_manifest
+
+        document = {
+            "id": ext_id,
+            "name": ext_id,
+            "version": "0.1.0",
+            "maturity": "experimental",
+            "requires": {"surface": SURFACE_VERSION, "ir": 1},
+            "provides": {"commands": {"run": {"en": "runs"}}},
+        }
+
+        problems = validate_extension_manifest(document)
+
+        assert any("command name of the gateway" in problem for problem in problems), (
+            problems
         )
 
 
@@ -523,7 +654,7 @@ class TestEntryPoints:
         declared = {e.name: e.value for e in _declared_entry_points()}
 
         assert declared == {spec.name: spec.target for spec in cli._COMMANDS}
-        assert tuple(declared) == EXPECTED
+        assert tuple(declared) == COMMANDS
 
     def test_serve_through_entry_point_discovery_reaches_the_same_function(
         self, monkeypatch, served
@@ -549,7 +680,7 @@ class TestEntryPoints:
         catalog = command_catalog()
 
         assert catalog.conflicts == {}
-        assert sorted(catalog.commands) == sorted(EXPECTED)
+        assert sorted(catalog.commands) == sorted(COMMANDS)
 
     def test_every_entry_point_has_a_docstring_summary(self):
         for entry in _declared_entry_points():
@@ -568,6 +699,6 @@ class TestEntryPoints:
         assert core_cli.main(["help"]) == 0
 
         out = capsys.readouterr().out
-        for name in EXPECTED:
+        for name in COMMANDS:
             assert re.search(rf"^\s+{name}\s", out, flags=re.M), name
         assert "llm-rosetta-gateway" in out

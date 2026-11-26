@@ -11,14 +11,13 @@ import sys
 from typing import TYPE_CHECKING, Any, NoReturn
 
 import asyncio
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from llm_rosetta.api import CommandSpec
 from llm_rosetta.api import __version__ as _core_version
 from llm_rosetta.api import (
     CORE_COMMAND_NAMES,
     register_command,
-    resolve_command,
     run_cli,
 )
 
@@ -742,11 +741,11 @@ def _load_startup_config(
 
 _SERVE_PROG = "llm-rosetta-gateway"
 
-#: What each command is, for the dispatcher's help text.  The entry points in
-#: pyproject.toml name the same targets; ``main()`` registers these explicitly so
-#: a host without package metadata (the Nuitka binary) still finds them.
+#: The gateway's verbs: what ``llm-rosetta gateway <verb>`` runs.  ``serve`` is
+#: also a command of its own (the shortcut), and ``llm-rosetta-gateway <verb>``
+#: runs the same targets, so the verb table is the one home of what each is.
 _OWNER = "llm-rosetta-gateway"
-_COMMANDS: tuple[CommandSpec, ...] = (
+_VERBS: tuple[CommandSpec, ...] = (
     CommandSpec(
         "serve",
         "Start the gateway server (the default)",
@@ -787,6 +786,19 @@ _COMMANDS: tuple[CommandSpec, ...] = (
         "Migrate a config and database off the names 0.14.0 retires",
         "llm_rosetta_gateway.maintenance.migrate_0140:main",
     ),
+)
+
+#: What the dispatcher knows: the ``gateway`` area and the ``serve`` shortcut.
+#: The entry points in pyproject.toml name the same targets; ``main()``
+#: registers these explicitly so a host without package metadata (the Nuitka
+#: binary) still finds them.
+_COMMANDS: tuple[CommandSpec, ...] = (
+    CommandSpec(
+        "gateway",
+        "The gateway: " + ", ".join(spec.name for spec in _VERBS),
+        "llm_rosetta_gateway.cli:gateway_main",
+    ),
+    _VERBS[0],
 )
 
 #: ``set-password`` is what 0.13.0 called ``password``.
@@ -878,9 +890,9 @@ def _serve_parser() -> argparse.ArgumentParser:
 
 
 def _command_parser(name: str, description: str) -> argparse.ArgumentParser:
-    """Return the parser of a gateway command that reads a config file."""
+    """Return the parser of a gateway verb that reads a config file."""
     parser = argparse.ArgumentParser(
-        prog=f"llm-rosetta {name}", description=description
+        prog=f"llm-rosetta gateway {name}", description=description
     )
     parser.add_argument(
         "--config",
@@ -1053,7 +1065,7 @@ def credential_main(argv: Sequence[str] | None = None) -> int:
 def password_main(argv: Sequence[str] | None = None) -> int:
     """Set or change the admin password (forgot-password recovery)"""
     parser = argparse.ArgumentParser(
-        prog="llm-rosetta password",
+        prog="llm-rosetta gateway password",
         description="Set or change admin password (for forgot-password recovery)",
     )
     parser.add_argument(
@@ -1121,8 +1133,61 @@ def db_main(argv: Sequence[str] | None = None) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# The ``gateway`` area and the entry point
 # ---------------------------------------------------------------------------
+
+
+def _verb_main(name: str) -> Callable[[Sequence[str] | None], int]:
+    """Return the callable behind the verb *name*.
+
+    Written out rather than imported from ``_VERBS``' targets, so the import
+    scan sees every module this file reaches; ``usage`` and ``migrate`` import
+    on use, so a verb that is not run costs nothing.
+    """
+    if name == "usage":
+        from ..observability.usage.cli import main as usage_main
+
+        return usage_main
+    if name == "migrate":
+        from ..maintenance.migrate_0140 import main as migrate_main
+
+        return migrate_main
+    return {
+        "serve": serve_main,
+        "init": init_main,
+        "add": add_main,
+        "credential": credential_main,
+        "password": password_main,
+        "db": db_main,
+    }[name]
+
+
+def _print_verbs(file: Any = None) -> None:
+    out = file or sys.stdout
+    width = max(len(spec.name) for spec in _VERBS)
+    print("usage: llm-rosetta gateway <command> [arguments]", file=out)
+    print(file=out)
+    print("commands:", file=out)
+    for spec in _VERBS:
+        print(f"  {spec.name.ljust(width)}  {spec.summary}", file=out)
+
+
+def gateway_main(argv: Sequence[str] | None = None) -> int:
+    """The gateway: serve, init, add, credential, password, db, usage, migrate"""
+    args = list(argv or [])
+    if not args or args[0] in ("-h", "--help", "help"):
+        _print_verbs()
+        return 0 if args else 2
+    name = _ALIASES.get(args[0], args[0])
+    if name not in {spec.name for spec in _VERBS}:
+        print(f"llm-rosetta gateway: unknown command {args[0]!r}", file=sys.stderr)
+        print(
+            f"available commands: {', '.join(spec.name for spec in _VERBS)}",
+            file=sys.stderr,
+        )
+        return 2
+    return int(_verb_main(name)(args[1:]) or 0)
+
 
 #: Server options that take a value, so the token after one is not a command.
 _VALUE_OPTIONS = frozenset(
@@ -1174,8 +1239,8 @@ def _carry(prefix: Sequence[str], command: str) -> list[str]:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run ``llm-rosetta-gateway``: a subcommand, or the server when none is named.
 
-    Equivalent to ``llm-rosetta <command>`` and ``llm-rosetta serve``: an
-    argument list that is empty or starts with an option starts the server.
+    Equivalent to ``llm-rosetta gateway <command>`` and ``llm-rosetta serve``:
+    an argument list that is empty or starts with an option starts the server.
 
     Args:
         argv: Arguments without the program name; ``sys.argv[1:]`` by default.
@@ -1199,7 +1264,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 f"options before {name!r} are not accepted: {' '.join(args[:at])}"
             )
         return int(run_cli(args) or 0)
-    if name not in {spec.name for spec in _COMMANDS}:
+    if name not in {spec.name for spec in _VERBS}:
         # Not one of the gateway's commands: an installed extension may own
         # the name (``llm-rosetta-gateway argo tunnel``), and the dispatcher
         # also words the refusal when nothing does.
@@ -1211,4 +1276,4 @@ def main(argv: Sequence[str] | None = None) -> int:
     if name == "serve":
         return int(serve_main(args[:at] + args[at + 1 :]) or 0)
     forwarded = _carry(args[:at], name)
-    return int(resolve_command(name)(forwarded + args[at + 1 :]) or 0)
+    return int(_verb_main(name)(forwarded + args[at + 1 :]) or 0)

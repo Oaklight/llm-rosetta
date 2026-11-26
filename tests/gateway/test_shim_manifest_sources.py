@@ -857,7 +857,7 @@ class TestRetiredPresets:
             parse_shims_section({"remotes": [{"url": "https://x.example/a.tar.gz"}]})
         message = str(caught.value)
         assert "shims.sources" in message and "extensions directory" in message
-        assert "llm-rosetta migrate" not in message
+        assert "llm-rosetta gateway migrate" not in message
 
     def test_every_retired_key_is_named_in_one_error(self):
         section = {
