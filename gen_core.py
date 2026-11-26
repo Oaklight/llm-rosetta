@@ -19,6 +19,10 @@ current_header = '''flowchart TB
   end
   subgraph IMPL["实现"]
     subgraph CONV["转换"]
+      subgraph IRCORE["ir/(一个包,#1710)"]
+        IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION<br/>只依赖标准库"]
+        IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
+      end
       PIPE["pipeline/<br/>chat · embeddings · rerank · decisions · typed"]
       CVT["converters/<br/>base(含 ConversionError) · llm/各格式 · embeddings · rerank · decisions(各含 lookup) · registry"]
       DET["auto_detect.py"]
@@ -35,11 +39,7 @@ current_header = '''flowchart TB
       DEV["devtools/<br/>scaffold · ext_scaffold · 模板"]
     end
   end
-  subgraph FOUND["共享基础(被上面各层使用)"]
-    subgraph IRCORE["ir/(一个包,#1710)"]
-      IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION<br/>只依赖标准库"]
-      IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
-    end
+  subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
     CON["contracts/<br/>外部各方实现或接收的契约<br/>shim 数据类 · resolver(叶子) · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
     FMT["formats/<br/>catalog · detect · spec · batch"]
     VOCAB["model_vocabulary · retired_names · conversion_warnings"]
