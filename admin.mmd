@@ -1,0 +1,111 @@
+flowchart LR
+  subgraph PAGES["页面(admin.html 的 9 个标签页)"]
+    P_DASH["dashboard 仪表盘"]
+    P_PROV["providers 提供方"]
+    P_MOD["models 模型"]
+    P_ROUTE["routing 路由<br/>policy · decisions · sessions"]
+    P_KEYS["keys 密钥"]
+    P_OBS["observability 可观测<br/>请求日志 · ops 日志 · 错误转储"]
+    P_SHIM["shims"]
+    P_JOBS["jobs 任务"]
+    P_SET["settings 设置<br/>appearance · behavior · rateLimit · retention · security · about"]
+  end
+  subgraph TABJS["页面脚本 js/tabs/"]
+    T_DASH["dashboard.js"]
+    T_PROV["providers.js"]
+    T_MOD["models.js"]
+    T_ROUTE["routing.js"]
+    T_KEYS["keys.js"]
+    T_KEX["key-examples.js"]
+    T_LOGS["logs.js"]
+    T_OPS["ops-log.js"]
+    T_SHIMS["shims.js · shims-page.js · shim-sources-editor.js<br/>+ core/shim-sources.js(待替换)"]
+    T_JOBS["jobs.js"]
+  end
+  COMP["js/components/<br/>provider-picker · provider-row · logo-picker · logo-select · type-picker · fetch-models · test-runner"]
+  SHARED["js/core/ 共享<br/>state · i18n · route · init · auth · topbar · themes · html · dialog · pagination · ..."]
+
+  subgraph APIS["/admin/api 分组(这几组名字来自各 JS 的调用)"]
+    A_CFG["config"]
+    A_KEYS["keys"]
+    A_REQ["requests"]
+    A_DUMP["error-dumps"]
+    A_MET["metrics"]
+    A_TOK["token-usage"]
+    A_CAP["capture"]
+    A_PROF["profiling"]
+    A_OPS["ops-log"]
+    A_JOBS["jobs"]
+    A_ROUTE["routing"]
+    A_DIAG["diagnostics"]
+    A_TEST["test"]
+    A_OTHER["login · token · sessions · rate-limits · circuit-breakers<br/>maintenance · db · updates · changelog · extensions · logo"]
+  end
+  subgraph BACK["后端组件(对应关系按名字推断)"]
+    B_CFG["config + ops + maintenance + shims"]
+    B_KS["keystore + middleware.auth"]
+    B_OBS["observability"]
+    B_JOBS["jobs"]
+    B_ROUTE["routing + quota"]
+    B_REQ["proxy + transport + pipelines"]
+    B_MW["middleware"]
+    B_UPD["updates"]
+  end
+
+  P_DASH --> T_DASH
+  P_PROV --> T_PROV
+  P_MOD --> T_MOD
+  P_ROUTE --> T_ROUTE
+  P_KEYS --> T_KEYS
+  P_KEYS --> T_KEX
+  P_OBS --> T_LOGS
+  P_OBS --> T_OPS
+  P_SHIM --> T_SHIMS
+  P_JOBS --> T_JOBS
+  P_SET --> SHARED
+  T_PROV --> COMP
+  T_DASH --> SHARED
+  T_PROV --> SHARED
+
+  T_DASH --> A_CAP
+  T_DASH --> A_DUMP
+  T_DASH --> A_MET
+  T_DASH --> A_PROF
+  T_DASH --> A_REQ
+  T_DASH --> A_TOK
+  T_PROV --> A_CFG
+  T_PROV --> A_DIAG
+  T_PROV --> A_MET
+  COMP --> A_CFG
+  COMP --> A_TEST
+  T_MOD --> A_CFG
+  T_ROUTE --> A_CFG
+  T_ROUTE --> A_ROUTE
+  T_KEYS --> A_KEYS
+  T_KEYS --> A_REQ
+  T_KEX --> A_CFG
+  T_KEX --> A_KEYS
+  T_LOGS --> A_CFG
+  T_LOGS --> A_DUMP
+  T_LOGS --> A_REQ
+  T_OPS --> A_OPS
+  T_SHIMS --> A_CFG
+  T_JOBS --> A_JOBS
+  SHARED --> A_OTHER
+
+  A_CFG --> B_CFG
+  A_KEYS --> B_KS
+  A_REQ --> B_OBS
+  A_DUMP --> B_OBS
+  A_MET --> B_OBS
+  A_TOK --> B_OBS
+  A_CAP --> B_OBS
+  A_PROF --> B_OBS
+  A_OPS --> B_OBS
+  A_JOBS --> B_JOBS
+  A_ROUTE --> B_ROUTE
+  A_DIAG --> B_REQ
+  A_TEST --> B_REQ
+  A_OTHER --> B_MW
+  A_OTHER --> B_UPD
+  A_OTHER --> B_KS

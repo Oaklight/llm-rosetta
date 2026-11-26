@@ -1,0 +1,57 @@
+flowchart TB
+  AUTHOR(["shim / 扩展作者"])
+  GW["gateway:transport 注册表<br/>注册 transports 处理器"]
+  subgraph FACADE["入口与门面(core 内部不得导入 api)"]
+    API["api.py<br/>宿主门面:只做再导出"]
+    INIT["llm_rosetta/__init__ 组合根<br/>导入完成后调用 load_extensions()"]
+    CLI["cli.py · __main__<br/>分发器 · 注册 commands 处理器"]
+  end
+  subgraph IMPL["实现"]
+    subgraph CONV["转换"]
+      PIPE["pipeline/"]
+      CVT["converters/"]
+      IR["ir/"]
+    end
+    EXTS["extensions/ 只管包<br/>清单校验 · 发现 · 安装/卸载/更新 · 索引 · 兼容性 · 状态<br/>种类处理器注册点;不认识 shim / transport / commands"]
+    SHIM["shims/<br/>注册表 · 加载器 · builtin<br/>注册 shims 处理器"]
+  end
+  subgraph FOUND["共享基础"]
+    subgraph CONS["contracts/"]
+      CDECL["声明层(叶子)<br/>shim · auth · quota · routing · usage · transport · command · extension · 清单<br/>只依赖 types / 标准库"]
+      CXF["transform.py<br/>便利再导出 ir 原语<br/>唯一允许依赖 ir 的模块"]
+    end
+    FMT["formats/ · types/ · model_vocabulary · retired_names"]
+  end
+
+
+  API -->|"再导出"| PIPE
+  API -->|"再导出"| CVT
+  API -->|"再导出"| SHIM
+  API -->|"再导出"| EXTS
+  API -->|"再导出"| CLI
+  API -->|"同一对象"| CDECL
+  INIT --> PIPE
+  INIT --> SHIM
+  INIT -->|"load_extensions()"| EXTS
+  SHIM -->|"注册 shims 处理器"| EXTS
+  CLI -->|"注册 commands 处理器"| EXTS
+  GW -.->|"经 api 注册 transports 处理器"| EXTS
+  EXTS --> CDECL
+  SHIM --> CDECL
+  SHIM --> IR
+  SHIM --> FMT
+  PIPE --> CVT
+  PIPE --> IR
+  CVT --> IR
+  CVT --> CDECL
+  IR --> CDECL
+  CXF --> IR
+  CXF --> CDECL
+  CDECL --> FMT
+  AUTHOR -->|"只用 contracts"| CDECL
+  AUTHOR --> CXF
+
+  linkStyle 8 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 9 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 10 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 11 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c

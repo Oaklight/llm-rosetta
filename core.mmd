@@ -1,0 +1,77 @@
+flowchart TB
+  subgraph FACADE["入口与门面(core 内部不得导入 api)"]
+    API["api.py<br/>宿主门面:只做再导出,gateway 经它进入 core"]
+    INIT["llm_rosetta/__init__<br/>convert() · get_converter_for_provider()"]
+    CLI["cli.py · __main__<br/>llm-rosetta 分发器"]
+  end
+  subgraph IMPL["实现"]
+    subgraph CONV["转换"]
+      PIPE["pipeline/<br/>chat · typed"]
+      CVT["converters/<br/>base · llm/各格式 · embeddings · rerank · decisions · registry"]
+      IR["ir/<br/>primitives · tools · passes · context"]
+      DET["auto_detect.py"]
+      CAP["capabilities.py"]
+      TOOL["tool_ops.py"]
+    end
+    subgraph SHIMEXT["shim 与扩展"]
+      SHIM["shims/<br/>provider_shim 注册表 · _loader · builtin/各 vendor · providers 转发层"]
+      EXTS["extensions/<br/>_discovery · _load · _dirs · _install · _cli"]
+    end
+    subgraph TOOLS["工具"]
+      FID["fidelity/"]
+      PROF["profiling/"]
+      DEV["devtools/<br/>scaffold · ext_scaffold · 模板"]
+    end
+  end
+  subgraph FOUND["共享基础(被上面各层使用)"]
+    CON["contracts/<br/>外部各方实现或接收的契约<br/>shim 数据类 · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
+    FMT["formats/<br/>catalog · detect · spec · batch"]
+    TYP["types/<br/>IR 数据类 · 提供方形状(仅参考)"]
+    VOCAB["model_vocabulary · retired_names · conversion_warnings"]
+  end
+
+
+  API -->|"再导出"| PIPE
+  API -->|"再导出"| CVT
+  API -->|"再导出"| SHIM
+  API -->|"再导出"| EXTS
+  API -->|"再导出"| CLI
+  API -->|"再导出"| DEV
+  API -->|"再导出"| FID
+  API -->|"再导出"| PROF
+  API -->|"同一对象"| CON
+  INIT --> PIPE
+  INIT --> CVT
+  INIT --> SHIM
+  INIT --> DET
+  CLI --> CON
+  CLI -.->|"懒加载"| EXTS
+  PIPE --> CVT
+  PIPE --> IR
+  PIPE --> SHIM
+  PIPE --> CON
+  CVT --> IR
+  CVT --> CON
+  IR --> CON
+  IR -->|"ir 的 pass 用 shim 契约"| SHIM
+  SHIM --> IR
+  SHIM --> CON
+  SHIM --> FMT
+  SHIM -.->|"导入时 load_extensions"| EXTS
+  EXTS -.->|"注册 shim"| SHIM
+  EXTS --> CON
+  EXTS -.->|"ext new / check"| DEV
+  CON -->|"数据类型"| TYP
+  CON -->|"usage.semantics"| FMT
+  CON -->|"routing.py"| DET
+  CON -->|"transform 再导出 ir 原语"| IR
+  DET --> FMT
+  FMT --> TYP
+  CAP --> CVT
+  DEV --> CON
+
+  linkStyle 22 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 23 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 26 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 27 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 33 stroke:#d33,stroke-width:2.5px,color:#d33

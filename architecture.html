@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>llm-rosetta 架构图</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root { color-scheme: light dark; }
+body { font: 15px/1.5 system-ui, "Noto Sans CJK SC", sans-serif; margin: 0; padding: 24px 32px 80px; background: #fff; color: #1b1f24; }
+@media (prefers-color-scheme: dark) { body { background:#14171a; color:#e6e8ea; } }
+h1 { margin: 0 0 4px; } h2 { margin: 36px 0 6px; }
+nav a { margin-right: 14px; }
+.note { max-width: 1000px; color: #5b6570; margin: 4px 0 10px; }
+.legend span { display:inline-block; margin-right:18px; }
+.legend i { display:inline-block; width:28px; height:0; border-top:3px solid; vertical-align:middle; margin-right:6px; }
+.bar { margin: 6px 0; }
+.scroll { overflow: auto; border: 1px solid #c8ced4; border-radius: 6px; background: #fff; padding: 12px; max-height: 88vh; }
+.stage { width: max-content; }
+pre.mermaid { margin: 0; background: transparent; }
+pre.error { color: #b00; white-space: pre-wrap; }
+</style></head>
+<body>
+<h1>llm-rosetta 架构图</h1>
+<p class="note">core 现状、core 建议目标、gateway 后端、gateway admin。由 mermaid 在浏览器里渲染,可滚动、可缩放。</p>
+<p class="legend"><span><i style="border-color:#333"></i>模块顶层导入</span><span><i style="border-color:#333;border-top-style:dashed"></i>函数内懒加载</span><span><i style="border-color:#d33"></i>有问题的依赖(循环或反向)</span><span><i style="border-color:#1a8f3c"></i>建议新增的接线</span></p>
+<nav><a href="#core">core 现状</a><a href="#core_target">core 建议目标</a><a href="#gateway">gateway 后端</a><a href="#admin">admin 页面</a></nav>
+
+<section id="core">
+  <h2>1. core 现状:组件与依赖</h2>
+  <p class="note">实线是模块顶层导入,虚线是函数内的懒加载。红色是有问题的依赖:shims 与 extensions 互相依赖(导入时加载 vs 注册 shim)、ir 与 shims 互相依赖、contracts 经 transform.py 依赖 ir。contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。未画的:shims/providers 转发层、已弃用的 gateway/ 与 observability/ 转发包。画的是 master(含 PR #1705)的树;extensions/_index、_commands、_probe 在草稿 PR #1707。</p>
+  <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="core"> <span id="z-core">100%</span></label></div>
+  <div class="scroll"><div class="stage" id="stage-core"><pre class="mermaid" id="m-core">flowchart TB
+  subgraph FACADE["入口与门面(core 内部不得导入 api)"]
+    API["api.py&lt;br/&gt;宿主门面:只做再导出,gateway 经它进入 core"]
+    INIT["llm_rosetta/__init__&lt;br/&gt;convert() · get_converter_for_provider()"]
+    CLI["cli.py · __main__&lt;br/&gt;llm-rosetta 分发器"]
+  end
+  subgraph IMPL["实现"]
+    subgraph CONV["转换"]
+      PIPE["pipeline/&lt;br/&gt;chat · typed"]
+      CVT["converters/&lt;br/&gt;base · llm/各格式 · embeddings · rerank · decisions · registry"]
+      IR["ir/&lt;br/&gt;primitives · tools · passes · context"]
+      DET["auto_detect.py"]
+      CAP["capabilities.py"]
+      TOOL["tool_ops.py"]
+    end
+    subgraph SHIMEXT["shim 与扩展"]
+      SHIM["shims/&lt;br/&gt;provider_shim 注册表 · _loader · builtin/各 vendor · providers 转发层"]
+      EXTS["extensions/&lt;br/&gt;_discovery · _load · _dirs · _install · _cli"]
+    end
+    subgraph TOOLS["工具"]
+      FID["fidelity/"]
+      PROF["profiling/"]
+      DEV["devtools/&lt;br/&gt;scaffold · ext_scaffold · 模板"]
+    end
+  end
+  subgraph FOUND["共享基础(被上面各层使用)"]
+    CON["contracts/&lt;br/&gt;外部各方实现或接收的契约&lt;br/&gt;shim 数据类 · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
+    FMT["formats/&lt;br/&gt;catalog · detect · spec · batch"]
+    TYP["types/&lt;br/&gt;IR 数据类 · 提供方形状(仅参考)"]
+    VOCAB["model_vocabulary · retired_names · conversion_warnings"]
+  end
+
+
+  API --&gt;|"再导出"| PIPE
+  API --&gt;|"再导出"| CVT
+  API --&gt;|"再导出"| SHIM
+  API --&gt;|"再导出"| EXTS
+  API --&gt;|"再导出"| CLI
+  API --&gt;|"再导出"| DEV
+  API --&gt;|"再导出"| FID
+  API --&gt;|"再导出"| PROF
+  API --&gt;|"同一对象"| CON
+  INIT --&gt; PIPE
+  INIT --&gt; CVT
+  INIT --&gt; SHIM
+  INIT --&gt; DET
+  CLI --&gt; CON
+  CLI -.-&gt;|"懒加载"| EXTS
+  PIPE --&gt; CVT
+  PIPE --&gt; IR
+  PIPE --&gt; SHIM
+  PIPE --&gt; CON
+  CVT --&gt; IR
+  CVT --&gt; CON
+  IR --&gt; CON
+  IR --&gt;|"ir 的 pass 用 shim 契约"| SHIM
+  SHIM --&gt; IR
+  SHIM --&gt; CON
+  SHIM --&gt; FMT
+  SHIM -.-&gt;|"导入时 load_extensions"| EXTS
+  EXTS -.-&gt;|"注册 shim"| SHIM
+  EXTS --&gt; CON
+  EXTS -.-&gt;|"ext new / check"| DEV
+  CON --&gt;|"数据类型"| TYP
+  CON --&gt;|"usage.semantics"| FMT
+  CON --&gt;|"routing.py"| DET
+  CON --&gt;|"transform 再导出 ir 原语"| IR
+  DET --&gt; FMT
+  FMT --&gt; TYP
+  CAP --&gt; CVT
+  DEV --&gt; CON
+
+  linkStyle 22 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 23 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 26 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 27 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 33 stroke:#d33,stroke-width:2.5px,color:#d33
+</pre></div></div>
+</section>
+<section id="core_target">
+  <h2>2. core 建议目标(未实现,待决定)</h2>
+  <p class="note">绿色是建议新增的接线。extensions 只管包(清单、发现、安装、索引、兼容性、状态),只依赖 contracts,不认识 shim、transport、commands;shims、cli、gateway 各自向它注册种类处理器;由 __init__ 这个组合根在导入完成后调用 load_extensions(),shims 不再在导入时隐式调用它。contracts 拆成声明层(只依赖 types 和标准库)和 transform.py(唯一允许依赖 ir 的便利再导出),并用导入边界测试固定。</p>
+  <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="core_target"> <span id="z-core_target">100%</span></label></div>
+  <div class="scroll"><div class="stage" id="stage-core_target"><pre class="mermaid" id="m-core_target">flowchart TB
+  AUTHOR(["shim / 扩展作者"])
+  GW["gateway:transport 注册表&lt;br/&gt;注册 transports 处理器"]
+  subgraph FACADE["入口与门面(core 内部不得导入 api)"]
+    API["api.py&lt;br/&gt;宿主门面:只做再导出"]
+    INIT["llm_rosetta/__init__ 组合根&lt;br/&gt;导入完成后调用 load_extensions()"]
+    CLI["cli.py · __main__&lt;br/&gt;分发器 · 注册 commands 处理器"]
+  end
+  subgraph IMPL["实现"]
+    subgraph CONV["转换"]
+      PIPE["pipeline/"]
+      CVT["converters/"]
+      IR["ir/"]
+    end
+    EXTS["extensions/ 只管包&lt;br/&gt;清单校验 · 发现 · 安装/卸载/更新 · 索引 · 兼容性 · 状态&lt;br/&gt;种类处理器注册点;不认识 shim / transport / commands"]
+    SHIM["shims/&lt;br/&gt;注册表 · 加载器 · builtin&lt;br/&gt;注册 shims 处理器"]
+  end
+  subgraph FOUND["共享基础"]
+    subgraph CONS["contracts/"]
+      CDECL["声明层(叶子)&lt;br/&gt;shim · auth · quota · routing · usage · transport · command · extension · 清单&lt;br/&gt;只依赖 types / 标准库"]
+      CXF["transform.py&lt;br/&gt;便利再导出 ir 原语&lt;br/&gt;唯一允许依赖 ir 的模块"]
+    end
+    FMT["formats/ · types/ · model_vocabulary · retired_names"]
+  end
+
+
+  API --&gt;|"再导出"| PIPE
+  API --&gt;|"再导出"| CVT
+  API --&gt;|"再导出"| SHIM
+  API --&gt;|"再导出"| EXTS
+  API --&gt;|"再导出"| CLI
+  API --&gt;|"同一对象"| CDECL
+  INIT --&gt; PIPE
+  INIT --&gt; SHIM
+  INIT --&gt;|"load_extensions()"| EXTS
+  SHIM --&gt;|"注册 shims 处理器"| EXTS
+  CLI --&gt;|"注册 commands 处理器"| EXTS
+  GW -.-&gt;|"经 api 注册 transports 处理器"| EXTS
+  EXTS --&gt; CDECL
+  SHIM --&gt; CDECL
+  SHIM --&gt; IR
+  SHIM --&gt; FMT
+  PIPE --&gt; CVT
+  PIPE --&gt; IR
+  CVT --&gt; IR
+  CVT --&gt; CDECL
+  IR --&gt; CDECL
+  CXF --&gt; IR
+  CXF --&gt; CDECL
+  CDECL --&gt; FMT
+  AUTHOR --&gt;|"只用 contracts"| CDECL
+  AUTHOR --&gt; CXF
+
+  linkStyle 8 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 9 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 10 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 11 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+</pre></div></div>
+</section>
+<section id="gateway">
+  <h2>3. gateway 后端的组件与关系</h2>
+  <p class="note">分层来自 tests/gateway/test_layers.py,只能向下导入。每个包都会用 core,图里只画了几条代表性的到 CORE 的线。admin 除了 admin_api 之外还有一批旧 allowlist 导入(config、keystore、maintenance、middleware、observability、ops、quota、routing、shims、transport、updates),名单只允许缩小,图里没画。shims 里的 manifest_sources 是要被 index.json 取代的部分。</p>
+  <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gateway"> <span id="z-gateway">100%</span></label></div>
+  <div class="scroll"><div class="stage" id="stage-gateway"><pre class="mermaid" id="m-gateway">flowchart TB
+  CLIENT(["客户端&lt;br/&gt;OpenAI / Anthropic / Google 格式"])
+  UP(["上游提供方"])
+  CORE["llm_rosetta.api + llm_rosetta.contracts&lt;br/&gt;(gateway 进入 core 的唯一入口,测试强制)"]
+
+  subgraph ENTRY["entry"]
+    CLI["cli/&lt;br/&gt;llm-rosetta-gateway · banner"]
+  end
+  subgraph SERVING["serving"]
+    APP["app/&lt;br/&gt;factory · routes_llm · routes_typed · routes_models&lt;br/&gt;routes_compact · routes_count_tokens · routes_health · tasks · admin_context"]
+    ADMIN["admin/&lt;br/&gt;routes/ · js/ · admin.html"]
+    ADMINAPI["admin_api.py&lt;br/&gt;AdminContext 协议"]
+  end
+  subgraph ENGINE["engine"]
+    PROXY["proxy/&lt;br/&gt;prepare · engine · streaming · failover · fidelity · preflight · lifecycle · errors"]
+    PIPES["pipelines/&lt;br/&gt;embeddings · rerank · decision"]
+  end
+  subgraph OPERATIONS["operations"]
+    OPS["ops/&lt;br/&gt;OpsBase 审计层 · data · keys · security · proxy"]
+  end
+  subgraph POLICY["policy"]
+    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings"]
+    MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context"]
+  end
+  subgraph STATE["state"]
+    ROUTING["routing/&lt;br/&gt;select · strategy · failover · session · same_format"]
+    QUOTA["quota/&lt;br/&gt;service · allowance · signals · probes · rate_limit"]
+    KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库"]
+    JOBS["jobs/&lt;br/&gt;envelope · queue · worker · handlers"]
+    MAINT["maintenance/&lt;br/&gt;migrations · backfills · dumps · startup · names 守卫"]
+  end
+  subgraph FOUNDATION["foundation"]
+    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info"]
+    OBS["observability/&lt;br/&gt;logging · metrics · request_log · ops_log · error_dump · capture · retention · usage · persistence"]
+    SHIMS["shims/&lt;br/&gt;extension_view · manifest_sources(待替换)"]
+    MT["model_types/"]
+    UPD["updates.py"]
+    SURF["surface.py"]
+  end
+
+  CLIENT --&gt;|HTTP| APP
+  TRANSPORT --&gt;|HTTP/SSE · ACP stdio| UP
+  CLI --&gt; CONFIG
+  CLI --&gt; OBS
+  CLI --&gt; SHIMS
+  CLI -.-&gt;|serve| APP
+  APP --&gt; PROXY
+  APP --&gt; CONFIG
+  APP --&gt; MW
+  APP --&gt; KEYSTORE
+  APP --&gt; OPS
+  APP --&gt; ROUTING
+  APP --&gt; QUOTA
+  APP --&gt; MAINT
+  APP --&gt; MT
+  APP --&gt; TRANSPORT
+  APP --&gt; OBS
+  APP -.-&gt;|只有 factory.py| ADMIN
+  APP --&gt;|适配器 admin_context.py| ADMINAPI
+  ADMIN --&gt;|唯一允许| ADMINAPI
+  ADMINAPI --&gt; OBS
+  PIPES --&gt; PROXY
+  PIPES --&gt; CONFIG
+  PIPES --&gt; MW
+  PIPES --&gt; TRANSPORT
+  PROXY --&gt; MW
+  PROXY --&gt; ROUTING
+  PROXY --&gt; TRANSPORT
+  PROXY --&gt; OPS
+  PROXY --&gt; MAINT
+  PROXY --&gt; OBS
+  OPS --&gt; MW
+  OPS --&gt; ROUTING
+  OPS --&gt; MT
+  OPS --&gt; SHIMS
+  OPS --&gt; OBS
+  CONFIG --&gt; MT
+  CONFIG --&gt; ROUTING
+  CONFIG --&gt; TRANSPORT
+  CONFIG --&gt; OBS
+  MW --&gt; KEYSTORE
+  MW --&gt; OBS
+  ROUTING --&gt; QUOTA
+  QUOTA --&gt; OBS
+  JOBS --&gt; OBS
+  KEYSTORE --&gt; MAINT
+  KEYSTORE --&gt; OBS
+  MAINT --&gt; SHIMS
+  MAINT --&gt; OBS
+  CONFIG --&gt; CORE
+  PROXY --&gt; CORE
+  TRANSPORT --&gt; CORE
+  SHIMS --&gt; CORE
+  OBS --&gt; CORE
+</pre></div></div>
+</section>
+<section id="admin">
+  <h2>4. admin 页面与组件的关系</h2>
+  <p class="note">已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。GET /admin/api/extensions 后端已有,目前没有页面调用它。</p>
+  <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="admin"> <span id="z-admin">100%</span></label></div>
+  <div class="scroll"><div class="stage" id="stage-admin"><pre class="mermaid" id="m-admin">flowchart LR
+  subgraph PAGES["页面(admin.html 的 9 个标签页)"]
+    P_DASH["dashboard 仪表盘"]
+    P_PROV["providers 提供方"]
+    P_MOD["models 模型"]
+    P_ROUTE["routing 路由&lt;br/&gt;policy · decisions · sessions"]
+    P_KEYS["keys 密钥"]
+    P_OBS["observability 可观测&lt;br/&gt;请求日志 · ops 日志 · 错误转储"]
+    P_SHIM["shims"]
+    P_JOBS["jobs 任务"]
+    P_SET["settings 设置&lt;br/&gt;appearance · behavior · rateLimit · retention · security · about"]
+  end
+  subgraph TABJS["页面脚本 js/tabs/"]
+    T_DASH["dashboard.js"]
+    T_PROV["providers.js"]
+    T_MOD["models.js"]
+    T_ROUTE["routing.js"]
+    T_KEYS["keys.js"]
+    T_KEX["key-examples.js"]
+    T_LOGS["logs.js"]
+    T_OPS["ops-log.js"]
+    T_SHIMS["shims.js · shims-page.js · shim-sources-editor.js&lt;br/&gt;+ core/shim-sources.js(待替换)"]
+    T_JOBS["jobs.js"]
+  end
+  COMP["js/components/&lt;br/&gt;provider-picker · provider-row · logo-picker · logo-select · type-picker · fetch-models · test-runner"]
+  SHARED["js/core/ 共享&lt;br/&gt;state · i18n · route · init · auth · topbar · themes · html · dialog · pagination · ..."]
+
+  subgraph APIS["/admin/api 分组(这几组名字来自各 JS 的调用)"]
+    A_CFG["config"]
+    A_KEYS["keys"]
+    A_REQ["requests"]
+    A_DUMP["error-dumps"]
+    A_MET["metrics"]
+    A_TOK["token-usage"]
+    A_CAP["capture"]
+    A_PROF["profiling"]
+    A_OPS["ops-log"]
+    A_JOBS["jobs"]
+    A_ROUTE["routing"]
+    A_DIAG["diagnostics"]
+    A_TEST["test"]
+    A_OTHER["login · token · sessions · rate-limits · circuit-breakers&lt;br/&gt;maintenance · db · updates · changelog · extensions · logo"]
+  end
+  subgraph BACK["后端组件(对应关系按名字推断)"]
+    B_CFG["config + ops + maintenance + shims"]
+    B_KS["keystore + middleware.auth"]
+    B_OBS["observability"]
+    B_JOBS["jobs"]
+    B_ROUTE["routing + quota"]
+    B_REQ["proxy + transport + pipelines"]
+    B_MW["middleware"]
+    B_UPD["updates"]
+  end
+
+  P_DASH --&gt; T_DASH
+  P_PROV --&gt; T_PROV
+  P_MOD --&gt; T_MOD
+  P_ROUTE --&gt; T_ROUTE
+  P_KEYS --&gt; T_KEYS
+  P_KEYS --&gt; T_KEX
+  P_OBS --&gt; T_LOGS
+  P_OBS --&gt; T_OPS
+  P_SHIM --&gt; T_SHIMS
+  P_JOBS --&gt; T_JOBS
+  P_SET --&gt; SHARED
+  T_PROV --&gt; COMP
+  T_DASH --&gt; SHARED
+  T_PROV --&gt; SHARED
+
+  T_DASH --&gt; A_CAP
+  T_DASH --&gt; A_DUMP
+  T_DASH --&gt; A_MET
+  T_DASH --&gt; A_PROF
+  T_DASH --&gt; A_REQ
+  T_DASH --&gt; A_TOK
+  T_PROV --&gt; A_CFG
+  T_PROV --&gt; A_DIAG
+  T_PROV --&gt; A_MET
+  COMP --&gt; A_CFG
+  COMP --&gt; A_TEST
+  T_MOD --&gt; A_CFG
+  T_ROUTE --&gt; A_CFG
+  T_ROUTE --&gt; A_ROUTE
+  T_KEYS --&gt; A_KEYS
+  T_KEYS --&gt; A_REQ
+  T_KEX --&gt; A_CFG
+  T_KEX --&gt; A_KEYS
+  T_LOGS --&gt; A_CFG
+  T_LOGS --&gt; A_DUMP
+  T_LOGS --&gt; A_REQ
+  T_OPS --&gt; A_OPS
+  T_SHIMS --&gt; A_CFG
+  T_JOBS --&gt; A_JOBS
+  SHARED --&gt; A_OTHER
+
+  A_CFG --&gt; B_CFG
+  A_KEYS --&gt; B_KS
+  A_REQ --&gt; B_OBS
+  A_DUMP --&gt; B_OBS
+  A_MET --&gt; B_OBS
+  A_TOK --&gt; B_OBS
+  A_CAP --&gt; B_OBS
+  A_PROF --&gt; B_OBS
+  A_OPS --&gt; B_OBS
+  A_JOBS --&gt; B_JOBS
+  A_ROUTE --&gt; B_ROUTE
+  A_DIAG --&gt; B_REQ
+  A_TEST --&gt; B_REQ
+  A_OTHER --&gt; B_MW
+  A_OTHER --&gt; B_UPD
+  A_OTHER --&gt; B_KS
+</pre></div></div>
+</section>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "default",
+  flowchart: { useMaxWidth: false, htmlLabels: true, curve: "basis", nodeSpacing: 40, rankSpacing: 60 } });
+(async () => {
+  for (const pre of document.querySelectorAll("pre.mermaid")) {
+    const id = pre.id.replace("m-", "");
+    try {
+      const { svg } = await mermaid.render("svg-" + id, pre.textContent);
+      pre.outerHTML = '<div class="rendered" data-ok="1">' + svg + '</div>';
+      const stage = document.getElementById("stage-" + id), box = stage.parentElement;
+      const w = stage.querySelector("svg").getBoundingClientRect().width;
+      const fit = Math.max(40, Math.min(100, Math.floor(((box.clientWidth - 28) / w) * 20) * 5));
+      const slider = document.querySelector('input[data-target="' + id + '"]');
+      slider.value = fit; slider.dispatchEvent(new Event("input"));
+    } catch (e) {
+      pre.outerHTML = '<pre class="error" data-ok="0">' + String(e) + '</pre>';
+    }
+  }
+  document.body.dataset.done = "1";
+})();
+document.querySelectorAll("input[type=range]").forEach(r => r.addEventListener("input", () => {
+  const k = r.dataset.target, v = r.value / 100;
+  document.getElementById("stage-" + k).style.zoom = v;
+  document.getElementById("z-" + k).textContent = r.value + "%";
+}));
+</script></body></html>
