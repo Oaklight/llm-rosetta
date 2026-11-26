@@ -1,6 +1,6 @@
 """Apply a dialect's declared request constraints to the IR request.
 
-The declaration is a :class:`~llm_rosetta.types.ir.constraints.RequestConstraints`
+The declaration is a :class:`~llm_rosetta.ir.model.constraints.RequestConstraints`
 on the target converter (its own dialect's requirement) overlaid by the target
 shim (its vendor's requirement, per path).  Three things happen here, in this
 order:
@@ -9,7 +9,7 @@ order:
    a missing key mean the same thing in IR — the client named no value — and
    a ``null`` that reached a writer became a value the upstream rejects
    (#1459).  This runs for every field of
-   :class:`~llm_rosetta.types.ir.configs.GenerationConfig`, declared or not,
+   :class:`~llm_rosetta.ir.model.configs.GenerationConfig`, declared or not,
    because it is IR semantics rather than a dialect quirk.
 2. **Declared defaults fill an absent path.**  The value is recorded in the
    conversion metadata (``injected``), the same carrier the writers use for
@@ -31,8 +31,8 @@ from collections.abc import Mapping, MutableMapping
 from typing import Any
 
 from llm_rosetta.conversion_warnings import DOWNGRADED, DROPPED, WarningSink
-from llm_rosetta.types.ir.configs import GenerationConfig
-from llm_rosetta.types.ir.constraints import Range, RequestConstraints
+from llm_rosetta.ir.model.configs import GenerationConfig
+from llm_rosetta.ir.model.constraints import Range, RequestConstraints
 
 logger = logging.getLogger(__name__)
 

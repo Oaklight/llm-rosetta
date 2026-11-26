@@ -15,8 +15,8 @@ import pytest
 
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.llm.messages import MessagesConverter
-from llm_rosetta.types.ir import IRRequest
-from llm_rosetta.types.ir.constraints import Range, RequestConstraints
+from llm_rosetta.ir.model import IRRequest
+from llm_rosetta.ir.model.constraints import Range, RequestConstraints
 
 IR: dict[str, Any] = {
     "model": "claude-test",

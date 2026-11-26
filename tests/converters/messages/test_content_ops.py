@@ -8,7 +8,7 @@ from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
 
 # Note: ir_refusal_to_p returns dict | None; tests assert result is not None before subscript
-from llm_rosetta.types.ir import FilePart, ImagePart, ReasoningPart, TextPart
+from llm_rosetta.ir.model import FilePart, ImagePart, ReasoningPart, TextPart
 
 
 class TestMessagesContentOps:

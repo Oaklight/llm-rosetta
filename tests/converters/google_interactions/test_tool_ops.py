@@ -5,7 +5,7 @@ import pytest
 from llm_rosetta.converters.llm.google_interactions.tool_ops import (
     GoogleInteractionsToolOps,
 )
-from llm_rosetta.types.ir.parts import ToolCallPart, ToolResultPart
+from llm_rosetta.ir.model.parts import ToolCallPart, ToolResultPart
 
 
 class TestToolDefinitionConversion:

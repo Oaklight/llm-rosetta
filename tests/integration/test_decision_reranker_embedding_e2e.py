@@ -29,7 +29,7 @@ dotenv.load_dotenv(
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.decisions.embedding import EmbeddingDecisionConverter
 from llm_rosetta.converters.decisions.reranker import RerankerDecisionConverter
-from llm_rosetta.types.ir.decision import (
+from llm_rosetta.ir.model.decision import (
     ChoiceQuestion,
     IRDecisionRequest,
     AssertionQuestion,

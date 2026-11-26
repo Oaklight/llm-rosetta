@@ -54,7 +54,7 @@ from llm_rosetta.model_vocabulary import (
     MODEL_TYPES,
 )
 
-from ..types.ir.configs import IREffort, IRMode  # re-exported (0.13.0)
+from llm_rosetta.ir.model.configs import IREffort, IRMode  # re-exported (0.13.0)
 
 logger = logging.getLogger(__name__)
 

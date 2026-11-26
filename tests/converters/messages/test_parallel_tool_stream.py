@@ -8,7 +8,7 @@ import pytest
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.pipeline import ConversionPipeline
-from llm_rosetta.types.ir.stream import IRStreamEvent
+from llm_rosetta.ir.model.stream import IRStreamEvent
 
 
 def chat_chunk(delta, finish=None):

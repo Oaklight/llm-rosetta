@@ -22,12 +22,12 @@ from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.ir.tools.intrinsic import get_intrinsic_kind
 from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.converters.llm.messages import MessagesConverter
-from llm_rosetta.types.ir.stream import (
+from llm_rosetta.ir.model.stream import (
     ToolCallDeltaEvent,
     ToolCallStartEvent,
     ToolResultEvent,
 )
-from llm_rosetta.types.ir.validation import validate_ir_response
+from llm_rosetta.ir.model.validation import validate_ir_response
 
 # ---------------------------------------------------------------------------
 # Captured shapes (measured live against /v1beta/interactions, 2026-10-13)

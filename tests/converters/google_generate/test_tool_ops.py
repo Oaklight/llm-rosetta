@@ -6,7 +6,7 @@ from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.google_generate.tool_ops import GoogleGenerateToolOps
 from typing import cast
 
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     ToolCallPart,
     ToolChoice,
     ToolDefinition,

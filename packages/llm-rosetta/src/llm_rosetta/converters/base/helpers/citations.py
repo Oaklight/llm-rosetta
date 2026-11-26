@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from ....types.ir import CitationPart
+from llm_rosetta.ir.model import CitationPart
 from llm_rosetta.conversion_warnings import report_drop
 
 

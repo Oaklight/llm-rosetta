@@ -4,7 +4,7 @@ Opaque reasoning values — Anthropic ``thinking.signature`` /
 ``redacted_thinking.data``, OpenAI ``encrypted_content``, Google
 ``thoughtSignature`` / ``function_call.signature`` — are only valid for the
 provider that issued them.  The IR stores them under provider-agnostic names
-(:pyattr:`~llm_rosetta.types.ir.parts.ReasoningPart.signature` and
+(:pyattr:`~llm_rosetta.ir.model.parts.ReasoningPart.signature` and
 ``redacted_data``), so a converter must know a value's *origin* before it can
 decide whether to emit it.
 

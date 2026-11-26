@@ -37,13 +37,13 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 from llm_rosetta.conversion_warnings import report_drop
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     IRInputItem,
     is_message,
     is_tool_call_part,
     is_tool_result_part,
 )
-from llm_rosetta.types.ir.request import IRRequest
+from llm_rosetta.ir.model.request import IRRequest
 from .call_id import sanitize_tool_call_id
 from .intrinsic import is_intrinsic_part
 

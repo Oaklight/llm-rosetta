@@ -8,13 +8,13 @@ and IR Messages. Handles step merging (consecutive assistant-role steps).
 from collections.abc import Sequence
 from typing import Any, cast
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     AssistantMessage,
     Message,
     ToolMessage,
 )
-from ....types.ir.parts import AssistantContentPart, ContentPart
-from ....types.ir.request import IRInputItem
+from llm_rosetta.ir.model.parts import AssistantContentPart, ContentPart
+from llm_rosetta.ir.model.request import IRInputItem
 from ...base import BaseMessageOps
 from ...base.helpers.citations import report_dropped_citation
 from ...base.helpers.opaque import inject_interactions_function_call_signature

@@ -60,7 +60,7 @@ class TestTheCommittedLedger:
 
 class TestTheSequence:
     def test_the_sequence_covers_every_ir_event_type(self):
-        from llm_rosetta.types.ir import stream
+        from llm_rosetta.ir.model import stream
 
         declared = {
             literal

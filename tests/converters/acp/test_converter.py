@@ -16,7 +16,7 @@ import pytest
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.llm.acp import AcpConverter, target_finish_reason
 from llm_rosetta.conversion_warnings import ConversionWarning, WarningSink
-from llm_rosetta.types.ir import IRRequest, IRResponse
+from llm_rosetta.ir.model import IRRequest, IRResponse
 
 
 def _converter() -> AcpConverter:

@@ -1,31 +1,18 @@
-"""Provider-specific opaque IR payload types."""
+"""Deprecated: moved to :mod:`llm_rosetta.ir.model.passthrough`.
+
+``llm_rosetta.types.ir.passthrough`` shipped in 0.13.0.  It forwards the names 0.13.0
+had, as the same objects; importing it imports the deprecated package
+:mod:`llm_rosetta.types.ir`, which warns that it is removed in 0.15.0.
+"""
 
 from __future__ import annotations
 
-import sys
-from typing import Any, Literal, TypedDict
+from llm_rosetta.ir.model.passthrough import (
+    ProviderPassthroughEvent,
+    ProviderPassthroughItem,
+)
 
-if sys.version_info >= (3, 11):
-    from typing import NotRequired, Required
-else:
-    from typing_extensions import NotRequired, Required
-
-
-class ProviderPassthroughEvent(TypedDict):
-    """Opaque provider-native streaming event."""
-
-    type: Required[Literal["provider_passthrough"]]
-    provider: Required[str]
-    payload: Required[dict[str, Any]]
-
-
-class ProviderPassthroughItem(TypedDict):
-    """Opaque provider-native non-streaming item."""
-
-    type: Required[Literal["provider_passthrough_item"]]
-    provider: Required[str]
-    payload: Required[dict[str, Any]]
-    position: NotRequired[int]
-
-
-__all__ = ["ProviderPassthroughEvent", "ProviderPassthroughItem"]
+__all__ = [
+    "ProviderPassthroughEvent",
+    "ProviderPassthroughItem",
+]

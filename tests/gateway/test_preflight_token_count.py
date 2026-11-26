@@ -13,7 +13,7 @@ from llm_rosetta_gateway.proxy import (
 from llm_rosetta_gateway.transport._base import UpstreamResponse
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.llm.messages.converter import MessagesConverter
-from llm_rosetta.types.ir.stream import StreamStartEvent
+from llm_rosetta.ir.model.stream import StreamStartEvent
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.middleware.headers import get_preflight_tokens_override
 

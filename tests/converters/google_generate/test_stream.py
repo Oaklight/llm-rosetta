@@ -10,7 +10,7 @@ import pytest
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
-from llm_rosetta.types.ir.stream import (
+from llm_rosetta.ir.model.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
     FinishEvent,

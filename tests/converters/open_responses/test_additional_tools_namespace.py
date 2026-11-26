@@ -17,7 +17,7 @@ from llm_rosetta.converters.llm.open_responses.tool_ops import (
     harvest_additional_tools,
     strip_additional_tools_items,
 )
-from llm_rosetta.types.ir import Message
+from llm_rosetta.ir.model import Message
 
 
 def _additional_tools_item() -> dict:

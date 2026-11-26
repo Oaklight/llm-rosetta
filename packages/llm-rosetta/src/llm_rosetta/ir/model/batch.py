@@ -7,9 +7,9 @@ describe that envelope in provider-neutral terms so a codec only has to
 translate the container, never the meaning.
 
 Per-item conversion stays in the ordinary converters: :class:`BatchItem`
-carries an :class:`~llm_rosetta.types.ir.request.IRRequest` and
+carries an :class:`~llm_rosetta.ir.model.request.IRRequest` and
 :class:`BatchResultItem` carries an
-:class:`~llm_rosetta.types.ir.response.IRResponse`, so nothing here duplicates
+:class:`~llm_rosetta.ir.model.response.IRResponse`, so nothing here duplicates
 the chat IR.
 
 Ordering is never part of the contract.  Every consumer joins results on

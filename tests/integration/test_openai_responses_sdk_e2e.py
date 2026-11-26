@@ -33,7 +33,7 @@ from examples.tools import (
     tools_spec,
 )
 from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     IRRequest,
     Message,
     ToolCallPart,

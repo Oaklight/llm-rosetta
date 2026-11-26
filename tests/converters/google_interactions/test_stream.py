@@ -7,7 +7,7 @@ from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsCon
 from llm_rosetta.converters.base.context import StreamContext
 from typing import cast
 
-from llm_rosetta.types.ir.stream import (
+from llm_rosetta.ir.model.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
     FinishEvent,

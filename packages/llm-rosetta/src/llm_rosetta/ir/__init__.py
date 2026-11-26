@@ -1,6 +1,6 @@
 """The IR layer: primitives, tools and passes around the typed IR.
 
-``llm_rosetta.types.ir`` remains the one home for the typed IR and keeps its
+``llm_rosetta.ir.model`` remains the one home for the typed IR and keeps its
 public path.  This package holds the logic that operates on IR values:
 
 ====================  ===================================================

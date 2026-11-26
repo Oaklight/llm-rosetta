@@ -2,14 +2,14 @@
 
 from typing import Any, cast
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     is_text_part,
     is_tool_call_part,
     is_tool_result_part,
     is_reasoning_part,
     is_citation_part,
 )
-from ....types.ir.response import IRResponse, UsageInfo
+from llm_rosetta.ir.model.response import IRResponse, UsageInfo
 from ...base.context import ConversionContext
 from ...base.helpers.citations import report_dropped_citation
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss

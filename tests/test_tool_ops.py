@@ -3,7 +3,7 @@
 import pytest
 
 from llm_rosetta import tool_ops
-from llm_rosetta.types.ir.tools import ToolDefinition
+from llm_rosetta.ir.model.tools import ToolDefinition
 
 # Shared fixtures
 IR_TOOL: ToolDefinition = {

@@ -20,7 +20,7 @@ from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
 from llm_rosetta.converters.llm.open_responses.tool_ops import OpenResponsesToolOps
-from llm_rosetta.types.ir.stream import ToolResultEvent
+from llm_rosetta.ir.model.stream import ToolResultEvent
 
 _CI_RESULT_ITEM: dict[str, Any] = {
     "type": "code_interpreter_call_output",

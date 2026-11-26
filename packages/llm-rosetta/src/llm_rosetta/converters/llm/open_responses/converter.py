@@ -12,13 +12,13 @@ nested messages. The converter handles this structural difference.
 import time
 from typing import Any, ClassVar, cast
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     TextPart,
     is_text_part,
 )
-from ....types.ir.passthrough import ProviderPassthroughItem
-from ....types.ir.request import IRRequest
-from ....types.ir.response import IRResponse
+from llm_rosetta.ir.model.passthrough import ProviderPassthroughItem
+from llm_rosetta.ir.model.request import IRRequest
+from llm_rosetta.ir.model.response import IRResponse
 from ...base import BaseConverter
 from ...base.context import ConversionContext, StreamContext
 from ....ir.primitives import expand_response

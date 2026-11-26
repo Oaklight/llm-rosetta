@@ -25,7 +25,7 @@ from llm_rosetta import get_converter_for_provider
 from llm_rosetta.converters.base.helpers import CARRIER_KEY
 from llm_rosetta.converters.llm.chat_completions.tool_ops import ChatCompletionsToolOps
 from llm_rosetta.converters.llm.messages.tool_ops import MessagesToolOps
-from llm_rosetta.types.ir import IRRequest, IRResponse, ToolCallPart
+from llm_rosetta.ir.model import IRRequest, IRResponse, ToolCallPart
 
 FORMATS = [
     "chat_completions",

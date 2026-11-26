@@ -18,7 +18,7 @@ from llm_rosetta.converters.llm.open_responses.message_ops import (
     OpenResponsesMessageOps,
 )
 from llm_rosetta.converters.llm.open_responses.tool_ops import OpenResponsesToolOps
-from llm_rosetta.types.ir import Message
+from llm_rosetta.ir.model import Message
 
 _REASONING_ID = "rs_order_1"
 

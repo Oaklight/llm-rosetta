@@ -24,7 +24,7 @@ from llm_rosetta.converters.base import (
     BaseToolOps,
     StreamContext,
 )
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     AssistantMessage,
     AudioPart,
     CacheConfig,
@@ -54,8 +54,8 @@ from llm_rosetta.types.ir import (
     ToolResultPart,
     UserMessage,
 )
-from llm_rosetta.types.ir.response import UsageInfo
-from llm_rosetta.types.ir.stream import IRStreamEvent
+from llm_rosetta.ir.model.response import UsageInfo
+from llm_rosetta.ir.model.stream import IRStreamEvent
 
 # ============================================================================
 # Mock implementations for testing

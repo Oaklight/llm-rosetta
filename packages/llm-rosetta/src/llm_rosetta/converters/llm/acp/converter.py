@@ -33,9 +33,9 @@ from typing import Any, cast
 
 from llm_rosetta.conversion_warnings import DROPPED, FAILED, report_loss
 
-from ....types.ir.request import IRRequest
-from ....types.ir.response import FinishReason, IRResponse, UsageInfo
-from ....types.ir.stream import (
+from llm_rosetta.ir.model.request import IRRequest
+from llm_rosetta.ir.model.response import FinishReason, IRResponse, UsageInfo
+from llm_rosetta.ir.model.stream import (
     ContentBlockStartEvent,
     FinishEvent,
     IRStreamEvent,

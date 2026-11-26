@@ -12,7 +12,7 @@ from llm_rosetta.converters.llm.open_responses.stream_context import (
     OpenResponsesStreamContext,
 )
 from llm_rosetta.pipeline import ConversionPipeline
-from llm_rosetta.types.ir.stream import (
+from llm_rosetta.ir.model.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
     FinishEvent,

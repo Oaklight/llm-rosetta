@@ -16,7 +16,7 @@ Google-specific:
 from collections.abc import Sequence
 from typing import Any, cast
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     ContentPart,
     IRInputItem,
     Message,

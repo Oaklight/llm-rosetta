@@ -10,7 +10,7 @@ from llm_rosetta.converters.base.tools import TOOL_ERROR_MARKER
 from llm_rosetta.converters.llm.chat_completions.tool_ops import ChatCompletionsToolOps
 from typing import cast
 
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     ToolCallConfig,
     ToolCallPart,
     ToolChoice,

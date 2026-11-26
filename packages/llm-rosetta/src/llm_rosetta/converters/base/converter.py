@@ -10,16 +10,16 @@ from collections.abc import Iterable, Iterator, Mapping, Sequence
 import re
 from typing import Any, cast
 
-from ...types.ir.constraints import RequestConstraints
-from ...types.ir.passthrough import ProviderPassthroughEvent
-from ...types.ir.request import IRInputItem, IRRequest
-from ...types.ir.response import IRResponse, UsageInfo
-from ...types.ir.stream import (
+from llm_rosetta.ir.model.constraints import RequestConstraints
+from llm_rosetta.ir.model.passthrough import ProviderPassthroughEvent
+from llm_rosetta.ir.model.request import IRInputItem, IRRequest
+from llm_rosetta.ir.model.response import IRResponse, UsageInfo
+from llm_rosetta.ir.model.stream import (
     CitationDeltaEvent,
     IRStreamEvent,
     RefusalDeltaEvent,
 )
-from ...types.ir.validation import (
+from llm_rosetta.ir.model.validation import (
     validate_ir_request,
     validate_ir_response,
     validate_messages,

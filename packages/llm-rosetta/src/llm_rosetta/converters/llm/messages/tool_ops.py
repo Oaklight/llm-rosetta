@@ -16,13 +16,13 @@ from ...base.tools.content import (
     convert_content_blocks_to_ir,
     convert_ir_content_blocks_to_p,
 )
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     ToolCallPart,
     ToolChoice,
     ToolDefinition,
     ToolResultPart,
 )
-from ....types.ir.tools import ToolCallConfig
+from llm_rosetta.ir.model.tools import ToolCallConfig
 from ...base import BaseToolOps, IntrinsicLeg
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.helpers.opaque import CARRIER_KEY

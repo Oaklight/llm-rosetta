@@ -17,8 +17,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ....types.ir.parts import ToolCallPart, ToolResultPart
-from ....types.ir.tools import ToolCallConfig, ToolChoice, ToolDefinition
+from llm_rosetta.ir.model.parts import ToolCallPart, ToolResultPart
+from llm_rosetta.ir.model.tools import ToolCallConfig, ToolChoice, ToolDefinition
 from ...base.tools.ops import BaseToolOps
 from llm_rosetta.conversion_warnings import DROPPED, report_loss
 

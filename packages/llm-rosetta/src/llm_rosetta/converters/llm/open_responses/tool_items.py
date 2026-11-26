@@ -12,7 +12,7 @@ from typing import Any, Literal, cast
 from ...base.tools.content import (
     convert_ir_content_blocks_to_p,
 )
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     ToolCallPart,
     ToolDefinition,
     ToolResultPart,

@@ -20,7 +20,7 @@ from llm_rosetta.converters.llm.open_responses.message_ops import (
     OpenResponsesMessageOps,
 )
 from llm_rosetta.converters.llm.open_responses.tool_ops import OpenResponsesToolOps
-from llm_rosetta.types.ir import IRInputItem, ToolCallPart, ToolResultPart
+from llm_rosetta.ir.model import IRInputItem, ToolCallPart, ToolResultPart
 
 # The two item shapes as returned by the live OpenAI endpoint.
 WEB_SEARCH_ITEM = {

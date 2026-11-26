@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any, Literal, TypeVar
 
-from llm_rosetta.types.ir import is_tool_call_part
+from llm_rosetta.ir.model import is_tool_call_part
 from ..tools.intrinsic import is_intrinsic_part
 
 ReasonT = TypeVar("ReasonT", bound=str)

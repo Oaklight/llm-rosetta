@@ -25,7 +25,7 @@ import pytest
 
 from llm_rosetta.ir.primitives import expand_response, fold_response_events
 from llm_rosetta.pipeline import ConversionPipeline
-from llm_rosetta.types.ir import IRResponse
+from llm_rosetta.ir.model import IRResponse
 from tests.converters.test_leg_agreement import (
     CASE_TABLE,
     Turn,

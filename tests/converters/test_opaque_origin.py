@@ -33,7 +33,7 @@ from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
 from llm_rosetta.converters.llm.open_responses.content_ops import (
     OpenResponsesContentOps,
 )
-from llm_rosetta.types.ir import IRRequest, ToolCallPart
+from llm_rosetta.ir.model import IRRequest, ToolCallPart
 
 
 class TestOpaqueOriginHelper:

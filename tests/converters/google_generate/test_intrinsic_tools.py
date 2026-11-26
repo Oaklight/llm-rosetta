@@ -15,7 +15,7 @@ from llm_rosetta.converters.llm.google_generate.message_ops import (
     GoogleGenerateMessageOps,
 )
 from llm_rosetta.converters.llm.google_generate.tool_ops import GoogleGenerateToolOps
-from llm_rosetta.types.ir import ToolCallPart, ToolDefinition, ToolResultPart
+from llm_rosetta.ir.model import ToolCallPart, ToolDefinition, ToolResultPart
 
 
 def _make_message_ops() -> GoogleGenerateMessageOps:

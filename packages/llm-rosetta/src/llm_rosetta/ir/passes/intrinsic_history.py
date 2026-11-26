@@ -267,7 +267,7 @@ def _pair_keys(messages: list[Any]) -> dict[tuple[int, int], str]:
     """Map each intrinsic call/result position to the key that pairs them.
 
     The key is the ``tool_call_id`` when the part has one.  Ids are optional on
-    :class:`~llm_rosetta.types.ir.parts.ToolCallPart`, and two id-less calls of
+    :class:`~llm_rosetta.ir.model.parts.ToolCallPart`, and two id-less calls of
     different kinds share the empty string, so an anonymous call is keyed by its
     own position instead — each keeps its own kind and name.  An anonymous
     result pairs with the most recent anonymous call before it, which is the

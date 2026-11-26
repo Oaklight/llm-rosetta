@@ -18,8 +18,8 @@ from llm_rosetta.ir.passes import (
     RequestConstraintViolation,
     apply_request_constraints,
 )
-from llm_rosetta.types.ir.configs import GenerationConfig
-from llm_rosetta.types.ir.constraints import Range, RequestConstraints
+from llm_rosetta.ir.model.configs import GenerationConfig
+from llm_rosetta.ir.model.constraints import Range, RequestConstraints
 
 
 def _ir(**generation: Any) -> dict[str, Any]:

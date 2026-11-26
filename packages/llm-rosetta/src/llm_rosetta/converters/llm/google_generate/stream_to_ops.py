@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, cast
 
 
-from ....types.ir.stream import (
+from llm_rosetta.ir.model.stream import (
     CitationDeltaEvent,
     ContentBlockEndEvent,
     ContentBlockStartEvent,
@@ -51,7 +51,7 @@ from .response_ops import (
 )
 
 if TYPE_CHECKING:
-    from ....types.ir import ToolResultPart
+    from llm_rosetta.ir.model import ToolResultPart
     from .tool_ops import GoogleGenerateToolOps
 
 

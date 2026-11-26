@@ -32,7 +32,7 @@ from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsCon
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.open_responses import OpenAIResponsesConverter
 from llm_rosetta.pipeline import ConversionPipeline
-from llm_rosetta.types.ir import IRRequest
+from llm_rosetta.ir.model import IRRequest
 
 _SCHEMA = {
     "type": "object",
@@ -517,7 +517,7 @@ class TestAllowedToolsIRValidation:
 
     @pytest.mark.parametrize("strict", [True, False, None])
     def test_strict_is_a_boolean_field(self, strict):
-        from llm_rosetta.types.ir.validation import validate_ir_request
+        from llm_rosetta.ir.model.validation import validate_ir_request
 
         tool: dict = {
             "type": "function",

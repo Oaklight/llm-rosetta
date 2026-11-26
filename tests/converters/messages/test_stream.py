@@ -9,7 +9,7 @@ import pytest
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
-from llm_rosetta.types.ir.stream import (
+from llm_rosetta.ir.model.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
     FinishEvent,
@@ -1989,7 +1989,7 @@ class TestStreamingInputTokensFix:
         """Without pending_usage, input_tokens defaults to 0."""
         ctx = StreamContext()
 
-        from llm_rosetta.types.ir.stream import StreamStartEvent
+        from llm_rosetta.ir.model.stream import StreamStartEvent
 
         start = StreamStartEvent(
             type="stream_start", response_id="msg_test", model="gpt-4"

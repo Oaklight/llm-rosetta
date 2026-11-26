@@ -6,7 +6,7 @@ from typing import Any, cast
 
 from llm_rosetta.converters.base.context import StreamContext
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
-from llm_rosetta.types.ir.stream import (
+from llm_rosetta.ir.model.stream import (
     ContentBlockEndEvent,
     ContentBlockStartEvent,
     FinishEvent,
@@ -1580,7 +1580,7 @@ class TestStreamingRefusal:
 
     def test_streaming_role_chunk_has_refusal_null(self):
         """First streaming delta includes refusal: null."""
-        from llm_rosetta.types.ir.stream import StreamStartEvent
+        from llm_rosetta.ir.model.stream import StreamStartEvent
 
         ctx = StreamContext()
         event = StreamStartEvent(type="stream_start", response_id="test", model="gpt-4")

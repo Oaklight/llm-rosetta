@@ -12,13 +12,13 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, cast
 
-from ....types.ir.messages import (
+from llm_rosetta.ir.model.messages import (
     AssistantMessage,
     SystemMessage,
     ToolMessage,
     UserMessage,
 )
-from ....types.ir.request import IRInputItem
+from llm_rosetta.ir.model.request import IRInputItem
 from ...base.messages import BaseMessageOps
 
 

@@ -9,7 +9,7 @@ from llm_rosetta.converters.decisions.embedding import (
     EmbeddingDecisionConverter,
     _cosine_similarity,
 )
-from llm_rosetta.types.ir.decision import (
+from llm_rosetta.ir.model.decision import (
     ChoiceQuestion,
     IRDecisionRequest,
     AssertionQuestion,

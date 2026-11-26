@@ -11,7 +11,7 @@ from llm_rosetta.converters.embeddings import (
     OpenAIEmbeddingConverter,
     VoyageEmbeddingConverter,
 )
-from llm_rosetta.types.ir.embedding import (
+from llm_rosetta.ir.model.embedding import (
     IREmbeddingRequest,
 )
 

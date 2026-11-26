@@ -11,7 +11,7 @@ IRRerankResponse, RerankUsageInfo).
 
 from __future__ import annotations
 
-from llm_rosetta.types.ir.rerank import (
+from llm_rosetta.ir.model.rerank import (
     IRRerankRequest,
     IRRerankResponse,
     RerankUsageInfo,

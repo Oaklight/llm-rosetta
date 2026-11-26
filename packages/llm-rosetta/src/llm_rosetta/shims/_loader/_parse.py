@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from llm_rosetta.formats.batch import DECLARABLE_DIALECTS, batch_spec_for
-from llm_rosetta.types.ir.constraints import Range, RequestConstraints
+from llm_rosetta.ir.model.constraints import Range, RequestConstraints
 
 from llm_rosetta.contracts.shim import (
     TYPE_PARAM_KEYS,
@@ -448,7 +448,7 @@ def _parse_request_constraints(
         ValueError: On an unknown key, a malformed path, a non-numeric bound,
             or an unknown ``on_out_of_range`` policy.
     """
-    from llm_rosetta.types.ir.configs import GenerationConfig
+    from llm_rosetta.ir.model.configs import GenerationConfig
 
     raw = cfg.get("request")
     if raw is None:

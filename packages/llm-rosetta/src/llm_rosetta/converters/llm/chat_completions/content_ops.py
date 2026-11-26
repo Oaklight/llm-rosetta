@@ -8,7 +8,7 @@ Handles bidirectional conversion of text, image, and other content parts.
 import re
 from typing import Any
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     AudioPart,
     CitationPart,
     FilePart,

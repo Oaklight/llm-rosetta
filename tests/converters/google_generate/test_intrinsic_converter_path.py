@@ -29,14 +29,14 @@ from llm_rosetta.ir.tools.intrinsic import get_intrinsic_kind
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
-from llm_rosetta.types.ir.response import IRResponse
-from llm_rosetta.types.ir.stream import (
+from llm_rosetta.ir.model.response import IRResponse
+from llm_rosetta.ir.model.stream import (
     FinishEvent,
     ToolCallDeltaEvent,
     ToolCallStartEvent,
     ToolResultEvent,
 )
-from llm_rosetta.types.ir.validation import validate_ir_response
+from llm_rosetta.ir.model.validation import validate_ir_response
 
 _CODE_CHUNK: dict[str, Any] = {
     "candidates": [

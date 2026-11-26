@@ -17,8 +17,8 @@ from llm_rosetta.converters.llm.chat_completions.converter import (
     ChatCompletionsConverter,
 )
 from llm_rosetta.converters.llm.open_responses.converter import OpenAIResponsesConverter
-from llm_rosetta.types.ir import ToolChoice
-from llm_rosetta.types.ir.request import IRRequest
+from llm_rosetta.ir.model import ToolChoice
+from llm_rosetta.ir.model.request import IRRequest
 
 
 # ==================== Unit tests for shared function ====================

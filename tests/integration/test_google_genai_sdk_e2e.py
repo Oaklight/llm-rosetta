@@ -36,7 +36,7 @@ from examples.tools import (
     tools_spec,
 )
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     IRRequest,
     Message,
     ToolCallPart,

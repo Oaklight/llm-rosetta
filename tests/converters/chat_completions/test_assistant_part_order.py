@@ -21,7 +21,7 @@ from llm_rosetta.converters.llm.chat_completions.message_ops import (
     ChatCompletionsMessageOps,
 )
 from llm_rosetta.converters.llm.chat_completions.tool_ops import ChatCompletionsToolOps
-from llm_rosetta.types.ir import Message
+from llm_rosetta.ir.model import Message
 
 
 def _text(text: str) -> dict[str, Any]:

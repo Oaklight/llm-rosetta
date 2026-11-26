@@ -29,7 +29,7 @@ from typing import Literal, get_args
 
 from llm_rosetta.formats.catalog import BY_PAIR
 from llm_rosetta.formats.spec import FormatSpec
-from llm_rosetta.types.ir.batch import BatchJobState
+from llm_rosetta.ir.model.batch import BatchJobState
 
 #: How a dialect delivers its request container.  A format with no batch
 #: surface has no record, so there is no "none" value.
@@ -91,7 +91,7 @@ class BatchSpec:
             (``/v1/files/{file_id}/content``) or a file named on the job.
         item_key: How a result line is joined back to its request.
         state_map: The dialect's state words → the normalized
-            :data:`~llm_rosetta.types.ir.batch.BatchJobState` vocabulary.
+            :data:`~llm_rosetta.ir.model.batch.BatchJobState` vocabulary.
         supported_endpoints: Request endpoints this batch route accepts, e.g.
             OpenAI's ``/v1/responses`` and ``/v1/chat/completions``.
         limits: Vendor limits.
@@ -143,7 +143,7 @@ class BatchSpec:
 
 
 #: State maps, one per dialect vocabulary.  The normalized target vocabulary
-#: lives in :mod:`llm_rosetta.types.ir.batch`; a dialect word with no exact
+#: lives in :mod:`llm_rosetta.ir.model.batch`; a dialect word with no exact
 #: normalized word maps to the state it behaves like:
 #:
 #: * OpenAI's ``cancelling`` is a cancellation in flight — the job still
@@ -329,7 +329,7 @@ def check_batch_specs() -> None:
     that is in the catalog has one.  Beyond the join, each record (and each
     file variant) must name a codec in :data:`DIALECTS`, a known container and
     item key, at least one supported endpoint, and a state map whose values
-    are all in the normalized :data:`~llm_rosetta.types.ir.batch.BatchJobState`
+    are all in the normalized :data:`~llm_rosetta.ir.model.batch.BatchJobState`
     vocabulary.
 
     Raises:

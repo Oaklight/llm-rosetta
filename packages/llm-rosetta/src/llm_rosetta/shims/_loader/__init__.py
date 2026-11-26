@@ -67,7 +67,7 @@ from llm_rosetta.formats.batch import (  # noqa: F401
     DECLARABLE_DIALECTS,
     batch_spec_for,
 )
-from llm_rosetta.types.ir.constraints import Range, RequestConstraints  # noqa: F401
+from llm_rosetta.ir.model.constraints import Range, RequestConstraints  # noqa: F401
 
 from ...contracts import QUOTA_MODULE
 from llm_rosetta.contracts.resolver import set_providers_dir_loader

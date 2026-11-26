@@ -23,11 +23,11 @@ from llm_rosetta._vendor.validate import (
     json_schema,
     validate,
 )
-from llm_rosetta.types.ir import BaseMessage
+from llm_rosetta.ir.model import BaseMessage
 
 
 def _ir_typeddicts():
-    import llm_rosetta.types.ir as ir
+    import llm_rosetta.ir.model as ir
 
     return {
         name: obj

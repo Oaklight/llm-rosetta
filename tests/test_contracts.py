@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import llm_rosetta.contracts as contracts
 from llm_rosetta import api
-from llm_rosetta.types import ir
+from llm_rosetta.ir import model as ir
 
 
 def test_the_versions_have_one_definition_each():

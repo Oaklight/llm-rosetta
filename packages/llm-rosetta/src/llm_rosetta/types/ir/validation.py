@@ -1,85 +1,19 @@
-"""
-LLM-Rosetta - IR Validation Utilities
+"""Deprecated: moved to :mod:`llm_rosetta.ir.model.validation`.
 
-Runtime validation for IR types using zerodep validate.
-These functions validate dicts against IR TypedDict definitions,
-catching malformed structures at IR boundaries rather than
-downstream in converters.
+``llm_rosetta.types.ir.validation`` shipped in 0.13.0.  It forwards the names 0.13.0
+had, as the same objects; importing it imports the deprecated package
+:mod:`llm_rosetta.types.ir`, which warns that it is removed in 0.15.0.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from ..._vendor.validate import ValidationError, validate
-from .request import IRInputItem, IRRequest
-from .response import IRResponse
-from .tools import ToolDefinition
-
-
-def validate_ir_request(data: dict[str, Any]) -> IRRequest:
-    """Validate a dict against IRRequest TypedDict.
-
-    Args:
-        data: Dict to validate.
-
-    Returns:
-        The validated data (same object, typed as IRRequest).
-
-    Raises:
-        ValidationError: If the data doesn't match IRRequest structure.
-    """
-    return validate(data, IRRequest)
-
-
-def validate_ir_response(data: dict[str, Any]) -> IRResponse:
-    """Validate a dict against IRResponse TypedDict.
-
-    Args:
-        data: Dict to validate.
-
-    Returns:
-        The validated data (same object, typed as IRResponse).
-
-    Raises:
-        ValidationError: If the data doesn't match IRResponse structure.
-    """
-    return validate(data, IRResponse)
-
-
-def validate_messages(
-    messages: list[Any],
-) -> list[IRInputItem]:
-    """Validate a message list against IR Message/ExtensionItem types.
-
-    Args:
-        messages: List of message dicts to validate.
-
-    Returns:
-        The validated list.
-
-    Raises:
-        ValidationError: If any message doesn't match expected structure.
-    """
-    return validate(messages, list[IRInputItem])
-
-
-def validate_tools(
-    tools: list[Any],
-) -> list[ToolDefinition]:
-    """Validate a tool list against IR ToolDefinition type.
-
-    Args:
-        tools: List of tool definition dicts to validate.
-
-    Returns:
-        The validated list.
-
-    Raises:
-        ValidationError: If any tool doesn't match expected structure.
-    """
-    return validate(tools, list[ToolDefinition])
-
+from llm_rosetta.ir.model.validation import (
+    ValidationError,
+    validate_ir_request,
+    validate_ir_response,
+    validate_messages,
+    validate_tools,
+)
 
 __all__ = [
     "ValidationError",

@@ -1,6 +1,6 @@
 """Stateless tool helpers — the IR tool layer.
 
-These modules depend on the standard library and ``llm_rosetta.types.ir``
+These modules depend on the standard library and ``llm_rosetta.ir.model``
 only.  The converter-facing ``BaseToolOps`` abstract class, the schema
 sanitizer that uses the converter cache, and the content/packing helpers that
 need ``BaseContentOps`` stay in :mod:`llm_rosetta.converters.base.tools`;

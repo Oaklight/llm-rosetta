@@ -35,7 +35,7 @@ from examples.tools import (
     tools_spec,
 )
 from llm_rosetta.converters.llm.messages import MessagesConverter
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     IRRequest,
     ToolCallPart,
     ToolDefinition,

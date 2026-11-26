@@ -20,7 +20,7 @@ Handles all configuration-related conversions:
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ...types.ir.configs import (
+from llm_rosetta.ir.model.configs import (
     CacheConfig,
     GenerationConfig,
     ReasoningConfig,

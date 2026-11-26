@@ -23,7 +23,7 @@ from llm_rosetta.ir.tools.intrinsic import get_intrinsic_kind
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.messages.tool_ops import MessagesToolOps
-from llm_rosetta.types.ir.stream import ToolResultEvent
+from llm_rosetta.ir.model.stream import ToolResultEvent
 
 _WEB_RESULT_BLOCK: dict[str, Any] = {
     "type": "web_search_tool_result",
@@ -123,7 +123,7 @@ class TestReader:
         assert all(e["type"] != "tool_result" for e in events)
 
     def test_event_is_reexported_from_types_ir(self):
-        from llm_rosetta.types.ir import ToolResultEvent as ReExported
+        from llm_rosetta.ir.model import ToolResultEvent as ReExported
 
         assert ReExported is ToolResultEvent
 

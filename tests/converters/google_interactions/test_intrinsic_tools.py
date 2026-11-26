@@ -8,7 +8,7 @@ from llm_rosetta.converters.llm.google_interactions.tool_ops import (
 from llm_rosetta.converters.llm.google_interactions.message_ops import (
     GoogleInteractionsMessageOps,
 )
-from llm_rosetta.types.ir import ToolCallPart, ToolResultPart
+from llm_rosetta.ir.model import ToolCallPart, ToolResultPart
 
 
 class TestServerCallToIR:

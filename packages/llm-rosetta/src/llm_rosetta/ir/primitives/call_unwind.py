@@ -21,7 +21,7 @@ from collections import Counter
 from typing import Any
 
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     is_message,
     is_tool_call_part,
     is_tool_result_part,

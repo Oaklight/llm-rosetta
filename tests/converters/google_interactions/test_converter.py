@@ -4,7 +4,7 @@ import pytest
 
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
-from llm_rosetta.types.ir import IRRequest, IRResponse
+from llm_rosetta.ir.model import IRRequest, IRResponse
 
 
 class TestRequestToProvider:

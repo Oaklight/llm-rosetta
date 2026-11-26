@@ -44,7 +44,7 @@ way an IR value written at the old level cannot be read at the new one.
 
 from __future__ import annotations
 
-from llm_rosetta.types.ir import IR_VERSION
+from llm_rosetta.ir.model import IR_VERSION
 
 #: The extension surface's compatibility level (this package and
 #: :mod:`llm_rosetta.api`).  It rises only when a name is removed or changes
