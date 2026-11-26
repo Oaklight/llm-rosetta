@@ -65,6 +65,10 @@ KEPT_DEPRECATIONS = dict(
             "ConversionPipeline(shim=...) is the older spelling of target_shim",
         ),
         (
+            "llm_rosetta/types/ir/__init__.py",
+            "0.13.0 package, forwards to llm_rosetta.ir.model for one minor",
+        ),
+        (
             "llm_rosetta/types/ir/extensions.py",
             "0.13.0 module, forwards to extensions_experimental for one minor",
         ),

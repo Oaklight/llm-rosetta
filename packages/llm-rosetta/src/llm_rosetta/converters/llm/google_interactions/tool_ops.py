@@ -8,8 +8,8 @@ and IR ToolDefinition/ToolCallPart/ToolResultPart.
 import json
 from typing import Any, cast
 
-from ....types.ir import ToolCallPart, ToolResultPart
-from ....types.ir.tools import ToolChoice, ToolDefinition
+from llm_rosetta.ir.model import ToolCallPart, ToolResultPart
+from llm_rosetta.ir.model.tools import ToolChoice, ToolDefinition
 from ...base import BaseToolOps, IntrinsicLeg
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.tools import (

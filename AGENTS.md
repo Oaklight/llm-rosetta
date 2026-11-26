@@ -202,22 +202,28 @@ Admin never imports `app._state`.
 
 ### IR type system
 
-Typed dataclasses for the intermediate representation live in `types/ir/`.
-Each paradigm has its own IR types: chat (`request.py`, `response.py`),
-embedding (`embedding.py`), rerank (`rerank.py`), and decision (`decision.py`).
+The IR is one package, `ir/`. Its data lives in `ir/model/`: the typed
+dataclasses, type guards, validation, helpers and `IR_VERSION`. Each paradigm
+has its own IR types: chat (`request.py`, `response.py`), embedding
+(`embedding.py`), rerank (`rerank.py`), and decision (`decision.py`).
 Provider shapes for reference (documentation, not runtime) live in
 `types/messages/`, `types/openai/`, and `types/google/`.
+`llm_rosetta.types.ir` shipped in 0.13.0 and stays as a deprecated forwarder to
+`ir.model` until 0.15.0.
 
-The logic that operates on IR values lives in `ir/`:
+The logic that operates on IR values lives beside the model in `ir/`:
 
 | Sub-package | Holds |
 |-------------|-------|
+| `ir/model/` | The data: IR dataclasses, guards, validation, helpers; imports only the standard library and `_vendor` |
 | `ir/primitives/` | Body/IR transforms plus their stateless helpers |
 | `ir/tools/` | Stateless tool helpers (intrinsic kinds, call ids, error markers) |
 | `ir/passes/` | Capability passes (vision, reasoning, custom tools, names) |
 
+The direction is `ir/model <- ir/primitives, ir/tools <- ir/passes <- converters`.
 Nothing in `ir/` may import `converters` (enforced by
-`tests/test_ir_import_boundary.py`); `ConversionContext` / `StreamContext` live
+`tests/test_ir_import_boundary.py`, which also holds the model and the
+primitives to their layer); `ConversionContext` / `StreamContext` live
 in `ir/context.py` and `converters/base/context.py` re-exports them. A pass may
 use the shim contract. `llm_rosetta.contracts.transform` re-exports the
 transform types and primitives shims use, and the package-level
@@ -250,8 +256,8 @@ Core modules (`packages/llm-rosetta/src/llm_rosetta/`):
 | `conversion_warnings.py` | The warning sink for lossy conversions |
 | `formats/` | `spec.py` (record type), `catalog.py` (records and `BY_PAIR`), `detect.py` (body detectors) |
 | `converters/` | One package per `(model_type, format)`; `base/` is the abstract contract; `registry.py` binds formats to classes |
-| `ir/` | IR logic: `primitives/`, `tools/`, `passes/` |
-| `types/` | Typed IR dataclasses in `types/ir/`; provider shapes for reference in `types/messages/`, `types/openai/`, `types/google/` |
+| `ir/` | The IR: `model/` (data), `primitives/`, `tools/`, `passes/` (logic) |
+| `types/` | Provider shapes for reference in `types/messages/`, `types/openai/`, `types/google/`; `types/ir/` is the deprecated 0.13.0 forwarder to `ir/model/` |
 | `contracts/` | The extension contracts: `shim.py`, `transform.py`, `auth.py`, `quota.py`, `routing.py`, `command.py` (a subcommand a distribution adds to `llm-rosetta`), `usage/` |
 | `cli.py` | The `llm-rosetta` dispatcher (`python -m llm_rosetta`): it owns `ext` (`list`, `install`, `remove`, `doctor`, `new`, `check`; `extensions/_cli.py`) and `help`, and runs every other command from the `llm_rosetta.commands` entry point group or `register_command`; it never starts a server |
 | `shims/` | `provider_shim.py` (the registry), `_loader/` (the code that reads a shim tree), `builtin/` (the bundled vendor data: one manifest per vendor/model-type/format), and `providers/` (the 0.13.0 loader path: forwards its names, deprecated, until 0.15.0) |
@@ -591,7 +597,7 @@ place for the agent to run its own tools on the gateway host.
 
 ## Escalation
 
-- Converter output mismatch → check IR types in `types/ir/`, then the
+- Converter output mismatch → check IR types in `ir/model/`, then the
   converter's `*_ops.py` modules
 - Shim/transform issue → check `shims/builtin/`, `contracts/transform.py` and `ir/primitives/`
 - Gateway config issue → check `config/` resolution order

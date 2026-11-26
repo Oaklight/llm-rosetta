@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from ...types.ir.passthrough import ProviderPassthroughItem
+from llm_rosetta.ir.model.passthrough import ProviderPassthroughItem
 
 
 def restore_provider_passthrough_item(

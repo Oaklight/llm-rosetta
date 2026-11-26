@@ -7,14 +7,14 @@ and IR GenerationConfig / ReasoningConfig.
 
 from typing import Any, cast
 
-from ....types.ir.configs import (
+from llm_rosetta.ir.model.configs import (
     CacheConfig,
     GenerationConfig,
     ReasoningConfig,
     ResponseFormatConfig,
     StreamConfig,
 )
-from ....types.ir.reasoning import IREffort, IRVisibility
+from llm_rosetta.ir.model.reasoning import IREffort, IRVisibility
 from ...base import BaseConfigOps
 from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.response_format import (

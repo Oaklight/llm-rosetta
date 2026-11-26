@@ -22,7 +22,7 @@ from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
 from llm_rosetta.converters.llm.open_responses.stream_context import (
     OpenResponsesStreamContext,
 )
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     FinishEvent,
     IRResponse,
     StreamEndEvent,

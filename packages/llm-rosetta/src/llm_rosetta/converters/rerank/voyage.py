@@ -22,7 +22,7 @@ from typing import Any
 
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.base.rerank_converter import BaseRerankConverter
-from llm_rosetta.types.ir.rerank import (
+from llm_rosetta.ir.model.rerank import (
     IRRerankRequest,
     IRRerankResponse,
     RerankDocument,

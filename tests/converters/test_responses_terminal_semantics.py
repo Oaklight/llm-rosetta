@@ -9,7 +9,7 @@ from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.pipeline import ConversionError, ConversionPipeline
-from llm_rosetta.types.ir import FinishEvent
+from llm_rosetta.ir.model import FinishEvent
 
 
 FINISH_CASES = [

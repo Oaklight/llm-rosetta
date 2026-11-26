@@ -45,7 +45,7 @@ from __future__ import annotations
 import json
 from typing import Any, cast
 
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     IRResponse,
     IRStreamEvent,
     UsageInfo,

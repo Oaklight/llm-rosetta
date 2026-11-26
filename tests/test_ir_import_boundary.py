@@ -1,6 +1,6 @@
 """The IR layer must not import ``converters``, at any depth.
 
-The direction is ``types.ir <- ir.primitives/ir.tools <- ir.passes <-
+The direction is ``ir.model <- ir.primitives/ir.tools <- ir.passes <-
 converters``.  The whole of ``ir`` (passes included) imports nothing from
 ``converters``: the context contract a pass needs lives in ``ir.context``, and
 ``converters.base.context`` re-exports it for old import paths.
@@ -17,6 +17,7 @@ from _import_scan import import_hits
 
 _IR = Path(__file__).parents[1] / "packages/llm-rosetta/src/llm_rosetta/ir"
 _LAYERS = (_IR / "primitives", _IR / "tools")
+_MODEL = _IR / "model"
 _CONVERTERS = "llm_rosetta.converters"
 
 
@@ -43,6 +44,44 @@ def test_ir_as_a_whole_never_imports_converters():
     offenders: list[str] = []
     for path in _IR.rglob("*.py"):
         offenders.extend(_converter_imports(path, path.read_text()))
+    assert offenders == []
+
+
+def _hits(path: Path, predicate) -> list[str]:
+    package = ("llm_rosetta", "ir", *path.relative_to(_IR).parent.parts)
+    return import_hits(path, path.read_text(), package, predicate)
+
+
+def _outside_the_model(name: str) -> bool:
+    """A ``llm_rosetta`` import that is neither the model itself nor ``_vendor``."""
+    if name != "llm_rosetta" and not name.startswith("llm_rosetta."):
+        return False
+    allowed = ("llm_rosetta.ir.model", "llm_rosetta._vendor")
+    return not any(name == a or name.startswith(a + ".") for a in allowed)
+
+
+def test_the_model_imports_only_the_standard_library_and_the_vendor_dir():
+    """``ir.model`` is the bottom of the IR: data classes, guards, helpers."""
+    offenders: list[str] = []
+    for path in _MODEL.rglob("*.py"):
+        offenders.extend(_hits(path, _outside_the_model))
+    assert offenders == []
+
+
+def test_primitives_and_tools_never_import_the_passes():
+    """``ir.passes`` sits above ``ir.primitives`` and ``ir.tools``."""
+    offenders: list[str] = []
+    for layer in _LAYERS:
+        for path in layer.rglob("*.py"):
+            offenders.extend(
+                _hits(
+                    path,
+                    lambda n: (
+                        n == "llm_rosetta.ir.passes"
+                        or n.startswith("llm_rosetta.ir.passes.")
+                    ),
+                )
+            )
     assert offenders == []
 
 
@@ -77,7 +116,7 @@ def test_guard_catches_absolute_relative_and_dynamic_imports():
     )
     assert _converter_imports(top, '__import__("llm_rosetta.converters.x")')
 
-    clean = "from llm_rosetta.types.ir import Message\nfrom .image_limit import x\n"
+    clean = "from llm_rosetta.ir.model import Message\nfrom .image_limit import x\n"
     assert _converter_imports(top, clean) == []
 
 

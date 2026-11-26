@@ -15,14 +15,14 @@ from typing import Any, cast
 from llm_rosetta.conversion_warnings import report_loss
 from llm_rosetta.converters.base.helpers.service_tier import google_service_tier
 
-from ....types.ir import ToolResultPart
-from ....types.ir.request import IRRequest
-from ....types.ir.response import (
+from llm_rosetta.ir.model import ToolResultPart
+from llm_rosetta.ir.model.request import IRRequest
+from llm_rosetta.ir.model.response import (
     FinishReason,
     IRResponse,
     UsageInfo,
 )
-from ....types.ir.stream import (
+from llm_rosetta.ir.model.stream import (
     CitationDeltaEvent,
     ContentBlockEndEvent,
     ContentBlockStartEvent,

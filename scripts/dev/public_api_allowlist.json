@@ -95,23 +95,23 @@
     },
     {
       "key": "llm_rosetta.tool_ops::ToolCallConfig::removed",
-      "reason": "0.14.0 moved the IR tool types to llm_rosetta.types.ir (and the top-level package); tool_ops imports them for signatures only. Tracked by #1116."
+      "reason": "0.14.0 moved the IR tool types to llm_rosetta.ir.model (and the top-level package); tool_ops imports them for signatures only. Tracked by #1116."
     },
     {
       "key": "llm_rosetta.tool_ops::ToolCallPart::removed",
-      "reason": "0.14.0 moved the IR tool types to llm_rosetta.types.ir (and the top-level package); tool_ops imports them for signatures only. Tracked by #1116."
+      "reason": "0.14.0 moved the IR tool types to llm_rosetta.ir.model (and the top-level package); tool_ops imports them for signatures only. Tracked by #1116."
     },
     {
       "key": "llm_rosetta.tool_ops::ToolChoice::removed",
-      "reason": "0.14.0 moved the IR tool types to llm_rosetta.types.ir (and the top-level package); tool_ops imports them for signatures only. Tracked by #1116."
+      "reason": "0.14.0 moved the IR tool types to llm_rosetta.ir.model (and the top-level package); tool_ops imports them for signatures only. Tracked by #1116."
     },
     {
       "key": "llm_rosetta.tool_ops::ToolDefinition::removed",
-      "reason": "0.14.0 moved the IR tool types to llm_rosetta.types.ir (and the top-level package); tool_ops imports them for signatures only. Tracked by #1116."
+      "reason": "0.14.0 moved the IR tool types to llm_rosetta.ir.model (and the top-level package); tool_ops imports them for signatures only. Tracked by #1116."
     },
     {
       "key": "llm_rosetta.tool_ops::ToolResultPart::removed",
-      "reason": "0.14.0 moved the IR tool types to llm_rosetta.types.ir (and the top-level package); tool_ops imports them for signatures only. Tracked by #1116."
+      "reason": "0.14.0 moved the IR tool types to llm_rosetta.ir.model (and the top-level package); tool_ops imports them for signatures only. Tracked by #1116."
     },
     {
       "key": "llm_rosetta::AnthropicConverter::removed",

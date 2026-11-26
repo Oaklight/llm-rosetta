@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ....types.ir.configs import (
+from llm_rosetta.ir.model.configs import (
     CacheConfig,
     GenerationConfig,
     ReasoningConfig,

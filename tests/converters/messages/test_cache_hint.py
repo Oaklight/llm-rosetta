@@ -10,7 +10,7 @@ Scope: PR 1 of #362 — preservation only, no auto-injection.
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
 from llm_rosetta.converters.llm.messages.tool_ops import MessagesToolOps
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     FilePart,
     IRRequest,
     ImagePart,

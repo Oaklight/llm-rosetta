@@ -8,7 +8,7 @@ from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.chat_completions.config_ops import (
     ChatCompletionsConfigOps,
 )
-from llm_rosetta.types.ir import CacheConfig, GenerationConfig, ReasoningConfig
+from llm_rosetta.ir.model import CacheConfig, GenerationConfig, ReasoningConfig
 
 
 class TestChatCompletionsConfigOps:

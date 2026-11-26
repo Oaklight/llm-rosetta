@@ -39,7 +39,7 @@ from typing import Any, cast
 from collections.abc import Callable
 
 from llm_rosetta.conversion_warnings import report_loss
-from llm_rosetta.types.ir import IRResponse, UsageInfo
+from llm_rosetta.ir.model import IRResponse, UsageInfo
 
 __all__ = ["fold_response_events"]
 
@@ -73,7 +73,7 @@ _RESULT_FIELDS = ("tool_type", "is_error", "intrinsic_kind", "cache_hint")
 
 #: Response-level fields a caller may hand in, because their own stream's
 #: chunks repeat them even though no IR event does.  The IR response spells
-#: them (:class:`~llm_rosetta.types.ir.IRResponse`), so a seed that carries one
+#: them (:class:`~llm_rosetta.ir.model.IRResponse`), so a seed that carries one
 #: is not an invention — it is the same fact the source body would have had.
 _ECHO_FIELDS = ("service_tier", "system_fingerprint")
 

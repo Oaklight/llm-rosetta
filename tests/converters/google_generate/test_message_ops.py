@@ -13,8 +13,8 @@ from llm_rosetta.converters.llm.google_generate.message_ops import (
     GoogleGenerateMessageOps,
 )
 from llm_rosetta.converters.llm.google_generate.tool_ops import GoogleGenerateToolOps
-from llm_rosetta.types.ir import Message
-from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
+from llm_rosetta.ir.model import Message
+from llm_rosetta.ir.model.extensions_experimental import ExtensionItem
 
 
 class TestGoogleGenerateMessageOps:

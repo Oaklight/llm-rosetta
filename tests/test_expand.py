@@ -14,7 +14,7 @@ import json
 from typing import Any, cast, get_args
 
 from llm_rosetta.ir.primitives import expand_response
-from llm_rosetta.types.ir.parts import ContentPart
+from llm_rosetta.ir.model.parts import ContentPart
 
 
 def _expand(response: Any) -> list[dict[str, Any]]:

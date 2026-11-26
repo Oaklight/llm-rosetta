@@ -11,8 +11,8 @@ from llm_rosetta.converters.llm.open_responses.message_ops import (
     OpenResponsesMessageOps,
 )
 from llm_rosetta.converters.llm.open_responses.tool_ops import OpenResponsesToolOps
-from llm_rosetta.types.ir import Message, ToolCallPart, ToolResultPart
-from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
+from llm_rosetta.ir.model import Message, ToolCallPart, ToolResultPart
+from llm_rosetta.ir.model.extensions_experimental import ExtensionItem
 
 
 class TestOpenResponsesMessageOps:

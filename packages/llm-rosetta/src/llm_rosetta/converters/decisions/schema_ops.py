@@ -20,7 +20,7 @@ from collections.abc import Mapping
 from typing import Annotated, Any, Literal, cast
 
 from llm_rosetta._vendor.validate import Ge, Le, create_struct, json_schema
-from llm_rosetta.types.ir.decision import (
+from llm_rosetta.ir.model.decision import (
     AssertionAnswer,
     ChoiceAnswer,
     DecisionAnswer,

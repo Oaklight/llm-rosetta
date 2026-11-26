@@ -26,7 +26,7 @@ from collections.abc import Mapping
 from typing import Any, cast
 
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
-from llm_rosetta.types.ir.tools import ToolChoice, ToolRef
+from llm_rosetta.ir.model.tools import ToolChoice, ToolRef
 
 __all__ = [
     "allowed_tool_names",

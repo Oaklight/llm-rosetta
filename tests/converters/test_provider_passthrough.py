@@ -15,7 +15,7 @@ from llm_rosetta.converters.llm.chat_completions.converter import (
     ChatCompletionsConverter,
 )
 from llm_rosetta.converters.llm.google_generate.converter import GoogleGenerateConverter
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     IRInputItem,
     IRResponse,
     ProviderPassthroughEvent,
@@ -23,7 +23,7 @@ from llm_rosetta.types.ir import (
     is_provider_passthrough_event,
     is_provider_passthrough_item,
 )
-from llm_rosetta.types.ir.validation import (
+from llm_rosetta.ir.model.validation import (
     validate_ir_request,
     validate_ir_response,
     validate_messages,

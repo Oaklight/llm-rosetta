@@ -15,7 +15,7 @@ from typing import Any
 
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.converters.base.embedding_converter import BaseEmbeddingConverter
-from llm_rosetta.types.ir.embedding import (
+from llm_rosetta.ir.model.embedding import (
     EmbeddingItem,
     EmbeddingTaskType,
     EmbeddingUsageInfo,

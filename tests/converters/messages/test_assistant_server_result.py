@@ -34,8 +34,8 @@ from llm_rosetta.ir.tools.orphan_fix import UNANSWERED_TOOL_CALL
 from llm_rosetta.ir.tools.orphan_fix import normalize_tool_pairing
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
-from llm_rosetta.types.ir import IRInputItem, Message
-from llm_rosetta.types.ir.request import IRRequest
+from llm_rosetta.ir.model import IRInputItem, Message
+from llm_rosetta.ir.model.request import IRRequest
 
 _SERVER_CALL: dict[str, Any] = {
     "type": "server_tool_use",

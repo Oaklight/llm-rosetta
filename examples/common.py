@@ -17,7 +17,7 @@ from pathlib import Path
 
 import httpx
 
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     UserMessage,
     create_tool_result_message,
     extract_text_content,

@@ -27,8 +27,8 @@ from llm_rosetta.converters.llm.chat_completions.message_ops import (
     ChatCompletionsMessageOps,
 )
 from llm_rosetta.converters.llm.chat_completions.tool_ops import ChatCompletionsToolOps
-from llm_rosetta.types.ir import Message, ToolCallPart, ToolResultPart
-from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
+from llm_rosetta.ir.model import Message, ToolCallPart, ToolResultPart
+from llm_rosetta.ir.model.extensions_experimental import ExtensionItem
 
 
 def _write(messages, message_ops):

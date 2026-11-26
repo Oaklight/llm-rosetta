@@ -9,8 +9,8 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, cast
 
 
-from ....types.ir.response import UsageInfo
-from ....types.ir.stream import (
+from llm_rosetta.ir.model.response import UsageInfo
+from llm_rosetta.ir.model.stream import (
     CitationDeltaEvent,
     FinishEvent,
     IRStreamEvent,

@@ -17,7 +17,7 @@ import math
 from typing import Any, cast
 
 from llm_rosetta.converters.decisions.schema_ops import compute_confidence
-from llm_rosetta.types.ir.decision import (
+from llm_rosetta.ir.model.decision import (
     AssertionAnswer,
     ChoiceAnswer,
     DecisionAnswer,

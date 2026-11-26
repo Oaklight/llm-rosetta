@@ -21,7 +21,7 @@ from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.open_responses.content_ops import (
     OpenResponsesContentOps,
 )
-from llm_rosetta.types.ir import ReasoningPart
+from llm_rosetta.ir.model import ReasoningPart
 
 
 class TestOpenAIResponsesEncryptedContent:
@@ -188,7 +188,7 @@ class TestGoogleGenerateThoughtSignature:
         """TextPart thoughtSignature still uses provider_metadata (no signature field on TextPart)."""
         from typing import cast
 
-        from llm_rosetta.types.ir import TextPart
+        from llm_rosetta.ir.model import TextPart
 
         ir_text = cast(
             TextPart,

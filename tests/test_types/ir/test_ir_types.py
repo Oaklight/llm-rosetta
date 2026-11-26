@@ -14,7 +14,7 @@ from typing import cast
 import pytest
 
 # 直接从 IR 模块导入，避免通过主模块导入旧的转换器
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     # Content parts
     TextPart,
     ImagePart,
@@ -70,7 +70,7 @@ from llm_rosetta.types.ir import (
     UsageInfo,
     ChoiceInfo,
 )
-from llm_rosetta.types.ir.extensions_experimental import (
+from llm_rosetta.ir.model.extensions_experimental import (
     SystemEvent,
     BatchMarker,
     SessionControl,

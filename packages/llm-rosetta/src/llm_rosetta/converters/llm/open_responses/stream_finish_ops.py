@@ -4,7 +4,7 @@ import json
 import time
 from typing import Any, cast
 
-from ....types.ir.stream import (
+from llm_rosetta.ir.model.stream import (
     FinishEvent,
     UsageEvent,
 )

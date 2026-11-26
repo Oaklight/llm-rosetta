@@ -37,8 +37,8 @@ Example usage::
 from typing import Any, Literal
 
 from .retired_names import PROVIDER_TYPE, retired_name_message
-from .types.ir.tools import ToolCallConfig, ToolChoice, ToolDefinition
-from .types.ir.parts import ToolCallPart, ToolResultPart
+from llm_rosetta.ir.model.tools import ToolCallConfig, ToolChoice, ToolDefinition
+from llm_rosetta.ir.model.parts import ToolCallPart, ToolResultPart
 
 __all__ = [
     # Unified dispatch

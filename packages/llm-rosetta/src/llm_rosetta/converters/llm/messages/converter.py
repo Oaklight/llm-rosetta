@@ -18,7 +18,7 @@ import time
 from collections.abc import Mapping
 from typing import Any, cast
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     TextPart,
     is_text_part,
     is_tool_call_part,
@@ -27,12 +27,12 @@ from ....types.ir import (
     is_citation_part,
     is_refusal_part,
 )
-from ....types.ir.request import IRRequest
-from ....types.ir.response import IRResponse, UsageInfo
-from ....types.ir.stream import (
+from llm_rosetta.ir.model.request import IRRequest
+from llm_rosetta.ir.model.response import IRResponse, UsageInfo
+from llm_rosetta.ir.model.stream import (
     IRStreamEvent,
 )
-from ....types.ir.constraints import Range, RequestConstraints
+from llm_rosetta.ir.model.constraints import Range, RequestConstraints
 from ....ir.passes.tool_names import STRICT_TOOL_NAME_PATTERN
 from ...base import BaseConverter
 from llm_rosetta.conversion_warnings import report_loss

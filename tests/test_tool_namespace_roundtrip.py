@@ -21,7 +21,7 @@ from llm_rosetta.ir.passes import (
 from llm_rosetta.ir.primitives.tool_group import generated_group_id
 from llm_rosetta.ir.passes import tool_names
 from llm_rosetta.pipeline import ConversionPipeline
-from llm_rosetta.types.ir.request import IRRequest
+from llm_rosetta.ir.model.request import IRRequest
 from llm_rosetta.contracts.shim import ProviderShim, ToolsConfig
 from llm_rosetta.shims.provider_shim import register_shim, unregister_shim
 

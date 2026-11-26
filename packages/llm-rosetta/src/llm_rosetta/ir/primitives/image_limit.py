@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from typing import Any, cast
 
-from llm_rosetta.types.ir.type_guards import is_image_part, is_tool_result_part
+from llm_rosetta.ir.model.type_guards import is_image_part, is_tool_result_part
 from llm_rosetta.conversion_warnings import (
     DOWNGRADED,
     DROPPED,

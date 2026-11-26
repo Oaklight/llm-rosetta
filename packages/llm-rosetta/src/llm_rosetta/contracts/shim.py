@@ -34,8 +34,8 @@ from typing import TYPE_CHECKING, Any, Literal
 from llm_rosetta import retired_names
 from llm_rosetta.contracts.resolver import get_providers_dir_loader
 from llm_rosetta.contracts.transform import IRTransform, Transform
-from llm_rosetta.types.ir.configs import IREffort, IRMode
-from llm_rosetta.types.ir.constraints import RequestConstraints
+from llm_rosetta.ir.model.configs import IREffort, IRMode
+from llm_rosetta.ir.model.constraints import RequestConstraints
 
 
 #: Request parameters a shim may declare for its own model type, as the IR
@@ -695,7 +695,7 @@ class ProviderShim:
         request: What this vendor requires or restricts on the chat request,
             by IR path.  Overlaid on the converter's own dialect declaration
             per path; see
-            :class:`~llm_rosetta.types.ir.constraints.RequestConstraints`.
+            :class:`~llm_rosetta.ir.model.constraints.RequestConstraints`.
     """
 
     name: str

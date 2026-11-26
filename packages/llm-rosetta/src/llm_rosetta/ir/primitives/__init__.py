@@ -1,7 +1,7 @@
 """IR primitives: body/IR transforms and the stateless helpers they need.
 
 Everything here depends only on the standard library and
-``llm_rosetta.types.ir``.  The transform types and factories a shim uses are
+``llm_rosetta.ir.model``.  The transform types and factories a shim uses are
 re-exported by :mod:`llm_rosetta.contracts.transform`; the helper implementations live in their own
 submodules so a caller can reach them without the transform surface.
 """

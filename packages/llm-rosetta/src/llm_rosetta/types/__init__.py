@@ -6,7 +6,7 @@ This package contains type definitions for:
 - Provider-specific types (Anthropic, Google, OpenAI)
 """
 
-from .ir import (
+from llm_rosetta.ir.model import (
     # Content part types
     ContentPart,
     TextPart,

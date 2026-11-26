@@ -8,7 +8,7 @@ request/response interfaces.
 
 from typing import TYPE_CHECKING, Any
 
-from ....types.ir.stream import (
+from llm_rosetta.ir.model.stream import (
     CitationDeltaEvent,
     ContentBlockEndEvent,
     ContentBlockStartEvent,

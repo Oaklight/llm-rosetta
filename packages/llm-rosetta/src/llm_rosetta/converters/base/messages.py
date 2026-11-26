@@ -21,8 +21,8 @@ from collections.abc import Sequence
 from typing import Any
 
 from ..._vendor.validate import ValidationError, validate
-from ...types.ir.request import IRInputItem
-from ...types.ir.type_guards import is_provider_passthrough_item
+from llm_rosetta.ir.model.request import IRInputItem
+from llm_rosetta.ir.model.type_guards import is_provider_passthrough_item
 from .passthrough import restore_provider_passthrough_item
 
 

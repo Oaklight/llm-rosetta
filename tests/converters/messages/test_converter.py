@@ -10,7 +10,7 @@ import pytest
 
 from llm_rosetta.converters.base.context import ConversionContext, StreamContext
 from llm_rosetta.converters.llm.messages import MessagesConverter
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     FinishEvent,
     IRRequest,
     IRResponse,
@@ -1098,7 +1098,7 @@ class TestAnthropicUsageCompliance:
 
     def test_stream_message_start_has_complete_usage(self):
         """message_start event must contain all spec-required usage fields."""
-        from llm_rosetta.types.ir import StreamStartEvent
+        from llm_rosetta.ir.model import StreamStartEvent
 
         event = cast(
             StreamStartEvent,
@@ -1376,7 +1376,7 @@ class TestAnthropicStopFieldsCompliance:
 
     def test_stream_message_start_has_stop_fields(self):
         """message_start scaffold includes stop_sequence and stop_details."""
-        from llm_rosetta.types.ir import StreamStartEvent
+        from llm_rosetta.ir.model import StreamStartEvent
 
         event = cast(
             StreamStartEvent,
@@ -1615,7 +1615,7 @@ class TestAnthropicContentBlockCompliance:
 
     def test_stream_message_start_has_container(self):
         """message_start scaffold includes container: null."""
-        from llm_rosetta.types.ir import StreamStartEvent
+        from llm_rosetta.ir.model import StreamStartEvent
 
         event = cast(
             StreamStartEvent,

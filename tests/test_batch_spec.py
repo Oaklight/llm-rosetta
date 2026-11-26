@@ -130,7 +130,7 @@ def test_the_gate_refuses_a_duplicate_pair(monkeypatch):
 def test_the_state_maps_land_in_the_normalized_vocabulary():
     from typing import get_args
 
-    from llm_rosetta.types.ir.batch import BatchJobState
+    from llm_rosetta.ir.model.batch import BatchJobState
 
     normalized = set(get_args(BatchJobState))
     for spec in BATCH_SPECS:

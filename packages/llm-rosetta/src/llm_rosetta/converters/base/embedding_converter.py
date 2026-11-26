@@ -11,7 +11,7 @@ IREmbeddingResponse, EmbeddingUsageInfo).
 
 from __future__ import annotations
 
-from llm_rosetta.types.ir.embedding import (
+from llm_rosetta.ir.model.embedding import (
     EmbeddingUsageInfo,
     IREmbeddingRequest,
     IREmbeddingResponse,

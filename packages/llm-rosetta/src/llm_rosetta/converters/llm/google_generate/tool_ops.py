@@ -17,13 +17,13 @@ Google-specific:
 from collections.abc import Mapping
 from typing import Any, cast
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     ToolCallPart,
     ToolChoice,
     ToolDefinition,
     ToolResultPart,
 )
-from ....types.ir.tools import ToolCallConfig
+from llm_rosetta.ir.model.tools import ToolCallConfig
 from ...base import BaseToolOps, IntrinsicLeg, sink_leg
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.helpers.opaque import CARRIER_KEY
@@ -580,7 +580,7 @@ class GoogleGenerateToolOps(BaseToolOps):
         Returns:
             Google function_response Part dict.
         """
-        from ....types.ir import is_message, is_tool_call_part
+        from llm_rosetta.ir.model import is_message, is_tool_call_part
 
         tool_name = None
         tool_call_id = ir_tool_result.get("tool_call_id")

@@ -7,7 +7,7 @@ from typing import cast
 
 from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.messages.config_ops import MessagesConfigOps
-from llm_rosetta.types.ir import GenerationConfig, ReasoningConfig
+from llm_rosetta.ir.model import GenerationConfig, ReasoningConfig
 
 
 class TestMessagesConfigOps:

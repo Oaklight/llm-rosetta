@@ -14,9 +14,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ...base import BaseConverter
     from ...base.context import ConversionContext, StreamContext
-    from ....types.ir.stream import ContentBlockEndEvent, ContentBlockStartEvent
-    from ....types.ir.stream import RefusalDeltaEvent
-    from ....types.ir.response import UsageInfo
+    from llm_rosetta.ir.model.stream import ContentBlockEndEvent, ContentBlockStartEvent
+    from llm_rosetta.ir.model.stream import RefusalDeltaEvent
+    from llm_rosetta.ir.model.response import UsageInfo
     from .content_ops import OpenResponsesContentOps
     from .stream_context import MessageItemState, OpenResponsesStreamContext
 

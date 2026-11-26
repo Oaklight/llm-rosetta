@@ -13,7 +13,7 @@ Note: Responses API uses different field names than Chat API:
 
 from typing import Any, cast
 
-from ....types.ir.configs import (
+from llm_rosetta.ir.model.configs import (
     CacheConfig,
     GenerationConfig,
     ReasoningConfig,

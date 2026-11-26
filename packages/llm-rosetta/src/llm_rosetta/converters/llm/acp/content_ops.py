@@ -13,7 +13,7 @@ from typing import Any
 
 from llm_rosetta.conversion_warnings import DROPPED, DOWNGRADED, report_loss
 
-from ....types.ir.parts import (
+from llm_rosetta.ir.model.parts import (
     AudioPart,
     CitationPart,
     FilePart,

@@ -11,7 +11,7 @@ IRDecisionResponse, DecisionUsageInfo).
 
 from __future__ import annotations
 
-from llm_rosetta.types.ir.decision import (
+from llm_rosetta.ir.model.decision import (
     DecisionUsageInfo,
     IRDecisionRequest,
     IRDecisionResponse,

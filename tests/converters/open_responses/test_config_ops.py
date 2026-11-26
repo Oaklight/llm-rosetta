@@ -9,7 +9,7 @@ from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.open_responses.config_ops import (
     OpenResponsesConfigOps,
 )
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     CacheConfig,
     GenerationConfig,
     ReasoningConfig,

@@ -15,7 +15,7 @@ This layer calls content_ops and tool_ops for part-level conversions.
 from collections.abc import Sequence
 from typing import Any, cast
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     ContentPart,
     is_citation_part,
     IRInputItem,
@@ -31,8 +31,8 @@ from ....types.ir import (
     is_tool_call_part,
     is_tool_result_part,
 )
-from ....types.ir.messages import MessageMetadata
-from ....types.ir.passthrough import ProviderPassthroughItem
+from llm_rosetta.ir.model.messages import MessageMetadata
+from llm_rosetta.ir.model.passthrough import ProviderPassthroughItem
 from ...base import BaseMessageOps
 from ...base.helpers.citations import report_dropped_citation
 from llm_rosetta.conversion_warnings import DOWNGRADED, DROPPED, report_loss

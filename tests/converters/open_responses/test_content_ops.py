@@ -9,7 +9,7 @@ from llm_rosetta.converters.llm.open_responses.content_ops import (
 )
 from typing import cast
 
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     RefusalPart,
     CitationPart,
     FilePart,

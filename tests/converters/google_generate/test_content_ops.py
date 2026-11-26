@@ -9,7 +9,7 @@ from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.converters.llm.google_generate.content_ops import (
     GoogleGenerateContentOps,
 )
-from llm_rosetta.types.ir import AudioPart, FilePart, ImagePart, ReasoningPart, TextPart
+from llm_rosetta.ir.model import AudioPart, FilePart, ImagePart, ReasoningPart, TextPart
 
 
 class TestGoogleGenerateContentOps:

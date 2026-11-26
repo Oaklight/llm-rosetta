@@ -9,7 +9,7 @@ from llm_rosetta.converters.llm.chat_completions.content_ops import (
 )
 from typing import cast
 
-from llm_rosetta.types.ir import CitationPart, ImagePart, TextPart
+from llm_rosetta.ir.model import CitationPart, ImagePart, TextPart
 
 
 class TestChatCompletionsContentOps:

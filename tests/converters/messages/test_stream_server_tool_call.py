@@ -20,7 +20,7 @@ from llm_rosetta.ir.tools.intrinsic import get_intrinsic_kind
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.messages.tool_ops import MessagesToolOps
-from llm_rosetta.types.ir.stream import ToolCallStartEvent
+from llm_rosetta.ir.model.stream import ToolCallStartEvent
 
 _SERVER_CALL_BLOCK: dict[str, Any] = {
     "type": "server_tool_use",

@@ -12,7 +12,7 @@ from llm_rosetta.converters.base.tools import (
     make_intrinsic_tool_result,
 )
 from llm_rosetta.converters.llm.open_responses.tool_ops import OpenResponsesToolOps
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     ToolCallConfig,
     ToolCallPart,
     ToolChoice,

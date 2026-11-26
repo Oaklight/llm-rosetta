@@ -224,7 +224,7 @@ jobs:
         # A transitive dependency (the conformance extra's SDKs) may declare
         # typing_extensions unconditionally, so an import check would pass even
         # if our own marker were dropped.  Assert the project's metadata
-        # instead: types/ir/* and the vendored create_struct() import it on
+        # instead: ir/model/* and the vendored create_struct() import it on
         # 3.10.
         run: |
           python -c "import importlib.metadata as m; reqs = m.requires('llm-rosetta') or []; assert any('typing_extensions' in r and 'python_version' in r for r in reqs), 'typing_extensions marker missing from llm-rosetta metadata'"

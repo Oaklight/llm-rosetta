@@ -16,7 +16,7 @@ from collections.abc import Sequence
 from typing import Any, cast
 
 from llm_rosetta.contracts.shim import ReasoningCapability
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     ContentPart,
     IRInputItem,
     Message,

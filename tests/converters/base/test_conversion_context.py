@@ -13,8 +13,8 @@ from llm_rosetta.converters.llm.google_generate.converter import GoogleGenerateC
 from llm_rosetta.converters.llm.open_responses.stream_context import (
     OpenResponsesStreamContext,
 )
-from llm_rosetta.types.ir import UserMessage
-from llm_rosetta.types.ir.request import IRRequest
+from llm_rosetta.ir.model import UserMessage
+from llm_rosetta.ir.model.request import IRRequest
 
 
 class TestConversionContext:

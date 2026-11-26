@@ -12,7 +12,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any, NamedTuple, cast
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     ContentPart,
     IRInputItem,
     FileData,

@@ -17,7 +17,7 @@ from llm_rosetta.ir.tools.intrinsic import (
     make_intrinsic_tool_call,
     make_intrinsic_tool_result,
 )
-from llm_rosetta.types.ir import ToolCallPart, ToolResultPart
+from llm_rosetta.ir.model import ToolCallPart, ToolResultPart
 
 # ---------------------------------------------------------------------------
 # Test doubles

@@ -18,15 +18,15 @@ from collections.abc import Mapping
 from typing import Any, cast
 
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     CitationPart,
     TextPart,
     is_citation_part,
     is_text_part,
     is_tool_result_part,
 )
-from ....types.ir.request import IRRequest
-from ....types.ir.response import IRResponse, UsageInfo
+from llm_rosetta.ir.model.request import IRRequest
+from llm_rosetta.ir.model.response import IRResponse, UsageInfo
 from ...base import BaseConverter
 from llm_rosetta.conversion_warnings import report_loss
 from llm_rosetta.converters.base.helpers.service_tier import google_service_tier

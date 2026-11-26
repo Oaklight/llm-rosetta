@@ -10,7 +10,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any, cast
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     TextPart,
     is_citation_part,
     is_reasoning_part,
@@ -18,9 +18,9 @@ from ....types.ir import (
     is_text_part,
     is_tool_call_part,
 )
-from ....types.ir.request import IRRequest
-from ....types.ir.response import IRResponse, UsageInfo
-from ....types.ir.stream import (
+from llm_rosetta.ir.model.request import IRRequest
+from llm_rosetta.ir.model.response import IRResponse, UsageInfo
+from llm_rosetta.ir.model.stream import (
     CitationDeltaEvent,
     ContentBlockEndEvent,
     ContentBlockStartEvent,

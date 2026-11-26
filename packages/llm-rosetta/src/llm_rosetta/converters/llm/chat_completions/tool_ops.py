@@ -12,13 +12,13 @@ import json
 import logging
 from typing import Any, cast
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     ToolCallPart,
     ToolChoice,
     ToolDefinition,
     ToolResultPart,
 )
-from ....types.ir.tools import ToolCallConfig
+from llm_rosetta.ir.model.tools import ToolCallConfig
 from ...base import BaseToolOps
 from llm_rosetta.conversion_warnings import DOWNGRADED, report_loss
 from ...base.helpers.opaque import CARRIER_KEY

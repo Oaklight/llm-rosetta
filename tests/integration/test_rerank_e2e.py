@@ -32,7 +32,7 @@ from llm_rosetta.converters.rerank import (
     JinaRerankConverter,
     VoyageRerankConverter,
 )
-from llm_rosetta.types.ir.rerank import IRRerankRequest, RerankDocument
+from llm_rosetta.ir.model.rerank import IRRerankRequest, RerankDocument
 
 dotenv.load_dotenv()
 

@@ -161,7 +161,7 @@ from llm_rosetta.devtools.scaffold import run as run_scaffold
 from llm_rosetta.devtools.scaffold import run_check as run_scaffold_check
 from llm_rosetta.devtools.scaffold import run_migrate as run_scaffold_migrate
 from llm_rosetta.contracts.transform import flatten_system_content
-from llm_rosetta.types.ir import is_image_part, is_tool_result_part
+from llm_rosetta.ir.model import is_image_part, is_tool_result_part
 
 
 __all__ = [

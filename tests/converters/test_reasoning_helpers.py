@@ -19,7 +19,7 @@ from llm_rosetta.converters.base.helpers.reasoning import (
     normalize_reasoning_input,
 )
 from llm_rosetta.contracts.shim import ReasoningCapability
-from llm_rosetta.types.ir.reasoning import ReasoningConfig
+from llm_rosetta.ir.model.reasoning import ReasoningConfig
 
 
 # ── Input normalisation ────────────────────────────────────────────────────

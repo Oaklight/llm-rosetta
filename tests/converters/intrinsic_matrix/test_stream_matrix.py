@@ -24,8 +24,8 @@ from llm_rosetta.ir.tools.intrinsic import get_intrinsic_kind
 from llm_rosetta.converters.llm.google_generate import GoogleGenerateConverter
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.converters.llm.open_responses import OpenResponsesConverter
-from llm_rosetta.types.ir.stream import ToolCallDeltaEvent, ToolCallStartEvent
-from llm_rosetta.types.ir.stream import ToolResultEvent
+from llm_rosetta.ir.model.stream import ToolCallDeltaEvent, ToolCallStartEvent
+from llm_rosetta.ir.model.stream import ToolResultEvent
 
 from .conftest import CONVERTERS, UNKNOWN_KIND, matrix_cases
 

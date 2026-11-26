@@ -11,7 +11,7 @@ and input_file for files. Images and files are always input-only.
 import re
 from typing import Any
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     AudioPart,
     CitationPart,
     FileData,

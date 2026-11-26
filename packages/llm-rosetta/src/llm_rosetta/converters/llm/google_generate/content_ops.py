@@ -15,7 +15,7 @@ from typing import Any, cast
 
 import urllib.request
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     AudioData,
     AudioPart,
     CitationPart,
@@ -26,7 +26,7 @@ from ....types.ir import (
     RefusalPart,
     TextPart,
 )
-from ....types.ir.parts import ContentPart
+from llm_rosetta.ir.model.parts import ContentPart
 from ...base import BaseContentOps
 from llm_rosetta.conversion_warnings import report_loss
 from ...base.helpers.opaque import (

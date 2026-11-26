@@ -16,13 +16,13 @@ from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from typing import Any, Literal, cast
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     ToolCallPart,
     ToolChoice,
     ToolDefinition,
     ToolResultPart,
 )
-from ....types.ir.tools import ToolCallConfig
+from llm_rosetta.ir.model.tools import ToolCallConfig
 from llm_rosetta.conversion_warnings import report_loss
 from llm_rosetta.ir.tools.intrinsic import intrinsic_kind_of, is_intrinsic_part
 

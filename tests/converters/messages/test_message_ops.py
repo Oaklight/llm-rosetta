@@ -8,8 +8,8 @@ from llm_rosetta.converters.llm.messages.content_ops import MessagesContentOps
 from llm_rosetta.converters.llm.messages.message_ops import MessagesMessageOps
 from llm_rosetta.converters.llm.messages.tool_ops import MessagesToolOps
 from llm_rosetta.contracts.shim import ReasoningCapability
-from llm_rosetta.types.ir import Message
-from llm_rosetta.types.ir.extensions_experimental import ExtensionItem
+from llm_rosetta.ir.model import Message
+from llm_rosetta.ir.model.extensions_experimental import ExtensionItem
 
 
 class TestMessagesMessageOps:

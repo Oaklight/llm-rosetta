@@ -3,8 +3,8 @@
 import json
 from typing import Any
 
-from ....types.ir.passthrough import ProviderPassthroughEvent
-from ....types.ir.stream import (
+from llm_rosetta.ir.model.passthrough import ProviderPassthroughEvent
+from llm_rosetta.ir.model.stream import (
     CitationDeltaEvent,
     ContentBlockEndEvent,
     ContentBlockStartEvent,

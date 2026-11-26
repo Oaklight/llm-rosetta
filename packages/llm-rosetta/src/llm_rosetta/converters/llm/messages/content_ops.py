@@ -10,7 +10,7 @@ Self-contained: does not depend on utils/FieldMapper.
 
 from typing import Any
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     AudioPart,
     CitationPart,
     FilePart,

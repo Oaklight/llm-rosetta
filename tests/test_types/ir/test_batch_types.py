@@ -13,7 +13,7 @@ from typing import cast, get_args
 import pytest
 
 from llm_rosetta._vendor.validate import ValidationError, json_schema, validate
-from llm_rosetta.types.ir import (
+from llm_rosetta.ir.model import (
     IRRequest,
     IRResponse,
     BatchItem,
@@ -24,7 +24,7 @@ from llm_rosetta.types.ir import (
     BatchMode,
     BatchResultItem,
 )
-from llm_rosetta.types.ir import batch as batch_module
+from llm_rosetta.ir.model import batch as batch_module
 
 _REQUEST = cast(
     IRRequest,

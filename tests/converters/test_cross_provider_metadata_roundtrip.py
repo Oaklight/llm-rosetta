@@ -18,7 +18,7 @@ from llm_rosetta.converters.llm.google_interactions.tool_ops import (
     GoogleInteractionsToolOps,
 )
 from llm_rosetta.converters.llm.open_responses.tool_ops import OpenResponsesToolOps
-from llm_rosetta.types.ir import ToolCallPart, ToolResultPart, ReasoningPart
+from llm_rosetta.ir.model import ToolCallPart, ToolResultPart, ReasoningPart
 
 
 class TestGoogleAnthropicToolCallRoundTrip:

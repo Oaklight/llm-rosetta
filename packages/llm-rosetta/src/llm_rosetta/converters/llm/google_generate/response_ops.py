@@ -10,7 +10,7 @@ from collections.abc import Mapping
 from typing import Any, cast
 
 
-from ....types.ir import (
+from llm_rosetta.ir.model import (
     CitationPart,
     is_message,
     is_text_part,
