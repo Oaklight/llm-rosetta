@@ -19,8 +19,8 @@ current_header = '''flowchart TB
   end
   subgraph IMPL["实现"]
     subgraph CONV["转换"]
-      PIPE["pipeline/<br/>chat · typed"]
-      CVT["converters/<br/>base · llm/各格式 · embeddings · rerank · decisions · registry"]
+      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions · typed"]
+      CVT["converters/<br/>base(含 ConversionError) · llm/各格式 · embeddings · rerank · decisions(各含 lookup) · registry"]
       IR["ir/<br/>primitives · tools · passes · context"]
       DET["auto_detect.py"]
       CAP["capabilities.py"]
@@ -75,7 +75,7 @@ target_header = '''flowchart TB
   end
   subgraph IMPL["实现"]
     subgraph CONV["转换"]
-      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions(typed 三个待从 converters 搬入)"]
+      PIPE["pipeline/<br/>chat · embeddings · rerank · decisions"]
       CVT["converters/"]
       subgraph IRCORE["ir/(types/ir 合并进来)"]
         IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION(原 types/ir)"]
