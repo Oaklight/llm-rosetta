@@ -26,8 +26,8 @@ from llm_rosetta.converters.llm.acp.converter import AcpConverter
 from llm_rosetta.converters.llm.chat_completions.converter import (
     ChatCompletionsConverter,
 )
-from llm_rosetta.converters.decisions.pipeline import _DECISION_CONVERTERS
-from llm_rosetta.converters.embeddings.pipeline import _EMBEDDING_CONVERTERS
+from llm_rosetta.converters.decisions.lookup import _DECISION_CONVERTERS
+from llm_rosetta.converters.embeddings.lookup import _EMBEDDING_CONVERTERS
 from llm_rosetta.converters.llm.google_generate.converter import (
     GoogleGenerateConverter,
 )
@@ -36,7 +36,7 @@ from llm_rosetta.converters.llm.google_interactions.converter import (
 )
 from llm_rosetta.converters.llm.messages.converter import MessagesConverter
 from llm_rosetta.converters.llm.open_responses.converter import OpenResponsesConverter
-from llm_rosetta.converters.rerank.pipeline import _RERANK_CONVERTERS
+from llm_rosetta.converters.rerank.lookup import _RERANK_CONVERTERS
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE as _DECLARED_FORMATS
 from llm_rosetta import retired_names
 from llm_rosetta.model_vocabulary import MODEL_TYPES

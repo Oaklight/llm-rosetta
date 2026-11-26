@@ -32,6 +32,7 @@ from ...ir.primitives.finish_reason import (
     reason_for_completed_turn,
 )
 from ...ir.tools.orphan_fix import UnrepairableToolHistory, normalize_tool_pairing
+from .errors import ConversionError
 from .helpers import strip_internal_metadata
 from .helpers.citations import report_dropped_citation
 from .helpers.extensions import (
@@ -271,10 +272,6 @@ class BaseConverter(ABC):
                 messages, warnings=context.warnings if context is not None else None
             )
         except UnrepairableToolHistory as exc:
-            # Imported here on purpose: the pipeline imports the converters,
-            # so a module-level import would close the cycle.
-            from ...pipeline.chat import ConversionError
-
             raise ConversionError(str(exc), phase="ir_to_target") from exc
 
     @records_on_leg("request")

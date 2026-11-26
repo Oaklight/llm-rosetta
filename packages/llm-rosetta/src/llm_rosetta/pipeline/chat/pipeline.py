@@ -27,7 +27,7 @@ from llm_rosetta.ir.passes import (
     restore_custom_tool_calls,
     strip_reasoning_for_non_reasoning,
 )
-from llm_rosetta.converters.base.context import ConversionContext, ImageFetcher
+from llm_rosetta.ir.context import ConversionContext, ImageFetcher
 from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta import retired_names
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE

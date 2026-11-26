@@ -7,7 +7,7 @@ from typing import Any, Protocol
 from llm_rosetta.ir.passes import (
     enforce_reasoning,
 )
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.conversion_warnings import WarningSink
 from llm_rosetta.contracts.shim import ProviderShim
 from llm_rosetta.contracts.resolver import resolve_shim

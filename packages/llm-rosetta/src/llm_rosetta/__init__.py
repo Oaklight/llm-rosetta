@@ -13,9 +13,9 @@ from .auto_detect import (
     get_converter_for_provider,
 )
 from .pipeline import ConversionError, ConversionPipeline
-from .converters.decisions.pipeline import DecisionConversionPipeline
-from .converters.embeddings.pipeline import EmbeddingConversionPipeline
-from .converters.rerank.pipeline import RerankConversionPipeline
+from .pipeline.decisions import DecisionConversionPipeline
+from .pipeline.embeddings import EmbeddingConversionPipeline
+from .pipeline.rerank import RerankConversionPipeline
 from .converters import (
     AcpConverter,
     BaseConverter,

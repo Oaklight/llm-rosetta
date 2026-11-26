@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from llm_rosetta.converters.base.defaults import apply_ir_defaults
-from llm_rosetta.converters.decisions.pipeline import DecisionConversionPipeline
-from llm_rosetta.converters.embeddings.pipeline import EmbeddingConversionPipeline
-from llm_rosetta.converters.rerank.pipeline import RerankConversionPipeline
+from llm_rosetta.pipeline.decisions import DecisionConversionPipeline
+from llm_rosetta.pipeline.embeddings import EmbeddingConversionPipeline
+from llm_rosetta.pipeline.rerank import RerankConversionPipeline
 
 
 class TestApplyIrDefaults:

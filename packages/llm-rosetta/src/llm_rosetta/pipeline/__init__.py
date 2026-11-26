@@ -1,7 +1,7 @@
 """Conversion pipelines — one import site for every paradigm.
 
 The chat pipeline lives in :mod:`.chat`; the embedding, rerank and decision
-pipelines are re-exported from their converter families in :mod:`.typed`.
+pipelines are in :mod:`.embeddings`, :mod:`.rerank` and :mod:`.decisions`, gathered by :mod:`.typed`.
 Existing imports from ``llm_rosetta.pipeline`` keep working: the package
 re-exports the same public names the module had.
 """

@@ -6,7 +6,7 @@ from typing import Any
 from llm_rosetta.ir.passes import (
     ToolNameMap,
 )
-from llm_rosetta.converters.base.context import ConversionContext, ImageFetcher
+from llm_rosetta.ir.context import ConversionContext, ImageFetcher
 from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta.contracts.shim import ProviderShim
 from llm_rosetta.contracts.resolver import resolve_shim

@@ -440,7 +440,7 @@ class TestMultimodal:
 class TestSameFormatPipeline:
     def test_every_request_goes_through_the_ir(self):
         """A same-format request is rebuilt from the IR, not passed through."""
-        from llm_rosetta.converters.decisions.pipeline import DecisionConversionPipeline
+        from llm_rosetta.pipeline.decisions import DecisionConversionPipeline
 
         pipeline = DecisionConversionPipeline("systemone", "systemone")
         body = dict(TYPESAFE_REQUEST)

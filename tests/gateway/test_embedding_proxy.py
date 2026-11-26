@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.converters.embeddings.pipeline import (
-    EmbeddingConversionPipeline,
-    get_embedding_converter,
-)
+from llm_rosetta.converters.embeddings.lookup import get_embedding_converter
+from llm_rosetta.pipeline.embeddings import EmbeddingConversionPipeline
 
 
 class TestEmbeddingConversionPipeline:

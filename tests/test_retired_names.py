@@ -17,7 +17,7 @@ import pytest
 
 from llm_rosetta import ConversionPipeline, convert, convert_response, retired_names
 from llm_rosetta.auto_detect import get_converter_for_provider
-from llm_rosetta.converters.embeddings.pipeline import get_embedding_converter
+from llm_rosetta.converters.embeddings.lookup import get_embedding_converter
 from llm_rosetta.retired_names import (
     MODEL_TYPE,
     PROVIDER_TYPE,
