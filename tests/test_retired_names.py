@@ -521,7 +521,9 @@ def test_register_shim_keys_on_the_exact_name() -> None:
         assert ps.get_shim("open_responses") is neutral
         assert ps.get_shim("openai_responses") is profile
         assert ps.get_shim("openai--open_responses") is None
-        assert ps.resolve_format("openai_responses") == "open_responses"
+        from llm_rosetta.contracts.resolver import resolve_format
+
+        assert resolve_format("openai_responses") == "open_responses"
     finally:
         ps._SHIM_REGISTRY.clear()
         ps._SHIM_REGISTRY.update(saved)

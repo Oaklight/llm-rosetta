@@ -12,7 +12,7 @@ returning a custom (``apply_patch``) tool call.
 
 from typing import Any, cast
 
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 
 PATCH_PIECES = ("*** Begin Patch\n", "*** Add File: a.txt\n", "+hi\n", "*** End Patch")

@@ -25,7 +25,7 @@ from llm_rosetta.ir.model.stream import (
     UsageEvent,
 )
 from llm_rosetta.conversion_warnings import report_loss
-from ...base.context import (
+from llm_rosetta.ir.context import (
     StreamContext,
 )
 from ...base.tools import (

@@ -15,7 +15,7 @@ import time
 from pathlib import Path
 
 from llm_rosetta.auto_detect import get_converter_for_provider
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 
 # ---------------------------------------------------------------------------
 # Test Payloads

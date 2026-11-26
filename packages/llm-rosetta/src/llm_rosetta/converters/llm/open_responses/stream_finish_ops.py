@@ -8,7 +8,7 @@ from llm_rosetta.ir.model.stream import (
     FinishEvent,
     UsageEvent,
 )
-from ...base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from .stream_context import MessageItemState, OpenResponsesStreamContext
 from ._mixin_host import OpenResponsesMixinHost
 from ._constants import (

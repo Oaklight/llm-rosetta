@@ -7,7 +7,7 @@ Request-side tool vocabulary and hosted-call classification for the converter.
 from typing import TYPE_CHECKING, Any
 
 
-from ...base.context import (
+from llm_rosetta.ir.context import (
     ConversionContext,
     StreamContext,
 )

@@ -6,7 +6,7 @@ via the chunk's ``index`` field, not the last-registered tool call ID.
 """
 
 from llm_rosetta import MessagesConverter
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 
 
 def _make_events(interleaved: bool = True) -> list[dict]:

@@ -17,7 +17,7 @@ from llm_rosetta.ir.model.stream import (
     ToolCallStartEvent,
     ToolResultEvent,
 )
-from ...base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from ...base.helpers.citations import report_dropped_citation
 from ...base.helpers.opaque import (
     get_opaque_origin,

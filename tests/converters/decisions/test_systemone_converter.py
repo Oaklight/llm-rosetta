@@ -7,7 +7,7 @@ converter maps them to TypeSafe's per-type criteria shapes.
 
 import pytest
 
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.decisions.systemone import SystemOneDecisionConverter
 
 # ============================================================================
@@ -282,7 +282,7 @@ class TestEdgeCases:
         assert wire["answers"]["q"]["unknown_probability"] == 0.2
 
     def test_unknown_answer_type_warns_and_passes_through(self, converter):
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
 
         ctx = ConversionContext()
         resp = {

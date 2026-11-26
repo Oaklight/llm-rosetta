@@ -111,12 +111,12 @@ def test_capabilities_forwards_the_current_objects():
     from llm_rosetta.contracts import shim
     from llm_rosetta.converters import base
     from llm_rosetta.ir import passes
-    from llm_rosetta.shims import provider_shim
+    from llm_rosetta.contracts import resolver
 
     assert module.ConversionContext is base.ConversionContext
     assert module.ProviderShim is shim.ProviderShim
     assert module.ReasoningCapability is shim.ReasoningCapability
-    assert module.resolve_shim is provider_shim.resolve_shim
+    assert module.resolve_shim is resolver.resolve_shim
     for name in CAPABILITIES_NAMES[3:]:
         if name == "resolve_shim":
             continue
@@ -266,3 +266,123 @@ def test_types_ir_is_in_the_compat_tier():
 
     assert "llm_rosetta.types.ir" in _tiers.COMPAT
     assert "llm_rosetta.types.ir" not in _tiers.USER
+
+
+#: ``llm_rosetta.converters.base.context`` on the v0.13.0 tag: the three names it
+#: held.  The context moved to ``llm_rosetta.ir.context``; ``ImageFetcher`` and
+#: the rest first shipped in 0.14.0 and are not forwarded.
+CONTEXT_NAMES_013 = ["ConversionContext", "MetadataMode", "StreamContext"]
+
+
+def test_the_old_context_path_forwards_its_013_names_and_warns():
+    module, caught = _fresh_import("llm_rosetta.converters.base.context")
+    canonical = importlib.import_module("llm_rosetta.ir.context")
+    assert len(caught) == 1
+    message = str(caught[0].message)
+    assert "llm_rosetta.converters.base.context" in message
+    assert "llm_rosetta.ir.context" in message
+    assert "0.15.0" in message
+    assert sorted(module.__all__) == sorted(CONTEXT_NAMES_013)
+    for name in CONTEXT_NAMES_013:
+        assert getattr(module, name) is getattr(canonical, name), name
+    assert not hasattr(module, "ImageFetcher")
+    assert "0.15.0" in (module.__doc__ or "")
+
+
+def test_the_old_context_path_is_in_the_compat_tier():
+    from llm_rosetta import _tiers
+
+    assert "llm_rosetta.converters.base.context" in _tiers.COMPAT
+
+
+def test_importing_converters_base_does_not_warn():
+    """The package keeps its names; only the old submodule path is deprecated."""
+    import subprocess
+    import sys
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-W",
+            "error::DeprecationWarning",
+            "-c",
+            "import llm_rosetta; import llm_rosetta.converters.base as b; "
+            "assert b.ConversionContext and b.StreamContext and b.MetadataMode",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+#: Names ``llm_rosetta.shims.provider_shim`` held on the v0.13.0 tag that have a
+#: new home, with that home.  The module is still the live registry, so it cannot
+#: warn on import; asking for one of these warns.
+PROVIDER_SHIM_MOVED_013 = {
+    "IREffort": "llm_rosetta.ir.model.configs",
+    "IRMode": "llm_rosetta.ir.model.configs",
+    "IRTransform": "llm_rosetta.contracts.transform",
+    "ProviderShim": "llm_rosetta.contracts.shim",
+    "ReasoningCapability": "llm_rosetta.contracts.shim",
+    "ToolSearchMode": "llm_rosetta.contracts.shim",
+    "Transform": "llm_rosetta.contracts.transform",
+    "UnsignedBlocks": "llm_rosetta.contracts.shim",
+    "resolve_shim": "llm_rosetta.contracts.resolver",
+}
+
+#: Names first shipped in 0.14.0 that used to be re-exported by this module
+#: during development; they are not forwarded.
+PROVIDER_SHIM_NEW_IN_014 = [
+    "BatchDeclaration",
+    "ConnectionConfig",
+    "QuotaDeclaration",
+    "ReplayMissing",
+    "SoftErrorPattern",
+    "TYPE_PARAM_KEYS",
+    "ToolsConfig",
+    "VendorManifest",
+    "match_model_reasoning",
+    "resolve_format",
+]
+
+
+@pytest.mark.parametrize(("name", "home"), sorted(PROVIDER_SHIM_MOVED_013.items()))
+def test_provider_shim_forwards_a_moved_013_name_and_warns(name, home):
+    from llm_rosetta.shims import provider_shim
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        got = getattr(provider_shim, name)
+    assert got is getattr(importlib.import_module(home), name)
+    messages = [
+        str(w.message) for w in caught if issubclass(w.category, DeprecationWarning)
+    ]
+    assert len(messages) == 1
+    assert name in messages[0]
+    assert home in messages[0]
+    assert "0.15.0" in messages[0]
+
+
+@pytest.mark.parametrize("name", PROVIDER_SHIM_NEW_IN_014)
+def test_provider_shim_does_not_forward_0_14_0_names(name):
+    from llm_rosetta.shims import provider_shim
+
+    with pytest.raises(AttributeError):
+        getattr(provider_shim, name)
+
+
+def test_provider_shim_keeps_the_registry_without_a_warning():
+    from llm_rosetta.shims import provider_shim
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        for name in (
+            "get_shim",
+            "list_shims",
+            "register_shim",
+            "unregister_shim",
+            "resolve_model_type",
+            "staging_registry",
+        ):
+            assert callable(getattr(provider_shim, name))

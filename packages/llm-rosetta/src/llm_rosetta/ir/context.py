@@ -2,7 +2,7 @@
 LLM-Rosetta - Conversion Context
 
 Lives in ``ir`` (not ``converters.base``) so ``ir.passes`` can use it without
-depending on the converter layer; ``converters.base.context`` re-exports it.
+depending on the converter layer; ``converters.base.context`` is a deprecated forwarder to it (removed in 0.15.0).
 
 Provides the context hierarchy for conversion pipelines:
 

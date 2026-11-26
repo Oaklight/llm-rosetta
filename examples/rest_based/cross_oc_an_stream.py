@@ -45,7 +45,7 @@ from common import (  # noqa: E402
 )
 
 from llm_rosetta import MessagesConverter, ChatCompletionsConverter  # noqa: E402
-from llm_rosetta.converters.base.context import StreamContext  # noqa: E402
+from llm_rosetta.ir.context import StreamContext  # noqa: E402
 
 # Initialize converters
 oc_converter = ChatCompletionsConverter()

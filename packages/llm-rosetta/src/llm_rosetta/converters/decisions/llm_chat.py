@@ -16,7 +16,7 @@ from __future__ import annotations
 import json
 from typing import Any, Literal
 
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.base.decision_converter import BaseDecisionConverter
 from llm_rosetta.ir.model.decision import (
     DecisionUsageInfo,

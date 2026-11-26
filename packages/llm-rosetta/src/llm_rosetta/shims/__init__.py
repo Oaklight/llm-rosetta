@@ -26,11 +26,10 @@ from .provider_shim import (
     get_shim,
     list_shims,
     register_shim,
-    resolve_format,
     resolve_model_type,
-    resolve_shim,
     unregister_shim,
 )
+from llm_rosetta.contracts.resolver import resolve_format, resolve_shim
 from llm_rosetta.contracts.transform import (
     IRTransform,
     Transform,

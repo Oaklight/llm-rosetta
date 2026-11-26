@@ -16,7 +16,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar, Generic, TypeVar
 
-from .context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from ...conversion_warnings import records_on_leg
 
 # Type variables for IR request, response, and usage types.

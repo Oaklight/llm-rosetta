@@ -16,7 +16,7 @@ from llm_rosetta.ir.model import (
     is_text_part,
 )
 from ...base.errors import require_representable_finish_reason
-from ...base.context import (
+from llm_rosetta.ir.context import (
     StreamContext,
 )
 from ...base.helpers.citations import (

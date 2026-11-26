@@ -6,90 +6,85 @@ import time by ``shims/__init__.py``.  Registration functions
 functions (``get_shim``, ``list_shims``) read from it.  A host reaches these
 functions through :mod:`llm_rosetta.api`.
 
-The shim data classes (:class:`ProviderShim`, :class:`ConnectionConfig`,
-:class:`ToolsConfig`, :class:`ReasoningCapability`, :class:`VendorManifest`,
-:class:`QuotaDeclaration`, :class:`BatchDeclaration`,
-:class:`SoftErrorPattern` and the ``TYPE_PARAM_KEYS`` / literal types) live in
-:mod:`llm_rosetta.contracts.shim`.  This module re-exports them because
-0.13.0 shipped them here; importing them from here is deprecated and the
-re-exports will be removed in 0.15.0.
+0.13.0 also exported the shim data classes and a few helpers from this module.
+They live elsewhere now (:data:`_MOVED` names each new home); asking this module
+for one still works, as the same object, and emits a ``DeprecationWarning``
+that names the new home and says it is removed in 0.15.0.  Names that first
+shipped in 0.14.0 (``ConnectionConfig``, ``resolve_format`` and the others) were
+never exported from here and are not forwarded.
 """
 
 from __future__ import annotations
 
 import contextlib
+import importlib
 import logging
 import threading
+import warnings
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from llm_rosetta import retired_names
-from llm_rosetta.contracts.shim import (  # deprecated re-exports, removed in 0.15.0
-    TYPE_PARAM_KEYS,
-    BatchDeclaration,
-    ConnectionConfig,
-    ProviderShim,
-    QuotaDeclaration,
-    ReasoningCapability,
-    ReplayMissing,
-    SoftErrorPattern,
-    ToolSearchMode,
-    ToolsConfig,
-    UnsignedBlocks,
-    VendorManifest,
-)
-from llm_rosetta.contracts.resolver import (  # moved to contracts (#1706)
-    match_model_reasoning,
-    resolve_format,
-    resolve_shim,
-    set_shim_resolver,
-)
-from llm_rosetta.contracts.transform import (
-    IRTransform,
-    Transform,
-)  # re-exported (0.13.0)
+from llm_rosetta.contracts.resolver import set_shim_resolver
 from llm_rosetta.model_vocabulary import (
     FORMATS_BY_TYPE,
     MODEL_TYPES,
 )
 
-from llm_rosetta.ir.model.configs import IREffort, IRMode  # re-exported (0.13.0)
+if TYPE_CHECKING:
+    from llm_rosetta.contracts.shim import ProviderShim
 
 logger = logging.getLogger(__name__)
 
+#: The names 0.13.0 exported from this module that have a new home, and the
+#: module each one lives in now.  Asking for one warns (see ``__getattr__``).
+_MOVED: dict[str, str] = {
+    "IREffort": "llm_rosetta.ir.model.configs",
+    "IRMode": "llm_rosetta.ir.model.configs",
+    "IRTransform": "llm_rosetta.contracts.transform",
+    "ProviderShim": "llm_rosetta.contracts.shim",
+    "ReasoningCapability": "llm_rosetta.contracts.shim",
+    "ToolSearchMode": "llm_rosetta.contracts.shim",
+    "Transform": "llm_rosetta.contracts.transform",
+    "UnsignedBlocks": "llm_rosetta.contracts.shim",
+    "resolve_shim": "llm_rosetta.contracts.resolver",
+}
+
+
 __all__ = [
-    # Registry
     "RegistrySnapshot",
     "get_shim",
     "list_shims",
-    "match_model_reasoning",
     "register_shim",
-    "resolve_format",
     "resolve_model_type",
-    "resolve_shim",
     "restore_registry",
     "snapshot_registry",
     "staging_registry",
     "unregister_shim",
-    # Deprecated re-exports of llm_rosetta.contracts.shim (removed in 0.15.0)
-    "TYPE_PARAM_KEYS",
-    "BatchDeclaration",
-    "ConnectionConfig",
-    "IREffort",
-    "IRMode",
-    "IRTransform",
-    "ProviderShim",
-    "QuotaDeclaration",
-    "ReasoningCapability",
-    "ReplayMissing",
-    "SoftErrorPattern",
-    "ToolSearchMode",
-    "ToolsConfig",
-    "Transform",
-    "UnsignedBlocks",
-    "VendorManifest",
+    # The names 0.13.0 exported that have a new home (see ``_MOVED``): they are
+    # part of this module's surface until 0.15.0, each warning when asked for.
+    *sorted(_MOVED),
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Forward a moved 0.13.0 name to its new home, warning that it is deprecated."""
+    home = _MOVED.get(name)
+    if home is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    # Deprecated 0.13.0 path, removed in 0.15.0.
+    warnings.warn(
+        f"{__name__}.{name} is deprecated and will be removed in 0.15.0; "
+        f"import it from {home}",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return getattr(importlib.import_module(home), name)
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_MOVED))
 
 
 # ---------------------------------------------------------------------------

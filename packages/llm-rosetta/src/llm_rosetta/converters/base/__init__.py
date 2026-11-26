@@ -28,7 +28,7 @@ from llm_rosetta.conversion_warnings import (  # noqa: F401
 from .configs import BaseConfigOps  # noqa: F401
 from .errors import UnrepresentableFinishReason  # noqa: F401
 from .content import BaseContentOps  # noqa: F401
-from .context import ConversionContext, MetadataMode, StreamContext
+from llm_rosetta.ir.context import ConversionContext, MetadataMode, StreamContext
 from .converter import BaseConverter
 from .simple_converter import BaseSimpleConverter
 from .embedding_converter import BaseEmbeddingConverter

@@ -85,25 +85,6 @@ def test_primitives_and_tools_never_import_the_passes():
     assert offenders == []
 
 
-def test_context_old_path_re_exports_the_same_objects():
-    from llm_rosetta.converters.base import context as legacy
-    import llm_rosetta.ir.context as canonical
-
-    surface = (
-        "ConversionContext",
-        "StreamContext",
-        "ImageFetcher",
-        "MetadataMode",
-        "_REQUEST_TOOL_VOCABULARY_KEY",
-        "carry_registered_call_identity",
-    )
-    # The shim's whole surface is pinned: dropping any name, or adding one
-    # nobody checks, turns this red.
-    assert set(legacy.__all__) == set(surface)
-    for name in surface:
-        assert getattr(legacy, name) is getattr(canonical, name)
-
-
 def test_guard_catches_absolute_relative_and_dynamic_imports():
     top = _IR / "primitives" / "ir.py"
     nested = _IR / "primitives" / "nested" / "helper.py"

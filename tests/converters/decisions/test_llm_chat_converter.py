@@ -5,7 +5,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.decisions.llm_chat import LLMChatDecisionConverter
 from llm_rosetta.ir.model.decision import (
     ChoiceQuestion,

@@ -34,7 +34,7 @@ from typing import Any
 
 from llm_rosetta import get_converter_for_provider
 from llm_rosetta.conversion_warnings import WarningSink, recording_to
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 
 from ..model import Probe, ProbeFailure
 

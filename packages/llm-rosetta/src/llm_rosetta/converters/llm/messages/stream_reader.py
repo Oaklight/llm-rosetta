@@ -22,7 +22,7 @@ from llm_rosetta.ir.model.stream import (
     ToolResultEvent,
     UsageEvent,
 )
-from ...base.context import (
+from llm_rosetta.ir.context import (
     StreamContext,
     carry_registered_call_identity,
 )

@@ -7,7 +7,7 @@ from typing import Any, cast
 import pytest
 
 from llm_rosetta.converters.llm.messages import MessagesConverter
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.ir.model.stream import (
     ContentBlockEndEvent,

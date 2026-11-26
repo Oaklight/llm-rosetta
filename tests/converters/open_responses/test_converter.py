@@ -1472,7 +1472,7 @@ class TestResponseIdPrefixFromContext:
 
     def test_from_provider_uses_context_prefix(self):
         """response_from_provider reads prefix from context.options."""
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
 
         ctx = ConversionContext()
         ctx.options["response_id_prefix"] = "custom_"
@@ -1495,7 +1495,7 @@ class TestResponseIdPrefixFromContext:
 
     def test_to_provider_uses_context_prefix(self):
         """response_to_provider reads prefix from context.options."""
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
 
         ctx = ConversionContext()
         ctx.options["response_id_prefix"] = "custom_"
@@ -1541,7 +1541,7 @@ class TestResponseIdPrefixFromContext:
 
     def test_empty_prefix_in_context_passes_through(self):
         """Empty string prefix in context means no prefix added."""
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
 
         ctx = ConversionContext()
         ctx.options["response_id_prefix"] = ""
@@ -1840,7 +1840,7 @@ class TestMultipleMessageItemsInOneResponse:
 
     def test_preserve_mode_restores_each_items_own_id(self):
         """Item metadata lands on the item it came from, not a neighbour."""
-        from llm_rosetta.converters.base.context import ConversionContext
+        from llm_rosetta.ir.context import ConversionContext
 
         context = ConversionContext(options={"metadata_mode": "preserve"})
         restored = self.converter.response_to_provider(

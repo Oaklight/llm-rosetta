@@ -4,7 +4,7 @@ OpenAI Chat Completions stream converter unit tests.
 
 from typing import Any, cast
 
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.ir.model.stream import (
     ContentBlockEndEvent,

@@ -4,7 +4,7 @@ import pytest
 
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
-from llm_rosetta.converters.base.context import StreamContext
+from llm_rosetta.ir.context import StreamContext
 from typing import cast
 
 from llm_rosetta.ir.model.stream import (

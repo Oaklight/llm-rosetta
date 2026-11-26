@@ -26,7 +26,7 @@ from llm_rosetta.ir.passes.tool_names import (
     build_tool_name_map,
     qualify_tool_names,
 )
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
 from llm_rosetta.converters.llm.google_interactions import GoogleInteractionsConverter
 from llm_rosetta.converters.llm.messages import MessagesConverter

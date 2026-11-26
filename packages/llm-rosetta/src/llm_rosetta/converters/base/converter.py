@@ -25,7 +25,7 @@ from llm_rosetta.ir.model.validation import (
     validate_messages,
     validate_tools,
 )
-from .context import ConversionContext, StreamContext
+from llm_rosetta.ir.context import ConversionContext, StreamContext
 from .tools import assign_tool_batch_ids, strip_orphaned_tool_config
 from ...ir.primitives.finish_reason import (
     client_tool_calls_in,

@@ -5,7 +5,7 @@ from typing import Any, cast
 
 from llm_rosetta.converters.llm.messages.converter import MessagesConverter
 from llm_rosetta.converters.base import BaseConverter
-from llm_rosetta.converters.base.context import ConversionContext, StreamContext
+from llm_rosetta.ir.context import ConversionContext, StreamContext
 from llm_rosetta.pipeline import StreamProcessor
 from llm_rosetta.ir.tools.orphan_fix import (
     normalize_tool_pairing,

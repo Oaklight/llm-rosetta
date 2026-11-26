@@ -48,7 +48,7 @@ from llm_rosetta.ir.model.stream import (
     UsageEvent,
 )
 from ...base import BaseConverter
-from ...base.context import ConversionContext, StreamContext
+from llm_rosetta.ir.context import ConversionContext, StreamContext
 from .content_ops import AcpContentOps
 from .message_ops import AcpMessageOps
 from .prompt import render_messages, render_system

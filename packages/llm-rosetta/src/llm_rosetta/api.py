@@ -112,7 +112,8 @@ from llm_rosetta.shims import (
     unregister_shim,
 )
 from llm_rosetta.contracts.shim import SoftErrorPattern
-from llm_rosetta.shims.provider_shim import match_model_reasoning, staging_registry
+from llm_rosetta.shims.provider_shim import staging_registry
+from llm_rosetta.contracts.resolver import match_model_reasoning
 from llm_rosetta.shims._loader import (
     builtin_providers_dir,
     get_model_list_transform,

@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from ...base import BaseConverter
-    from ...base.context import ConversionContext, StreamContext
+    from llm_rosetta.ir.context import ConversionContext, StreamContext
     from llm_rosetta.ir.model.stream import ContentBlockEndEvent, ContentBlockStartEvent
     from llm_rosetta.ir.model.stream import RefusalDeltaEvent
     from llm_rosetta.ir.model.response import UsageInfo

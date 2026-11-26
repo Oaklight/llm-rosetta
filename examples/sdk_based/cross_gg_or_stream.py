@@ -48,7 +48,7 @@ from common import (  # noqa: E402
 )
 
 from llm_rosetta import GoogleGenerateConverter, OpenAIResponsesConverter  # noqa: E402
-from llm_rosetta.converters.base.context import StreamContext  # noqa: E402
+from llm_rosetta.ir.context import StreamContext  # noqa: E402
 
 # Initialize converters
 gg_converter = GoogleGenerateConverter()

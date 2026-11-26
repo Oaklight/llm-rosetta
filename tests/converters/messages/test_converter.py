@@ -8,7 +8,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.converters.base.context import ConversionContext, StreamContext
+from llm_rosetta.ir.context import ConversionContext, StreamContext
 from llm_rosetta.converters.llm.messages import MessagesConverter
 from llm_rosetta.ir.model import (
     FinishEvent,

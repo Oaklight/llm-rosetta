@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from ...base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from ....ir.primitives.finish_reason import reason_for_completed_turn
 from ._constants import (
     RESPONSES_INCOMPLETE_REASON_TO_IR,

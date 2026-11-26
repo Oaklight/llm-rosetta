@@ -65,7 +65,7 @@ from typing import Any
 from collections.abc import Callable
 
 from llm_rosetta import get_converter_for_provider
-from llm_rosetta.converters.base.context import ConversionContext
+from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.formats.catalog import BY_PAIR
 
 from ..model import Probe, ProbeFailure, ProbeSkip

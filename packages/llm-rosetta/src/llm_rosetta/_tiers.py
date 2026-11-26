@@ -97,6 +97,9 @@ COMPAT: tuple[str, ...] = (
     # 0.13.0 flat module, forwards the passes and the shim types to their
     # current homes; removed in 0.15.0.
     "llm_rosetta.capabilities",
+    # 0.13.0 module, forwards the context classes to llm_rosetta.ir.context;
+    # removed in 0.15.0.
+    "llm_rosetta.converters.base.context",
     # 0.13.0 package, forwards to llm_rosetta.ir.model; removed in 0.15.0.
     "llm_rosetta.types.ir",
     # 0.13.0 module (already deprecated then), forwards to

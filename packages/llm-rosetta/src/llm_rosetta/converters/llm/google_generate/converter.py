@@ -30,7 +30,7 @@ from llm_rosetta.ir.model.response import IRResponse, UsageInfo
 from ...base import BaseConverter
 from llm_rosetta.conversion_warnings import report_loss
 from llm_rosetta.converters.base.helpers.service_tier import google_service_tier
-from ...base.context import (
+from llm_rosetta.ir.context import (
     ConversionContext,
     StreamContext,
 )

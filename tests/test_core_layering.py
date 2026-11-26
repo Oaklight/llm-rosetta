@@ -106,7 +106,7 @@ def test_no_converter_imports_the_pipeline():
 
 
 def test_the_pipeline_takes_conversion_context_from_the_ir():
-    """``ConversionContext`` lives in ``ir.context``; the converters only re-export it."""
+    """``ConversionContext`` lives in ``ir.context``; the old converters path only forwards it."""
     offenders = [
         f"{path.relative_to(_CORE)}:{line} imports {name}"
         for path in _files("pipeline")
