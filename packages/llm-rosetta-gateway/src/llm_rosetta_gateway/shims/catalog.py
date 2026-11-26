@@ -67,7 +67,7 @@ STANDALONE_VENDORS: tuple[StandaloneVendor, ...] = (
             "alcf_minerva--chat_completions",
             "alcf_sophia--chat_completions",
         ),
-        (_GH + "llm-rosetta-shim-alcf",),
+        (_GH + "llm-rosetta-ext-argonne", _GH + "llm-rosetta-shim-alcf"),
     ),
     StandaloneVendor(
         "argo",
@@ -76,7 +76,11 @@ STANDALONE_VENDORS: tuple[StandaloneVendor, ...] = (
         "argonne:argo",
         ("argo",),
         ("argo--chat_completions", "argo--messages", "argo--open_responses"),
-        (_GH + "llm-rosetta-shim-argonne", _GH + "llm-rosetta-shim-argo"),
+        (
+            _GH + "llm-rosetta-ext-argonne",
+            _GH + "llm-rosetta-shim-argonne",
+            _GH + "llm-rosetta-shim-argo",
+        ),
     ),
     StandaloneVendor(
         "free",
@@ -90,7 +94,11 @@ STANDALONE_VENDORS: tuple[StandaloneVendor, ...] = (
             "opencode_zen_free--chat_completions",
             "ovhcloud--chat_completions",
         ),
-        (_GH + "llm-rosetta-shim-contrib", _GH + "llm-rosetta-shim-free"),
+        (
+            _GH + "llm-rosetta-ext-contrib",
+            _GH + "llm-rosetta-shim-contrib",
+            _GH + "llm-rosetta-shim-free",
+        ),
     ),
     StandaloneVendor(
         "asksage",
@@ -105,7 +113,7 @@ STANDALONE_VENDORS: tuple[StandaloneVendor, ...] = (
             "asksage--google_generate",
             "asksage--embeddings",
         ),
-        (_GH + "llm-rosetta-shim-asksage",),
+        (_GH + "llm-rosetta-ext-argonne", _GH + "llm-rosetta-shim-asksage"),
     ),
     StandaloneVendor(
         "opendesign",
@@ -118,7 +126,7 @@ STANDALONE_VENDORS: tuple[StandaloneVendor, ...] = (
             "opendesign--messages",
             "opendesign--open_responses",
         ),
-        (_GH + "llm-rosetta-shim-opendesign",),
+        (_GH + "llm-rosetta-ext-contrib", _GH + "llm-rosetta-shim-opendesign"),
     ),
 )
 
@@ -239,6 +247,24 @@ class ShimSource:
         owner, name = self._owner_repo
         return f"https://raw.githubusercontent.com/{owner}/{name}/dist/manifest.json"
 
+    @property
+    def legacy_manifest_urls(self) -> tuple[str, ...]:
+        """The manifest URLs an earlier name of the repository published.
+
+        A config written before a rename names one of these; it is the same
+        source, so it is recognised as this one.
+        """
+        urls: list[str] = []
+        for legacy in self.legacy_repos:
+            owner, name = legacy.rstrip("/").split("/")[-2:]
+            urls.append(
+                f"https://cdn.jsdelivr.net/gh/{owner}/{name}@dist/manifest.json"
+            )
+            urls.append(
+                f"https://raw.githubusercontent.com/{owner}/{name}/dist/manifest.json"
+            )
+        return tuple(urls)
+
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serialisable view."""
         return {
@@ -257,14 +283,20 @@ SHIM_SOURCES: tuple[ShimSource, ...] = (
     ShimSource(
         key="argonne",
         label="Argonne",
-        repo="https://github.com/Oaklight/llm-rosetta-shim-argonne",
-        legacy_repos=("https://github.com/Oaklight/llm-rosetta-shim-argo",),
+        repo="https://github.com/Oaklight/llm-rosetta-ext-argonne",
+        legacy_repos=(
+            "https://github.com/Oaklight/llm-rosetta-shim-argonne",
+            "https://github.com/Oaklight/llm-rosetta-shim-argo",
+        ),
     ),
     ShimSource(
         key="contrib",
         label="Contrib",
-        repo="https://github.com/Oaklight/llm-rosetta-shim-contrib",
-        legacy_repos=("https://github.com/Oaklight/llm-rosetta-shim-free",),
+        repo="https://github.com/Oaklight/llm-rosetta-ext-contrib",
+        legacy_repos=(
+            "https://github.com/Oaklight/llm-rosetta-shim-contrib",
+            "https://github.com/Oaklight/llm-rosetta-shim-free",
+        ),
     ),
 )
 

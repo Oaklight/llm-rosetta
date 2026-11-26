@@ -53,7 +53,7 @@ jobs:
     # The manifest sources are a hand-written record (`SHIM_SOURCES`), so a
     # source repository created after the last edit is invisible to every
     # operator until someone remembers it exists.  This job lists the
-    # account's `llm-rosetta-shim-*` repositories, diffs them against the
+    # account's `llm-rosetta-ext-*` (and the older `llm-rosetta-shim-*`) repositories, diffs them against the
     # record, and fails with the entry to paste — the
     # reminder is a red check, not a review comment.  It reads the public
     # repository list, so no secret beyond the workflow token is involved.

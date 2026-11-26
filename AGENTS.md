@@ -290,7 +290,7 @@ Conventions the filesystem does not show:
 - Core vendors follow the placement rule (#1660): the model maker's own API
   with a static API key — no `auth.py`, and a `quota.py` probe that its own
   shims select (`tests/test_shim_placement.py`).  Every other vendor lives in
-  `Oaklight/llm-rosetta-shim-contrib`; `retired_names.MOVED_VENDORS` lists the
+  `Oaklight/llm-rosetta-ext-contrib`; `retired_names.MOVED_VENDORS` lists the
   ones that left core, and the gateway installs a listed vendor by itself when
   a config names its shim (`llm_rosetta_gateway/shims/moved.py`).
   `tests/fixtures/moved_vendors/` holds frozen copies for core's own tests

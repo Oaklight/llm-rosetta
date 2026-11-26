@@ -675,7 +675,7 @@ def test_the_declared_names_all_exist() -> None:
 def test_a_moved_shim_is_traced_to_its_vendor(name: str, vendor: str) -> None:
     row = retired_names.moved_vendor(name)
     assert row is not None and row.vendor == vendor
-    assert row.package == "llm-rosetta-shim-contrib"
+    assert row.package == "llm-rosetta-ext-contrib"
 
 
 @pytest.mark.parametrize(
@@ -714,12 +714,15 @@ def test_a_library_lookup_of_a_moved_shim_names_the_contrib_repository() -> None
         get_converter_for_provider("opencode--chat_completions")
     message = str(caught.value)
     assert "Unsupported provider: opencode--chat_completions" in message
-    assert "moved in 0.14 to the shim repository llm-rosetta-shim-contrib" in message
-    assert "load_providers_from_dir" in message
+    assert (
+        "moved in 0.14 to the extension repository llm-rosetta-ext-contrib" in message
+    )
+    assert "llm-rosetta ext install opencode" in message
+    assert "llm_rosetta.extensions.load_extensions()" in message
 
 
 def test_a_pipeline_with_a_moved_target_shim_names_the_contrib_repository() -> None:
-    with pytest.raises(ValueError, match="llm-rosetta-shim-contrib"):
+    with pytest.raises(ValueError, match="llm-rosetta-ext-contrib"):
         ConversionPipeline("chat_completions", "chat_completions", target_shim="xai")
 
 
@@ -732,4 +735,4 @@ def test_a_retired_spelling_of_a_moved_shim_says_both_things() -> None:
     message = retired_name_message("openrouter--openai_chat", SHIM)
     assert message is not None
     assert "'openrouter--chat_completions'" in message
-    assert "moved to llm-rosetta-shim-contrib" in message
+    assert "moved to llm-rosetta-ext-contrib" in message

@@ -4,7 +4,7 @@ Nothing ships these directories.  Core's and the gateway's own tests load them
 to exercise paths that only these vendors declare today — reasoning effort
 ladders, the tool-group matrix, request-range clamping, the ACP transport, a
 credential exchange, a model-list transform.  The live copies are in
-Oaklight/llm-rosetta-shim-contrib; a change there does not need a change here,
+Oaklight/llm-rosetta-ext-contrib; a change there does not need a change here,
 because these tests pin core behaviour, not the vendor's.
 
 A test file outside ``tests/`` itself imports this module after
