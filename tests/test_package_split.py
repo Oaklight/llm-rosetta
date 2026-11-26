@@ -33,7 +33,8 @@ def test_importing_the_old_root_warns() -> None:
         "with warnings.catch_warnings(record=True) as caught:\n"
         "    warnings.simplefilter('always')\n"
         "    import llm_rosetta.gateway\n"
-        "print(int(any('llm_rosetta_gateway' in str(w.message) for w in caught)))\n"
+        "print(int(any('llm_rosetta_gateway' in str(w.message)\n"
+        "              and 'removed in 0.15.0' in str(w.message) for w in caught)))\n"
     )
     root = Path(__file__).parents[1]
     env = {
@@ -46,7 +47,10 @@ def test_importing_the_old_root_warns() -> None:
     out = subprocess.check_output(
         [sys.executable, "-c", code], text=True, env=env
     ).strip()
-    assert out == "1", "importing llm_rosetta.gateway must warn about the new root"
+    assert out == "1", (
+        "importing llm_rosetta.gateway must warn about the new root and say it is "
+        "removed in 0.15.0"
+    )
 
 
 def test_old_submodules_are_the_same_objects() -> None:

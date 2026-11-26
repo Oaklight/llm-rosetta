@@ -270,7 +270,7 @@ Core modules (`packages/llm-rosetta/src/llm_rosetta/`):
 | `profiling/` | The profiler |
 | `observability/` | Deprecated 0.13 package: alias finder for the telemetry that moved to the gateway |
 | `_tiers.py` | The tier of each public module (user, extension, compat, removed) |
-| `gateway/` | Deprecated forward shim to `llm_rosetta_gateway`; it warns on import and will be removed in a later release |
+| `gateway/` | Deprecated forward shim to `llm_rosetta_gateway`; it warns on import and will be removed in 0.15.0 |
 | `_vendor/` | Vendored modules (DO NOT EDIT) |
 
 Other top-level paths:
@@ -286,7 +286,7 @@ Other top-level paths:
 Conventions the filesystem does not show:
 
 - `llm_rosetta/gateway/` forwards to `llm_rosetta_gateway`; it is deprecated
-  and will be removed in a later release. Do not add code to it.
+  and will be removed in 0.15.0. Do not add code to it.
 - Provider-type, shim and model-type names that were renamed have no alias.
   A retired spelling raises, naming its replacement and the
   `llm-rosetta gateway migrate` command (`retired_names.py`); to retire another name,

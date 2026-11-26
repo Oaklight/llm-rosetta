@@ -58,6 +58,8 @@ def test_an_alias_import_warns_and_names_the_new_home(name):
 
     messages = [str(w.message) for w in record]
     assert any(alias_name in m and "is deprecated" in m for m in messages), messages
+    # Every 0.13.0 forwarder names its removal version.
+    assert any("will be removed in 0.15.0" in m for m in messages), messages
     # The warning is only useful if it says where the module went.
     assert any(f"use {target_name}" in m for m in messages), messages
     assert aliased is importlib.import_module(target_name)
@@ -88,7 +90,7 @@ def test_the_package_root_forwards_moved_names_with_the_same_warning():
     facade.__dict__.pop("MetricsCollector", None)
     sys.modules.pop(f"{ALIAS}.metrics", None)
 
-    with pytest.warns(DeprecationWarning, match="is deprecated"):
+    with pytest.warns(DeprecationWarning, match="removed in 0.15.0"):
         collector = facade.MetricsCollector
 
     assert collector is real

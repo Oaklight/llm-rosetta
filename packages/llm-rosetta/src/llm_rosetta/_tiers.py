@@ -77,11 +77,11 @@ EXTENSION: tuple[str, ...] = (
 )
 
 COMPAT: tuple[str, ...] = (
-    # Forwards to llm_rosetta_gateway (deprecated).
+    # Forwards to llm_rosetta_gateway (deprecated); removed in 0.15.0.
     "llm_rosetta.gateway",
     # The 0.13 observability package: an alias finder for the telemetry that
     # moved to llm_rosetta_gateway.observability, plus the usage names (now in
-    # llm_rosetta.contracts.usage).
+    # llm_rosetta.contracts.usage); removed in 0.15.0.
     "llm_rosetta.observability",
     # The shim registry stays here; its re-exports of the data classes in
     # llm_rosetta.contracts.shim are removed in 0.15.0.

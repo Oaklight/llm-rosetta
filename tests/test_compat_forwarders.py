@@ -100,6 +100,21 @@ def test_extensions_forwards_the_experimental_objects():
         assert getattr(module, name) is getattr(home, name), name
 
 
+def test_every_compat_module_says_it_is_removed_in_0150():
+    """One rule for every 0.13.0 forwarder: its text names the removal version."""
+    import importlib.util
+
+    from llm_rosetta import _tiers
+
+    for name in _tiers.COMPAT:
+        spec = importlib.util.find_spec(name)
+        assert spec is not None and spec.origin, name
+        with open(spec.origin, encoding="utf-8") as handle:
+            text = handle.read()
+        assert "0.15.0" in text, f"{name} does not name its removal version"
+        assert "later release" not in text, f"{name} leaves the removal open"
+
+
 def test_extensions_is_in_the_compat_tier():
     from llm_rosetta import _tiers
 
