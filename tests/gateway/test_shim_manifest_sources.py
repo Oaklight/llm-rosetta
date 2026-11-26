@@ -832,24 +832,6 @@ class TestPrecedence:
         assert _vendor_status(report, "acme").shim_names == ("acme--chat_completions",)
         assert get_shim("acme_sneaky--chat_completions") is None
 
-    def test_an_explicit_path_overrides_a_manifest_install(self, tmp_path):
-        http = FakeHttp()
-        http.publish("acme", "0.1.0", ["acme--chat_completions"])
-        local = tmp_path / "local" / "acme"
-        local.mkdir(parents=True)
-        (local / "provider.yaml").write_text(
-            "name: acme--chat_completions\nformat: chat_completions\n"
-            "model_type: llm\nconnection:\n  base_url: https://local.example/v1\n"
-        )
-
-        _apply(
-            tmp_path, {**_url_section("acme"), "paths": [str(tmp_path / "local")]}, http
-        )
-
-        shim = get_shim("acme--chat_completions")
-        assert shim is not None
-        assert shim.connection.base_url == "https://local.example/v1"
-
 
 class TestRetiredPresets:
     #: What each refusal tells the operator to do.  ``remotes`` has no migrate
@@ -858,10 +840,13 @@ class TestRetiredPresets:
         "presets": "'shims.install'",
         "include": "'shims.install'",
         "exclude": "'!<source>:<vendor>'",
-        "remotes": "'shims.paths'",
+        "remotes": "'shims.sources'",
+        "paths": "extension folder",
     }
 
-    @pytest.mark.parametrize("key", ["presets", "include", "exclude", "remotes"])
+    @pytest.mark.parametrize(
+        "key", ["presets", "include", "exclude", "remotes", "paths"]
+    )
     def test_a_retired_key_is_refused_with_the_advice(self, key):
         match = f"'shims.{key}' was removed in 0.15.0: .*{self.ADVICE[key]}"
         with pytest.raises(ValueError, match=match):
@@ -871,7 +856,7 @@ class TestRetiredPresets:
         with pytest.raises(ValueError) as caught:
             parse_shims_section({"remotes": [{"url": "https://x.example/a.tar.gz"}]})
         message = str(caught.value)
-        assert "shims.sources" in message and "shims.paths" in message
+        assert "shims.sources" in message and "extensions directory" in message
         assert "llm-rosetta migrate" not in message
 
     def test_every_retired_key_is_named_in_one_error(self):

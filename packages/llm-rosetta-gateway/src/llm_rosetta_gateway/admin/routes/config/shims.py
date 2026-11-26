@@ -47,10 +47,7 @@ def _validate_shim_sources_body(
     make ``apply_shim_sources`` raise is rejected *before* it is persisted —
     otherwise the bad section lands on disk and the next startup fails.
     """
-    paths = body.get("paths")
     disabled = body.get("disabled")
-    if paths is not None and not isinstance(paths, list):
-        return JSONResponse({"error": "'paths' must be an array"}, status_code=400)
     for key in ("sources", "install"):
         if body.get(key) is not None and not isinstance(body.get(key), list):
             return JSONResponse({"error": f"'{key}' must be an array"}, status_code=400)
@@ -78,7 +75,6 @@ def _merge_shim_sources_body(
     section stays tidy.
     """
     for key in (
-        "paths",
         "sources",
         "install",
         "disabled",
@@ -98,7 +94,6 @@ def _merge_shim_sources_body(
         else:
             section[key] = value
     for key in (
-        "paths",
         "sources",
         "install",
         "disabled",

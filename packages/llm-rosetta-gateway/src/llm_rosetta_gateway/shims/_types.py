@@ -65,10 +65,9 @@ class ShimSourceStatus:
     """Outcome of loading one declared shim source.
 
     Attributes:
-        kind: ``"path"`` for a local directory, ``"remote"`` for a fetched
-            archive.
-        location: The declared directory path or remote URL.
-        name: Remote name (derived when not given).  ``None`` for paths.
+        kind: Always ``"remote"``: a source is fetched from an extension index.
+        location: The declared source URL.
+        name: Remote name (derived when not given).
         ok: Whether the source loaded.  A stale-cache fallback counts as ok.
         shim_count: Number of shims registered from this source.
         shim_names: Names of the shims registered from this source.
@@ -86,11 +85,10 @@ class ShimSourceStatus:
             expanded mirror template when ``leg`` is ``"mirror"``).
         unreachable: Whether the source failed because no leg could be
             reached, as opposed to a server answer or a bad archive.
-        manifest_shims: The shim names the source's ``shims.yaml`` declares.
-            Empty when it ships no manifest, which is the legacy scan layout.
+        manifest_shims: The shim names the installed index entry declares.
         source: The manifest source a vendor install came from (``contrib``,
             ``argonne``, or the id a manifest URL declares).  ``None`` for a
-            directory or a plain remote.
+            plain remote.
         vendor: The vendor a manifest install covers.  ``None`` otherwise.
         release: The manifest record of the installed version (version,
             commit, sha256, requires, shims, tags, maturity, ...), as the
@@ -106,7 +104,7 @@ class ShimSourceStatus:
             as the required extensions that are not installed.
     """
 
-    kind: Literal["path", "remote"]
+    kind: Literal["remote"]
     location: str
     name: str | None = None
     ok: bool = True

@@ -28,14 +28,11 @@ class TestParseShimsSection:
         assert not sources
 
     def test_a_declared_section_is_truthy(self):
-        assert parse_shims_section({"paths": []})
+        assert parse_shims_section({"install": []})
 
-    def test_paths_and_cache_dir_anchor_to_the_config_directory(self, tmp_path):
+    def test_cache_dir_anchors_to_the_config_directory(self, tmp_path):
         config_path = str(tmp_path / "config.jsonc")
-        sources = parse_shims_section(
-            {"paths": ["./shims"], "cache_dir": ".cache"}, config_path
-        )
-        assert os.path.normpath(sources.paths[0]) == str(tmp_path / "shims")
+        sources = parse_shims_section({"cache_dir": ".cache"}, config_path)
         assert sources.cache_root is not None
         assert os.path.normpath(sources.cache_root) == str(tmp_path / ".cache")
 
@@ -126,11 +123,11 @@ class TestLoaderAndApplyAgree:
             GatewayConfig(document)
 
     def test_the_config_keeps_the_parsed_section(self):
-        config = GatewayConfig({"shims": {"paths": ["shims"]}})
+        config = GatewayConfig({"shims": {"disabled": ["x--chat_completions"]}})
         assert isinstance(config.shims, ShimSources)
-        assert config.shims.paths == ("shims",)
+        assert config.shims.disabled == ("x--chat_completions",)
 
     def test_the_config_records_the_raw_section_signature(self):
-        document = {"shims": {"paths": ["shims"], "strict": True}}
+        document = {"shims": {"disabled": ["x--chat_completions"], "strict": True}}
         config = GatewayConfig(document)
         assert config.shims_signature == shims_signature(document)

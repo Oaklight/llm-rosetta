@@ -628,9 +628,10 @@ class _ConfigPlanner:
                 "shims.remotes",
                 "remotes",
                 "removed in 0.15.0, and an explicit archive URL has no manifest "
-                "equivalent: publish a manifest source and declare it in "
-                "shims.sources, or point shims.paths at a local copy; the "
-                "gateway refuses the key until it is removed",
+                "equivalent: publish an extension index and declare it in "
+                "shims.sources, or install the extension folder into the "
+                "extensions directory; the gateway refuses the key until it "
+                "is removed",
             )
         presets_member = obj.member("presets") if obj is not None else None
         declared: list[str] = []

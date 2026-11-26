@@ -1,10 +1,10 @@
 /**
- * The vendor manifest editor's inheritance view.
+ * The vendor manifest's inheritance view.
  *
  * A manifest sets the connection defaults every leaf below it inherits, field
  * by field (`headers` per key).  These are the pure builders the panel paints
- * from: which field rows exist, which of them an unsaved edit touches, and
- * which leaves that edit changes.  No DOM, so node runs them directly.
+ * from: which field rows exist and who inherits or overrides each.  No DOM, so
+ * node runs them directly.
  */
 
 import assert from 'node:assert/strict';
@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import {
-  inheritanceRows, annotateBlast, changedLeaves, nameList,
+  inheritanceRows, nameList,
 } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/manifest-inherit.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -59,49 +59,6 @@ test('a malformed entry does not throw', () => {
   assert.deepEqual(rows[1].inherited, []);
 });
 
-test('only the touched field is marked, and it carries the leaves it changes', () => {
-  const rows = annotateBlast(inheritanceRows(FIELDS), [
-    { field: 'base_url', header: null, removed: false, leaves: ['b--x'] },
-  ]);
-
-  const [base, key, header] = rows;
-  assert.equal(base.touched, true);
-  assert.equal(base.removed, false);
-  assert.deepEqual(base.affected, ['b--x']);
-  assert.equal(key.touched, false);
-  assert.deepEqual(key.affected, []);
-  assert.equal(header.touched, false);
-});
-
-test('a header change marks the header row, not the whole headers field', () => {
-  const rows = annotateBlast(inheritanceRows(FIELDS), [
-    { field: 'headers', header: 'x-client', removed: false, leaves: ['a--x'] },
-  ]);
-
-  assert.equal(rows[2].touched, false);
-  assert.equal(rows[3].touched, true);
-  assert.deepEqual(rows[3].affected, ['a--x']);
-});
-
-test('removing a field is marked as emptying its inheritors', () => {
-  const rows = annotateBlast(inheritanceRows(FIELDS), [
-    { field: 'api_key_env', header: null, removed: true, leaves: ['a--x', 'b--x', 'c--x'] },
-  ]);
-
-  assert.equal(rows[1].touched, true);
-  assert.equal(rows[1].removed, true);
-});
-
-test('the changed leaves are the union over every touched field', () => {
-  const names = changedLeaves([
-    { field: 'base_url', header: null, leaves: ['b--x'] },
-    { field: 'headers', header: 'x-client', leaves: ['b--x', 'a--x'] },
-  ]);
-
-  assert.deepEqual(names, ['a--x', 'b--x']);
-  assert.deepEqual(changedLeaves([]), []);
-});
-
 test('a long name list is truncated, not dropped', () => {
   assert.equal(nameList(['a', 'b']), 'a, b');
   assert.equal(nameList(['a', 'b', 'c'], 2), 'a, b +1');
@@ -117,7 +74,7 @@ test('every manifest key is translated in both languages', () => {
   const counts = new Map();
   for (const key of keys) counts.set(key, (counts.get(key) || 0) + 1);
 
-  assert.ok(counts.size >= 10, `expected the manifest block, saw ${counts.size} keys`);
+  assert.ok(counts.size >= 7, `expected the manifest block, saw ${counts.size} keys`);
   for (const [key, count] of counts) {
     assert.equal(count, 2, `${key} is in ${count} dictionary/ies, not 2`);
   }

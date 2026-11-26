@@ -10,8 +10,8 @@ each handler lives in the module for the resource it edits:
 :mod:`.model_providers`       model-to-provider links and weights
 :mod:`.settings`              server settings, rate limits, log format
 :mod:`.shims`                 shim sources, reload, update check
-:mod:`.shim_files`            loaded shims: inventory, view, edit, delete
-:mod:`.shim_manifests`        vendor manifests: rows, view, edit, blast radius
+:mod:`.shim_files`            loaded shims: inventory, view, enable switch
+:mod:`.shim_manifests`        vendor manifests: rows, view, inheritance
 :mod:`.shim_source_catalog`   manifest sources and every vendor they publish
 :mod:`.extensions`            installed extensions (read-only listing)
 :mod:`.upstream`              upstream model discovery and routing loops
@@ -49,17 +49,13 @@ from .providers import (
 )
 from .settings import put_server_settings
 from .shim_files import (
-    delete_loaded_shim,
     get_loaded_shim,
     get_loaded_shims,
     post_shim_enabled,
-    put_loaded_shim,
 )
 from .shim_manifests import (
     get_shim_manifest,
     get_shim_manifests,
-    post_preview_shim_manifest,
-    put_shim_manifest,
 )
 from .extensions import get_extensions
 from .shim_source_catalog import get_shim_source_catalog
@@ -98,7 +94,6 @@ __all__ = [
     "bulk_add_models",
     "bulk_update_models",
     "check_routing_loops",
-    "delete_loaded_shim",
     "delete_model",
     "delete_provider",
     "fetch_upstream_models",
@@ -108,12 +103,9 @@ __all__ = [
     "get_loaded_shims",
     "get_shim_manifest",
     "get_shim_manifests",
-    "post_preview_shim_manifest",
     "post_shims_check_updates",
     "post_shims_reload",
     "post_shim_enabled",
-    "put_loaded_shim",
-    "put_shim_manifest",
     "put_model",
     "put_provider",
     "put_server_settings",
@@ -174,7 +166,7 @@ def register_config_routes(app: Any) -> None:
         check_routing_loops
     )
     app.route("/admin/api/config/server", methods=["PUT"])(put_server_settings)
-    # Loaded shims: what is registered, and the local ones we may edit.
+    # Loaded shims: what is registered, where each is defined, the enable switch.
     app.route("/admin/api/config/shims", methods=["GET"])(
         _guard("providers", get_loaded_shims)
     )
@@ -187,12 +179,6 @@ def register_config_routes(app: Any) -> None:
     )
     app.route("/admin/api/config/shims/<name>", methods=["GET"])(
         _guard("providers", get_loaded_shim)
-    )
-    app.route("/admin/api/config/shims/<name>", methods=["PUT"])(
-        _guard("providers", put_loaded_shim)
-    )
-    app.route("/admin/api/config/shims/<name>", methods=["DELETE"])(
-        _guard("providers", delete_loaded_shim)
     )
     app.route("/admin/api/config/shims/<name>/enabled", methods=["POST"])(
         _guard("providers", post_shim_enabled)
@@ -209,17 +195,11 @@ def register_config_routes(app: Any) -> None:
     # Vendor manifests: not shims, so a separate resource.  The path travels in
     # the query or the body rather than in the URL, because a filesystem path
     # is not a URL segment; either way it is matched against the manifests the
-    # sources define before anything is read or written.
+    # sources define before anything is read.
     app.route("/admin/api/config/shim-manifests", methods=["GET"])(
         _guard("providers", get_shim_manifests)
     )
-    app.route("/admin/api/config/shim-manifests", methods=["PUT"])(
-        _guard("providers", put_shim_manifest)
-    )
     app.route("/admin/api/config/shim-manifests/detail", methods=["GET"])(
         _guard("providers", get_shim_manifest)
-    )
-    app.route("/admin/api/config/shim-manifests/preview", methods=["POST"])(
-        _guard("providers", post_preview_shim_manifest)
     )
     app.route("/admin/api/config/reload", methods=["POST"])(reload_config)

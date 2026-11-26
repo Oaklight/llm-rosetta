@@ -842,13 +842,6 @@
           </div>
           <div class="settings-fields">
             <div class="settings-popup-item">
-              <label data-i18n="label.shimPaths">Directories</label>
-              <div>
-                <textarea id="shimPathsInput" rows="2" spellcheck="false" placeholder="/config/shims&#10;./local-shims"></textarea>
-                <p class="field-hint" data-i18n="label.shimPathHint"></p>
-              </div>
-            </div>
-            <div class="settings-popup-item">
               <label data-i18n="label.shimCacheDir">Cache directory</label>
               <input type="text" id="shimCacheDirInput" spellcheck="false" placeholder="./shims-cache">
             </div>
@@ -2011,9 +2004,8 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
   <div class="modal modal-yaml" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="shimModalTitle">
     <h3 id="shimModalTitle" data-i18n="modal.shim">Shim</h3>
     <div class="shim-modal-meta" id="shimModalMeta"></div>
-    <textarea id="shimModalYaml" class="shim-yaml" spellcheck="false" rows="18"></textarea>
+    <textarea id="shimModalYaml" class="shim-yaml" spellcheck="false" rows="18" readonly></textarea>
     <div class="field-hint" id="shimModalNote"></div>
-    <div class="field-hint" id="shimModalProblem" style="color:var(--neg)" hidden></div>
     <div class="shim-inherit" id="shimModalInherit" hidden>
       <div class="shim-inherit-head">
         <span class="shim-inherit-title" data-i18n="shim.manifest.fields">Fields and who inherits them</span>
@@ -2024,7 +2016,6 @@ Rules:..."</code><br><br>Some upstream providers don't support content arrays in
     <div class="panel-foot">
       <button class="btn" onclick="copyShimYaml()" data-i18n="btn.copyDefinition">Copy</button>
       <button class="btn" onclick="closeModal('shimModal')" data-i18n="btn.cancel">Cancel</button>
-      <button class="btn btn-primary" id="shimModalSave" onclick="saveShimModal()" data-i18n="btn.save">Save</button>
     </div>
   </div>
 </div>

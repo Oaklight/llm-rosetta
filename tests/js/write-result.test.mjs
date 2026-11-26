@@ -146,20 +146,6 @@ test('a failed shim update check leaves the badges alone', () => {
   );
 });
 
-test('a manifest save does not report success over a failed reload', () => {
-  const body = functionBody(read('tabs/shims.js'), 'async function saveManifestYaml(');
-  assert.match(
-    body,
-    /const reload = await api\.post\('\/admin\/api\/config\/shims\/reload'/,
-    'the reload answer is kept',
-  );
-  assert.match(body, /if \(!reload\.ok\) throw new Error\(reload\.error \|\| t\('toast\.error'\)\);/);
-  assert.ok(
-    body.indexOf('if (!reload.ok)') < body.indexOf("closeModal('shimModal')"),
-    'the check runs before the dialog closes',
-  );
-});
-
 test('the busy guard puts the button back the way it found it', () => {
   const text = read('core/utils.js');
   assert.match(text, /const wasDisabled = btn\.disabled;/);
