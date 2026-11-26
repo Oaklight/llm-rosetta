@@ -16,7 +16,7 @@ flowchart TB
     end
     subgraph SIDE["辅助"]
       DET["auto_detect.py"]
-      CAP["capabilities.py"]
+      CAP["capabilities.py<br/>0.13.0 的转发,警告,0.15.0 删除;无人导入"]
       TOOL["tool_ops.py"]
     end
   end
@@ -26,7 +26,7 @@ flowchart TB
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
     subgraph CONS["contracts/"]
-      CDECL["声明层<br/>shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · _schema(清单校验用的 schema 解释器)<br/>依赖 ir.model · formats · retired_names · auto_detect"]
+      CDECL["声明层<br/>shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · _schema(清单校验用的 schema 解释器)<br/>依赖 ir.model · formats · retired_names(都按纯数据)"]
       CXF["transform.py<br/>再导出 ir 原语<br/>contracts 里唯一导入 ir.primitives 的模块"]
     end
     FMT["formats/<br/>catalog · detect · spec · batch"]
@@ -62,7 +62,7 @@ flowchart TB
   EXTS -.->|"ext new / check"| DEV
   CDECL -->|"IREffort · IRMode · IR_VERSION"| IRMODEL
   CDECL -->|"usage.semantics"| FMT
-  CDECL -->|"routing.py"| DET
+  DET -->|"ProviderType 定义在 contracts.routing(#1738)"| CDECL
   CDECL -->|"retired_names"| VOCAB
   CXF --> IROPS
   DET --> FMT

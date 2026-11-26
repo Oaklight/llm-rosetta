@@ -29,7 +29,7 @@ current_header = '''flowchart TB
     end
     subgraph SIDE["辅助"]
       DET["auto_detect.py"]
-      CAP["capabilities.py"]
+      CAP["capabilities.py<br/>0.13.0 的转发,警告,0.15.0 删除;无人导入"]
       TOOL["tool_ops.py"]
     end
   end
@@ -39,7 +39,7 @@ current_header = '''flowchart TB
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
     subgraph CONS["contracts/"]
-      CDECL["声明层<br/>shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · _schema(清单校验用的 schema 解释器)<br/>依赖 ir.model · formats · retired_names · auto_detect"]
+      CDECL["声明层<br/>shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · _schema(清单校验用的 schema 解释器)<br/>依赖 ir.model · formats · retired_names(都按纯数据)"]
       CXF["transform.py<br/>再导出 ir 原语<br/>contracts 里唯一导入 ir.primitives 的模块"]
     end
     FMT["formats/<br/>catalog · detect · spec · batch"]
@@ -64,7 +64,7 @@ current_edges = [
  ("EXTS","CDECL","","solid",None), ("EXTS","DEV","ext new / check","lazy",None),
  ("CDECL","IRMODEL","IREffort · IRMode · IR_VERSION","solid",None),
  ("CDECL","FMT","usage.semantics","solid",None),
- ("CDECL","DET","routing.py","solid",None),
+ ("DET","CDECL","ProviderType 定义在 contracts.routing(#1738)","solid",None),
  ("CDECL","VOCAB","retired_names","solid",None),
  ("CXF","IROPS","","solid",RED),
  ("DET","FMT","","solid",None), ("FMT","IRMODEL","","solid",None),

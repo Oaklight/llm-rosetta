@@ -44,7 +44,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
     end
     subgraph SIDE["辅助"]
       DET["auto_detect.py"]
-      CAP["capabilities.py"]
+      CAP["capabilities.py&lt;br/&gt;0.13.0 的转发,警告,0.15.0 删除;无人导入"]
       TOOL["tool_ops.py"]
     end
   end
@@ -54,7 +54,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
     subgraph CONS["contracts/"]
-      CDECL["声明层&lt;br/&gt;shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · _schema(清单校验用的 schema 解释器)&lt;br/&gt;依赖 ir.model · formats · retired_names · auto_detect"]
+      CDECL["声明层&lt;br/&gt;shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · _schema(清单校验用的 schema 解释器)&lt;br/&gt;依赖 ir.model · formats · retired_names(都按纯数据)"]
       CXF["transform.py&lt;br/&gt;再导出 ir 原语&lt;br/&gt;contracts 里唯一导入 ir.primitives 的模块"]
     end
     FMT["formats/&lt;br/&gt;catalog · detect · spec · batch"]
@@ -90,7 +90,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   EXTS -.-&gt;|"ext new / check"| DEV
   CDECL --&gt;|"IREffort · IRMode · IR_VERSION"| IRMODEL
   CDECL --&gt;|"usage.semantics"| FMT
-  CDECL --&gt;|"routing.py"| DET
+  DET --&gt;|"ProviderType 定义在 contracts.routing(#1738)"| CDECL
   CDECL --&gt;|"retired_names"| VOCAB
   CXF --&gt; IROPS
   DET --&gt; FMT
