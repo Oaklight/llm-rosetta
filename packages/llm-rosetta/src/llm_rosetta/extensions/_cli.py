@@ -37,6 +37,7 @@ from ._index import (
 )
 from ._install import (
     InstalledExtension,
+    _require_directory,
     _url_allowed,
     check_external,
     inspect_wheel,
@@ -479,18 +480,22 @@ def _install_id(parser: argparse.ArgumentParser, args: argparse.Namespace) -> in
 
 
 def _install_file(args: argparse.Namespace) -> int:
+    # Read the wheel here, so "cannot read" is only ever said of the wheel: a
+    # failure of the extensions directory is the installer's own error.
     try:
-        if args.dry_run:
-            manifest = inspect_wheel(args.source, sha256=args.sha256)
-            print(
-                f"would install {manifest.id} {manifest.version} from {args.source}"
-                f"{_previous(manifest.id)}"
-            )
-            return 0
-        _said(install_wheel(args.source, sha256=args.sha256))
+        with open(args.source, "rb") as handle:
+            data = handle.read()
     except OSError as exc:
         _err(f"{PROG} install: cannot read {args.source}: {exc}")
         return 1
+    if args.dry_run:
+        manifest = inspect_wheel(data, sha256=args.sha256)
+        print(
+            f"would install {manifest.id} {manifest.version} from {args.source}"
+            f"{_previous(manifest.id)}"
+        )
+        return 0
+    _said(install_wheel(data, sha256=args.sha256))
     return 0
 
 
@@ -526,6 +531,7 @@ def _remove(ext_id: str, dry_run: bool = False) -> int:
 
 
 def _update(ext_id: str | None, index_arg: str | None, dry_run: bool) -> int:
+    _require_directory(extensions_dir())
     installed = installed_extensions()
     if ext_id is not None:
         installed = [item for item in installed if item.id == ext_id]
