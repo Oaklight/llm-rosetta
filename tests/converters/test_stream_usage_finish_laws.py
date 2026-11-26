@@ -173,29 +173,23 @@ def test_a_stream_has_one_start_one_finish_and_ends_last(name, usages, reason) -
 
 # --- a second finish for the same choice -------------------------------------
 
-_FIRST_WINS = ["chat_completions"]
-_NOT_FIRST = [n for n in _NAMES if n not in _FIRST_WINS]
+# What each dialect does today with a second finish for one choice.  No rule
+# is claimed: a provider does not send two, and the effect is small.  The
+# table records the behaviour so a change is noticed (PIN, not a rule).
+_SECOND_FINISH = {
+    "chat_completions": ["stop"],  # StreamContext.mark_choice_finished: first wins
+    "open_responses": ["length"],  # the last wins
+    "messages": ["length"],  # the last wins
+    "google_generate": ["stop", "length"],  # both are emitted
+    "google_interactions": ["length"],  # the last wins
+}
 
 
-def _finish_reasons(name: str) -> list[str]:
+@pytest.mark.parametrize("name", _NAMES)
+def test_pin_a_second_finish_for_one_choice(name) -> None:
     events = _round_trip(name, _stream([], ["stop", "length"]))
-    return [e["finish_reason"]["reason"] for e in events if e["type"] == "finish"]
-
-
-@pytest.mark.parametrize("name", _FIRST_WINS)
-def test_a_second_finish_for_a_choice_is_ignored(name) -> None:
-    assert _finish_reasons(name) == ["stop"]
-
-
-@pytest.mark.xfail(
-    strict=False,
-    reason="only chat_completions keeps the first finish of a choice, as "
-    "StreamContext.mark_choice_finished says; the others keep the last "
-    "(google_generate emits both)",
-)
-@pytest.mark.parametrize("name", _NOT_FIRST)
-def test_a_second_finish_for_a_choice_is_ignored_on_every_dialect(name) -> None:
-    assert _finish_reasons(name) == ["stop"]
+    reasons = [e["finish_reason"]["reason"] for e in events if e["type"] == "finish"]
+    assert reasons == _SECOND_FINISH[name]
 
 
 # --- a provider whose usage is a running total --------------------------------
@@ -362,3 +356,123 @@ def test_buffered_usage_takes_the_latest_non_numeric_value() -> None:
     context.buffer_usage({"prompt_tokens": 1, "tier": "a"})
     context.buffer_usage({"prompt_tokens": 2, "tier": "b"})
     assert context.pop_pending_usage() == {"prompt_tokens": 3, "tier": "b"}
+
+
+# --- a cumulative-snapshot wire: Messages, and zeros that reset nothing -------
+
+# Live Anthropic shape (reported by llm-rosetta-03 from a live stream):
+# message_start usage input 24 / output 1; message_delta usage input 24 /
+# cache 0 / output 83, which repeats the input.  Total 107.
+_ANTHROPIC_LIVE = [
+    {
+        "type": "message_start",
+        "message": {
+            "id": "msg_1",
+            "type": "message",
+            "role": "assistant",
+            "model": "m",
+            "content": [],
+            "usage": {"input_tokens": 24, "output_tokens": 1},
+        },
+    },
+    {
+        "type": "content_block_start",
+        "index": 0,
+        "content_block": {"type": "text", "text": ""},
+    },
+    {
+        "type": "content_block_delta",
+        "index": 0,
+        "delta": {"type": "text_delta", "text": "hi"},
+    },
+    {"type": "content_block_stop", "index": 0},
+    {
+        "type": "message_delta",
+        "delta": {"stop_reason": "end_turn"},
+        "usage": {
+            "input_tokens": 24,
+            "cache_read_input_tokens": 0,
+            "output_tokens": 83,
+        },
+    },
+    {"type": "message_stop"},
+]
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="the Messages wire is a cumulative-snapshot wire (the delta repeats "
+    "the input); the contract in #1749 makes the reader emit differences",
+)
+def test_a_live_messages_stream_reads_to_its_final_total() -> None:
+    reader = DIALECTS["messages"]()
+    events = list(
+        reader.iter_stream_from_provider(
+            _ANTHROPIC_LIVE, context=reader.create_stream_context()
+        )
+    )
+    assert _summed(events)[:2] == (24, 83)
+
+
+def _google_usage_chunks(snapshots: list[tuple[int, int, int]]) -> list[dict[str, Any]]:
+    chunks = []
+    for i, (prompt, completion, total) in enumerate(snapshots):
+        candidate: dict[str, Any] = {
+            "content": {"role": "model", "parts": [{"text": f"{i} "}]}
+        }
+        if i == len(snapshots) - 1:
+            candidate["finishReason"] = "STOP"
+        chunks.append(
+            {
+                "candidates": [candidate],
+                "usageMetadata": {
+                    "promptTokenCount": prompt,
+                    "candidatesTokenCount": completion,
+                    "totalTokenCount": total,
+                },
+            }
+        )
+    return chunks
+
+
+def _read_google(snapshots: list[tuple[int, int, int]]) -> list[dict[str, Any]]:
+    reader = DIALECTS["google_generate"]()
+    return list(
+        reader.iter_stream_from_provider(
+            _google_usage_chunks(snapshots), context=reader.create_stream_context()
+        )
+    )
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="a zero placeholder or a decrease must reset nothing: per-field "
+    "high-water mark (#1749)",
+)
+def test_a_zero_placeholder_snapshot_resets_nothing() -> None:
+    events = _read_google([(10, 5, 15), (0, 0, 0), (10, 5, 15)])
+    assert _summed(events) == (10, 5, 15)
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="a decrease must reset nothing: per-field high-water mark (#1749)",
+)
+def test_a_decreasing_snapshot_does_not_lower_the_total() -> None:
+    events = _read_google([(10, 8, 18), (10, 5, 15), (10, 9, 19)])
+    assert _summed(events) == (10, 9, 19)
+
+
+@pytest.mark.xfail(
+    strict=False,
+    reason="the first snapshot passes through whole, reported zeros included (#1749)",
+)
+def test_the_first_snapshot_passes_through_whole() -> None:
+    events = _read_google([(3, 0, 3)])
+    usage = [e["usage"] for e in events if e["type"] == "usage"]
+    assert len(usage) == 1
+    assert (
+        usage[0]["prompt_tokens"],
+        usage[0]["completion_tokens"],
+        usage[0]["total_tokens"],
+    ) == (3, 0, 3)
