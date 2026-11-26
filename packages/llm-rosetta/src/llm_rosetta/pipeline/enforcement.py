@@ -8,18 +8,17 @@ capabilities and the target shim, never by a provider name.
 from __future__ import annotations
 
 import copy
-
 import logging
 from typing import Any
 
-from ..tools.intrinsic import (
+from llm_rosetta.ir.tools.intrinsic import (
     intrinsic_kind_of as _intrinsic_kind_of,
     make_intrinsic_tool_definition as _make_intrinsic_tool_definition,
 )
 
-from ..context import ConversionContext, StreamContext
-from ..primitives.image_limit import strip_images_for_non_vision
-from ..primitives.parts import iter_tool_call_parts
+from llm_rosetta.ir.context import ConversionContext, StreamContext
+from llm_rosetta.ir.primitives.image_limit import strip_images_for_non_vision
+from llm_rosetta.ir.primitives.parts import iter_tool_call_parts
 from llm_rosetta.conversion_warnings import WarningSink, report_drop
 from llm_rosetta.contracts.shim import ProviderShim, ReasoningCapability
 from llm_rosetta.contracts.resolver import match_model_reasoning, resolve_shim

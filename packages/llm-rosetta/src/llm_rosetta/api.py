@@ -107,7 +107,7 @@ from llm_rosetta.pipeline import (
     get_rerank_converter,
     typed_response_usage,
 )
-from llm_rosetta.ir.passes.enforcement import reasoning_capability
+from llm_rosetta.pipeline.enforcement import reasoning_capability
 from llm_rosetta.profiling import DeepProfiler
 from llm_rosetta.shims import (
     get_shim,

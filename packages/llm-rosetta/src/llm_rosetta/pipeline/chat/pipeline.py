@@ -8,22 +8,24 @@ from typing import Any, Literal
 
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.ir.passes import (
-    backfill_reasoning_replay,
     dedupe_tool_definitions,
     qualify_tool_names,
     degrade_intrinsic_history,
-    drop_nameless_tools,
-    enforce_custom_tools,
-    resolve_intrinsic_tools,
     relocate_oversized_tool_descriptions,
-    enforce_reasoning,
-    enforce_vision,
     ToolNameMap,
     apply_upstream_tool_names,
     build_tool_name_map,
-    get_custom_tool_names,
     restore_client_tool_names,
     sanitize_tool_names,
+)
+from llm_rosetta.pipeline.enforcement import (
+    backfill_reasoning_replay,
+    drop_nameless_tools,
+    enforce_custom_tools,
+    resolve_intrinsic_tools,
+    enforce_reasoning,
+    enforce_vision,
+    get_custom_tool_names,
     restore_custom_tool_calls,
     strip_reasoning_for_non_reasoning,
 )
