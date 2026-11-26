@@ -7,9 +7,10 @@ load as if it were absent.
 
 This module manages packages only.  What a ``provides`` kind means is the
 business of the layer that owns it: that layer registers a handler with
-:func:`register_kind_handler` (the shim layer registers ``"shims"``), and a
-kind with no load-time work (commands, transports) needs none.  Nothing here
-imports the shim layer or the converters.
+:func:`register_kind_handler` (the shim layer registers ``"shims"``, the command
+line ``"commands"``, the gateway ``"transports"``).  A kind nobody registered a
+handler for needs no load-time work.  Nothing here imports the shim layer, the
+converters, the command line or the gateway.
 """
 
 from __future__ import annotations
@@ -19,9 +20,10 @@ import logging
 import re
 import threading
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 from llm_rosetta._vendor.yaml import load as yaml_load
 from llm_rosetta.contracts.extension import (
@@ -33,7 +35,7 @@ from llm_rosetta.contracts.extension import (
 )
 from llm_rosetta.contracts.shim import ProviderShim
 
-from ._dirs import activate_if_present
+from ._dirs import ExtensionsDirError, activate_if_present, extensions_dir
 from ._discovery import (
     ENTRY_POINT_GROUP,
     NAMESPACE,
@@ -79,13 +81,25 @@ class KindLoadError(Exception):
 
 
 #: What a handler receives (the manifest and the extension folder) and what it
-#: hands back: the objects it registered, which :func:`load_extensions` returns.
-KindHandler = Callable[[ExtensionManifest, Path], Sequence[ProviderShim]]
+#: hands back: the objects it registered.  A shims handler returns the shims,
+#: which :func:`load_extensions` returns; the other kinds' results are not used.
+KindHandler = Callable[[ExtensionManifest, Path], Sequence[Any]]
+
+#: What a kind's undo receives: the manifest of an extension that failed after
+#: this kind had registered it.
+KindUndo = Callable[[ExtensionManifest], None]
+
+#: The kinds an extension may provide, in the order a load runs their handlers.
+#: The manifest attribute of each kind has the same name.
+KINDS = ("shims", "transports", "commands")
 
 _KIND_HANDLERS: dict[str, KindHandler] = {}
+_KIND_UNDO: dict[str, KindUndo] = {}
 
 
-def register_kind_handler(kind: str, handler: KindHandler) -> None:
+def register_kind_handler(
+    kind: str, handler: KindHandler, *, undo: KindUndo | None = None
+) -> None:
     """Register the code that loads one ``provides`` kind of an extension.
 
     The handler runs once per extension that lists the kind, after the manifest
@@ -93,16 +107,118 @@ def register_kind_handler(kind: str, handler: KindHandler) -> None:
     exception) to fail the extension, and must undo what it registered before it
     does, so a half-loaded extension leaves nothing behind.
 
+    The first load runs when ``llm_rosetta`` is imported, before a later layer
+    (the command line, the gateway) can register.  So registering also applies
+    the handler to every extension that is already loaded; one the handler
+    refuses becomes ``failed`` and the other kinds it registered are undone.
+
     Args:
-        kind: The ``provides`` key, e.g. ``"shims"``.
+        kind: The ``provides`` key: ``"shims"``, ``"transports"`` or
+            ``"commands"``.
         handler: ``handler(manifest, folder)``; the later registration of a
             kind replaces the earlier.
+        undo: ``undo(manifest)``, called when a kind that runs after this one
+            (or a replayed one) fails the same extension; it removes what the
+            handler registered for it.
     """
+    if kind not in KINDS:
+        raise ValueError(f"{kind!r} is not an extension kind: {', '.join(KINDS)}")
     _KIND_HANDLERS[kind] = handler
+    if undo is None:
+        _KIND_UNDO.pop(kind, None)
+    else:
+        _KIND_UNDO[kind] = undo
+    _replay(kind)
+
+
+def _undo(manifest: ExtensionManifest, kinds: Sequence[str]) -> None:
+    for kind in reversed(kinds):
+        undo = _KIND_UNDO.get(kind)
+        if undo is None:
+            continue
+        try:
+            undo(manifest)
+        except Exception:  # noqa: BLE001 - the extension is failing already
+            logger.exception("Undoing the %s of extension %s failed", kind, manifest.id)
+
+
+def _run_kinds(
+    manifest: ExtensionManifest, folder: Path, kinds: Sequence[str] = KINDS
+) -> tuple[dict[str, list[Any]], str | None]:
+    """Run the handlers of the kinds *manifest* provides.
+
+    Returns:
+        What each handler returned, and the reason the extension failed (the
+        kinds that had run are undone first), else ``None``.
+    """
+    outputs: dict[str, list[Any]] = {}
+    done: list[str] = []
+    for kind in kinds:
+        handler = _KIND_HANDLERS.get(kind)
+        if handler is None or not getattr(manifest, kind):
+            continue
+        try:
+            outputs[kind] = list(handler(manifest, folder))
+        except KindLoadError as exc:
+            reason = str(exc)
+        except Exception as exc:  # noqa: BLE001 - name the extension, keep going
+            reason = f"{type(exc).__name__}: {exc}"
+        else:
+            done.append(kind)
+            continue
+        _undo(manifest, done)
+        return outputs, reason
+    return outputs, None
+
+
+def _replay(kind: str) -> None:
+    """Apply a newly registered handler to the extensions already loaded."""
+    for item in list_extensions():
+        manifest = item.manifest
+        if item.state != LOADED or manifest is None or not getattr(manifest, kind):
+            continue
+        outputs, reason = _run_kinds(manifest, item.path, (kind,))
+        if reason is None:
+            changed = (
+                replace(item, shims=tuple(sorted(s.name for s in outputs[kind])))
+                if kind == "shims"
+                else None
+            )
+        else:
+            _undo(manifest, [k for k in KINDS if k != kind and getattr(manifest, k)])
+            changed = replace(item, state=FAILED, reason=reason, shims=())
+            logger.warning(
+                "Extension %s (%s) is %s: %s", item.id, item.path, FAILED, reason
+            )
+        if changed is not None:
+            with _STATUS_LOCK:
+                for index, current in enumerate(_STATUS):
+                    if current is item:
+                        _STATUS[index] = changed
 
 
 _STATUS: list[ExtensionStatus] = []
 _STATUS_LOCK = threading.Lock()
+_LOADED_ONCE = False
+_LOADED_DIR: Path | None = None
+
+
+def _directory() -> Path | None:
+    try:
+        return extensions_dir()
+    except ExtensionsDirError:
+        return None
+
+
+def extensions_current() -> bool:
+    """Whether the last :func:`load_extensions` used the directory in force now.
+
+    ``False`` when nothing has loaded yet (a build without the shim layer) or
+    when the extensions directory was changed since (a host configured it after
+    ``llm_rosetta`` was imported).  A caller that reads the loaded extensions
+    loads them first then.
+    """
+    return _LOADED_ONCE and _LOADED_DIR == _directory()
 
 
 def list_extensions() -> tuple[ExtensionStatus, ...]:
@@ -203,18 +319,12 @@ def _load_one(
     problems = compatibility_problems(manifest)
     if problems:
         return result(SKIPPED, "; ".join(problems)), []
-    if not manifest.shims:
-        return result(LOADED), []
-
-    handler = _KIND_HANDLERS.get("shims")
-    if handler is None:
+    if manifest.shims and "shims" not in _KIND_HANDLERS:
         return result(SKIPPED, "no shim layer is loaded to register its shims"), []
-    try:
-        loaded = list(handler(manifest, found.path))
-    except KindLoadError as exc:
-        return result(FAILED, str(exc)), []
-    except Exception as exc:  # noqa: BLE001 - name the extension, keep going
-        return result(FAILED, f"{type(exc).__name__}: {exc}"), []
+    outputs, reason = _run_kinds(manifest, found.path)
+    if reason is not None:
+        return result(FAILED, reason), []
+    loaded = outputs.get("shims", [])
     return result(LOADED, shims=sorted(shim.name for shim in loaded)), loaded
 
 
@@ -257,6 +367,9 @@ def load_extensions() -> list[ProviderShim]:
                 item.state,
                 item.reason,
             )
+    global _LOADED_ONCE, _LOADED_DIR
     with _STATUS_LOCK:
         _STATUS[:] = statuses
+        _LOADED_ONCE = True
+        _LOADED_DIR = _directory()
     return registered

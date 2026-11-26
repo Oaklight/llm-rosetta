@@ -5,6 +5,10 @@ with hyphens (``claude_cli`` is ``claude-cli``).  The manifest maps each verb to
 its summary; the ``commands`` module exposes ``COMMANDS``, a mapping of verb to a
 callable ``main(argv) -> int``.
 
+This module is the CLI's side of the extension loader: it registers the
+``"commands"`` kind handler, which records the area of each extension as it
+loads.  The loader knows nothing of commands.
+
 The dispatcher learns the areas, their verbs and the verbs' summaries from the
 manifests alone (:func:`extension_areas` imports no extension code), so help
 works without importing the extension and in a build that strips docstrings.  The
@@ -21,26 +25,23 @@ from llm_rosetta.contracts.command import CommandError
 from llm_rosetta.contracts.extension import (
     ExtensionManifest,
     command_area,
-    compatibility_problems,
 )
-
-from ._discovery import discover
-from ._load import _read_manifest, import_extension_module
+from llm_rosetta.extensions import (
+    FAILED,
+    LOADED,
+    SKIPPED,
+    extensions_current,
+    import_extension_module,
+    list_extensions,
+    load_extensions,
+    register_kind_handler,
+)
 
 #: The module of an extension that holds its ``COMMANDS`` mapping.
 COMMANDS_MODULE = "commands"
 
 #: The mapping that module exposes.
 COMMANDS_ATTRIBUTE = "COMMANDS"
-
-__all__ = [
-    "COMMANDS_ATTRIBUTE",
-    "COMMANDS_MODULE",
-    "ExtensionArea",
-    "area_verbs",
-    "extension_areas",
-    "resolve_extension_command",
-]
 
 
 @dataclass(frozen=True)
@@ -67,8 +68,9 @@ class ExtensionArea:
     problem: str | None = None
 
 
-def _area_of(manifest: ExtensionManifest, folder: Path) -> ExtensionArea:
-    problems = compatibility_problems(manifest)
+def _area_of(
+    manifest: ExtensionManifest, folder: Path, problem: str | None = None
+) -> ExtensionArea:
     return ExtensionArea(
         area=command_area(manifest.id),
         ext_id=manifest.id,
@@ -78,46 +80,63 @@ def _area_of(manifest: ExtensionManifest, folder: Path) -> ExtensionArea:
         },
         summary=(manifest.summary or {}).get("en", ""),
         path=folder,
-        problem="; ".join(problems) if problems else None,
+        problem=problem,
     )
 
 
-def extension_areas() -> tuple[dict[str, ExtensionArea], list[str]]:
-    """Read the CLI areas of every discovered extension from its manifest.
+#: The areas the loader has handed over, by area name.
+_AREAS: dict[str, ExtensionArea] = {}
 
-    No extension code is imported.  A folder whose manifest cannot be read, or
-    whose folder name differs from its id, is left out and reported.
+
+def _claim(manifest: ExtensionManifest, folder: Path) -> list[object]:
+    """The ``commands`` kind handler: take the area of *manifest*.
+
+    An id has one area (the id with hyphens) and the loader keeps ids unique, so
+    two extensions never name the same area and there is nothing to refuse.
+    """
+    area = _area_of(manifest, folder)
+    _AREAS[area.area] = area
+    return []
+
+
+def _release(manifest: ExtensionManifest) -> None:
+    for name in [n for n, a in _AREAS.items() if a.ext_id == manifest.id]:
+        del _AREAS[name]
+
+
+register_kind_handler("commands", _claim, undo=_release)
+
+
+def extension_areas() -> tuple[dict[str, ExtensionArea], list[str]]:
+    """Read the CLI areas of the extensions the loader found.
+
+    No extension code is imported.  The extensions are loaded first when nothing
+    has loaded them yet (a build without the shim layer) or the extensions
+    directory has changed since (a host configured it after the import).  An extension that
+    cannot run here (``skipped``) keeps its area, with ``problem`` set to the
+    reason; one that failed is reported and has no area.
 
     Returns:
         ``(areas, problems)``: the areas by area name, and one sentence for each
-        folder that was left out.  The first folder to claim an area keeps it.
+        folder that was left out.
     """
+    if not extensions_current():
+        load_extensions()
     areas: dict[str, ExtensionArea] = {}
     problems: list[str] = []
-    for found in discover():
-        if found.problem is not None:
-            continue
-        try:
-            manifest = _read_manifest(found.path)
-        except Exception as exc:  # noqa: BLE001 - one folder must not stop the rest
-            problems.append(f"{found.path.name}: {type(exc).__name__}: {exc}")
-            continue
-        if not manifest.commands:
-            continue
-        if manifest.id != found.path.name:
-            problems.append(
-                f"{found.path.name}: plugin.yaml names id {manifest.id!r}; "
-                "its commands are not available"
-            )
-            continue
-        area = _area_of(manifest, found.path)
-        if area.area in areas:
-            problems.append(
-                f"{found.path}: the area {area.area!r} is already owned by "
-                f"{areas[area.area].path}"
-            )
-            continue
-        areas[area.area] = area
+    for item in list_extensions():
+        manifest = item.manifest
+        if item.state == FAILED:
+            if manifest is None or manifest.commands:
+                problems.append(f"{item.path.name}: {item.reason}")
+        elif manifest is not None and manifest.commands:
+            if item.state == SKIPPED:
+                area = _area_of(manifest, item.path, item.reason)
+                areas.setdefault(area.area, area)
+            elif item.state == LOADED:
+                area = _AREAS.get(command_area(manifest.id))
+                if area is not None and area.ext_id == manifest.id:
+                    areas[area.area] = area
     return areas, problems
 
 

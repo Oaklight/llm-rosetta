@@ -13,6 +13,9 @@ import pytest
 
 from llm_rosetta.contracts import SURFACE_VERSION
 from llm_rosetta.extensions import (
+    configure_extensions_dir,
+    extensions_current,
+    register_kind_handler,
     KindLoadError,
     _discovery,
     _load,
@@ -137,6 +140,142 @@ class TestKindHandlers:
         load_extensions()
 
         assert _status("acme").reason == "RuntimeError: boom"
+
+
+def _commands_extension(root: Path, ext_id: str) -> Path:
+    folder = _extension(root, ext_id)
+    manifest = (folder / "plugin.yaml").read_text()
+    (folder / "plugin.yaml").write_text(
+        manifest + "  commands:\n    run: {en: Run it}\n"
+    )
+    return folder
+
+
+class TestKindDispatch:
+    """Every kind an extension provides reaches the handler its layer registered."""
+
+    @pytest.fixture(autouse=True)
+    def _handlers(self):
+        handlers, undo = dict(_load._KIND_HANDLERS), dict(_load._KIND_UNDO)
+        yield
+        _load._KIND_HANDLERS.clear()
+        _load._KIND_HANDLERS.update(handlers)
+        _load._KIND_UNDO.clear()
+        _load._KIND_UNDO.update(undo)
+
+    def test_a_handler_runs_only_for_a_kind_the_extension_provides(self, path):
+        _extension(path, "plain")
+        _commands_extension(path, "cmds")
+        seen = []
+        register_kind_handler("commands", lambda m, f: seen.append(m.id) or [])
+
+        load_extensions()
+
+        assert seen == ["cmds"]
+
+    def test_a_kind_without_a_handler_needs_none(self, path):
+        _commands_extension(path, "cmds")
+        _load._KIND_HANDLERS.pop("commands", None)
+
+        load_extensions()
+
+        assert _status("cmds").state == "loaded"
+
+    def test_a_later_kind_that_fails_undoes_the_shims_it_follows(self, path):
+        _commands_extension(path, "cmds")
+
+        def refuse(manifest, folder):
+            raise KindLoadError("no area for you")
+
+        register_kind_handler("commands", refuse)
+
+        load_extensions()
+
+        status = _status("cmds")
+        assert (status.state, status.reason) == ("failed", "no area for you")
+        assert status.shims == ()
+        assert get_shim("cmds--chat_completions") is None
+        assert plugin_source("cmds--chat_completions") is None
+
+    def test_an_undo_that_raises_does_not_hide_the_failure(self, path):
+        _commands_extension(path, "cmds")
+
+        def undo_fails(manifest):
+            raise ZeroDivisionError("division by zero")
+
+        def handler_fails(manifest, folder):
+            raise ZeroDivisionError("division by zero")
+
+        register_kind_handler("shims", _load._KIND_HANDLERS["shims"], undo=undo_fails)
+        register_kind_handler("commands", handler_fails)
+
+        load_extensions()
+
+        assert _status("cmds").reason == "ZeroDivisionError: division by zero"
+
+    def test_a_handler_registered_after_the_load_is_applied_to_loaded_extensions(
+        self, path
+    ):
+        _commands_extension(path, "cmds")
+        load_extensions()
+        seen = []
+
+        register_kind_handler(
+            "commands", lambda m, f: seen.append((m.id, f.name)) or []
+        )
+
+        assert seen == [("cmds", "cmds")]
+        assert _status("cmds").state == "loaded"
+
+    def test_a_late_handler_that_refuses_fails_the_extension_and_undoes_its_shims(
+        self, path
+    ):
+        _commands_extension(path, "cmds")
+        load_extensions()
+        assert get_shim("cmds--chat_completions") is not None
+
+        def refuse(manifest, folder):
+            raise KindLoadError("too late")
+
+        register_kind_handler("commands", refuse)
+
+        status = _status("cmds")
+        assert (status.state, status.reason) == ("failed", "too late")
+        assert get_shim("cmds--chat_completions") is None
+
+    def test_a_late_handler_does_not_touch_an_extension_that_is_not_loaded(self, path):
+        _commands_extension(path, "cmds")
+        folder = path / "llm_rosetta_ext" / "cmds"
+        text = (folder / "plugin.yaml").read_text()
+        text = text.replace(f"surface: {SURFACE_VERSION}", "surface: 9999")
+        (folder / "plugin.yaml").write_text(text)
+        load_extensions()
+        assert _status("cmds").state == "skipped"
+        seen = []
+
+        register_kind_handler("commands", lambda m, f: seen.append(m.id) or [])
+
+        assert seen == []
+
+    def test_an_unknown_kind_is_refused(self):
+        with pytest.raises(ValueError, match="not an extension kind"):
+            register_kind_handler("widgets", lambda m, f: [])
+
+    def test_the_loader_reports_that_it_has_run(self, path):
+        load_extensions()
+        assert extensions_current() is True
+
+    def test_a_directory_chosen_after_the_load_makes_it_stale(self, path, tmp_path):
+        load_extensions()
+        other = tmp_path / "elsewhere"
+        other.mkdir()
+        configure_extensions_dir(other)
+        try:
+            assert extensions_current() is False
+            load_extensions()
+            assert extensions_current() is True
+        finally:
+            configure_extensions_dir(None)
 
 
 class TestLoading:

@@ -12,14 +12,6 @@ named, never allowed to stop the others.
 
 from __future__ import annotations
 
-from ._commands import (
-    COMMANDS_ATTRIBUTE,
-    COMMANDS_MODULE,
-    ExtensionArea,
-    area_verbs,
-    extension_areas,
-    resolve_extension_command,
-)
 from ._discovery import (
     ENTRY_POINT_GROUP,
     LEGACY_ENTRY_POINT_GROUP,
@@ -64,8 +56,13 @@ from ._install import (
     remove_extension,
 )
 from ._load import (
+    FAILED,
+    KINDS,
+    LOADED,
+    SKIPPED,
     ExtensionStatus,
     KindLoadError,
+    extensions_current,
     import_extension_module,
     list_extensions,
     load_extensions,
@@ -73,15 +70,17 @@ from ._load import (
 )
 
 __all__ = [
-    "COMMANDS_ATTRIBUTE",
-    "COMMANDS_MODULE",
+    "FAILED",
+    "KINDS",
+    "LOADED",
+    "SKIPPED",
+    "extensions_current",
     "DEFAULT_INDEX_URL",
     "ENTRY_POINT_GROUP",
     "ENV_VAR",
     "INDEX_ENV",
     "LEGACY_ENTRY_POINT_GROUP",
     "NAMESPACE",
-    "ExtensionArea",
     "ExtensionIndex",
     "ExtensionInstallError",
     "ExtensionStatus",
@@ -93,12 +92,10 @@ __all__ = [
     "RetiredEntryPoint",
     "UpdatePlan",
     "activate_extensions_dir",
-    "area_verbs",
     "check_external",
     "configure_extensions_dir",
     "discover",
     "entry_problems",
-    "extension_areas",
     "extensions_dir",
     "import_extension_module",
     "inspect_wheel",
@@ -116,7 +113,6 @@ __all__ = [
     "plan_updates",
     "register_kind_handler",
     "remove_extension",
-    "resolve_extension_command",
     "retired_entry_points",
     "select_entry",
     "version_key",

@@ -30,6 +30,26 @@ def _unregister(names: set[str]) -> None:
         unregister_shim(name)
 
 
+def _own_names(extension_id: str) -> set[str]:
+    return {
+        name
+        for name in _registered_names()
+        if (_PLUGIN_SOURCES.get(name) or "").partition(" ")[0] == extension_id
+    }
+
+
+def forget_extension_shims(manifest: ExtensionManifest) -> None:
+    """Unregister every shim the extension *manifest* registered.
+
+    The extension loader calls this when a later kind of the same extension
+    fails, so the extension is not left half loaded.
+    """
+    own = _own_names(manifest.id)
+    _unregister(own)
+    for name in own:
+        _PLUGIN_SOURCES.pop(name, None)
+
+
 def load_extension_shims(
     manifest: ExtensionManifest, folder: Path
 ) -> list[ProviderShim]:
@@ -50,14 +70,7 @@ def load_extension_shims(
     # A reload replaces what this extension registered last time, so its own
     # earlier names are not "held by another owner".  Names another owner holds
     # stay protected.
-    own = {
-        name
-        for name in _registered_names()
-        if (_PLUGIN_SOURCES.get(name) or "").partition(" ")[0] == manifest.id
-    }
-    _unregister(own)
-    for name in own:
-        _PLUGIN_SOURCES.pop(name, None)
+    forget_extension_shims(manifest)
     before = _registered_names()
     taken = set(before)
     try:
