@@ -102,7 +102,7 @@ def _format_name(provider: str) -> str:
     named a format or a vendor profile of one: ``openai--open_responses`` and
     ``open_responses`` describe the same body shape.
     """
-    from llm_rosetta.shims.provider_shim import resolve_format
+    from llm_rosetta.contracts.resolver import resolve_format
 
     return resolve_format(provider)
 

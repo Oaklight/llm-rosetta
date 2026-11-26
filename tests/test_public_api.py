@@ -295,6 +295,21 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
         ],
         "max_count": 12,
     },
+    "llm_rosetta.contracts.resolver": {
+        "items": [
+            "ShimResolver",
+            "ShimResolverUnavailable",
+            "get_providers_dir_loader",
+            "get_shim_resolver",
+            "lookup_shim",
+            "match_model_reasoning",
+            "resolve_format",
+            "resolve_shim",
+            "set_providers_dir_loader",
+            "set_shim_resolver",
+        ],
+        "max_count": 10,
+    },
     "llm_rosetta.contracts.shim": {
         "items": [
             "TYPE_PARAM_KEYS",

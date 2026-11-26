@@ -32,6 +32,7 @@ from collections.abc import Callable, Collection
 from typing import TYPE_CHECKING, Any, Literal
 
 from llm_rosetta import retired_names
+from llm_rosetta.contracts.resolver import get_providers_dir_loader
 from llm_rosetta.contracts.transform import IRTransform, Transform
 from llm_rosetta.types.ir.configs import IREffort, IRMode
 from llm_rosetta.types.ir.constraints import RequestConstraints
@@ -874,8 +875,9 @@ def load_providers_from_dir(
 ) -> list[ProviderShim]:
     """Scan *providers_dir* for provider shims and register them.
 
-    The call that registers a shim tree from a directory.  It delegates to the shim loader, imported on call, so this
-    module stays importable while the loader itself is starting up.
+    The call that registers a shim tree from a directory.  It hands the work
+    to the loader the shim layer registers, so this contract module imports
+    nothing from that layer.
 
     Args:
         providers_dir: The root of the plugin's shim tree
@@ -888,10 +890,11 @@ def load_providers_from_dir(
 
     Returns:
         The shims this call registered.
-    """
-    from llm_rosetta.shims._loader import load_providers_from_dir as _load
 
-    return _load(
+    Raises:
+        ShimResolverUnavailable: No shim layer is loaded to read the tree.
+    """
+    return get_providers_dir_loader()(
         providers_dir,
         group=group,
         on_error=on_error,

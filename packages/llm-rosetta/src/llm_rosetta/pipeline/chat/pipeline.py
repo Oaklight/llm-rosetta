@@ -32,7 +32,11 @@ from llm_rosetta.conversion_warnings import WarningSink, recording_to
 from llm_rosetta import retired_names
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
 from llm_rosetta.contracts.shim import ProviderShim
-from llm_rosetta.shims.provider_shim import resolve_format, resolve_shim
+from llm_rosetta.contracts.resolver import (
+    lookup_shim,
+    resolve_format,
+    resolve_shim,
+)
 from llm_rosetta.ir.primitives.body import Transform, apply_transforms
 from .errors import ConversionError
 from .introspection import PipelineIntrospection
@@ -66,7 +70,7 @@ def _check_shim_name(shim_name: str) -> None:
         ValueError: For either case.
     """
     retired_names.check_not_retired(shim_name, retired_names.SHIM)
-    if resolve_shim(shim_name) is None:
+    if lookup_shim(shim_name) is None:
         moved = retired_names.moved_shim_message(shim_name)
         if moved is not None:
             raise ValueError(moved)

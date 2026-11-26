@@ -78,7 +78,7 @@ def get_converter_for_provider(provider: str):
         return _converter_cache[provider]
 
     from .converters.registry import CONVERTER_REGISTRY
-    from .shims import resolve_format
+    from .contracts.resolver import resolve_format
 
     converter_map = CONVERTER_REGISTRY["llm"]
 
@@ -171,7 +171,7 @@ def convert(
         >>> normalised = convert(body, "chat_completions", baseline=False)
     """
     from .pipeline import ConversionPipeline
-    from .shims import get_shim
+    from .contracts.resolver import resolve_shim
 
     # A retired name (``openai_chat``, ``volcengine--openai_chat``) is not
     # resolved here: the pipeline below raises a ValueError that names its
@@ -180,13 +180,15 @@ def convert(
     tgt = str(target_provider)
 
     source_shim = (
-        get_shim(str(source_provider)) if source_provider is not None else get_shim(src)
+        resolve_shim(str(source_provider))
+        if source_provider is not None
+        else resolve_shim(src)
     )
     pipeline = ConversionPipeline(
         src,
         tgt,
         source_shim=source_shim,
-        target_shim=get_shim(str(target_provider)),
+        target_shim=resolve_shim(str(target_provider)),
         upstream_model=model,
         baseline=baseline,
         # Library callers expect Google SDK format; gateway uses "rest"
@@ -228,7 +230,7 @@ def convert_response(
         ValueError: If conversion fails.
     """
     from .pipeline import ConversionPipeline
-    from .shims import get_shim
+    from .contracts.resolver import resolve_shim
 
     src = str(source_provider)
     tgt = str(target_provider)
@@ -236,8 +238,8 @@ def convert_response(
     pipeline = ConversionPipeline(
         src,
         tgt,
-        source_shim=get_shim(str(source_provider)),
-        target_shim=get_shim(str(target_provider)),
+        source_shim=resolve_shim(str(source_provider)),
+        target_shim=resolve_shim(str(target_provider)),
         upstream_model=model,
         baseline=baseline,
         # Library callers expect Google SDK format; gateway uses "rest"
