@@ -235,6 +235,13 @@ build-binary:
 	@echo "Binary build complete."
 
 # Build musl-linked binary via Alpine Docker container (Linux only)
+#
+# Nuitka is pinned here: 4.4 stops the Alpine build before it compiles anything,
+# "FATAL: Error, 'ldd' failed with exit code 127 for .../lib-dynload/_asyncio.cpython-312-x86_64-linux-musl.so"
+# (found on 2026-11-26 with the unpinned install).  4.2.1 is the release the last
+# green CI run of this target used (2026-09-05, v0.12.0), and it built the
+# binary of 2026-11-26 that passed the frozen-build checks.  Move the pin only
+# with a musl build that finishes and runs.
 build-binary-musl:
 	@echo "Building musl binary: $(BINARY_NAME_MUSL)..."
 	@mkdir -p $(BINARY_DIR)
@@ -247,7 +254,7 @@ build-binary-musl:
 			apk add --no-cache gcc musl-dev python3-dev git >/dev/null && \
 			pip install --break-system-packages patchelf -q && \
 			pip install --break-system-packages -e packages/llm-rosetta -e packages/llm-rosetta-gateway -q && \
-			pip install --break-system-packages "nuitka[onefile]" ordered-set -q && \
+			pip install --break-system-packages "nuitka[onefile]==4.2.1" ordered-set -q && \
 			printf "from llm_rosetta_gateway import main\nraise SystemExit(main())\n" > /tmp/_entry.py && \
 			python -m nuitka \
 				--standalone --onefile \

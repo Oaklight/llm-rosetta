@@ -131,3 +131,17 @@ def test_the_musl_recipe_installs_the_packages_the_workflow_installs():
     wanted = ("packages/llm-rosetta", "packages/llm-rosetta-gateway")
     assert wanted in _editable_installs(workflow)
     assert _editable_installs(_flag_blocks()["build-binary-musl"]) == [wanted]
+
+
+def test_the_musl_recipe_pins_nuitka():
+    """The Alpine recipe installs one Nuitka release, not whatever is newest.
+
+    Nuitka 4.4 fails on the musl Python (``'ldd' failed with exit code 127`` for
+    ``_asyncio.cpython-312-x86_64-linux-musl.so``), and the unpinned install
+    picked it up the day it came out.  4.2.1 built the musl binary, and the
+    binary ran every check, on 2026-11-26 (it is also what the last green
+    release run used, on 2026-09-05).
+    """
+    block = _flag_blocks()["build-binary-musl"]
+    pins = re.findall(r"nuitka\[onefile\]([^\s\"']*)", block)
+    assert pins and all(re.fullmatch(r"==\d+(\.\d+)+", pin) for pin in pins), pins
