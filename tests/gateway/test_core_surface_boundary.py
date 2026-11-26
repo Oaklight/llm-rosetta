@@ -201,8 +201,19 @@ def undeclared_names(edges: Iterable[Edge]) -> list[str]:
     return found
 
 
+def _lines(edges: list[Edge], keep) -> list[str]:
+    """``file:line module.name`` of every edge *keep* accepts, sorted."""
+    return sorted(
+        f"{e.file}:{e.lineno} {e.module}{'.' + e.name if e.name else ''}"
+        for e in edges
+        if keep(e)
+    )
+
+
 def test_a_core_import_is_on_the_surface():
-    assert sorted(outside_surface(gateway_edges())) == [], (
+    edges = list(gateway_edges())
+    outside = outside_surface(edges)
+    assert _lines(edges, lambda e: (e.file, e.module) in outside) == [], (
         "the gateway imports core outside the named surface "
         f"({', '.join(_SURFACE)}); add an additive name to llm_rosetta.api "
         "instead"
@@ -210,7 +221,8 @@ def test_a_core_import_is_on_the_surface():
 
 
 def test_the_gateway_reaches_no_private_core_name():
-    assert sorted(private_offenders(gateway_edges())) == []
+    edges = list(gateway_edges())
+    assert _lines(edges, lambda e: e.private) == []
 
 
 def test_surface_imports_use_declared_names():

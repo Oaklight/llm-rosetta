@@ -32,6 +32,10 @@ Guards:
   count change, and a same-named method in another class is a different key,
   so neither passes.
 
+* every unit-to-unit import, downward and same-layer ones included, is a row
+  of ``GATEWAY_EDGES``: a new one fails with its file and line, and a row whose
+  import has gone fails too, so the table is the whole package graph;
+
 What admin may import is guarded separately, file by file, by
 ``tests/gateway/test_admin_import_boundary.py``; this test only places admin
 in the serving layer.
@@ -279,6 +283,165 @@ def test_function_local_upward_imports_only_shrink():
     assert gone == [], "remove these from LAZY_UPWARD"
     shrunk = sorted(key for key in current if current[key] < LAZY_UPWARD[key])
     assert shrunk == [], "lower these counts in LAZY_UPWARD"
+
+
+#: Every import from one gateway unit into another, module level and
+#: function-local alike (``TYPE_CHECKING`` and dynamic non-literal imports are
+#: not counted, as above).  ``LAYERS`` forbids the upward ones; this table is
+#: the rest: a *downward* or same-layer import is allowed, but a new one is a
+#: new dependency a reviewer should see, so it fails until it is listed here, and
+#: an entry whose import has gone fails until it is deleted.
+GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
+    "admin": (
+        "admin_api",
+        "config",
+        "jobs",
+        "keystore",
+        "maintenance",
+        "middleware",
+        "model_types",
+        "observability",
+        "ops",
+        "quota",
+        "routing",
+        "shims",
+        "transport",
+        "updates",
+    ),
+    "admin_api": (
+        "app",
+        "observability",
+    ),
+    "app": (
+        "admin",
+        "config",
+        "jobs",
+        "keystore",
+        "maintenance",
+        "middleware",
+        "model_types",
+        "observability",
+        "ops",
+        "proxy",
+        "quota",
+        "routing",
+        "shims",
+        "surface",
+        "transport",
+    ),
+    "cli": (
+        "app",
+        "config",
+        "maintenance",
+        "observability",
+        "ops",
+        "shims",
+    ),
+    "config": (
+        "maintenance",
+        "middleware",
+        "model_types",
+        "observability",
+        "quota",
+        "routing",
+        "shims",
+        "transport",
+    ),
+    "jobs": (
+        "observability",
+        "ops",
+    ),
+    "keystore": (
+        "maintenance",
+        "observability",
+    ),
+    "maintenance": (
+        "config",
+        "keystore",
+        "observability",
+        "quota",
+        "shims",
+        "transport",
+    ),
+    "middleware": (
+        "keystore",
+        "observability",
+    ),
+    "model_types": ("pipelines",),
+    "ops": (
+        "config",
+        "middleware",
+        "model_types",
+        "observability",
+        "routing",
+        "shims",
+    ),
+    "pipelines": (
+        "config",
+        "maintenance",
+        "middleware",
+        "model_types",
+        "observability",
+        "proxy",
+        "quota",
+        "transport",
+    ),
+    "proxy": (
+        "maintenance",
+        "middleware",
+        "observability",
+        "ops",
+        "quota",
+        "routing",
+        "transport",
+    ),
+    "quota": (
+        "observability",
+        "routing",
+        "transport",
+    ),
+    "routing": (
+        "maintenance",
+        "quota",
+        "transport",
+    ),
+    "transport": ("routing",),
+}
+
+
+def _gateway_edges() -> dict[tuple[str, str], str]:
+    """Every unit-to-unit import, with one ``file:line`` that shows it."""
+    found: dict[tuple[str, str], str] = {}
+    for path in _files():
+        own = _unit_of_file(path)
+        for unit, _function, line in _edges(path.read_text(), path):
+            if unit != own:
+                found.setdefault((own, unit), f"{_rel(path)}:{line}")
+    return found
+
+
+def test_no_gateway_package_gains_an_import_the_table_does_not_list():
+    allowed = {(src, dst) for src, dsts in GATEWAY_EDGES.items() for dst in dsts}
+    new = [
+        f"{src} -> {dst} ({where})"
+        for (src, dst), where in sorted(_gateway_edges().items())
+        if (src, dst) not in allowed
+    ]
+    assert new == [], (
+        "a new package-level import in the gateway; if it is meant, add it to "
+        "GATEWAY_EDGES in tests/gateway/test_layers.py so a reviewer sees it"
+    )
+
+
+def test_the_gateway_edge_table_lists_no_import_that_has_gone():
+    actual = set(_gateway_edges())
+    gone = [
+        f"{src} -> {dst}"
+        for src, dsts in GATEWAY_EDGES.items()
+        for dst in dsts
+        if (src, dst) not in actual
+    ]
+    assert gone == [], "delete these rows from GATEWAY_EDGES: the import is gone"
 
 
 def test_the_guard_sees_eager_lazy_relative_and_dynamic_imports():
