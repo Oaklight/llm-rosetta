@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from llm_rosetta import api
 from llm_rosetta.devtools import ext_scaffold
 from llm_rosetta.devtools.ext_scaffold import (
     ExtensionScaffoldError,
@@ -34,8 +33,10 @@ needs_toml = pytest.mark.skipif(
 
 def _new(dest: Path, ext_id: str, *flags: str) -> int:
     parser = argparse.ArgumentParser()
-    api.add_ext_arguments(parser)
-    return api.run_ext_new(parser.parse_args([ext_id, "--dest", str(dest), *flags]))
+    ext_scaffold.add_ext_arguments(parser)
+    return ext_scaffold.run_ext_new(
+        parser.parse_args([ext_id, "--dest", str(dest), *flags])
+    )
 
 
 def _make(tmp_path: Path, ext_id: str = "acme", *flags: str) -> Path:
@@ -511,7 +512,7 @@ def test_checking_leaves_the_live_registry_alone(tmp_path):
 
 def test_run_ext_check_returns_zero_for_a_sound_folder(tmp_path, capsys):
     folder = _make(tmp_path, "acme")
-    assert api.run_ext_check(folder, build=False) == 0
+    assert ext_scaffold.run_ext_check(folder, build=False) == 0
     out = capsys.readouterr().out
     assert "ok      acme" in out
     assert "skipped acme: wheel contents" in out
@@ -520,7 +521,7 @@ def test_run_ext_check_returns_zero_for_a_sound_folder(tmp_path, capsys):
 def test_run_ext_check_returns_one_and_prints_the_problem(tmp_path, capsys):
     folder = _make(tmp_path, "acme")
     (folder / "README.md").unlink()
-    assert api.run_ext_check(folder, build=False) == 1
+    assert ext_scaffold.run_ext_check(folder, build=False) == 1
     assert "problem acme: missing README.md" in capsys.readouterr().out
 
 
@@ -530,7 +531,7 @@ def test_run_ext_check_walks_the_packages_of_a_root(tmp_path, capsys):
     bad = _make(packages, "bad")
     (bad / "tests" / "test_extension.py").unlink()
     (bad / "tests").rmdir()
-    assert api.run_ext_check(tmp_path, build=False) == 1
+    assert ext_scaffold.run_ext_check(tmp_path, build=False) == 1
     out = capsys.readouterr().out
     assert "ok      good" in out
     assert "problem bad: missing tests/" in out
@@ -540,43 +541,35 @@ def test_a_folder_in_packages_without_a_manifest_fails_the_root(tmp_path, capsys
     packages = tmp_path / "packages"
     _make(packages, "good")
     (packages / "stray").mkdir()
-    assert api.run_ext_check(tmp_path, build=False) == 1
+    assert ext_scaffold.run_ext_check(tmp_path, build=False) == 1
     assert "problem stray: no plugin.yaml" in capsys.readouterr().out
 
 
 def test_run_ext_check_takes_the_parsed_flags(tmp_path, capsys):
     folder = _make(tmp_path, "acme")
     parser = argparse.ArgumentParser()
-    api.add_ext_arguments(parser, command="check")
+    ext_scaffold.add_ext_arguments(parser, command="check")
     args = parser.parse_args([str(folder), "--no-build"])
     assert args.build is False
-    assert api.run_ext_check(args) == 0
+    assert ext_scaffold.run_ext_check(args) == 0
     assert "wheel contents: build not requested" in capsys.readouterr().out
     assert parser.parse_args([str(folder)]).build is True
 
 
 def test_add_ext_arguments_refuses_an_unknown_command():
     with pytest.raises(ValueError, match="unknown ext command"):
-        api.add_ext_arguments(argparse.ArgumentParser(), command="nope")
+        ext_scaffold.add_ext_arguments(argparse.ArgumentParser(), command="nope")
 
 
 def test_the_new_flags_default_to_chat_completions_in_packages():
     parser = argparse.ArgumentParser()
-    api.add_ext_arguments(parser)
+    ext_scaffold.add_ext_arguments(parser)
     args = parser.parse_args(["acme"])
     assert (args.format, args.dest, args.transport) == (
         "chat_completions",
         "packages",
         False,
     )
-
-
-def test_the_entry_points_are_the_scaffold_module_s():
-    assert api.run_ext_new is ext_scaffold.run_ext_new
-    assert api.run_ext_check is ext_scaffold.run_ext_check
-    assert api.add_ext_arguments is ext_scaffold.add_ext_arguments
-    for name in ("run_ext_new", "run_ext_check", "add_ext_arguments"):
-        assert name in api.__all__
 
 
 def test_the_generated_test_runs_the_check(tmp_path):

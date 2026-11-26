@@ -16,15 +16,13 @@ from typing import Any
 import pytest
 
 from llm_rosetta import cli as core_cli
-from llm_rosetta.api import (
-    CommandConflict,
-    CommandSpec,
-    command_catalog,
-    register_command,
-    registered_commands,
-    resolve_command,
-)
+from llm_rosetta.api import CommandSpec, register_command, resolve_command
 from llm_rosetta.contracts import command as command_contract
+from llm_rosetta.contracts.command import (
+    CommandConflict,
+    command_catalog,
+    registered_commands,
+)
 from llm_rosetta_gateway import cli
 from llm_rosetta_gateway.maintenance import migrate_0140
 from llm_rosetta_gateway.observability.usage import cli as usage_cli

@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import llm_rosetta.contracts as contracts
-from llm_rosetta import api
 from llm_rosetta.ir import model as ir
 
 
 def test_the_versions_have_one_definition_each():
     assert contracts.IR_VERSION is ir.IR_VERSION
-    assert api.SURFACE_VERSION is contracts.SURFACE_VERSION
     assert isinstance(contracts.SURFACE_VERSION, int)
     assert isinstance(contracts.IR_VERSION, int)
 

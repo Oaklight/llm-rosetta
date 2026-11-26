@@ -44,7 +44,7 @@ from .test_shim_manifest_sources import (
 
 @pytest.fixture(autouse=True)
 def _registry():
-    from llm_rosetta.api import restore_registry, snapshot_registry
+    from llm_rosetta.testing import restore_registry, snapshot_registry
 
     snapshot = snapshot_registry()
     yield

@@ -8,13 +8,8 @@ pin both the helpers and the fixture.
 
 from __future__ import annotations
 
-from llm_rosetta.shims import (
-    get_shim,
-    list_shims,
-    register_shim,
-    restore_registry,
-    snapshot_registry,
-)
+from llm_rosetta.shims import get_shim, list_shims, register_shim
+from llm_rosetta.testing import restore_registry, snapshot_registry
 from llm_rosetta.contracts.shim import ProviderShim
 from llm_rosetta.shims._loader import (
     _model_list_transforms,

@@ -77,9 +77,8 @@ def _load_dir(tmp_path, grouped=None, legacy=None):
     """Load shim definitions from a directory through the public loader."""
     from llm_rosetta.api import (
         load_providers_from_dir,
-        restore_registry,
-        snapshot_registry,
     )
+    from llm_rosetta.testing import restore_registry, snapshot_registry
 
     for name, text in (("grouped", grouped), ("legacy", legacy)):
         if text is not None:

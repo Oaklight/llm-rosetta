@@ -1,15 +1,14 @@
 """The core surface level this gateway needs (#1630).
 
 The gateway reaches ``llm_rosetta`` only through ``llm_rosetta.api`` and
-``llm_rosetta.contracts``.  ``llm_rosetta.api.SURFACE_VERSION`` (the same object
-as ``llm_rosetta.contracts.SURFACE_VERSION``) rises when a name is
+``llm_rosetta.contracts``.  ``llm_rosetta.contracts.SURFACE_VERSION`` rises when a name is
 removed or changes meaning, never when one is added; the gateway therefore
 asserts a minimum at startup instead of failing later on a missing name.
 """
 
 from __future__ import annotations
 
-#: The lowest ``llm_rosetta.api.SURFACE_VERSION`` this gateway runs on.
+#: The lowest ``llm_rosetta.contracts.SURFACE_VERSION`` this gateway runs on.
 REQUIRED_SURFACE_VERSION = 1
 
 
@@ -18,7 +17,7 @@ def check_core_surface(installed: object | None = None) -> None:
 
     Args:
         installed: The installed core's ``SURFACE_VERSION``.  ``None`` reads it
-            from ``llm_rosetta.api``; a core that predates the constant counts
+            from ``llm_rosetta.contracts``; a core that predates the constant counts
             as level 0.
 
     Raises:
@@ -26,9 +25,9 @@ def check_core_surface(installed: object | None = None) -> None:
             or is not an integer.
     """
     if installed is None:
-        from llm_rosetta import api
+        from llm_rosetta import contracts
 
-        installed = getattr(api, "SURFACE_VERSION", 0)
+        installed = getattr(contracts, "SURFACE_VERSION", 0)
     if (
         not isinstance(installed, int)
         or isinstance(installed, bool)

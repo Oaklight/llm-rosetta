@@ -8,7 +8,11 @@ import llm_rosetta.api as api
 from llm_rosetta.shims import builtin as providers
 from llm_rosetta.shims import ProviderShim, ReasoningCapability
 from llm_rosetta.shims.provider_shim import get_shim, register_shim
-from llm_rosetta.shims._loader import _CONNECTION_KEYS, _IDENTITY_KEYS
+from llm_rosetta.shims._loader import (
+    _CONNECTION_KEYS,
+    _IDENTITY_KEYS,
+    describe_vendor_manifest,
+)
 from llm_rosetta.shims._loader import _model_list_transforms
 from llm_rosetta.devtools import scaffold
 
@@ -152,7 +156,7 @@ def _vendor(tmp_path):
 
 
 def test_describe_manifest_effective_connection(tmp_path):
-    d = api.describe_vendor_manifest(_vendor(tmp_path))
+    d = describe_vendor_manifest(_vendor(tmp_path))
     assert d.vendor == "acme"
     assert d.connection["base_url"] == "https://a.example/v1"
     by_name = {leaf.name: leaf for leaf in d.leaves}
@@ -169,7 +173,7 @@ def test_describe_manifest_effective_connection(tmp_path):
 
 def test_describe_manifest_accepts_file_path_and_preview(tmp_path):
     v = _vendor(tmp_path)
-    d = api.describe_vendor_manifest(
+    d = describe_vendor_manifest(
         v / "provider.yaml", connection={"base_url": "https://b.example"}
     )
     assert d.connection == {"base_url": "https://b.example"}
@@ -178,7 +182,7 @@ def test_describe_manifest_accepts_file_path_and_preview(tmp_path):
 
 
 def test_describe_manifest_exposes_keys_and_schema(tmp_path):
-    d = api.describe_vendor_manifest(_vendor(tmp_path))
+    d = describe_vendor_manifest(_vendor(tmp_path))
     assert "base_url" in d.connection_keys
     assert {"name", "format"} <= set(d.identity_keys)
     assert "connection" in d.schema["manifest"].get("properties", {})
@@ -193,14 +197,14 @@ def test_describe_manifest_skips_nested_vendor_manifest(tmp_path):
     (nested / "llm" / "messages" / "provider.yaml").write_text(
         "name: acme-lane--messages\nformat: messages\n"
     )
-    names = {leaf.name for leaf in api.describe_vendor_manifest(v).leaves}
+    names = {leaf.name for leaf in describe_vendor_manifest(v).leaves}
     assert "acme-lane--messages" not in names
     assert "acme--embeddings" in names
 
 
 def test_describe_manifest_missing_file(tmp_path):
     with pytest.raises(FileNotFoundError):
-        api.describe_vendor_manifest(tmp_path)
+        describe_vendor_manifest(tmp_path)
 
 
 # --------------------------------------------- manifest text, no file on disk
@@ -211,7 +215,7 @@ def test_manifest_vocabulary_matches_the_loader_and_a_described_manifest(tmp_pat
     assert vocab.identity_keys == _IDENTITY_KEYS
     assert set(vocab.schema) == {"manifest", "connection"}
     assert set(vocab.schema["connection"]["properties"]) == set(_CONNECTION_KEYS)
-    d = api.describe_vendor_manifest(_vendor(tmp_path))
+    d = describe_vendor_manifest(_vendor(tmp_path))
     assert d.schema == vocab.schema
     assert d.connection_keys == vocab.connection_keys
     assert d.identity_keys == vocab.identity_keys
@@ -244,7 +248,7 @@ def test_merge_connection_leaf_wins_and_headers_merge_per_key():
 
 
 def test_merge_connection_agrees_with_describe_vendor_manifest(tmp_path):
-    d = api.describe_vendor_manifest(_vendor(tmp_path))
+    d = describe_vendor_manifest(_vendor(tmp_path))
     for leaf in d.leaves:
         assert api.merge_connection(d.connection, leaf.own) == leaf.effective
 
@@ -294,12 +298,9 @@ def test_plugin_source_is_none_for_a_directory_shim():
     assert api.plugin_source("no-such-shim") is None
 
 
-def test_the_scaffold_entry_points_are_the_scaffold_module_s():
+def test_the_scaffold_arguments_parse():
     import argparse
 
-    assert api.run_scaffold is scaffold.run
-    assert api.run_scaffold_check is scaffold.run_check
-    assert api.run_scaffold_migrate is scaffold.run_migrate
     parser = argparse.ArgumentParser()
-    api.add_scaffold_arguments(parser, default_root="providers")
+    scaffold.add_arguments(parser, default_root="providers")
     assert parser.parse_args(["acme"]).__dict__

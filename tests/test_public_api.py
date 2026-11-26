@@ -119,11 +119,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "ProviderType",
             "retired_names",
             # Shim registry, read side
-            "ConnectionConfig",
-            "ProviderShim",
-            "ReasoningCapability",
             "SoftErrorPattern",
-            "VendorManifest",
             "get_model_list_transform",
             "get_shim",
             "list_shims",
@@ -133,9 +129,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "resolve_model_type",
             "resolve_shim",
             # Shim registry, write side and loaders
-            "ManifestVocabulary",
             "builtin_providers_dir",
-            "describe_vendor_manifest",
             "leaf_connection",
             "load_providers",
             "load_providers_from_dir",
@@ -143,42 +137,16 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "merge_connection",
             "plugin_source",
             "register_shim",
-            "restore_registry",
-            "snapshot_registry",
             "staging_registry",
             "unregister_shim",
             "validate_shim_declaration",
             # Shim scaffolding
-            "add_scaffold_arguments",
-            "run_scaffold",
-            "run_scaffold_check",
-            "run_scaffold_migrate",
             # Extension authoring
-            "add_ext_arguments",
-            "run_ext_check",
-            "run_ext_new",
             # Vendor CLI sign-in
-            "CliLoginError",
-            "begin_cli_login",
-            "cancel_cli_login",
-            "complete_cli_login",
-            "run_capture",
-            "subprocess_env",
             # Subcommands a distribution adds to the ``llm-rosetta`` dispatcher
-            "COMMAND_ENTRY_POINT_GROUP",
             "CORE_COMMAND_NAMES",
-            "CommandCatalog",
-            "CommandConflict",
-            "CommandError",
-            "CommandLoadError",
-            "CommandNameError",
             "CommandSpec",
-            "RegisteredCommand",
-            "UnknownCommand",
-            "command_catalog",
-            "command_summary",
             "register_command",
-            "registered_commands",
             "resolve_command",
             "run_cli",
             # Installed extensions and what happened to each at load time
@@ -214,10 +182,9 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "read_tool_declarations",
             "strip_internal_metadata",
             # Version
-            "SURFACE_VERSION",
             "__version__",
         ],
-        "max_count": 108,
+        "max_count": 75,
     },
     "llm_rosetta.ir.model": {
         "items": None,  # too many to enumerate; just check count
@@ -294,6 +261,10 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "TRANSFORMS_MODULE",
         ],
         "max_count": 12,
+    },
+    "llm_rosetta.testing": {
+        "items": ["RegistrySnapshot", "restore_registry", "snapshot_registry"],
+        "max_count": 3,
     },
     "llm_rosetta.contracts.resolver": {
         "items": [

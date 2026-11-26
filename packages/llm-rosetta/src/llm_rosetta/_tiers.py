@@ -74,6 +74,7 @@ EXTENSION: tuple[str, ...] = (
     "llm_rosetta.contracts.transform",
     "llm_rosetta.contracts.transport",
     "llm_rosetta.contracts.usage",
+    "llm_rosetta.testing",
 )
 
 COMPAT: tuple[str, ...] = (
