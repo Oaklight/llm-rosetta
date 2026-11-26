@@ -39,21 +39,29 @@ from .converters.base.simple_converter import BaseSimpleConverter
 from . import tool_ops
 from .converters.base.context import ConversionContext, StreamContext
 from .ir.primitives.body import Transform, apply_transforms
-from .shims import (
-    ConnectionConfig,
-    ProviderShim,
-    ToolsConfig,
-    get_shim,
-    list_shims,
-    register_shim,
-    rename_field,
-    resolve_format,
-    resolve_model_type,
-    force_fields,
-    set_defaults,
-    strip_fields,
-    unregister_shim,
-)
+from .contracts.resolver import resolve_format
+from .contracts.shim import ConnectionConfig, ProviderShim, ToolsConfig
+
+# The shim layer (the registry of provider shims and the extensions that add
+# more) is optional: without it this is a plain conversion library, and a
+# ``ProviderShim`` object still works wherever a shim is taken.  This is the one
+# place that lets the package import without it.
+try:
+    from .shims import (
+        force_fields,
+        get_shim,
+        list_shims,
+        register_shim,
+        rename_field,
+        resolve_model_type,
+        set_defaults,
+        strip_fields,
+        unregister_shim,
+    )
+
+    _SHIM_LAYER = True
+except ImportError:
+    _SHIM_LAYER = False
 
 __version__ = "0.14.0.dev35"
 
@@ -115,3 +123,17 @@ __all__ = [
     "rename_field",
     "set_defaults",
 ]
+
+if not _SHIM_LAYER:
+    _SHIM_NAMES = {
+        "force_fields",
+        "get_shim",
+        "list_shims",
+        "register_shim",
+        "rename_field",
+        "resolve_model_type",
+        "set_defaults",
+        "strip_fields",
+        "unregister_shim",
+    }
+    __all__ = [name for name in __all__ if name not in _SHIM_NAMES]

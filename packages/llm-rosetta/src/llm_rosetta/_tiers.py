@@ -67,6 +67,7 @@ EXTENSION: tuple[str, ...] = (
     "llm_rosetta.contracts.command",
     "llm_rosetta.contracts.extension",
     "llm_rosetta.contracts.quota",
+    "llm_rosetta.contracts.resolver",
     "llm_rosetta.contracts.routing",
     "llm_rosetta.contracts.shim",
     "llm_rosetta.contracts.shim_manifest",

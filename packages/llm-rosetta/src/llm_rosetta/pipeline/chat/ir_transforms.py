@@ -10,7 +10,7 @@ from llm_rosetta.ir.passes import (
 from llm_rosetta.converters.base.context import ConversionContext
 from llm_rosetta.conversion_warnings import WarningSink
 from llm_rosetta.contracts.shim import ProviderShim
-from llm_rosetta.shims.provider_shim import resolve_shim
+from llm_rosetta.contracts.resolver import resolve_shim
 from llm_rosetta.ir.primitives.ir import (
     TransformContext,
     apply_ir_transforms as _apply_ir_transforms_exec,

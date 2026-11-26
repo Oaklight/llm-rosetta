@@ -18,7 +18,6 @@ re-exports will be removed in 0.15.0.
 from __future__ import annotations
 
 import contextlib
-import fnmatch
 import logging
 import threading
 from collections.abc import Iterator
@@ -39,6 +38,12 @@ from llm_rosetta.contracts.shim import (  # deprecated re-exports, removed in 0.
     ToolsConfig,
     UnsignedBlocks,
     VendorManifest,
+)
+from llm_rosetta.contracts.resolver import (  # moved to contracts (#1706)
+    match_model_reasoning,
+    resolve_format,
+    resolve_shim,
+    set_shim_resolver,
 )
 from llm_rosetta.contracts.transform import (
     IRTransform,
@@ -189,53 +194,6 @@ def get_shim(name: str) -> ProviderShim | None:
     return _current_registry().get(name)
 
 
-def resolve_shim(shim: ProviderShim | str | None) -> ProviderShim | None:
-    """Resolve a shim argument to a :class:`ProviderShim` instance.
-
-    Accepts a :class:`ProviderShim` (returned as-is), a registered name
-    (looked up via :func:`get_shim`), or ``None`` (returns ``None``).
-    """
-    if shim is None:
-        return None
-    if isinstance(shim, ProviderShim):
-        return shim
-    return get_shim(shim)
-
-
-def match_model_reasoning(
-    shim: ProviderShim | str | None,
-    model: str | None,
-) -> ReasoningCapability | None:
-    """Return the reasoning override declared for *model*, if any.
-
-    ``model_overrides`` keys are matched against the **upstream model ID**.
-    An exact key wins; otherwise the keys are tried in declaration order as
-    shell-style patterns (:func:`fnmatch.fnmatchcase`), so a vendor can cover
-    a model family with one entry (``deepseek*``) while an exact ID still
-    overrides it.  ``fnmatch``'s ``*`` matches ``/`` too, so the same
-    pattern covers vendor-prefixed IDs such as ``deepseek/deepseek-v3``.
-
-    Args:
-        shim: A shim object or registered name.
-        model: The upstream model ID.  ``None`` or empty matches nothing.
-
-    Returns:
-        The matching per-model capability, or ``None`` when the model has no
-        override (the caller then falls back to the provider-level one).
-    """
-    resolved = resolve_shim(shim)
-    if resolved is None or not resolved.model_reasoning or not model:
-        return None
-    overrides = resolved.model_reasoning
-    exact = overrides.get(model)
-    if exact is not None:
-        return exact
-    for pattern, capability in overrides.items():
-        if fnmatch.fnmatchcase(model, pattern):
-            return capability
-    return None
-
-
 def list_shims() -> list[ProviderShim]:
     """Return all registered provider shims, in registration order.
 
@@ -250,20 +208,6 @@ def list_shims() -> list[ProviderShim]:
         seen.add(id(shim))
         out.append(shim)
     return out
-
-
-def resolve_format(name: str) -> str:
-    """Resolve a provider/shim *name* to its wire format.
-
-    An exact registered shim name is tried first.  If *name* is a known chat
-    format or a model-type name, it is returned unchanged.  If the name is not
-    found in either, it is returned as-is (caller decides how to handle unknown
-    names, including a retired spelling).
-    """
-    shim = _current_registry().get(name)
-    if shim is not None:
-        return shim.format
-    return name
 
 
 def resolve_model_type(name: str) -> str | None:
@@ -389,3 +333,16 @@ def restore_registry(snapshot: RegistrySnapshot) -> None:
     _model_list_transforms.update(snapshot.model_list_transforms)
     # Cached converters are derived from shims that may no longer exist.
     _converter_cache.clear()
+
+
+class _RegistryResolver:
+    """The shim layer's answer to :class:`~llm_rosetta.contracts.resolver.ShimResolver`."""
+
+    def get_shim(self, name: str) -> ProviderShim | None:
+        """Return the shim registered under *name*, or ``None``."""
+        return get_shim(name)
+
+
+# Conversion code reads shim names through the contract's resolver; this layer
+# is what answers.
+set_shim_resolver(_RegistryResolver())

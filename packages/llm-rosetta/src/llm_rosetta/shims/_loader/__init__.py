@@ -70,6 +70,7 @@ from llm_rosetta.formats.batch import (  # noqa: F401
 from llm_rosetta.types.ir.constraints import Range, RequestConstraints  # noqa: F401
 
 from ...contracts import QUOTA_MODULE
+from llm_rosetta.contracts.resolver import set_providers_dir_loader
 from llm_rosetta.contracts.shim import ProviderShim  # noqa: F401
 from ..provider_shim import register_shim  # noqa: F401
 
@@ -378,3 +379,8 @@ def plugin_source(name: str) -> str | None:
         ``None`` for a shim that came from a directory.
     """
     return _PLUGIN_SOURCES.get(name)
+
+
+# ``llm_rosetta.contracts.shim.load_providers_from_dir`` hands its work to this
+# function; the contract module imports nothing from the shim layer.
+set_providers_dir_loader(load_providers_from_dir)
