@@ -29,6 +29,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   <div class="scroll"><div class="stage" id="stage-core"><pre class="mermaid" id="m-core">flowchart TB
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
     API["api.py&lt;br/&gt;宿主门面:只做再导出(再导出的边不画)"]
+    TESTING["testing.py&lt;br/&gt;测试辅助:snapshot_registry · restore_registry(core 不导入)"]
     INIT["llm_rosetta/__init__&lt;br/&gt;convert() · get_converter_for_provider()"]
     CLI["cli.py · __main__&lt;br/&gt;llm-rosetta 分发器"]
   end
@@ -109,6 +110,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   GW["gateway:transport 注册表&lt;br/&gt;注册 transports 处理器"]
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
     API["api.py&lt;br/&gt;宿主门面:只做再导出(再导出的边不画)"]
+    TESTING["testing.py&lt;br/&gt;测试辅助:snapshot_registry · restore_registry(core 不导入)"]
     INIT["llm_rosetta/__init__ 组合根&lt;br/&gt;导入完成后调用 load_extensions()"]
     CLI["cli.py · __main__&lt;br/&gt;分发器 · 注册 commands 处理器"]
   end

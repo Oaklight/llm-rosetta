@@ -14,6 +14,7 @@ def render(header, edges):
 current_header = '''flowchart TB
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
     API["api.py<br/>宿主门面:只做再导出(再导出的边不画)"]
+    TESTING["testing.py<br/>测试辅助:snapshot_registry · restore_registry(core 不导入)"]
     INIT["llm_rosetta/__init__<br/>convert() · get_converter_for_provider()"]
     CLI["cli.py · __main__<br/>llm-rosetta 分发器"]
   end
@@ -74,6 +75,7 @@ target_header = '''flowchart TB
   GW["gateway:transport 注册表<br/>注册 transports 处理器"]
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
     API["api.py<br/>宿主门面:只做再导出(再导出的边不画)"]
+    TESTING["testing.py<br/>测试辅助:snapshot_registry · restore_registry(core 不导入)"]
     INIT["llm_rosetta/__init__ 组合根<br/>导入完成后调用 load_extensions()"]
     CLI["cli.py · __main__<br/>分发器 · 注册 commands 处理器"]
   end
