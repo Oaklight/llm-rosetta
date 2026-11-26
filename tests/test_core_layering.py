@@ -321,6 +321,7 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
         "contracts",
         "converters",
         "ir",
+        "pipeline",
     ),
     "cli": (
         "contracts",
@@ -350,10 +351,7 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
     ),
     "fidelity": ("retired_names",),
     "formats": ("ir",),
-    "ir": (
-        "contracts",
-        "conversion_warnings",
-    ),
+    "ir": ("conversion_warnings",),
     "model_vocabulary": ("formats",),
     "pipeline": (
         "contracts",

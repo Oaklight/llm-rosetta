@@ -4,9 +4,7 @@ import logging
 import warnings
 from typing import Any, Protocol
 
-from llm_rosetta.ir.passes import (
-    enforce_reasoning,
-)
+from llm_rosetta.pipeline.enforcement import enforce_reasoning
 from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.conversion_warnings import WarningSink
 from llm_rosetta.contracts.shim import ProviderShim
@@ -35,7 +33,7 @@ def configure_context(
     model: str | None = None,
     config_override: dict[str, Any] | None = None,
 ) -> None:
-    """Deprecated: use :func:`llm_rosetta.ir.passes.enforce_reasoning`."""
+    """Deprecated: use :func:`llm_rosetta.pipeline.enforcement.enforce_reasoning`."""
 
     warnings.warn(
         "configure_context is deprecated; use capabilities.enforce_reasoning()",

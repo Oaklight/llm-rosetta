@@ -111,6 +111,7 @@ def test_capabilities_forwards_the_current_objects():
     from llm_rosetta.contracts import shim
     from llm_rosetta.converters import base
     from llm_rosetta.ir import passes
+    from llm_rosetta.pipeline import enforcement
     from llm_rosetta.contracts import resolver
 
     assert module.ConversionContext is base.ConversionContext
@@ -120,7 +121,8 @@ def test_capabilities_forwards_the_current_objects():
     for name in CAPABILITIES_NAMES[3:]:
         if name == "resolve_shim":
             continue
-        assert getattr(module, name) is getattr(passes, name), name
+        home = enforcement if hasattr(enforcement, name) else passes
+        assert getattr(module, name) is getattr(home, name), name
 
 
 #: ``llm_rosetta.types.ir.__all__`` on the v0.13.0 tag: the IR merged into

@@ -17,7 +17,7 @@ from llm_rosetta.conversion_warnings import (
     WarningSink,
     recording_to,
 )
-from llm_rosetta.ir.passes import enforce_vision
+from llm_rosetta.pipeline.enforcement import enforce_vision
 from llm_rosetta.pipeline import ConversionPipeline
 
 IMAGE: dict[str, Any] = {

@@ -218,14 +218,17 @@ The logic that operates on IR values lives beside the model in `ir/`:
 | `ir/model/` | The data: IR dataclasses, guards, validation, helpers; imports only the standard library and `_vendor` |
 | `ir/primitives/` | Body/IR transforms plus their stateless helpers |
 | `ir/tools/` | Stateless tool helpers (intrinsic kinds, call ids, error markers) |
-| `ir/passes/` | Capability passes (vision, reasoning, custom tools, names) |
+| `ir/passes/` | Passes over IR that need no shim (intrinsic history, tool names, description limits, request constraints) |
 
 The direction is `ir/model <- ir/primitives, ir/tools <- ir/passes <- converters`.
 Nothing in `ir/` may import `converters` (enforced by
 `tests/test_ir_import_boundary.py`, which also holds the model and the
 primitives to their layer); `ConversionContext` / `StreamContext` live
-in `ir/context.py` and `converters/base/context.py` re-exports them. A pass may
-use the shim contract. `llm_rosetta.contracts.transform` re-exports the
+in `ir/context.py` and `converters/base/context.py` re-exports them. No module
+in `ir/` imports `contracts` (`CORE_EDGES` in `tests/test_core_layering.py`): a
+pass does not use the shim contract, and the passes that read a shim's
+declarations (reasoning, vision, custom and intrinsic tools) are
+`pipeline/enforcement.py`. `llm_rosetta.contracts.transform` re-exports the
 transform types and primitives shims use, and the package-level
 `converters.base.{helpers,tools}` names re-export from `ir/`.
 

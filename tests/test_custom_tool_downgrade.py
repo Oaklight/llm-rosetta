@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from llm_rosetta.ir.passes import (
+from llm_rosetta.pipeline.enforcement import (
     CustomToolRestorer,
     enforce_custom_tools,
     get_custom_tool_names,

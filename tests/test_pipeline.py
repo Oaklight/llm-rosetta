@@ -10,11 +10,11 @@ from typing import Any, get_args, get_type_hints
 
 import pytest
 
-from llm_rosetta.ir.passes import (
+from llm_rosetta.pipeline.enforcement import (
     enforce_reasoning,
     strip_reasoning_for_non_reasoning,
 )
-from llm_rosetta.ir.passes.enforcement import _apply_config_reasoning_override
+from llm_rosetta.pipeline.enforcement import _apply_config_reasoning_override
 from llm_rosetta.conversion_warnings import DOWNGRADED, WarningSink
 from llm_rosetta.ir.context import ConversionContext
 from llm_rosetta.pipeline import apply_ir_transforms

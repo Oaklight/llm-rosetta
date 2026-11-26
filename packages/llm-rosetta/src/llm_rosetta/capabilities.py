@@ -18,7 +18,7 @@ from llm_rosetta.converters.base import ConversionContext
 from llm_rosetta.ir.passes.description_limit import (
     relocate_oversized_tool_descriptions,
 )
-from llm_rosetta.ir.passes.enforcement import (
+from llm_rosetta.pipeline.enforcement import (
     enforce_custom_tools,
     enforce_reasoning,
     enforce_vision,

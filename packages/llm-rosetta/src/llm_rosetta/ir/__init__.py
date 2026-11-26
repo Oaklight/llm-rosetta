@@ -13,10 +13,9 @@ Sub-package           Holds
 ``ir.tools``          Stateless tool helpers: intrinsic-kind inspection,
                       call ids, error markers, orphan repair, batch ids,
                       allow-lists, strict mode.
-``ir.passes``         Named capability passes that adapt an IR input to a
-                      model's capabilities (vision, reasoning, custom
-                      tools, intrinsic history, tool names, description
-                      limits).
+``ir.passes``         Named passes that adapt an IR input to a model's
+                      declared limits (intrinsic history, tool names,
+                      description limits, request constraints).
 ====================  ===================================================
 
 Dependency direction::
@@ -27,8 +26,9 @@ Dependency direction::
 No module in ``ir`` imports anything from ``converters`` — the direction is
 enforced by ``tests/test_ir_import_boundary.py``.  ``ConversionContext`` and
 ``StreamContext`` live in ``ir.context`` (``converters.base.context``
-re-exports them).  A pass may use the shim contract, because a pass is where a
-target's declared capabilities enter the IR.
+re-exports them).  A pass does not use the shim contract: the passes that read
+a shim's declarations (reasoning, vision, custom and intrinsic tools) are
+``pipeline.enforcement``, which sits above ``contracts``.
 
 :mod:`llm_rosetta.contracts.transform` re-exports the transform types and
 primitives a shim uses, and the modules that used to live under
@@ -36,8 +36,8 @@ primitives a shim uses, and the modules that used to live under
 new home rather than keeping a copy.
 
 This ``__init__`` deliberately imports nothing: ``llm_rosetta.shims`` imports
-``llm_rosetta.contracts.transform``, and eager sub-package imports here would pull
-``ir.passes`` (which imports the shim contract) back into that cycle.
+``llm_rosetta.contracts.transform``, and eager sub-package imports here would
+make the ``ir`` import order matter to the contract layer.
 """
 
 from __future__ import annotations
