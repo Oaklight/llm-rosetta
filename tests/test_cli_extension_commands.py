@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import shutil
 import sys
 import textwrap
 from pathlib import Path
@@ -17,11 +18,12 @@ from llm_rosetta.contracts.extension import (
     validate_extension_manifest,
 )
 from llm_rosetta.devtools import ext_scaffold
+from llm_rosetta import cli_areas
+from llm_rosetta.cli_areas import extension_areas
 from llm_rosetta.extensions import (
-    _commands,
     _discovery,
     configure_extensions_dir,
-    extension_areas,
+    load_extensions,
 )
 from llm_rosetta.shims import list_shims
 from llm_rosetta.shims._loader import _PLUGIN_SOURCES
@@ -37,6 +39,7 @@ def _isolated(monkeypatch):
     monkeypatch.delenv("LLM_ROSETTA_EXTENSIONS_DIR", raising=False)
     monkeypatch.delenv(cli.DEBUG_ENV, raising=False)
     configure_extensions_dir(None)
+    cli_areas._AREAS.clear()
     before = {shim.name for shim in list_shims()}
     sources = dict(_PLUGIN_SOURCES)
     path = list(sys.path)
@@ -44,6 +47,7 @@ def _isolated(monkeypatch):
     command._REGISTRY.clear()
     command._REGISTRY.update(saved)
     configure_extensions_dir(None)
+    cli_areas._AREAS.clear()
     sys.path[:] = path
     for shim in list_shims():
         if shim.name not in before:
@@ -117,6 +121,9 @@ def _place(
     (folder / "__init__.py").write_text("", encoding="utf-8")
     if commands is not None:
         (folder / "commands.py").write_text(textwrap.dedent(commands), encoding="utf-8")
+    # The loader ran when ``llm_rosetta`` was imported; a folder placed since
+    # is seen by the next load, as after ``ext install``.
+    load_extensions()
     return folder
 
 
@@ -216,6 +223,60 @@ class TestAreas:
         _place(home, "old", _manifest("old", surface=SURFACE_VERSION + 1))
         areas, _ = _areas_after_activation(home)
         assert areas["old"].problem
+
+
+class TestTheLoaderHandsOverTheAreas:
+    """The CLI registers the ``commands`` kind; the loader calls it per extension."""
+
+    def test_the_cli_registers_the_commands_kind(self):
+        from llm_rosetta.extensions import _load
+
+        assert _load._KIND_HANDLERS["commands"] is cli_areas._claim
+        assert _load._KIND_UNDO["commands"] is cli_areas._release
+
+    def test_the_loader_records_the_area_of_a_loaded_extension(self, home):
+        _place(home, "acme_tool", _manifest("acme_tool"))
+        assert set(cli_areas._AREAS) == {"acme-tool"}
+
+    def test_an_extension_that_failed_has_no_area_and_is_reported(self, home):
+        # It declares a shim it does not ship, so the shims kind refuses it.
+        _place(home, "acme_tool", _manifest("acme_tool", shims=True))
+        areas, problems = extension_areas()
+        assert areas == {}
+        assert cli_areas._AREAS == {}
+        assert any("acme_tool" in p and "does not register" in p for p in problems)
+
+    def test_a_removed_extension_leaves_no_area(self, home):
+        folder = _place(home, "acme_tool", _manifest("acme_tool"))
+        shutil.rmtree(folder)
+        load_extensions()
+        areas, _ = extension_areas()
+        assert areas == {}
+
+    def test_the_extensions_are_loaded_first_when_nothing_loaded_them(
+        self, home, monkeypatch
+    ):
+        from llm_rosetta.extensions import _load
+
+        folder = home / "llm_rosetta_ext" / "acme_tool"
+        folder.mkdir(parents=True)
+        (folder / "__init__.py").write_text("")
+        (folder / "plugin.yaml").write_text(_manifest("acme_tool"))
+        monkeypatch.setattr(_load, "_LOADED_ONCE", False)
+        areas, _ = extension_areas()
+        assert set(areas) == {"acme-tool"}
+
+    def test_a_directory_configured_after_the_load_is_read(self, home, tmp_path):
+        load_extensions()  # the import-time load: this directory is empty
+        other = tmp_path / "other"
+        (other / "llm_rosetta_ext" / "acme_tool").mkdir(parents=True)
+        (other / "llm_rosetta_ext" / "acme_tool" / "__init__.py").write_text("")
+        (other / "llm_rosetta_ext" / "acme_tool" / "plugin.yaml").write_text(
+            _manifest("acme_tool")
+        )
+        configure_extensions_dir(other)
+        areas, _ = extension_areas()
+        assert set(areas) == {"acme-tool"}
 
 
 def _areas_after_activation(home: Path):
@@ -350,7 +411,9 @@ class TestOrder:
 
     def test_help_survives_a_failing_scan(self, monkeypatch, capsys):
         monkeypatch.setattr(
-            _commands, "discover", lambda: (_ for _ in ()).throw(OSError("denied"))
+            cli_areas,
+            "list_extensions",
+            lambda: (_ for _ in ()).throw(OSError("denied")),
         )
         assert cli.main(["help"]) == 0
         assert "ext" in capsys.readouterr().out
@@ -388,6 +451,7 @@ class TestScaffold:
         capsys.readouterr()
         folder = home / "llm_rosetta_ext" / "acme_tool"
         assert cli.main(["ext", "check", str(folder), "--no-build"]) == 0
+        load_extensions()  # the next process would find the new folder
         assert cli.main(["acme-tool", "run-it", "x"]) == 0
         assert "acme_tool run-it x" in capsys.readouterr().out
 

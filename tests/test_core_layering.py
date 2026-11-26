@@ -325,8 +325,13 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
         "pipeline",
     ),
     "cli": (
+        "cli_areas",
         "contracts",
         "devtools",
+        "extensions",
+    ),
+    "cli_areas": (
+        "contracts",
         "extensions",
     ),
     "contracts": (
