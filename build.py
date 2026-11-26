@@ -3,7 +3,7 @@ d = pathlib.Path(".")
 def src(n): return html.escape((d / f"{n}.mmd").read_text(encoding="utf-8"), quote=False)
 sections = [
  ("core", "1. core 现状:组件与依赖",
-  "实线是模块顶层导入,虚线是函数内的懒加载。红色是有问题的依赖:shims 与 extensions 互相依赖(导入时加载 vs 注册 shim)、ir 与 shims 互相依赖、contracts 经 transform.py 依赖 ir。contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。未画的:shims/providers 转发层、已弃用的 gateway/ 与 observability/ 转发包。画的是 master(含 PR #1705)的树;extensions/_index、_commands、_probe 在草稿 PR #1707。"),
+  "实线是模块顶层导入,虚线是函数内的懒加载。红色是有问题的依赖:shims 与 extensions 互相依赖(导入时加载 vs 注册 shim)、ir 与 shims 互相依赖、contracts 经 transform.py 依赖 ir。contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。api 只是把下面各包再导出一遍,0.14.0 dev 期间还会大改,这些再导出的边不画,免得遮住真正的依赖。未画的:shims/providers 转发层、已弃用的 gateway/ 与 observability/ 转发包。画的是 master(含 PR #1705)的树;extensions/_index、_commands、_probe 在草稿 PR #1707。"),
  ("core_target", "2. core 建议目标(未实现,待决定)",
   "绿色是建议新增的接线。extensions 只管包(清单、发现、安装、索引、兼容性、状态),只依赖 contracts,不认识 shim、transport、commands;shims、cli、gateway 各自向它注册种类处理器;由 __init__ 这个组合根在导入完成后调用 load_extensions(),shims 不再在导入时隐式调用它。contracts 拆成声明层(只依赖 types 和标准库)和 transform.py(唯一允许依赖 ir 的便利再导出),并用导入边界测试固定。"),
  ("gateway", "3. gateway 后端的组件与关系",
@@ -41,7 +41,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
 <body>
 <h1>llm-rosetta 架构图</h1>
 <p class="note">core 现状、core 建议目标、gateway 后端、gateway admin。由 mermaid 在浏览器里渲染,可滚动、可缩放。</p>
-<p class="legend"><span><i style="border-color:#333"></i>模块顶层导入</span><span><i style="border-color:#333;border-top-style:dashed"></i>函数内懒加载</span><span><i style="border-color:#d33"></i>有问题的依赖(循环或反向)</span><span><i style="border-color:#1a8f3c"></i>建议新增的接线</span><span><i style="border-color:#c3c9d0;border-top-width:1px"></i>api 门面的再导出(0.14.0 dev 新增,最后可能大改,所以淡化)</span></p>
+<p class="legend"><span><i style="border-color:#333"></i>模块顶层导入</span><span><i style="border-color:#333;border-top-style:dashed"></i>函数内懒加载</span><span><i style="border-color:#d33"></i>有问题的依赖(循环或反向)</span><span><i style="border-color:#1a8f3c"></i>建议新增的接线</span></p>
 <nav><a href="#core">core 现状</a><a href="#core_target">core 建议目标</a><a href="#gateway">gateway 后端</a><a href="#admin">admin 页面</a></nav>
 ''' + blocks + '''
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>

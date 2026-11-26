@@ -1,7 +1,5 @@
 RED = "stroke:#d33,stroke-width:2.5px,color:#d33"
 GREEN = "stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c"
-GRAY = "stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad"
-API_NODE_STYLE = "  style API fill:#f3f4f6,stroke:#c3c9d0,color:#8a939e"
 
 def render(header, edges):
     lines = [header, ""]
@@ -11,12 +9,11 @@ def render(header, edges):
         lines.append(f"  {a} {arrow}|\"{label}\"| {b}" if label else f"  {a} {arrow} {b}")
         if color:
             styles.append(f"  linkStyle {i} {color}")
-    styles.append(API_NODE_STYLE)
     return "\n".join(lines + [""] + styles) + "\n"
 
 current_header = '''flowchart TB
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
-    API["api.py<br/>宿主门面:只做再导出,gateway 经它进入 core"]
+    API["api.py<br/>宿主门面:只做再导出(再导出的边不画)"]
     INIT["llm_rosetta/__init__<br/>convert() · get_converter_for_provider()"]
     CLI["cli.py · __main__<br/>llm-rosetta 分发器"]
   end
@@ -47,12 +44,7 @@ current_header = '''flowchart TB
   end
 '''
 current_edges = [
- ("API","PIPE","再导出","solid",GRAY), ("API","CVT","再导出","solid",GRAY),
- ("API","SHIM","再导出","solid",GRAY), ("API","EXTS","再导出","solid",GRAY),
- ("API","CLI","再导出","solid",GRAY), ("API","DEV","再导出","solid",GRAY),
- ("API","FID","再导出","solid",GRAY), ("API","PROF","再导出","solid",GRAY),
- ("API","CON","同一对象","solid",GRAY),
- ("INIT","PIPE","","solid",None), ("INIT","CVT","","solid",None),
+("INIT","PIPE","","solid",None), ("INIT","CVT","","solid",None),
  ("INIT","SHIM","","solid",None), ("INIT","DET","","solid",None),
  ("CLI","CON","","solid",None), ("CLI","EXTS","懒加载","lazy",None),
  ("PIPE","CVT","","solid",None), ("PIPE","IR","","solid",None),
@@ -78,7 +70,7 @@ target_header = '''flowchart TB
   AUTHOR(["shim / 扩展作者"])
   GW["gateway:transport 注册表<br/>注册 transports 处理器"]
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
-    API["api.py<br/>宿主门面:只做再导出"]
+    API["api.py<br/>宿主门面:只做再导出(再导出的边不画)"]
     INIT["llm_rosetta/__init__ 组合根<br/>导入完成后调用 load_extensions()"]
     CLI["cli.py · __main__<br/>分发器 · 注册 commands 处理器"]
   end
@@ -100,10 +92,7 @@ target_header = '''flowchart TB
   end
 '''
 target_edges = [
- ("API","PIPE","再导出","solid",GRAY), ("API","CVT","再导出","solid",GRAY),
- ("API","SHIM","再导出","solid",GRAY), ("API","EXTS","再导出","solid",GRAY),
- ("API","CLI","再导出","solid",GRAY), ("API","CDECL","同一对象","solid",GRAY),
- ("INIT","PIPE","","solid",None), ("INIT","SHIM","","solid",None),
+("INIT","PIPE","","solid",None), ("INIT","SHIM","","solid",None),
  ("INIT","EXTS","load_extensions()","solid",GREEN),
  ("SHIM","EXTS","注册 shims 处理器","solid",GREEN),
  ("CLI","EXTS","注册 commands 处理器","solid",GREEN),
