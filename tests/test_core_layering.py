@@ -116,6 +116,46 @@ def test_the_extension_loader_imports_neither_the_shim_layer_nor_the_converters(
     assert offenders == []
 
 
+#: What a contract module may import from the rest of core, besides other
+#: contracts and the vendored helpers.  Each entry is data, never behaviour:
+#: ``ir.model`` (the IR dataclasses and enums a declaration names),
+#: ``formats`` (the catalog records), ``retired_names`` (the table of retired
+#: spellings a declaration is refused with).  None of them imports a converter,
+#: the pipeline, the shim layer or the extension layer.
+CONTRACT_DATA_DEPENDENCIES = (
+    "llm_rosetta.ir.model",
+    "llm_rosetta.formats",
+    "llm_rosetta.retired_names",
+)
+
+#: The one contract module that depends on IR behaviour: the transform contract
+#: re-exports the primitives shims use.
+CONTRACT_BEHAVIOUR_EDGES = {"contracts/transform.py": ("llm_rosetta.ir.primitives",)}
+
+
+def test_a_contract_imports_only_data_beyond_the_transform_contract():
+    """The declaration layer is a leaf: ``routing`` no longer reads ``auto_detect``.
+
+    ``ProviderType`` is defined in ``contracts.routing`` and ``auto_detect``
+    imports it, so the dependency runs from the conversion layer to the contract.
+    """
+    offenders = []
+    for path in _files("contracts"):
+        relative = path.relative_to(_CORE).as_posix()
+        allowed = (
+            "llm_rosetta.contracts",
+            "llm_rosetta._vendor",
+            *CONTRACT_DATA_DEPENDENCIES,
+            *CONTRACT_BEHAVIOUR_EDGES.get(relative, ()),
+        )
+        for line, name in _imports(path):
+            if name == "llm_rosetta" or name.startswith(allowed):
+                continue
+            if name.startswith("llm_rosetta."):
+                offenders.append(f"{relative}:{line} imports {name}")
+    assert offenders == []
+
+
 def test_no_converter_imports_the_pipeline():
     """The converters sit below the pipeline: nothing in them imports it."""
     offenders = [

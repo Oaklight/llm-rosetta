@@ -544,7 +544,7 @@ gate — missing any item means the converter is not fully integrated.
    error-envelope and usage-shape maps, the detection order, and the
    model-type descriptor format lists and chat routes.  The registry's
    import-time check refuses a catalog entry with no converter binding.
-   Add the name to the `ProviderType` literal in `auto_detect.py`.
+   Add the name to the `ProviderType` literal in `contracts/routing.py` (`auto_detect.py` imports it).
 5. **Provider shim** — create `shims/builtin/<vendor>/llm/<format>/provider.yaml`
    (chat) or `shims/builtin/<vendor>/<type>/provider.yaml` (embeddings, rerank,
    decision) with `model_type: <type>` and `format: <format>`.  The loader
