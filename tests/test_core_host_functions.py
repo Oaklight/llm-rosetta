@@ -304,3 +304,21 @@ def test_the_scaffold_arguments_parse():
     parser = argparse.ArgumentParser()
     scaffold.add_arguments(parser, default_root="providers")
     assert parser.parse_args(["acme"]).__dict__
+
+
+def test_the_extension_index_names_are_the_extensions_packages_objects():
+    """The gateway reads the extension index through ``api``; nothing is a copy."""
+    from llm_rosetta import extensions
+
+    for name in (
+        "ExtensionIndex",
+        "IndexEntry",
+        "entry_problems",
+        "install_from_index",
+        "load_index",
+        "parse_index",
+        "select_entry",
+        "version_key",
+    ):
+        assert getattr(api, name) is getattr(extensions, name), name
+        assert name in api.__all__

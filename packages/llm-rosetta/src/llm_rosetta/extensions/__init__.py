@@ -42,11 +42,13 @@ from ._index import (
     ExtensionIndex,
     IndexEntry,
     UpdatePlan,
+    entry_problems,
     install_from_index,
     load_index,
     parse_index,
     plan_updates,
     select_entry,
+    version_key,
 )
 from ._install import (
     ExternalStatus,
@@ -92,6 +94,7 @@ __all__ = [
     "check_external",
     "configure_extensions_dir",
     "discover",
+    "entry_problems",
     "extension_areas",
     "extensions_dir",
     "import_extension_module",
@@ -112,4 +115,5 @@ __all__ = [
     "resolve_extension_command",
     "retired_entry_points",
     "select_entry",
+    "version_key",
 ]
