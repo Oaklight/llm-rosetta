@@ -4,6 +4,20 @@
 CONFIG_DIR=${CONFIG_DIR:-/config}
 mkdir -p "$CONFIG_DIR" 2>/dev/null || true
 
+# Extensions installed in the container, and the moved vendors the gateway
+# installs by itself at start, survive the container only when they live in the
+# config volume.  Unless the operator set the directory, use
+# $CONFIG_DIR/extensions.  A run that replaces this script with `--entrypoint`
+# gets no default.  The directory has to be writable by this uid, as HOME does.
+if [ -z "${LLM_ROSETTA_EXTENSIONS_DIR:-}" ]; then
+	if ! mkdir -p "$CONFIG_DIR/extensions" 2>/dev/null || [ ! -w "$CONFIG_DIR/extensions" ]; then
+		echo "error: cannot use $CONFIG_DIR/extensions for installed extensions as uid $(id -u); the mounted directory must be writable by that uid (chown it on the host, or set PUID/PGID to its owner), or set LLM_ROSETTA_EXTENSIONS_DIR" >&2
+		exit 1
+	fi
+	LLM_ROSETTA_EXTENSIONS_DIR=$CONFIG_DIR/extensions
+fi
+export LLM_ROSETTA_EXTENSIONS_DIR
+
 if [ "${1#-}" != "$1" ]; then
 	set -- /usr/local/bin/llm-rosetta-gateway "$@"
 fi
