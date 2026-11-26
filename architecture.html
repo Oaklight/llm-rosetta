@@ -31,7 +31,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
     API["api.py&lt;br/&gt;宿主门面:只做再导出(再导出的边不画)"]
     TESTING["testing.py&lt;br/&gt;测试辅助:snapshot_registry · restore_registry(core 不导入)"]
     INIT["llm_rosetta/__init__&lt;br/&gt;convert() · get_converter_for_provider()"]
-    CLI["cli.py · __main__&lt;br/&gt;llm-rosetta 分发器"]
+    CLI["cli.py · __main__&lt;br/&gt;分发器 · 读各扩展 plugin.yaml 的 commands 清单(#1707)"]
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]

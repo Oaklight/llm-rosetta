@@ -16,7 +16,7 @@ current_header = '''flowchart TB
     API["api.py<br/>宿主门面:只做再导出(再导出的边不画)"]
     TESTING["testing.py<br/>测试辅助:snapshot_registry · restore_registry(core 不导入)"]
     INIT["llm_rosetta/__init__<br/>convert() · get_converter_for_provider()"]
-    CLI["cli.py · __main__<br/>llm-rosetta 分发器"]
+    CLI["cli.py · __main__<br/>分发器 · 读各扩展 plugin.yaml 的 commands 清单(#1707)"]
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]
