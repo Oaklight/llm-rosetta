@@ -126,6 +126,12 @@ def _member_parts(name: str) -> tuple[str, ...]:
         raise ExtensionInstallError(f"wheel contains an absolute path: {name}")
     if ".." in parts:
         raise ExtensionInstallError(f"wheel contains a traversal path: {name}")
+    if any(":" in part for part in parts):
+        # Not only the first part: on Windows a later ``D:`` part makes the join
+        # leave the stage directory, and ``name:stream`` writes an NTFS stream.
+        raise ExtensionInstallError(
+            f"wheel member name has a drive or stream separator (':'): {name}"
+        )
     return parts
 
 
@@ -272,8 +278,17 @@ def _extract(
     stage: Path,
 ) -> None:
     written = 0
+    root = stage.resolve()
     for info, parts in planned:
         target = stage.joinpath(*parts)
+        resolved = target.resolve()
+        if resolved != root and root not in resolved.parents:
+            # The member checks above should make this unreachable; the stage
+            # directory is the one place nothing may be written outside of.
+            raise ExtensionInstallError(
+                f"wheel member would be written outside the install directory: "
+                f"{'/'.join(parts)}"
+            )
         if info.is_dir():
             target.mkdir(parents=True, exist_ok=True)
             continue

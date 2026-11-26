@@ -197,6 +197,60 @@ class TestInstall:
         with pytest.raises(ExtensionInstallError, match=word):
             install_wheel(wheel, dest=tmp_path / "ext")
 
+    @pytest.mark.parametrize(
+        "member",
+        [
+            "llm_rosetta_ext/acme/x/D:/y.py",
+            "llm_rosetta_ext/acme/D:y.py",
+            "llm_rosetta_ext/acme/a.py:stream",
+            "llm_rosetta_ext/acme/c:",
+            "acme-0.1.0.dist-info/x/C:/y",
+        ],
+    )
+    def test_a_drive_or_stream_separator_in_any_part_is_refused(self, tmp_path, member):
+        dest = tmp_path / "ext"
+        wheel = _wheel(tmp_path, extra={member: "x"})
+        with pytest.raises(ExtensionInstallError, match="drive or stream"):
+            install_wheel(wheel, dest=dest)
+        assert _empty(dest)
+
+    def test_an_accepted_member_stays_inside_the_stage_on_windows_paths(self):
+        """Whatever the checks accept must not leave the stage when joined as a
+        Windows path (a later ``D:`` part used to make the join leave it)."""
+        from pathlib import PureWindowsPath
+
+        names = [
+            "llm_rosetta_ext/acme/plugin.yaml",
+            "llm_rosetta_ext/acme/llm/chat_completions/provider.yaml",
+            "llm_rosetta_ext/acme/x/D:/y",
+            "llm_rosetta_ext/acme/D:y",
+            "llm_rosetta_ext/acme/a:b/c",
+            "llm_rosetta_ext/acme/C:..",
+            "llm_rosetta_ext/acme/x\\D:\\y",
+            "acme-0.1.0.dist-info/METADATA",
+            "acme-0.1.0.dist-info/C:/z",
+        ]
+        stage = PureWindowsPath("C:/stage")
+        accepted = 0
+        for name in names:
+            try:
+                parts = _install._member_parts(name)
+            except ExtensionInstallError:
+                continue
+            accepted += 1
+            assert stage.joinpath(*parts).is_relative_to(stage), name
+        assert accepted == 3  # the plain, valid members
+
+    def test_extraction_refuses_a_target_outside_the_stage(self, tmp_path):
+        stage = tmp_path / "stage"
+        stage.mkdir()
+        wheel = _wheel(tmp_path)
+        with zipfile.ZipFile(wheel) as archive:
+            info = archive.infolist()[0]
+            with pytest.raises(ExtensionInstallError, match="outside the install"):
+                _install._extract(archive, [(info, ("..", "evil.py"))], stage)
+        assert not (tmp_path / "evil.py").exists()
+
     def test_a_symlink_member_is_refused(self, tmp_path):
         dest = tmp_path / "ext"
         wheel = _wheel(tmp_path)
