@@ -39,7 +39,7 @@ current_header = '''flowchart TB
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
     subgraph CONS["contracts/"]
-      CDECL["声明层<br/>shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest<br/>依赖 ir.model · formats · retired_names · auto_detect"]
+      CDECL["声明层<br/>shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · _schema(清单校验用的 schema 解释器)<br/>依赖 ir.model · formats · retired_names · auto_detect"]
       CXF["transform.py<br/>再导出 ir 原语<br/>contracts 里唯一导入 ir.primitives 的模块"]
     end
     FMT["formats/<br/>catalog · detect · spec · batch"]

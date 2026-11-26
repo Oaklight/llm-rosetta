@@ -54,7 +54,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
     subgraph CONS["contracts/"]
-      CDECL["声明层&lt;br/&gt;shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest&lt;br/&gt;依赖 ir.model · formats · retired_names · auto_detect"]
+      CDECL["声明层&lt;br/&gt;shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · _schema(清单校验用的 schema 解释器)&lt;br/&gt;依赖 ir.model · formats · retired_names · auto_detect"]
       CXF["transform.py&lt;br/&gt;再导出 ir 原语&lt;br/&gt;contracts 里唯一导入 ir.primitives 的模块"]
     end
     FMT["formats/&lt;br/&gt;catalog · detect · spec · batch"]
@@ -209,7 +209,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   subgraph FOUNDATION["foundation"]
     TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info"]
     OBS["observability/&lt;br/&gt;logging · metrics · request_log · ops_log · error_dump · capture · retention · usage · persistence"]
-    SHIMS["shims/&lt;br/&gt;extension_view · manifest_sources(待替换)"]
+    SHIMS["shims/&lt;br/&gt;extension_view · manifest_sources · source_view(读扩展 index.json,#1728)"]
     MT["model_types/"]
     UPD["updates.py"]
     SURF["surface.py"]
