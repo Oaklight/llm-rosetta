@@ -38,7 +38,10 @@ current_header = '''flowchart TB
     EXTS["extensions/<br/>_discovery · _load · _dirs · _install · _cli"]
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
-    CON["contracts/<br/>外部各方实现或接收的契约<br/>shim 数据类 · resolver(叶子) · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
+    subgraph CONS["contracts/"]
+      CDECL["声明层<br/>shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest<br/>依赖 ir.model · formats · retired_names · auto_detect"]
+      CXF["transform.py<br/>再导出 ir 原语<br/>contracts 里唯一导入 ir.primitives 的模块"]
+    end
     FMT["formats/<br/>catalog · detect · spec · batch"]
     VOCAB["model_vocabulary · retired_names · conversion_warnings"]
     REF["types/<br/>提供方参考形状:openai · google · messages<br/>types.ir 是 0.13.0 的转发,0.15.0 删除"]
@@ -52,20 +55,21 @@ current_header = '''flowchart TB
 current_edges = [
  ("INIT","PIPE","","solid",None), ("INIT","CVT","","solid",None),
  ("INIT","SHIM","接线(带保护的导入)","solid",None), ("INIT","DET","","solid",None),
- ("CLI","CON","","solid",None), ("CLI","EXTS","懒加载","lazy",None),
- ("PIPE","CVT","","solid",None), ("PIPE","IROPS","","solid",None), ("PIPE","CON","","solid",None),
- ("CVT","IROPS","","solid",None), ("CVT","IRMODEL","","solid",None), ("CVT","CON","","solid",None),
- ("IROPS","IRMODEL","","solid",None), ("IROPS","CON","passes 用 shim 数据类","solid",None),
- ("SHIM","IROPS","","solid",None), ("SHIM","CON","注册 resolver","solid",None), ("SHIM","FMT","","solid",None),
+ ("CLI","CDECL","","solid",None), ("CLI","EXTS","懒加载","lazy",None),
+ ("PIPE","CVT","","solid",None), ("PIPE","IROPS","","solid",None), ("PIPE","CDECL","","solid",None),
+ ("CVT","IROPS","","solid",None), ("CVT","IRMODEL","","solid",None), ("CVT","CDECL","","solid",None),
+ ("IROPS","IRMODEL","","solid",None), ("IROPS","CDECL","passes 用 shim 数据类","solid",None),
+ ("SHIM","IROPS","","solid",None), ("SHIM","CDECL","注册 resolver","solid",None), ("SHIM","FMT","","solid",None),
  ("SHIM","EXTS","导入时 load_extensions","lazy",RED),
  ("EXTS","SHIM","注册 shim","lazy",RED),
- ("EXTS","CON","","solid",None), ("EXTS","DEV","ext new / check","lazy",None),
- ("CON","IRMODEL","数据类型","solid",None),
- ("CON","FMT","usage.semantics","solid",None),
- ("CON","DET","routing.py","solid",None),
- ("CON","IROPS","transform 再导出 ir 原语","solid",RED),
+ ("EXTS","CDECL","","solid",None), ("EXTS","DEV","ext new / check","lazy",None),
+ ("CDECL","IRMODEL","IREffort · IRMode · IR_VERSION","solid",None),
+ ("CDECL","FMT","usage.semantics","solid",None),
+ ("CDECL","DET","routing.py","solid",None),
+ ("CDECL","VOCAB","retired_names","solid",None),
+ ("CXF","IROPS","","solid",RED),
  ("DET","FMT","","solid",None), ("FMT","IRMODEL","","solid",None),
- ("CAP","CVT","","solid",None), ("DEV","CON","","solid",None),
+ ("CAP","CVT","","solid",None), ("DEV","CDECL","","solid",None),
  ("REF","IRMODEL","转发(带警告)","solid",None),
 ]
 open("core.mmd","w",encoding="utf-8").write(render(current_header, current_edges))

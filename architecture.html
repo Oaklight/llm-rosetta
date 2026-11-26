@@ -53,7 +53,10 @@ pre.error { color: #b00; white-space: pre-wrap; }
     EXTS["extensions/&lt;br/&gt;_discovery · _load · _dirs · _install · _cli"]
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
-    CON["contracts/&lt;br/&gt;外部各方实现或接收的契约&lt;br/&gt;shim 数据类 · resolver(叶子) · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
+    subgraph CONS["contracts/"]
+      CDECL["声明层&lt;br/&gt;shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest&lt;br/&gt;依赖 ir.model · formats · retired_names · auto_detect"]
+      CXF["transform.py&lt;br/&gt;再导出 ir 原语&lt;br/&gt;contracts 里唯一导入 ir.primitives 的模块"]
+    end
     FMT["formats/&lt;br/&gt;catalog · detect · spec · batch"]
     VOCAB["model_vocabulary · retired_names · conversion_warnings"]
     REF["types/&lt;br/&gt;提供方参考形状:openai · google · messages&lt;br/&gt;types.ir 是 0.13.0 的转发,0.15.0 删除"]
@@ -69,36 +72,37 @@ pre.error { color: #b00; white-space: pre-wrap; }
   INIT --&gt; CVT
   INIT --&gt;|"接线(带保护的导入)"| SHIM
   INIT --&gt; DET
-  CLI --&gt; CON
+  CLI --&gt; CDECL
   CLI -.-&gt;|"懒加载"| EXTS
   PIPE --&gt; CVT
   PIPE --&gt; IROPS
-  PIPE --&gt; CON
+  PIPE --&gt; CDECL
   CVT --&gt; IROPS
   CVT --&gt; IRMODEL
-  CVT --&gt; CON
+  CVT --&gt; CDECL
   IROPS --&gt; IRMODEL
-  IROPS --&gt;|"passes 用 shim 数据类"| CON
+  IROPS --&gt;|"passes 用 shim 数据类"| CDECL
   SHIM --&gt; IROPS
-  SHIM --&gt;|"注册 resolver"| CON
+  SHIM --&gt;|"注册 resolver"| CDECL
   SHIM --&gt; FMT
   SHIM -.-&gt;|"导入时 load_extensions"| EXTS
   EXTS -.-&gt;|"注册 shim"| SHIM
-  EXTS --&gt; CON
+  EXTS --&gt; CDECL
   EXTS -.-&gt;|"ext new / check"| DEV
-  CON --&gt;|"数据类型"| IRMODEL
-  CON --&gt;|"usage.semantics"| FMT
-  CON --&gt;|"routing.py"| DET
-  CON --&gt;|"transform 再导出 ir 原语"| IROPS
+  CDECL --&gt;|"IREffort · IRMode · IR_VERSION"| IRMODEL
+  CDECL --&gt;|"usage.semantics"| FMT
+  CDECL --&gt;|"routing.py"| DET
+  CDECL --&gt;|"retired_names"| VOCAB
+  CXF --&gt; IROPS
   DET --&gt; FMT
   FMT --&gt; IRMODEL
   CAP --&gt; CVT
-  DEV --&gt; CON
+  DEV --&gt; CDECL
   REF --&gt;|"转发(带警告)"| IRMODEL
 
   linkStyle 17 stroke:#d33,stroke-width:2.5px,color:#d33
   linkStyle 18 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 24 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 25 stroke:#d33,stroke-width:2.5px,color:#d33
 </pre></div></div>
 </section>
 <section id="core_target">

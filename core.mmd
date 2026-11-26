@@ -25,7 +25,10 @@ flowchart TB
     EXTS["extensions/<br/>_discovery · _load · _dirs · _install · _cli"]
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
-    CON["contracts/<br/>外部各方实现或接收的契约<br/>shim 数据类 · resolver(叶子) · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
+    subgraph CONS["contracts/"]
+      CDECL["声明层<br/>shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest<br/>依赖 ir.model · formats · retired_names · auto_detect"]
+      CXF["transform.py<br/>再导出 ir 原语<br/>contracts 里唯一导入 ir.primitives 的模块"]
+    end
     FMT["formats/<br/>catalog · detect · spec · batch"]
     VOCAB["model_vocabulary · retired_names · conversion_warnings"]
     REF["types/<br/>提供方参考形状:openai · google · messages<br/>types.ir 是 0.13.0 的转发,0.15.0 删除"]
@@ -41,33 +44,34 @@ flowchart TB
   INIT --> CVT
   INIT -->|"接线(带保护的导入)"| SHIM
   INIT --> DET
-  CLI --> CON
+  CLI --> CDECL
   CLI -.->|"懒加载"| EXTS
   PIPE --> CVT
   PIPE --> IROPS
-  PIPE --> CON
+  PIPE --> CDECL
   CVT --> IROPS
   CVT --> IRMODEL
-  CVT --> CON
+  CVT --> CDECL
   IROPS --> IRMODEL
-  IROPS -->|"passes 用 shim 数据类"| CON
+  IROPS -->|"passes 用 shim 数据类"| CDECL
   SHIM --> IROPS
-  SHIM -->|"注册 resolver"| CON
+  SHIM -->|"注册 resolver"| CDECL
   SHIM --> FMT
   SHIM -.->|"导入时 load_extensions"| EXTS
   EXTS -.->|"注册 shim"| SHIM
-  EXTS --> CON
+  EXTS --> CDECL
   EXTS -.->|"ext new / check"| DEV
-  CON -->|"数据类型"| IRMODEL
-  CON -->|"usage.semantics"| FMT
-  CON -->|"routing.py"| DET
-  CON -->|"transform 再导出 ir 原语"| IROPS
+  CDECL -->|"IREffort · IRMode · IR_VERSION"| IRMODEL
+  CDECL -->|"usage.semantics"| FMT
+  CDECL -->|"routing.py"| DET
+  CDECL -->|"retired_names"| VOCAB
+  CXF --> IROPS
   DET --> FMT
   FMT --> IRMODEL
   CAP --> CVT
-  DEV --> CON
+  DEV --> CDECL
   REF -->|"转发(带警告)"| IRMODEL
 
   linkStyle 17 stroke:#d33,stroke-width:2.5px,color:#d33
   linkStyle 18 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 24 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 25 stroke:#d33,stroke-width:2.5px,color:#d33
