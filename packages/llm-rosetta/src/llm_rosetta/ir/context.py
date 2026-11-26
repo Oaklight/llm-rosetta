@@ -239,6 +239,8 @@ class StreamContext(ConversionContext):
     _tool_call_args: dict[str, str] = field(default_factory=dict, repr=False)
     _tool_call_order: list[str] = field(default_factory=list, repr=False)
     _tool_call_index: dict[str, int] = field(default_factory=dict, repr=False)
+    _next_tool_slot: dict[int, int] = field(default_factory=dict, repr=False)
+    _tool_slot_of: dict[tuple[int, str], int] = field(default_factory=dict, repr=False)
     _tool_call_types: dict[str, str] = field(default_factory=dict, repr=False)
     _tool_call_provider_metadata: dict[str, dict] = field(
         default_factory=dict, repr=False
@@ -463,6 +465,36 @@ class StreamContext(ConversionContext):
         if 0 <= index < len(self._tool_call_order):
             return self._tool_call_order[index]
         return None
+
+    def claim_tool_call_slot(
+        self, tool_call_id: str, choice_index: int, *, opening: bool = False
+    ) -> int:
+        """Give a tool call a slot in its choice.
+
+        A writer whose wire counts tool calls per choice, from 0 and without
+        gaps (Chat Completions), calls this for each call.  The slot does not
+        depend on the position the source dialect gave the call.  A call that
+        opens (``opening=True``) always takes the next free slot, so an IR
+        stream with two starts that share one id gets two slots and later
+        fragments follow the latest.  (A Chat Completions source that reuses an
+        id yields only one start, so it stays one call.)  A fragment
+        (``opening=False``) keeps the call's slot, or takes the next free one
+        when its call never opened.
+
+        Args:
+            tool_call_id: The tool call ID.
+            choice_index: The choice the call belongs to.
+            opening: Whether the call opens now.
+
+        Returns:
+            The slot of the call.
+        """
+        key = (choice_index, tool_call_id)
+        if opening or key not in self._tool_slot_of:
+            slot = self._next_tool_slot.get(choice_index, 0)
+            self._next_tool_slot[choice_index] = slot + 1
+            self._tool_slot_of[key] = slot
+        return self._tool_slot_of[key]
 
     def get_tool_call_index(self, tool_call_id: str) -> int | None:
         """Look up the positional index of a tool call ID.
