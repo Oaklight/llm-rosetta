@@ -16,11 +16,14 @@ Provides the context hierarchy for conversion pipelines:
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Literal
 
 from llm_rosetta.conversion_warnings import WarningSink
+
+logger = logging.getLogger(__name__)
 
 MetadataMode = Literal["strip", "preserve"]
 
@@ -224,6 +227,11 @@ class StreamContext(ConversionContext):
 
     # Deferred event payloads
     pending_usage: dict | None = None
+    # The highest cumulative usage a reader has turned into increments, per
+    # field (see :meth:`usage_increment`).
+    _usage_baseline: dict[str, Any] = field(default_factory=dict, repr=False)
+    _usage_started: bool = field(default=False, repr=False)
+    _usage_decrease_logged: bool = field(default=False, repr=False)
     preflight_usage: dict | None = None
     pending_finish: dict | None = None
     pending_response: dict | None = None
@@ -575,19 +583,65 @@ class StreamContext(ConversionContext):
     def buffer_usage(self, usage: Mapping[str, Any]) -> None:
         """Accumulate usage info for later merging into a terminal event.
 
-        If no usage is buffered yet, stores a copy. Otherwise merges
-        by adding numeric values and overwriting non-numeric ones, so
-        that partial updates (e.g., input tokens first, output tokens
-        later) are correctly combined.
+        Several ``UsageEvent`` of one stream are *increments* (see
+        :class:`~llm_rosetta.ir.model.stream.UsageEvent`): this adds numeric
+        values (a nested detail dict field by field) and takes the latest of
+        non-numeric ones, so that partial
+        updates (input tokens first, output tokens later) are combined, and a
+        field an event does not state contributes nothing.  The first event
+        stores a copy.
         """
-        if self.pending_usage is None:
-            self.pending_usage = dict(usage)
-        else:
-            for key, value in usage.items():
-                if isinstance(value, (int, float)):
-                    self.pending_usage[key] = self.pending_usage.get(key, 0) + value
-                else:
-                    self.pending_usage[key] = value
+        self.pending_usage = add_usage(self.pending_usage, usage)
+
+    def usage_increment(self, snapshot: Mapping[str, Any]) -> dict[str, Any] | None:
+        """Turn a cumulative usage snapshot into an increment.
+
+        A reader of a wire that repeats the running total (Google
+        ``usageMetadata``, Anthropic ``message_delta``, an OpenAI-compatible
+        endpoint that repeats ``usage``) calls this so that the ``UsageEvent``
+        it emits are increments: the sum of the increments of a stream is its
+        highest snapshot, field by field, nested detail dicts included.
+
+        The first snapshot passes through whole, zeros included: a zero the
+        wire reported is a fact (``cache_read_tokens: 0``), not an absence.
+        After that each numeric field is a high-water mark: only a rise above
+        the highest value seen counts, a field that is equal or lower
+        contributes nothing, and a lower value (a zero placeholder, a snapshot
+        that went down) resets nothing; the first such decrease of a stream is
+        logged as a warning.  A field a snapshot does not state is untouched.
+        A snapshot that adds nothing (or only newly reports zeros) returns ``None``,
+        so no event is emitted.  A zero reported late on an otherwise identical
+        snapshot is therefore dropped (no ``reasoning_tokens: 0`` event), as it
+        was before; with growth in the same snapshot the zeros arrive.
+        A non-numeric value is passed on when it differs from the last one.
+        An increment after the first states ``prompt_tokens``,
+        ``completion_tokens`` and ``total_tokens``, which
+        :class:`~llm_rosetta.ir.model.response.UsageInfo` requires.
+
+        Args:
+            snapshot: The cumulative usage as the IR names it.
+
+        Returns:
+            The increment, or ``None`` when the snapshot adds nothing.
+        """
+        if not self._usage_started:
+            self._usage_started = True
+            self._usage_baseline = _deep_copy_usage(snapshot)
+            return _deep_copy_usage(snapshot)
+        decreases: list[str] = []
+        delta = _usage_delta(self._usage_baseline, snapshot, "usage", decreases)
+        if decreases and not self._usage_decrease_logged:
+            self._usage_decrease_logged = True
+            logger.warning(
+                "Usage snapshot went down (%s); keeping the highest value seen, "
+                "not a negative increment",
+                ", ".join(decreases),
+            )
+        if not _states_a_change(delta):
+            return None
+        for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+            delta.setdefault(key, 0)
+        return delta
 
     def pop_pending_usage(self) -> dict[str, Any] | None:
         """Return and clear buffered pending usage, if any."""
@@ -604,6 +658,104 @@ class StreamContext(ConversionContext):
         finish = self.pending_finish
         self.pending_finish = None
         return finish
+
+
+def add_usage(
+    accumulated: Mapping[str, Any] | None, increment: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Add one usage increment to the running usage.
+
+    The consumer side of the contract on
+    :class:`~llm_rosetta.ir.model.stream.UsageEvent`: numeric fields sum, a
+    nested dict (the per-modality details) is added field by field, and any
+    other value takes the latest one, except ``None``, which says "not stated"
+    and keeps what is there.  A field the increment does not state, or states
+    as zero, changes nothing.  Neither argument is modified.
+
+    Args:
+        accumulated: The usage so far, or ``None`` for the first increment.
+        increment: One ``UsageEvent`` usage.
+
+    Returns:
+        The new running usage.
+    """
+    result: dict[str, Any] = {
+        key: dict(value) if isinstance(value, dict) else value
+        for key, value in (accumulated or {}).items()
+    }
+    for key, value in increment.items():
+        current = result.get(key)
+        if isinstance(value, Mapping):
+            result[key] = add_usage(
+                current if isinstance(current, dict) else None, value
+            )
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            held = current if isinstance(current, (int, float)) else 0
+            result[key] = held + value
+        elif value is not None or key not in result:
+            result[key] = value
+    return result
+
+
+def _deep_copy_usage(usage: Mapping[str, Any]) -> dict[str, Any]:
+    """A copy of a usage mapping with its nested detail dicts copied too."""
+    return {
+        key: _deep_copy_usage(value) if isinstance(value, Mapping) else value
+        for key, value in usage.items()
+    }
+
+
+def _states_a_change(delta: Mapping[str, Any]) -> bool:
+    """Whether a delta holds anything but zeros (a field newly reported as 0)."""
+    for value in delta.values():
+        if isinstance(value, Mapping):
+            if _states_a_change(value):
+                return True
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            if value != 0:
+                return True
+        else:
+            return True
+    return False
+
+
+def _usage_delta(
+    baseline: dict[str, Any],
+    snapshot: Mapping[str, Any],
+    path: str,
+    decreases: list[str],
+) -> dict[str, Any]:
+    """The rise of *snapshot* over *baseline*, which it also raises.
+
+    A numeric field is a high-water mark: only a rise counts; a lower value is
+    recorded in *decreases* and changes nothing.
+    """
+    delta: dict[str, Any] = {}
+    for key, value in snapshot.items():
+        where = f"{path}.{key}"
+        if isinstance(value, Mapping):
+            inner = baseline.get(key)
+            if not isinstance(inner, dict):
+                inner = baseline[key] = {}
+            nested = _usage_delta(inner, value, where, decreases)
+            if nested:
+                delta[key] = nested
+        elif isinstance(value, (int, float)) and not isinstance(value, bool):
+            previous = baseline.get(key)
+            if not isinstance(previous, (int, float)) or isinstance(previous, bool):
+                previous = None
+            if previous is None:
+                baseline[key] = value
+                delta[key] = value
+            elif value > previous:
+                delta[key] = value - previous
+                baseline[key] = value
+            elif value < previous:
+                decreases.append(f"{where}: {previous} -> {value}")
+        elif key not in baseline or baseline[key] != value:
+            baseline[key] = value
+            delta[key] = value
+    return delta
 
 
 def carry_registered_call_identity(

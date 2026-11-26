@@ -1,0 +1,16 @@
+data: {"candidates": [{"content": {"parts": [{"text": "1, 2, "}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 16,"candidatesTokenCount": 6,"totalTokenCount": 323,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 16}],"thoughtsTokenCount": 301,"serviceTier": "standard"},"modelVersion": "gemini-3.8-flash","responseId": "RESPONSE_ID"}
+
+data: {"candidates": [{"content": {"parts": [{"text": "3, 4, 5, 6, 7, 8, 9, 10,"}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 16,"candidatesTokenCount": 30,"totalTokenCount": 347,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 16}],"thoughtsTokenCount": 301,"serviceTier": "standard"},"modelVersion": "gemini-3.8-flash","responseId": "RESPONSE_ID"}
+
+data: {"candidates": [{"content": {"parts": [{"text": " 11, 12, 13, 14, 15, 16,"}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 16,"candidatesTokenCount": 54,"totalTokenCount": 371,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 16}],"thoughtsTokenCount": 301,"serviceTier": "standard"},"modelVersion": "gemini-3.8-flash","responseId": "RESPONSE_ID"}
+
+data: {"candidates": [{"content": {"parts": [{"text": " 17, 18, 19, 20, 21, 22, 23, "}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 16,"candidatesTokenCount": 83,"totalTokenCount": 400,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 16}],"thoughtsTokenCount": 301,"serviceTier": "standard"},"modelVersion": "gemini-3.8-flash","responseId": "RESPONSE_ID"}
+
+data: {"candidates": [{"content": {"parts": [{"text": "24, 25, 26, 27, 28, 29, "}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 16,"candidatesTokenCount": 107,"totalTokenCount": 424,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 16}],"thoughtsTokenCount": 301,"serviceTier": "standard"},"modelVersion": "gemini-3.8-flash","responseId": "RESPONSE_ID"}
+
+data: {"candidates": [{"content": {"parts": [{"text": "30, 31, 32, 33, 34, 35, "}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 16,"candidatesTokenCount": 131,"totalTokenCount": 448,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 16}],"thoughtsTokenCount": 301,"serviceTier": "standard"},"modelVersion": "gemini-3.8-flash","responseId": "RESPONSE_ID"}
+
+data: {"candidates": [{"content": {"parts": [{"text": "36, 37, 38, 39, 40"}],"role": "model"},"index": 0}],"usageMetadata": {"promptTokenCount": 16,"candidatesTokenCount": 149,"totalTokenCount": 466,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 16}],"thoughtsTokenCount": 301,"serviceTier": "standard"},"modelVersion": "gemini-3.8-flash","responseId": "RESPONSE_ID"}
+
+data: {"candidates": [{"content": {"parts": [{"text": "","thoughtSignature": "SIGNATURE"}],"role": "model"},"finishReason": "STOP","index": 0}],"usageMetadata": {"promptTokenCount": 16,"candidatesTokenCount": 149,"totalTokenCount": 466,"promptTokensDetails": [{"modality": "TEXT","tokenCount": 16}],"thoughtsTokenCount": 301,"serviceTier": "standard"},"modelVersion": "gemini-3.8-flash","responseId": "RESPONSE_ID"}
+

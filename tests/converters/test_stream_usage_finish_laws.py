@@ -120,11 +120,6 @@ def test_the_usage_a_stream_reads_back_is_the_sum_of_what_was_written(
     assert _summed(_round_trip(name, _stream(usages))) == _expected(usages)
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="google_interactions keeps the last usage event instead of adding "
-    "them (#1750)",
-)
 @_SETTINGS
 @given(usages=_partial_usages())
 def test_google_interactions_adds_partial_usage_events(usages) -> None:
@@ -239,16 +234,18 @@ def _google_to(name: str) -> tuple[int, int, int]:
     return _summed(_round_trip(name, events))
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="google_generate reads each chunk's running total as a separate "
-    "usage event and the target writers add them (#1749)",
-)
 @pytest.mark.parametrize(
-    "target", ["chat_completions", "open_responses", "messages", "google_generate"]
+    "target", ["chat_completions", "open_responses", "google_generate"]
 )
 def test_a_google_stream_reads_to_its_final_total(target) -> None:
     assert _google_to(target) == (15, 110, 228)
+
+
+def test_a_google_stream_into_messages_keeps_input_and_output() -> None:
+    """Messages has no ``total_tokens`` on the wire, so a round trip through it
+    derives the total from input and output (125, not Google's 228); input and
+    output are the stream's final ones."""
+    assert _google_to("messages")[:2] == (15, 110)
 
 
 @pytest.mark.parametrize("name", ["messages"])

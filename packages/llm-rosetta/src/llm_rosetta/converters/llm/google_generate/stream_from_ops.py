@@ -65,6 +65,9 @@ class GoogleGenerateStreamFromOps:
         def _normalize(data: Any) -> dict: ...
 
         @staticmethod
+        def _build_p_usage_to_ir(p_usage: dict[str, Any]) -> UsageInfo: ...
+
+        @staticmethod
         def strip_response_id_prefix(raw_id: str, prefix: str) -> str: ...
 
         def _get_response_id_prefix(
@@ -159,7 +162,7 @@ class GoogleGenerateStreamFromOps:
                     prompt_feedback=prompt_feedback,
                 )
 
-        self._handle_p_usage_to_ir(chunk, events)
+        self._handle_p_usage_to_ir(chunk, events, context)
 
         if deferred_finish is not None:
             events.append(deferred_finish)
@@ -595,35 +598,27 @@ class GoogleGenerateStreamFromOps:
         self,
         chunk: dict[str, Any],
         events: list[IRStreamEvent],
+        context: StreamContext | None = None,
     ) -> None:
-        """Emit UsageEvent from chunk usage metadata."""
+        """Emit a ``UsageEvent`` for the new part of a chunk's usage metadata.
+
+        Google repeats the running ``usageMetadata`` on every chunk, so the raw
+        figures are snapshots.  A ``UsageEvent`` is an increment (see
+        :class:`~llm_rosetta.ir.model.stream.UsageEvent`): with a context the
+        event carries the difference against the previous snapshot, and a
+        snapshot that adds nothing (the live stream repeats its last chunk)
+        emits none.  The mapping is the body leg's own, so a stream and a body
+        read the same fields, the per-modality details included.
+        """
         usage = chunk.get("usage_metadata") or chunk.get("usageMetadata")
         if not usage:
             return
 
-        usage_info: dict[str, Any] = {
-            "prompt_tokens": usage.get(
-                "prompt_token_count", usage.get("promptTokenCount", 0)
-            ),
-            "completion_tokens": usage.get(
-                "candidates_token_count",
-                usage.get("candidatesTokenCount", 0),
-            ),
-            "total_tokens": usage.get(
-                "total_token_count", usage.get("totalTokenCount", 0)
-            ),
-        }
-
-        thoughts = usage.get("thoughts_token_count") or usage.get("thoughtsTokenCount")
-        if thoughts is not None:
-            usage_info["reasoning_tokens"] = thoughts
-
-        cached = usage.get("cached_content_token_count") or usage.get(
-            "cachedContentTokenCount"
-        )
-        if cached is not None:
-            usage_info["cache_read_tokens"] = cached
-
+        usage_info: dict[str, Any] | None = dict(self._build_p_usage_to_ir(usage))
+        if context is not None:
+            usage_info = context.usage_increment(usage_info)
+        if usage_info is None:
+            return
         events.append(
             UsageEvent(
                 type="usage",

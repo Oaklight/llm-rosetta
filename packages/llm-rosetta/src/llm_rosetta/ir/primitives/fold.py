@@ -40,6 +40,7 @@ from collections.abc import Callable
 
 from llm_rosetta.conversion_warnings import report_loss
 from llm_rosetta.ir.tools.custom_input import custom_input_from_text
+from llm_rosetta.ir.context import add_usage
 from llm_rosetta.ir.model import IRResponse, UsageInfo
 
 __all__ = ["fold_response_events"]
@@ -465,21 +466,15 @@ def _resolve_arguments(entry: dict[str, Any]) -> None:
 
 
 def _merge_usage(accumulated: dict[str, Any] | None, raw: Any) -> dict[str, Any]:
-    """Fold one usage report into the running one.
+    """Add one usage event to the running usage.
 
-    A later event that reports only some counters must not zero the ones an
-    earlier event already carried, so a zero is treated as "not stated" —
-    the same rule ``StreamProcessor._merge_usage`` applies on the way out.
+    Usage events are increments (see
+    :class:`~llm_rosetta.ir.model.stream.UsageEvent`), so they add; a zero or a
+    missing field changes nothing.
     """
-    usage = dict(accumulated or {})
     if not isinstance(raw, dict):
-        return usage
-    for key, value in raw.items():
-        if value is not None and value != 0:
-            usage[key] = value
-        elif key not in usage:
-            usage[key] = value
-    return usage
+        return dict(accumulated or {})
+    return add_usage(accumulated, raw)
 
 
 #: Event type → the method that folds it.  A type absent here is one this

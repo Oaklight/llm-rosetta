@@ -290,6 +290,28 @@ class UsageEvent(TypedDict):
     """Usage statistics event.
 
     Emitted when token usage statistics are available (typically at the end of stream).
+
+    Several ``UsageEvent`` in one stream are *increments*.  A consumer adds
+    them: numeric fields sum (nested detail dicts field by field), non-numeric
+    fields take the latest value, and a field an event does not state
+    contributes nothing.  A reader of a wire that reports cumulative snapshots
+    emits the difference against the previous snapshot, so that the sum of its
+    events is the stream's total.  Because ``total_tokens`` is a numeric field
+    it is an increment too, and every event states it consistently with its
+    other fields.
+
+    Which wires report snapshots (measured live): Google ``generateContent``
+    repeats ``usageMetadata`` on every chunk, and Anthropic's ``message_delta``
+    repeats the ``message_start`` input beside the output so far (24/1, then
+    24/83), so both readers emit differences.  OpenAI sends ``usage`` once, on
+    the last chunk.  The Chat reader treats every repeat of ``usage`` as a
+    cumulative snapshot, so an OpenAI-compatible endpoint that sent per-chunk
+    increments would be undercounted; no such endpoint was measured.
+
+    The readers keep their running report in the stream context, so a stream
+    read *without* a context is not increment-safe: a Messages stream read that
+    way passes each report as it is, and the live capture's two reports (24/1,
+    then 24/83) add up to 48/83/131.  Every in-package caller passes a context.
     """
 
     type: Required[Literal["usage"]]

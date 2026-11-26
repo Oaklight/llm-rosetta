@@ -723,7 +723,7 @@ class ChatCompletionsConverter(BaseConverter):
 
         usage = chunk.get("usage")
         if usage:
-            self._handle_p_usage_to_ir(usage, events)
+            self._handle_p_usage_to_ir(usage, events, context)
 
         self._handle_p_stream_end_to_ir(choices, events, usage, context)
 
@@ -1089,12 +1089,25 @@ class ChatCompletionsConverter(BaseConverter):
         self,
         usage: dict[str, Any],
         events: list[IRStreamEvent],
+        context: StreamContext | None = None,
     ) -> None:
-        """Emit UsageEvent from chunk usage data."""
+        """Emit a ``UsageEvent`` for the new part of a chunk's usage data.
+
+        OpenAI sends ``usage`` once, on the last chunk; an OpenAI-compatible
+        endpoint may repeat the running total on every chunk.  A
+        ``UsageEvent`` is an increment, so with a context the event carries the
+        difference against the previous chunk's usage, and a repeat that adds
+        nothing emits none.
+        """
+        usage_info: dict[str, Any] | None = dict(self._build_p_usage_to_ir(usage))
+        if context is not None:
+            usage_info = context.usage_increment(usage_info)
+        if usage_info is None:
+            return
         events.append(
             UsageEvent(
                 type="usage",
-                usage=self._build_p_usage_to_ir(usage),
+                usage=cast(UsageInfo, usage_info),
             )
         )
 
