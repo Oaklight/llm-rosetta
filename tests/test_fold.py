@@ -259,23 +259,33 @@ def test_reasoning_fragments_in_one_block_accumulate() -> None:
     assert parts == [{"type": "reasoning", "reasoning": "weighing it"}]
 
 
-def test_a_usage_report_refines_the_one_before_it() -> None:
-    """A dialect may report usage more than once, each report a different subset.
+def test_usage_reports_are_increments_that_add_up() -> None:
+    """Several usage events in one stream are increments (``UsageEvent``).
 
-    The later report wins where it states something; a counter it leaves at
-    zero is *not stated*, so the earlier value survives.  Both halves are
-    asserted: replacing instead of merging loses ``prompt_tokens``, and letting
-    a zero through zeroes ``completion_tokens``.
+    Messages reports input in ``message_start`` and output in
+    ``message_delta``: two halves that make the total only when added.  A field
+    an event leaves at zero is *not stated* and adds nothing, so the first
+    half survives, and nested detail dicts add field by field.
     """
     events = [
         {"type": "stream_start", "response_id": "r1", "model": "m"},
         {
             "type": "usage",
-            "usage": {"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+            "usage": {
+                "prompt_tokens": 5,
+                "completion_tokens": 0,
+                "total_tokens": 5,
+                "prompt_tokens_details": {"text_tokens": 5},
+            },
         },
         {
             "type": "usage",
-            "usage": {"prompt_tokens": 0, "completion_tokens": 9, "total_tokens": 0},
+            "usage": {
+                "prompt_tokens": 0,
+                "completion_tokens": 2,
+                "total_tokens": 2,
+                "prompt_tokens_details": {"image_tokens": 3},
+            },
         },
         {"type": "finish", "finish_reason": {"reason": "stop"}},
     ]
@@ -284,8 +294,9 @@ def test_a_usage_report_refines_the_one_before_it() -> None:
 
     assert folded["usage"] == {
         "prompt_tokens": 5,
-        "completion_tokens": 9,
+        "completion_tokens": 2,
         "total_tokens": 7,
+        "prompt_tokens_details": {"text_tokens": 5, "image_tokens": 3},
     }
 
 

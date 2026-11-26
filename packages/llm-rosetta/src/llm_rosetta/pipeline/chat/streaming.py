@@ -4,6 +4,7 @@ import logging
 from collections.abc import Callable, Iterable, Iterator
 from typing import Any, Protocol, runtime_checkable
 
+from llm_rosetta.ir.context import add_usage
 from llm_rosetta.ir.passes import ToolNameMap, restore_client_tool_names
 from llm_rosetta.pipeline.enforcement import CustomToolRestorer
 from llm_rosetta.conversion_warnings import recording_to
@@ -259,20 +260,15 @@ class StreamProcessor:
         return self._usage
 
     def _merge_usage(self, u: dict[str, Any]) -> None:
-        """Merge an IR usage dict into accumulated usage.
+        """Add an IR usage event to the accumulated usage.
 
-        The first usage event (typically from ``message_start``) seeds
-        the accumulator; subsequent events (e.g. ``message_delta``)
-        merge non-zero values so that fields like ``prompt_tokens``
-        from earlier events are not overwritten by a later event that
-        only carries ``completion_tokens``.
+        Usage events are increments (see
+        :class:`~llm_rosetta.ir.model.stream.UsageEvent`): the Messages stream
+        reports input in ``message_start`` and output in ``message_delta``, and
+        a reader of a cumulative wire (Google) emits differences.  The sum is
+        the stream's usage, which the gateway records.
         """
-        if self._usage is None:
-            self._usage = dict(u)
-        else:
-            for k, v in u.items():
-                if v is not None and v != 0:
-                    self._usage[k] = v
+        self._usage = add_usage(self._usage, u)
 
     def _flush_deferred(self) -> list[dict[str, Any]]:
         """Flush deferred terminal events from the target converter.

@@ -50,6 +50,34 @@ class MessagesStreamReader:
         @staticmethod
         def strip_response_id_prefix(raw_id: str, prefix: str) -> str: ...
 
+    def _emit_usage_increment(
+        self,
+        usage: dict[str, Any],
+        context: StreamContext | None,
+        events: list[IRStreamEvent],
+    ) -> None:
+        """Emit the new part of an Anthropic usage report as a ``UsageEvent``.
+
+        Anthropic's usage is cumulative: ``message_start`` carries the input and
+        ``message_delta`` repeats it beside the output so far (measured live:
+        24/1 at the start, 24/83 at the delta).  A report may also state only
+        some fields.  The fields stated so far are therefore kept as one running
+        report, the IR usage is built from that whole (so the total counts input
+        once), and the event carries the increase over the last report.  A
+        field a report leaves out is untouched.  Without a context there is no
+        state, and the report is passed as it is.
+        """
+        if context is None:
+            events.append(
+                UsageEvent(type="usage", usage=self._build_p_usage_to_ir(usage))
+            )
+            return
+        running = context.metadata.setdefault("_messages_usage_report", {})
+        running.update({k: v for k, v in usage.items() if v is not None})
+        increment = context.usage_increment(self._build_p_usage_to_ir(running))
+        if increment is not None:
+            events.append(UsageEvent(type="usage", usage=increment))  # ty: ignore[invalid-argument-type]
+
     def _handle_p_message_start_to_ir(
         self,
         chunk: dict[str, Any],
@@ -70,12 +98,7 @@ class MessagesStreamReader:
         if usage:
             start_usage = dict(usage)
             start_usage["output_tokens"] = 0
-            events.append(
-                UsageEvent(
-                    type="usage",
-                    usage=self._build_p_usage_to_ir(start_usage),
-                )
-            )
+            self._emit_usage_increment(start_usage, context, events)
 
         if context is not None:
             response_id = message.get("id", "")
@@ -310,12 +333,7 @@ class MessagesStreamReader:
         # Emit UsageEvent before FinishEvent
         usage = chunk.get("usage")
         if usage:
-            events.append(
-                UsageEvent(
-                    type="usage",
-                    usage=self._build_p_usage_to_ir(usage),
-                )
-            )
+            self._emit_usage_increment(usage, context, events)
 
         if stop_reason:
             reason = ANTHROPIC_REASON_FROM_PROVIDER.get(stop_reason, "stop")

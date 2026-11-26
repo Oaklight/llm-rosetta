@@ -15,6 +15,7 @@ from typing import Any, cast
 from llm_rosetta.conversion_warnings import report_loss
 from llm_rosetta.converters.base.helpers.service_tier import google_service_tier
 
+from llm_rosetta.ir.context import add_usage
 from llm_rosetta.ir.model import ToolResultPart
 from llm_rosetta.ir.model.request import IRRequest
 from llm_rosetta.ir.model.response import (
@@ -1178,8 +1179,12 @@ class GoogleInteractionsConverter(BaseConverter):
     def _handle_ir_usage_to_p(
         self, event: UsageEvent, context: StreamContext | None
     ) -> dict[str, Any]:
-        usage = self._build_ir_usage_to_p(event["usage"])
-        # Stash for injection into interaction.completed
+        # Several usage events are increments (``UsageEvent``): add them, and
+        # stash the sum for injection into interaction.completed (#1750).
         if context is not None:
-            context.metadata["_interactions_usage"] = usage
+            total = add_usage(
+                context.metadata.get("_interactions_usage_ir"), event["usage"]
+            )
+            context.metadata["_interactions_usage_ir"] = total
+            context.metadata["_interactions_usage"] = self._build_ir_usage_to_p(total)
         return {}
