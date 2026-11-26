@@ -143,7 +143,7 @@ declare the differences.
 | Built-in shims | `shims/builtin/<vendor>/<type>/provider.yaml` | One shim per vendor/format pair, grouped by model type |
 | Vendor manifest | `shims/builtin/<vendor>/provider.yaml` | Optional per-vendor defaults every leaf inherits: `connection:` (the credential) plus the vendor's own `logo` / `group` / `group_label`; `auth.py` sits beside it |
 | Tree contract | `devtools/_shim_template/` | The path rules (`<vendor>[/<lane>]/<type>[/<format>]/provider.yaml`), the file allow-list, and the skeleton `scripts/dev/new_shim.py` renders; `llm-rosetta ext check` reports an extension folder (its tree included) that departs from it |
-| External shim sources | `llm_rosetta_gateway/shims/` | Manifest installs (`manifest_sources/`: plan, selection, freshness, install, status), directory loader, manifest-source catalogue |
+| External shim sources | `llm_rosetta_gateway/shims/` | Extension-index installs (`manifest_sources/`: plan, selection, freshness, install, status), source catalogue |
 
 ### Gateway
 

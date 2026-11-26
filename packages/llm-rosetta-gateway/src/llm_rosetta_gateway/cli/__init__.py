@@ -655,8 +655,8 @@ def _report_shim_sources(report: ShimLoadReport | None) -> None:
         if status.unreachable:
             logger.warning(
                 "  %s is unreachable; declare a second manifest URL for it "
-                "(shims.sources[].fallback), point shims.paths at a local copy, "
-                "or restore access to the host",
+                "(shims.sources[].fallback), install the extension into the "
+                "extensions directory by hand, or restore access to the host",
                 status.location,
             )
     for status in report.sources:

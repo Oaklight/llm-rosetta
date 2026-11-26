@@ -1,58 +1,41 @@
-"""Loaded shims: where each one is defined, and editing the ones we own.
+"""Loaded shims: where each one is defined, and the switch that turns one off.
 
 A shim is a ``provider.yaml`` (plus optional ``transforms.py``) in a directory,
-so the admin panel can show every loaded shim and, for the ones living in a
-*declared local directory*, edit that file or delete its directory — the
-sources the operator already vouched for by listing them in ``shims.paths``.
-
-A built-in shim ships inside the package and a remote one is a fetched
-artifact: both are read-only here, because an edit would be lost on upgrade or
-on the next refetch.
-
-Deleting a shim removes its directory, so the route refuses while a configured
-provider still names the shim.
+so the admin panel can show every loaded shim and the text of its definition.
+Every definition is read-only here: a built-in ships inside the package, and an
+installed extension is a fetched artifact that the next update would overwrite.
+The enable switch is a config declaration (``shims.disabled``), not an edit.
 """
 
 from __future__ import annotations
 
-import logging
-import shutil
 from pathlib import Path
 from typing import Any
 
 from llm_rosetta_gateway._vendor.yaml import load as yaml_load
-from llm_rosetta.api import list_shims, validate_shim_declaration
+from llm_rosetta.api import list_shims
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from .._shared import (
     _get_config_io,
     _get_config_path,
-    _reload_gateway_config,
     config_mutate,
     parse_json_body,
 )
 
-logger = logging.getLogger("llm-rosetta-gateway")
-
-#: Why a shim cannot be edited or deleted from the panel, keyed by origin.
+#: Why a definition is read-only in the panel, keyed by origin.
 _READ_ONLY_REASON = {
     "builtin": (
-        "A built-in shim ships inside the package: edit it in the core "
-        "repository, or declare your own copy as a local shim source."
+        "A built-in shim ships inside the package: edit it in the core repository."
     ),
     "remote": (
-        "A remote shim is a fetched artifact: the next refetch would overwrite "
-        "an edit. Declare a local copy instead."
+        "An installed extension is a fetched artifact: the next update would "
+        "overwrite an edit. Edit it in its own repository."
     ),
     "plugin": (
-        "A plugin shim is registered by an installed package: edit it in that "
-        "package, or declare your own copy as a local shim source."
+        "A plugin shim is registered by an installed package: edit it in that package."
     ),
 }
-
-#: Logger the shim loader reports a skipped directory on, captured while a
-#: saved file is reloaded so the panel can say *why* it did not load.
-_LOADER_LOGGER = "llm_rosetta.shims.providers"
 
 
 def _plugin_source(name: str) -> str | None:
@@ -177,38 +160,9 @@ def _disabled_names(request: Any) -> list[str]:
     return [name for name in names if isinstance(name, str)]
 
 
-SOURCE_ROOT_REASON = (
-    "This definition sits at the root of a declared source, where the loader "
-    "does not look for shims. Move it into its own directory to edit or "
-    "delete it here."
-)
-
-
-def _at_source_root(entry: dict[str, Any]) -> bool:
-    """Whether a definition's directory *is* the declared source root.
-
-    A file there is not a shim directory: the loader wants
-    ``<source>/<name>/provider.yaml``.  Deleting "its directory" would remove
-    the whole source, siblings included.
-    """
-    root, path = entry.get("root"), entry.get("path")
-    if not root or not path:
-        return False
-    try:
-        return Path(path).parent.resolve() == Path(root).resolve()
-    except OSError:
-        return False
-
-
-def _read_only_reason(row: dict[str, Any]) -> str | None:
-    """Why a row cannot be edited or deleted here, or ``None`` when it can."""
-    if row.get("at_source_root"):
-        return SOURCE_ROOT_REASON
-    if row["origin"] not in ("path",):
-        return (
-            _READ_ONLY_REASON.get(row["origin"]) or "This shim cannot be edited here."
-        )
-    return None
+def _read_only_reason(row: dict[str, Any]) -> str:
+    """Why a row's definition cannot be edited here."""
+    return _READ_ONLY_REASON.get(row["origin"]) or "This shim cannot be edited here."
 
 
 def _manifest_above(entry: dict[str, Any]) -> str | None:
@@ -252,8 +206,6 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
         entry = index.get(shim.name) or {}
         plugin = "" if entry else (_plugin_source(shim.name) or "")
         origin = entry.get("origin", "plugin" if plugin else "builtin")
-        at_root = _at_source_root(entry)
-        writable = origin == "path" and not at_root
         rows[shim.name] = {
             "name": shim.name,
             "display_name": shim.display_name,
@@ -269,9 +221,6 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
                 str(shim.manifest.path) if shim.manifest is not None else None
             ),
             "enabled": shim.name not in disabled,
-            "editable": writable,
-            "deletable": writable,
-            "at_source_root": at_root,
             "free_source": bool(shim.free_source),
             "used_by": sorted(usage.get(shim.name, [])),
         }
@@ -279,8 +228,6 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
         if name in rows:
             continue
         origin = entry.get("origin", "unknown")
-        at_root = _at_source_root(entry)
-        writable = origin == "path" and not at_root
         rows[name] = {
             "name": name,
             "display_name": entry.get("display_name"),
@@ -295,15 +242,9 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
             "manifest_path": _manifest_above(entry),
             "enabled": False,
             "free_source": bool(entry.get("free_source")),
-            "editable": writable,
-            "deletable": writable,
-            "at_source_root": at_root,
             "used_by": sorted(usage.get(name, [])),
         }
-    ordered = sorted(
-        rows.values(), key=lambda row: (row["origin"] != "path", row["name"])
-    )
-    return ordered
+    return sorted(rows.values(), key=lambda row: row["name"])
 
 
 def _find_row(request: Any, name: str) -> dict[str, Any] | None:
@@ -322,67 +263,6 @@ def _read_yaml(path: str | None) -> str | None:
         return Path(path).read_text(encoding="utf-8")
     except OSError:
         return None
-
-
-def _yaml_problem(text: str, name: str) -> str | None:
-    """Return why *text* is not a valid definition for *name*, or ``None``.
-
-    Only the checks the loader would make anyway, so a saved file fails here
-    with a message rather than half-registering.
-    """
-    try:
-        cfg = yaml_load(text)
-    except Exception as exc:  # noqa: BLE001 - the parser's message is the point
-        return f"Not valid YAML: {exc}"
-    if not isinstance(cfg, dict):
-        return "The file must be a YAML mapping"
-    if not isinstance(cfg.get("name"), str):
-        return "The file must declare a 'name'"
-    if cfg["name"] != name:
-        return (
-            f"The file declares name {cfg['name']!r}; rename a shim by creating "
-            "a new directory instead of editing this one"
-        )
-    try:
-        validate_shim_declaration(cfg, "provider.yaml")
-    except ValueError as exc:
-        return str(exc)
-    return None
-
-
-class _CaptureWarnings(logging.Handler):
-    """Collect the loader's warnings while a saved file is reloaded."""
-
-    def __init__(self) -> None:
-        super().__init__(level=logging.WARNING)
-        self.messages: list[str] = []
-
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            self.messages.append(record.getMessage())
-        except Exception:  # noqa: BLE001 - a broken record must not break a save
-            pass
-
-
-async def _rebuild_shims(request: Any) -> str | None:
-    """Reload the shim sources and the config; return the loader's complaint.
-
-    Returns ``None`` on success, or the last warning the loader emitted — a
-    shim that failed to parse is skipped with a warning rather than raised, so
-    the warning is the only signal that the save did not take.
-    """
-    capture = _CaptureWarnings()
-    loader_logger = logging.getLogger(_LOADER_LOGGER)
-    loader_logger.addHandler(capture)
-    try:
-        await _reload_gateway_config(
-            request, _get_config_path(request), force_shims=True
-        )
-    except Exception as exc:  # noqa: BLE001 - reported to the admin panel
-        return str(exc)
-    finally:
-        loader_logger.removeHandler(capture)
-    return capture.messages[-1] if capture.messages else None
 
 
 async def post_shim_enabled(request: Any, name: str) -> Response:
@@ -488,87 +368,3 @@ async def get_loaded_shim(request: Any, name: str) -> Response:
     detail["yaml"] = _read_yaml(row.get("path"))
     detail["read_only_reason"] = _read_only_reason(row)
     return JSONResponse(detail)
-
-
-async def put_loaded_shim(request: Any, name: str) -> Response:
-    """Save an edited definition for a shim that lives in a local source.
-
-    The previous file is restored when the edited one does not come back as a
-    registered shim, so a typo cannot leave the gateway without the shim.
-    """
-    body, err = parse_json_body(request)
-    if err:
-        return err
-    if not isinstance(body, dict) or not isinstance(body.get("yaml"), str):
-        return JSONResponse({"error": "Body must be {'yaml': <text>}"}, status_code=400)
-
-    row = _find_row(request, name)
-    if row is None:
-        return JSONResponse({"error": f"Shim {name!r} is not loaded"}, status_code=404)
-    if not row["editable"]:
-        return JSONResponse({"error": _read_only_reason(row)}, status_code=403)
-    problem = _yaml_problem(body["yaml"], name)
-    if problem is not None:
-        return JSONResponse({"error": problem}, status_code=400)
-
-    path = Path(row["path"])
-    try:
-        backup = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        return JSONResponse({"error": f"Cannot read {path}: {exc}"}, status_code=500)
-
-    text = body["yaml"]
-    if not text.endswith("\n"):
-        text += "\n"
-    try:
-        path.write_text(text, encoding="utf-8")
-    except OSError as exc:
-        return JSONResponse({"error": f"Cannot write {path}: {exc}"}, status_code=500)
-
-    complaint = await _rebuild_shims(request)
-    if complaint is None and name in {shim.name for shim in list_shims()}:
-        return JSONResponse({"ok": True, "shim": _find_row(request, name)})
-
-    path.write_text(backup, encoding="utf-8")
-    await _rebuild_shims(request)
-    return JSONResponse(
-        {
-            "error": complaint
-            or "The edited file did not register this shim; the previous file was restored."
-        },
-        status_code=400,
-    )
-
-
-async def delete_loaded_shim(request: Any, name: str) -> Response:
-    """Remove a shim that lives in a local source, with its directory.
-
-    Refused while a configured provider still names the shim: the provider
-    would stop resolving, and the operator has to choose a replacement anyway.
-    """
-    row = _find_row(request, name)
-    if row is None:
-        return JSONResponse({"error": f"Shim {name!r} is not loaded"}, status_code=404)
-    if not row["deletable"]:
-        return JSONResponse({"error": _read_only_reason(row)}, status_code=403)
-    if row["used_by"]:
-        return JSONResponse(
-            {
-                "error": "Providers still use this shim: " + ", ".join(row["used_by"]),
-                "providers": row["used_by"],
-            },
-            status_code=409,
-        )
-
-    directory = Path(row["path"]).parent
-    try:
-        shutil.rmtree(directory)
-    except OSError as exc:
-        return JSONResponse(
-            {"error": f"Cannot remove {directory}: {exc}"}, status_code=500
-        )
-
-    complaint = await _rebuild_shims(request)
-    if complaint is not None:
-        logger.warning("Shim rebuild after deleting %s: %s", name, complaint)
-    return JSONResponse({"ok": True, "status": _shim_rows(request)})

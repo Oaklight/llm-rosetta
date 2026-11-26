@@ -1,14 +1,14 @@
-"""External shim sources — load provider shims from manifests and directories.
+"""External shim sources — load provider shims from extension indexes.
 
 Built-in shims are registered at import time from the bundled ``providers/``
 directory (see :mod:`llm_rosetta.shims._loader`).  This module adds a second,
 *declarative* source of shims: vendors installed from a source's versioned
-manifest (:mod:`.manifest_sources`) and extra local directories.  The gateway
+index (:mod:`.manifest_sources`).  The gateway
 exposes both through its ``shims`` config section; this module is the
 config-agnostic core.
 
 Public entry point: :func:`rebuild_shims` — full registry rebuild (built-ins +
-entry points + manifest installs + ``extra_dirs``).  Idempotent.  It is the
+entry points + index installs).  Idempotent.  It is the
 programmatic entry point for callers that want to load shims before calling
 :func:`llm_rosetta.convert`.
 
@@ -39,7 +39,6 @@ from llm_rosetta.api import (
     unregister_shim,
 )
 
-from ._scan import _load_local_dir
 from ._types import (
     HTTP_TIMEOUT,
     MAX_ARCHIVE_BYTES,
@@ -60,7 +59,7 @@ from .manifest_sources.status import check_manifest_updates, scan_manifest_statu
 _rebuild_lock = threading.Lock()
 
 #: Shim names installed by the most recent rebuild from manifest installs and
-#: ``extra_dirs``.  Tracked so a later rebuild can drop exactly those while
+#: ``shims.sources``.  Tracked so a later rebuild can drop exactly those while
 #: leaving shims registered in-process via ``register_shim`` alone.
 _source_shims: set[str] = set()
 
@@ -71,7 +70,6 @@ _source_shims: set[str] = set()
 
 
 def rebuild_shims(
-    extra_dirs: Sequence[str | os.PathLike[str]] = (),
     *,
     cache_root: str | os.PathLike[str] | None = None,
     strict: bool = False,
@@ -86,16 +84,13 @@ def rebuild_shims(
     """Rebuild the shim registry from built-ins, extensions and sources.
 
     The registry is cleared and repopulated in a fixed order — built-ins, then
-    the installed extensions (those a manifest install just placed in the
-    extensions directory included), then ``extra_dirs`` in order — so a later
-    source overrides an earlier one of the same shim name.  An extension is the
+    the installed extensions (those an index install just placed in the
+    extensions directory included).  An extension is the
     exception to that rule against core: one whose shim names another owner
     holds is not loaded (core wins, see :mod:`.manifest_sources`).
     Idempotent: calling twice with the same inputs yields the same registry.
 
     Args:
-        extra_dirs: Local directories to scan for ``provider.yaml`` (flat or
-            grouped layout, as :func:`load_providers_from_dir` accepts).
         cache_root: Directory for fetched manifests and installs.  Required
             when ``manifests`` is given.
         strict: When ``True``, raise :class:`ShimSourceError` if any declared
@@ -155,8 +150,6 @@ def rebuild_shims(
             # replaces one of their names.
             for status in manifest_statuses:
                 statuses.append(scan_manifest_status(status, known))
-            for directory in extra_dirs:
-                statuses.append(_load_local_dir(directory))
 
             # Disabled names go last: every source has registered by now, so a
             # name is dropped whatever source would have provided it.

@@ -234,7 +234,7 @@ def test_shims_remotes_is_reported_and_names_the_way_out() -> None:
     assert [i.where for i in unmapped] == ["shims.remotes"]
     # The operator is told both ways out, and the key itself is left alone.
     assert "shims.sources" in unmapped[0].detail
-    assert "shims.paths" in unmapped[0].detail
+    assert "extensions directory" in unmapped[0].detail
     new = _load(result.new_text)
     assert new["shims"]["install"] == ["argonne:alcf"]
     assert new["shims"]["remotes"] == [

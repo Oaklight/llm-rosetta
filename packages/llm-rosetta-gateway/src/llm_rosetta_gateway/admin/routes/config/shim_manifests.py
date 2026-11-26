@@ -7,12 +7,10 @@ nothing and never appears in a provider picker — so it has no row in the shim
 inventory of :mod:`.shim_files`; it is listed beside the leaves that inherit
 it instead.
 
-Editing one is a vendor-wide change, so the panel shows the blast radius
-before saving: which leaf inherits each field the edit touches, and which leaf
-overrides it and is therefore unaffected.  The merge and the read-only rules
-are the loader's and :func:`.shim_files._read_only_reason`'s, not second
-copies: an inheritance view that disagreed with the loader would be worse than
-none.
+The panel shows which leaf inherits each field a manifest declares and which
+leaf overrides it.  The merge rule is the loader's, not a second copy: an
+inheritance view that disagreed with the loader would be worse than none.  A
+manifest is read-only here, like a shim (:func:`.shim_files._read_only_reason`).
 """
 
 from __future__ import annotations
@@ -20,35 +18,24 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta.api import leaf_connection, manifest_vocabulary, merge_connection
+from llm_rosetta.api import leaf_connection, manifest_vocabulary
 
 from llm_rosetta_gateway._vendor.yaml import load as yaml_load
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
-from .._shared import _qp, parse_json_body
+from .._shared import _qp
 from .shim_files import (
     _read_only_reason,
-    _rebuild_shims,
     _shim_roots,
     _yaml_meta,
 )
-
-_UNKNOWN_KEY_REASON = (
-    "A vendor manifest may declare only a 'connection:' block; found %s. "
-    "Identity belongs in a leaf's provider.yaml."
-)
-
-
-def _connection_keys() -> tuple[str, ...]:
-    """The ``connection:`` keys a manifest may declare, from the core."""
-    return manifest_vocabulary().connection_keys
 
 
 def _identity_keys() -> tuple[str, ...]:
     """Keys that make a ``provider.yaml`` a shim rather than a manifest.
 
     The loader's own tuple: a file is a manifest here exactly when it is one
-    there, so the panel cannot offer an editor for something the loader reads
+    there, so the panel cannot present as a manifest something the loader reads
     as a shim.
     """
     return manifest_vocabulary().identity_keys
@@ -57,131 +44,6 @@ def _identity_keys() -> tuple[str, ...]:
 def _leaf_connection(cfg: Any) -> dict[str, Any]:
     """A leaf's own connection values, in the loader's canonical spelling."""
     return leaf_connection(cfg)
-
-
-def _merged_connection(
-    connection: dict[str, Any], leaf: dict[str, Any], manifest_path: Path
-) -> dict[str, Any]:
-    """The effective connection of a leaf: its own values over the manifest's.
-
-    *manifest_path* is unused: the merge needs the manifest's values only.
-    """
-    return merge_connection(connection, leaf)
-
-
-def _manifest_schema() -> dict[str, Any]:
-    """The manifest shape of ``provider.schema.json`` and its ``connection``."""
-    return manifest_vocabulary().schema
-
-
-def _list_problem(value: Any, spec: dict[str, Any], key: str) -> str | None:
-    """Why *value* is not the list one ``connection`` property allows."""
-    if not isinstance(value, list):
-        return f"connection.{key} must be a list"
-    minimum = spec.get("minItems")
-    if minimum and len(value) < minimum:
-        return f"connection.{key} needs at least {minimum} item(s)"
-    items = spec.get("items") or {}
-    if items.get("type") == "string" and not all(
-        isinstance(item, str) for item in value
-    ):
-        return f"connection.{key} must be a list of strings"
-    return None
-
-
-def _mapping_problem(value: Any, spec: dict[str, Any], key: str) -> str | None:
-    """Why *value* is not the mapping one ``connection`` property allows."""
-    if not isinstance(value, dict):
-        return f"connection.{key} must be a mapping"
-    values = spec.get("additionalProperties")
-    if isinstance(values, dict) and values.get("type") == "string":
-        bad = [name for name, item in value.items() if not isinstance(item, str)]
-        if bad:
-            return (
-                f"connection.{key} must map names to strings; "
-                f"{', '.join(sorted(bad))} is not a string"
-            )
-    return None
-
-
-def _value_problem(value: Any, spec: dict[str, Any], key: str) -> str | None:
-    """Why *value* does not match one ``connection`` property, or ``None``."""
-    kind = spec.get("type")
-    if kind == "string":
-        if not isinstance(value, str) or isinstance(value, bool):
-            return f"connection.{key} must be a string"
-        allowed = spec.get("enum")
-        if allowed and value not in allowed:
-            return f"connection.{key} must be one of: {', '.join(allowed)}"
-        return None
-    if kind == "boolean":
-        if isinstance(value, bool):
-            return None
-        return f"connection.{key} must be true or false"
-    if kind == "integer":
-        if not isinstance(value, int) or isinstance(value, bool):
-            return f"connection.{key} must be an integer"
-        minimum = spec.get("minimum")
-        if minimum is not None and value < minimum:
-            return f"connection.{key} must be at least {minimum}"
-        return None
-    if kind == "array":
-        return _list_problem(value, spec, key)
-    if kind == "object":
-        return _mapping_problem(value, spec, key)
-    return None
-
-
-def manifest_problem(text: str) -> str | None:
-    """Why *text* is not a valid vendor manifest, or ``None``.
-
-    Validates against the manifest shape — the ``vendorManifest`` half of the
-    ``oneOf`` in ``provider.schema.json`` — not the leaf shape, so a manifest
-    that accidentally grows a ``name`` is refused here rather than being
-    silently read as a shim by the loader.
-    """
-    try:
-        cfg = yaml_load(text)
-    except Exception as exc:  # noqa: BLE001 - the parser's message is the point
-        return f"Not valid YAML: {exc}"
-    if cfg is None:
-        # A comment-only manifest is a legitimate marker: the vendor's shared
-        # facts are then its ``auth.py`` and the comments say why.
-        return None
-    if not isinstance(cfg, dict):
-        return "The file must be a YAML mapping"
-    identity = [key for key in _identity_keys() if key in cfg]
-    if identity:
-        return (
-            "A vendor manifest declares no identity ("
-            + ", ".join(f"'{key}'" for key in identity)
-            + "): a file with 'name' or 'format' is a shim, and identity "
-            "belongs in the leaf's provider.yaml"
-        )
-
-    schema = _manifest_schema()
-    allowed = set(schema["manifest"].get("properties") or {})
-    unknown = set(cfg) - allowed
-    if unknown:
-        return _UNKNOWN_KEY_REASON % ", ".join(sorted(unknown))
-
-    connection = cfg.get("connection")
-    if connection is None:
-        return None
-    if not isinstance(connection, dict):
-        return "connection must be a mapping"
-    properties = schema["connection"].get("properties") or {}
-    unknown = set(connection) - set(properties)
-    if unknown:
-        return (
-            f"unknown connection key(s) {', '.join(sorted(unknown))}; "
-            f"a vendor manifest may declare {', '.join(_connection_keys())}"
-        )
-    for key, value in connection.items():
-        problem = _value_problem(value, properties.get(key) or {}, key)
-        if problem is not None:
-            return problem
-    return None
 
 
 def _read_definition(path: Path) -> dict[str, Any] | None:
@@ -298,7 +160,6 @@ def _root_manifests(origin: str, location: str, root: Path) -> list[dict[str, An
             "source": location,
             "root": str(root),
         }
-        entry["at_source_root"] = _at_source_root(entry)
         entries.append(entry)
     return entries
 
@@ -322,32 +183,15 @@ def _manifest_entries(request: Any) -> list[dict[str, Any]]:
     for origin, location, root in _shim_roots(request):
         entries.extend(_root_manifests(origin, location, root))
 
-    entries.sort(key=lambda item: (item["origin"] != "path", item["vendor"]))
+    entries.sort(key=lambda item: item["vendor"])
     request.app._shim_manifest_index = (stamp, entries)
     return entries
-
-
-def _at_source_root(entry: dict[str, Any]) -> bool:
-    """Whether the manifest's directory *is* the declared source root.
-
-    Mirrors :func:`.shim_files._at_source_root` for a file one level up from a
-    shim: such a manifest is read-only for the same reason (its directory is
-    the whole source).
-    """
-    root, path = entry.get("root"), entry.get("path")
-    if not root or not path:
-        return False
-    try:
-        return Path(path).parent.resolve() == Path(root).resolve()
-    except OSError:
-        return False
 
 
 def _row(entry: dict[str, Any]) -> dict[str, Any]:
     """The summary row the inventory renders, with the load-time read-only rule."""
     row = dict(entry)
     reason = _read_only_reason(row)
-    row["editable"] = reason is None
     row["read_only_reason"] = reason
     return row
 
@@ -411,53 +255,6 @@ def _fields(connection: dict[str, Any], leaves: list[dict[str, Any]]) -> dict[st
     return fields
 
 
-def _headers_of(connection: dict[str, Any]) -> dict[str, Any]:
-    """The ``headers:`` mapping of a connection block, or an empty one."""
-    headers = connection.get("headers")
-    return headers if isinstance(headers, dict) else {}
-
-
-def _units(
-    old: dict[str, Any], new: dict[str, Any]
-) -> list[tuple[str, str | None, bool]]:
-    """The ``(field, header, removed)`` units an edit to the manifest touches."""
-    units: list[tuple[str, str | None, bool]] = []
-    for key in sorted((set(old) | set(new)) - {"headers"}):
-        if old.get(key) != new.get(key):
-            units.append((key, None, key not in new))
-    old_headers = _headers_of(old)
-    new_headers = _headers_of(new)
-    for name in sorted(set(old_headers) | set(new_headers)):
-        if old_headers.get(name) != new_headers.get(name):
-            units.append(("headers", name, name not in new_headers))
-    return units
-
-
-def _affected_leaves(
-    units: list[tuple[str, str | None, bool]], leaves: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
-    """The leaves whose effective connection each touched unit changes.
-
-    A leaf that declares the field itself overrides the manifest and is
-    unaffected — the one case an operator can otherwise only find by reading
-    every leaf.
-    """
-    changes: list[dict[str, Any]] = []
-    for field, header, removed in units:
-        affected: list[str] = []
-        for leaf in leaves:
-            own = leaf["own"]
-            if field == "headers":
-                if header not in (own.get("headers") or {}):
-                    affected.append(leaf["name"])
-            elif field not in own:
-                affected.append(leaf["name"])
-        changes.append(
-            {"field": field, "header": header, "removed": removed, "leaves": affected}
-        )
-    return changes
-
-
 def _connection_of(text: str) -> dict[str, Any]:
     """The ``connection:`` block of a manifest text, or an empty mapping."""
     try:
@@ -468,26 +265,6 @@ def _connection_of(text: str) -> dict[str, Any]:
         return {}
     connection = cfg.get("connection")
     return dict(connection) if isinstance(connection, dict) else {}
-
-
-def _changed_leaves(
-    before: dict[str, Any],
-    after: dict[str, Any],
-    leaves: list[dict[str, Any]],
-    manifest_path: Path,
-) -> list[str]:
-    """The leaves whose *effective* connection differs between two manifests.
-
-    The effective value is the loader's merge, so this names a leaf only when
-    the save actually changes what it would use.
-    """
-    changed: list[str] = []
-    for leaf in leaves:
-        was = _merged_connection(before, leaf["own"], manifest_path)
-        now = _merged_connection(after, leaf["own"], manifest_path)
-        if was != now:
-            changed.append(leaf["name"])
-    return changed
 
 
 def _detail(entry: dict[str, Any]) -> dict[str, Any]:
@@ -565,104 +342,3 @@ async def get_shim_manifest(request: Any) -> Response:
     if entry is None:
         return JSONResponse({"error": "No such vendor manifest"}, status_code=404)
     return JSONResponse(_detail(entry))
-
-
-async def post_preview_shim_manifest(request: Any) -> Response:
-    """Say which leaves an unsaved edit would change, without writing anything.
-
-    The editor calls this while the operator types, so a vendor-wide change is
-    visible before Save: ``changes`` names the field and the leaves that
-    inherit it, and ``changed_leaves`` is the union.
-    """
-    body, err = parse_json_body(request)
-    if err:
-        return err
-    if not isinstance(body, dict) or not isinstance(body.get("yaml"), str):
-        return JSONResponse({"error": "Body must be {'yaml': <text>}"}, status_code=400)
-    entry = _find_entry(request, body.get("path"))
-    if entry is None:
-        return JSONResponse({"error": "No such vendor manifest"}, status_code=404)
-
-    problem = manifest_problem(body["yaml"])
-    if problem is not None:
-        return JSONResponse({"error": problem}, status_code=400)
-
-    path = Path(entry["path"])
-    try:
-        before = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        return JSONResponse({"error": f"Cannot read {path}: {exc}"}, status_code=500)
-    leaves = _leaf_entries(path)
-    old, new = _connection_of(before), _connection_of(body["yaml"])
-    changes = _affected_leaves(_units(old, new), leaves)
-    changed = _changed_leaves(old, new, leaves, path)
-    return JSONResponse(
-        {
-            "ok": True,
-            "changes": changes,
-            "changed_leaves": changed,
-            "unchanged_leaves": [
-                leaf["name"] for leaf in leaves if leaf["name"] not in changed
-            ],
-        }
-    )
-
-
-async def put_shim_manifest(request: Any) -> Response:
-    """Save an edited vendor manifest, restoring it if the reload rejects it.
-
-    The reload is the loader's own verdict: a manifest that makes a leaf fail
-    to register is rolled back, exactly as :func:`.shim_files.put_loaded_shim`
-    does for a leaf.  The response names the leaves whose effective connection
-    the save changed.
-    """
-    body, err = parse_json_body(request)
-    if err:
-        return err
-    if not isinstance(body, dict) or not isinstance(body.get("yaml"), str):
-        return JSONResponse({"error": "Body must be {'yaml': <text>}"}, status_code=400)
-
-    entry = _find_entry(request, body.get("path"))
-    if entry is None:
-        return JSONResponse({"error": "No such vendor manifest"}, status_code=404)
-    row = _row(entry)
-    if not row["editable"]:
-        return JSONResponse({"error": row["read_only_reason"]}, status_code=403)
-    problem = manifest_problem(body["yaml"])
-    if problem is not None:
-        return JSONResponse({"error": problem}, status_code=400)
-
-    path = Path(entry["path"])
-    try:
-        backup = path.read_text(encoding="utf-8")
-    except OSError as exc:
-        return JSONResponse({"error": f"Cannot read {path}: {exc}"}, status_code=500)
-
-    text = body["yaml"]
-    if text and not text.endswith("\n"):
-        text += "\n"
-    try:
-        path.write_text(text, encoding="utf-8")
-    except OSError as exc:
-        return JSONResponse({"error": f"Cannot write {path}: {exc}"}, status_code=500)
-
-    complaint = await _rebuild_shims(request)
-    if complaint is not None:
-        path.write_text(backup, encoding="utf-8")
-        await _rebuild_shims(request)
-        return JSONResponse({"error": complaint}, status_code=400)
-
-    leaves = _leaf_entries(path)
-    changed = _changed_leaves(
-        _connection_of(backup), _connection_of(text), leaves, path
-    )
-    return JSONResponse(
-        {
-            "ok": True,
-            "manifest": _detail({**entry, "path": str(path)}),
-            "changed_leaves": changed,
-            "unchanged_leaves": [
-                leaf["name"] for leaf in leaves if leaf["name"] not in changed
-            ],
-        }
-    )

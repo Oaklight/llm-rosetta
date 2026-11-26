@@ -1,16 +1,13 @@
 // shims.js — External shim sources (Settings tab).
 //
-// Lets the operator declare extra shim directories and the manifest cache
-// settings from the admin UI; manifest sources are edited by
-// shim-sources-editor.js.  The fields map 1:1 onto the top-level `shims`
-// config section; the status table reports what the gateway loaded; the
-// inventory below is grouped by it.
+// Lets the operator set the extension-index cache settings from the admin UI;
+// index sources are edited by shim-sources-editor.js.  The fields map 1:1 onto
+// the top-level `shims` config section; the status table reports what the
+// gateway loaded; the inventory below is grouped by it.
 import { S } from '../core/state.js';
 import { t } from '../core/i18n.js';
-import { api, showToast, esc, copyText, openModal, closeModal } from '../core/utils.js';
-import {
-  inheritanceRows, annotateBlast, changedLeaves, nameList,
-} from '../core/manifest-inherit.js';
+import { api, showToast, esc, copyText, openModal } from '../core/utils.js';
+import { inheritanceRows, nameList } from '../core/manifest-inherit.js';
 import { renderShimManifestEditor, resetShimManifestEditor } from './shim-sources-editor.js';
 
 function _section() {
@@ -24,13 +21,11 @@ function _status() {
 
 /** Fill the form from the loaded config and render the status table. */
 function renderShimSources() {
-  const pathsEl = document.getElementById('shimPathsInput');
-  if (!pathsEl) return;
-  const sec = _section();
-  pathsEl.value = Array.isArray(sec.paths) ? sec.paths.join('\n') : '';
-  checkShimUpdates(false);
   const cacheEl = document.getElementById('shimCacheDirInput');
-  if (cacheEl) cacheEl.value = sec.cache_dir || '';
+  if (!cacheEl) return;
+  const sec = _section();
+  cacheEl.value = sec.cache_dir || '';
+  checkShimUpdates(false);
   const ttlEl = document.getElementById('shimTtlInput');
   if (ttlEl) ttlEl.value = sec.remote_ttl != null ? sec.remote_ttl : '';
   const strictEl = document.getElementById('shimStrictInput');
@@ -50,11 +45,8 @@ async function saveShimSources() {
   const err = document.getElementById('shimSourcesError');
   if (err) err.textContent = '';
 
-  const paths = (document.getElementById('shimPathsInput').value || '')
-    .split('\n').map(s => s.trim()).filter(Boolean);
-
   try {
-    const body = { paths };
+    const body = {};
     const cacheDir = (document.getElementById('shimCacheDirInput').value || '').trim();
     body.cache_dir = cacheDir;
     const ttlRaw = (document.getElementById('shimTtlInput').value || '').trim();
@@ -112,11 +104,6 @@ async function reloadShimSources(forceRefresh) {
 function _shimFormDirty() {
   const sec = _section();
   const el = id => document.getElementById(id);
-  const paths = (el('shimPathsInput').value || '')
-    .split('\n').map(x => x.trim()).filter(Boolean);
-  const savedPaths = Array.isArray(sec.paths) ? sec.paths : [];
-  if (JSON.stringify(paths) !== JSON.stringify(savedPaths)) return true;
-
   if ((el('shimCacheDirInput').value || '').trim() !== (sec.cache_dir || '')) return true;
   const ttl = (el('shimTtlInput').value || '').trim();
   const savedTtl = sec.remote_ttl != null ? String(sec.remote_ttl) : '';
@@ -137,21 +124,13 @@ function _updateShimDirty() {
 // ── Loaded shims ──────────────────────────────────────────────────────
 //
 // The sources above say where shims come from; this list says what actually
-// loaded and where each definition lives.  A shim in a declared local
-// directory is editable here — the operator already vouched for that
-// directory by listing it.  A built-in ships in the package and a remote one
-// is a fetched artifact, so both are shown read-only.
+// loaded and where each definition lives.  A built-in ships in the package and
+// an installed extension is a fetched artifact, so both are shown read-only.
 
 let _shimRows = [];
-let _shimDetail = null;
 // Vendor manifests ride in the same payload under their own key: they have no
 // shim name, so they are never entries of `_shimRows`.
 let _manifests = [];
-let _manifestDetail = null;
-let _manifestFields = [];
-let _manifestTimer = null;
-// Which shape the shared modal is editing: a shim definition or a manifest.
-let _modalKind = 'shim';
 // location -> {current, head, update, error}, from the last check.
 let _shimUpdates = new Map();
 
@@ -195,7 +174,7 @@ function _sourceGroups() {
   for (const [source, rows] of bySource) {
     groups.push({ origin: rows[0].origin, source, status: null, rows });
   }
-  const rank = { path: 0, remote: 1, builtin: 2 };
+  const rank = { remote: 0, builtin: 1 };
   groups.sort((a, b) =>
     (rank[a.origin] - rank[b.origin]) || String(a.source).localeCompare(String(b.source)));
   return groups;
@@ -355,7 +334,7 @@ function _manifestRowHtml(m) {
       <div class="shim-row-meta" title="${esc(meta)}">${esc(meta)}</div>
     </div>
     <div class="shim-row-actions">
-      <button class="btn btn-sm" data-manifest="${esc(m.path)}" onclick="openManifestDetail(this.dataset.manifest)">${esc(t(m.editable ? 'shim.edit' : 'shim.open'))}</button>
+      <button class="btn btn-sm" data-manifest="${esc(m.path)}" onclick="openManifestDetail(this.dataset.manifest)">${esc(t('shim.open'))}</button>
     </div>
   </div>`;
 }
@@ -366,15 +345,11 @@ function _shimRowHtml(r) {
     ? t('shim.usedBy', { providers: r.used_by.join(', ') })
     : t('shim.unused');
   const meta = `${r.model_type} \u00b7 ${r.format} \u00b7 ${used}`;
-  const local = r.origin === 'path';
   const off = r.enabled === false;
   const state = off
     ? `<span class="shim-pill off">${esc(t('shim.state.disabled'))}</span>`
     : '';
   const toggle = `<button class="btn btn-sm" data-shim="${esc(r.name)}" data-enable="${off ? '1' : ''}" onclick="toggleShimEnabled(this.dataset.shim, this.dataset.enable === '1')">${esc(t(off ? 'shim.enable' : 'shim.disable'))}</button>`;
-  const del = r.deletable
-    ? `<button class="btn btn-sm btn-danger" data-shim="${esc(r.name)}" onclick="deleteLoadedShim(this.dataset.shim)">${esc(t('shim.delete'))}</button>`
-    : '';
   return `<div class="shim-row${off ? ' is-disabled' : ''}">
     <div class="shim-row-main">
       <div class="shim-row-id">
@@ -383,64 +358,30 @@ function _shimRowHtml(r) {
       <div class="shim-row-meta" title="${esc(r.path || r.source || '')}">${esc(meta)}</div>
     </div>
     <div class="shim-row-actions">
-      <button class="btn btn-sm" data-shim="${esc(r.name)}" onclick="openShimDetail(this.dataset.shim)">${esc(t(local ? 'shim.edit' : 'shim.open'))}</button>
-      ${toggle}${del}
+      <button class="btn btn-sm" data-shim="${esc(r.name)}" onclick="openShimDetail(this.dataset.shim)">${esc(t('shim.open'))}</button>
+      ${toggle}
     </div>
   </div>`;
 }
 
-/** Open one definition: editable for a local shim, read-only otherwise. */
+/** Open one definition, read-only. */
 async function openShimDetail(name) {
   try {
     const d = await api.get('/admin/api/config/shims/' + encodeURIComponent(name));
-    _shimDetail = d;
-    _modalKind = 'shim';
-    _manifestDetail = null;
     document.getElementById('shimModalInherit').hidden = true;
-    _showManifestProblem('');
     document.getElementById('shimModalTitle').textContent = d.name;
     document.getElementById('shimModalMeta').textContent =
       [t('shim.origin.' + d.origin), d.path || d.source || ''].filter(Boolean).join(' \u00b7 ');
     const ta = document.getElementById('shimModalYaml');
     ta.value = d.yaml || '';
-    ta.readOnly = !d.editable;
-    document.getElementById('shimModalSave').style.display = d.editable ? '' : 'none';
-    document.getElementById('shimModalNote').textContent = d.editable
-      ? t('shim.editHint')
-      : (d.read_only_reason || '');
+    document.getElementById('shimModalNote').textContent = d.read_only_reason || '';
     openModal('shimModal');
   } catch (e) {
     showToast(String(e.message || e), 'error');
   }
 }
 
-/** Save whichever shape the modal holds: a shim definition or a manifest. */
-function saveShimModal() {
-  return _modalKind === 'manifest' ? saveManifestYaml() : saveShimYaml();
-}
-
-/** Save the edited definition; the server rolls back if it does not load. */
-async function saveShimYaml() {
-  const name = _shimDetail && _shimDetail.name;
-  if (!name) return;
-  const yaml = document.getElementById('shimModalYaml').value;
-  const btn = document.getElementById('shimModalSave');
-  if (btn) btn.disabled = true;
-  try {
-    const res = await api.put('/admin/api/config/shims/' + encodeURIComponent(name), { yaml });
-    if (res && res.error) { showToast(res.error, 'error'); return; }
-    closeModal('shimModal');
-    showToast(t('toast.saved'));
-    await loadLoadedShims();
-    await window.loadConfig();
-  } catch (e) {
-    showToast(String(e.message || e), 'error');
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-/** Copy the open definition, as a starting point for a local shim. */
+/** Copy the open definition. */
 async function copyShimYaml() {
   const ta = document.getElementById('shimModalYaml');
   if (ta) await copyText(ta.value, t('shim.copied'));
@@ -461,58 +402,25 @@ async function toggleShimEnabled(name, enable) {
   }
 }
 
-/** Remove a local shim's directory, once nothing references it. */
-async function deleteLoadedShim(name) {
-  if (!confirm(t('shim.delete.confirm', { name }))) return;
-  try {
-    const res = await api.del('/admin/api/config/shims/' + encodeURIComponent(name));
-    if (res && res.error) { showToast(res.error, 'error'); return; }
-    showToast(t('toast.deleted', { count: 1 }));
-    await loadLoadedShims();
-    await window.loadConfig();
-  } catch (e) {
-    showToast(String(e.message || e), 'error');
-  }
-}
-
 // ── Vendor manifests ──────────────────────────────────────────────────
 //
-// A manifest sets the connection defaults every leaf below it inherits.  The
-// editor is the same modal as a shim's, plus an inheritance panel: which
-// leaves take each field from here, which override it, and — while an unsaved
-// edit is in the textarea — which leaves the edit would actually change.
+// A manifest sets the connection defaults every leaf below it inherits.  It
+// opens in the same modal as a shim, plus an inheritance panel: which leaves
+// take each field from here and which override it.
 
-/** Show or clear the manifest's validation message. */
-function _showManifestProblem(message) {
-  const el = document.getElementById('shimModalProblem');
-  if (!el) return;
-  el.textContent = message || '';
-  el.hidden = !message;
-}
-
-/** Open one vendor manifest for viewing or editing. */
+/** Open one vendor manifest for viewing. */
 async function openManifestDetail(path) {
   try {
     const d = await api.get(
       '/admin/api/config/shim-manifests/detail?path=' + encodeURIComponent(path));
     if (d && d.error) throw new Error(d.error);
-    _modalKind = 'manifest';
-    _manifestDetail = d;
-    _shimDetail = null;
-    _bindManifestEditor();
     document.getElementById('shimModalTitle').textContent = (d.vendor || '') + '/';
     document.getElementById('shimModalMeta').textContent =
       [t('shim.origin.' + d.origin), d.path || ''].filter(Boolean).join(' \u00b7 ');
     const ta = document.getElementById('shimModalYaml');
     ta.value = d.yaml || '';
-    ta.readOnly = !d.editable;
-    document.getElementById('shimModalSave').style.display = d.editable ? '' : 'none';
-    document.getElementById('shimModalNote').textContent = d.editable
-      ? t('shim.manifest.editHint')
-      : (d.read_only_reason || '');
-    _manifestFields = inheritanceRows(d.fields);
-    _paintManifestRows(_manifestFields, (d.leaves || []).length, null);
-    _showManifestProblem('');
+    document.getElementById('shimModalNote').textContent = d.read_only_reason || '';
+    _paintManifestRows(inheritanceRows(d.fields), (d.leaves || []).length);
     document.getElementById('shimModalInherit').hidden = false;
     openModal('shimModal');
   } catch (e) {
@@ -520,54 +428,13 @@ async function openManifestDetail(path) {
   }
 }
 
-/** Re-run the preview shortly after typing stops, not on every keystroke. */
-function _bindManifestEditor() {
-  const ta = document.getElementById('shimModalYaml');
-  if (!ta || ta.dataset.manifestBound) return;
-  ta.dataset.manifestBound = '1';
-  ta.addEventListener('input', () => {
-    if (_modalKind !== 'manifest') return;
-    clearTimeout(_manifestTimer);
-    _manifestTimer = setTimeout(previewManifestYaml, 450);
-  });
-}
-
-/**
- * Ask the gateway which leaves the unsaved text would change.
- *
- * Nothing is written: the panel shows the blast radius before Save, because a
- * manifest field reaches every leaf that does not override it.
- */
-async function previewManifestYaml() {
-  if (_modalKind !== 'manifest' || !_manifestDetail) return;
-  const yaml = document.getElementById('shimModalYaml').value;
-  try {
-    const r = await api.post('/admin/api/config/shim-manifests/preview',
-      { path: _manifestDetail.path, yaml });
-    // `api.post` resolves with the body on 400 too: a manifest that does not
-    // validate says so here rather than only on Save.
-    // The modal may have been closed, or reopened on a shim, while the
-    // preview was in flight; a stale answer must not paint the hidden panel.
-    if (_modalKind !== 'manifest') return;
-    if (r && r.error) { _showManifestProblem(r.error); return; }
-    _showManifestProblem('');
-    _paintManifestRows(
-      annotateBlast(_manifestFields, r.changes),
-      (_manifestDetail.leaves || []).length,
-      changedLeaves(r.changes));
-  } catch (e) {
-    _showManifestProblem(String(e.message || e));
-  }
-}
-
 /**
  * Paint the inheritance rows.
  *
  * Rows are built as nodes rather than markup, so a leaf name is text and never
- * something the parser could read back as HTML.  `blast` names the leaves the
- * unsaved edit changes; `null` means no edit is being previewed yet.
+ * something the parser could read back as HTML.
  */
-function _paintManifestRows(rows, total, blast) {
+function _paintManifestRows(rows, total) {
   const list = document.getElementById('shimModalInheritList');
   if (!list) return;
   list.replaceChildren();
@@ -579,7 +446,7 @@ function _paintManifestRows(rows, total, blast) {
   }
   for (const row of rows) {
     const el = document.createElement('div');
-    el.className = 'shim-inherit-row' + (row.touched ? ' is-touched' : '');
+    el.className = 'shim-inherit-row';
     el.dataset.field = row.id;
     const name = document.createElement('code');
     name.className = 'shim-inherit-field';
@@ -595,64 +462,17 @@ function _paintManifestRows(rows, total, blast) {
     }
     who.textContent = parts.join(' \u00b7 ');
     el.append(name, who);
-    if (row.touched) {
-      const mark = document.createElement('span');
-      mark.className = 'shim-inherit-mark';
-      mark.textContent = t(row.removed
-        ? 'shim.manifest.willEmpty'
-        : 'shim.manifest.willChange', { count: row.affected.length });
-      el.append(mark);
-    }
     list.append(el);
   }
   const summary = document.getElementById('shimModalInheritSummary');
   if (!summary) return;
-  if (blast === null) {
-    summary.textContent = t('shim.manifest.leafCount', { count: total });
-  } else {
-    summary.textContent = blast.length
-      ? t('shim.manifest.blast', { count: blast.length, total })
-      : t('shim.manifest.noChange');
-  }
-}
-
-/**
- * Save the manifest, then re-apply the shim sources through the panel's own
- * reload endpoint and name the leaves whose effective values changed.
- */
-async function saveManifestYaml() {
-  if (!_manifestDetail) return;
-  const btn = document.getElementById('shimModalSave');
-  const yaml = document.getElementById('shimModalYaml').value;
-  if (btn) btn.disabled = true;
-  try {
-    const res = await api.put('/admin/api/config/shim-manifests',
-      { path: _manifestDetail.path, yaml });
-    if (res && res.error) { _showManifestProblem(res.error); return; }
-    // The manifest file is written by now, but the running sources are only
-    // re-applied here: closing the dialog over a failed reload would report
-    // "saved" about a gateway that still runs the old shim.
-    const reload = await api.post('/admin/api/config/shims/reload', {});
-    if (!reload.ok) throw new Error(reload.error || t('toast.error'));
-    closeModal('shimModal');
-    const changed = (res && res.changed_leaves) || [];
-    showToast(changed.length
-      ? t('shim.manifest.saved', { count: changed.length, leaves: nameList(changed) })
-      : t('shim.manifest.savedNone'));
-    await loadLoadedShims();
-    await window.loadConfig();
-  } catch (e) {
-    showToast(String(e.message || e), 'error');
-  } finally {
-    if (btn) btn.disabled = false;
-  }
+  summary.textContent = t('shim.manifest.leafCount', { count: total });
 }
 
 Object.assign(window, {
   renderShimSources, saveShimSources, reloadShimSources, checkShimUpdates,
-  loadLoadedShims, renderLoadedShims, openShimDetail, saveShimYaml,
-  copyShimYaml, deleteLoadedShim, toggleShimEnabled,
-  openManifestDetail, saveShimModal, previewManifestYaml,
+  loadLoadedShims, renderLoadedShims, openShimDetail,
+  copyShimYaml, toggleShimEnabled, openManifestDetail,
   // Repainted on a language change: the update badges are translated strings.
   repaintShimUpdateBadges: renderLoadedShims,
 });

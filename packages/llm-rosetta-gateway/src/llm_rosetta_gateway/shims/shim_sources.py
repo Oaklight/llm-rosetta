@@ -1,9 +1,8 @@
 """Bridge between the gateway config and declarative shim sources.
 
-The top-level ``shims`` config section declares the manifest sources to read, the
-vendors to install from them, and extra local directories to load provider
-shims from.  This module resolves that section
-against the config file location and drives
+The top-level ``shims`` config section declares the extension-index sources
+to read and the vendors to install from them.  This module resolves that
+section against the config file location and drives
 :func:`llm_rosetta.shims.rebuild_shims`.
 
 Shims must be registered **before** :class:`~llm_rosetta_gateway.config.GatewayConfig`
@@ -54,7 +53,7 @@ def shims_signature(raw: Mapping[str, Any] | None) -> str:
     The hash covers the section **as the document spells it**, not the parsed
     :class:`ShimSources`: the loader stores this value and the reload path
     recomputes it from the document it has just read, so both sides must hash
-    the same kind of value.  A parsed section has already anchored its paths
+    the same kind of value.  A parsed section has already anchored its cache dir
     and expanded its defaults, which would make the two disagree.
 
     *raw* is the whole document: the moved vendors its providers name are
@@ -73,18 +72,6 @@ def shims_signature(raw: Mapping[str, Any] | None) -> str:
     except (TypeError, ValueError):
         blob = repr(section)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
-
-
-def _resolve_paths(raw_paths: Any, config_dir: str | None) -> list[str]:
-    """Validate and anchor the ``shims.paths`` entries."""
-    if not isinstance(raw_paths, list):
-        raise ValueError("config: 'shims.paths' must be an array")
-    dirs: list[str] = []
-    for entry in raw_paths:
-        if not isinstance(entry, str) or not entry:
-            raise ValueError("config: 'shims.paths' entries must be non-empty strings")
-        dirs.append(_anchor(entry, config_dir))
-    return dirs
 
 
 def _source_specs(raw_sources: Any, on_unknown: str) -> list[ManifestSourceSpec]:
@@ -154,8 +141,13 @@ RETIRED_KEYS: dict[str, str] = {
     "exclude": "it selected shims of a preset; use '!<source>:<vendor>' in "
     "'shims.install' and 'shims.disabled'; 'llm-rosetta migrate --config <path>' "
     "rewrites it",
-    "remotes": "an explicit archive URL has no manifest equivalent; publish a "
-    "manifest source ('shims.sources') or point 'shims.paths' at a local copy",
+    "remotes": "an explicit archive URL has no index equivalent; publish an "
+    "extension index and list it in 'shims.sources', or install the extension "
+    "folder into the extensions directory",
+    "paths": "a local shim directory is no longer a source; turn it into an "
+    "extension folder (an 'extension.yaml' beside its shim directories) and "
+    "put that folder in the extensions directory, or publish it through an "
+    "extension index and list the index in 'shims.sources'",
 }
 
 
@@ -202,7 +194,6 @@ class ShimSources:
     mapping and an apply that validated it did (#1330).
 
     Attributes:
-        paths: Local shim directories, anchored to the config file.
         disabled: Shim names to keep out of the registry.
         cache_root: Where fetched manifests and installs are cached, anchored the same way.
         remote_ttl: Seconds a fetched manifest may be reused without a refetch.
@@ -223,7 +214,6 @@ class ShimSources:
             a document with no ``shims`` section.
     """
 
-    paths: tuple[str, ...] = ()
     disabled: tuple[str, ...] = ()
     cache_root: str | None = None
     remote_ttl: int = REMOTE_TTL_SECONDS
@@ -304,7 +294,7 @@ def parse_shims_section(
     Args:
         section: The ``shims`` mapping (or ``None``/empty).
         config_path: Path to the config file, the anchoring base for relative
-            ``paths`` and ``cache_dir`` entries.
+            ``cache_dir``.
         on_unknown: ``"raise"`` or ``"skip"`` for a ``shims.sources`` id this
             build does not ship.  ``None`` reads it from ``shims.strict``: a
             strict document raises, a tolerant one skips with a warning.
@@ -333,14 +323,12 @@ def parse_shims_section(
     if mode is None:
         mode = "raise" if section.get("strict") is True else "skip"
     _refuse_retired_keys(section)
-    dirs = _resolve_paths(section.get("paths") or [], config_dir)
     manifests = _resolve_manifest_plan(section, on_unknown=mode)
     _validate_knobs(section)
     parsed = ShimSources(
         sources=tuple(section.get("sources") or ()),
         install=tuple(section.get("install") or ()),
         manifests=manifests,
-        paths=tuple(dirs),
         disabled=tuple(resolve_disabled(section)),
         cache_root=_cache_root(section.get("cache_dir"), config_dir),
         remote_ttl=_int_setting(section, "remote_ttl", REMOTE_TTL_SECONDS),
@@ -357,11 +345,11 @@ def resolve_source_config(
     config_path: str | None,
     *,
     on_unknown: str = "raise",
-) -> tuple[list[str], str]:
-    """Resolve a ``shims`` section into absolute dirs and the cache root.
+) -> str:
+    """Resolve a ``shims`` section into its cache root.
 
     A thin view over :func:`parse_shims_section`, kept for callers that want
-    the two values rather than the object.
+    the cache root rather than the object.
 
     Args:
         section: The ``shims`` mapping (or ``None``/empty).
@@ -371,13 +359,13 @@ def resolve_source_config(
             path where the caller can still correct what it sent.
 
     Returns:
-        ``(dirs, cache_root)``.
+        The absolute cache root.
 
     Raises:
         ValueError: If the section or one of its fields has the wrong shape.
     """
     sources = parse_shims_section(section, config_path, on_unknown=on_unknown)
-    return list(sources.paths), sources.cache_root or _cache_root(None, None)
+    return sources.cache_root or _cache_root(None, None)
 
 
 def resolve_disabled(section: Mapping[str, Any] | None) -> list[str]:
@@ -406,7 +394,6 @@ def resolve_disabled(section: Mapping[str, Any] | None) -> list[str]:
 def describe_shim_sources(report: ShimLoadReport | None) -> list[str]:
     """One line per declared remote source, naming the leg it loaded from.
 
-    Local ``paths`` entries are left out: they have no legs to choose between.
     The lines are what the startup output prints under the banner, next to the
     matching log line.
 
@@ -523,7 +510,6 @@ def apply_shim_section(
     if strict is None:
         strict = sources.strict
     report = rebuild_shims(
-        list(sources.paths),
         cache_root=sources.cache_root or _cache_root(None, None),
         strict=bool(strict),
         http_get=http_get,

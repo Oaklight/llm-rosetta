@@ -14,7 +14,6 @@ from llm_rosetta_gateway.admin.routes.config import (
     _shim_status_payload,
     _validate_shim_sources_body,
 )
-from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.shims.shim_sources import (
     apply_shim_section,
     apply_shim_sources,
@@ -45,63 +44,35 @@ def _clean_registry():
     restore_registry(snapshot)
 
 
-def _write_provider(root: Path, slug: str, name: str) -> None:
-    directory = root / slug
-    directory.mkdir(parents=True, exist_ok=True)
-    (directory / "provider.yaml").write_text(
-        f"name: {name}\n"
-        "format: chat_completions\nmodel_type: llm\n"
-        "connection:\n"
-        f"  base_url: https://{slug}.example/v1\n"
-        "  api_key_env: ACME_API_KEY\n"
-    )
-
-
 class TestShimsSignature:
     def test_empty(self):
         assert shims_signature({}) == ""
         assert shims_signature({"shims": {}}) == ""
 
     def test_key_order_insensitive(self):
-        a = shims_signature({"shims": {"paths": ["x"], "strict": True}})
-        b = shims_signature({"shims": {"strict": True, "paths": ["x"]}})
+        a = shims_signature({"shims": {"install": ["x"], "strict": True}})
+        b = shims_signature({"shims": {"strict": True, "install": ["x"]}})
         assert a == b
 
     def test_changes_with_section(self):
-        base = shims_signature({"shims": {"paths": ["x"]}})
-        assert base != shims_signature({"shims": {"paths": ["y"]}})
+        base = shims_signature({"shims": {"install": ["x"]}})
+        assert base != shims_signature({"shims": {"install": ["y"]}})
         assert base != shims_signature({})
 
 
 class TestResolveSourceConfig:
-    def test_relative_paths_anchor_to_config_dir(self, tmp_path: Path):
-        cfg = str(tmp_path / "config.jsonc")
-        dirs, cache = resolve_source_config({"paths": ["./shims", "../shared"]}, cfg)
-        assert dirs == [
-            os.path.join(str(tmp_path), "./shims"),
-            os.path.join(str(tmp_path), "../shared"),
-        ]
-        assert cache == os.path.join(str(tmp_path), "shims-cache")
-
-    def test_absolute_path_preserved(self, tmp_path: Path):
-        cfg = str(tmp_path / "config.jsonc")
-        dirs, _ = resolve_source_config({"paths": ["/abs/shims"]}, cfg)
-        assert dirs == ["/abs/shims"]
-
     def test_cache_dir_override_anchored(self, tmp_path: Path):
         cfg = str(tmp_path / "config.jsonc")
-        _, cache = resolve_source_config({"cache_dir": "./cc"}, cfg)
+        cache = resolve_source_config({"cache_dir": "./cc"}, cfg)
         assert cache == os.path.join(str(tmp_path), "./cc")
 
     def test_no_config_path_uses_home_cache(self):
-        _, cache = resolve_source_config({"paths": ["x"]}, None)
+        cache = resolve_source_config({"install": ["x"]}, None)
         assert cache == str(Path("~/.cache/llm-rosetta/shims").expanduser())
 
     @pytest.mark.parametrize(
         "section",
         [
-            {"paths": "not-a-list"},
-            {"paths": [123]},
             {"install": "nope"},
             {"sources": "nope"},
             {"cache_dir": 5},
@@ -118,42 +89,10 @@ class TestApplyShimSources:
         assert report.sources == []
         assert report.total_shims > 0
 
-    def test_provider_resolves_through_declared_source(self, tmp_path: Path):
-        shims_dir = tmp_path / "shims"
-        _write_provider(shims_dir, "acme", "acme--chat_completions")
-        cfg_path = str(tmp_path / "config.jsonc")
-        raw = {
-            "providers": {"acme": {"shim": "acme--chat_completions", "api_key": "k"}},
-            "models": {"m": "acme"},
-            "server": {},
-            "shims": {"paths": ["./shims"]},
-        }
-
-        report = apply_shim_sources(raw, cfg_path)
-        assert report.sources[0].ok is True
-
-        config = GatewayConfig(raw)
-        assert config.provider_types["acme"] == "chat_completions"
-        assert config.providers["acme"].base_url == "https://acme.example/v1"
-        assert config.shims.paths == ("./shims",)
-        assert config.shims.declared is True
-
-    def test_dropping_the_section_drops_the_shims(self, tmp_path: Path):
-        shims_dir = tmp_path / "shims"
-        _write_provider(shims_dir, "acme", "acme--chat_completions")
-        cfg_path = str(tmp_path / "config.jsonc")
-        apply_shim_sources({"shims": {"paths": ["./shims"]}}, cfg_path)
-
-        report = apply_shim_sources({"shims": {}}, cfg_path)
-        assert report.sources == []
-        from llm_rosetta.shims import get_shim
-
-        assert get_shim("acme--chat_completions") is None
-
     def test_force_refresh_reaches_the_rebuild(self, tmp_path: Path, monkeypatch):
         seen: dict = {}
 
-        def fake_rebuild(dirs, **kwargs):
+        def fake_rebuild(**kwargs):
             seen.update(kwargs)
             return SimpleNamespace(
                 sources=[], total_shims=0, failures=lambda: [], to_dict=lambda: {}
@@ -181,7 +120,7 @@ class TestMergeShimSourcesBody:
         from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
 
         section = {"install": ["argonne:argo"]}
-        assert _merge_shim_sources_body(section, {"paths": []}) == {
+        assert _merge_shim_sources_body(section, {"sources": []}) == {
             "install": ["argonne:argo"]
         }
 
@@ -197,19 +136,17 @@ class TestMergeShimSourcesBody:
         from llm_rosetta_gateway.admin.routes.config import _merge_shim_sources_body
 
         merged = _merge_shim_sources_body(
-            {"paths": ["/a"], "strict": True}, {"install": ["argonne:alcf"]}
+            {"disabled": ["a"], "strict": True}, {"install": ["argonne:alcf"]}
         )
-        assert merged == {"paths": ["/a"], "strict": True, "install": ["argonne:alcf"]}
+        assert merged == {
+            "disabled": ["a"],
+            "strict": True,
+            "install": ["argonne:alcf"],
+        }
 
 
 class TestCheckSourceUpdates:
     """``check_source_updates`` reads installed manifest vendors only."""
-
-    def test_local_sources_are_skipped(self):
-        report = ShimLoadReport(
-            sources=[ShimSourceStatus(kind="path", location="/tmp/shims")]
-        )
-        assert check_source_updates(report, http_get=lambda *a, **k: b"{}") == []
 
     def test_a_failed_vendor_is_not_asked_about(self):
         report = ShimLoadReport(
@@ -254,9 +191,13 @@ class TestRetiredKeys:
     def test_a_retired_key_is_refused_with_its_replacement(self, tmp_path: Path):
         with pytest.raises(ValueError, match=r"'shims\.presets'.*0\.15\.0"):
             apply_shim_section(
-                {"presets": ["alcf"], "paths": [str(tmp_path / "none")]},
+                {"presets": ["alcf"], "disabled": ["x--chat_completions"]},
                 str(tmp_path / "config.jsonc"),
             )
+
+    def test_paths_tells_an_operator_to_make_an_extension_folder(self, tmp_path: Path):
+        with pytest.raises(ValueError, match=r"'shims\.paths'.*extension folder"):
+            apply_shim_section({"paths": ["./shims"]}, str(tmp_path / "config.jsonc"))
 
     def test_the_message_names_the_install_replacement(self, tmp_path: Path):
         with pytest.raises(ValueError, match="shims.install"):
@@ -448,9 +389,11 @@ class TestAdminHelpers:
 
     def test_validate_accepts_good_body(self, tmp_path: Path):
         cfg = str(tmp_path / "config.jsonc")
-        assert _validate_shim_sources_body({"paths": ["a"], "install": []}, cfg) is None
+        assert _validate_shim_sources_body({"install": []}, cfg) is None
 
-    @pytest.mark.parametrize("key", ["presets", "include", "exclude", "remotes"])
+    @pytest.mark.parametrize(
+        "key", ["presets", "include", "exclude", "remotes", "paths"]
+    )
     def test_validate_rejects_a_retired_key(self, key, tmp_path: Path):
         """The admin PUT refuses a key 0.15.0 removed, naming the release."""
         cfg = str(tmp_path / "config.jsonc")
@@ -459,7 +402,9 @@ class TestAdminHelpers:
         assert response.status_code == 400
         assert b"0.15.0" in response.body
 
-    @pytest.mark.parametrize("key", ["presets", "include", "exclude", "remotes"])
+    @pytest.mark.parametrize(
+        "key", ["presets", "include", "exclude", "remotes", "paths"]
+    )
     def test_validate_accepts_a_retired_key_that_holds_nothing(
         self, key, tmp_path: Path
     ):
@@ -470,8 +415,6 @@ class TestAdminHelpers:
     @pytest.mark.parametrize(
         "body",
         [
-            {"paths": "x"},
-            {"paths": [123]},  # element type — resolver rejects, not the route
             {"install": "x"},
             {"sources": "x"},
             {"cache_dir": 123},  # type — resolver rejects
@@ -498,29 +441,6 @@ class TestDisabledShims:
     def test_bad_shape_raises(self, section):
         with pytest.raises(ValueError, match="shims.disabled"):
             resolve_disabled(section)
-
-    def test_disabled_shim_leaves_the_registry(self, tmp_path: Path):
-        from llm_rosetta.shims import get_shim
-
-        _write_provider(tmp_path, "acme", "acme--chat_completions")
-        report = apply_shim_section(
-            {"paths": [str(tmp_path)], "disabled": ["acme--chat_completions"]}
-        )
-
-        assert get_shim("acme--chat_completions") is None
-        assert report.sources[0].shim_count == 0
-        assert report.sources[0].shim_names == ()
-
-    def test_removing_the_name_brings_the_shim_back(self, tmp_path: Path):
-        from llm_rosetta.shims import get_shim
-
-        _write_provider(tmp_path, "acme", "acme--chat_completions")
-        apply_shim_section(
-            {"paths": [str(tmp_path)], "disabled": ["acme--chat_completions"]}
-        )
-        apply_shim_section({"paths": [str(tmp_path)]})
-
-        assert get_shim("acme--chat_completions") is not None
 
     def test_a_disabled_name_the_sources_do_not_have_is_harmless(self):
         report = apply_shim_section({"disabled": ["nope--chat_completions"]})
@@ -559,12 +479,6 @@ class TestDescribeShimSources:
             "argonne:argo 1.2.0: loaded via primary (cache)",
             "contrib:llm7: failed",
         ]
-
-    def test_describe_leaves_local_paths_out(self):
-        report = ShimLoadReport(
-            sources=[ShimSourceStatus(kind="path", location="/tmp/shims", ok=True)]
-        )
-        assert describe_shim_sources(report) == []
 
     def test_describe_is_empty_without_a_section(self):
         assert describe_shim_sources(None) == []
