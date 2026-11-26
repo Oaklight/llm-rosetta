@@ -44,7 +44,7 @@ from llm_rosetta.contracts.extension import (
     parse_extension_manifest,
 )
 
-from ._dirs import ExtensionInstallError, extensions_dir
+from ._dirs import ENV_VAR, ExtensionInstallError, extensions_dir
 from ._discovery import NAMESPACE
 
 #: The most bytes a wheel may unpack to, and the largest wheel accepted.
@@ -419,10 +419,44 @@ def _extract(
 # --------------------------------------------------------------------------- #
 
 
+def _not_writable(dest: Path, reason: str) -> ExtensionInstallError:
+    """The error for an extensions directory nothing can be written to.
+
+    The errno text of the failing call is different for each cause (a file in
+    the way, a read-only parent, a read-only directory) and names none of them
+    well, so each says what it found.
+    """
+    return ExtensionInstallError(
+        f"the extensions directory {dest} is not writable: {reason}; "
+        f"set {ENV_VAR} to a writable directory"
+    )
+
+
+def _require_directory(dest: Path) -> None:
+    """Raise unless *dest*, if it exists, is a directory."""
+    if dest.exists() and not dest.is_dir():
+        raise _not_writable(dest, "it is a file, not a directory")
+
+
+def _create_directory(dest: Path) -> None:
+    """Create *dest* and its parents, or say why that cannot be done."""
+    _require_directory(dest)
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+    except (NotADirectoryError, FileExistsError):
+        raise _not_writable(
+            dest, "a parent of it is a file, so it cannot be created"
+        ) from None
+    except OSError as exc:
+        raise _not_writable(
+            dest, f"it does not exist and cannot be created ({exc.strerror})"
+        ) from None
+
+
 @contextlib.contextmanager
 def _locked(dest: Path) -> Iterator[None]:
     """Hold an exclusive lock on *dest* (an ``O_EXCL`` file with a stale limit)."""
-    dest.mkdir(parents=True, exist_ok=True)
+    _create_directory(dest)
     lock = dest / _LOCK_NAME
     deadline = time.monotonic() + LOCK_WAIT_SECONDS
     while True:
@@ -443,6 +477,10 @@ def _locked(dest: Path) -> Iterator[None]:
                 ) from None
             time.sleep(0.02)
             continue
+        except OSError as exc:
+            raise _not_writable(
+                dest, f"it exists but cannot be written to ({exc.strerror})"
+            ) from None
         with os.fdopen(fd, "w") as handle:
             handle.write(str(os.getpid()))
         break
@@ -787,6 +825,7 @@ def remove_extension(ext_id: str, dest: str | os.PathLike[str] | None = None) ->
     ):
         raise ExtensionInstallError(f"{ext_id!r} is not an extension id")
     target = Path(dest) if dest is not None else extensions_dir()
+    _require_directory(target)
     folder = target / NAMESPACE / ext_id
     if not target.is_dir() or not (folder.is_symlink() or folder.exists()):
         return False
