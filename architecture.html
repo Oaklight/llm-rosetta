@@ -176,7 +176,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   CORE["llm_rosetta.api + llm_rosetta.contracts&lt;br/&gt;(gateway 进入 core 的唯一入口,测试强制)"]
 
   subgraph ENTRY["entry"]
-    CLI["cli/&lt;br/&gt;llm-rosetta-gateway · banner"]
+    CLI["cli/&lt;br/&gt;llm-rosetta-gateway · banner&lt;br/&gt;注册 gateway 与 serve 两个命令;gateway 下分发 serve/init/add/credential/password/db/usage/migrate(#1748)"]
   end
   subgraph SERVING["serving"]
     APP["app/&lt;br/&gt;factory · routes_llm · routes_typed · routes_models&lt;br/&gt;routes_compact · routes_count_tokens · routes_health · tasks · admin_context"]
