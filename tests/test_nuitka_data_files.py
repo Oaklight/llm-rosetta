@@ -106,3 +106,28 @@ def test_every_runtime_data_file_is_listed(target):
 def test_the_two_flag_lists_ship_the_same_data():
     blocks = _flag_blocks()
     assert _listed(blocks["build-binary"]) == _listed(blocks["build-binary-musl"])
+
+
+def _editable_installs(text: str) -> list[tuple[str, ...]]:
+    """The ``-e <path>`` arguments of every ``pip install`` line in *text*."""
+    found = []
+    for line in text.splitlines():
+        if "pip install" in line and " -e " in f" {line} ":
+            found.append(tuple(re.findall(r"-e\s+(\"[^\"]*\"|\S+)", line)))
+    return found
+
+
+def test_the_musl_recipe_installs_the_packages_the_workflow_installs():
+    """The repository root is not a package since the split (#1158).
+
+    ``pip install -e .`` at the root fails with "Multiple top-level packages
+    discovered", so the Alpine container installs the two distributions, as the
+    native build in ``.github/workflows/nuitka.yml`` does.
+    """
+    path = ROOT / ".github" / "workflows" / "nuitka.yml"
+    if not path.is_file():
+        pytest.skip("the workflow files are not part of this checkout")
+    workflow = path.read_text(encoding="utf-8")
+    wanted = ("packages/llm-rosetta", "packages/llm-rosetta-gateway")
+    assert wanted in _editable_installs(workflow)
+    assert _editable_installs(_flag_blocks()["build-binary-musl"]) == [wanted]
