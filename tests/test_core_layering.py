@@ -94,6 +94,45 @@ def test_no_contract_module_imports_the_shim_or_extension_layer():
     assert offenders == []
 
 
+def test_no_converter_imports_the_pipeline():
+    """The converters sit below the pipeline: nothing in them imports it."""
+    offenders = [
+        f"{path.relative_to(_CORE)}:{line} imports {name}"
+        for path in _files("converters")
+        for line, name in _imports(path)
+        if name == "llm_rosetta.pipeline" or name.startswith("llm_rosetta.pipeline.")
+    ]
+    assert offenders == []
+
+
+def test_the_pipeline_takes_conversion_context_from_the_ir():
+    """``ConversionContext`` lives in ``ir.context``; the converters only re-export it."""
+    offenders = [
+        f"{path.relative_to(_CORE)}:{line} imports {name}"
+        for path in _files("pipeline")
+        for line, name in _imports(path)
+        if name.startswith("llm_rosetta.converters.base.context")
+    ]
+    assert offenders == []
+
+
+def test_conversion_error_is_one_class_under_every_name():
+    """``except`` and ``isinstance`` must agree whichever name a caller imported."""
+    import llm_rosetta
+    import llm_rosetta.api
+    import llm_rosetta.pipeline
+    import llm_rosetta.pipeline.chat
+    from llm_rosetta.converters.base.errors import ConversionError
+
+    for owner in (
+        llm_rosetta,
+        llm_rosetta.api,
+        llm_rosetta.pipeline,
+        llm_rosetta.pipeline.chat,
+    ):
+        assert owner.ConversionError is ConversionError, owner.__name__
+
+
 _PURE_MODE = textwrap.dedent(
     """
     import sys

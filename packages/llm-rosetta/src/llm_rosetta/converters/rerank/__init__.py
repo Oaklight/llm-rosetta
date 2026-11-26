@@ -12,9 +12,8 @@ Provides converters for:
 
 from .cohere import CohereRerankConverter
 from .jina import JinaRerankConverter
-from .pipeline import (
+from .lookup import (
     RERANK_FORMATS,
-    RerankConversionPipeline,
     get_rerank_converter,
 )
 from .voyage import VoyageRerankConverter
@@ -23,7 +22,6 @@ __all__ = [
     "JinaRerankConverter",
     "CohereRerankConverter",
     "VoyageRerankConverter",
-    "RerankConversionPipeline",
     "RERANK_FORMATS",
     "get_rerank_converter",
 ]

@@ -18,9 +18,8 @@ from .google import GoogleEmbeddingConverter
 from .jina import JinaEmbeddingConverter
 from .minimax import MiniMaxEmbeddingConverter
 from .openai import OpenAIEmbeddingConverter
-from .pipeline import (
+from .lookup import (
     EMBEDDING_FORMATS,
-    EmbeddingConversionPipeline,
     get_embedding_converter,
 )
 from .voyage import VoyageEmbeddingConverter
@@ -32,7 +31,6 @@ __all__ = [
     "CohereEmbeddingConverter",
     "GoogleEmbeddingConverter",
     "MiniMaxEmbeddingConverter",
-    "EmbeddingConversionPipeline",
     "EMBEDDING_FORMATS",
     "get_embedding_converter",
 ]

@@ -43,7 +43,7 @@ _EMBED_BODY = {
 
 
 def test_typed_usage_embeddings_matches_family_reader():
-    from llm_rosetta.converters.embeddings.pipeline import response_usage
+    from llm_rosetta.converters.embeddings.lookup import response_usage
 
     got = api.typed_response_usage("embeddings", "openai", _EMBED_BODY)
     assert got == response_usage("openai", _EMBED_BODY)
@@ -51,8 +51,8 @@ def test_typed_usage_embeddings_matches_family_reader():
 
 
 def test_typed_usage_dispatches_per_family():
-    from llm_rosetta.converters.decisions.pipeline import response_usage as dec
-    from llm_rosetta.converters.rerank.pipeline import response_usage as rer
+    from llm_rosetta.converters.decisions.lookup import response_usage as dec
+    from llm_rosetta.converters.rerank.lookup import response_usage as rer
 
     rerank_body = {
         "model": "m",

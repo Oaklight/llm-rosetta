@@ -6,10 +6,8 @@ import pytest
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.pipelines.rerank import _detect_source_format
 
-from llm_rosetta.converters.rerank.pipeline import (
-    RerankConversionPipeline,
-    get_rerank_converter,
-)
+from llm_rosetta.converters.rerank.lookup import get_rerank_converter
+from llm_rosetta.pipeline.rerank import RerankConversionPipeline
 
 
 # ============================================================================

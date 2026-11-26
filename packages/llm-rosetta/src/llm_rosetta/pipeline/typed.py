@@ -1,7 +1,8 @@
-"""The non-chat pipelines, re-exported for one import site.
+"""The non-chat pipelines and their shared usage entry point.
 
-Each family owns its pipeline in ``converters/<family>/pipeline.py``; this
-module only makes all four paradigms reachable as ``llm_rosetta.pipeline``.
+The embeddings, rerank and decisions orchestrators live beside the chat one in
+this package (``pipeline/embeddings.py`` and so on); this module gathers them
+and reads the usage of a typed upstream response.
 """
 
 from __future__ import annotations
@@ -9,21 +10,21 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from llm_rosetta.converters.decisions.pipeline import (
-    DecisionConversionPipeline,
+from llm_rosetta.converters.decisions.lookup import (
     get_decision_converter,
     response_usage as _decision_usage,
 )
-from llm_rosetta.converters.embeddings.pipeline import (
-    EmbeddingConversionPipeline,
+from llm_rosetta.pipeline.decisions import DecisionConversionPipeline
+from llm_rosetta.converters.embeddings.lookup import (
     get_embedding_converter,
     response_usage as _embedding_usage,
 )
-from llm_rosetta.converters.rerank.pipeline import (
-    RerankConversionPipeline,
+from llm_rosetta.pipeline.embeddings import EmbeddingConversionPipeline
+from llm_rosetta.converters.rerank.lookup import (
     get_rerank_converter,
     response_usage as _rerank_usage,
 )
+from llm_rosetta.pipeline.rerank import RerankConversionPipeline
 from llm_rosetta import retired_names
 
 _USAGE_READERS = {
