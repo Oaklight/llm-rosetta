@@ -1,31 +1,23 @@
 """Selection: which release of a selected vendor to install, or why none.
 
-Picks the newest compatible version, honours pins and promotions to core, and
+Picks the newest compatible version, honours pins, and
 reads back what is already installed.
 """
 
 from __future__ import annotations
 
-import re
 from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta.contracts.shim_manifest import (
-    ShimRequirement,
-    SourceManifest,
-    VendorRelease,
-    promoted_core_version,
-    requirement_problem,
-    select_release,
-    version_key,
-)
+from llm_rosetta.api import ExtensionIndex, IndexEntry, version_key
 
 from .._cache import _read_stamp
 from .._types import (
     ShimSourceStatus,
     logger,
 )
+from .releases import release_from_dict, requirement_problem, select_release
 from .plan import (
     InstallSelector,
     ManifestSourceSpec,
@@ -99,7 +91,7 @@ def _unmatched_rows(
 
 
 def _select_vendors(
-    manifest: SourceManifest,
+    manifest: ExtensionIndex,
     source_id: str,
     selectors: Sequence[InstallSelector],
     claimed: dict[str, str],
@@ -113,14 +105,13 @@ def _select_vendors(
     earlier source already provided is not installed twice: the first source
     in ``shims.sources`` order wins, and the other is logged.
 
-    A vendor the manifest lists but whose every record was invalid
-    (``manifest.dropped``) is selected too, its tags read from the install
-    stamp under *root*: :func:`_install_vendor` then keeps the last good
-    install rather than letting the vendor vanish because a record went bad.
+    A vendor with no release in the index is not selected.  *root* is
+    where a vendor's last install stamp lives; its tags speak for a vendor
+    whose releases are all unreadable here.
     """
     out: list[tuple[str, InstallSelector]] = []
-    for vendor in sorted(set(manifest.vendors) | set(manifest.dropped)):
-        releases = manifest.vendors.get(vendor, ())
+    for vendor in sorted(manifest):
+        releases = manifest.get(vendor, ())
         # The record that would be installed speaks for the tags: one newer
         # release this core cannot run must not drop the vendor from a tag.
         installable, _ = select_release(releases)
@@ -160,11 +151,11 @@ def _select_vendors(
 
 
 def _choose_release(
-    releases: Sequence[VendorRelease],
+    releases: Sequence[IndexEntry],
     selector: InstallSelector,
     source_id: str,
     vendor: str,
-) -> tuple[VendorRelease | None, list[tuple[VendorRelease, str]], str | None]:
+) -> tuple[IndexEntry | None, list[tuple[IndexEntry, str]], str | None]:
     """The release to install: the pinned one, or the newest installable.
 
     Returns:
@@ -202,7 +193,7 @@ def _choose_release(
 
 
 def _keeps(
-    installed: VendorRelease, chosen: VendorRelease, selector: InstallSelector
+    installed: IndexEntry, chosen: IndexEntry, selector: InstallSelector
 ) -> bool:
     """Whether the installed release stays.
 
@@ -215,13 +206,13 @@ def _keeps(
 
 
 def _pinned_release(
-    releases: Sequence[VendorRelease], version: str
-) -> tuple[VendorRelease | None, str | None]:
+    releases: Sequence[IndexEntry], version: str
+) -> tuple[IndexEntry | None, str | None]:
     """The release a pin names, or why it cannot be installed here."""
     release = next((r for r in releases if r.version == version), None)
     if release is None:
-        return None, "the manifest does not list"
-    problem = requirement_problem(release.requires)
+        return None, "the index does not list"
+    problem = requirement_problem(release)
     if problem:
         return None, f"is not installable on this core ({problem})"
     return release, None
@@ -249,30 +240,25 @@ def _provided_by(names: Collection[str]) -> str:
 
 
 def _skip_reason(
-    chosen: VendorRelease,
+    chosen: IndexEntry,
     selector: InstallSelector,
     source_id: str,
     core_names: Collection[str],
-    core_version: str,
 ) -> str | None:
     """Why the chosen release is not installed at all, or ``None``.
 
-    A promotion this core honours, a record every shim of which core or an
-    installed plugin already registers, or a legacy include that names none of
-    the vendor's shims.  A *partial* clash is not a reason: the vendor installs
+    A release every shim of which core or an installed plugin already
+    registers.  A *partial* clash is not a reason: the vendor installs
     and the extension loader decides: it refuses an extension whose declared
     shim names another owner holds (the holder wins), and the status says so.
     """
-    promoted = _promotion(chosen, core_version, core_names, source_id)
-    if promoted:
-        return f"promoted to {promoted}"
     clash = sorted(set(chosen.shims) & set(core_names))
     if clash and set(clash) == set(chosen.shims):
         reason = f"already provided by {_provided_by(clash)}: " + ", ".join(clash)
         logger.warning(
             "Shim source %s: vendor %r is ignored; %s",
             source_id,
-            chosen.vendor,
+            chosen.id,
             reason,
         )
         return reason
@@ -282,7 +268,7 @@ def _skip_reason(
             "loader refuses an extension whose shim names are held, so it "
             "will not load",
             source_id,
-            chosen.vendor,
+            chosen.id,
             _provided_by(clash),
             ", ".join(clash),
         )
@@ -293,7 +279,7 @@ def _no_release_error(
     vendor: str,
     selector: InstallSelector,
     pin_problem: str | None,
-    passed_over: Sequence[tuple[VendorRelease, str]],
+    passed_over: Sequence[tuple[IndexEntry, str]],
 ) -> str:
     """Why nothing can be installed.
 
@@ -308,86 +294,6 @@ def _no_release_error(
     return f"no version of {vendor} is installable on this core ({reason})"
 
 
-def _core_version_key(version: str) -> tuple[int, int, int, int]:
-    """A PEP 440-aware sort key for a core version: ``(major, minor, patch, phase)``.
-
-    The phase orders the releases of one ``X.Y.Z``: a dev release (0) before
-    a pre-release (1) before the final release (2) before a post release (3),
-    so ``0.14.0.dev35`` has not reached ``0.14.0``.
-    """
-    match = re.match(r"^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(.*)$", version.strip())
-    if match is None:
-        return (0, 0, 0, 0)
-    major, minor, patch, rest = match.groups()
-    rest = rest.lower()
-    if "post" in rest:
-        phase = 3
-    elif "dev" in rest:
-        phase = 0
-    elif re.search(r"(a|b|c|rc|alpha|beta|pre|preview)\d*", rest):
-        phase = 1
-    else:
-        phase = 2
-    return int(major), int(minor or 0), int(patch or 0), phase
-
-
-def _promotion(
-    release: VendorRelease,
-    core_version: str,
-    core_names: Collection[str],
-    source_id: str,
-) -> str | None:
-    """The ``promoted_to`` claim of *release*, when this core honours it.
-
-    The claim is read from the record that would be installed, so a later
-    release without it un-promotes the vendor.  It holds only when this core
-    is at or after the named version and core registers every shim the record
-    lists; a claim that is due but not borne out is logged and ignored.
-    """
-    target = promoted_core_version(release)
-    if target is None:
-        return None
-    if _core_version_key(core_version) < (*target, 2):
-        return None
-    missing = sorted(set(release.shims) - set(core_names))
-    if missing:
-        logger.warning(
-            "Shim source %s: %s %s says promoted_to %s, but this core does not "
-            "provide %s; installing from the source",
-            source_id,
-            release.vendor,
-            release.version,
-            release.promoted_to,
-            ", ".join(missing),
-        )
-        return None
-    logger.info(
-        "Shim source %s: %s %s says promoted_to %s; core provides it",
-        source_id,
-        release.vendor,
-        release.version,
-        release.promoted_to,
-    )
-    return release.promoted_to
-
-
-def _installed_release(stamp: Mapping[str, Any], vendor: str) -> VendorRelease | None:
+def _installed_release(stamp: Mapping[str, Any], vendor: str) -> IndexEntry | None:
     """The release an install stamp records, or ``None`` when unreadable."""
-    try:
-        requires = stamp["requires"]
-        return VendorRelease(
-            vendor=vendor,
-            version=str(stamp["version"]),
-            commit=str(stamp["commit"]),
-            archive=str(stamp["archive"]),
-            sha256=str(stamp["sha256"]),
-            requires=ShimRequirement(int(requires["surface"]), int(requires["ir"])),
-            shims=tuple(stamp.get("shims") or ()),
-            maturity=str(stamp.get("maturity") or ""),
-            tags=tuple(stamp.get("tags") or ()),
-            since=stamp.get("since"),
-            conformance=stamp.get("conformance"),
-            promoted_to=stamp.get("promoted_to"),
-        )
-    except (KeyError, TypeError, ValueError):
-        return None
+    return release_from_dict(vendor, stamp)

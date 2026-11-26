@@ -180,9 +180,8 @@ def sources_to_declare(
     for source in (get_shim_source(k) for k in DEFAULT_SOURCES):
         if source is not None:
             by_url[source.manifest_url] = source.key
-            by_url[source.fallback_url] = source.key
-            for legacy_url in source.legacy_manifest_urls:
-                by_url[legacy_url] = source.key
+            if source.fallback_url:
+                by_url[source.fallback_url] = source.key
     for entry in declared:
         url = entry.get("url") if isinstance(entry, Mapping) else entry
         if not isinstance(url, str):

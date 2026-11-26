@@ -216,7 +216,7 @@ class TestCheckSourceUpdates:
             sources=[
                 ShimSourceStatus(
                     kind="remote",
-                    location="https://example.test/manifest.json",
+                    location="https://example.test/index.json",
                     vendor="argo",
                     ok=False,
                     error="fetch failed: 404",
@@ -537,7 +537,7 @@ class TestDescribeShimSources:
             sources=[
                 ShimSourceStatus(
                     kind="remote",
-                    location="https://example.test/manifest.json",
+                    location="https://example.test/index.json",
                     name="argonne:argo",
                     vendor="argo",
                     release={"version": "1.2.0"},

@@ -22,10 +22,7 @@ spec.loader.exec_module(check)
 sys.path.insert(0, str(ROOT / "packages/llm-rosetta-gateway/src"))
 sys.path.insert(0, str(ROOT / "packages/llm-rosetta/src"))
 
-from llm_rosetta_gateway.shims.catalog import (  # noqa: E402
-    SHIM_SOURCES,
-    STANDALONE_VENDORS,
-)
+from llm_rosetta_gateway.shims.catalog import SHIM_SOURCES  # noqa: E402
 
 
 def _repo(name: str, owner: str = "Oaklight", **extra) -> dict:
@@ -37,35 +34,33 @@ def _repo(name: str, owner: str = "Oaklight", **extra) -> dict:
     }
 
 
-def test_only_shim_package_repositories_are_considered():
+def test_only_extension_repositories_are_considered():
     repos = check.shim_repositories(
         [
-            _repo("llm-rosetta-shim-acme"),
+            _repo("llm-rosetta-ext-acme"),
+            _repo("llm-rosetta-ext-acme"),
             _repo("llm-rosetta-shims-legacy"),
             _repo("llm-rosetta"),
             _repo("llm-rosetta-gateway"),
         ]
     )
 
-    assert sorted(repos.values()) == [
-        "llm-rosetta-shim-acme",
-        "llm-rosetta-shims-legacy",
-    ]
+    assert sorted(repos.values()) == ["llm-rosetta-ext-acme"]
 
 
 def test_a_catalogue_url_is_compared_without_case_or_suffix_noise():
     repos = check.shim_repositories(
         [
             _repo(
-                "llm-rosetta-shim-acme",
-                html_url="https://github.com/Oaklight/llm-rosetta-shim-acme.git",
+                "llm-rosetta-ext-acme",
+                html_url="https://github.com/Oaklight/llm-rosetta-ext-acme.git",
             )
         ]
     )
 
     class Pkg:
         key = "acme"
-        repo = "https://GitHub.com/oaklight/llm-rosetta-shim-acme/"
+        repo = "https://GitHub.com/oaklight/llm-rosetta-ext-acme/"
 
     missing, stale = check.compare_catalog(repos, [Pkg()])
 
@@ -73,12 +68,12 @@ def test_a_catalogue_url_is_compared_without_case_or_suffix_noise():
 
 
 def test_a_repository_the_catalogue_does_not_name_is_missing():
-    repos = check.shim_repositories([_repo("llm-rosetta-shim-new")])
+    repos = check.shim_repositories([_repo("llm-rosetta-ext-new")])
 
     missing, stale = check.compare_catalog(repos, [])
 
     assert missing == [
-        ("llm-rosetta-shim-new", "https://github.com/oaklight/llm-rosetta-shim-new")
+        ("llm-rosetta-ext-new", "https://github.com/oaklight/llm-rosetta-ext-new")
     ]
     assert stale == []
 
@@ -86,12 +81,12 @@ def test_a_repository_the_catalogue_does_not_name_is_missing():
 def test_a_catalogue_entry_whose_repository_is_gone_is_stale():
     class Pkg:
         key = "gone"
-        repo = "https://github.com/Oaklight/llm-rosetta-shim-gone"
+        repo = "https://github.com/Oaklight/llm-rosetta-ext-gone"
 
     missing, stale = check.compare_catalog({}, [Pkg()])
 
     assert missing == []
-    assert stale == [("gone", "https://github.com/oaklight/llm-rosetta-shim-gone")]
+    assert stale == [("gone", "https://github.com/oaklight/llm-rosetta-ext-gone")]
 
 
 def test_the_current_catalogue_matches_its_own_repositories():
@@ -101,17 +96,6 @@ def test_the_current_catalogue_matches_its_own_repositories():
     )
 
     missing, stale = check.compare_catalog(repos, SHIM_SOURCES)
-
-    assert (missing, stale) == ([], [])
-
-
-def test_a_retired_repository_is_known_not_missing():
-    """An earlier name or an archived stand-alone package is not drift."""
-    legacy = [url for source in SHIM_SOURCES for url in source.legacy_repos]
-    legacy += [url for vendor in STANDALONE_VENDORS for url in vendor.repos]
-    repos = check.shim_repositories([_repo(url.rsplit("/", 1)[1]) for url in legacy])
-
-    missing, stale = check.compare_catalog(repos, [], legacy)
 
     assert (missing, stale) == ([], [])
 
@@ -128,8 +112,8 @@ def test_the_skeleton_names_the_source_the_repository_holds(capsys):
         "Oaklight",
         [
             (
-                "llm-rosetta-shim-acme",
-                "https://github.com/Oaklight/llm-rosetta-shim-acme",
+                "llm-rosetta-ext-acme",
+                "https://github.com/Oaklight/llm-rosetta-ext-acme",
             )
         ],
         [],
@@ -149,22 +133,16 @@ def test_offline_run_reads_a_saved_listing(tmp_path, capsys):
     assert check.main(["--from-json", str(source)]) == 0
     assert "match SHIM_SOURCES" in capsys.readouterr().out
 
-    listing.append(_repo("llm-rosetta-shim-extra"))
+    listing.append(_repo("llm-rosetta-ext-extra"))
     source.write_text(json.dumps(listing), encoding="utf-8")
 
     assert check.main(["--from-json", str(source)]) == 1
-    assert "llm-rosetta-shim-extra" in capsys.readouterr().out
+    assert "llm-rosetta-ext-extra" in capsys.readouterr().out
 
 
-def test_an_extension_repository_is_considered_and_its_old_name_is_known():
-    """``llm-rosetta-ext-*`` is the current name; the ``shim`` one is its legacy name."""
-    repos = check.shim_repositories([_repo("llm-rosetta-ext-acme")])
-    assert list(repos.values()) == ["llm-rosetta-ext-acme"]
+def test_every_source_is_an_extension_repository():
     for source in SHIM_SOURCES:
-        current = source.repo.rsplit("/", 1)[1]
-        assert current.startswith("llm-rosetta-ext-"), source.key
-        old = current.replace("llm-rosetta-ext-", "llm-rosetta-shim-")
-        assert any(url.endswith("/" + old) for url in source.legacy_repos), source.key
+        assert source.repo.rsplit("/", 1)[1].startswith("llm-rosetta-ext-"), source.key
 
 
 def test_the_skeleton_strips_the_extension_prefix(capsys):
@@ -174,15 +152,3 @@ def test_the_skeleton_strips_the_extension_prefix(capsys):
         [],
     )
     assert 'key="acme"' in capsys.readouterr().out
-
-
-def test_a_manifest_url_of_an_earlier_repository_name_is_the_same_source():
-    """A config written before the rename still names the old repository."""
-    for source in SHIM_SOURCES:
-        old = source.legacy_manifest_urls
-        assert old, source.key
-        assert all(url not in (source.manifest_url, source.fallback_url) for url in old)
-        assert any(
-            "llm-rosetta-shim-" in url and url.endswith("@dist/manifest.json")
-            for url in old
-        )

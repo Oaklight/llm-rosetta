@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import hashlib
 import os
-import posixpath
 from collections.abc import Callable, Collection, Mapping
 from dataclasses import replace
 from pathlib import Path
@@ -20,16 +19,13 @@ from typing import Any
 
 from llm_rosetta.api import (
     ExtensionInstallError,
+    IndexEntry,
     InstalledExtension,
     extensions_dir,
     install_wheel,
     installed_extensions,
     missing_dependencies,
     remove_extension,
-)
-from llm_rosetta.contracts.shim_manifest import (
-    VendorRelease,
-    requirement_problem,
 )
 
 from .._cache import _file_lock, _read_stamp, _write_stamp
@@ -52,11 +48,10 @@ from .plan import (
     InstallSelector,
     ManifestPlan,
     ManifestSourceSpec,
-    _dist_root,
     _headers_for,
-    _manifest_legs,
     _source_root,
 )
+from .releases import release_to_dict, requirement_problem
 from .selection import (
     _choose_release,
     _installed_release,
@@ -78,7 +73,6 @@ def install_from_manifests(
     proxy: str | None = None,
     force_refresh: bool = False,
     core_names: Collection[str] = (),
-    core_version: str | None = None,
     extensions_root: str | os.PathLike[str] | None = None,
 ) -> list[ShimSourceStatus]:
     """Fetch every planned manifest and install the selected vendors.
@@ -96,16 +90,12 @@ def install_from_manifests(
         force_refresh: Refetch every manifest regardless of its age.
         core_names: The shim names core registers; a vendor shipping one is
             not downloaded (the scan step re-checks against the live set).
-        core_version: The running core's version, for ``promoted_to``;
-            :data:`llm_rosetta.api.__version__` by default.
         extensions_root: The extensions directory the wheels install into;
             :func:`llm_rosetta.api.extensions_dir` by default.
 
     Returns:
         One status per selected vendor, or per failed source.
     """
-    if core_version is None:
-        from llm_rosetta.api import __version__ as core_version
     dest = Path(extensions_root) if extensions_root is not None else extensions_dir()
     have = {item.id: item for item in installed_extensions(dest)}
     statuses: list[ShimSourceStatus] = []
@@ -152,7 +142,6 @@ def install_from_manifests(
                     now=now,
                     proxy=proxy,
                     core_names=core_names,
-                    core_version=core_version,
                     dest=dest,
                     have=have,
                 )
@@ -194,14 +183,12 @@ def _install_vendor(
     now: Callable[[], float],
     proxy: str | None,
     core_names: Collection[str],
-    core_version: str,
     dest: Path,
     have: Mapping[str, InstalledExtension],
 ) -> ShimSourceStatus:
     """Decide on one vendor and install it when needed."""
     assert state.manifest is not None
-    releases = state.manifest.vendors.get(vendor, ())
-    dropped = state.manifest.dropped.get(vendor)
+    releases = state.manifest.get(vendor, ())
     base = ShimSourceStatus(
         kind="remote",
         location=f"{spec.url}#{vendor}",
@@ -216,7 +203,7 @@ def _install_vendor(
     )
 
     if chosen is not None:
-        skip = _skip_reason(chosen, selector, source_id, core_names, core_version)
+        skip = _skip_reason(chosen, selector, source_id, core_names)
         if skip:
             return replace(base, skipped=skip)
 
@@ -230,30 +217,14 @@ def _install_vendor(
         if present is not None and present.version == stamp.get("version")
         else None
     )
-    usable = installed is not None and requirement_problem(installed.requires) is None
+    usable = installed is not None and requirement_problem(installed) is None
     if installed is not None and installed.version not in {r.version for r in releases}:
         logger.warning(
-            "Shim source %s: manifest no longer lists %s %s; keeping the install",
+            "Shim source %s: index no longer lists %s %s; keeping the install",
             source_id,
             vendor,
             installed.version,
         )
-
-    if dropped is not None:
-        # Every record of the vendor is invalid: keep the last good install
-        # (stale, like an unreachable source) and never uninstall for it.
-        why = f"no valid release: {dropped}"
-        kept = installed if usable else None
-        logger.warning(
-            "Shim source %s: vendor %r has %s; %s",
-            source_id,
-            vendor,
-            why,
-            f"keeping the installed {kept.version}" if kept else "it is not installed",
-        )
-        if kept is None:
-            return replace(base, skipped=why)
-        return _kept_or_failed(base, present, kept, stamp, state, why)
 
     if chosen is None:
         kept = installed if usable else None
@@ -282,7 +253,7 @@ def _install_vendor(
         return _install_failed(base, present, kept, stamp, state, exc)
 
     record = {
-        **chosen.to_dict(),
+        **release_to_dict(chosen),
         "vendor": vendor,
         "source": source_id,
         "archive_url": archive_url,
@@ -304,15 +275,15 @@ def _install_vendor(
         resolved_ref=chosen.commit,
         checksum_ok=True,
         archive_url=archive_url,
-        leg="primary" if archive_url.startswith(_dist_root(spec.url)) else "mirror",
-        release=chosen.to_dict(),
+        leg="primary",
+        release=release_to_dict(chosen),
     )
 
 
 def _install_failed(
     base: ShimSourceStatus,
     present: InstalledExtension | None,
-    kept: VendorRelease | None,
+    kept: IndexEntry | None,
     stamp: Mapping[str, Any],
     state: _ManifestState,
     exc: ShimSourceError,
@@ -339,7 +310,7 @@ def _install_failed(
 def _kept_or_failed(
     base: ShimSourceStatus,
     present: InstalledExtension | None,
-    installed: VendorRelease | None,
+    installed: IndexEntry | None,
     stamp: Mapping[str, Any],
     state: _ManifestState,
     error: str,
@@ -354,7 +325,7 @@ def _kept_or_failed(
 def _installed_status(
     base: ShimSourceStatus,
     present: InstalledExtension | None,
-    installed: VendorRelease,
+    installed: IndexEntry,
     stamp: Mapping[str, Any],
     state: _ManifestState,
 ) -> ShimSourceStatus:
@@ -369,7 +340,7 @@ def _installed_status(
         stale=state.stale,
         checksum_ok=True,
         archive_url=archive_url,
-        release=installed.to_dict(),
+        release=release_to_dict(installed),
     )
 
 
@@ -411,7 +382,7 @@ def _with_dependency_notes(
 def _download_release(
     spec: ManifestSourceSpec,
     state: _ManifestState,
-    release: VendorRelease,
+    release: IndexEntry,
     vendor: str,
     dest: Path,
     *,
@@ -438,8 +409,9 @@ def _download_release(
     failures: list[str] = []
     mismatch = False
     all_unreachable = True
-    for manifest_url in _manifest_legs(spec, state.leg_url):
-        url = _dist_root(manifest_url) + posixpath.normpath(release.archive)
+    # An index entry names its wheel by URL: there is one place to ask.
+    urls = [release.url]
+    for url in urls:
         try:
             data = bytes(
                 http_get(
@@ -479,7 +451,7 @@ def _download_release(
 
 
 def _install_wheel(
-    data: bytes, release: VendorRelease, vendor: str, dest: Path
+    data: bytes, release: IndexEntry, vendor: str, dest: Path
 ) -> InstalledExtension:
     """Install *data* with core's installer and check it is the vendor's wheel."""
     try:

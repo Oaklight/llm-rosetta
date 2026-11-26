@@ -456,22 +456,27 @@ async def get_loaded_shims(request: Any) -> Response:
 
 
 def release_requires_problem(release: dict[str, Any]) -> str | None:
-    """Why an installed release record's ``requires`` does not fit this core.
+    """Why an installed release record does not fit this core.
 
     ``None`` when it fits.  The rule is core's own
-    (:func:`llm_rosetta.contracts.shim_manifest.requirement_problem`).
+    (:func:`llm_rosetta.api.entry_problems`).
     """
-    from llm_rosetta.contracts.shim_manifest import (
-        ShimRequirement,
-        requirement_problem,
-    )
+    from llm_rosetta.api import IndexEntry, entry_problems
 
-    requires = release.get("requires") or {}
     try:
-        req = ShimRequirement(int(requires["surface"]), int(requires["ir"]))
+        entry = IndexEntry(
+            id="installed",
+            version=str(release["version"]),
+            url="",
+            sha256="",
+            requires_python=release.get("requires_python"),
+            surface=release.get("surface"),
+            ir=release.get("ir"),
+        )
     except (KeyError, TypeError, ValueError):
         return "the installed release names no readable requirement"
-    return requirement_problem(req)
+    problems = entry_problems(entry)
+    return "; ".join(problems) if problems else None
 
 
 async def get_loaded_shim(request: Any, name: str) -> Response:

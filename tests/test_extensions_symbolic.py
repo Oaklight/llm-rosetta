@@ -32,7 +32,7 @@ pytest.importorskip("crosshair")
 from crosshair.core_and_libs import MessageType, analyze_function  # noqa: E402
 from crosshair.options import AnalysisOptionSet  # noqa: E402
 
-from llm_rosetta.contracts.shim_manifest import version_key  # noqa: E402
+from llm_rosetta.api import version_key  # noqa: E402
 from llm_rosetta.extensions._install import (  # noqa: E402
     ExtensionInstallError,
     _member_parts,

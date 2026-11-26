@@ -307,9 +307,23 @@ class TestVersions:
     def test_a_pre_release_sorts_below_its_final(self):
         assert version_key("1.0.0-rc.1") < version_key("1.0.0")
 
+    def test_pre_release_identifiers_compare_as_numbers_and_then_text(self):
+        assert version_key("1.0.0-rc.2") < version_key("1.0.0-rc.10")
+        assert version_key("1.0.0-alpha") < version_key("1.0.0")
+        assert version_key("1.0.0-1") < version_key("1.0.0-alpha")
+        assert version_key("1.0.0-rc.1") < version_key("1.0.0-rc.1.1")
+
     def test_a_non_version_is_refused(self):
         with pytest.raises(ValueError):
             version_key("1.0")
+
+    def test_build_metadata_is_refused(self):
+        with pytest.raises(ValueError):
+            version_key("0.1.0+build.5")
+        document = _doc()
+        document["extensions"]["acme"][0]["version"] = "0.1.0+build.5"
+        with pytest.raises(ExtensionInstallError):
+            parse_index(document)
 
 
 def _entry(version, **kw) -> IndexEntry:

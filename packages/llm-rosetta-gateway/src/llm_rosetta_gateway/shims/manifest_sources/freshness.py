@@ -15,10 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta.contracts.shim_manifest import (
-    SourceManifest,
-    parse_manifest,
-)
+from llm_rosetta.api import ExtensionIndex, ExtensionInstallError, parse_index
 
 from .._cache import _read_stamp, _write_stamp
 from .._legs import _is_unreachable
@@ -39,7 +36,7 @@ from .plan import (
 class _ManifestState:
     """What :func:`_load_manifest` learned about one source."""
 
-    manifest: SourceManifest | None
+    manifest: ExtensionIndex | None
     fetched_at: float | None = None
     stale: bool = False
     from_cache: bool = False
@@ -93,8 +90,8 @@ def _load_manifest(
         force: Refetch regardless of the cached copy's age or a cooldown.
         selectors: The install selectors; see :func:`_expected_vendors`.
     """
-    doc_path = root / "manifest.json"
-    stamp_path = root / "manifest.stamp.json"
+    doc_path = root / "index.json"
+    stamp_path = root / "index.stamp.json"
     stamp = _read_stamp(stamp_path)
     cached = _read_cached_manifest(doc_path, spec)
     fetched_at = stamp.get("fetched_at")
@@ -145,7 +142,7 @@ def _load_manifest(
             return _keep_newer_cache(
                 spec, url, manifest, cached, stamp, stamp_path, known_at
             )
-        tmp = doc_path.with_name(f"manifest.json.tmp-{uuid.uuid4().hex}")
+        tmp = doc_path.with_name(f"index.json.tmp-{uuid.uuid4().hex}")
         tmp.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
         tmp.replace(doc_path)
         when = now()
@@ -184,7 +181,7 @@ VENDOR_RECHECK_SECONDS = 600
 
 def _read_cached_manifest(
     doc_path: Path, spec: ManifestSourceSpec
-) -> SourceManifest | None:
+) -> ExtensionIndex | None:
     """The cached manifest, or ``None`` when there is none or it is unusable."""
     if not doc_path.is_file():
         return None
@@ -211,8 +208,8 @@ def _cooling(stamp: Mapping[str, Any], missing: Sequence[str], when: float) -> b
 def _keep_newer_cache(
     spec: ManifestSourceSpec,
     url: str,
-    manifest: SourceManifest,
-    cached: SourceManifest,
+    manifest: ExtensionIndex,
+    cached: ExtensionIndex,
     stamp: Mapping[str, Any],
     stamp_path: Path,
     known_at: float | None,
@@ -243,7 +240,7 @@ def _keep_newer_cache(
 
 def _fetch_leg(
     spec: ManifestSourceSpec, url: str, *, http_get: HttpGet, proxy: str | None
-) -> tuple[Any, SourceManifest]:
+) -> tuple[Any, ExtensionIndex]:
     """Fetch and parse the manifest at *url*: ``(document, manifest)``."""
     data = http_get(
         url, headers=_headers_for(spec, url), timeout=HTTP_TIMEOUT, proxy=proxy
@@ -258,7 +255,7 @@ _RFC3339_RE = re.compile(
 )
 
 
-def _generated_at(manifest: SourceManifest) -> datetime | None:
+def _generated_at(manifest: ExtensionIndex) -> datetime | None:
     """The manifest's ``generated_at`` as an aware UTC datetime, or ``None``.
 
     Parsed by hand: ``datetime.fromisoformat`` on Python 3.10 refuses ``Z``
@@ -277,7 +274,7 @@ def _generated_at(manifest: SourceManifest) -> datetime | None:
     return moment.astimezone(timezone.utc)
 
 
-def _older(manifest: SourceManifest, than: SourceManifest) -> bool:
+def _older(manifest: ExtensionIndex, than: ExtensionIndex) -> bool:
     """Whether *manifest* was generated before *than* (an unknown time: no)."""
     mine, theirs = _generated_at(manifest), _generated_at(than)
     return mine is not None and theirs is not None and mine < theirs
@@ -300,22 +297,18 @@ def _expected_vendors(selectors: Sequence[InstallSelector], source_id: str) -> s
 
 
 def _missing_vendors(
-    manifest: SourceManifest,
+    manifest: ExtensionIndex,
     spec: ManifestSourceSpec,
     selectors: Sequence[InstallSelector],
 ) -> list[str]:
-    """The expected vendors (:func:`_expected_vendors`) *manifest* lacks.
-
-    A vendor listed only in ``manifest.dropped`` (every record invalid) counts
-    as lacking: an old copy can carry a record a newer producer has fixed.
-    """
+    """The expected vendors (:func:`_expected_vendors`) *manifest* lacks."""
     expected = _expected_vendors(selectors, spec.key or manifest.source)
-    return sorted(expected - set(manifest.vendors))
+    return sorted(expected - set(manifest))
 
 
 def _freshness_doubt(
-    manifest: SourceManifest,
-    cached: SourceManifest | None,
+    manifest: ExtensionIndex,
+    cached: ExtensionIndex | None,
     spec: ManifestSourceSpec,
     selectors: Sequence[InstallSelector],
     *,
@@ -340,13 +333,13 @@ def _freshness_doubt(
 
 def _second_opinion(
     spec: ManifestSourceSpec,
-    first: tuple[str, Any, SourceManifest],
+    first: tuple[str, Any, ExtensionIndex],
     other_url: str,
     doubt: str,
     *,
     http_get: HttpGet,
     proxy: str | None,
-) -> tuple[str, Any, SourceManifest]:
+) -> tuple[str, Any, ExtensionIndex]:
     """Fetch *other_url* once and return the newer of the two manifests.
 
     The first manifest wins a tie, an unknown ``generated_at`` and a failed
@@ -397,32 +390,27 @@ def _second_opinion(
 
 def _read_manifest(
     document: Any, spec: ManifestSourceSpec, *, warn: bool = True
-) -> SourceManifest:
-    """Parse a published manifest record by record.
-
-    A broken top level fails the source (:class:`ShimManifestInvalid`, a
-    ``ValueError``).  An invalid vendor entry or release record is left out
-    with one WARNING naming the vendor, the version and the JSON-path reason,
-    and the rest of the manifest is used: a record written by a newer
-    producer must not take every other vendor of the source down with it,
-    and selection only ever sees valid records.
+) -> ExtensionIndex:
+    """Parse a published extension index.
 
     Args:
         document: The parsed JSON value.
-        spec: The source, for the log line.
-        warn: Whether to log the skipped records; the cached copy and the
-            update check re-read a document whose fetch already logged them.
+        spec: The source, whose URL a relative wheel ``url`` resolves against.
+        warn: Unused; kept so the cached copy and the update check read the
+            same way as a fetch.
+
+    Raises:
+        ValueError: The document is not a valid index.
     """
-    manifest = parse_manifest(document, invalid_records="skip")
-    if warn:
-        for line in manifest.skipped:
-            logger.warning("Shim source %s: manifest record %s", spec.label, line)
-    return manifest
+    try:
+        return parse_index(document, base=spec.url)
+    except ExtensionInstallError as exc:
+        raise ValueError(str(exc)) from None
 
 
 def _fetch_manifest_once(
     spec: ManifestSourceSpec, *, http_get: HttpGet, proxy: str | None
-) -> SourceManifest | str:
+) -> ExtensionIndex | str:
     """Fetch and parse a manifest without the cache; an error is returned as text."""
     failures = []
     for url in _manifest_legs(spec, None):

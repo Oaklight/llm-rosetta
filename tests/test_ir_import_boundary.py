@@ -3,7 +3,7 @@
 The direction is ``ir.model <- ir.primitives/ir.tools <- ir.passes <-
 converters``.  The whole of ``ir`` (passes included) imports nothing from
 ``converters``: the context contract a pass needs lives in ``ir.context``, and
-``converters.base.context`` re-exports it for old import paths.
+``converters.base.context`` is a deprecated forwarder to it (removed in 0.15.0).
 """
 
 from __future__ import annotations
