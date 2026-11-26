@@ -6,15 +6,17 @@ flowchart TB
     INIT["llm_rosetta/__init__ 组合根<br/>导入完成后调用 load_extensions()"]
     CLI["cli.py · __main__<br/>分发器 · 注册 commands 处理器"]
   end
-  subgraph IMPL["实现"]
-    subgraph CONV["转换"]
+  subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
+    subgraph TIERS["三层,自上而下依赖"]
       PIPE["pipeline/<br/>chat · embeddings · rerank · decisions"]
       CVT["converters/"]
       subgraph IRCORE["ir/(一个包,#1710 已落地)"]
-        IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION(原 types/ir)"]
         IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
+        IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION(原 types/ir)"]
       end
     end
+  end
+  subgraph OPT["可选外层(没有它们,转换库照样完整)"]
     EXTS["extensions/ 只管包<br/>清单校验 · 发现 · 安装/卸载/更新 · 索引 · 兼容性 · 状态<br/>种类处理器注册点;不认识 shim / transport / commands"]
     SHIM["shims/<br/>注册表 · 加载器 · builtin<br/>注册 shims 处理器"]
   end

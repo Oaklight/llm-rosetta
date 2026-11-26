@@ -17,33 +17,35 @@ current_header = '''flowchart TB
     INIT["llm_rosetta/__init__<br/>convert() · get_converter_for_provider()"]
     CLI["cli.py · __main__<br/>llm-rosetta 分发器"]
   end
-  subgraph IMPL["实现"]
-    subgraph CONV["转换"]
-      subgraph IRCORE["ir/(一个包,#1710)"]
-        IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION<br/>只依赖标准库"]
-        IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
-      end
+  subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
+    subgraph TIERS["三层,自上而下依赖"]
       PIPE["pipeline/<br/>chat · embeddings · rerank · decisions · typed"]
       CVT["converters/<br/>base(含 ConversionError) · llm/各格式 · embeddings · rerank · decisions(各含 lookup) · registry"]
+      subgraph IRCORE["ir/(一个包,#1710)"]
+        IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
+        IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION<br/>只依赖标准库"]
+      end
+    end
+    subgraph SIDE["辅助"]
       DET["auto_detect.py"]
       CAP["capabilities.py"]
       TOOL["tool_ops.py"]
     end
-    subgraph SHIMEXT["shim 与扩展"]
-      SHIM["shims/<br/>provider_shim 注册表 · _loader · builtin/各 vendor · providers 转发层"]
-      EXTS["extensions/<br/>_discovery · _load · _dirs · _install · _cli"]
-    end
-    subgraph TOOLS["工具"]
-      FID["fidelity/"]
-      PROF["profiling/"]
-      DEV["devtools/<br/>scaffold · ext_scaffold · 模板"]
-    end
+  end
+  subgraph OPT["可选外层(没有它们,转换库照样完整)"]
+    SHIM["shims/<br/>provider_shim 注册表 · _loader · builtin/各 vendor · providers 转发层"]
+    EXTS["extensions/<br/>_discovery · _load · _dirs · _install · _cli"]
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
     CON["contracts/<br/>外部各方实现或接收的契约<br/>shim 数据类 · resolver(叶子) · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
     FMT["formats/<br/>catalog · detect · spec · batch"]
     VOCAB["model_vocabulary · retired_names · conversion_warnings"]
     REF["types/<br/>提供方参考形状:openai · google · messages<br/>types.ir 是 0.13.0 的转发,0.15.0 删除"]
+  end
+  subgraph TOOLS["工具"]
+    FID["fidelity/"]
+    PROF["profiling/"]
+    DEV["devtools/<br/>scaffold · ext_scaffold · 模板"]
   end
 '''
 current_edges = [
@@ -75,15 +77,17 @@ target_header = '''flowchart TB
     INIT["llm_rosetta/__init__ 组合根<br/>导入完成后调用 load_extensions()"]
     CLI["cli.py · __main__<br/>分发器 · 注册 commands 处理器"]
   end
-  subgraph IMPL["实现"]
-    subgraph CONV["转换"]
+  subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
+    subgraph TIERS["三层,自上而下依赖"]
       PIPE["pipeline/<br/>chat · embeddings · rerank · decisions"]
       CVT["converters/"]
       subgraph IRCORE["ir/(一个包,#1710 已落地)"]
-        IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION(原 types/ir)"]
         IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
+        IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION(原 types/ir)"]
       end
     end
+  end
+  subgraph OPT["可选外层(没有它们,转换库照样完整)"]
     EXTS["extensions/ 只管包<br/>清单校验 · 发现 · 安装/卸载/更新 · 索引 · 兼容性 · 状态<br/>种类处理器注册点;不认识 shim / transport / commands"]
     SHIM["shims/<br/>注册表 · 加载器 · builtin<br/>注册 shims 处理器"]
   end
