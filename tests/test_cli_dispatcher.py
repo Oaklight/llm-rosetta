@@ -794,6 +794,31 @@ class TestExtDoctor:
         assert "no extension 'ghost'" in capsys.readouterr().err
 
 
+class TestExtVerbs:
+    """``new`` and ``check`` come from the dev tools; the extension package has none."""
+
+    def test_the_extension_package_alone_does_not_know_new_or_check(self, capsys):
+        with pytest.raises(SystemExit) as info:
+            ext_cli.ext_main(["new", "acme_free"])
+
+        assert info.value.code == 2
+        assert "invalid choice" in capsys.readouterr().err
+
+    def test_the_dev_tools_hand_both_actions_in(self, tmp_path):
+        from llm_rosetta.devtools.ext_scaffold import EXT_VERBS
+
+        assert [verb.name for verb in EXT_VERBS] == ["new", "check"]
+        dest = str(tmp_path / "packages")
+        assert ext_cli.ext_main(["new", "acme_free", "--dest", dest], EXT_VERBS) == 0
+
+    def test_the_dispatcher_lists_them_beside_the_installer_actions(self, capsys):
+        assert _ext("--help") == 0
+
+        out = capsys.readouterr().out
+        for action in ("list", "install", "doctor", "new", "check"):
+            assert action in out
+
+
 class TestExtScaffold:
     def test_new_then_check(self, tmp_path, capsys):
         assert _ext("new", "acme_free", "--dest", str(tmp_path / "packages")) == 0

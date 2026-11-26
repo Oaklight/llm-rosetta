@@ -1,8 +1,9 @@
 """The ``llm-rosetta ext`` subcommands.
 
 ``list``, ``show``, ``install``, ``remove``, ``update`` and ``doctor`` wrap the
-installer, the index and the loader in this package; ``new`` and ``check`` wrap
-the scaffold in :mod:`llm_rosetta.devtools.ext_scaffold`.  ``list``, ``show`` and
+installer, the index and the loader in this package.  ``new`` and ``check`` wrap
+the scaffold in :mod:`llm_rosetta.devtools.ext_scaffold`, which hands them in as
+:class:`ExtVerb` records (this package imports no dev tool).  ``list``, ``show`` and
 ``doctor`` take ``--json``; ``install``, ``remove`` and ``update`` take
 ``--dry-run``, which reports what would change and changes nothing.  Every
 function here returns an exit code: ``0`` success, ``1`` a failure or a problem
@@ -17,7 +18,8 @@ import os
 import re
 import sys
 import urllib.parse
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 from llm_rosetta.contracts.extension import (
@@ -50,6 +52,24 @@ from ._load import ExtensionStatus, list_extensions, load_extensions
 from ._probe import check_import
 
 PROG = "llm-rosetta ext"
+
+
+@dataclass(frozen=True)
+class ExtVerb:
+    """An ``ext`` action that another layer supplies.
+
+    Attributes:
+        name: The action word (``new``).
+        help: The one line the action list shows.
+        add_arguments: Registers the action's flags on its parser.
+        run: Runs the action from the parsed namespace; returns the exit code.
+    """
+
+    name: str
+    help: str
+    add_arguments: Callable[[argparse.ArgumentParser], None]
+    run: Callable[[argparse.Namespace], int]
+
 
 _ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
@@ -95,9 +115,7 @@ def _add_index(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    from llm_rosetta.devtools.ext_scaffold import add_ext_arguments
-
+def _build_parser(verbs: Sequence[ExtVerb] = ()) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog=PROG, description="Manage llm-rosetta extensions."
     )
@@ -157,36 +175,30 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_dir(p)
     _add_json(p)
 
-    p = sub.add_parser("new", help="Create the folder of a new extension")
-    add_ext_arguments(p, command="new")
-
-    p = sub.add_parser("check", help="Check an extension folder")
-    add_ext_arguments(p, command="check")
+    for verb in verbs:
+        verb.add_arguments(sub.add_parser(verb.name, help=verb.help))
     return parser
 
 
-def ext_main(argv: Sequence[str] | None = None) -> int:
+def ext_main(argv: Sequence[str] | None = None, verbs: Sequence[ExtVerb] = ()) -> int:
     """Run ``llm-rosetta ext``.
 
     Args:
         argv: The arguments after ``ext``; ``sys.argv[1:]`` by default.
+        verbs: The actions another layer adds (``new`` and ``check`` from the
+            dev tools); an action not listed here is unknown to the parser.
 
     Returns:
         The exit code.
     """
-    parser = _build_parser()
+    parser = _build_parser(verbs)
     args = parser.parse_args(argv)
     if args.action is None:
         parser.print_help()
         return 2
-    if args.action == "new":
-        from llm_rosetta.devtools.ext_scaffold import run_ext_new
-
-        return run_ext_new(args)
-    if args.action == "check":
-        from llm_rosetta.devtools.ext_scaffold import run_ext_check
-
-        return run_ext_check(args)
+    for verb in verbs:
+        if args.action == verb.name:
+            return verb.run(args)
     if args.dir is not None:
         configure_extensions_dir(args.dir)
     try:

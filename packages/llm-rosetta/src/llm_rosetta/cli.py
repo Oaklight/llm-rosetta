@@ -237,9 +237,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def _ext(argv: Sequence[str]) -> int:
+    from llm_rosetta.devtools.ext_scaffold import EXT_VERBS
     from llm_rosetta.extensions._cli import ext_main
 
-    return _guarded("ext", lambda: ext_main(argv))
+    return _guarded("ext", lambda: ext_main(argv, EXT_VERBS))
 
 
 if __name__ == "__main__":

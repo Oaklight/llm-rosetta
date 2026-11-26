@@ -38,6 +38,7 @@ from llm_rosetta.contracts.extension import (
     parse_extension_manifest,
 )
 from llm_rosetta.devtools.scaffold import _render
+from llm_rosetta.extensions._cli import ExtVerb
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
 
 #: The template this module renders.
@@ -683,3 +684,21 @@ def run_ext_check(
         else:
             print(f"ok      {folder.name}")
     return 1 if failed else 0
+
+
+#: The ``ext`` actions this module supplies; ``llm_rosetta.cli`` hands them to
+#: ``extensions._cli.ext_main``, so the extension package imports no dev tool.
+EXT_VERBS: tuple[ExtVerb, ...] = (
+    ExtVerb(
+        "new",
+        "Create the folder of a new extension",
+        lambda parser: add_ext_arguments(parser, command="new"),
+        run_ext_new,
+    ),
+    ExtVerb(
+        "check",
+        "Check an extension folder",
+        lambda parser: add_ext_arguments(parser, command="check"),
+        run_ext_check,
+    ),
+)
