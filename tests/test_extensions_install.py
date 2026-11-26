@@ -251,6 +251,55 @@ class TestInstall:
                 _install._extract(archive, [(info, ("..", "evil.py"))], stage)
         assert not (tmp_path / "evil.py").exists()
 
+    @pytest.mark.parametrize(
+        ("member", "word"),
+        [
+            ("llm_rosetta_ext/acme/NUL", "reserved"),
+            ("llm_rosetta_ext/acme/con.txt", "reserved"),
+            ("llm_rosetta_ext/acme/COM1", "reserved"),
+            ("llm_rosetta_ext/acme/x/Lpt9.py", "reserved"),
+            ("llm_rosetta_ext/acme/a.", "dot or a space"),
+            ("llm_rosetta_ext/acme/a ", "dot or a space"),
+            ("llm_rosetta_ext/acme/d./x.py", "dot or a space"),
+            ("llm_rosetta_ext/acme/a<b", "Windows refuses"),
+            ("llm_rosetta_ext/acme/a|b", "Windows refuses"),
+            ("llm_rosetta_ext/acme/a?b", "Windows refuses"),
+            ("llm_rosetta_ext/acme/a*b", "Windows refuses"),
+            ('llm_rosetta_ext/acme/a"b', "Windows refuses"),
+            ("llm_rosetta_ext/acme/a\x01b", "Windows refuses"),
+        ],
+    )
+    def test_a_name_windows_cannot_store_as_written_is_refused(
+        self, tmp_path, member, word
+    ):
+        dest = tmp_path / "ext"
+        wheel = _wheel(tmp_path, extra={member: "x"})
+        with pytest.raises(ExtensionInstallError, match=word):
+            install_wheel(wheel, dest=dest)
+        assert _empty(dest)
+
+    def test_names_that_differ_only_in_case_are_one_member(self, tmp_path):
+        dest = tmp_path / "ext"
+        wheel = _wheel(tmp_path, extra={"llm_rosetta_ext/acme/PLUGIN.YAML": "x"})
+        with pytest.raises(ExtensionInstallError, match="twice"):
+            install_wheel(wheel, dest=dest)
+        assert _empty(dest)
+
+    def test_ordinary_names_that_merely_contain_a_reserved_word_install(self, tmp_path):
+        wheel = _wheel(
+            tmp_path,
+            extra={
+                "llm_rosetta_ext/acme/assets/a.b-c_d.svg": "x",
+                "llm_rosetta_ext/acme/console.py": "x",
+                "llm_rosetta_ext/acme/nullable.py": "x",
+                "llm_rosetta_ext/acme/aux_.py": "x",
+                "llm_rosetta_ext/acme/com10.py": "x",
+            },
+        )
+        installed = install_wheel(wheel, dest=tmp_path / "ext")
+        assert (installed.path / "console.py").is_file()
+        assert (installed.path / "com10.py").is_file()
+
     def test_a_symlink_member_is_refused(self, tmp_path):
         dest = tmp_path / "ext"
         wheel = _wheel(tmp_path)

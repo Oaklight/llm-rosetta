@@ -66,6 +66,13 @@ _LOCK_NAME = ".llm-rosetta-install.lock"
 _OWNER_MARKER = "LLM_ROSETTA_EXTENSION"
 _DIST_INFO_RE = re.compile(r"^[^-/]+-[^-/]+\.dist-info$")
 _DRIVE_RE = re.compile(r"^[A-Za-z]:")
+#: Characters Windows refuses in a file name, and its reserved device names
+#: (``NUL``, ``CON.txt``, ``COM1`` ...).  A wheel installs on Windows, macOS and
+#: Linux, so a member that cannot be written on one of them is refused on all.
+_WINDOWS_INVALID_RE = re.compile(r'[<>"|?*\x00-\x1f]')
+_WINDOWS_RESERVED_RE = re.compile(
+    r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$", re.IGNORECASE
+)
 _VERSION_RE = re.compile(r"\d+(?:\.\d+)+")
 _LOOPBACK = {"localhost", "127.0.0.1", "::1"}
 
@@ -132,6 +139,20 @@ def _member_parts(name: str) -> tuple[str, ...]:
         raise ExtensionInstallError(
             f"wheel member name has a drive or stream separator (':'): {name}"
         )
+    for part in parts:
+        if part != part.rstrip(" ."):
+            # Windows drops a trailing dot or space, so ``a.`` and ``a`` are one file.
+            raise ExtensionInstallError(
+                f"wheel member name ends with a dot or a space: {name}"
+            )
+        if _WINDOWS_INVALID_RE.search(part):
+            raise ExtensionInstallError(
+                f"wheel member name has a character Windows refuses: {name}"
+            )
+        if _WINDOWS_RESERVED_RE.match(part):
+            raise ExtensionInstallError(
+                f"wheel member name is a reserved Windows device name: {name}"
+            )
     return parts
 
 
@@ -234,11 +255,16 @@ def _inspect(
     planned: list[tuple[zipfile.ZipInfo, tuple[str, ...]]] = []
     for info in infos:
         kind, key, parts = _classify(info)
-        if parts in seen:
+        # Compared case-insensitively: on Windows and macOS two names that differ
+        # only in case are one file, and the later would silently replace the one
+        # whose manifest was validated.
+        folded = tuple(part.casefold() for part in parts)
+        if folded in seen:
             raise ExtensionInstallError(
-                f"wheel contains a member twice: {info.filename}"
+                f"wheel contains a member twice (names that differ only in case "
+                f"are one file on Windows and macOS): {info.filename}"
             )
-        seen.add(parts)
+        seen.add(folded)
         if kind == "ext" and key:
             ids.add(key)
         elif kind == "dist":
