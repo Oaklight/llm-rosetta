@@ -77,7 +77,10 @@ target_header = '''flowchart TB
     subgraph CONV["转换"]
       PIPE["pipeline/<br/>chat · embeddings · rerank · decisions(typed 三个待从 converters 搬入)"]
       CVT["converters/"]
-      IR["ir/"]
+      subgraph IRCORE["ir/(types/ir 合并进来)"]
+        IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION(原 types/ir)"]
+        IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
+      end
     end
     EXTS["extensions/ 只管包<br/>清单校验 · 发现 · 安装/卸载/更新 · 索引 · 兼容性 · 状态<br/>种类处理器注册点;不认识 shim / transport / commands"]
     SHIM["shims/<br/>注册表 · 加载器 · builtin<br/>注册 shims 处理器"]
@@ -87,7 +90,7 @@ target_header = '''flowchart TB
       CDECL["声明层(叶子)<br/>shim · resolver(#1708 已落地) · auth · quota · routing · usage · transport · command · extension · 清单<br/>只依赖 types / 标准库"]
       CXF["transform.py<br/>便利再导出 ir 原语<br/>唯一允许依赖 ir 的模块"]
     end
-    FMT["formats/ · types/ · model_vocabulary · retired_names"]
+    FMT["formats/ · model_vocabulary · retired_names<br/>types/ 只剩提供方参考形状,不属于核心"]
   end
 '''
 target_edges = [
@@ -97,12 +100,12 @@ target_edges = [
  ("CLI","EXTS","注册 commands 处理器","solid",GREEN),
  ("GW","EXTS","经 api 注册 transports 处理器","lazy",GREEN),
  ("EXTS","CDECL","","solid",None),
- ("SHIM","CDECL","","solid",None), ("SHIM","IR","","solid",None),
+ ("SHIM","CDECL","","solid",None), ("SHIM","IROPS","","solid",None),
  ("SHIM","FMT","","solid",None),
- ("PIPE","CVT","","solid",None), ("PIPE","IR","","solid",None),
- ("CVT","IR","","solid",None), ("CVT","CDECL","","solid",None),
- ("IR","CDECL","","solid",None),
- ("CXF","IR","","solid",None), ("CXF","CDECL","","solid",None),
+ ("PIPE","CVT","","solid",None), ("PIPE","IROPS","","solid",None),
+ ("CVT","IROPS","","solid",None), ("CVT","IRMODEL","","solid",None), ("CVT","CDECL","","solid",None),
+ ("IROPS","CDECL","","solid",None), ("IROPS","IRMODEL","","solid",None), ("FMT","IRMODEL","","solid",None),
+ ("CXF","IROPS","","solid",None), ("CXF","CDECL","","solid",None),
  ("CDECL","FMT","","solid",None),
  ("AUTHOR","CDECL","只用 contracts","solid",None), ("AUTHOR","CXF","","solid",None),
 ]

@@ -94,7 +94,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
 </section>
 <section id="core_target">
   <h2>2. core 建议目标(未实现,待决定)</h2>
-  <p class="note">只画还没做的部分(resolver 与 ir/pipeline 脱离 shims 已在 #1708 落地)。绿色是建议新增的接线。extensions 只管包(清单、发现、安装、索引、兼容性、状态),只依赖 contracts,不认识 shim、transport、commands;shims、cli、gateway 各自向它注册种类处理器;由 __init__ 这个组合根在导入完成后调用 load_extensions(),shims 不再在导入时隐式调用它。contracts 拆成声明层(只依赖 types 和标准库)和 transform.py(唯一允许依赖 ir 的便利再导出),并用导入边界测试固定。</p>
+  <p class="note">只画还没做的部分(resolver 与 ir/pipeline 脱离 shims 已在 #1708 落地)。IR 合并已决定:types/ir 并入 ir/model,逻辑留在 ir/,依赖方向 model ← primitives/tools ← passes;顺序是先搬 typed pipelines,再合并 IR,由 core-gateway-refactor 在 refactor/core-layering 上做。绿色是建议新增的接线。extensions 只管包(清单、发现、安装、索引、兼容性、状态),只依赖 contracts,不认识 shim、transport、commands;shims、cli、gateway 各自向它注册种类处理器;由 __init__ 这个组合根在导入完成后调用 load_extensions(),shims 不再在导入时隐式调用它。contracts 拆成声明层(只依赖 types 和标准库)和 transform.py(唯一允许依赖 ir 的便利再导出),并用导入边界测试固定。</p>
   <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="core_target"> <span id="z-core_target">100%</span></label></div>
   <div class="scroll"><div class="stage" id="stage-core_target"><pre class="mermaid" id="m-core_target">flowchart TB
   AUTHOR(["shim / 扩展作者"])
@@ -108,7 +108,10 @@ pre.error { color: #b00; white-space: pre-wrap; }
     subgraph CONV["转换"]
       PIPE["pipeline/&lt;br/&gt;chat · embeddings · rerank · decisions(typed 三个待从 converters 搬入)"]
       CVT["converters/"]
-      IR["ir/"]
+      subgraph IRCORE["ir/(types/ir 合并进来)"]
+        IRMODEL["ir/model/&lt;br/&gt;数据类 · 类型守卫 · 校验 · IR_VERSION(原 types/ir)"]
+        IROPS["ir/ 逻辑&lt;br/&gt;primitives · tools · passes · context"]
+      end
     end
     EXTS["extensions/ 只管包&lt;br/&gt;清单校验 · 发现 · 安装/卸载/更新 · 索引 · 兼容性 · 状态&lt;br/&gt;种类处理器注册点;不认识 shim / transport / commands"]
     SHIM["shims/&lt;br/&gt;注册表 · 加载器 · builtin&lt;br/&gt;注册 shims 处理器"]
@@ -118,7 +121,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
       CDECL["声明层(叶子)&lt;br/&gt;shim · resolver(#1708 已落地) · auth · quota · routing · usage · transport · command · extension · 清单&lt;br/&gt;只依赖 types / 标准库"]
       CXF["transform.py&lt;br/&gt;便利再导出 ir 原语&lt;br/&gt;唯一允许依赖 ir 的模块"]
     end
-    FMT["formats/ · types/ · model_vocabulary · retired_names"]
+    FMT["formats/ · model_vocabulary · retired_names&lt;br/&gt;types/ 只剩提供方参考形状,不属于核心"]
   end
 
 
@@ -130,14 +133,17 @@ pre.error { color: #b00; white-space: pre-wrap; }
   GW -.-&gt;|"经 api 注册 transports 处理器"| EXTS
   EXTS --&gt; CDECL
   SHIM --&gt; CDECL
-  SHIM --&gt; IR
+  SHIM --&gt; IROPS
   SHIM --&gt; FMT
   PIPE --&gt; CVT
-  PIPE --&gt; IR
-  CVT --&gt; IR
+  PIPE --&gt; IROPS
+  CVT --&gt; IROPS
+  CVT --&gt; IRMODEL
   CVT --&gt; CDECL
-  IR --&gt; CDECL
-  CXF --&gt; IR
+  IROPS --&gt; CDECL
+  IROPS --&gt; IRMODEL
+  FMT --&gt; IRMODEL
+  CXF --&gt; IROPS
   CXF --&gt; CDECL
   CDECL --&gt; FMT
   AUTHOR --&gt;|"只用 contracts"| CDECL
