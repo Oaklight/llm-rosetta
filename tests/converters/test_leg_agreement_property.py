@@ -33,7 +33,10 @@ from tests.converters.test_leg_agreement import (  # noqa: E402
     Turn,
     TurnView,
     _body_leg,
+    _ir_events,
+    _ir_response,
     _stream_leg,
+    _write_events,
 )
 
 _TEXT = st.text(
@@ -66,10 +69,18 @@ def _calls(draw) -> tuple[dict, ...]:
         }
         if kind == "custom":
             call["tool_type"] = "custom"
-            # #1720: an empty input, or one that parses as JSON (``0``, ``true``),
-            # does not survive the Open Responses body leg unchanged.
+            # Texts that are JSON objects stay out on purpose: the IR keeps such
+            # a text structured, so it is re-serialized on the way out and the
+            # text ``{"input": "x"}`` reads as the dict (see
+            # ``llm_rosetta.ir.tools.custom_input``).  That is a known limit, not
+            # a law the legs can be held to.
             call["tool_input"] = {
-                "input": draw(st.text(alphabet="abc xyz", min_size=1, max_size=12))
+                "input": draw(
+                    st.one_of(
+                        st.text(alphabet="abc xyz", max_size=12),
+                        st.sampled_from(["0", "true", "null", "[1, 2]", '"s"']),
+                    )
+                )
             }
         elif kind == "intrinsic":
             call["tool_type"] = "intrinsic"
@@ -139,6 +150,30 @@ def _expected_calls(dialect: str, turn: Turn) -> list[tuple[str, str, str]]:
     return kept
 
 
+def _assert_custom_text_on_the_wire(converter: Any, turn: Turn) -> None:
+    """Both Open Responses writers send a custom call's text, not its IR wrapper."""
+    texts = {
+        c["tool_call_id"]: c["tool_input"]["input"]
+        for c in turn.calls
+        if c.get("tool_type") == "custom"
+    }
+    body = converter.response_to_provider(_ir_response(turn))
+    from_body = {
+        i["call_id"]: i["input"]
+        for i in body["output"]
+        if i["type"] == "custom_tool_call"
+    }
+    chunks = _write_events(converter, _ir_events(turn))
+    from_stream = {
+        c["item"]["call_id"]: c["item"]["input"]
+        for c in chunks
+        if c.get("type") == "response.output_item.done"
+        and c["item"]["type"] == "custom_tool_call"
+    }
+    assert from_body == texts
+    assert from_stream == texts
+
+
 @pytest.mark.parametrize("dialect", DIALECTS)
 @settings(
     max_examples=150,
@@ -181,6 +216,8 @@ def test_the_legs_agree_and_keep_the_turn(dialect: str, turn: Turn) -> None:
         sorted(json.dumps(json.loads(c.arguments), sort_keys=True) for c in body.calls)
         == kept_inputs
     )
+    if dialect == "open_responses":
+        _assert_custom_text_on_the_wire(converter, turn)
     if turn.usage is not None:
         assert body.usage == (
             turn.usage["prompt_tokens"],
@@ -217,3 +254,48 @@ def test_a_refusal_keeps_its_words_on_both_legs(dialect: str, words: str) -> Non
     else:
         assert body.refusal == ""
         assert body.text == words
+
+
+@settings(
+    max_examples=80,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow],
+    derandomize=True,
+)
+@given(
+    value=st.one_of(
+        st.none(),
+        st.booleans(),
+        st.integers(min_value=-1000, max_value=1000),
+        st.lists(st.integers(min_value=-9, max_value=9), max_size=3),
+    )
+)
+def test_a_non_string_custom_input_is_written_as_json_on_both_writers(
+    value: Any,
+) -> None:
+    """``{"input": True}`` goes on the wire as ``true``, never as ``True``."""
+    turn = Turn(
+        calls=(
+            {
+                "type": "tool_call",
+                "tool_call_id": "call_0",
+                "tool_name": "lookup",
+                "tool_input": {"input": value},
+                "tool_type": "custom",
+            },
+        ),
+        finish="tool_calls",
+    )
+    converter = DIALECTS["open_responses"]()
+    body = converter.response_to_provider(_ir_response(turn))
+    (from_body,) = [
+        i["input"] for i in body["output"] if i["type"] == "custom_tool_call"
+    ]
+    chunks = _write_events(converter, _ir_events(turn))
+    (from_stream,) = [
+        c["item"]["input"]
+        for c in chunks
+        if c.get("type") == "response.output_item.done"
+        and c["item"]["type"] == "custom_tool_call"
+    ]
+    assert from_body == from_stream == json.dumps(value)

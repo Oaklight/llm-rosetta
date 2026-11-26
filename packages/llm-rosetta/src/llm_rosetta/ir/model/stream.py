@@ -227,6 +227,11 @@ class ToolCallDeltaEvent(TypedDict):
     tool_call_id: Required[str]
     arguments_delta: Required[str]  # JSON string fragment
     intrinsic_kind: NotRequired[str]  # Canonical kind for an intrinsic call
+    # True when ``arguments_delta`` is the ``{"input": text}`` wrapper the IR
+    # keeps a custom call's text in, delivered whole, rather than raw text.  Set
+    # where a body is expanded into events; a writer that puts the text on the
+    # wire as text unwraps only a delta that carries it.
+    input_wrapped: NotRequired[bool]
     block_index: NotRequired[int]  # Provider content block index (e.g. Anthropic)
     tool_call_index: NotRequired[int]  # Index for multiple parallel tool calls
     choice_index: NotRequired[int]

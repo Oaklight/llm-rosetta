@@ -612,7 +612,7 @@ class TestOpenResponsesToolOps:
         assert result["tool_type"] == "custom"
 
     def test_p_tool_call_to_ir_custom_tool_call_empty_input(self):
-        """Custom tool call with empty input returns empty dict."""
+        """Custom tool call with empty input keeps the empty string (#1720)."""
         provider_tc = {
             "type": "custom_tool_call",
             "call_id": "call_custom5",
@@ -620,7 +620,21 @@ class TestOpenResponsesToolOps:
             "input": "",
         }
         result = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
-        assert result["tool_input"] == {}
+        assert result["tool_input"] == {"input": ""}
+
+    @pytest.mark.parametrize("text", ["0", "true", "null", "[1, 2]", '"s"', ""])
+    def test_custom_tool_call_non_object_text_stays_a_string(self, text):
+        """Text that is not a JSON object is wrapped whole, never decoded (#1720)."""
+        provider_tc = {
+            "type": "custom_tool_call",
+            "call_id": "call_custom6",
+            "name": "t",
+            "input": text,
+        }
+        result = OpenResponsesToolOps.p_tool_call_to_ir(provider_tc)
+        assert result["tool_input"] == {"input": text}
+        back = OpenResponsesToolOps.ir_tool_call_to_p(result)
+        assert back["input"] == text
 
     def test_custom_tool_call_round_trip(self):
         """Test custom_tool_call round-trip: provider → IR → provider."""

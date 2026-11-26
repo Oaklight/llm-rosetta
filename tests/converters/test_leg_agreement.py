@@ -37,6 +37,7 @@ from typing import Any, cast
 
 import pytest
 
+from llm_rosetta.ir.tools.custom_input import custom_input_from_text
 from llm_rosetta.converters.base.errors import UnrepresentableFinishReason
 from llm_rosetta.ir.primitives import expand_response
 from llm_rosetta.converters.llm.chat_completions import ChatCompletionsConverter
@@ -296,6 +297,10 @@ def _ir_events(turn: Turn) -> list[dict[str, Any]]:
                 "type": "tool_call_delta",
                 "tool_call_id": call["tool_call_id"],
                 "arguments_delta": json.dumps(call["tool_input"]),
+                # As ``expand_response`` gives a custom call's delta.
+                **(
+                    {"input_wrapped": True} if call.get("tool_type") == "custom" else {}
+                ),
             }
         )
     if turn.refusal is not None:
@@ -389,7 +394,11 @@ def _call_view(
     kind = tool_type or "function"
     if kind == "intrinsic":
         kind = f"intrinsic:{intrinsic_kind or ''}"
-    if isinstance(arguments, str):
+    if kind == "custom" and isinstance(arguments, str):
+        # A streamed custom call carries its plain text (a body-built expansion
+        # carries the ``{"input": text}`` wrapper); both read as the same input.
+        arguments = json.dumps(custom_input_from_text(arguments), sort_keys=True)
+    elif isinstance(arguments, str):
         try:
             arguments = json.dumps(json.loads(arguments), sort_keys=True)
         except json.JSONDecodeError:
