@@ -18,6 +18,7 @@ from llm_rosetta.ir.model.stream import (
     ToolResultEvent,
 )
 from llm_rosetta.ir.context import StreamContext
+from llm_rosetta.ir.tools.custom_input import custom_input_text_of_wrapper
 from ...base.helpers.citations import report_dropped_citation
 from ...base.helpers.opaque import (
     get_opaque_origin,
@@ -658,6 +659,16 @@ class OpenResponsesStreamToMixin(OpenResponsesMixinHost):
         if not call_id and context is not None and tc_index is not None:
             if tc_index < context.tool_call_count:
                 call_id = context.resolve_tool_call_id_by_index(tc_index)
+
+        # A custom call's input is plain text.  A delta that carries the
+        # ``input_wrapped`` flag (set where a body is expanded into events) is
+        # the ``{"input": text}`` wrapper the IR keeps it in, so it is unwrapped
+        # here, once, before it reaches the event, the accumulated input and the
+        # finished item (#1736).  Any other delta is raw text from a streaming
+        # reader and passes through, whatever it looks like and however it is
+        # chunked.
+        if event.get("input_wrapped"):
+            delta = custom_input_text_of_wrapper(delta)
 
         # Accumulate arguments in context for done events
         if context is not None and call_id:

@@ -273,6 +273,10 @@ def _tool_call_events(
         # The kind rides every event of a provider-executed call, not only the
         # start: a reader that sees the fragment alone still knows the tool.
         delta["intrinsic_kind"] = part["intrinsic_kind"]
+    if part.get("tool_type") == "custom":
+        # The delta is the IR's ``{"input": text}`` wrapper, whole; say so, so a
+        # writer that sends the text unwraps this delta and no other.
+        delta["input_wrapped"] = True
     return [_tagged(start, choice_index, multi), _tagged(delta, choice_index, multi)]
 
 

@@ -39,6 +39,7 @@ from typing import Any, cast
 from collections.abc import Callable
 
 from llm_rosetta.conversion_warnings import report_loss
+from llm_rosetta.ir.tools.custom_input import custom_input_from_text
 from llm_rosetta.ir.model import IRResponse, UsageInfo
 
 __all__ = ["fold_response_events"]
@@ -440,6 +441,10 @@ def _resolve_arguments(entry: dict[str, Any]) -> None:
     """Turn one accumulated argument string into the call's ``tool_input``."""
     part = entry["part"]
     text = entry["args"]
+    if part.get("tool_type") == "custom":
+        # A custom call's deltas are its plain text, however it parses.
+        part["tool_input"] = custom_input_from_text(text)
+        return
     if not text.strip():
         return
     try:

@@ -18,6 +18,10 @@ from llm_rosetta.ir.model import (
     ToolResultPart,
 )
 from llm_rosetta.conversion_warnings import report_loss
+from llm_rosetta.ir.tools.custom_input import custom_input_from_text
+from llm_rosetta.ir.tools.custom_input import (  # noqa: F401
+    custom_input_text as custom_call_input_text,
+)
 from ...base.helpers.opaque import CARRIER_KEY
 from llm_rosetta.ir.primitives.tool_group import (
     GENERATED_GROUP_MARKER,
@@ -295,24 +299,6 @@ def function_call_item_id(tool_call_id: str, provider_metadata: Any = None) -> s
     if tool_call_id.startswith("call_"):
         return "fc_" + tool_call_id[5:]
     return "fc_" + tool_call_id
-
-
-def custom_call_input_text(tool_input: Any) -> str:
-    """The plain-text ``input`` a custom tool call carries.
-
-    A custom tool takes text, not JSON, so the IR wraps it as ``{"input": str}``
-    when the text is not itself a JSON object; both the body writer and the
-    stream writer must unwrap it the same way.
-
-    Args:
-        tool_input: The IR tool call's ``tool_input``.
-
-    Returns:
-        The text the wire carries.
-    """
-    if isinstance(tool_input, dict) and list(tool_input.keys()) == ["input"]:
-        return str(tool_input["input"])
-    return json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input)
 
 
 def _build_function_call_item(
@@ -684,15 +670,11 @@ def _custom_tool_call_to_ir(provider_tool_call: dict[str, Any]) -> ToolCallPart:
     Custom tools carry plain text ``input`` instead of JSON ``arguments``.
     IR requires ``tool_input`` to be a dict, so the text is wrapped as
     ``{"input": str}`` — unless it happens to parse as a JSON object, in
-    which case it is kept structured so other converters can read fields.
+    which case it is kept structured so other converters can read fields.  Any
+    other text, an empty one and a JSON scalar (``"0"``, ``"true"``) included,
+    stays the string the wire carried, as the stream leg keeps it (#1720).
     """
-    input_str = provider_tool_call.get("input", "")
-    try:
-        parsed_input = json.loads(input_str) if input_str else {}
-    except (json.JSONDecodeError, TypeError):
-        parsed_input = {"input": input_str}
-    if not isinstance(parsed_input, dict):
-        parsed_input = {"input": parsed_input}
+    parsed_input = custom_input_from_text(provider_tool_call.get("input", ""))
 
     part = ToolCallPart(
         type="tool_call",
