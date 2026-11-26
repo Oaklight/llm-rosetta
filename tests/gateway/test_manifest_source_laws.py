@@ -422,18 +422,21 @@ class _Http:
 
     def __init__(self) -> None:
         self.stamps: dict[str, str] = {}
+        self.sources: dict[str, str | None] = {}
         self.calls: list[str] = []
 
     def __call__(self, url: str, *, headers=None, timeout=None, proxy=None) -> bytes:
         self.calls.append(url)
         if url not in self.stamps:
             raise ConnectionError(url)
-        document = {
+        document: dict[str, Any] = {
             "index_version": 1,
-            "source": "contrib",
             "generated_at": self.stamps[url],
             "extensions": {},
         }
+        source = self.sources.get(url, "contrib")
+        if source is not None:
+            document["source"] = source
         return json.dumps(document).encode()
 
 
@@ -515,15 +518,68 @@ def test_the_second_url_is_consulted_only_when_the_first_is_older_than_the_cache
             assert got == chosen and not state.stale
 
 
-def test_pin_a_manifest_that_names_another_source_is_still_used() -> None:
-    """PIN, not a rule: a source-id mismatch is logged and the manifest kept."""
+# The ``source`` header is the id the index gives itself.  A catalogue id
+# (``argonne``, ``contrib``) names one repository, and the wheels' sha256 comes
+# from the same document, so an index that calls itself something else is a
+# different repository's trust root: it is refused, never used.  A source given
+# as a bare URL has no id to compare, and an index with no header makes no claim.
+
+
+def test_a_manifest_that_names_another_source_is_refused() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         http = _Http()
         http.stamps[_URL] = "2026-01-01T00:00:00Z"
         spec = plan.ManifestSourceSpec(key="argonne", url=_URL)
+
         state = _load(Path(tmp), http, spec)
+
+        assert state.manifest is None
+        assert state.error is not None
+        assert "'contrib'" in state.error and "'argonne'" in state.error
+        assert not list(Path(tmp).rglob("index.json")), "a refused index is not cached"
+
+
+def test_a_refused_primary_falls_back_to_a_mirror_that_names_the_source() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        http = _Http()
+        http.stamps[_URL] = http.stamps[_MIRROR] = "2026-01-01T00:00:00Z"
+        http.sources[_URL] = "someone-else"
+        spec = plan.ManifestSourceSpec(key="contrib", url=_URL, fallback_url=_MIRROR)
+
+        state = _load(Path(tmp), http, spec)
+
         assert state.manifest is not None and state.manifest.source == "contrib"
-        assert state.error is None
+        assert http.calls == [_URL, _MIRROR]
+
+
+def test_a_cached_manifest_that_names_another_source_is_not_used() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        http = _Http()
+        http.stamps[_URL] = "2026-01-01T00:00:00Z"
+        wrong = plan.ManifestSourceSpec(key="argonne", url=_URL)
+        document = json.loads(http(_URL))
+        path = Path(tmp) / "index.json"
+        path.write_text(json.dumps(document), encoding="utf-8")
+
+        assert freshness._read_cached_manifest(path, wrong) is None
+        right = plan.ManifestSourceSpec(key="contrib", url=_URL)
+        assert freshness._read_cached_manifest(path, right) is not None
+
+
+@pytest.mark.parametrize("key", ["contrib", None])
+def test_an_index_with_no_source_header_or_a_url_source_is_used(key) -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        http = _Http()
+        http.stamps[_URL] = "2026-01-01T00:00:00Z"
+        if key is not None:
+            http.sources[_URL] = None
+        else:
+            http.sources[_URL] = "anything"
+        spec = plan.ManifestSourceSpec(key=key, url=_URL)
+
+        state = _load(Path(tmp), http, spec)
+
+        assert state.manifest is not None and state.error is None
 
 
 # --- the selector's own predicates, and which entry speaks ------------------
