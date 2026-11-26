@@ -10,7 +10,7 @@ flowchart TB
     subgraph CONV["转换"]
       PIPE["pipeline/<br/>chat · embeddings · rerank · decisions"]
       CVT["converters/"]
-      subgraph IRCORE["ir/(types/ir 合并进来)"]
+      subgraph IRCORE["ir/(一个包,#1710 已落地)"]
         IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION(原 types/ir)"]
         IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
       end

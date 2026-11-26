@@ -21,7 +21,6 @@ current_header = '''flowchart TB
     subgraph CONV["转换"]
       PIPE["pipeline/<br/>chat · embeddings · rerank · decisions · typed"]
       CVT["converters/<br/>base(含 ConversionError) · llm/各格式 · embeddings · rerank · decisions(各含 lookup) · registry"]
-      IR["ir/<br/>primitives · tools · passes · context"]
       DET["auto_detect.py"]
       CAP["capabilities.py"]
       TOOL["tool_ops.py"]
@@ -37,31 +36,34 @@ current_header = '''flowchart TB
     end
   end
   subgraph FOUND["共享基础(被上面各层使用)"]
+    subgraph IRCORE["ir/(一个包,#1710)"]
+      IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION<br/>只依赖标准库"]
+      IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
+    end
     CON["contracts/<br/>外部各方实现或接收的契约<br/>shim 数据类 · resolver(叶子) · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
     FMT["formats/<br/>catalog · detect · spec · batch"]
-    TYP["types/<br/>IR 数据类 · 提供方形状(仅参考)"]
     VOCAB["model_vocabulary · retired_names · conversion_warnings"]
+    REF["types/<br/>提供方参考形状:openai · google · messages<br/>types.ir 是 0.13.0 的转发,0.15.0 删除"]
   end
 '''
 current_edges = [
-("INIT","PIPE","","solid",None), ("INIT","CVT","","solid",None),
+ ("INIT","PIPE","","solid",None), ("INIT","CVT","","solid",None),
  ("INIT","SHIM","接线(带保护的导入)","solid",None), ("INIT","DET","","solid",None),
  ("CLI","CON","","solid",None), ("CLI","EXTS","懒加载","lazy",None),
- ("PIPE","CVT","","solid",None), ("PIPE","IR","","solid",None),
- ("PIPE","CON","","solid",None),
- ("CVT","IR","","solid",None), ("CVT","CON","","solid",None),
- ("IR","CON","","solid",None),
- ("SHIM","IR","","solid",None),
- ("SHIM","CON","注册 resolver","solid",None), ("SHIM","FMT","","solid",None),
+ ("PIPE","CVT","","solid",None), ("PIPE","IROPS","","solid",None), ("PIPE","CON","","solid",None),
+ ("CVT","IROPS","","solid",None), ("CVT","IRMODEL","","solid",None), ("CVT","CON","","solid",None),
+ ("IROPS","IRMODEL","","solid",None), ("IROPS","CON","passes 用 shim 数据类","solid",None),
+ ("SHIM","IROPS","","solid",None), ("SHIM","CON","注册 resolver","solid",None), ("SHIM","FMT","","solid",None),
  ("SHIM","EXTS","导入时 load_extensions","lazy",RED),
  ("EXTS","SHIM","注册 shim","lazy",RED),
  ("EXTS","CON","","solid",None), ("EXTS","DEV","ext new / check","lazy",None),
- ("CON","TYP","数据类型","solid",None),
+ ("CON","IRMODEL","数据类型","solid",None),
  ("CON","FMT","usage.semantics","solid",None),
  ("CON","DET","routing.py","solid",None),
- ("CON","IR","transform 再导出 ir 原语","solid",RED),
- ("DET","FMT","","solid",None), ("FMT","TYP","","solid",None),
+ ("CON","IROPS","transform 再导出 ir 原语","solid",RED),
+ ("DET","FMT","","solid",None), ("FMT","IRMODEL","","solid",None),
  ("CAP","CVT","","solid",None), ("DEV","CON","","solid",None),
+ ("REF","IRMODEL","转发(带警告)","solid",None),
 ]
 open("core.mmd","w",encoding="utf-8").write(render(current_header, current_edges))
 
@@ -77,7 +79,7 @@ target_header = '''flowchart TB
     subgraph CONV["转换"]
       PIPE["pipeline/<br/>chat · embeddings · rerank · decisions"]
       CVT["converters/"]
-      subgraph IRCORE["ir/(types/ir 合并进来)"]
+      subgraph IRCORE["ir/(一个包,#1710 已落地)"]
         IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION(原 types/ir)"]
         IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
       end

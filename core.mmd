@@ -8,7 +8,6 @@ flowchart TB
     subgraph CONV["转换"]
       PIPE["pipeline/<br/>chat · embeddings · rerank · decisions · typed"]
       CVT["converters/<br/>base(含 ConversionError) · llm/各格式 · embeddings · rerank · decisions(各含 lookup) · registry"]
-      IR["ir/<br/>primitives · tools · passes · context"]
       DET["auto_detect.py"]
       CAP["capabilities.py"]
       TOOL["tool_ops.py"]
@@ -24,10 +23,14 @@ flowchart TB
     end
   end
   subgraph FOUND["共享基础(被上面各层使用)"]
+    subgraph IRCORE["ir/(一个包,#1710)"]
+      IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION<br/>只依赖标准库"]
+      IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
+    end
     CON["contracts/<br/>外部各方实现或接收的契约<br/>shim 数据类 · resolver(叶子) · transform · auth · quota · routing · usage · transport · command · extension · cli_login · shim_manifest"]
     FMT["formats/<br/>catalog · detect · spec · batch"]
-    TYP["types/<br/>IR 数据类 · 提供方形状(仅参考)"]
     VOCAB["model_vocabulary · retired_names · conversion_warnings"]
+    REF["types/<br/>提供方参考形状:openai · google · messages<br/>types.ir 是 0.13.0 的转发,0.15.0 删除"]
   end
 
 
@@ -38,27 +41,30 @@ flowchart TB
   CLI --> CON
   CLI -.->|"懒加载"| EXTS
   PIPE --> CVT
-  PIPE --> IR
+  PIPE --> IROPS
   PIPE --> CON
-  CVT --> IR
+  CVT --> IROPS
+  CVT --> IRMODEL
   CVT --> CON
-  IR --> CON
-  SHIM --> IR
+  IROPS --> IRMODEL
+  IROPS -->|"passes 用 shim 数据类"| CON
+  SHIM --> IROPS
   SHIM -->|"注册 resolver"| CON
   SHIM --> FMT
   SHIM -.->|"导入时 load_extensions"| EXTS
   EXTS -.->|"注册 shim"| SHIM
   EXTS --> CON
   EXTS -.->|"ext new / check"| DEV
-  CON -->|"数据类型"| TYP
+  CON -->|"数据类型"| IRMODEL
   CON -->|"usage.semantics"| FMT
   CON -->|"routing.py"| DET
-  CON -->|"transform 再导出 ir 原语"| IR
+  CON -->|"transform 再导出 ir 原语"| IROPS
   DET --> FMT
-  FMT --> TYP
+  FMT --> IRMODEL
   CAP --> CVT
   DEV --> CON
+  REF -->|"转发(带警告)"| IRMODEL
 
-  linkStyle 15 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 16 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 22 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 17 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 18 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 24 stroke:#d33,stroke-width:2.5px,color:#d33
