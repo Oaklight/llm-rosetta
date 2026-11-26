@@ -1,5 +1,7 @@
 RED = "stroke:#d33,stroke-width:2.5px,color:#d33"
 GREEN = "stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c"
+GRAY = "stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad"
+API_NODE_STYLE = "  style API fill:#f3f4f6,stroke:#c3c9d0,color:#8a939e"
 
 def render(header, edges):
     lines = [header, ""]
@@ -9,6 +11,7 @@ def render(header, edges):
         lines.append(f"  {a} {arrow}|\"{label}\"| {b}" if label else f"  {a} {arrow} {b}")
         if color:
             styles.append(f"  linkStyle {i} {color}")
+    styles.append(API_NODE_STYLE)
     return "\n".join(lines + [""] + styles) + "\n"
 
 current_header = '''flowchart TB
@@ -44,11 +47,11 @@ current_header = '''flowchart TB
   end
 '''
 current_edges = [
- ("API","PIPE","再导出","solid",None), ("API","CVT","再导出","solid",None),
- ("API","SHIM","再导出","solid",None), ("API","EXTS","再导出","solid",None),
- ("API","CLI","再导出","solid",None), ("API","DEV","再导出","solid",None),
- ("API","FID","再导出","solid",None), ("API","PROF","再导出","solid",None),
- ("API","CON","同一对象","solid",None),
+ ("API","PIPE","再导出","solid",GRAY), ("API","CVT","再导出","solid",GRAY),
+ ("API","SHIM","再导出","solid",GRAY), ("API","EXTS","再导出","solid",GRAY),
+ ("API","CLI","再导出","solid",GRAY), ("API","DEV","再导出","solid",GRAY),
+ ("API","FID","再导出","solid",GRAY), ("API","PROF","再导出","solid",GRAY),
+ ("API","CON","同一对象","solid",GRAY),
  ("INIT","PIPE","","solid",None), ("INIT","CVT","","solid",None),
  ("INIT","SHIM","","solid",None), ("INIT","DET","","solid",None),
  ("CLI","CON","","solid",None), ("CLI","EXTS","懒加载","lazy",None),
@@ -97,9 +100,9 @@ target_header = '''flowchart TB
   end
 '''
 target_edges = [
- ("API","PIPE","再导出","solid",None), ("API","CVT","再导出","solid",None),
- ("API","SHIM","再导出","solid",None), ("API","EXTS","再导出","solid",None),
- ("API","CLI","再导出","solid",None), ("API","CDECL","同一对象","solid",None),
+ ("API","PIPE","再导出","solid",GRAY), ("API","CVT","再导出","solid",GRAY),
+ ("API","SHIM","再导出","solid",GRAY), ("API","EXTS","再导出","solid",GRAY),
+ ("API","CLI","再导出","solid",GRAY), ("API","CDECL","同一对象","solid",GRAY),
  ("INIT","PIPE","","solid",None), ("INIT","SHIM","","solid",None),
  ("INIT","EXTS","load_extensions()","solid",GREEN),
  ("SHIM","EXTS","注册 shims 处理器","solid",GREEN),

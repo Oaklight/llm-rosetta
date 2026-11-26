@@ -41,7 +41,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
 <body>
 <h1>llm-rosetta 架构图</h1>
 <p class="note">core 现状、core 建议目标、gateway 后端、gateway admin。由 mermaid 在浏览器里渲染,可滚动、可缩放。</p>
-<p class="legend"><span><i style="border-color:#333"></i>模块顶层导入</span><span><i style="border-color:#333;border-top-style:dashed"></i>函数内懒加载</span><span><i style="border-color:#d33"></i>有问题的依赖(循环或反向)</span><span><i style="border-color:#1a8f3c"></i>建议新增的接线</span></p>
+<p class="legend"><span><i style="border-color:#333"></i>模块顶层导入</span><span><i style="border-color:#333;border-top-style:dashed"></i>函数内懒加载</span><span><i style="border-color:#d33"></i>有问题的依赖(循环或反向)</span><span><i style="border-color:#1a8f3c"></i>建议新增的接线</span><span><i style="border-color:#c3c9d0;border-top-width:1px"></i>api 门面的再导出(0.14.0 dev 新增,最后可能大改,所以淡化)</span></p>
 <nav><a href="#core">core 现状</a><a href="#core_target">core 建议目标</a><a href="#gateway">gateway 后端</a><a href="#admin">admin 页面</a></nav>
 ''' + blocks + '''
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>

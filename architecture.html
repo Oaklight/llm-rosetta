@@ -19,7 +19,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
 <body>
 <h1>llm-rosetta 架构图</h1>
 <p class="note">core 现状、core 建议目标、gateway 后端、gateway admin。由 mermaid 在浏览器里渲染,可滚动、可缩放。</p>
-<p class="legend"><span><i style="border-color:#333"></i>模块顶层导入</span><span><i style="border-color:#333;border-top-style:dashed"></i>函数内懒加载</span><span><i style="border-color:#d33"></i>有问题的依赖(循环或反向)</span><span><i style="border-color:#1a8f3c"></i>建议新增的接线</span></p>
+<p class="legend"><span><i style="border-color:#333"></i>模块顶层导入</span><span><i style="border-color:#333;border-top-style:dashed"></i>函数内懒加载</span><span><i style="border-color:#d33"></i>有问题的依赖(循环或反向)</span><span><i style="border-color:#1a8f3c"></i>建议新增的接线</span><span><i style="border-color:#c3c9d0;border-top-width:1px"></i>api 门面的再导出(0.14.0 dev 新增,最后可能大改,所以淡化)</span></p>
 <nav><a href="#core">core 现状</a><a href="#core_target">core 建议目标</a><a href="#gateway">gateway 后端</a><a href="#admin">admin 页面</a></nav>
 
 <section id="core">
@@ -98,11 +98,21 @@ pre.error { color: #b00; white-space: pre-wrap; }
   CAP --&gt; CVT
   DEV --&gt; CON
 
+  linkStyle 0 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 1 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 2 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 3 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 4 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 5 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 6 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 7 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 8 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
   linkStyle 22 stroke:#d33,stroke-width:2.5px,color:#d33
   linkStyle 23 stroke:#d33,stroke-width:2.5px,color:#d33
   linkStyle 26 stroke:#d33,stroke-width:2.5px,color:#d33
   linkStyle 27 stroke:#d33,stroke-width:2.5px,color:#d33
   linkStyle 33 stroke:#d33,stroke-width:2.5px,color:#d33
+  style API fill:#f3f4f6,stroke:#c3c9d0,color:#8a939e
 </pre></div></div>
 </section>
 <section id="core_target">
@@ -162,10 +172,17 @@ pre.error { color: #b00; white-space: pre-wrap; }
   AUTHOR --&gt;|"只用 contracts"| CDECL
   AUTHOR --&gt; CXF
 
+  linkStyle 0 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 1 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 2 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 3 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 4 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 5 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
   linkStyle 8 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
   linkStyle 9 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
   linkStyle 10 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
   linkStyle 11 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  style API fill:#f3f4f6,stroke:#c3c9d0,color:#8a939e
 </pre></div></div>
 </section>
 <section id="gateway">
@@ -266,6 +283,13 @@ pre.error { color: #b00; white-space: pre-wrap; }
   TRANSPORT --&gt; CORE
   SHIMS --&gt; CORE
   OBS --&gt; CORE
+
+  linkStyle 49 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 50 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 51 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 52 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  linkStyle 53 stroke:#c3c9d0,stroke-width:1px,color:#9aa3ad
+  style CORE fill:#f3f4f6,stroke:#c3c9d0,color:#8a939e
 </pre></div></div>
 </section>
 <section id="admin">
