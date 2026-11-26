@@ -94,7 +94,7 @@ from llm_rosetta.formats import (
     spec_for,
 )
 from llm_rosetta.formats.catalog import default_path
-from llm_rosetta.formats.tool_locations import ToolDeclaration, read_tool_declarations
+from llm_rosetta.pipeline.tool_locations import ToolDeclaration, read_tool_declarations
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
 from llm_rosetta.pipeline import (
     ConversionError,

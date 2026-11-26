@@ -15,8 +15,8 @@ reports ``tools[16]``.  ``wrapper`` names a nesting step between the path and
 the name/schema (Chat's ``function``, ``custom``); ``schema_field`` names the
 field the schema lives under (``parameters``, ``input_schema``).
 
-The module is a leaf: it reads a plain dict and imports nothing from the
-converters, so the gateway can use it on a body it holds without a pipeline.
+The module reads a plain dict and imports nothing from the
+converters, so the gateway can use it on a body it holds without converting it.
 """
 
 from __future__ import annotations

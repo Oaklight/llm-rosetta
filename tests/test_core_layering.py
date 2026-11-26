@@ -349,10 +349,7 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
         "devtools",
     ),
     "fidelity": ("retired_names",),
-    "formats": (
-        "contracts",
-        "ir",
-    ),
+    "formats": ("ir",),
     "ir": (
         "contracts",
         "conversion_warnings",
