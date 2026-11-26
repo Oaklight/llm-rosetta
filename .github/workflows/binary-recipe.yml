@@ -1,0 +1,48 @@
+name: Binary recipe
+
+# The Nuitka binary workflow (nuitka.yml) runs only by hand, so a change that
+# breaks its recipe goes unseen until someone builds a release: the split into
+# two distributions (#1158) broke `pip install -e .` for months, and Nuitka 4.4
+# broke the musl build.  This job runs the recipe's install steps in the same
+# Alpine image, on the pull requests that can break them, and prints the Nuitka
+# version it got.  It takes about a minute because it compiles nothing.
+
+on:
+  pull_request:
+    paths:
+      - "Makefile"
+      - ".github/workflows/nuitka.yml"
+      - ".github/workflows/binary-recipe.yml"
+      - "packages/*/pyproject.toml"
+      - "docker/**"
+
+permissions:
+  contents: read
+
+jobs:
+  musl-install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install the musl recipe's packages and Nuitka
+        run: |
+          # The one place the version lives is the Makefile's musl recipe.
+          PIN=$(sed -n 's/.*"nuitka\[onefile\]\(==[0-9][0-9.]*\)".*/\1/p' Makefile | head -1)
+          if [ -z "$PIN" ]; then
+            echo "::error::the musl recipe in the Makefile does not pin Nuitka"
+            exit 1
+          fi
+          echo "Nuitka pin from the Makefile: $PIN"
+          docker run --rm -v "$PWD":/workspace:ro python:3.12-alpine /bin/sh -c "
+            set -e
+            mkdir -p /tmp/build
+            tar -cf - -C /workspace --exclude=.git --exclude=__pycache__ . | tar -xf - -C /tmp/build
+            cd /tmp/build
+            apk add --no-cache gcc musl-dev python3-dev git >/dev/null
+            pip install --break-system-packages patchelf -q
+            pip install --break-system-packages -e packages/llm-rosetta -e packages/llm-rosetta-gateway -q
+            pip install --break-system-packages 'nuitka[onefile]$PIN' ordered-set -q
+            python -m nuitka --version
+            python -c 'from llm_rosetta_gateway import main'
+          "
