@@ -259,3 +259,190 @@ def test_every_converter_pair_converts_without_the_shim_layer():
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "pure mode ok 25" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# The edge table
+# ---------------------------------------------------------------------------
+
+#: Every import from one top-level unit of ``llm_rosetta`` (a package or a root
+#: module; ``<root>`` is ``llm_rosetta/__init__.py``) into another, module level
+#: and function-local alike, ``_vendor`` left out.  The layers, bottom to top:
+#:
+#: * foundation: ``types``, ``ir``, ``formats``, ``retired_names``,
+#:   ``conversion_warnings``, ``model_vocabulary``;
+#: * ``contracts``: what an outside party implements or receives;
+#: * conversion: ``converters``, ``tool_ops``, ``auto_detect``, ``pipeline``,
+#:   ``fidelity``, ``profiling``;
+#: * optional layers: ``shims``, ``extensions``, ``routing``, ``devtools``,
+#:   ``testing``;
+#: * entry: ``cli``, ``api``, ``capabilities`` (the 0.13.0 forwarder, imported by
+#:   nothing), ``<root>``, ``__main__``.
+#:
+#: The table only records the edges that exist.  A new edge fails the first test
+#: below until its author adds it here, where a reviewer sees it; an edge that
+#: has gone fails the second until it is deleted, so a removed edge stays
+#: removed.  The pairs that point both ways (``ir`` and ``contracts``;
+#: ``formats`` and ``contracts``, the latter only lazily) are the ones left to
+#: untie.
+CORE_EDGES: dict[str, tuple[str, ...]] = {
+    "<root>": (
+        "auto_detect",
+        "contracts",
+        "converters",
+        "ir",
+        "pipeline",
+        "shims",
+        "tool_ops",
+    ),
+    "__main__": ("cli",),
+    "api": (
+        "cli",
+        "contracts",
+        "converters",
+        "extensions",
+        "fidelity",
+        "formats",
+        "ir",
+        "model_vocabulary",
+        "pipeline",
+        "profiling",
+        "retired_names",
+        "shims",
+    ),
+    "auto_detect": (
+        "contracts",
+        "converters",
+        "formats",
+        "pipeline",
+        "retired_names",
+    ),
+    "capabilities": (
+        "contracts",
+        "converters",
+        "ir",
+    ),
+    "cli": (
+        "contracts",
+        "extensions",
+    ),
+    "contracts": (
+        "formats",
+        "ir",
+        "retired_names",
+    ),
+    "converters": (
+        "contracts",
+        "conversion_warnings",
+        "ir",
+        "model_vocabulary",
+        "retired_names",
+    ),
+    "devtools": (
+        "contracts",
+        "converters",
+        "model_vocabulary",
+        "shims",
+    ),
+    "extensions": (
+        "contracts",
+        "devtools",
+    ),
+    "fidelity": ("retired_names",),
+    "formats": (
+        "contracts",
+        "ir",
+    ),
+    "ir": (
+        "contracts",
+        "conversion_warnings",
+    ),
+    "model_vocabulary": ("formats",),
+    "pipeline": (
+        "contracts",
+        "conversion_warnings",
+        "converters",
+        "fidelity",
+        "ir",
+        "model_vocabulary",
+        "retired_names",
+    ),
+    "routing": ("contracts",),
+    "shims": (
+        "auto_detect",
+        "contracts",
+        "extensions",
+        "formats",
+        "ir",
+        "model_vocabulary",
+        "retired_names",
+    ),
+    "testing": ("shims",),
+    "tool_ops": (
+        "converters",
+        "ir",
+        "retired_names",
+    ),
+    "types": ("ir",),
+}
+
+
+_SKIPPED_PARTS = ("_vendor", "__pycache__")
+
+
+def _unit_of(path: Path) -> str:
+    first = path.relative_to(_CORE).parts[0]
+    return "<root>" if first == "__init__.py" else first.removesuffix(".py")
+
+
+def _core_units() -> set[str]:
+    return {
+        entry.name.removesuffix(".py")
+        for entry in _CORE.iterdir()
+        if (entry.is_dir() or entry.suffix == ".py")
+        and entry.name not in _SKIPPED_PARTS
+        and entry.name != "__init__.py"
+    }
+
+
+def _actual_edges() -> dict[tuple[str, str], str]:
+    """Every unit-to-unit import, with one ``file:line`` that shows it."""
+    units = _core_units()
+    found: dict[tuple[str, str], str] = {}
+    for path in sorted(_CORE.rglob("*.py")):
+        if any(part in _SKIPPED_PARTS for part in path.parts):
+            continue
+        source = _unit_of(path)
+        for line, name in _imports(path):
+            parts = name.split(".")
+            if parts[0] != "llm_rosetta" or len(parts) < 2 or parts[1] not in units:
+                continue
+            if parts[1] != source:
+                found.setdefault(
+                    (source, parts[1]), f"{path.relative_to(_CORE)}:{line}"
+                )
+    return found
+
+
+def test_no_core_package_gains_an_import_the_table_does_not_list():
+    allowed = {(src, dst) for src, dsts in CORE_EDGES.items() for dst in dsts}
+    new = [
+        f"{src} -> {dst} ({where})"
+        for (src, dst), where in sorted(_actual_edges().items())
+        if (src, dst) not in allowed
+    ]
+    assert new == [], (
+        "a new package-level import; if it is meant, add it to CORE_EDGES in "
+        "tests/test_core_layering.py so a reviewer sees it"
+    )
+
+
+def test_the_table_lists_no_import_that_has_gone():
+    actual = set(_actual_edges())
+    gone = [
+        f"{src} -> {dst}"
+        for src, dsts in CORE_EDGES.items()
+        for dst in dsts
+        if (src, dst) not in actual
+    ]
+    assert gone == [], "delete these rows from CORE_EDGES: the import is gone"
