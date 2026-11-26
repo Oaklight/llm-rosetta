@@ -1377,7 +1377,6 @@ class ChatCompletionsConverter(BaseConverter):
         the same call id, which is why the drop is recorded on the context.
         """
         choice_index = event.get("choice_index", 0)
-        tc_index = event.get("tool_call_index", 0)
         tool_type = event.get("tool_type", "function")
         call_id = sanitize_tool_call_id(event["tool_call_id"])
 
@@ -1390,6 +1389,16 @@ class ChatCompletionsConverter(BaseConverter):
                 call_id,
             )
             return {}
+
+        if context is not None:
+            context.register_tool_call(call_id, event["tool_name"], tool_type)
+        # Chat counts tool calls per choice from 0, whatever position the
+        # source dialect gave the call, so the writer assigns the slot itself.
+        tc_index = (
+            context.claim_tool_call_slot(call_id, choice_index, opening=True)
+            if context is not None
+            else 0
+        )
 
         if tool_type == "custom":
             tc_entry: dict[str, Any] = {
@@ -1412,9 +1421,6 @@ class ChatCompletionsConverter(BaseConverter):
                 },
             }
 
-        if context is not None:
-            context.register_tool_call(call_id, event["tool_name"], tool_type)
-
         chunk = {
             "choices": [
                 {
@@ -1431,12 +1437,17 @@ class ChatCompletionsConverter(BaseConverter):
     ) -> dict[str, Any]:
         """Handle ToolCallDeltaEvent → tool_calls delta with arguments."""
         choice_index = event.get("choice_index", 0)
-        tc_index = event.get("tool_call_index", 0)
+        call_id = sanitize_tool_call_id(event["tool_call_id"])
 
-        if context is not None and context.is_intrinsic_call_dropped(
-            sanitize_tool_call_id(event["tool_call_id"])
-        ):
+        if context is not None and context.is_intrinsic_call_dropped(call_id):
             return {}
+        # The slot the call's start claimed; a fragment of a call that never
+        # opened takes the next free slot rather than joining call 0.
+        tc_index = (
+            context.claim_tool_call_slot(call_id, choice_index)
+            if context is not None
+            else 0
+        )
 
         if context is None:
             logger.debug(

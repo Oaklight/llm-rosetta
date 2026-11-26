@@ -7,12 +7,6 @@ keeps the text, the reasoning, the calls (id, name, input, order) and the usage
 the IR turn carried.  It reuses the table's own helpers, so the two cannot
 drift on what "the turn" means.
 
-One difference from the table: the stream fixture here puts ``tool_call_index``
-on every ``tool_call_delta``, as the Chat reader does.  The IR leaves the field
-optional, and the Chat writer routes an unindexed delta to call 0 whatever its
-``tool_call_id`` says, so the table's fixture (which omits it) would merge the
-arguments of a second call into the first.  That gap is #1719.
-
 The generator draws the terminal state from the three reasons every dialect
 writes (``stop``, ``tool_calls``, ``length``); the refusal and error rows stay
 with the table, because they are decisions about one dialect each.
@@ -30,7 +24,6 @@ pytest.importorskip("hypothesis")
 from hypothesis import HealthCheck, assume, given, settings  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
-from llm_rosetta.converters.base.errors import UnrepresentableFinishReason  # noqa: E402
 from tests.converters.test_leg_agreement import (  # noqa: E402
     DIALECTS,
     EXPECTED_CALL_KINDS,
@@ -40,9 +33,7 @@ from tests.converters.test_leg_agreement import (  # noqa: E402
     Turn,
     TurnView,
     _body_leg,
-    _ir_events,
-    _view_of_events,
-    _write_events,
+    _stream_leg,
 )
 
 _TEXT = st.text(
@@ -124,32 +115,6 @@ def _turns(draw) -> Turn:
         calls=calls,
         finish=draw(st.sampled_from(finishes)),
         usage=usage,
-    )
-
-
-def _indexed_events(turn: Turn) -> list[dict[str, Any]]:
-    """The turn's stream events, each call delta carrying its call's index."""
-    events = _ir_events(turn)
-    index_of = {
-        event["tool_call_id"]: event["tool_call_index"]
-        for event in events
-        if event["type"] == "tool_call_start"
-    }
-    for event in events:
-        if event["type"] == "tool_call_delta":
-            event["tool_call_index"] = index_of[event["tool_call_id"]]
-    return events
-
-
-def _stream_leg(converter: Any, turn: Turn) -> TurnView | Refused:
-    """Write the turn as a stream and read it back."""
-    try:
-        chunks = _write_events(converter, _indexed_events(turn))
-    except UnrepresentableFinishReason as exc:
-        return Refused(reason=exc.reason)
-    context = converter.create_stream_context()
-    return _view_of_events(
-        list(converter.iter_stream_from_provider(chunks, context=context))
     )
 
 

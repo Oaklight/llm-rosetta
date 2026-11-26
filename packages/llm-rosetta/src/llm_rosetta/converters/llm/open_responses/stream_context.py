@@ -223,6 +223,8 @@ class OpenResponsesStreamContext(StreamContext):
         ctx._tool_call_intrinsic_kinds = base._tool_call_intrinsic_kinds
         ctx._dropped_intrinsic_calls = base._dropped_intrinsic_calls
         ctx._tool_call_index = base._tool_call_index
+        ctx._next_tool_slot = base._next_tool_slot
+        ctx._tool_slot_of = base._tool_slot_of
         # Subclass-only fields below start empty and are populated during
         # streaming, so they are not copied from `base` (which is a plain
         # StreamContext).  Listed here so a new field is not silently lost.
