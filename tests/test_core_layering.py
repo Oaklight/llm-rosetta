@@ -98,14 +98,15 @@ def test_the_extension_loader_imports_neither_the_shim_layer_nor_the_converters(
     """The extension loader manages packages; the shim layer registers a handler.
 
     The shim layer imports the extension loader to register its ``shims`` kind
-    handler, never the other way round.  ``devtools`` (the ``ext new`` verb) is
-    the one lazy import that leaves the package.
+    handler, never the other way round.  The ``ext new`` and ``ext check`` actions
+    come from ``devtools`` as :class:`ExtVerb` records handed in by the CLI.
     """
     forbidden = (
         "llm_rosetta.shims",
         "llm_rosetta.converters",
         "llm_rosetta.pipeline",
         "llm_rosetta.api",
+        "llm_rosetta.devtools",
     )
     offenders = [
         f"{path.relative_to(_CORE)}:{line} imports {name}"
@@ -325,6 +326,7 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
     ),
     "cli": (
         "contracts",
+        "devtools",
         "extensions",
     ),
     "contracts": (
@@ -342,13 +344,11 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
     "devtools": (
         "contracts",
         "converters",
+        "extensions",
         "model_vocabulary",
         "shims",
     ),
-    "extensions": (
-        "contracts",
-        "devtools",
-    ),
+    "extensions": ("contracts",),
     "fidelity": ("retired_names",),
     "formats": ("ir",),
     "ir": ("conversion_warnings",),
