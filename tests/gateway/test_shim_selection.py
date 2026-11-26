@@ -15,10 +15,9 @@ import pytest
 
 from llm_rosetta.api import (
     load_providers_from_dir,
-    restore_registry,
-    snapshot_registry,
     staging_registry,
 )
+from llm_rosetta.testing import restore_registry, snapshot_registry
 from llm_rosetta_gateway.shims import sources as shim_sources
 from llm_rosetta_gateway.shims.manifest import (
     MANIFEST_FILENAME,

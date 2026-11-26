@@ -90,7 +90,6 @@ def test_names_are_the_same_objects_as_their_home():
     from llm_rosetta.shims import provider_shim
 
     assert api.ConversionPipeline is ConversionPipeline
-    assert api.ProviderShim is provider_shim.ProviderShim
     assert api.get_shim is provider_shim.get_shim
     assert api.__version__ == llm_rosetta.__version__
 

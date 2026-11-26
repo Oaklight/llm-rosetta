@@ -33,7 +33,7 @@ def pytest_runtest_protocol(item, nextitem):
     module-scoped fixture that distinguishes the two lives in
     ``tests/integration/``, which a default run skips.
     """
-    from llm_rosetta.shims import restore_registry, snapshot_registry
+    from llm_rosetta.testing import restore_registry, snapshot_registry
 
     saved = snapshot_registry()
     try:

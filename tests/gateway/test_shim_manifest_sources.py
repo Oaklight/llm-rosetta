@@ -23,9 +23,8 @@ from llm_rosetta.api import (
     installed_extensions,
     list_extensions,
     list_shims,
-    restore_registry,
-    snapshot_registry,
 )
+from llm_rosetta.testing import restore_registry, snapshot_registry
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
 from llm_rosetta_gateway.shims.shim_sources import (
     apply_shim_sources,
@@ -708,7 +707,8 @@ class TestPluginOwnedSkipReachesTheStatus:
     """The plugin owner must survive the status path, not only the helper."""
 
     def test_a_plugin_owned_clash_names_the_plugin_in_the_status(self, monkeypatch):
-        from llm_rosetta.api import register_shim, restore_registry, snapshot_registry
+        from llm_rosetta.api import register_shim
+        from llm_rosetta.testing import restore_registry, snapshot_registry
         from llm_rosetta.contracts.shim import ProviderShim
 
         from llm_rosetta_gateway.shims._types import ShimSourceStatus

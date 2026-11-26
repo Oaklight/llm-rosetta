@@ -29,8 +29,6 @@ from .provider_shim import (
     resolve_format,
     resolve_model_type,
     resolve_shim,
-    restore_registry,
-    snapshot_registry,
     unregister_shim,
 )
 from llm_rosetta.contracts.transform import (
@@ -68,8 +66,6 @@ __all__ = [
     "resolve_format",
     "resolve_model_type",
     "resolve_shim",
-    "snapshot_registry",
-    "restore_registry",
     # Transforms
     "Transform",
     "apply_transforms",

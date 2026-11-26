@@ -11,10 +11,13 @@ The two allowed import prefixes are:
 - ``llm_rosetta.contracts`` and its submodules (``contracts.usage`` as a
   package, never its submodules)
 
-The contract modules are not re-exported here wholesale.  A few names a host
-needs beside the registry (the shim data classes, ``flatten_system_content``)
-are re-exported from their contract home, so ``api`` and ``contracts`` hand
-out the same objects.
+Every name has one home.  ``llm_rosetta.contracts`` holds what outside parties
+implement or receive (the shim data classes, the command and sign-in contracts,
+``SURFACE_VERSION``); this module holds what a host calls (the registry, the
+loaders, the installer, the converters, ``run_cli``).  A contract name is not
+repeated here, and a name that neither needs is not exported at all.  The test
+helpers that snapshot and restore the registry are in
+:mod:`llm_rosetta.testing`.
 
 Stability rule: within one minor release this module only gains names, and
 ``SURFACE_VERSION`` (defined in :mod:`llm_rosetta.contracts`) stays put; it is
@@ -41,31 +44,11 @@ from llm_rosetta import (
     retired_names,
 )
 from llm_rosetta.ir.passes.tool_names import ToolNameMap
-from llm_rosetta.contracts import SURFACE_VERSION
-from llm_rosetta.contracts.cli_login import (
-    CliLoginError,
-    begin_cli_login,
-    cancel_cli_login,
-    complete_cli_login,
-    run_capture,
-    subprocess_env,
-)
 from llm_rosetta.cli import main as run_cli
 from llm_rosetta.contracts.command import (
-    COMMAND_ENTRY_POINT_GROUP,
     CORE_COMMAND_NAMES,
-    CommandCatalog,
-    CommandConflict,
-    CommandError,
-    CommandLoadError,
-    CommandNameError,
     CommandSpec,
-    RegisteredCommand,
-    UnknownCommand,
-    command_catalog,
-    command_summary,
     register_command,
-    registered_commands,
     resolve_command,
 )
 from llm_rosetta.converters import get_converter_class
@@ -119,9 +102,6 @@ from llm_rosetta.pipeline import (
 from llm_rosetta.ir.passes.enforcement import reasoning_capability
 from llm_rosetta.profiling import DeepProfiler
 from llm_rosetta.shims import (
-    ConnectionConfig,
-    ProviderShim,
-    ReasoningCapability,
     get_shim,
     list_shims,
     load_providers_from_dir,
@@ -129,16 +109,12 @@ from llm_rosetta.shims import (
     resolve_format,
     resolve_model_type,
     resolve_shim,
-    restore_registry,
-    snapshot_registry,
     unregister_shim,
 )
-from llm_rosetta.contracts.shim import SoftErrorPattern, VendorManifest
+from llm_rosetta.contracts.shim import SoftErrorPattern
 from llm_rosetta.shims.provider_shim import match_model_reasoning, staging_registry
 from llm_rosetta.shims._loader import (
-    ManifestVocabulary,
     builtin_providers_dir,
-    describe_vendor_manifest,
     get_model_list_transform,
     leaf_connection,
     load_providers,
@@ -148,18 +124,6 @@ from llm_rosetta.shims._loader import (
     validate_shim_declaration,
 )
 
-# The four scaffold names are renamed at the import line, so each object keeps
-# its internal name: ``run_scaffold.__name__`` is ``"run"``, and
-# ``add_scaffold_arguments.__name__`` is ``"add_arguments"``.
-from llm_rosetta.devtools.ext_scaffold import (
-    add_ext_arguments,
-    run_ext_check,
-    run_ext_new,
-)
-from llm_rosetta.devtools.scaffold import add_arguments as add_scaffold_arguments
-from llm_rosetta.devtools.scaffold import run as run_scaffold
-from llm_rosetta.devtools.scaffold import run_check as run_scaffold_check
-from llm_rosetta.devtools.scaffold import run_migrate as run_scaffold_migrate
 from llm_rosetta.contracts.transform import flatten_system_content
 from llm_rosetta.ir.model import is_image_part, is_tool_result_part
 
@@ -191,11 +155,7 @@ __all__ = [
     "ProviderType",
     "retired_names",
     # Shim registry, read side
-    "ConnectionConfig",
-    "ProviderShim",
-    "ReasoningCapability",
     "SoftErrorPattern",
-    "VendorManifest",
     "get_model_list_transform",
     "get_shim",
     "list_shims",
@@ -205,9 +165,7 @@ __all__ = [
     "resolve_model_type",
     "resolve_shim",
     # Shim registry, write side and loaders
-    "ManifestVocabulary",
     "builtin_providers_dir",
-    "describe_vendor_manifest",
     "leaf_connection",
     "load_providers",
     "load_providers_from_dir",
@@ -215,42 +173,13 @@ __all__ = [
     "merge_connection",
     "plugin_source",
     "register_shim",
-    "restore_registry",
-    "snapshot_registry",
     "staging_registry",
     "unregister_shim",
     "validate_shim_declaration",
-    # Shim scaffolding (``scripts/dev/new_shim.py`` and the tree check)
-    "add_scaffold_arguments",
-    "run_scaffold",
-    "run_scaffold_check",
-    "run_scaffold_migrate",
-    # Extension authoring (the ``ext new`` / ``ext check`` commands)
-    "add_ext_arguments",
-    "run_ext_check",
-    "run_ext_new",
-    # Vendor CLI sign-in (an ``auth.py`` sidecar imports it from the contracts)
-    "CliLoginError",
-    "begin_cli_login",
-    "cancel_cli_login",
-    "complete_cli_login",
-    "run_capture",
-    "subprocess_env",
     # Subcommands a distribution adds to the ``llm-rosetta`` dispatcher
-    "COMMAND_ENTRY_POINT_GROUP",
     "CORE_COMMAND_NAMES",
-    "CommandCatalog",
-    "CommandConflict",
-    "CommandError",
-    "CommandLoadError",
-    "CommandNameError",
     "CommandSpec",
-    "RegisteredCommand",
-    "UnknownCommand",
-    "command_catalog",
-    "command_summary",
     "register_command",
-    "registered_commands",
     "resolve_command",
     "run_cli",
     # Installed extensions and what happened to each at load time
@@ -286,6 +215,5 @@ __all__ = [
     "read_tool_declarations",
     "strip_internal_metadata",
     # Version
-    "SURFACE_VERSION",
     "__version__",
 ]

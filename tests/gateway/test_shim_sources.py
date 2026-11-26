@@ -25,7 +25,8 @@ from llm_rosetta_gateway.shims.shim_sources import (
 )
 from llm_rosetta_gateway.shims._types import ShimLoadReport, ShimSourceStatus
 from llm_rosetta_gateway.shims.sources import check_source_updates
-from llm_rosetta.api import restore_registry, snapshot_registry, staging_registry
+from llm_rosetta.api import staging_registry
+from llm_rosetta.testing import restore_registry, snapshot_registry
 
 
 @pytest.fixture(autouse=True)
