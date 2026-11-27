@@ -33,7 +33,6 @@ CONVERSION_LAYERS = (
     "formats",
     "fidelity",
     "profiling",
-    "tool_ops.py",
     "model_vocabulary.py",
     "conversion_warnings.py",
 )
@@ -272,13 +271,13 @@ def test_every_converter_pair_converts_without_the_shim_layer():
 #: * foundation: ``types``, ``ir``, ``formats``, ``retired_names``,
 #:   ``conversion_warnings``, ``model_vocabulary``;
 #: * ``contracts``: what an outside party implements or receives;
-#: * conversion: ``converters``, ``tool_ops``, ``pipeline``, ``fidelity``,
-#:   ``profiling``;
+#: * conversion: ``converters``, ``pipeline``, ``fidelity``, ``profiling``;
 #: * optional layers: ``shims``, ``extensions``, ``routing``, ``devtools``,
 #:   ``testing``;
-#: * entry: ``cli``, ``api``, ``auto_detect`` and ``capabilities`` (the 0.13.0
-#:   forwarders: they hold no logic and nothing imports them), ``<root>``,
-#:   ``__main__``.
+#: * entry: ``cli``, ``api``, ``tool_ops`` (the convenience entry point for
+#:   toolregistry, imported by ``<root>`` only), ``auto_detect`` and
+#:   ``capabilities`` (the 0.13.0 forwarders: they hold no logic and nothing
+#:   imports them), ``<root>``, ``__main__``.
 #:
 #: The table only records the edges that exist.  A new edge fails the first test
 #: below until its author adds it here, where a reviewer sees it; an edge that
@@ -507,9 +506,12 @@ def test_the_lazy_only_table_lists_no_edge_that_is_eager_or_gone():
 
 #: Entry-level units and who may import them.  The 0.13.0 forwarders hold no
 #: logic and no unit imports them: only a caller of the deprecated path does.
+#: ``tool_ops`` is the convenience entry point for toolregistry: the package
+#: root re-exports it and nothing below does.
 ENTRY_IMPORTED_BY: dict[str, frozenset[str]] = {
     "auto_detect": frozenset(),
     "capabilities": frozenset(),
+    "tool_ops": frozenset({"<root>"}),
 }
 
 
@@ -521,7 +523,32 @@ def test_an_entry_level_unit_is_imported_only_by_those_that_may():
     ]
     assert offenders == [], (
         "an entry-level unit is not imported from below it: a deprecated "
-        f"forwarder is for outside callers, so import the new home instead: {offenders}"
+        "forwarder is for outside callers (import the new home instead), and "
+        f"tool_ops is imported by the package root only: {offenders}"
+    )
+
+
+#: Units an entry-level unit may never import, whatever ``CORE_EDGES`` says: the
+#: table records the edges that exist and a later edit can extend it, this one
+#: can only be loosened on purpose.  ``tool_ops`` is the convenience entry point
+#: for toolregistry; it stays free of the shim and extension layers, the
+#: command line and the other optional layers.
+ENTRY_NEVER_IMPORTS: dict[str, frozenset[str]] = {
+    "tool_ops": frozenset(
+        {"shims", "extensions", "cli", "routing", "devtools", "testing"}
+    ),
+}
+
+
+def test_an_entry_level_unit_never_imports_the_units_it_must_stay_free_of():
+    offenders = [
+        f"{src} -> {dst} ({where})"
+        for (src, dst), where in sorted(_actual_edges().items())
+        if dst in ENTRY_NEVER_IMPORTS.get(src, frozenset())
+    ]
+    assert offenders == [], (
+        "this entry-level unit must stay free of these layers, in the edge table "
+        f"or not: {offenders}"
     )
 
 

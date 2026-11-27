@@ -253,7 +253,7 @@ Core modules (`packages/llm-rosetta/src/llm_rosetta/`):
 |--------|-------|
 | `__init__.py` | Public API: `convert()`, `get_converter_for_provider()` |
 | `auto_detect.py` | The 0.13.0 module, kept as a forwarder (deprecated, removed in 0.15.0): `detect_provider`, `get_converter_for_provider` and the converter cache live in `converters/registry.py`, `convert` and `convert_response` in `pipeline/facade.py`; all are importable from `llm_rosetta` |
-| `tool_ops.py` | Cross-provider tool-call utilities |
+| `tool_ops.py` | The toolregistry entry convenience: cross-provider tool-call conversion (`from llm_rosetta import tool_ops`); entry level, imported by the package root only |
 | `model_vocabulary.py` | The model-type and format vocabulary |
 | `retired_names.py` | The table of renamed provider types, shims and model types, and the error each one raises (an error table, never an alias) |
 | `conversion_warnings.py` | The warning sink for lossy conversions |
