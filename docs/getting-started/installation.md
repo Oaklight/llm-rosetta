@@ -29,14 +29,15 @@ The gateway has **zero external runtime dependencies** — it uses vendored stdl
 
 ### Docker
 
-Four image variants are available on [DockerHub](https://hub.docker.com/r/oaklight/llm-rosetta-gateway):
+Three image variants are available on [DockerHub](https://hub.docker.com/r/oaklight/llm-rosetta-gateway):
 
 | Tag | Base | Size | Use case |
 |-----|------|------|----------|
 | `:<ver>` / `latest` | Alpine + binary | ~21 MB | Default, smallest |
 | `:<ver>-glibc` | busybox:glibc + binary | ~25 MB | glibc-only environments |
-| `:<ver>-python` | python:alpine + pip | ~80 MB | Need pip extensions |
-| `:<ver>-agents` | python:alpine + pip + Node.js and npm | ~150 MB | Install an agent CLI with `ext install-cli` ([External programs](../guide/extensions.md#external-programs)) |
+| `:<ver>-python` | python:alpine + pip | ~80 MB | Need pip extensions; also runs `ext install-cli` |
+
+No image carries Node.js or an agent CLI: `llm-rosetta ext install-cli <id>` installs them into `/config/tools`, so they stay when the image changes ([External programs](../guide/extensions.md#external-programs)).
 
 ```bash
 # Default (Alpine, recommended)

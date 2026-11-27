@@ -185,9 +185,10 @@ llm-rosetta ext doctor claude               # external claude: ok 2.1.299
 | `<tools>/<id>/npm-<version>/` or `release-<version>/` | The install |
 | `<tools>/<id>/bin/<name>` | The entry link `check` and `ext doctor` find |
 | `<tools>/bin/<name>` | One directory for `PATH`; the image's entrypoint puts it first |
-| `<tools>/<id>/.npm-cache/` | npm's cache; nothing is written to `$HOME` |
+| `<tools>/node/<version>/` | The Node.js (with its npm) that npm programs are installed with and run on |
+| `<tools>/<id>/.home/`, `<tools>/<id>/.npm-cache/` | npm's `HOME` and cache; nothing is written to the user's `$HOME` |
 
-A run at the pinned version changes nothing. A new pinned version replaces the old one. A wrong checksum, a failed download or npm run, an archive that holds a path outside its directory, or a program whose check does not pass leaves nothing installed and exits `1`. An npm package is checked by npm against the registry's integrity record; a release archive is checked against the SHA-256 in the manifest before it is unpacked. A program that needs npm needs Node.js: the image's `-agents` tag has it ([Docker](../getting-started/installation.md#docker)).
+A run at the pinned version changes nothing. A new pinned version replaces the old one. A wrong checksum, a failed download or npm run, an archive that holds a path outside its directory, or a program whose check does not pass leaves nothing installed and exits `1`. An npm package is checked by npm against the registry's integrity record; a release archive is checked against the SHA-256 in the manifest before it is unpacked. A program that comes from npm needs Node.js, and `install-cli` installs that too: a pinned Node.js (24.22.3, with the npm it bundles) goes into `<tools>/node/<version>/` first, and npm runs from there, so the image needs neither `node` nor `npm`. glibc and macOS builds come from nodejs.org; musl builds come from `unofficial-builds.nodejs.org`, which publishes a checksum list but no signature, so the SHA-256 of every build is pinned in the source and checked before unpacking. On Alpine, `node` needs the `libstdc++` package, which the image carries. A program that no longer starts after the image changed (for example its `node` cannot load) is `broken` in `ext doctor` and in the panel's Extensions view; running `install-cli` again repairs it.
 
 Pinned versions the shipped extensions declare:
 
