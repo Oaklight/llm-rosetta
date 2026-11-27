@@ -273,3 +273,45 @@ def test_a_tools_directory_the_operator_set_is_kept_and_on_path(script, tmp_path
     seen = _stub_env(tmp_path)
     assert seen["TOOLS"] == str(mine)
     assert seen["PATHHEAD"] == str(mine / "bin")
+
+
+def test_the_image_defaults_follow_a_config_volume_that_is_not_slash_config(tmp_path):
+    """The image sets /config/extensions and /config/tools for `docker exec`.
+
+    Those are its defaults, not the operator's choice: with CONFIG_DIR elsewhere
+    the server still keeps both in that volume.
+    """
+    result, _log = _run(
+        "entrypoint.sh",
+        ["llm-rosetta", "ext", "list"],
+        tmp_path,
+        env={
+            "LLM_ROSETTA_EXTENSIONS_DIR": "/config/extensions",
+            "LLM_ROSETTA_TOOLS_DIR": "/config/tools",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    seen = _stub_env(tmp_path)
+    assert seen["EXT"] == str(tmp_path / "config" / "extensions")
+    assert seen["TOOLS"] == str(tmp_path / "config" / "tools")
+    assert (tmp_path / "config" / "extensions").is_dir()
+
+
+def test_the_image_default_still_gets_the_writable_check(tmp_path):
+    """Setting the image default must not skip the clear error for a bad volume."""
+    blocker = tmp_path / "volume"
+    blocker.write_text("x")
+
+    result, _log = _run(
+        "entrypoint.sh",
+        ["llm-rosetta", "ext", "list"],
+        tmp_path,
+        env={
+            "CONFIG_DIR": str(blocker),
+            "LLM_ROSETTA_EXTENSIONS_DIR": "/config/extensions",
+        },
+    )
+
+    assert result.returncode != 0
+    assert "cannot use" in result.stderr

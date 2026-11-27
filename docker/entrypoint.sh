@@ -33,7 +33,11 @@ fi
 # config volume.  Unless the operator set the directory, use
 # $CONFIG_DIR/extensions.  A run that replaces this script with `--entrypoint`
 # gets no default.  The directory has to be writable by this uid, as HOME does.
-if [ -z "${LLM_ROSETTA_EXTENSIONS_DIR:-}" ]; then
+# The image sets /config/extensions and /config/tools itself, so that a command
+# run with `docker exec` (which does not pass through this script) reads the
+# volume too; that value is the image's default, not the operator's choice, and
+# a CONFIG_DIR other than /config moves it.
+if [ -z "${LLM_ROSETTA_EXTENSIONS_DIR:-}" ] || [ "$LLM_ROSETTA_EXTENSIONS_DIR" = /config/extensions ]; then
 	if ! mkdir -p "$CONFIG_DIR/extensions" 2>/dev/null || [ ! -w "$CONFIG_DIR/extensions" ]; then
 		echo "error: cannot use $CONFIG_DIR/extensions for installed extensions as uid $(id -u); the mounted directory must be writable by that uid (chown it on the host, or set PUID/PGID to its owner), or set LLM_ROSETTA_EXTENSIONS_DIR" >&2
 		exit 1
@@ -46,7 +50,9 @@ export LLM_ROSETTA_EXTENSIONS_DIR
 # agent CLI, at a pinned version) live in the config volume too.  Their entry
 # links are collected in one directory, which goes on PATH here so a CLI
 # installed after the container started is found without a restart.
-LLM_ROSETTA_TOOLS_DIR=${LLM_ROSETTA_TOOLS_DIR:-$CONFIG_DIR/tools}
+if [ -z "${LLM_ROSETTA_TOOLS_DIR:-}" ] || [ "$LLM_ROSETTA_TOOLS_DIR" = /config/tools ]; then
+	LLM_ROSETTA_TOOLS_DIR=$CONFIG_DIR/tools
+fi
 export LLM_ROSETTA_TOOLS_DIR
 PATH=$LLM_ROSETTA_TOOLS_DIR/bin:$PATH
 export PATH

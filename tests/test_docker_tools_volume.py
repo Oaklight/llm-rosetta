@@ -57,3 +57,22 @@ def test_make_has_no_agents_target():
     assert "agents" not in text
     assert "WITH_AGENTS" not in text
     assert not re.search(r"^build-docker-agents:", text, re.M)
+
+
+def _env_values(dockerfile: str) -> dict[str, str]:
+    """The ``ENV`` pairs of the file (``KEY=value`` form, continuations joined)."""
+    values: dict[str, str] = {}
+    for line in dockerfile.replace("\\\n", " ").splitlines():
+        if line.startswith("ENV "):
+            for word in line.split()[1:]:
+                key, _, value = word.partition("=")
+                values[key] = value
+    return values
+
+
+def test_the_image_points_the_ext_commands_at_the_volume():
+    # Without these the command in `docker exec` reads ~/.local/share and finds no
+    # extension, while the gateway serves the ones under /config.
+    env = _env_values(_read("docker/Dockerfile"))
+    assert env.get("LLM_ROSETTA_EXTENSIONS_DIR") == "/config/extensions"
+    assert env.get("LLM_ROSETTA_TOOLS_DIR") == "/config/tools"
