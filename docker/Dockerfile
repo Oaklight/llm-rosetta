@@ -18,6 +18,12 @@ WORKDIR /app
 RUN addgroup -g 1000 appgroup && \
     adduser -D -u 1000 -G appgroup appuser
 
+# The "-agents" tag (WITH_AGENTS=1) adds Node.js and npm, so `llm-rosetta ext
+# install-cli` can install an agent CLI that is distributed through npm.  The
+# default image does not change.
+ARG WITH_AGENTS=0
+RUN if [ "$WITH_AGENTS" = "1" ]; then apk add --no-cache nodejs npm; fi
+
 RUN mkdir -p /tmp/dist/
 COPY dist/ /tmp/dist/
 

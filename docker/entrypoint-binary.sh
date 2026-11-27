@@ -18,6 +18,15 @@ if [ -z "${LLM_ROSETTA_EXTENSIONS_DIR:-}" ]; then
 fi
 export LLM_ROSETTA_EXTENSIONS_DIR
 
+# External CLIs that `llm-rosetta ext install-cli` installs (an extension's
+# agent CLI, at a pinned version) live in the config volume too.  Their entry
+# links are collected in one directory, which goes on PATH here so a CLI
+# installed after the container started is found without a restart.
+LLM_ROSETTA_TOOLS_DIR=${LLM_ROSETTA_TOOLS_DIR:-$CONFIG_DIR/tools}
+export LLM_ROSETTA_TOOLS_DIR
+PATH=$LLM_ROSETTA_TOOLS_DIR/bin:$PATH
+export PATH
+
 if [ "${1#-}" != "$1" ]; then
 	set -- /usr/local/bin/llm-rosetta-gateway "$@"
 fi

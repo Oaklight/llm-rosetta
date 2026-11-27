@@ -359,15 +359,22 @@ build-docker-python:
 		echo "Using PyPI mirror: $(PYPI_MIRROR)"; \
 		BUILD_ARGS="$$BUILD_ARGS --build-arg PYPI_MIRROR=$(PYPI_MIRROR)"; \
 	fi; \
-	cd docker && docker build -f Dockerfile $$BUILD_ARGS -t $(DOCKER_IMAGE):$(V)-python -t $(DOCKER_IMAGE):latest-python ..
+	cd docker && docker build -f Dockerfile $$BUILD_ARGS $(DOCKER_BUILD_EXTRA) $(if $(DOCKER_TAGS),$(DOCKER_TAGS),-t $(DOCKER_IMAGE):$(V)-python -t $(DOCKER_IMAGE):latest-python) ..
 	@echo "Python Docker image built successfully."
+
+# The Python image plus Node.js and npm, for `llm-rosetta ext install-cli`
+build-docker-agents:
+	@echo "Building agents Docker image $(DOCKER_IMAGE):$(V)-agents..."
+	@$(MAKE) --no-print-directory build-docker-python \
+		DOCKER_BUILD_EXTRA="--build-arg WITH_AGENTS=1" \
+		DOCKER_TAGS="-t $(DOCKER_IMAGE):$(V)-agents -t $(DOCKER_IMAGE):latest-agents"
 
 # Legacy alias
 build-docker: build-docker-python
 
 push-docker:
 	@echo "Pushing Docker images..."
-	@for tag in $(V)-alpine $(V) latest latest-binary $(V)-glibc $(V)-python latest-python; do \
+	@for tag in $(V)-alpine $(V) latest latest-binary $(V)-glibc $(V)-python latest-python $(V)-agents latest-agents; do \
 		if docker image inspect $(DOCKER_IMAGE):$$tag >/dev/null 2>&1; then \
 			echo "  Pushing $(DOCKER_IMAGE):$$tag"; \
 			docker push $(DOCKER_IMAGE):$$tag; \
@@ -377,7 +384,7 @@ push-docker:
 
 clean-docker:
 	@echo "Cleaning Docker images..."
-	@for tag in $(V)-alpine $(V) latest latest-binary $(V)-glibc $(V)-python latest-python; do \
+	@for tag in $(V)-alpine $(V) latest latest-binary $(V)-glibc $(V)-python latest-python $(V)-agents latest-agents; do \
 		docker rmi $(DOCKER_IMAGE):$$tag 2>/dev/null || true; \
 	done
 
@@ -434,6 +441,7 @@ help:
 	@echo ""
 	@echo "Docker:"
 	@echo "  build-docker-alpine  - Build Alpine Docker image (musl binary)"
+	@echo "  build-docker-agents  - Build the Python image plus Node.js/npm (-agents tag)"
 	@echo "  build-docker-glibc   - Build glibc Docker image (native binary)"
 	@echo "  build-docker-python  - Build Python Docker image (pip install)"
 	@echo "  build-docker         - Alias for build-docker-python"
@@ -473,4 +481,4 @@ help:
 	@echo ""
 	@echo "Detected version: $(VERSION)"
 
-.PHONY: all lint bench lint-fix test test-js theme-matrix test-integration test-gateway check-shim-catalog check-public-api build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker push-docker clean-docker deploy-dev help
+.PHONY: all lint bench lint-fix test test-js theme-matrix test-integration test-gateway check-shim-catalog check-public-api build-package build-wheel push-package clean-package build push clean build-binary build-binary-musl clean-binary clean-binary-all build-docker-alpine build-docker-glibc build-docker-python build-docker-agents build-docker push-docker clean-docker deploy-dev help

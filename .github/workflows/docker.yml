@@ -87,6 +87,24 @@ jobs:
           cache-from: type=gha,scope=python
           cache-to: type=gha,mode=max,scope=python
 
+      # The same image plus Node.js and npm, so `llm-rosetta ext install-cli`
+      # can install an agent CLI that is distributed through npm.
+      - name: Build and push agents image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            PACKAGE_VERSION=${{ steps.meta.outputs.version }}
+            WITH_AGENTS=1
+          tags: |
+            oaklight/llm-rosetta-gateway:${{ steps.meta.outputs.version }}-agents
+            oaklight/llm-rosetta-gateway:latest-agents
+          cache-from: type=gha,scope=python
+          cache-to: type=gha,mode=max,scope=python-agents
+
   # ── Binary-based images (Alpine + glibc) ──────────────
   build-binary-images:
     needs: binaries

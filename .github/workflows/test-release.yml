@@ -127,3 +127,20 @@ jobs:
             oaklight/llm-rosetta-gateway:dev
           cache-from: type=gha,scope=dev-python
           cache-to: type=gha,mode=max,scope=dev-python
+
+      - name: Build and push dev agents image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            PACKAGE_VERSION=${{ steps.meta.outputs.version }}
+            EXTRA_INDEX_URL=https://test.pypi.org/simple/
+            WITH_AGENTS=1
+          tags: |
+            oaklight/llm-rosetta-gateway:${{ steps.meta.outputs.version }}-dev-agents
+            oaklight/llm-rosetta-gateway:dev-agents
+          cache-from: type=gha,scope=dev-python
+          cache-to: type=gha,mode=max,scope=dev-agents
