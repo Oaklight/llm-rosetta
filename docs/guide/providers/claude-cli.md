@@ -88,7 +88,7 @@ shim 会设置 `--setting-sources user`，因为主机可能通过 `apiKeyHelper
 与输出共享这份预算。需要硬上限时在 `cli_env` 中设置
 `CLAUDE_CODE_MAX_OUTPUT_TOKENS`。
 
-## 能力
+## 能力 { #capabilities }
 
 `text`、`vision` 与 `reasoning` 默认开启。图片原样通过重放，thinking 块从
 CLI 的流事件返回。
@@ -117,7 +117,7 @@ CLI 的流事件返回。
 
 - **实验性且与 CLI 版本耦合。** 重放帧、确认、设置注入和会话 id 均在
   CLI 2.1.299 上测量。升级版本后需要重跑实测检查。
-- **工具定义不会发往上游。** 见[能力](#能力)。
+- **工具定义不会发往上游。** 见[能力](#capabilities)。
 - **错误映射不完整。** 被拒绝的重试会复现真实上游状态；把
   `anthropic-ratelimit-unified-reset` 映射为 `resets_at` 的套餐/会话 429，
   以及 401/402/529/503 的映射尚未完成。
