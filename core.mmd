@@ -26,7 +26,7 @@ flowchart TB
   end
   subgraph OPT["可选外层(没有它们,转换库照样完整)"]
     SHIM["shims/<br/>provider_shim 注册表 · _loader · builtin/各 vendor · providers 转发层"]
-    EXTS["extensions/<br/>_discovery · _load · _dirs · _install · _cli"]
+    EXTS["extensions/<br/>_discovery · _load · _dirs · _install · _index · _probe · _tools · _cli<br/>ext install-cli:外部程序按精确版本装进 /config/tools(#1821、#1823)"]
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
     REF["types/<br/>提供方参考形状:openai · google · messages<br/>types.ir 是 0.13.0 的转发,0.15.0 删除"]
