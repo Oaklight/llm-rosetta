@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Repository wrapper around :mod:`llm_rosetta.devtools.scaffold`.
+"""Repository wrapper around :mod:`llm_rosetta.authoring.scaffold`.
 
 The gateway's ``shims new`` is gone (``llm-rosetta ext new`` creates an extension
 folder).  This command is how a checkout scaffolds into the built-in tree, which
@@ -18,7 +18,7 @@ BUILTIN_ROOT = REPO_ROOT / "packages/llm-rosetta/src/llm_rosetta/shims/builtin"
 
 def main(argv: list[str] | None = None) -> int:
     """Run the scaffolder against the built-in tree by default."""
-    from llm_rosetta.devtools.scaffold import main as scaffold_main
+    from llm_rosetta.authoring.scaffold import main as scaffold_main
 
     arguments = sys.argv[1:] if argv is None else argv
     return scaffold_main(arguments, default_root=str(BUILTIN_ROOT))

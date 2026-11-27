@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from llm_rosetta.devtools import scaffold
+from llm_rosetta.authoring import scaffold
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -34,7 +34,7 @@ from _import_scan import (  # noqa: E402
 
 _CORE = Path(__file__).parents[1] / "packages/llm-rosetta/src/llm_rosetta"
 _PROVIDERS = _CORE / "shims" / "builtin"
-_TEMPLATE = _CORE / "devtools" / "_shim_template"
+_TEMPLATE = _CORE / "authoring" / "_shim_template"
 _CONTRACTS = "llm_rosetta.contracts"
 
 

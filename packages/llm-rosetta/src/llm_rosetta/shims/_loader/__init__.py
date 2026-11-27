@@ -217,7 +217,7 @@ def load_providers_from_dir(
     modules in ``sys.modules``.
 
     The contract is the model-typed shape stated in
-    ``devtools/_shim_template/README_en.md``: ``<vendor>[/<lane>]/<type>`` with a
+    ``authoring/_shim_template/README_en.md``: ``<vendor>[/<lane>]/<type>`` with a
     ``<format>`` level only when that type holds more than one lane.  Two older
     shapes still load — they are tolerated, not the contract, and
     ``shims check`` reports both:

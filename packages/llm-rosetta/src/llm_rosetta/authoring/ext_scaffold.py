@@ -37,7 +37,7 @@ from llm_rosetta.contracts.extension import (
     ExtensionManifestInvalid,
     parse_extension_manifest,
 )
-from llm_rosetta.devtools.scaffold import _render
+from llm_rosetta.authoring.scaffold import _render
 from llm_rosetta.extensions._cli import ExtVerb
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
 

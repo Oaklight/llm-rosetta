@@ -805,7 +805,7 @@ class TestExtVerbs:
         assert "invalid choice" in capsys.readouterr().err
 
     def test_the_dev_tools_hand_both_actions_in(self, tmp_path):
-        from llm_rosetta.devtools.ext_scaffold import EXT_VERBS
+        from llm_rosetta.authoring.ext_scaffold import EXT_VERBS
 
         assert [verb.name for verb in EXT_VERBS] == ["new", "check"]
         dest = str(tmp_path / "packages")

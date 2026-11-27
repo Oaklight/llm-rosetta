@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from llm_rosetta.devtools import ext_scaffold
-from llm_rosetta.devtools.ext_scaffold import (
+from llm_rosetta.authoring import ext_scaffold
+from llm_rosetta.authoring.ext_scaffold import (
     ExtensionScaffoldError,
     chat_formats,
     check_extension,

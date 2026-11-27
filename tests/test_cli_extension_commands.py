@@ -17,7 +17,7 @@ from llm_rosetta.contracts.extension import (
     parse_extension_manifest,
     validate_extension_manifest,
 )
-from llm_rosetta.devtools import ext_scaffold
+from llm_rosetta.authoring import ext_scaffold
 from llm_rosetta.cli import areas as cli_areas
 from llm_rosetta.cli.areas import extension_areas
 from llm_rosetta.extensions import (
