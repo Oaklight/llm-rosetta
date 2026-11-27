@@ -254,7 +254,7 @@ build-binary-musl:
 			apk add --no-cache gcc musl-dev python3-dev git >/dev/null && \
 			pip install --break-system-packages patchelf -q && \
 			pip install --break-system-packages -e packages/llm-rosetta -e packages/llm-rosetta-gateway -q && \
-			pip install --break-system-packages "nuitka[onefile]==4.2.1" ordered-set -q && \
+			pip install --break-system-packages "nuitka[onefile]==4.4.0" ordered-set -q && \
 			printf "from llm_rosetta_gateway import main\nraise SystemExit(main())\n" > /tmp/_entry.py && \
 			python -m nuitka \
 				--standalone --onefile \
