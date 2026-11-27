@@ -441,18 +441,24 @@ class OpenResponsesConverter(
                 **_response_failure_metadata(provider_response, context),
             }
 
-        # A body whose output converts to content always has a choice, and so
-        # does a finished body with none (#1721): it carries the finish reason.
-        # The one case with no choice is an in-flight status (``in_progress``,
-        # ``queued``) with no converted content, which includes a message whose
-        # content is ``[]`` and a compaction item.  The rule is keyed on that
-        # content, not on the status: an in-flight body *with* content reads as
-        # a terminal choice (#1739).  A tuple, not a set: a non-string status
-        # must not raise on hashing.
-        if message_content or provider_response.get("status") not in (
-            "in_progress",
-            "queued",
-        ):
+        # A finished body always has a choice, even with no output: it carries
+        # the finish reason (#1721).  A body still in flight (``in_progress``,
+        # ``queued``) has no terminal condition and the IR choice requires a
+        # finish reason, so it reads as no choice whatever its output holds
+        # (#1739).  The stream leg differs only in time: it drops the
+        # lifecycle frame, but the text a stream has already sent is read as
+        # it arrives.  A tuple, not a set: a non-string status must not raise
+        # on hashing.
+        status = provider_response.get("status")
+        in_flight = status in ("in_progress", "queued")
+        if in_flight:
+            if output_items:
+                report_loss(
+                    f"a {status} Open Responses body has no terminal condition; "
+                    f"its {len(output_items)} output item(s) were not read",
+                    subject="output",
+                )
+        else:
             ir_msg: dict[str, Any] = {
                 "role": "assistant",
                 "content": message_content,
@@ -477,6 +483,8 @@ class OpenResponsesConverter(
             "model": provider_response.get("model", ""),
             "choices": choices,
         }
+        if in_flight:
+            ir_response["in_flight"] = True
         passthrough_items = [
             ProviderPassthroughItem(
                 type="provider_passthrough_item",
@@ -571,9 +579,30 @@ class OpenResponsesConverter(
         if choices:
             body["output"] = output
             self._renumber_message_items(body, str(ir_response.get("id", "")))
+        elif ir_response.get("in_flight"):
+            # No finish reason, so no terminal event to read the body off: the
+            # envelope ``response.created`` carries is the in-flight body.
+            body = self._in_flight_body(ir_response, stream_context)
 
         self._apply_body_shape(body, ir_response, context=context, kwargs=kwargs)
         return body
+
+    def _in_flight_body(
+        self,
+        ir_response: IRResponse,
+        stream_context: OpenResponsesStreamContext,
+    ) -> dict[str, Any]:
+        """The body of a response still in flight: ``in_progress``, no output."""
+        start = self._handle_ir_stream_start_to_p(
+            {
+                "type": "stream_start",
+                "response_id": ir_response.get("id", ""),
+                "model": ir_response.get("model", ""),
+                "created": ir_response.get("created", 0),
+            },
+            stream_context,
+        )
+        return dict(start[0]["response"])
 
     def _fold_events(
         self,

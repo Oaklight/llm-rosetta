@@ -444,23 +444,39 @@ class GoogleInteractionsConverter(BaseConverter):
         }
 
         status = resp.get("status", "completed")
-        # ``completed`` says nothing about tool calls; the steps do.  The API
-        # normally reports ``requires_action`` for them, but not always.
-        finish_reason: Any = {"reason": _STATUS_TO_FINISH_REASON.get(status, "stop")}
-
-        choice: Any = {
-            "index": 0,
-            "message": assistant_msg,
-            "finish_reason": finish_reason,
-        }
+        # An interaction still ``in_progress`` has no terminal condition and the
+        # IR choice requires a finish reason, so it reads as no choice whatever
+        # its steps hold (#1739).
+        choices: list[Any] = []
+        if status == "in_progress":
+            if steps:
+                report_loss(
+                    "an in_progress interaction has no terminal condition; "
+                    f"its {len(steps)} step(s) were not read",
+                    subject="steps",
+                )
+        else:
+            # ``completed`` says nothing about tool calls; the steps do.  The
+            # API normally reports ``requires_action`` for them, but not always.
+            choices.append(
+                {
+                    "index": 0,
+                    "message": assistant_msg,
+                    "finish_reason": {
+                        "reason": _STATUS_TO_FINISH_REASON.get(status, "stop")
+                    },
+                }
+            )
 
         ir_response: dict[str, Any] = {
             "id": resp.get("id", ""),
             "object": "response",
             "created": _parse_iso_to_epoch(resp.get("created")),
             "model": resp.get("model", ""),
-            "choices": [choice],
+            "choices": choices,
         }
+        if status == "in_progress":
+            ir_response["in_flight"] = True
 
         usage = resp.get("usage")
         if usage:
@@ -490,6 +506,8 @@ class GoogleInteractionsConverter(BaseConverter):
             response_id=ir_response.get("id", ""),
             provider_metadata=(assistant_msg or {}).get("provider_metadata"),
         )
+        if not choices and ir_response.get("in_flight"):
+            status = "in_progress"
 
         steps: list[dict] = []
         if assistant_msg:

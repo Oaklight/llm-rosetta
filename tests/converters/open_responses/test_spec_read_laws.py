@@ -270,18 +270,64 @@ def test_an_unfinished_body_with_no_output_reads_as_no_choice(
     assert _read_body(converter_cls, _body(status, []))["choices"] == []
 
 
-@pytest.mark.xfail(
-    strict=False,
-    reason="a non-terminal body with output reads as a stop/tool_calls choice; "
-    "owner not decided (reported to llm-rosetta-03)",
-)
 @pytest.mark.parametrize("converter_cls", CONVERTERS)
 @pytest.mark.parametrize("status", ["in_progress", "queued"])
+@LAW
+@given(
+    output=_output(min_size=1),
+    item_status=st.sampled_from(["in_progress", "completed"]),
+)
 def test_an_unfinished_body_with_output_reads_as_no_choice(
+    converter_cls, status, output, item_status
+) -> None:
+    """A response still in flight has no terminal condition (#1739).
+
+    The IR choice requires a finish reason, and an in-flight body has none to
+    give, so it reads as no choice whatever its output holds.
+    """
+    items = [{**item, "status": item_status} for item in output]
+    assert _read_body(converter_cls, _body(status, items))["choices"] == []
+
+
+@pytest.mark.parametrize("converter_cls", CONVERTERS)
+@pytest.mark.parametrize("status", ["in_progress", "queued"])
+def test_an_unfinished_body_reports_the_output_it_does_not_read(
     converter_cls, status
 ) -> None:
-    ir = _read_body(converter_cls, _body(status, [_message(0, "partial")]))
-    assert ir["choices"] == []
+    """The partial output is dropped on purpose, and the caller hears it (#1739)."""
+    from llm_rosetta.conversion_warnings import WarningSink, recording_to
+
+    sink = WarningSink(leg="response")
+    with recording_to(sink):
+        _read_body(converter_cls, _body(status, [_message(0, "partial"), _call(1)]))
+    assert [(w.subject, w.code) for w in sink] == [("output", "dropped")]
+    assert status in sink[0] and "2 output item(s)" in sink[0]
+
+    quiet = WarningSink(leg="response")
+    with recording_to(quiet):
+        _read_body(converter_cls, _body(status, []))
+    assert list(quiet) == []
+
+
+@pytest.mark.parametrize("converter_cls", CONVERTERS)
+@pytest.mark.parametrize("status", ["in_progress", "queued"])
+@pytest.mark.parametrize(
+    "output", [[], [_message(0, "partial")]], ids=["empty", "partial"]
+)
+def test_an_unfinished_body_is_marked_in_flight_and_writes_back_in_progress(
+    converter_cls, status, output
+) -> None:
+    """The IR says it was in flight, and the writer does not finish it (#1739)."""
+    ir = _read_body(converter_cls, _body(status, output))
+    assert ir["in_flight"] is True
+    back = converter_cls().response_to_provider(ir)
+    assert (back["status"], back["output"]) == ("in_progress", [])
+    assert back["id"].endswith("resp_1") and back["model"] == "m"
+
+
+@pytest.mark.parametrize("converter_cls", CONVERTERS)
+def test_a_finished_body_is_not_marked_in_flight(converter_cls) -> None:
+    assert "in_flight" not in _read_body(converter_cls, _body("completed", []))
 
 
 # --- rule 2: an incomplete item is last, and the response is incomplete -----

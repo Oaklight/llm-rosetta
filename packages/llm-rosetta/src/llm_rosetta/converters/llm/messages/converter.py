@@ -498,6 +498,9 @@ class MessagesConverter(MessagesStreamReader, MessagesStreamWriter, BaseConverte
         # Ensure nullable required fields are always present (spec compliance)
         provider_response.setdefault("stop_sequence", None)
         provider_response.setdefault("stop_details", None)
+        if ir_response.get("in_flight"):
+            # A message still being produced has no stop reason yet.
+            provider_response.setdefault("stop_reason", None)
         provider_response.setdefault("container", None)
 
         # Usage (always present — Anthropic responses require usage field)
