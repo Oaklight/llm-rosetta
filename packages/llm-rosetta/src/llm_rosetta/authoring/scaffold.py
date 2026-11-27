@@ -486,6 +486,54 @@ def _resolve_leaf_dir(
     return leaf
 
 
+def vendor_manifest_text(
+    vendor: str,
+    *,
+    api_key_env: str,
+    logo: str | None = None,
+    group: str | None = None,
+    group_label: str | None = None,
+) -> str:
+    """Render the vendor manifest: the defaults every leaf below it inherits."""
+    return _render(
+        _template("tree/vendor/provider.yaml.tmpl"),
+        {
+            "vendor": vendor,
+            "logo": _yaml_scalar(logo) if logo else "",
+            "group": _yaml_scalar(group or vendor),
+            "group_label": _yaml_scalar(group_label) if group_label else "",
+            "api_key_env": _yaml_scalar(api_key_env),
+        },
+    )
+
+
+def leaf_text(
+    vendor: str,
+    *,
+    name: str,
+    model_type: str,
+    format_: str,
+    base_url: str | None = None,
+    display_name: str | None = None,
+    models_path: str | None = None,
+    transport: str | None = None,
+) -> str:
+    """Render the ``provider.yaml`` of one leaf (one lane of a vendor)."""
+    return _render(
+        _template("tree/vendor/type/format/provider.yaml.tmpl"),
+        {
+            "vendor": vendor,
+            "name": _yaml_scalar(name),
+            "model_type": model_type,
+            "format": _yaml_scalar(format_),
+            "base_url": _yaml_scalar(base_url or "https://example.invalid/v1"),
+            "display_name": _yaml_scalar(display_name) if display_name else "",
+            "models_path": _yaml_scalar(models_path) if models_path else "",
+            "transport": _yaml_scalar(transport) if transport else "",
+        },
+    )
+
+
 def _write_leaf_files(
     root: Path,
     leaf: Path,
@@ -513,31 +561,31 @@ def _write_leaf_files(
     written: list[Path] = []
     manifest = root / vendor / "provider.yaml"
     if not manifest.is_file():
-        _write_from_template(
-            "tree/vendor/provider.yaml.tmpl",
-            manifest,
-            {
-                "vendor": vendor,
-                "logo": _yaml_scalar(logo) if logo else "",
-                "group": _yaml_scalar(group or vendor),
-                "group_label": _yaml_scalar(group_label) if group_label else "",
-                "api_key_env": _yaml_scalar(api_key_env),
-            },
+        manifest.parent.mkdir(parents=True, exist_ok=True)
+        manifest.write_text(
+            vendor_manifest_text(
+                vendor,
+                api_key_env=api_key_env,
+                logo=logo,
+                group=group,
+                group_label=group_label,
+            ),
+            encoding="utf-8",
         )
         written.append(manifest)
 
-    _write_from_template(
-        "tree/vendor/type/format/provider.yaml.tmpl",
-        leaf / "provider.yaml",
-        {
-            "vendor": vendor,
-            "name": _yaml_scalar(name),
-            "model_type": model_type,
-            "format": _yaml_scalar(format_),
-            "base_url": _yaml_scalar(base_url or "https://example.invalid/v1"),
-            "display_name": _yaml_scalar(display_name) if display_name else "",
-            "models_path": _yaml_scalar(models_path) if models_path else "",
-        },
+    leaf.mkdir(parents=True, exist_ok=True)
+    (leaf / "provider.yaml").write_text(
+        leaf_text(
+            vendor,
+            name=name,
+            model_type=model_type,
+            format_=format_,
+            base_url=base_url,
+            display_name=display_name,
+            models_path=models_path,
+        ),
+        encoding="utf-8",
     )
     written.append(leaf / "provider.yaml")
 

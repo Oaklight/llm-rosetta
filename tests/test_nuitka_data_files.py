@@ -26,12 +26,10 @@ SOURCES = (
 #: Suffixes of files the code opens at run time.
 RUNTIME_SUFFIXES = {".json", ".yaml", ".html", ".css", ".js", ".tmpl"}
 
-#: Data files that no code path of the binary reads, with the reason.
-NOT_SHIPPED = {
-    # ``scripts/dev/new_shim.py`` renders the built-in shim template; the binary
-    # has no command that does (``ext new`` uses ``_ext_template``).
-    "llm_rosetta/authoring/_shim_template",
-}
+#: Data files that no code path of the binary reads, with the reason.  ``ext new``
+#: renders ``_ext_template`` and, for the shims kind, ``_shim_template/tree``, so
+#: the binary ships both.
+NOT_SHIPPED: set[str] = set()
 
 
 def _flag_blocks() -> dict[str, str]:

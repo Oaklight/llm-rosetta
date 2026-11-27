@@ -894,6 +894,7 @@ class TestTemplate:
         "base_url": "https://api.acme.example/v1",
         "display_name": "Acme",
         "models_path": "https://api.acme.example/v1/models",
+        "transport": "acme",
     }
 
     def test_every_template_renders(self):

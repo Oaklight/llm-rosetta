@@ -38,7 +38,7 @@ from llm_rosetta.contracts.extension import (
     parse_extension_manifest,
 )
 from llm_rosetta.authoring.kinds import PROBLEMS
-from llm_rosetta.authoring.scaffold import _render
+from llm_rosetta.authoring.scaffold import _render, leaf_text, vendor_manifest_text
 from llm_rosetta.authoring.tree_contract import run_migrate
 from llm_rosetta.extensions import KINDS
 from llm_rosetta.extensions._cli import ExtVerb
@@ -149,6 +149,38 @@ def package_data(targets: Collection[str]) -> list[str]:
         and target != "__init__.py"
         and (not target.endswith(".py") or target.rpartition("/")[0] not in packages)
     )
+
+
+#: Where the shim kind's files sit in the extension folder: the folder is the
+#: one vendor, so its manifest is at the root and the first lane directly under
+#: the model-type directory (the shim tree contract; ``tree_contract.py``).
+_SHIM_TARGETS = ("provider.yaml", "llm/provider.yaml")
+
+
+def _shim_files(values: dict[str, str]) -> dict[str, str]:
+    """The vendor manifest and the first lane, from the shim tree generator.
+
+    The generator is the one the built-in tree's scaffolder uses
+    (:func:`llm_rosetta.authoring.scaffold.vendor_manifest_text` and
+    :func:`~llm_rosetta.authoring.scaffold.leaf_text`), so the two cannot write
+    different shapes.
+    """
+    return {
+        "provider.yaml": vendor_manifest_text(
+            values["id"],
+            api_key_env=values["api_key_env"],
+            group=values["id"],
+            group_label=values["name"],
+        ),
+        "llm/provider.yaml": leaf_text(
+            values["id"],
+            name=values["shim"],
+            model_type="llm",
+            format_=values["format"],
+            display_name=values["name"],
+            transport=values["transport_id"] or None,
+        ),
+    }
 
 
 def _checked_inputs(
@@ -295,6 +327,8 @@ def render_extension(
         for path, target in _template_files(kind)
     ]
     targets = {target for _, target in templates}
+    if "shims" in kinds:
+        targets |= set(_SHIM_TARGETS)
     packages = [f"{NAMESPACE}.{ext_id}"] + [
         f"{NAMESPACE}.{ext_id}." + target[: -len("/__init__.py")].replace("/", ".")
         for _, target in templates
@@ -302,10 +336,13 @@ def render_extension(
     ]
     values["packages"] = _quote(packages)
     values["package_data"] = _quote(package_data(targets | {MANIFEST_FILENAME}))
-    return {
+    files = {
         target: _render(path.read_text(encoding="utf-8"), values)
         for path, target in templates
     }
+    if "shims" in kinds:
+        files.update(_shim_files(values))
+    return files
 
 
 def _split_kinds(text: str) -> tuple[str, ...]:
