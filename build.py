@@ -1,4 +1,4 @@
-import html, pathlib
+import html, pathlib, re, subprocess
 d = pathlib.Path(".")
 def src(n): return html.escape((d / f"{n}.mmd").read_text(encoding="utf-8"), quote=False)
 sections = [
@@ -9,65 +9,114 @@ sections = [
  ("admin", "3. admin 页面与组件的关系",
   "已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。GET /admin/api/extensions 后端已有,目前没有页面调用它。"),
 ]
+
+try:
+    master = subprocess.run(["git", "-C", "..", "rev-parse", "--short", "origin/master"], capture_output=True, text=True, check=True).stdout.strip()
+except Exception:
+    master = "master"
+
+def note_html(text):
+    # one sentence per list item; the first sentence stays the lede
+    parts = [p.strip() for p in re.split(r"(?<=。)", text) if p.strip()]
+    lede = html.escape(parts[0])
+    items = "".join(f"<li>{html.escape(p)}</li>" for p in parts[1:])
+    return f'<p class="sub">{lede}</p>' + (f'<details class="notes"><summary>说明与已解决项({len(parts) - 1} 条)</summary><ul>{items}</ul></details>' if items else "")
+
 blocks = ""
-for key, title, note in sections:
-    blocks += f'''
+toc = ""
+for n, (key, title, note) in enumerate(sections, 1):
+    label = title.split(". ", 1)[1]
+    toc += f'<a href="#{key}">{n:02d} {html.escape(label)}</a>'
+    blocks += f"""
 <section id="{key}">
-  <h2>{html.escape(title)}</h2>
-  <p class="note">{html.escape(note)}</p>
-  <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="{key}"> <span id="z-{key}">100%</span></label></div>
-  <div class="scroll"><div class="stage" id="stage-{key}"><pre class="mermaid" id="m-{key}">{src(key)}</pre></div></div>
-</section>'''
-page = '''<!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><title>llm-rosetta 架构图</title>
+  <h2><span class="num">{n:02d}</span>{html.escape(label)}</h2>
+  {note_html(note)}
+  <div class="panel">
+    <span class="tag now">现状 · master @ {master}</span>
+    <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="{key}"> <span id="z-{key}">100%</span></label></div>
+    <div class="scroll"><div class="stage" id="stage-{key}"><pre class="mermaid" id="m-{key}">{src(key)}</pre></div></div>
+  </div>
+</section>"""
+
+mansio_css = pathlib.Path(__file__).with_name("page.css").read_text(encoding="utf-8")
+page = """<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>llm-rosetta 架构:现状</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-:root { color-scheme: light dark; }
-body { font: 15px/1.5 system-ui, "Noto Sans CJK SC", sans-serif; margin: 0; padding: 24px 32px 80px; background: #fff; color: #1b1f24; }
-@media (prefers-color-scheme: dark) { body { background:#14171a; color:#e6e8ea; } }
-h1 { margin: 0 0 4px; } h2 { margin: 36px 0 6px; }
-nav a { margin-right: 14px; }
-.note { max-width: 1000px; color: #5b6570; margin: 4px 0 10px; }
-.legend span { display:inline-block; margin-right:18px; }
-.legend i { display:inline-block; width:28px; height:0; border-top:3px solid; vertical-align:middle; margin-right:6px; }
-.bar { margin: 6px 0; }
-.scroll { overflow: auto; border: 1px solid #c8ced4; border-radius: 6px; background: #fff; padding: 12px; max-height: 88vh; }
-.stage { width: max-content; }
-pre.mermaid { margin: 0; background: transparent; }
-pre.error { color: #b00; white-space: pre-wrap; }
+""" + mansio_css + """
 </style></head>
 <body>
-<h1>llm-rosetta 架构图</h1>
-<p class="note">core 现状、gateway 后端、gateway admin。由 mermaid 在浏览器里渲染,可滚动、可缩放。</p>
-<p class="legend"><span><i style="border-color:#333"></i>模块顶层导入</span><span><i style="border-color:#333;border-top-style:dashed"></i>函数内懒加载</span><span><i style="border-color:#d33"></i>有问题的依赖(循环或反向)</span><span><i style="border-color:#1a8f3c"></i>建议新增的接线</span></p>
-<nav><a href="#core">core 现状</a><a href="#gateway">gateway 后端</a><a href="#admin">admin 页面</a></nav>
-''' + blocks + '''
+<div class="wrap">
+<header>
+  <div class="eyebrow">LLM-Rosetta · Architecture</div>
+  <h1>现状:core、gateway 与 admin 的组件和依赖</h1>
+  <p class="lede">三张图都画 master 的实际结构,不画目标态。红色表示还没解决的反向依赖,绿色表示 core 与扩展之间的接线,虚线是函数内的懒加载。合并任一分层 PR 后,本页按 master 更新。</p>
+  <div class="meta">
+    <span>现状快照:<code>master @ """ + master + """</code></span>
+    <span>分支:<code>docs_arch</code></span>
+    <button id="themeBtn" type="button">深色主题</button>
+  </div>
+  <div class="legend">
+    <span><i></i>模块顶层导入</span>
+    <span><i class="dash"></i>函数内懒加载</span>
+    <span><i class="red"></i>有问题的依赖(循环或反向)</span>
+    <span><i class="green"></i>接线(注册处理器)</span>
+  </div>
+</header>
+<nav class="toc">""" + toc + """</nav>
+""" + blocks + """
+<footer><span>由 <code>gen_core.py</code> 生成 core 图,<code>build.py</code> 生成本页;mermaid 在浏览器里渲染。</span><span>分支 <code>docs_arch</code></span></footer>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
-mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "default",
-  flowchart: { useMaxWidth: false, htmlLabels: true, curve: "basis", nodeSpacing: 40, rankSpacing: 60 } });
-(async () => {
-  for (const pre of document.querySelectorAll("pre.mermaid")) {
-    const id = pre.id.replace("m-", "");
-    try {
-      const { svg } = await mermaid.render("svg-" + id, pre.textContent);
-      pre.outerHTML = '<div class="rendered" data-ok="1">' + svg + '</div>';
-      const stage = document.getElementById("stage-" + id), box = stage.parentElement;
-      const w = stage.querySelector("svg").getBoundingClientRect().width;
-      const fit = Math.max(40, Math.min(100, Math.floor(((box.clientWidth - 28) / w) * 20) * 5));
-      const slider = document.querySelector('input[data-target="' + id + '"]');
-      slider.value = fit; slider.dispatchEvent(new Event("input"));
-    } catch (e) {
-      pre.outerHTML = '<pre class="error" data-ok="0">' + String(e) + '</pre>';
-    }
+(function () {
+  var KEY = "llm-rosetta-arch-theme", btn = document.getElementById("themeBtn");
+  var panes = Array.prototype.map.call(document.querySelectorAll("pre.mermaid"), function (pre) {
+    return { id: pre.id.replace("m-", ""), src: pre.textContent };
+  });
+  function preferred() {
+    var s = null; try { s = localStorage.getItem(KEY); } catch (e) {}
+    if (s === "light" || s === "dark") return s;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
-  document.body.dataset.done = "1";
+  function apply(t) { document.documentElement.setAttribute("data-theme", t); btn.textContent = t === "dark" ? "浅色主题" : "深色主题"; }
+  function zoomTo(id, v) {
+    document.getElementById("stage-" + id).style.zoom = v / 100;
+    document.getElementById("z-" + id).textContent = v + "%";
+    document.querySelector('input[data-target="' + id + '"]').value = v;
+  }
+  var manual = {};
+  async function render(theme) {
+    document.body.dataset.done = "";
+    mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: theme === "dark" ? "dark" : "default",
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif',
+      flowchart: { useMaxWidth: false, htmlLabels: true, curve: "basis", nodeSpacing: 40, rankSpacing: 60 } });
+    for (var p of panes) {
+      var stage = document.getElementById("stage-" + p.id);
+      try {
+        var r = await mermaid.render("svg-" + p.id + "-" + Date.now(), p.src);
+        stage.innerHTML = '<div class="rendered" data-ok="1">' + r.svg + '</div>';
+        if (!manual[p.id]) {
+          var box = stage.parentElement;
+          var w = stage.querySelector("svg").getBoundingClientRect().width / (Number(stage.style.zoom) || 1);
+          zoomTo(p.id, Math.max(40, Math.min(100, Math.floor(((box.clientWidth - 28) / w) * 20) * 5)));
+        }
+      } catch (e) {
+        stage.innerHTML = '<pre class="error" data-ok="0">' + String(e) + '</pre>';
+      }
+    }
+    document.body.dataset.done = "1";
+  }
+  document.querySelectorAll("input[type=range]").forEach(function (r) {
+    r.addEventListener("input", function () { manual[r.dataset.target] = true; zoomTo(r.dataset.target, Number(r.value)); });
+  });
+  var theme = preferred(); apply(theme); render(theme);
+  btn.addEventListener("click", function () {
+    var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    apply(next); try { localStorage.setItem(KEY, next); } catch (e) {}
+    render(next);
+  });
 })();
-document.querySelectorAll("input[type=range]").forEach(r => r.addEventListener("input", () => {
-  const k = r.dataset.target, v = r.value / 100;
-  document.getElementById("stage-" + k).style.zoom = v;
-  document.getElementById("z-" + k).textContent = r.value + "%";
-}));
-</script></body></html>'''
+</script></body></html>"""
 (d / "architecture.html").write_text(page, encoding="utf-8")
 print("wrote", (d / "architecture.html").stat().st_size, "bytes")

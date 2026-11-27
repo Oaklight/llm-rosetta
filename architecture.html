@@ -1,32 +1,120 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><title>llm-rosetta 架构图</title>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>llm-rosetta 架构:现状</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-:root { color-scheme: light dark; }
-body { font: 15px/1.5 system-ui, "Noto Sans CJK SC", sans-serif; margin: 0; padding: 24px 32px 80px; background: #fff; color: #1b1f24; }
-@media (prefers-color-scheme: dark) { body { background:#14171a; color:#e6e8ea; } }
-h1 { margin: 0 0 4px; } h2 { margin: 36px 0 6px; }
-nav a { margin-right: 14px; }
-.note { max-width: 1000px; color: #5b6570; margin: 4px 0 10px; }
-.legend span { display:inline-block; margin-right:18px; }
-.legend i { display:inline-block; width:28px; height:0; border-top:3px solid; vertical-align:middle; margin-right:6px; }
-.bar { margin: 6px 0; }
-.scroll { overflow: auto; border: 1px solid #c8ced4; border-radius: 6px; background: #fff; padding: 12px; max-height: 88vh; }
-.stage { width: max-content; }
-pre.mermaid { margin: 0; background: transparent; }
-pre.error { color: #b00; white-space: pre-wrap; }
+  :root {
+    color-scheme: light;
+    --bg: #f7f7f5; --panel: #ffffff; --ink: #1c1c1a; --muted: #61615c;
+    --line: #dcdcd6; --accent: #800020; --accent-soft: #f3e6e9;
+    --code-bg: #f0efe9; --shadow: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px rgba(0,0,0,.04);
+    --bad: #b91c1c; --bad-bg: #fde8e8; --hot: #b45309; --hot-bg: #fff4e5; --good: #15803d; --good-bg: #e8f5e9;
+  }
+  html[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #141413; --panel: #1d1d1b; --ink: #ecece6; --muted: #a3a39b;
+    --line: #33332f; --accent: #e07a90; --accent-soft: #2a1c20;
+    --code-bg: #262624; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #141413; --panel: #1d1d1b; --ink: #ecece6; --muted: #a3a39b;
+      --line: #33332f; --accent: #e07a90; --accent-soft: #2a1c20;
+      --code-bg: #262624; --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "Helvetica Neue", Arial, sans-serif; }
+  .wrap { max-width: 1440px; margin: 0 auto; padding-block: 28px 72px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  header { border-bottom: 1px solid var(--line); padding-bottom: 20px; }
+  .eyebrow { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  h1 { font-size: 32px; line-height: 1.2; margin: 8px 0 8px; letter-spacing: -.01em; }
+  .lede { color: var(--muted); max-width: 980px; margin: 0; }
+  .meta { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 13px; align-items: center; }
+  button { font: inherit; font-size: 13px; padding: 4px 10px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--ink); border-radius: 8px; cursor: pointer; }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  nav.toc { margin: 20px 0 28px; display: flex; flex-wrap: wrap; gap: 8px; }
+  nav.toc a { color: var(--ink); text-decoration: none; font-size: 13px; border: 1px solid var(--line);
+    background: var(--panel); padding: 5px 12px; border-radius: 999px; }
+  nav.toc a:hover { border-color: var(--accent); color: var(--accent); }
+  section { margin: 44px 0; }
+  h2 { font-size: 21px; margin: 0 0 6px; letter-spacing: -.01em; }
+  h2 .num { color: var(--accent); font-variant-numeric: tabular-nums; margin-right: 10px; }
+  h3 { font-size: 16px; margin: 20px 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 14px; max-width: 1080px; }
+  .compare { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  @media (max-width: 980px) { .compare { grid-template-columns: minmax(0, 1fr); } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; box-shadow: var(--shadow); min-width: 0; overflow-x: auto; }
+  .panel + .panel { margin-top: 14px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .08em;
+    text-transform: uppercase; padding: 2px 8px; border-radius: 999px; margin-bottom: 8px; }
+  .tag.now { background: var(--hot-bg); color: var(--hot); border: 1px solid var(--hot); }
+  .tag.target { background: var(--good-bg); color: var(--good); border: 1px solid var(--good); }
+  .scroll { overflow: auto; max-height: 78vh; }
+  .stage { width: max-content; }
+  .zoom { margin: 0 0 6px; }
+  .zoom label { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 8px; }
+  .zoom input[type="range"] { width: 160px; accent-color: var(--accent); }
+  .mermaid { text-align: center; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: none; }
+  code { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    font-size: .9em; background: var(--code-bg); padding: 1px 5px; border-radius: 5px; }
+  .callout { border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 10px 14px; border-radius: 0 10px 10px 0; font-size: 14px; margin-top: 14px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px 18px; color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+  .legend i { display: inline-block; width: 26px; height: 0; border-top: 3px solid #555; vertical-align: middle; margin-right: 6px; }
+  .legend .dash { border-top-style: dashed; }
+  .legend .red { border-color: var(--bad); }
+  .legend .green { border-color: var(--good); }
+  .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .pill.hot { background: var(--hot-bg); color: var(--hot); }
+  .pill.good { background: var(--good-bg); color: var(--good); }
+  footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  details.notes { margin: 0 0 14px; max-width: 1080px; color: var(--muted); font-size: 14px; }
+  details.notes summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+  details.notes ul { margin: 8px 0 0; padding-left: 20px; }
+  details.notes li { margin: 3px 0; }
+  pre.error { color: var(--bad); white-space: pre-wrap; }
+  .rendered { text-align: center; }
+
+
 </style></head>
 <body>
-<h1>llm-rosetta 架构图</h1>
-<p class="note">core 现状、gateway 后端、gateway admin。由 mermaid 在浏览器里渲染,可滚动、可缩放。</p>
-<p class="legend"><span><i style="border-color:#333"></i>模块顶层导入</span><span><i style="border-color:#333;border-top-style:dashed"></i>函数内懒加载</span><span><i style="border-color:#d33"></i>有问题的依赖(循环或反向)</span><span><i style="border-color:#1a8f3c"></i>建议新增的接线</span></p>
-<nav><a href="#core">core 现状</a><a href="#gateway">gateway 后端</a><a href="#admin">admin 页面</a></nav>
+<div class="wrap">
+<header>
+  <div class="eyebrow">LLM-Rosetta · Architecture</div>
+  <h1>现状:core、gateway 与 admin 的组件和依赖</h1>
+  <p class="lede">三张图都画 master 的实际结构,不画目标态。红色表示还没解决的反向依赖,绿色表示 core 与扩展之间的接线,虚线是函数内的懒加载。合并任一分层 PR 后,本页按 master 更新。</p>
+  <div class="meta">
+    <span>现状快照:<code>master @ master</code></span>
+    <span>分支:<code>docs_arch</code></span>
+    <button id="themeBtn" type="button">深色主题</button>
+  </div>
+  <div class="legend">
+    <span><i></i>模块顶层导入</span>
+    <span><i class="dash"></i>函数内懒加载</span>
+    <span><i class="red"></i>有问题的依赖(循环或反向)</span>
+    <span><i class="green"></i>接线(注册处理器)</span>
+  </div>
+</header>
+<nav class="toc"><a href="#core">01 core 现状:组件与依赖</a><a href="#gateway">02 gateway 后端的组件与关系</a><a href="#admin">03 admin 页面与组件的关系</a></nav>
 
 <section id="core">
-  <h2>1. core 现状:组件与依赖</h2>
-  <p class="note">实线是模块顶层导入,虚线是函数内的懒加载。已解决(#1708):ir、pipeline、formats、auto_detect 不再导入 shims,shim 名字经 contracts/resolver.py 读取(shims 注册,llm_rosetta/__init__ 接线),contracts 也不再导入 shims 和 extensions。已解决(#1709):四个编排器(chat、embeddings、rerank、decisions)都在 pipeline/,converters 不再导入 pipeline(任何深度),ConversionError 只定义在 converters/base/errors.py(各公开名字指向同一个类),pipeline 从 ir.context 取 ConversionContext;边界测试在 tests/test_core_layering.py。已解决(#1710):IR 合成一个包 llm_rosetta.ir:ir/model(原 types/ir,数据,只依赖标准库)在底层,ir/primitives、ir/tools、ir/passes 在它之上;types/ 只剩提供方参考形状,types.ir 是 0.13.0 的转发(警告,0.15.0 删除),只包含 0.13.0 出现过的 72 个名字和 15 个子模块。已解决(#1735):shims 与 extensions 不再互相依赖,shims 向 extensions 注册 shims 处理器(绿线)。仍是红色的依赖只剩一条:contracts/transform.py 导入 ir.primitives(contracts 里唯一的这类模块,边表由 tests/test_core_layering.py 固定,目标图接受它作为例外)。“转换库”组里是三层:pipeline 在最上,converters 在中间,IR 在最下(ir/model 在 ir/ 逻辑之下),自上而下依赖,没有 shim 时这一组就是完整的转换库;shims 和 extensions 是它外面的可选层;contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。api 只是把下面各包再导出一遍,0.14.0 dev 期间还会大改,这些再导出的边不画,免得遮住真正的依赖。tool_ops(入口便捷层)只画到 converters 的边,它到 ir 和 retired_names 的边(类型与错误消息)在 CORE_EDGES 里有,图里不画。未画的:shims/providers 转发层、已弃用的 gateway/ 与 observability/ 转发包。画的是 master 的树。</p>
-  <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="core"> <span id="z-core">100%</span></label></div>
-  <div class="scroll"><div class="stage" id="stage-core"><pre class="mermaid" id="m-core">flowchart TB
+  <h2><span class="num">01</span>core 现状:组件与依赖</h2>
+  <p class="sub">实线是模块顶层导入,虚线是函数内的懒加载。</p><details class="notes"><summary>说明与已解决项(10 条)</summary><ul><li>已解决(#1708):ir、pipeline、formats、auto_detect 不再导入 shims,shim 名字经 contracts/resolver.py 读取(shims 注册,llm_rosetta/__init__ 接线),contracts 也不再导入 shims 和 extensions。</li><li>已解决(#1709):四个编排器(chat、embeddings、rerank、decisions)都在 pipeline/,converters 不再导入 pipeline(任何深度),ConversionError 只定义在 converters/base/errors.py(各公开名字指向同一个类),pipeline 从 ir.context 取 ConversionContext;边界测试在 tests/test_core_layering.py。</li><li>已解决(#1710):IR 合成一个包 llm_rosetta.ir:ir/model(原 types/ir,数据,只依赖标准库)在底层,ir/primitives、ir/tools、ir/passes 在它之上;types/ 只剩提供方参考形状,types.ir 是 0.13.0 的转发(警告,0.15.0 删除),只包含 0.13.0 出现过的 72 个名字和 15 个子模块。</li><li>已解决(#1735):shims 与 extensions 不再互相依赖,shims 向 extensions 注册 shims 处理器(绿线)。</li><li>仍是红色的依赖只剩一条:contracts/transform.py 导入 ir.primitives(contracts 里唯一的这类模块,边表由 tests/test_core_layering.py 固定,目标图接受它作为例外)。</li><li>“转换库”组里是三层:pipeline 在最上,converters 在中间,IR 在最下(ir/model 在 ir/ 逻辑之下),自上而下依赖,没有 shim 时这一组就是完整的转换库;shims 和 extensions 是它外面的可选层;contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。</li><li>api 只是把下面各包再导出一遍,0.14.0 dev 期间还会大改,这些再导出的边不画,免得遮住真正的依赖。</li><li>tool_ops(入口便捷层)只画到 converters 的边,它到 ir 和 retired_names 的边(类型与错误消息)在 CORE_EDGES 里有,图里不画。</li><li>未画的:shims/providers 转发层、已弃用的 gateway/ 与 observability/ 转发包。</li><li>画的是 master 的树。</li></ul></details>
+  <div class="panel">
+    <span class="tag now">现状 · master @ master</span>
+    <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="core"> <span id="z-core">100%</span></label></div>
+    <div class="scroll"><div class="stage" id="stage-core"><pre class="mermaid" id="m-core">flowchart TB
   GW["gateway:transport 注册表&lt;br/&gt;经 api 注册 transports 处理器(#1774)"]
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]
@@ -110,12 +198,15 @@ pre.error { color: #b00; white-space: pre-wrap; }
   linkStyle 25 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
   linkStyle 29 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
 </pre></div></div>
+  </div>
 </section>
 <section id="gateway">
-  <h2>2. gateway 后端的组件与关系</h2>
-  <p class="note">分层来自 tests/gateway/test_layers.py,只能向下导入。每个包都会用 core,图里只画了几条代表性的到 CORE 的线。admin 除了 admin_api 之外还有一批旧 allowlist 导入(config、keystore、maintenance、middleware、observability、ops、quota、routing、shims、transport、updates),名单只允许缩小,图里没画。shims 里的 manifest_sources 是要被 index.json 取代的部分。</p>
-  <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gateway"> <span id="z-gateway">100%</span></label></div>
-  <div class="scroll"><div class="stage" id="stage-gateway"><pre class="mermaid" id="m-gateway">flowchart TB
+  <h2><span class="num">02</span>gateway 后端的组件与关系</h2>
+  <p class="sub">分层来自 tests/gateway/test_layers.py,只能向下导入。</p><details class="notes"><summary>说明与已解决项(3 条)</summary><ul><li>每个包都会用 core,图里只画了几条代表性的到 CORE 的线。</li><li>admin 除了 admin_api 之外还有一批旧 allowlist 导入(config、keystore、maintenance、middleware、observability、ops、quota、routing、shims、transport、updates),名单只允许缩小,图里没画。</li><li>shims 里的 manifest_sources 是要被 index.json 取代的部分。</li></ul></details>
+  <div class="panel">
+    <span class="tag now">现状 · master @ master</span>
+    <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gateway"> <span id="z-gateway">100%</span></label></div>
+    <div class="scroll"><div class="stage" id="stage-gateway"><pre class="mermaid" id="m-gateway">flowchart TB
   subgraph STATE["state"]
     KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库 · maintenance(schema 步骤,#1795)"]
     MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup"]
@@ -208,12 +299,15 @@ pre.error { color: #b00; white-space: pre-wrap; }
   PROXY --&gt; OBS
   PIPES --&gt; TRANSPORT
 </pre></div></div>
+  </div>
 </section>
 <section id="admin">
-  <h2>3. admin 页面与组件的关系</h2>
-  <p class="note">已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。GET /admin/api/extensions 后端已有,目前没有页面调用它。</p>
-  <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="admin"> <span id="z-admin">100%</span></label></div>
-  <div class="scroll"><div class="stage" id="stage-admin"><pre class="mermaid" id="m-admin">flowchart LR
+  <h2><span class="num">03</span>admin 页面与组件的关系</h2>
+  <p class="sub">已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。</p><details class="notes"><summary>说明与已解决项(2 条)</summary><ul><li>未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。</li><li>GET /admin/api/extensions 后端已有,目前没有页面调用它。</li></ul></details>
+  <div class="panel">
+    <span class="tag now">现状 · master @ master</span>
+    <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="admin"> <span id="z-admin">100%</span></label></div>
+    <div class="scroll"><div class="stage" id="stage-admin"><pre class="mermaid" id="m-admin">flowchart LR
   COMP["js/components/&lt;br/&gt;provider-picker · provider-row · logo-picker · logo-select · type-picker · fetch-models · test-runner"]
   subgraph APIS["/admin/api 分组(这几组名字来自各 JS 的调用)"]
     A_CFG["config"]
@@ -321,31 +415,58 @@ pre.error { color: #b00; white-space: pre-wrap; }
   A_OPS --&gt; B_OBS
   T_DASH --&gt; A_REQ
 </pre></div></div>
+  </div>
 </section>
+<footer><span>由 <code>gen_core.py</code> 生成 core 图,<code>build.py</code> 生成本页;mermaid 在浏览器里渲染。</span><span>分支 <code>docs_arch</code></span></footer>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <script>
-mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: "default",
-  flowchart: { useMaxWidth: false, htmlLabels: true, curve: "basis", nodeSpacing: 40, rankSpacing: 60 } });
-(async () => {
-  for (const pre of document.querySelectorAll("pre.mermaid")) {
-    const id = pre.id.replace("m-", "");
-    try {
-      const { svg } = await mermaid.render("svg-" + id, pre.textContent);
-      pre.outerHTML = '<div class="rendered" data-ok="1">' + svg + '</div>';
-      const stage = document.getElementById("stage-" + id), box = stage.parentElement;
-      const w = stage.querySelector("svg").getBoundingClientRect().width;
-      const fit = Math.max(40, Math.min(100, Math.floor(((box.clientWidth - 28) / w) * 20) * 5));
-      const slider = document.querySelector('input[data-target="' + id + '"]');
-      slider.value = fit; slider.dispatchEvent(new Event("input"));
-    } catch (e) {
-      pre.outerHTML = '<pre class="error" data-ok="0">' + String(e) + '</pre>';
-    }
+(function () {
+  var KEY = "llm-rosetta-arch-theme", btn = document.getElementById("themeBtn");
+  var panes = Array.prototype.map.call(document.querySelectorAll("pre.mermaid"), function (pre) {
+    return { id: pre.id.replace("m-", ""), src: pre.textContent };
+  });
+  function preferred() {
+    var s = null; try { s = localStorage.getItem(KEY); } catch (e) {}
+    if (s === "light" || s === "dark") return s;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   }
-  document.body.dataset.done = "1";
+  function apply(t) { document.documentElement.setAttribute("data-theme", t); btn.textContent = t === "dark" ? "浅色主题" : "深色主题"; }
+  function zoomTo(id, v) {
+    document.getElementById("stage-" + id).style.zoom = v / 100;
+    document.getElementById("z-" + id).textContent = v + "%";
+    document.querySelector('input[data-target="' + id + '"]').value = v;
+  }
+  var manual = {};
+  async function render(theme) {
+    document.body.dataset.done = "";
+    mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: theme === "dark" ? "dark" : "default",
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif',
+      flowchart: { useMaxWidth: false, htmlLabels: true, curve: "basis", nodeSpacing: 40, rankSpacing: 60 } });
+    for (var p of panes) {
+      var stage = document.getElementById("stage-" + p.id);
+      try {
+        var r = await mermaid.render("svg-" + p.id + "-" + Date.now(), p.src);
+        stage.innerHTML = '<div class="rendered" data-ok="1">' + r.svg + '</div>';
+        if (!manual[p.id]) {
+          var box = stage.parentElement;
+          var w = stage.querySelector("svg").getBoundingClientRect().width / (Number(stage.style.zoom) || 1);
+          zoomTo(p.id, Math.max(40, Math.min(100, Math.floor(((box.clientWidth - 28) / w) * 20) * 5)));
+        }
+      } catch (e) {
+        stage.innerHTML = '<pre class="error" data-ok="0">' + String(e) + '</pre>';
+      }
+    }
+    document.body.dataset.done = "1";
+  }
+  document.querySelectorAll("input[type=range]").forEach(function (r) {
+    r.addEventListener("input", function () { manual[r.dataset.target] = true; zoomTo(r.dataset.target, Number(r.value)); });
+  });
+  var theme = preferred(); apply(theme); render(theme);
+  btn.addEventListener("click", function () {
+    var next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    apply(next); try { localStorage.setItem(KEY, next); } catch (e) {}
+    render(next);
+  });
 })();
-document.querySelectorAll("input[type=range]").forEach(r => r.addEventListener("input", () => {
-  const k = r.dataset.target, v = r.value / 100;
-  document.getElementById("stage-" + k).style.zoom = v;
-  document.getElementById("z-" + k).textContent = r.value + "%";
-}));
 </script></body></html>
