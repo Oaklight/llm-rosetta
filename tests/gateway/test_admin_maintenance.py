@@ -313,7 +313,7 @@ class TestTheLoadTimeSteps:
         from llm_rosetta_gateway.config.migrate.apply import (
             build_registry as config_steps,
         )
-        from llm_rosetta_gateway.maintenance.keystore import (
+        from llm_rosetta_gateway.keystore.maintenance import (
             build_registry as keystore_steps,
         )
         from llm_rosetta_gateway.observability.persistence import PersistenceManager

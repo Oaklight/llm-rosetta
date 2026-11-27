@@ -22,7 +22,7 @@ from llm_rosetta_gateway._vendor import aiosqlite
 from llm_rosetta_gateway.observability.maintenance import Registry, StepContext
 from llm_rosetta.contracts.usage import INTERNAL_LABEL, INTERNAL_SUBJECT
 
-from ..maintenance.keystore import build_registry
+from .maintenance import build_registry
 
 logger = logging.getLogger("llm-rosetta.keystore")
 
@@ -39,7 +39,7 @@ _REBUILD_COLUMNS = (
     "allowed_models, rate_limit"
 )
 
-#: :mod:`~llm_rosetta_gateway.maintenance.keystore`, which also records them in
+#: :mod:`~llm_rosetta_gateway.keystore.maintenance`, which also records them in
 #: this store's ``schema_version`` ledger.
 VERSIONS: list[tuple[int, str, list[str]]] = [
     (1, "add api_keys.last_used", ["ALTER TABLE api_keys ADD COLUMN last_used TEXT"]),
@@ -234,7 +234,7 @@ class KeyStore:
 
         The table is created with the columns a store started with, and the
         versioned migrations that follow are steps in this store's own registry
-        (:mod:`~llm_rosetta_gateway.maintenance.keystore`):
+        (:mod:`~llm_rosetta_gateway.keystore.maintenance`):
 
         - ``api_keys.last_used`` and ``api_keys.usage_bucket`` are added by
           migrations rather than by the ``CREATE TABLE``, so a fresh store and a

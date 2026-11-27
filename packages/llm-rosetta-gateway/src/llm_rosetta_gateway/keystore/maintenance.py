@@ -217,7 +217,7 @@ async def _restore_stranded_rebuild(conn: Any, columns: set[str]) -> bool:
 
     Returns whether anything was done, so the caller can re-read the columns.
     """
-    from ..keystore import _REBUILD_COLUMNS
+    from . import _REBUILD_COLUMNS
 
     cursor = await conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = {row[0] for row in await cursor.fetchall()}
@@ -274,7 +274,7 @@ async def _backfill_usage_bucket(context: StepContext) -> int:
     bucket is what the request log attributes usage by.  Idempotent by its own
     ``WHERE`` clause: once every row has one, this matches nothing.
     """
-    from ..keystore import key_bucket
+    from . import key_bucket
 
     conn = context.keystore._conn
     cursor = await conn.execute(
@@ -322,7 +322,7 @@ def build_registry() -> Registry:
     at module scope: this module is imported by :mod:`~llm_rosetta_gateway.keystore`,
     so naming them at the top would be a cycle.
     """
-    from ..keystore import VERSIONS, _DB_FILENAME
+    from . import VERSIONS, _DB_FILENAME
 
     steps = [
         Step(

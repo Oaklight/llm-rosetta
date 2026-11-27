@@ -34,6 +34,8 @@ from llm_rosetta_gateway.observability.maintenance import (
 )
 from llm_rosetta_gateway.observability.persistence import _DB_FILENAME as GATEWAY_DB
 
+from ..keystore import _DB_FILENAME as KEYS_DB
+
 logger = logging.getLogger(__name__)
 
 #: What the admin surface and the log lines call this registry.
@@ -97,10 +99,6 @@ def build_registry(app: Any) -> Registry:
     """
     persistence = getattr(app, "persistence", None)
     keystore = getattr(app, "keystore", None)
-
-    # Imported here, not at module level: the key store imports this package
-    # for its own registry, and the filename is only needed when one exists.
-    from ..keystore import _DB_FILENAME as KEYS_DB
 
     steps: list[Step] = []
     if persistence is not None:

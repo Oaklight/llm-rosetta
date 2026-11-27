@@ -20,7 +20,7 @@ from llm_rosetta_gateway.config.migrate.apply import (
     build_registry as config_registry,
 )
 from llm_rosetta_gateway.keystore import KeyStore
-from llm_rosetta_gateway.maintenance.keystore import (
+from llm_rosetta_gateway.keystore.maintenance import (
     build_registry as keystore_registry,
 )
 from llm_rosetta_gateway.observability import PersistenceManager

@@ -8,20 +8,19 @@ and the deferred-startup runner.
 
 Each store keeps its own ledger:
 
-- :mod:`.keystore` — key-store schema steps, recorded in ``keys.db``.
 - :mod:`.backfills` — post-boot data repairs, recorded in the deferred
   registry's results.
 - :mod:`.startup` — the deferred task that runs the backfills.
 - :mod:`.dumps` — error dumps held until their request-log row exists.
 
+The key store's schema steps live in :mod:`llm_rosetta_gateway.keystore.maintenance`.
 The config-file migrations (the load-time steps recorded by ``config_version``,
 the versioned schema migrations, the retired-name guard and the
 ``llm-rosetta gateway migrate`` tool) live in :mod:`llm_rosetta_gateway.config.migrate`:
 they read the config's own parser, so they belong to the layer above this one.
 
-The public names are re-exported lazily: importing a submodule (for example
-``gateway.keystore`` importing ``maintenance.keystore``) does not pull in
-``startup`` or ``dumps``.  The mapping below is the whole façade; the
+The public names are re-exported lazily: importing one submodule (``backfills``,
+say) does not pull in ``startup`` or ``dumps``.  The mapping below is the whole façade; the
 submodules stay importable for tests and for callers that want the exact file.
 """
 
@@ -33,29 +32,24 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .backfills import build_registry as build_deferred_registry
     from .dumps import DeferredDumpStore
-    from .keystore import COLUMN_OF, build_registry as build_keystore_registry
     from .startup import DeferredStartup, ProviderInitState, ProviderNotReady
 
 #: Public name -> (submodule, attribute).  Kept as data so the façade costs
 #: nothing at import time; see the module docstring for why that matters.
 _EXPORTS: dict[str, tuple[str, str]] = {
-    "COLUMN_OF": (".keystore", "COLUMN_OF"),
     "DeferredDumpStore": (".dumps", "DeferredDumpStore"),
     "DeferredStartup": (".startup", "DeferredStartup"),
     "ProviderInitState": (".startup", "ProviderInitState"),
     "ProviderNotReady": (".startup", "ProviderNotReady"),
     "build_deferred_registry": (".backfills", "build_registry"),
-    "build_keystore_registry": (".keystore", "build_registry"),
 }
 
 __all__ = [
-    "COLUMN_OF",
     "DeferredDumpStore",
     "DeferredStartup",
     "ProviderInitState",
     "ProviderNotReady",
     "build_deferred_registry",
-    "build_keystore_registry",
 ]
 
 

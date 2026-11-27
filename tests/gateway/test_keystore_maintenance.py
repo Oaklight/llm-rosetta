@@ -19,7 +19,7 @@ from typing import Any
 import pytest
 
 from llm_rosetta_gateway.keystore import VERSIONS, KeyStore, key_bucket
-from llm_rosetta_gateway.maintenance.keystore import COLUMN_OF, build_registry
+from llm_rosetta_gateway.keystore.maintenance import COLUMN_OF, build_registry
 from llm_rosetta_gateway.observability.maintenance import Policy
 
 _STEPS = [
@@ -156,7 +156,7 @@ class TestARebuildThatHasNothingToDo:
         store this code created never runs the rebuild.  If the ledger row is
         missing anyway, the version must record itself without touching rows.
         """
-        from llm_rosetta_gateway.maintenance.keystore import _apply_migration
+        from llm_rosetta_gateway.keystore.maintenance import _apply_migration
         from llm_rosetta_gateway.observability.maintenance import StepContext
 
         store = await KeyStore.create(tmp_path / "keys.db")
@@ -356,7 +356,7 @@ class TestAnInterruptedRebuild:
         """The transaction is the guard: without it, a statement failing after
         the drop leaves a live table with no rows."""
         from llm_rosetta_gateway.keystore import VERSIONS
-        from llm_rosetta_gateway.maintenance.keystore import _apply_migration
+        from llm_rosetta_gateway.keystore.maintenance import _apply_migration
         from llm_rosetta_gateway.observability.maintenance import StepContext
 
         db = tmp_path / "keys.db"
