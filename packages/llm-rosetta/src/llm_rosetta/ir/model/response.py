@@ -124,6 +124,13 @@ class IRResponse(TypedDict):
     service_tier: NotRequired[str]  # 服务等级 Service tier
     system_fingerprint: NotRequired[str | None]  # 系统指纹 System fingerprint
     provider_passthrough_items: NotRequired[list[ProviderPassthroughItem]]
+    #: True when the source response was still being produced (Open Responses
+    #: ``in_progress`` / ``queued``, an Interactions ``in_progress``).  Such a
+    #: response has no finish reason, so it has no choice either, and a writer
+    #: that can say "not finished yet" uses this to do so.  An empty ``choices``
+    #: without it is not an in-flight response (a Chat reply with no choice, a
+    #: blocked prompt), so no writer infers one from an empty list.
+    in_flight: NotRequired[bool]
 
 
 # ============================================================================
