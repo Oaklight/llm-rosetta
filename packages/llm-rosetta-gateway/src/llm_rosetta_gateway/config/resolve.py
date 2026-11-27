@@ -187,7 +187,7 @@ def resolve_provider_identities(
     from llm_rosetta.api import resolve_format, resolve_model_type, retired_names
 
     from ..model_types import all_model_types
-    from ..maintenance.names import legacy_name_error
+    from .migrate.names import legacy_name_error
 
     # A retired name is an error that names its replacement; the gateway does
     # not rewrite the config or resolve the old spelling at runtime.

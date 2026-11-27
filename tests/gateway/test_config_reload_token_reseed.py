@@ -304,7 +304,7 @@ def test_reload_config_carries_the_registry_the_reader_ran(tmp_path):
     from llm_rosetta_gateway.app import _state as app_state
 
     from llm_rosetta_gateway.config import JsoncConfigIO
-    from llm_rosetta_gateway.maintenance.config import STEPS
+    from llm_rosetta_gateway.config.migrate.apply import STEPS
 
     document: dict[str, Any] = {
         "config_version": 1,

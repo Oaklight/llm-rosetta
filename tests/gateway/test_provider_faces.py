@@ -20,7 +20,7 @@ import pytest
 
 from llm_rosetta_gateway.config.core import GatewayConfig
 from llm_rosetta_gateway.config.typed import face_section, face_value
-from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION, migrate
+from llm_rosetta_gateway.config.migrate.migrations import CURRENT_VERSION, migrate
 
 # The vendors these tests read moved to contrib (#1660); their frozen copies
 # are registered for every test here.

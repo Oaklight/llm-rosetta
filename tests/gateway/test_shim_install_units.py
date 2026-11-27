@@ -21,8 +21,8 @@ import re
 import pytest
 
 from llm_rosetta.contracts import SURFACE_VERSION
-from llm_rosetta_gateway.maintenance.migrate_0140 import migrate_config_text
-from llm_rosetta_gateway.maintenance.migrate_presets import (
+from llm_rosetta_gateway.config.migrate.migrate_0140 import migrate_config_text
+from llm_rosetta_gateway.config.migrate.migrate_presets import (
     presets_as_install,
     rewrite_presets_section,
 )

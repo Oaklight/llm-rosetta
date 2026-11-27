@@ -17,7 +17,7 @@ import pytest
 from llm_rosetta.api import FORMATS_BY_TYPE, retired_names
 
 from llm_rosetta_gateway._vendor import jsonx
-from llm_rosetta_gateway.maintenance import migrate_0140 as mig
+from llm_rosetta_gateway.config.migrate import migrate_0140 as mig
 
 ROWS = retired_names.RETIRED_NAMES
 
@@ -755,7 +755,7 @@ def test_a_config_that_passes_check_is_not_rewritten_by_the_first_load(
 def test_a_load_time_migration_the_tool_cannot_run_is_pending(
     tmp_path, monkeypatch
 ) -> None:
-    from llm_rosetta_gateway.maintenance import migrations
+    from llm_rosetta_gateway.config.migrate import migrations
 
     def restructures(raw):
         raw = dict(raw, moved=True, config_version=migrations.CURRENT_VERSION)

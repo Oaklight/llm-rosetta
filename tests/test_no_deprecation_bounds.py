@@ -264,7 +264,7 @@ REMOVED_SYMBOLS = [
     ("llm_rosetta.formats", "legacy_model_type"),
     ("llm_rosetta.retired_names", "ALIASES_ENABLED"),
     ("llm_rosetta.shims", "resolve_base"),
-    ("llm_rosetta_gateway.maintenance.names", "correct_legacy_names"),
+    ("llm_rosetta_gateway.config.migrate.names", "correct_legacy_names"),
 ]
 
 

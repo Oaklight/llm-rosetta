@@ -24,7 +24,7 @@ from llm_rosetta.contracts.command import (
     registered_commands,
 )
 from llm_rosetta_gateway import cli
-from llm_rosetta_gateway.maintenance import migrate_0140
+from llm_rosetta_gateway.config.migrate import migrate_0140
 from llm_rosetta_gateway.observability.usage import cli as usage_cli
 
 PYPROJECT = (

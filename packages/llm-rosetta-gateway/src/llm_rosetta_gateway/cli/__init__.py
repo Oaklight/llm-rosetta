@@ -784,7 +784,7 @@ _VERBS: tuple[CommandSpec, ...] = (
     CommandSpec(
         "migrate",
         "Migrate a config and database off the names 0.14.0 retires",
-        "llm_rosetta_gateway.maintenance.migrate_0140:main",
+        "llm_rosetta_gateway.config.migrate.migrate_0140:main",
     ),
 )
 
@@ -1149,7 +1149,7 @@ def _verb_main(name: str) -> Callable[[Sequence[str] | None], int]:
 
         return usage_main
     if name == "migrate":
-        from ..maintenance.migrate_0140 import main as migrate_main
+        from ..config.migrate.migrate_0140 import main as migrate_main
 
         return migrate_main
     return {

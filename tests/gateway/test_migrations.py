@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 
-from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION, migrate
+from llm_rosetta_gateway.config.migrate.migrations import CURRENT_VERSION, migrate
 
 
 class TestMigrationFramework:

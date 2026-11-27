@@ -523,7 +523,7 @@ class TestAnUnreachableSourceOnAColdCache:
 
 class TestMigrate:
     def test_a_config_reports_moved_names_as_notes(self, tmp_path, capsys):
-        from llm_rosetta_gateway.maintenance import migrate_0140 as mig
+        from llm_rosetta_gateway.config.migrate import migrate_0140 as mig
 
         path = tmp_path / "config.jsonc"
         path.write_text(
@@ -555,7 +555,7 @@ class TestMigrate:
         assert all("installs it automatically" in n["detail"] for n in out["notes"])
 
     def test_a_scan_reports_moved_names_as_notes(self, tmp_path, capsys):
-        from llm_rosetta_gateway.maintenance import migrate_0140 as mig
+        from llm_rosetta_gateway.config.migrate import migrate_0140 as mig
 
         (tmp_path / "app.py").write_text(
             'TARGET = "openrouter--chat_completions"\nOTHER = "deepseek--chat_completions"\n'
@@ -576,7 +576,7 @@ class TestScanFindsEveryMovedName:
 
     @staticmethod
     def _notes(tmp_path, name: str, text: str, capsys) -> list[tuple[int, str]]:
-        from llm_rosetta_gateway.maintenance import migrate_0140 as mig
+        from llm_rosetta_gateway.config.migrate import migrate_0140 as mig
 
         (tmp_path / name).write_text(text)
         code = mig.main(["--scan", str(tmp_path / name), "--json"])

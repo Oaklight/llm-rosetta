@@ -13,8 +13,8 @@ import json
 from pathlib import Path
 
 from llm_rosetta_gateway.config import GatewayConfig, JsoncConfigIO
-from llm_rosetta_gateway.maintenance.config import STEPS, apply, build_registry
-from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION
+from llm_rosetta_gateway.config.migrate.apply import STEPS, apply, build_registry
+from llm_rosetta_gateway.config.migrate.migrations import CURRENT_VERSION
 from llm_rosetta_gateway.observability.maintenance import Policy, StepContext
 
 #: A document as an older release wrote it: version 0.
