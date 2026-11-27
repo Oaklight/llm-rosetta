@@ -409,6 +409,82 @@ def test_a_written_stream_ends_with_its_terminal_event(converter_cls, reason) ->
     assert chunks[-1]["type"] == WRITER_TERMINAL[reason]
 
 
+def _write_stream(
+    converter_cls: type, reason: str, *, with_call: bool = False
+) -> list[dict[str, Any]]:
+    converter = converter_cls()
+    context = converter.create_stream_context()
+    chunks: list[dict[str, Any]] = []
+    body: list[dict[str, Any]] = [
+        {"type": "content_block_start", "block_index": 0, "block_type": "text"},
+        {"type": "text_delta", "text": "x"},
+        {"type": "content_block_end", "block_index": 0},
+    ]
+    if with_call:
+        body += [
+            {
+                "type": "tool_call_start",
+                "tool_call_id": "c1",
+                "tool_name": "lookup",
+                "tool_call_index": 0,
+            },
+            {"type": "tool_call_delta", "tool_call_id": "c1", "arguments_delta": "{}"},
+        ]
+    for event in [
+        {"type": "stream_start", "response_id": "r", "model": "m"},
+        *body,
+        {"type": "finish", "finish_reason": {"reason": reason}},
+        {"type": "stream_end"},
+    ]:
+        out = converter.stream_response_to_provider(event, context=context)
+        chunks.extend(out if isinstance(out, list) else [out])
+    return chunks
+
+
+@pytest.mark.parametrize("converter_cls", CONVERTERS)
+@pytest.mark.parametrize("with_call", [False, True], ids=["text", "after-a-call"])
+def test_pin_a_cancelled_turn_closes_with_a_completed_frame_that_says_cancelled(
+    converter_cls, with_call
+) -> None:
+    """Pin (#1741): outside the spec, and not a defect.
+
+    The spec's status enum is ``in_progress`` / ``completed`` / ``incomplete``
+    and it has three terminal events, so it has no cancelled turn and no event
+    for one.  OpenAI's own Responses API has a ``cancelled`` status on the body
+    it returns for the cancel call and for a later ``GET``.  A long generation
+    cancelled midway on its stream ends with none of the three terminal events
+    (measured live, 2026-11-26, ``gpt-5-mini``, reproduced by a second reader).
+    No OpenAI stream was seen to write ``cancelled`` into a frame, so the writer
+    does something OpenAI's stream does not: it keeps the fact in
+    ``response.status`` and closes with the one terminal event that is neither
+    an error nor a stop short, so a client that reads the stream to its end is
+    not left waiting.  (A short run, cancelled before the stream replayed, ended
+    with ``response.completed`` whose status was ``completed`` in 8 runs of one
+    reader and got HTTP 400 for the other; it is a race and nothing here
+    depends on it.)  The reader maps the frame back to ``cancelled``, also when a
+    tool call is open, where a ``response.completed`` could be taken for a
+    finished call turn.
+
+    The cost: ``cancelled`` is not in the spec's status enum, so a client that
+    validates the frame against the spec's schema rejects it, and a client that
+    reads only the event type sees a completed turn.  This pin records what the
+    writer does and is not an endorsement by the spec.
+    """
+    chunks = _write_stream(converter_cls, "cancelled", with_call=with_call)
+    last = chunks[-1]
+    assert last["type"] == "response.completed"
+    assert last["response"]["status"] == "cancelled"
+    assert last["response"].get("error") is None
+    assert ("function_call" in [i["type"] for i in last["response"]["output"]]) == (
+        with_call
+    )
+    converter = converter_cls()
+    events = converter.iter_stream_from_provider(
+        chunks, context=converter.create_stream_context()
+    )
+    assert _stream_reasons(list(events)) == ["cancelled"]
+
+
 # --- rule 4: unknown provider-slug item types are kept ----------------------
 
 
