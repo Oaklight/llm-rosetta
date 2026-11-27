@@ -54,7 +54,7 @@ summary:
 | `provides.transports` | Transport ids the extension implements. A shim's `connection.transport` resolves to its own extension's transport first, then a host built-in, then a transport of an extension listed in `requires.extensions`. |
 | `provides.commands` | Verbs the extension adds, each with a one-line summary per language (`en` required). `llm-rosetta <id> <verb>` runs one; underscores in the id are written as hyphens. |
 | `requires.extensions` | Ids of other extensions whose transports this one names. |
-| `external` | Programs the extension drives and does not ship (`name`, `check`, `minimum`, `install_hint`); `ext doctor` reports them. |
+| `external` | Programs the extension drives and does not ship (`name`, `check`, `minimum`, `install_hint`, and `install`, the exact-version install spec that [`ext install-cli`](#external-programs) follows); `ext doctor` reports them. |
 | `platforms` | A subset of `linux`, `darwin`, `windows`. |
 | `tags`, `homepage`, `summary` | Listing metadata. |
 
@@ -141,10 +141,60 @@ The location is `--index`, else `$LLM_ROSETTA_EXTENSION_INDEX`, else the contrib
 | `install <wheel \| URL \| id> [--sha256 H] [--version V] [--index I] [--pip SPEC] [--dry-run]` | Install. `--pip` installs with pip, only where pip is available. |
 | `remove <id> [--dry-run]` | Remove an installed extension. |
 | `update [<id>] [--index I] [--dry-run]` | Install the newest compatible version found in the index. |
-| `doctor [<id>] [--no-import] [--json]` | Compatibility, missing required extensions, external programs, and an import check in a child process. |
+| `install-cli <id> [--program P] [--dry-run] [--json]` | Install the external programs the extension declares (`external[].install`) at their pinned version; see [External programs](#external-programs). |
+| `doctor [<id>] [--no-import] [--json]` | Compatibility, missing required extensions, external programs (including the ones `install-cli` put in the tools directory), and an import check in a child process. |
 | `new`, `check`, `migrate` | Authoring; see [Adding an extension](../contributing/adding-an-extension.md). |
 
-`list`, `show` and `doctor` take `--json`; `install`, `remove` and `update` take `--dry-run`, which says what would change and changes nothing. Exit codes: `0` success, `1` a failure or a problem found, `2` a usage error.
+`list`, `show`, `doctor` and `install-cli` take `--json`; `install`, `remove`, `update` and `install-cli` take `--dry-run`, which says what would change and changes nothing. Exit codes: `0` success, `1` a failure or a problem found, `2` a usage error.
+
+### External programs { #external-programs }
+
+An extension that drives an agent CLI (`claude`, `agy`) does not ship it. It declares the program under `external:` and, so that the operator does not have to guess a version, how to install it at **one exact version**:
+
+```yaml
+external:
+  - name: claude
+    check: ["claude", "--version"]
+    minimum: "2.1.299"
+    install:
+      npm: "@anthropic-ai/claude-code"
+      version: "2.1.299"
+  - name: agy
+    check: ["agy", "--version"]
+    install:
+      version: "1.5.15"
+      release:
+        url: "https://github.com/google-antigravity/antigravity-cli/releases/download/{version}/agy_cli_{platform}.tar.gz"
+        sha256: {linux_x64_musl: "a12514fb…", linux_arm64_musl: "455d20cc…"}
+        binary: antigravity   # the file inside the archive
+        link: agy             # the name `check` runs
+```
+
+`version` is exact (`2.1.299`, optionally `-pre`): a range, `latest` or a partial version is refused, and `ext check` reports it. Exactly one of `npm` and `release` is given. A release's URL is https, `{platform}` is `linux_x64_musl`, `linux_arm64_musl`, `linux_x64_gnu`, `linux_arm64_gnu`, `darwin_x64` or `darwin_arm64`, and every platform it is available for carries the archive's SHA-256. `check` must run the name the entry link has (`link`, else the npm `bin`, else the program's name).
+
+```bash
+llm-rosetta ext install-cli claude          # as the user the gateway runs as, not root
+llm-rosetta ext install-cli claude --dry-run
+llm-rosetta ext doctor claude               # external claude: ok 2.1.299
+```
+
+`install-cli` puts the program under `<tools>/<id>/`, where `<tools>` is `$LLM_ROSETTA_TOOLS_DIR`, else `tools` beside the extensions directory (`/config/tools` in the image):
+
+| Path | What |
+|------|------|
+| `<tools>/<id>/npm-<version>/` or `release-<version>/` | The install |
+| `<tools>/<id>/bin/<name>` | The entry link `check` and `ext doctor` find |
+| `<tools>/bin/<name>` | One directory for `PATH`; the image's entrypoint puts it first |
+| `<tools>/<id>/.npm-cache/` | npm's cache; nothing is written to `$HOME` |
+
+A run at the pinned version changes nothing. A new pinned version replaces the old one. A wrong checksum, a failed download or npm run, an archive that holds a path outside its directory, or a program whose check does not pass leaves nothing installed and exits `1`. An npm package is checked by npm against the registry's integrity record; a release archive is checked against the SHA-256 in the manifest before it is unpacked. A program that needs npm needs Node.js: the image's `-agents` tag has it ([Docker](../getting-started/installation.md#docker)).
+
+Pinned versions the shipped extensions declare:
+
+| Extension | Program | Source | Version | Platforms |
+|-----------|---------|--------|---------|-----------|
+| `claude` | `claude` | npm `@anthropic-ai/claude-code` | `2.1.299` | any npm supports (the musl build is chosen on Alpine) |
+| `antigravity` | `agy` | release archive `agy_cli_<platform>.tar.gz` | `1.5.15` | `linux_x64_musl`, `linux_arm64_musl` |
 
 ## The gateway and extensions
 
