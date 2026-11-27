@@ -14,7 +14,7 @@ from llm_rosetta.shims._loader import (
     describe_vendor_manifest,
 )
 from llm_rosetta.shims._loader import _model_list_transforms
-from llm_rosetta.authoring import scaffold
+from _new_shim_script import load as _load_new_shim
 
 
 # ---------------------------------------------------------------- spec_for
@@ -302,7 +302,7 @@ def test_the_scaffold_arguments_parse():
     import argparse
 
     parser = argparse.ArgumentParser()
-    scaffold.add_arguments(parser, default_root="providers")
+    _load_new_shim().add_arguments(parser, default_root="providers")
     assert parser.parse_args(["acme"]).__dict__
 
 
