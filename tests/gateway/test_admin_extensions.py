@@ -296,3 +296,227 @@ class TestTheEndpoint:
 
         text = inspect.getsource(config_routes.register_config_routes)
         assert '"/admin/api/extensions", methods=["GET"]' in text
+
+
+def _result(name: str, version: str, found: str | None = "2.1.299") -> SimpleNamespace:
+    """What ``install_cli`` returns, as far as the panel reads it."""
+    return SimpleNamespace(
+        program=name, state="installed", version=version, link="/t/bin/x", found=found
+    )
+
+
+class TestInstallingFromThePanel:
+    """``POST /admin/api/extensions/<id>/install-cli`` installs what the manifest pins (#1820)."""
+
+    @pytest.fixture
+    def calls(self, monkeypatch) -> list:
+        from llm_rosetta_gateway.ops import extensions as ops_extensions
+
+        recorded: list = []
+
+        def fake(ext_id, program, **kwargs):
+            recorded.append((ext_id, program.name, program.install.version, kwargs))
+            return _result(program.name, program.install.version)
+
+        monkeypatch.setattr(ops_extensions, "install_cli", fake)
+        return recorded
+
+    @staticmethod
+    def _post(app, ext_id, body):
+        class _Request:
+            def __init__(self):
+                self.app = app
+
+            def json(self):
+                if isinstance(body, Exception):
+                    raise body
+                return body
+
+        response = asyncio.run(
+            extensions_route.post_extension_install_cli(_Request(), ext_id)
+        )
+        return response.status_code, json.loads(response.body)
+
+    @staticmethod
+    def _app(ops_log=None):
+        from llm_rosetta_gateway.ops import OpsContext
+
+        app = SimpleNamespace(ops_ctx=OpsContext(ops_log=ops_log))
+        app.admin = GatewayAdminContext(app)
+        return app
+
+    def test_it_installs_the_program_at_the_version_the_manifest_pins(
+        self, ext_dir, calls
+    ):
+        _install(ext_dir, "acme", _manifest_with_cli("acme"))
+
+        status, body = self._post(self._app(), "acme", {"program": "acmecli"})
+
+        assert status == 200
+        assert body == {
+            "extension": "acme",
+            "program": "acmecli",
+            "version": "2.1.299",
+            "state": "installed",
+            "found": "2.1.299",
+        }
+        assert calls == [("acme", "acmecli", "2.1.299", {})]
+
+    def test_the_program_may_be_left_out_when_there_is_only_one(self, ext_dir, calls):
+        _install(ext_dir, "acme", _manifest_with_cli("acme"))
+
+        status, _ = self._post(self._app(), "acme", {})
+
+        assert status == 200 and calls[0][1] == "acmecli"
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"version": "9.9.9"},
+            {"program": "acmecli", "url": "https://evil.test/x"},
+            {"program": "acmecli", "command": "rm -rf /"},
+            {"program": ["acmecli"]},
+            ["acmecli"],
+        ],
+    )
+    def test_nothing_but_the_program_name_is_accepted(self, ext_dir, calls, body):
+        _install(ext_dir, "acme", _manifest_with_cli("acme"))
+
+        status, payload = self._post(self._app(), "acme", body)
+
+        assert (status, payload["reason"]) == (400, "bad_body")
+        assert calls == []
+
+    def test_invalid_json_is_refused(self, ext_dir, calls):
+        _install(ext_dir, "acme", _manifest_with_cli("acme"))
+
+        status, _ = self._post(self._app(), "acme", ValueError("not json"))
+
+        assert status == 400 and calls == []
+
+    @pytest.mark.parametrize(
+        ("ext_id", "body", "status", "reason"),
+        [
+            ("nope", {}, 404, "unknown_extension"),
+            ("acme", {"program": "other"}, 404, "unknown_program"),
+        ],
+    )
+    def test_an_unknown_extension_or_program_is_a_404(
+        self, ext_dir, calls, ext_id, body, status, reason
+    ):
+        _install(ext_dir, "acme", _manifest_with_cli("acme"))
+
+        got, payload = self._post(self._app(), ext_id, body)
+
+        assert (got, payload["reason"]) == (status, reason)
+        assert calls == []
+
+    def test_a_program_with_no_install_spec_is_a_409(self, ext_dir, calls):
+        _install(ext_dir, "acme", _manifest_with_cli("acme", install=False))
+
+        status, payload = self._post(self._app(), "acme", {"program": "acmecli"})
+
+        assert (status, payload["reason"]) == (409, "no_install_spec")
+        assert calls == []
+
+    def test_two_programs_need_a_name(self, ext_dir, calls):
+        manifest = _manifest_with_cli("acme") + (
+            "  - name: second\n"
+            '    check: ["second", "--version"]\n'
+            "    install:\n"
+            '      npm: "@acme/second"\n'
+            '      version: "1.0.0"\n'
+        )
+        _install(ext_dir, "acme", manifest)
+
+        status, payload = self._post(self._app(), "acme", {})
+
+        assert (status, payload["reason"]) == (400, "program_required")
+
+    def test_a_second_install_of_the_same_extension_is_a_409_while_one_runs(
+        self, ext_dir, monkeypatch
+    ):
+        import threading
+
+        from llm_rosetta_gateway.ops import extensions as ops_extensions
+
+        _install(ext_dir, "acme", _manifest_with_cli("acme"))
+        started, release = threading.Event(), threading.Event()
+
+        def slow(ext_id, program, **kwargs):
+            started.set()
+            release.wait(5)
+            return _result(program.name, "2.1.299", found=None)
+
+        monkeypatch.setattr(ops_extensions, "install_cli", slow)
+        app = self._app()
+
+        async def scenario():
+            first = asyncio.create_task(
+                app.admin.install_extension_cli("acme", "acmecli")
+            )
+            await asyncio.get_running_loop().run_in_executor(None, started.wait, 5)
+            from llm_rosetta_gateway.admin_api import ExtensionInstallRefused
+
+            with pytest.raises(ExtensionInstallRefused) as seen:
+                await app.admin.install_extension_cli("acme", "acmecli")
+            release.set()
+            await first
+            again = await app.admin.install_extension_cli("acme", "acmecli")
+            return seen.value, again
+
+        refused, again = asyncio.run(scenario())
+
+        assert (refused.status, refused.reason) == (409, "busy")
+        assert again["state"] == "installed"
+
+    def test_a_failed_install_is_a_502_with_the_reason_and_is_recorded(
+        self, ext_dir, monkeypatch
+    ):
+        from unittest.mock import AsyncMock, MagicMock
+
+        from llm_rosetta.api import CliInstallError
+        from llm_rosetta_gateway.ops import extensions as ops_extensions
+
+        def failing(ext_id, program, **kwargs):
+            raise CliInstallError("npm exited with 1: ERR 404")
+
+        monkeypatch.setattr(ops_extensions, "install_cli", failing)
+        _install(ext_dir, "acme", _manifest_with_cli("acme"))
+        ops_log = MagicMock()
+        ops_log.add = AsyncMock()
+
+        status, payload = self._post(self._app(ops_log), "acme", {"program": "acmecli"})
+
+        assert (status, payload["reason"]) == (502, "failed")
+        assert "ERR 404" in payload["error"]
+        entry = ops_log.add.call_args[0][0]
+        assert entry.event_type == "extension_cli_install"
+        assert entry.details["extension"] == "acme"
+
+    def test_a_success_is_recorded_without_the_environment(self, ext_dir, calls):
+        from unittest.mock import AsyncMock, MagicMock
+
+        _install(ext_dir, "acme", _manifest_with_cli("acme"))
+        ops_log = MagicMock()
+        ops_log.add = AsyncMock()
+
+        self._post(self._app(ops_log), "acme", {"program": "acmecli"})
+
+        entry = ops_log.add.call_args[0][0]
+        assert set(entry.details) == {
+            "extension",
+            "program",
+            "version",
+            "state",
+            "found",
+        }
+
+    def test_the_route_is_registered_behind_the_providers_tab(self):
+        import inspect
+
+        from llm_rosetta_gateway.admin.routes import config as config_routes
+
+        text = inspect.getsource(config_routes.register_config_routes)
+        assert '"/admin/api/extensions/<ext_id>/install-cli", methods=["POST"]' in text
+        assert '_guard("providers", post_extension_install_cli)' in text

@@ -24,6 +24,20 @@ from llm_rosetta.api import (
     tools_dir,
 )
 
+
+class ProgramRequestError(ValueError):
+    """The extension or program an install names cannot be installed.
+
+    Attributes:
+        reason: ``unknown_extension``, ``unknown_program``, ``program_required``
+            or ``no_install_spec``.
+    """
+
+    def __init__(self, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.reason = reason
+
+
 #: Where an extension was found when only the extensions directory holds it.
 DIRECTORY_SOURCE = "extensions directory"
 
@@ -178,3 +192,52 @@ def extension_listing() -> list[dict[str, Any]]:
             )
         )
     return rows
+
+
+def declared_program(ext_id: str, name: str | None) -> Any:
+    """Return the program *name* of extension *ext_id*, as its manifest declares it.
+
+    The install spec on it is the manifest's: a caller cannot supply another.
+
+    Args:
+        ext_id: The extension id.
+        name: The program's name; ``None`` when the extension has exactly one
+            program with an install spec.
+
+    Raises:
+        ProgramRequestError: The extension or the program is unknown, the name
+            is missing and ambiguous, or the program declares no install spec.
+    """
+    manifest = None
+    for item in list_extensions():
+        if item.id == ext_id and item.manifest is not None:
+            manifest = item.manifest
+    if manifest is None:
+        try:
+            on_disk = installed_extensions()
+        except ExtensionInstallError:
+            on_disk = []
+        for item in on_disk:
+            if item.id == ext_id and item.manifest is not None:
+                manifest = item.manifest
+    if manifest is None:
+        raise ProgramRequestError("unknown_extension", f"no extension {ext_id!r}")
+    if name is None:
+        installable = [p for p in manifest.external if p.install is not None]
+        if len(installable) != 1:
+            raise ProgramRequestError(
+                "program_required",
+                f"{ext_id!r} declares {len(installable)} installable programs; "
+                "name one",
+            )
+        return installable[0]
+    for program in manifest.external:
+        if program.name == name:
+            if program.install is None:
+                raise ProgramRequestError(
+                    "no_install_spec", f"{name!r} declares no install spec"
+                )
+            return program
+    raise ProgramRequestError(
+        "unknown_program", f"{ext_id!r} declares no program {name!r}"
+    )

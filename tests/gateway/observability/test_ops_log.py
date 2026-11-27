@@ -13,6 +13,7 @@ from llm_rosetta_gateway.observability.ops_log import (
     ALL_SOURCES,
     EVENT_CONFIG_RELOAD,
     EVENT_KEY_CREATE,
+    EVENT_EXTENSION_CLI_INSTALL,
     EVENT_OPS_LOG_CLEARED,
     EVENT_STARTUP,
     SEVERITY_ERROR,
@@ -399,7 +400,8 @@ class TestConstants:
     def test_all_event_types(self):
         assert EVENT_STARTUP in ALL_EVENT_TYPES
         assert EVENT_OPS_LOG_CLEARED in ALL_EVENT_TYPES
-        assert len(ALL_EVENT_TYPES) == 20
+        assert EVENT_EXTENSION_CLI_INSTALL in ALL_EVENT_TYPES
+        assert len(ALL_EVENT_TYPES) == 21
 
     def test_all_severities(self):
         assert SEVERITY_INFO in ALL_SEVERITIES

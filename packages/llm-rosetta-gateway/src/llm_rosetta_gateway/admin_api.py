@@ -27,6 +27,7 @@ __all__ = [
     "AdminContext",
     "AdminExtensions",
     "AdminShimSources",
+    "ExtensionInstallRefused",
     "admin_context",
 ]
 
@@ -67,6 +68,25 @@ class AdminShimSources(Protocol):
         ...
 
 
+class ExtensionInstallRefused(Exception):
+    """An install the panel asked for did not happen.
+
+    Attributes:
+        status: The HTTP status that fits: 404 (no such extension or program),
+            400 (the program must be named), 409 (nothing to install, or one
+            install of that extension is already running) or 502 (the install
+            ran and failed).
+        reason: A short code the panel can switch on.
+        message: One sentence for the operator.
+    """
+
+    def __init__(self, status: int, reason: str, message: str) -> None:
+        super().__init__(message)
+        self.status = status
+        self.reason = reason
+        self.message = message
+
+
 @runtime_checkable
 class AdminExtensions(Protocol):
     """What the installed extensions look like (epic #1703)."""
@@ -88,6 +108,27 @@ class AdminExtensions(Protocol):
         it is ready or declares no install).  The check also looks in the
         directory ``ext install-cli`` fills.  Blocking: it runs the external
         programs' version checks, so call it off the loop.
+        """
+        ...
+
+    async def install_extension_cli(
+        self, ext_id: str, program: str | None
+    ) -> dict[str, Any]:
+        """Install a program an extension declares, at the version it pins.
+
+        Only the extension id and the program's name come from the caller; the
+        version, the source and the checksum are the manifest's.  One install
+        per extension runs at a time.  The attempt is recorded in the ops log
+        (extension, program, version and outcome; never the environment or the
+        install's output).
+
+        Returns:
+            ``{"extension", "program", "state", "version", "found"}``; *state*
+            is ``installed`` or ``unchanged``.
+
+        Raises:
+            ExtensionInstallRefused: The request names nothing installable, one
+                install of that extension is running, or the install failed.
         """
         ...
 

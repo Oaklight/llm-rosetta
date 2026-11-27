@@ -70,6 +70,10 @@ EVENT_TOKEN_ROTATED = "token_rotated"
 
 EVENT_SELF_UPDATE = "self_update"
 
+# -- Extension program install event type (#1820) ---------------------------
+
+EVENT_EXTENSION_CLI_INSTALL = "extension_cli_install"
+
 ALL_EVENT_TYPES = [
     EVENT_STARTUP,
     EVENT_SHUTDOWN,
@@ -91,6 +95,7 @@ ALL_EVENT_TYPES = [
     EVENT_PASSWORD_CHANGED,
     EVENT_TOKEN_ROTATED,
     EVENT_SELF_UPDATE,
+    EVENT_EXTENSION_CLI_INSTALL,
 ]
 
 # -- Severity constants ----------------------------------------------------

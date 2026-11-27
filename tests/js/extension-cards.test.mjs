@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 import {
-  cardStatus, extensionCards, programRow, programStatus,
+  cardStatus, extensionCards, installOutcome, installRequest, programRow, programStatus,
 } from '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/core/extension-cards.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -90,10 +90,55 @@ test('every status and the labels the card paints exist in both languages', () =
   const keys = [
     'ext.status.ready', 'ext.status.missing', 'ext.status.broken', 'ext.status.too_old', 'ext.status.unknown',
     'ext.found', 'ext.minimum', 'ext.pinned', 'ext.install', 'ext.empty', 'ext.copy',
+    'ext.installBtn', 'ext.installing', 'ext.installDone',
     'shimPage.extensions',
   ];
   for (const key of keys) {
     const count = source.split(`'${key}'`).length - 1;
     assert.ok(count >= 2, `${key} is in ${count} of the 2 dictionaries`);
   }
+});
+
+test('the install request carries the program name and nothing else', () => {
+  const { url, body } = installRequest('claude', 'claude');
+  assert.equal(url, '/admin/api/extensions/claude/install-cli');
+  assert.deepEqual(body, { program: 'claude' });
+});
+
+test('an extension id is encoded as one path segment', () => {
+  assert.equal(
+    installRequest('a/b c', 'x').url,
+    '/admin/api/extensions/a%2Fb%20c/install-cli',
+  );
+});
+
+test('the panel posts the request installRequest builds, and only for a pinned program', () => {
+  const page = readFileSync(
+    join(HERE, '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/tabs/shims-page.js'),
+    'utf8',
+  );
+  assert.match(page, /const \{ url, body \} = installRequest\(extId, programName\);/);
+  assert.match(page, /api\.post\(url, body\)/);
+  // The button needs a pinned version: no install spec, no button.
+  assert.match(page, /program\.pinned\s*\n?\s*\? `<button[^`]*installExtensionProgram\(this,/);
+});
+
+test('an install is a success only when the answer says ok', () => {
+  assert.deepEqual(installOutcome({ ok: true, state: 'installed' }), { ok: true });
+  assert.deepEqual(
+    installOutcome({ ok: false, status: 502, error: 'no build of agy 1.5.15 is recorded for linux_x64_gnu' }),
+    { ok: false, error: 'no build of agy 1.5.15 is recorded for linux_x64_gnu' },
+  );
+  // An answer with no `ok`, no answer, or an empty one is not a pass.
+  assert.equal(installOutcome({ state: 'installed' }).ok, false);
+  assert.equal(installOutcome(undefined).ok, false);
+  assert.equal(installOutcome({ ok: false }).error, 'Install failed');
+});
+
+test('the panel reads the install answer through installOutcome', () => {
+  const page = readFileSync(
+    join(HERE, '../../packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js/tabs/shims-page.js'),
+    'utf8',
+  );
+  assert.match(page, /installOutcome\(await api\.post\(url, body\)\)/);
 });

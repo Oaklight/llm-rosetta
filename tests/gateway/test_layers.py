@@ -303,6 +303,7 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
     ),
     "app": (
         "admin",
+        "admin_api",
         "config",
         "jobs",
         "keystore",
