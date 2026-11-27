@@ -146,17 +146,17 @@ class TestPassthroughMode:
 
 class TestConverterCaching:
     def test_same_provider_returns_same_instance(self) -> None:
-        from llm_rosetta.auto_detect import get_converter_for_provider
+        from llm_rosetta import get_converter_for_provider
 
         c1 = get_converter_for_provider("chat_completions")
         c2 = get_converter_for_provider("chat_completions")
         assert c1 is c2
 
     def test_shim_and_base_share_instance(self) -> None:
-        from llm_rosetta.auto_detect import _converter_cache
+        from llm_rosetta.converters.registry import _converter_cache
 
         # After getting via a base name, cache should have it
-        from llm_rosetta.auto_detect import get_converter_for_provider
+        from llm_rosetta import get_converter_for_provider
 
         get_converter_for_provider("messages")
         assert "messages" in _converter_cache

@@ -6,7 +6,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.auto_detect import convert, detect_provider, get_converter_for_provider
+from llm_rosetta import convert, detect_provider, get_converter_for_provider
 from llm_rosetta.shims._loader import load_providers
 
 

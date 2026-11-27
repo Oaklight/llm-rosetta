@@ -51,7 +51,7 @@ class TestSnapshotAndRestore:
         assert set(_model_list_transforms) == set(saved.model_list_transforms)
 
     def test_restore_drops_a_converter_cached_for_a_removed_shim(self):
-        from llm_rosetta.auto_detect import _converter_cache
+        from llm_rosetta.converters.registry import _converter_cache
 
         saved = snapshot_registry()
         _converter_cache["acme--snapshot"] = object()

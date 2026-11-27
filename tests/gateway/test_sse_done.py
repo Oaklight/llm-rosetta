@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta import ProviderType
 from llm_rosetta_gateway.proxy import _stream_event_generator
 from llm_rosetta_gateway.transport.sse_format import format_sse_done
 

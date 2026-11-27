@@ -19,6 +19,7 @@ from .chat import (
     configure_context,
     setup_shim_context,
 )
+from .facade import convert, convert_response
 from .typed import (
     DecisionConversionPipeline,
     EmbeddingConversionPipeline,
@@ -38,6 +39,8 @@ __all__ = [
     "RerankConversionPipeline",
     "StreamProcessor",
     "StreamProcessorProtocol",
+    "convert",
+    "convert_response",
     "apply_ir_transforms",
     "apply_shim_to_ir",
     "configure_context",

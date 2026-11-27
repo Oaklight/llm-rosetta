@@ -13,7 +13,7 @@ from llm_rosetta_gateway.proxy import (
     ProviderMetadataStore,
     handle_non_streaming,
 )
-from llm_rosetta.auto_detect import ProviderType
+from llm_rosetta import ProviderType
 from llm_rosetta.pipeline import ConversionPipeline
 from llm_rosetta.contracts.routing import ResolvedRoute
 from llm_rosetta_gateway.transport._base import UpstreamResponse

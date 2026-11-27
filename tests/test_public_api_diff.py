@@ -20,7 +20,6 @@ SRC = REPO_ROOT / "packages" / "llm-rosetta" / "src" / "llm_rosetta"
 #: Listed modules with no ``__all__`` of their own.  Their names are
 #: re-exported by a package that *is* compared.
 NO_ALL_REEXPORTED = {
-    "llm_rosetta.auto_detect": "re-exported from llm_rosetta",
     "llm_rosetta_gateway.observability.metrics": "re-exported from llm_rosetta_gateway.observability",
     "llm_rosetta_gateway.observability.persistence": "re-exported from llm_rosetta_gateway.observability",
     "llm_rosetta_gateway.observability.request_log": "re-exported from llm_rosetta_gateway.observability",

@@ -75,7 +75,7 @@ class TestTheDescriptorsAgree:
             )
 
     def test_chat_converter_lookup_uses_the_registry(self) -> None:
-        from llm_rosetta.auto_detect import get_converter_for_provider
+        from llm_rosetta import get_converter_for_provider
         from llm_rosetta.converters.llm.chat_completions.converter import (
             ChatCompletionsConverter,
         )

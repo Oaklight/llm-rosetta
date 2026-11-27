@@ -368,7 +368,7 @@ class TestConvertersAgreeWithTheDeclaration:
     def test_the_declared_shape_reads_the_provider_cache_counter(
         self, standard, payload
     ):
-        from llm_rosetta.auto_detect import get_converter_for_provider
+        from llm_rosetta import get_converter_for_provider
 
         converter = get_converter_for_provider(standard)
         ir_usage = converter._build_p_usage_to_ir(payload)

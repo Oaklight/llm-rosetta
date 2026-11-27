@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from llm_rosetta.auto_detect import get_converter_for_provider
+from llm_rosetta import get_converter_for_provider
 
 CHAT_FORMATS = (
     "chat_completions",
