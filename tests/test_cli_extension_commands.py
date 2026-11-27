@@ -18,8 +18,8 @@ from llm_rosetta.contracts.extension import (
     validate_extension_manifest,
 )
 from llm_rosetta.devtools import ext_scaffold
-from llm_rosetta import cli_areas
-from llm_rosetta.cli_areas import extension_areas
+from llm_rosetta.cli import areas as cli_areas
+from llm_rosetta.cli.areas import extension_areas
 from llm_rosetta.extensions import (
     _discovery,
     configure_extensions_dir,

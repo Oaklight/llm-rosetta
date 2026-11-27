@@ -136,7 +136,7 @@ def _unknown(name: str) -> int:
 
 def _areas():
     """The extension areas, with the extensions directory importable first."""
-    from llm_rosetta.cli_areas import extension_areas
+    from llm_rosetta.cli.areas import extension_areas
     from llm_rosetta.extensions import activate_extensions_dir
 
     try:
@@ -167,7 +167,7 @@ def _run_named(name: str, argv: Sequence[str]) -> int:
 
 
 def _print_area_help(area, file=None) -> None:
-    from llm_rosetta.cli_areas import area_verbs
+    from llm_rosetta.cli.areas import area_verbs
 
     out = file or sys.stdout
     print(f"usage: {PROG} {area.area} <command> [arguments]", file=out)
@@ -181,7 +181,7 @@ def _print_area_help(area, file=None) -> None:
 
 def _run_area(area, argv: Sequence[str]) -> int:
     """Run ``llm-rosetta <area> <verb> ...`` for an extension's command."""
-    from llm_rosetta.cli_areas import resolve_extension_command
+    from llm_rosetta.cli.areas import resolve_extension_command
 
     if area.problem is not None:
         print(f"{PROG} {area.area}: {area.problem}", file=sys.stderr)
