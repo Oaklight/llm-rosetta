@@ -81,3 +81,6 @@ where = ["src"]
 
 [tool.setuptools.dynamic]
 version = { attr = "llm_rosetta.__version__" }
+
+[tool.zerodep]
+vendor-dir = "src/llm_rosetta/_vendor"

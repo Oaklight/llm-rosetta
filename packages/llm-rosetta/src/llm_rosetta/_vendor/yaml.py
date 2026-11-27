@@ -1,5 +1,5 @@
 # /// zerodep
-# version = "0.3.1"
+# version = "0.4.0"
 # deps = []
 # tier = "subsystem"
 # category = "serialization"
@@ -38,6 +38,10 @@ __all__ = [
     "load_all",
     "dump",
     "dump_all",
+    "safe_load",
+    "safe_load_all",
+    "safe_dump",
+    "safe_dump_all",
 ]
 
 # ── Exceptions ─────────────────────────────────────────────────────────────────
@@ -1122,3 +1126,56 @@ def dump_all(
         stream.write(result)
         return None
     return result
+
+
+# ── PyYAML-compatible names ────────────────────────────────────────────────────
+# This module only ever builds plain types, so the "safe" entry points are the
+# plain ones.  They exist so code written against PyYAML (``yaml.safe_load``)
+# keeps working when this module is the one that ``import yaml`` resolves to.
+
+
+def _read(stream: str | bytes | IO[Any]) -> str:
+    """Return the text of a string, bytes or file-like *stream*.
+
+    Bytes are decoded as UTF-8; a leading byte-order mark is dropped.  Other
+    encodings (UTF-16) are not sniffed, unlike PyYAML.
+    """
+    data = stream if isinstance(stream, (str, bytes)) else stream.read()
+    return data.decode("utf-8-sig") if isinstance(data, bytes) else data
+
+
+def safe_load(stream: str | bytes | IO[Any]) -> Any:
+    """Parse one YAML document from a string, bytes or file-like object.
+
+    Same as :func:`load`, with PyYAML's ``yaml.safe_load`` signature.  The
+    subset limits of this module apply, and none of them raises: anchors,
+    aliases, tags and merge keys come back as literal text, a multi-document
+    stream yields its first document, and malformed input (an unclosed ``[``
+    or quote, a misindented key, a tab) is not detected and parses to a partial
+    value.  PyYAML raises on all of these.
+
+    Args:
+        stream: YAML text, UTF-8 bytes (a BOM is dropped), or an object with
+            ``read()``.
+
+    Returns:
+        Parsed Python object.
+    """
+    return load(_read(stream))
+
+
+def safe_load_all(stream: str | bytes | IO[Any]) -> Iterator[Any]:
+    """Parse a multi-document stream; PyYAML's ``yaml.safe_load_all`` name.
+
+    Args:
+        stream: YAML text, UTF-8 bytes (a BOM is dropped), or an object with
+            ``read()``.
+
+    Yields:
+        Parsed Python objects, one per document.
+    """
+    return load_all(_read(stream))
+
+
+safe_dump = dump
+safe_dump_all = dump_all
