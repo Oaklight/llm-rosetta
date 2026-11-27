@@ -804,10 +804,10 @@ class TestExtVerbs:
         assert info.value.code == 2
         assert "invalid choice" in capsys.readouterr().err
 
-    def test_the_dev_tools_hand_both_actions_in(self, tmp_path):
+    def test_the_authoring_tools_hand_all_their_actions_in(self, tmp_path):
         from llm_rosetta.authoring.ext_scaffold import EXT_VERBS
 
-        assert [verb.name for verb in EXT_VERBS] == ["new", "check"]
+        assert [verb.name for verb in EXT_VERBS] == ["new", "check", "migrate"]
         dest = str(tmp_path / "packages")
         assert ext_cli.ext_main(["new", "acme_free", "--dest", dest], EXT_VERBS) == 0
 
@@ -815,7 +815,7 @@ class TestExtVerbs:
         assert _ext("--help") == 0
 
         out = capsys.readouterr().out
-        for action in ("list", "install", "doctor", "new", "check"):
+        for action in ("list", "install", "doctor", "new", "check", "migrate"):
             assert action in out
 
 

@@ -39,6 +39,7 @@ from llm_rosetta.contracts.extension import (
 )
 from llm_rosetta.authoring.kinds import PROBLEMS
 from llm_rosetta.authoring.scaffold import _render
+from llm_rosetta.authoring.tree_contract import run_migrate
 from llm_rosetta.extensions import KINDS
 from llm_rosetta.extensions._cli import ExtVerb
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
@@ -350,7 +351,7 @@ def add_ext_arguments(parser: argparse.ArgumentParser, *, command: str = "new") 
 
     Args:
         parser: The parser for the subcommand.
-        command: ``"new"`` or ``"check"``.
+        command: ``"new"``, ``"check"`` or ``"migrate"``.
 
     Raises:
         ValueError: *command* is neither.
@@ -396,6 +397,18 @@ def add_ext_arguments(parser: argparse.ArgumentParser, *, command: str = "new") 
             dest="build",
             action="store_false",
             help="Skip the wheel build (reported as skipped)",
+        )
+    elif command == "migrate":
+        parser.add_argument(
+            "path",
+            nargs="?",
+            default=".",
+            help="An extension folder, or a root whose packages/* are migrated",
+        )
+        parser.add_argument(
+            "--write",
+            action="store_true",
+            help="Apply the moves; without it the plan is printed and nothing moves",
         )
     else:
         raise ValueError(f"unknown ext command {command!r}")
@@ -661,6 +674,33 @@ def run_ext_check(
     return 1 if failed else 0
 
 
+def run_ext_migrate(args: argparse.Namespace) -> int:
+    """Move an extension's shim tree onto the contract, or print the plan.
+
+    The folder is the one vendor of its parent
+    (:func:`~llm_rosetta.authoring.tree_contract.run_migrate` with ``only``).
+    A leaf at the wrong depth moves; one that cannot be moved without a guess is
+    reported and left.  Nothing else changes: not ``plugin.yaml``, not the
+    sidecars' contents.  A move can leave ``pyproject.toml``'s package-data
+    naming the old path, which ``ext check`` finds in the wheel.
+
+    Args:
+        args: The parsed flags (see :func:`add_ext_arguments`).
+
+    Returns:
+        ``0`` when every folder had nothing to do or was migrated, ``1`` when a
+        dry run found work.
+    """
+    path = Path(getattr(args, "path", ".") or ".").expanduser().resolve()
+    write = bool(getattr(args, "write", False))
+    code = 0
+    for folder in _targets(path):
+        code = max(code, run_migrate(folder.parent, write=write, only=folder.name))
+        if write:
+            print(f"then:   llm-rosetta ext check {folder}")
+    return code
+
+
 #: The ``ext`` actions this module supplies; ``llm_rosetta.cli`` hands them to
 #: ``extensions._cli.ext_main``, so the extension package imports no dev tool.
 EXT_VERBS: tuple[ExtVerb, ...] = (
@@ -675,5 +715,11 @@ EXT_VERBS: tuple[ExtVerb, ...] = (
         "Check an extension folder",
         lambda parser: add_ext_arguments(parser, command="check"),
         run_ext_check,
+    ),
+    ExtVerb(
+        "migrate",
+        "Move an extension's shim tree onto the contract",
+        lambda parser: add_ext_arguments(parser, command="migrate"),
+        run_ext_migrate,
     ),
 )
