@@ -744,7 +744,7 @@ class TestExtDoctor:
         ext = self._external("[tool]", "2.0")
         _place(home, "acme", _manifest("acme", external=ext))
 
-        def refuse(program):
+        def refuse(program, **_):
             raise ValueError("minimum 'x' is not a dotted version")
 
         monkeypatch.setattr(ext_cli, "check_external", refuse)

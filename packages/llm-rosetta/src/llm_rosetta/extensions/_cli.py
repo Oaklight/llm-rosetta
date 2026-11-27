@@ -27,7 +27,12 @@ from llm_rosetta.contracts.extension import (
     compatibility_problems,
 )
 
-from ._dirs import ExtensionInstallError, configure_extensions_dir, extensions_dir
+from ._dirs import (
+    ExtensionInstallError,
+    configure_extensions_dir,
+    extensions_dir,
+    tool_bin_dir,
+)
 from ._discovery import retired_entry_points
 from ._index import (
     install_from_index,
@@ -51,6 +56,7 @@ from ._install import (
 )
 from ._load import ExtensionStatus, list_extensions, load_extensions
 from ._probe import check_import
+from ._tools import CliInstallError, install_cli
 
 PROG = "llm-rosetta ext"
 
@@ -165,6 +171,20 @@ def _build_parser(verbs: Sequence[ExtVerb] = ()) -> argparse.ArgumentParser:
     _add_dir(p)
     _add_dry_run(p)
 
+    p = sub.add_parser(
+        "install-cli",
+        help="Install the external CLI an extension drives, at its pinned version",
+    )
+    p.add_argument("ext_id", metavar="id")
+    p.add_argument(
+        "--program",
+        default=None,
+        help="The program, when the extension declares several",
+    )
+    _add_dir(p)
+    _add_json(p)
+    _add_dry_run(p)
+
     p = sub.add_parser("doctor", help="Check extensions and what they need")
     p.add_argument("ext_id", metavar="id", nargs="?")
     p.add_argument(
@@ -213,6 +233,8 @@ def ext_main(argv: Sequence[str] | None = None, verbs: Sequence[ExtVerb] = ()) -
             return _remove(args.ext_id, args.dry_run)
         if args.action == "update":
             return _update(args.ext_id, args.index, args.dry_run)
+        if args.action == "install-cli":
+            return _install_cli(args.ext_id, args.program, args.dry_run, args.json)
         return _doctor(args.ext_id, args.json, args.probe)
     except ExtensionInstallError as exc:
         _err(f"{PROG} {args.action}: {exc}")
@@ -586,6 +608,62 @@ def _update(ext_id: str | None, index_arg: str | None, dry_run: bool) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# install-cli
+# --------------------------------------------------------------------------- #
+
+
+def _manifest_of(ext_id: str) -> ExtensionManifest | None:
+    """The manifest of an extension that is installed or found, if any."""
+    statuses, stray = _survey()
+    for entry in [*statuses, *stray]:
+        if entry.id == ext_id and entry.manifest is not None:
+            return entry.manifest
+    return None
+
+
+def _tool_search(ext_id: str) -> list[Any]:
+    """Where ``install-cli`` puts an extension's entry links; none if unknown."""
+    try:
+        return [tool_bin_dir(ext_id)]
+    except ExtensionInstallError:
+        return []
+
+
+def _install_cli(ext_id: str, only: str | None, dry_run: bool, as_json: bool) -> int:
+    manifest = _manifest_of(ext_id)
+    if manifest is None:
+        _err(f"{PROG} install-cli: no extension {ext_id!r} found")
+        return 1
+    programs = [p for p in manifest.external if only in (None, p.name)]
+    if not programs:
+        _err(f"{PROG} install-cli: {ext_id!r} declares no such external program")
+        return 1
+    results: list[dict[str, Any]] = []
+    failed = False
+    for program in programs:
+        row: dict[str, Any] = {"name": program.name}
+        try:
+            done = install_cli(ext_id, program, dry_run=dry_run)
+        except CliInstallError as exc:
+            failed = True
+            row.update(state="failed", error=str(exc))
+            _err(f"{PROG} install-cli: {program.name}: {exc}")
+        else:
+            row.update(
+                state=done.state,
+                version=done.version,
+                link=done.link,
+                found=done.found,
+            )
+            if not as_json:
+                print(f"{program.name} {done.version}: {done.state} ({done.link})")
+        results.append(row)
+    if as_json:
+        _dump({"id": ext_id, "programs": results})
+    return 1 if failed else 0
+
+
+# --------------------------------------------------------------------------- #
 # doctor
 # --------------------------------------------------------------------------- #
 
@@ -612,7 +690,7 @@ def _examine(
             problems.append(f"requires the extension {name!r}, which is not installed")
         for program in manifest.external:
             try:
-                status = check_external(program)
+                status = check_external(program, search=_tool_search(ext_id))
             except ValueError as exc:
                 problems.append(f"external {program.name}: {exc}")
                 continue
