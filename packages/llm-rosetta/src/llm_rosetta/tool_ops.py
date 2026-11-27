@@ -6,7 +6,8 @@ provider formats without instantiating full converter pipelines.
 
 Covers the full tool lifecycle: definition, choice, call, result, config.
 
-All imports are lazy to avoid pulling provider dependencies at import time.
+The converters this module reaches have no provider dependency, so they are
+imported at the top like any other core module.
 
 Example usage::
 
@@ -36,6 +37,12 @@ Example usage::
 
 from typing import Any, Literal
 
+from .converters.llm.chat_completions import ChatCompletionsToolOps
+from .converters.llm.google_generate import GoogleGenerateToolOps
+from .converters.llm.google_interactions import GoogleInteractionsToolOps
+from .converters.llm.messages import MessagesToolOps
+from .converters.llm.open_responses import OpenResponsesToolOps
+from .converters.registry import CONVERTER_REGISTRY
 from .retired_names import PROVIDER_TYPE, retired_name_message
 from llm_rosetta.ir.model.tools import ToolCallConfig, ToolChoice, ToolDefinition
 from llm_rosetta.ir.model.parts import ToolCallPart, ToolResultPart
@@ -92,8 +99,6 @@ def _get_tool_ops(provider: str) -> Any:
     Resolved through the converter registry — the format's own package names
     its ToolOps class, so a new format needs no branch here.
     """
-    from .converters.registry import CONVERTER_REGISTRY
-
     converter_cls = CONVERTER_REGISTRY.get("llm", {}).get(provider)
     tool_ops_cls = getattr(converter_cls, "tool_ops_class", None)
     if tool_ops_cls is None:
@@ -221,43 +226,31 @@ def config_from_provider(
 
 def to_chat_completions(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to OpenAI Chat Completions format."""
-    from .converters.llm.chat_completions import ChatCompletionsToolOps
-
     return ChatCompletionsToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
 def to_open_responses(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to OpenAI Responses format."""
-    from .converters.llm.open_responses import OpenResponsesToolOps
-
     return OpenResponsesToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
 def to_messages(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to Messages format."""
-    from .converters.llm.messages import MessagesToolOps
-
     return MessagesToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
 def to_google_generate(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to Google generateContent format."""
-    from .converters.llm.google_generate import GoogleGenerateToolOps
-
     return GoogleGenerateToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
 def to_google_interactions(ir_tool: ToolDefinition, **kwargs: Any) -> dict[str, Any]:
     """Convert IR tool definition to Google Interactions format."""
-    from .converters.llm.google_interactions import GoogleInteractionsToolOps
-
     return GoogleInteractionsToolOps.ir_tool_definition_to_p(ir_tool, **kwargs)
 
 
 def from_chat_completions(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
     """Convert OpenAI Chat Completions tool definition to IR format."""
-    from .converters.llm.chat_completions import ChatCompletionsToolOps
-
     return ChatCompletionsToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
 
@@ -265,15 +258,11 @@ def from_open_responses(
     provider_tool: Any, **kwargs: Any
 ) -> ToolDefinition | list[ToolDefinition] | None:
     """Convert OpenAI Responses tool definition to IR format."""
-    from .converters.llm.open_responses import OpenResponsesToolOps
-
     return OpenResponsesToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
 
 def from_messages(provider_tool: Any, **kwargs: Any) -> ToolDefinition | None:
     """Convert Messages tool definition to IR format."""
-    from .converters.llm.messages import MessagesToolOps
-
     return MessagesToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
 
@@ -281,8 +270,6 @@ def from_google_generate(
     provider_tool: Any, **kwargs: Any
 ) -> ToolDefinition | list[ToolDefinition] | None:
     """Convert Google generateContent tool definition to IR format."""
-    from .converters.llm.google_generate import GoogleGenerateToolOps
-
     return GoogleGenerateToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
 
 
@@ -290,6 +277,4 @@ def from_google_interactions(
     provider_tool: Any, **kwargs: Any
 ) -> ToolDefinition | list[ToolDefinition] | None:
     """Convert Google Interactions tool definition to IR format."""
-    from .converters.llm.google_interactions import GoogleInteractionsToolOps
-
     return GoogleInteractionsToolOps.p_tool_definition_to_ir(provider_tool, **kwargs)
