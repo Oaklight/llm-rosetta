@@ -12,6 +12,7 @@ def render(header, edges):
     return "\n".join(lines + [""] + styles) + "\n"
 
 current_header = '''flowchart TB
+  GW["gateway:transport 注册表<br/>经 api 注册 transports 处理器(#1774)"]
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
     API["api.py<br/>宿主门面:只做再导出(再导出的边不画)"]
     TESTING["testing.py<br/>测试辅助:snapshot_registry · restore_registry(core 不导入)"]
@@ -58,6 +59,7 @@ current_edges = [
  ("INIT","SHIM","接线(带保护的导入)","solid",None), ("INIT","DET","","solid",None),
  ("CLI","CDECL","","solid",None), ("CLI","EXTS","activate_extensions_dir(懒加载)","lazy",None),
  ("CLI","CLIA","懒加载","lazy",None), ("CLIA","CDECL","","solid",None),
+ ("GW","EXTS","经 api 注册 transports 处理器","lazy",GREEN),
  ("CLIA","EXTS","注册 commands 处理器(加载器回放已加载的扩展)","solid",GREEN),
  ("PIPE","CVT","","solid",None), ("PIPE","IROPS","","solid",None), ("PIPE","CDECL","","solid",None),
  ("CVT","IROPS","","solid",None), ("CVT","IRMODEL","","solid",None), ("CVT","CDECL","","solid",None),

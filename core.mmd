@@ -1,4 +1,5 @@
 flowchart TB
+  GW["gateway:transport 注册表<br/>经 api 注册 transports 处理器(#1774)"]
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
     API["api.py<br/>宿主门面:只做再导出(再导出的边不画)"]
     TESTING["testing.py<br/>测试辅助:snapshot_registry · restore_registry(core 不导入)"]
@@ -49,6 +50,7 @@ flowchart TB
   CLI -.->|"activate_extensions_dir(懒加载)"| EXTS
   CLI -.->|"懒加载"| CLIA
   CLIA --> CDECL
+  GW -.->|"经 api 注册 transports 处理器"| EXTS
   CLIA -->|"注册 commands 处理器(加载器回放已加载的扩展)"| EXTS
   PIPE --> CVT
   PIPE --> IROPS
@@ -77,5 +79,6 @@ flowchart TB
   REF -->|"转发(带警告)"| IRMODEL
 
   linkStyle 8 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 19 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 27 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 9 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 20 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 28 stroke:#d33,stroke-width:2.5px,color:#d33
