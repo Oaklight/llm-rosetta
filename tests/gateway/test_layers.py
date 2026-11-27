@@ -340,10 +340,7 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
         "observability",
         "ops",
     ),
-    "keystore": (
-        "maintenance",
-        "observability",
-    ),
+    "keystore": ("observability",),
     "maintenance": (
         "keystore",
         "observability",

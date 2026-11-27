@@ -109,7 +109,7 @@ _LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         ("admin/routes/keys.py", "llm_rosetta_gateway.ops.keys"),
         ("admin/routes/logos.py", "llm_rosetta_gateway._vendor.httpclient"),
         ("admin/routes/maintenance.py", "llm_rosetta_gateway.maintenance.backfills"),
-        ("admin/routes/maintenance.py", "llm_rosetta_gateway.maintenance.keystore"),
+        ("admin/routes/maintenance.py", "llm_rosetta_gateway.keystore.maintenance"),
         (
             "admin/routes/maintenance.py",
             "llm_rosetta_gateway.observability.maintenance",
@@ -194,7 +194,7 @@ _LEGACY_ALLOWLIST_FROZEN: frozenset[tuple[str, str]] = frozenset(
         ("admin/routes/keys.py", "llm_rosetta_gateway.ops.keys"),
         ("admin/routes/logos.py", "llm_rosetta_gateway._vendor.httpclient"),
         ("admin/routes/maintenance.py", "llm_rosetta_gateway.maintenance.backfills"),
-        ("admin/routes/maintenance.py", "llm_rosetta_gateway.maintenance.keystore"),
+        ("admin/routes/maintenance.py", "llm_rosetta_gateway.keystore.maintenance"),
         (
             "admin/routes/maintenance.py",
             "llm_rosetta_gateway.observability.maintenance",
