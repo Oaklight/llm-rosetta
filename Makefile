@@ -253,7 +253,7 @@ build-binary-musl:
 			mkdir -p /tmp/build && tar -cf - -C /workspace --exclude=.git --exclude=__pycache__ . | tar -xf - -C /tmp/build && cd /tmp/build && \
 			apk add --no-cache gcc musl-dev python3-dev git >/dev/null && \
 			pip install --break-system-packages patchelf -q && \
-			pip install --break-system-packages -e packages/llm-rosetta -e packages/llm-rosetta-gateway -q && \
+			pip install --break-system-packages -e packages/llm-rosetta -q && \
 			pip install --break-system-packages "nuitka[onefile]==4.2.1" ordered-set -q && \
 			printf "from llm_rosetta_gateway import main\nraise SystemExit(main())\n" > /tmp/_entry.py && \
 			python -m nuitka \
