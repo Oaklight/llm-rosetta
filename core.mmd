@@ -4,8 +4,7 @@ flowchart TB
     API["api.py<br/>宿主门面:只做再导出(再导出的边不画)"]
     TESTING["testing.py<br/>测试辅助:snapshot_registry · restore_registry(core 不导入)"]
     INIT["llm_rosetta/__init__<br/>convert() · get_converter_for_provider()"]
-    CLI["cli.py · __main__<br/>分发器 · 读已加载状态里的 area 表(#1773)"]
-    CLIA["cli_areas.py<br/>area 表 · 注册 commands 处理器(#1773)"]
+    CLI["cli/ 包 · __main__<br/>分发器(__init__) · area 表与 commands 处理器(areas.py)(#1773、#1789)"]
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]
@@ -47,11 +46,8 @@ flowchart TB
   INIT -->|"接线(带保护的导入)"| SHIM
   INIT --> DET
   CLI --> CDECL
-  CLI -.->|"activate_extensions_dir(懒加载)"| EXTS
-  CLI -.->|"懒加载"| CLIA
-  CLIA --> CDECL
   GW -.->|"经 api 注册 transports 处理器"| EXTS
-  CLIA -->|"注册 commands 处理器(加载器回放已加载的扩展)"| EXTS
+  CLI -->|"注册 commands 处理器(加载器回放已加载的扩展)"| EXTS
   PIPE --> CVT
   PIPE --> IROPS
   PIPE --> CDECL
@@ -84,7 +80,7 @@ flowchart TB
   PIPE -.->|"按需加载"| FID
   SHIM -.->|"按需加载:clear_converter_cache()"| DET
 
-  linkStyle 8 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 9 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 20 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 28 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 5 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 6 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 17 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 25 stroke:#d33,stroke-width:2.5px,color:#d33
