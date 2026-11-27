@@ -96,11 +96,8 @@ llm-rosetta ext new together
 ```
 
 每次运行都会用真实 loader 加载自己的产物，再报告成功，所以 gateway 读不了的
-形状在创建时就失败，而不是等到启动。检查扩展目录用 `llm-rosetta ext check <目录>`，检查单独的树用：
-
-```bash
-python -c "import sys; from pathlib import Path; from llm_rosetta.api import run_scaffold_check; sys.exit(run_scaffold_check(Path(sys.argv[1])))" src/llm_rosetta/shims/builtin
-```
+形状在创建时就失败，而不是等到启动。`llm-rosetta ext check <目录>` 用这份契约检查扩展目录，
+把这个目录当作唯一的 vendor。
 
 ## 模板目录如何对应到 shim
 

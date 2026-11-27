@@ -736,3 +736,62 @@ def test_package_data_is_read_from_the_tree_not_from_a_fixed_list():
         "plugin.yaml",
         "provider.yaml",
     ]
+
+
+# ---------------------------------------------------------------------------
+# ext check applies the shim tree contract, with the folder as the one vendor
+# ---------------------------------------------------------------------------
+
+
+def test_a_lone_lane_in_a_format_directory_is_a_contract_problem(tmp_path):
+    folder = _make(tmp_path, "acme")
+    lane = folder / "llm" / "chat_completions"
+    lane.mkdir()
+    (folder / "llm" / "provider.yaml").rename(lane / "provider.yaml")
+    problems = _problems(folder)
+    assert len(problems) == 1
+    assert problems[0].startswith(
+        "shim tree: llm/chat_completions/provider.yaml: the only lane of llm"
+    )
+
+
+def test_a_leaf_at_the_vendor_root_is_a_contract_problem(tmp_path):
+    folder = _make(tmp_path, "acme")
+    (folder / "provider.yaml").write_text(
+        (folder / "llm" / "provider.yaml").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+    (folder / "llm" / "provider.yaml").unlink()
+    assert any(
+        p.startswith("shim tree: provider.yaml: a vendor directory is a leaf")
+        for p in _problems(folder)
+    )
+
+
+def test_a_sibling_extension_does_not_change_what_a_folder_is_told(tmp_path):
+    good = _make(tmp_path, "good")
+    bad = _make(tmp_path, "bad")
+    lane = bad / "llm" / "chat_completions"
+    lane.mkdir()
+    (bad / "llm" / "provider.yaml").rename(lane / "provider.yaml")
+    assert _problems(good) == []
+    assert _problems(bad) != []
+
+
+def test_a_provider_yaml_under_tests_is_not_read_by_the_tree_contract(tmp_path):
+    from llm_rosetta.authoring.tree_contract import check_tree
+
+    folder = _make(tmp_path, "acme")
+    fixture = folder / "tests" / "fixtures"
+    fixture.mkdir()
+    (fixture / "provider.yaml").write_text(
+        "name: other\nmodel_type: llm\nformat: messages\n", encoding="utf-8"
+    )
+    assert check_tree(tmp_path, only="acme") == []
+
+
+def test_every_kind_has_its_own_rules():
+    from llm_rosetta.authoring.kinds import PROBLEMS
+    from llm_rosetta.extensions import KINDS
+
+    assert set(PROBLEMS) == set(KINDS)

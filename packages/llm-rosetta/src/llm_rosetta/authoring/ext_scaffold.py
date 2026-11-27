@@ -18,7 +18,6 @@ it.  The wheel check therefore builds from a clean copy.
 from __future__ import annotations
 
 import argparse
-import ast
 import importlib.util
 import re
 import shutil
@@ -33,15 +32,12 @@ from typing import Any
 
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
 from llm_rosetta.contracts.extension import (
-    COMMANDS_ATTRIBUTE,
-    COMMANDS_MODULE,
     MANIFEST_FILENAME,
-    TRANSPORT_MODULE,
-    TRANSPORTS_ATTRIBUTE,
     ExtensionManifest,
     ExtensionManifestInvalid,
     parse_extension_manifest,
 )
+from llm_rosetta.authoring.kinds import PROBLEMS
 from llm_rosetta.authoring.scaffold import _render
 from llm_rosetta.extensions import KINDS
 from llm_rosetta.extensions._cli import ExtVerb
@@ -437,27 +433,6 @@ def _read_manifest(folder: Path) -> ExtensionManifest:
     return parse_extension_manifest(document)
 
 
-def _tree_shims(folder: Path) -> set[str]:
-    """Load the folder's shim tree off to the side and name what registered."""
-    from llm_rosetta.contracts.shim import load_providers_from_dir
-    from llm_rosetta.shims.provider_shim import staging_registry
-
-    class _Discard(Exception):
-        """Leaves the staging block so the live registry is not replaced."""
-
-    names: set[str] = set()
-    try:
-        with staging_registry():
-            loaded = load_providers_from_dir(
-                folder.parent, only_paths=(folder.name,), on_error="raise"
-            )
-            names = {shim.name for shim in loaded}
-            raise _Discard
-    except _Discard:
-        pass
-    return names
-
-
 def expected_wheel_files(folder: Path) -> set[str]:
     """List the wheel members the folder should produce.
 
@@ -594,112 +569,6 @@ def _check_wheel(folder: Path, build: bool, result: ExtCheckResult) -> None:
         result.problems.append(f"wheel ships {extra}, which is not in the folder")
 
 
-def _literal_keys(tree: ast.Module, name: str) -> set[str] | None:
-    """Return the string keys of the module-level dict literal *name*, if any."""
-    keys: set[str] | None = None
-    for node in tree.body:
-        targets = (
-            node.targets
-            if isinstance(node, ast.Assign)
-            else [node.target]
-            if isinstance(node, ast.AnnAssign)
-            else []
-        )
-        value = getattr(node, "value", None)
-        if any(isinstance(t, ast.Name) and t.id == name for t in targets) and (
-            isinstance(value, ast.Dict)
-        ):
-            keys = {
-                key.value
-                for key in value.keys
-                if isinstance(key, ast.Constant) and isinstance(key.value, str)
-            }
-    return keys
-
-
-def _command_problems(folder: Path, declared: tuple[str, ...]) -> list[str]:
-    """Check ``commands.py`` against ``provides.commands``.
-
-    The dispatcher reads a ``COMMANDS`` mapping (verb to callable) from
-    ``llm_rosetta_ext.<id>.commands`` when a verb runs.  The check is static,
-    so it never imports the extension.
-    """
-    module = next(
-        (
-            path
-            for path in (
-                folder / f"{COMMANDS_MODULE}.py",
-                folder / COMMANDS_MODULE / "__init__.py",
-            )
-            if path.is_file()
-        ),
-        None,
-    )
-    if module is None:
-        return [
-            f"provides.commands lists {', '.join(declared)} but the folder has "
-            "no commands module"
-        ]
-    try:
-        tree = ast.parse(module.read_text(encoding="utf-8"))
-    except SyntaxError as exc:
-        return [f"{module.name} does not parse: {exc}"]
-    keys = _literal_keys(tree, COMMANDS_ATTRIBUTE)
-    if keys is None:
-        return [
-            "the commands module has no COMMANDS mapping (a dict literal of verb "
-            f"to callable); the dispatcher needs it to run {', '.join(declared)}"
-        ]
-    if keys != set(declared):
-        return [
-            f"COMMANDS has {sorted(keys)} but provides.commands lists "
-            f"{sorted(declared)}"
-        ]
-    return []
-
-
-def _transport_problems(folder: Path, declared: tuple[str, ...]) -> list[str]:
-    """Check the transport module against ``provides.transports``.
-
-    The gateway reads a ``TRANSPORTS`` mapping (transport id to factory) from
-    ``llm_rosetta_ext.<id>.transport`` when it builds the lane.  The check is
-    static, so it never imports the extension.
-    """
-    module = next(
-        (
-            path
-            for path in (
-                folder / TRANSPORT_MODULE / "__init__.py",
-                folder / f"{TRANSPORT_MODULE}.py",
-            )
-            if path.is_file()
-        ),
-        None,
-    )
-    if module is None:
-        return [
-            f"provides.transports lists {', '.join(declared)} but the folder has "
-            "no transport module or package"
-        ]
-    try:
-        tree = ast.parse(module.read_text(encoding="utf-8"))
-    except SyntaxError as exc:
-        return [f"{module.name} does not parse: {exc}"]
-    keys = _literal_keys(tree, TRANSPORTS_ATTRIBUTE)
-    if keys is None:
-        return [
-            f"the transport module has no TRANSPORTS mapping (a dict literal of "
-            f"transport id to factory); the gateway needs it to build "
-            f"{', '.join(declared)}"
-        ]
-    if keys != set(declared):
-        return [
-            f"TRANSPORTS has {sorted(keys)} but provides.transports lists "
-            f"{sorted(declared)}"
-        ]
-    return []
-
-
 def check_extension(folder: Path, *, build: bool = True) -> ExtCheckResult:
     """Validate one extension folder.
 
@@ -737,24 +606,8 @@ def check_extension(folder: Path, *, build: bool = True) -> ExtCheckResult:
             result.problems.append(f"missing {relative}")
     if not (folder / "tests").is_dir():
         result.problems.append("missing tests/")
-    if manifest.transports:
-        result.problems.extend(_transport_problems(folder, manifest.transports))
-    if manifest.commands:
-        result.problems.extend(_command_problems(folder, tuple(manifest.commands)))
-    try:
-        registered = _tree_shims(folder)
-    except Exception as exc:  # noqa: BLE001 - name the loader's complaint
-        result.problems.append(f"shim tree does not load: {type(exc).__name__}: {exc}")
-    else:
-        declared = set(manifest.shims)
-        for name in sorted(declared - registered):
-            result.problems.append(
-                f"provides.shims lists {name!r} but the tree does not register it"
-            )
-        for name in sorted(registered - declared):
-            result.problems.append(
-                f"the tree registers {name!r} but provides.shims does not list it"
-            )
+    for kind in KINDS:
+        result.problems.extend(PROBLEMS[kind](folder, manifest))
     _check_pyproject(folder, manifest, result)
     _check_wheel(folder, build, result)
     return result

@@ -129,7 +129,31 @@ def _mixed_level_problem(root: Path, tail: list[str]) -> str:
     )
 
 
-def _token_command_problems(root: Path) -> list[Finding]:
+#: Folders of an extension that hold no shim tree.
+_NOT_TREE = frozenset({"tests", "build", "dist", "__pycache__"})
+
+
+def _provider_yamls(root: Path, only: str | None) -> list[Path]:
+    """The ``provider.yaml`` files below *root*, or below its vendor *only*."""
+    if only is None:
+        return sorted(root.rglob("provider.yaml"))
+    base = root / only
+    return [
+        path
+        for path in sorted(base.rglob("provider.yaml"))
+        if not set(path.relative_to(base).parts[:-1]) & _NOT_TREE
+        and not any(part.endswith(".egg-info") for part in path.relative_to(base).parts)
+    ]
+
+
+def _vendor_dirs(root: Path, only: str | None) -> list[Path]:
+    """The vendor directories of *root*, or just *only*."""
+    if only is None:
+        return sorted(root.iterdir())
+    return [root / only] if (root / only).is_dir() else []
+
+
+def _token_command_problems(root: Path, only: str | None = None) -> list[Finding]:
     """Report a relative ``token_command`` entry whose file is not there.
 
     A credential-exchange command runs with the leaf directory as its working
@@ -140,7 +164,7 @@ def _token_command_problems(root: Path) -> list[Finding]:
     interpreter name or a flag is not a file to look for.
     """
     findings: list[Finding] = []
-    for provider_yaml in sorted(root.rglob("provider.yaml")):
+    for provider_yaml in _provider_yamls(root, only):
         if any(
             part.startswith(("_", "."))
             for part in provider_yaml.relative_to(root).parts
@@ -173,10 +197,10 @@ def _token_command_problems(root: Path) -> list[Finding]:
     return findings
 
 
-def _module_problems(root: Path) -> list[Finding]:
+def _module_problems(root: Path, only: str | None = None) -> list[Finding]:
     """Report the places a module sits where the loader will not read it."""
     findings: list[Finding] = []
-    for vendor_dir in sorted(root.iterdir()):
+    for vendor_dir in _vendor_dirs(root, only):
         if not vendor_dir.is_dir() or vendor_dir.name.startswith(("_", ".")):
             continue
         transforms = vendor_dir / "transforms.py"
@@ -211,7 +235,7 @@ def _module_problems(root: Path) -> list[Finding]:
     return findings
 
 
-def _field_problems(root: Path) -> list[Finding]:
+def _field_problems(root: Path, only: str | None = None) -> list[Finding]:
     """Report a ``fields:`` block the loader would refuse.
 
     The panel renders those entries verbatim, so the loader validates them
@@ -222,7 +246,7 @@ def _field_problems(root: Path) -> list[Finding]:
     from llm_rosetta.shims._loader import _declared_fields
 
     findings: list[Finding] = []
-    for provider_yaml in sorted(root.rglob("provider.yaml")):
+    for provider_yaml in _provider_yamls(root, only):
         if any(
             part.startswith(("_", "."))
             for part in provider_yaml.relative_to(root).parts
@@ -247,7 +271,7 @@ def _field_problems(root: Path) -> list[Finding]:
     return findings
 
 
-def check_tree(root: Path) -> list[Finding]:
+def check_tree(root: Path, *, only: str | None = None) -> list[Finding]:
     """Report every place *root* deviates from the shim tree contract.
 
     The contract is the one ``_shim_template/README_en.md`` states: a vendor
@@ -259,6 +283,8 @@ def check_tree(root: Path) -> list[Finding]:
 
     Args:
         root: The directory a gateway scans.
+        only: The name of one vendor directory of *root* to check alone: an
+            extension folder is one vendor, and its siblings are not its tree.
 
     Returns:
         The findings, sorted by path.  An empty list means the tree conforms.
@@ -266,7 +292,7 @@ def check_tree(root: Path) -> list[Finding]:
     if not root.is_dir():
         return [Finding(root, "is not a directory")]
     findings: list[Finding] = []
-    for provider_yaml in sorted(root.rglob("provider.yaml")):
+    for provider_yaml in _provider_yamls(root, only):
         parts = provider_yaml.relative_to(root).parts
         if any(part.startswith(("_", ".")) for part in parts):
             continue
@@ -300,9 +326,9 @@ def check_tree(root: Path) -> list[Finding]:
         )
         if problem:
             findings.append(Finding(provider_yaml, problem))
-    findings.extend(_module_problems(root))
-    findings.extend(_token_command_problems(root))
-    findings.extend(_field_problems(root))
+    findings.extend(_module_problems(root, only))
+    findings.extend(_token_command_problems(root, only))
+    findings.extend(_field_problems(root, only))
     return sorted(findings, key=lambda f: str(f.path))
 
 
@@ -438,7 +464,9 @@ def _group_moves(
     return moves
 
 
-def plan_migration(root: Path) -> tuple[list[Move], list[str]]:
+def plan_migration(
+    root: Path, *, only: str | None = None
+) -> tuple[list[Move], list[str]]:
     """Plan the moves that put *root* on the contract.
 
     Only the mechanical part is planned: a leaf that sits at the wrong depth,
@@ -448,6 +476,7 @@ def plan_migration(root: Path) -> tuple[list[Move], list[str]]:
 
     Args:
         root: The directory a gateway scans.
+        only: The name of one vendor directory of *root* to plan alone.
 
     Returns:
         ``(moves, notes)``; apply the moves with :func:`apply_migration`.
@@ -455,7 +484,7 @@ def plan_migration(root: Path) -> tuple[list[Move], list[str]]:
     notes: list[str] = []
     groups: dict[tuple[str, tuple[str, ...], str], list[dict[str, Any]]] = {}
     leaf_dirs: set[Path] = set()
-    for provider_yaml in sorted(root.rglob("provider.yaml")):
+    for provider_yaml in _provider_yamls(root, only):
         parts = provider_yaml.relative_to(root).parts
         if any(part.startswith(("_", ".")) for part in parts):
             continue
