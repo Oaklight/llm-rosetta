@@ -45,10 +45,10 @@ current_header = '''flowchart TB
     VOCAB["model_vocabulary · retired_names · conversion_warnings"]
     REF["types/<br/>提供方参考形状:openai · google · messages<br/>types.ir 是 0.13.0 的转发,0.15.0 删除"]
   end
-  subgraph TOOLS["工具"]
+  subgraph TOOLS["运行时附件与作者工具"]
     FID["fidelity/"]
     PROF["profiling/"]
-    DEV["devtools/<br/>scaffold · ext_scaffold · 模板"]
+    DEV["authoring/<br/>扩展作者工具(随包发布):ext new · ext check · 模板(#1803)"]
   end
 '''
 current_edges = [
