@@ -75,6 +75,9 @@ current_edges = [
  ("DET","FMT","","solid",None), ("FMT","IRMODEL","","solid",None),
  ("CAP","CVT","","solid",None), ("CAP","PIPE","转发 enforcement","solid",None), ("DEV","CDECL","","solid",None),
  ("REF","IRMODEL","转发(带警告)","solid",None),
+ ("DET","CVT","按需加载(LAZY_ONLY_EDGES,#1787)","lazy",None), ("DET","PIPE","按需加载","lazy",None),
+ ("DEV","CVT","按需加载","lazy",None), ("DEV","SHIM","按需加载","lazy",None),
+ ("PIPE","FID","按需加载","lazy",None), ("SHIM","DET","按需加载:clear_converter_cache()","lazy",None),
 ]
 open("core.mmd","w",encoding="utf-8").write(render(current_header, current_edges))
 

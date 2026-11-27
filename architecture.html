@@ -105,6 +105,12 @@ pre.error { color: #b00; white-space: pre-wrap; }
   CAP --&gt;|"转发 enforcement"| PIPE
   DEV --&gt; CDECL
   REF --&gt;|"转发(带警告)"| IRMODEL
+  DET -.-&gt;|"按需加载(LAZY_ONLY_EDGES,#1787)"| CVT
+  DET -.-&gt;|"按需加载"| PIPE
+  DEV -.-&gt;|"按需加载"| CVT
+  DEV -.-&gt;|"按需加载"| SHIM
+  PIPE -.-&gt;|"按需加载"| FID
+  SHIM -.-&gt;|"按需加载:clear_converter_cache()"| DET
 
   linkStyle 8 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
   linkStyle 9 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c

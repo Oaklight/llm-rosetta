@@ -77,6 +77,12 @@ flowchart TB
   CAP -->|"转发 enforcement"| PIPE
   DEV --> CDECL
   REF -->|"转发(带警告)"| IRMODEL
+  DET -.->|"按需加载(LAZY_ONLY_EDGES,#1787)"| CVT
+  DET -.->|"按需加载"| PIPE
+  DEV -.->|"按需加载"| CVT
+  DEV -.->|"按需加载"| SHIM
+  PIPE -.->|"按需加载"| FID
+  SHIM -.->|"按需加载:clear_converter_cache()"| DET
 
   linkStyle 8 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
   linkStyle 9 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
