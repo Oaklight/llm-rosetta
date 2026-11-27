@@ -19,6 +19,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from llm_rosetta import retired_names
+
 
 FidelityMode = Literal["critical", "full"]
 
@@ -518,8 +520,6 @@ class FidelityChecker:
         model_type: str = "llm",
     ) -> None:
         self.mode = mode
-        from llm_rosetta import retired_names
-
         retired_names.check_not_retired(model_type, retired_names.MODEL_TYPE)
         self.model_type = model_type
         self.format_name = format_name

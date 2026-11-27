@@ -424,6 +424,100 @@ def _actual_edges() -> dict[tuple[str, str], str]:
     return found
 
 
+#: The edges that exist only as function-local imports, each with why it is not
+#: at the top of its module.  ``CORE_EDGES`` lists every edge, eager or lazy; this
+#: table names the ones a reader of ``CORE_EDGES`` cannot see are lazy.  A new
+#: lazy-only edge must be listed with its reason; an edge that becomes eager (or
+#: goes) must leave it.
+LAZY_ONLY_EDGES: dict[tuple[str, str], str] = {
+    ("auto_detect", "converters"): "a converter is built on the first call",
+    ("auto_detect", "pipeline"): "convert() builds its pipeline on the first call",
+    ("cli", "cli_areas"): "a command loads only the code it runs",
+    ("cli", "devtools"): "a command loads only the code it runs",
+    ("cli", "extensions"): "a command loads only the code it runs",
+    (
+        "devtools",
+        "converters",
+    ): "read when a command runs; a partial install still starts",
+    ("devtools", "shims"): "the scaffold commands load the shim loader when they run",
+    ("pipeline", "fidelity"): "the checker is built only when a fidelity mode is set",
+    ("shims", "auto_detect"): "the registry clears the converter cache when it is "
+    "rebuilt or restored",
+}
+
+
+def _imported_names(node: ast.AST, package: list[str]) -> list[str]:
+    """The absolute module names one import statement names (empty otherwise)."""
+    if isinstance(node, ast.Import):
+        return [alias.name for alias in node.names]
+    if not isinstance(node, ast.ImportFrom):
+        return []
+    if node.level:
+        base = package[: len(package) - (node.level - 1)]
+        module = ".".join(base + ([node.module] if node.module else []))
+    else:
+        module = node.module or ""
+    return [module] + [f"{module}.{alias.name}" for alias in node.names]
+
+
+def _top_level_imports(tree: ast.AST, package: list[str]) -> list[str]:
+    """Names imported outside any function, however deeply nested in ``if``/``try``."""
+    names: list[str] = []
+    pending = list(ast.iter_child_nodes(tree))
+    while pending:
+        node = pending.pop()
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        names += _imported_names(node, package)
+        pending += list(ast.iter_child_nodes(node))
+    return names
+
+
+def _eager_edges() -> set[tuple[str, str]]:
+    """Unit-to-unit imports that run when their module is imported.
+
+    An import inside a function does not count.
+    """
+    units = _core_units()
+    found: set[tuple[str, str]] = set()
+    for path in sorted(_CORE.rglob("*.py")):
+        if any(part in _SKIPPED_PARTS for part in path.parts):
+            continue
+        package = _module_name(path)
+        if path.name != "__init__.py":
+            package = package[:-1]
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        source = _unit_of(path)
+        for name in _top_level_imports(tree, package):
+            parts = name.split(".")
+            if (
+                parts[0] == "llm_rosetta"
+                and len(parts) > 1
+                and parts[1] in units
+                and parts[1] != source
+            ):
+                found.add((source, parts[1]))
+    return found
+
+
+def _lazy_only_edges() -> set[tuple[str, str]]:
+    return set(_actual_edges()) - _eager_edges()
+
+
+def test_every_edge_that_exists_only_inside_functions_is_listed_with_its_reason():
+    new = sorted(_lazy_only_edges() - set(LAZY_ONLY_EDGES))
+    assert new == [], (
+        "these edges are imported only inside functions; import them at the top of "
+        "the module, or add them to LAZY_ONLY_EDGES in tests/test_core_layering.py "
+        f"with the reason: {new}"
+    )
+
+
+def test_the_lazy_only_table_lists_no_edge_that_is_eager_or_gone():
+    stale = sorted(set(LAZY_ONLY_EDGES) - _lazy_only_edges())
+    assert stale == [], f"delete these rows from LAZY_ONLY_EDGES: {stale}"
+
+
 def test_no_core_package_gains_an_import_the_table_does_not_list():
     allowed = {(src, dst) for src, dsts in CORE_EDGES.items() for dst in dsts}
     new = [

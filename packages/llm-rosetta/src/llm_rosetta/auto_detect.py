@@ -7,6 +7,7 @@ Utility functions for auto-detecting LLM provider request body formats
 
 from typing import Any, cast
 
+from . import retired_names
 from .contracts.routing import ProviderType
 from .formats.detect import detect_format as _detect_body
 
@@ -36,6 +37,15 @@ def detect_provider(body: dict[str, Any]) -> ProviderType | None:
 
 
 _converter_cache: dict[str, Any] = {}
+
+
+def clear_converter_cache() -> None:
+    """Forget every cached converter.
+
+    The shim registry calls this when it is rebuilt or restored: a cached
+    converter was derived from a shim that may no longer exist.
+    """
+    _converter_cache.clear()
 
 
 def get_converter_for_provider(provider: str):
@@ -83,8 +93,6 @@ def get_converter_for_provider(provider: str):
         _converter_cache[provider] = instance
         _converter_cache[base] = instance
         return instance
-
-    from . import retired_names
 
     retired_names.check_not_retired(
         provider, retired_names.PROVIDER_TYPE, retired_names.SHIM

@@ -240,9 +240,9 @@ def _clear_registry_caches() -> None:
     """
     # Also clear the converter cache since shim resolution may have
     # cached converters for names that are now unregistered.
-    from llm_rosetta.auto_detect import _converter_cache
+    from llm_rosetta.auto_detect import clear_converter_cache
 
-    _converter_cache.clear()
+    clear_converter_cache()
 
     # Clear convention-based model list transforms.
     from llm_rosetta.shims._loader import _model_list_transforms
@@ -319,7 +319,7 @@ def restore_registry(snapshot: RegistrySnapshot) -> None:
         snapshot: A snapshot from :func:`snapshot_registry`.
     """
     global _SHIM_REGISTRY
-    from llm_rosetta.auto_detect import _converter_cache
+    from llm_rosetta.auto_detect import clear_converter_cache
 
     from ._loader import _model_list_transforms
 
@@ -327,7 +327,7 @@ def restore_registry(snapshot: RegistrySnapshot) -> None:
     _model_list_transforms.clear()
     _model_list_transforms.update(snapshot.model_list_transforms)
     # Cached converters are derived from shims that may no longer exist.
-    _converter_cache.clear()
+    clear_converter_cache()
 
 
 class _RegistryResolver:
