@@ -22,7 +22,7 @@ SCRIPTS = ("entrypoint.sh", "entrypoint-binary.sh")
 
 _STUB = """#!/bin/sh
 echo "$0 $*" >> "$STUB_LOG"
-echo "EXT=${LLM_ROSETTA_EXTENSIONS_DIR:-} HOME=$HOME" >> "$STUB_ENV"
+echo "EXT=${LLM_ROSETTA_EXTENSIONS_DIR:-} HOME=$HOME TOOLS=${LLM_ROSETTA_TOOLS_DIR:-} PATHHEAD=${PATH%%:*}" >> "$STUB_ENV"
 # The real ``init`` writes the template; a stub does the same.
 case " $* " in
   *" init "*) mkdir -p "$CONFIG_DIR"; : > "$CONFIG_DIR/config.jsonc" ;;
@@ -155,7 +155,7 @@ def test_the_python_entrypoint_runs_the_given_command_after_the_template(tmp_pat
 
 
 def _stub_env(tmp_path: Path) -> dict[str, str]:
-    """What the command saw: ``EXT=<dir> HOME=<dir>`` of its first line."""
+    """What the command saw: ``EXT=<dir> HOME=<dir> ...`` of its last line."""
     line = (tmp_path / "stub.env").read_text().splitlines()[-1]
     return dict(part.split("=", 1) for part in line.split(" "))
 
@@ -238,3 +238,38 @@ def test_the_binary_image_with_an_unusable_home_still_gets_a_directory(tmp_path)
 
     assert result.returncode == 0, result.stderr
     assert _stub_env(tmp_path)["EXT"] == str(tmp_path / "config" / "extensions")
+
+
+@pytest.mark.parametrize("script", SCRIPTS)
+@pytest.mark.parametrize(
+    "argv",
+    [SERVES[0], ["llm-rosetta", "ext", "install-cli", "claude"]],
+    ids=["serve", "one-off"],
+)
+def test_the_tools_directory_defaults_to_the_config_volume_and_is_on_path(
+    script, argv, tmp_path
+):
+    """``ext install-cli`` installs into the volume; the programs it links are found."""
+    result, _log = _run(script, argv, tmp_path, env={"LLM_ROSETTA_TOOLS_DIR": None})
+
+    assert result.returncode == 0, result.stderr
+    seen = _stub_env(tmp_path)
+    assert seen["TOOLS"] == str(tmp_path / "config" / "tools")
+    assert seen["PATHHEAD"] == str(tmp_path / "config" / "tools" / "bin")
+
+
+@pytest.mark.parametrize("script", SCRIPTS)
+def test_a_tools_directory_the_operator_set_is_kept_and_on_path(script, tmp_path):
+    mine = tmp_path / "mine"
+
+    result, _log = _run(
+        script,
+        ["llm-rosetta", "ext", "list"],
+        tmp_path,
+        env={"LLM_ROSETTA_TOOLS_DIR": str(mine)},
+    )
+
+    assert result.returncode == 0, result.stderr
+    seen = _stub_env(tmp_path)
+    assert seen["TOOLS"] == str(mine)
+    assert seen["PATHHEAD"] == str(mine / "bin")
