@@ -18,11 +18,10 @@ WORKDIR /app
 RUN addgroup -g 1000 appgroup && \
     adduser -D -u 1000 -G appgroup appuser
 
-# The "-agents" tag (WITH_AGENTS=1) adds Node.js and npm, so `llm-rosetta ext
-# install-cli` can install an agent CLI that is distributed through npm.  The
-# default image does not change.
-ARG WITH_AGENTS=0
-RUN if [ "$WITH_AGENTS" = "1" ]; then apk add --no-cache nodejs npm; fi
+# `llm-rosetta ext install-cli` installs Node.js and the agent CLIs into
+# /config/tools, so they follow the volume and not the image.  The musl build of
+# Node.js is linked against libstdc++ (and libgcc), which this base lacks.
+RUN apk add --no-cache libstdc++
 
 RUN mkdir -p /tmp/dist/
 COPY dist/ /tmp/dist/
