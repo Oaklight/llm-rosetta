@@ -28,87 +28,87 @@ pre.error { color: #b00; white-space: pre-wrap; }
   <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="core"> <span id="z-core">100%</span></label></div>
   <div class="scroll"><div class="stage" id="stage-core"><pre class="mermaid" id="m-core">flowchart TB
   GW["gateway:transport 注册表&lt;br/&gt;经 api 注册 transports 处理器(#1774)"]
-  subgraph FACADE["入口与门面(core 内部不得导入 api)"]
-    API["api.py&lt;br/&gt;宿主门面:只做再导出(再导出的边不画)"]
-    TESTING["testing.py&lt;br/&gt;测试辅助:snapshot_registry · restore_registry(core 不导入)"]
-    INIT["llm_rosetta/__init__&lt;br/&gt;convert() · get_converter_for_provider()"]
-    TOOL["tool_ops.py&lt;br/&gt;入口便捷层:为 toolregistry 直接转换工具定义/调用/结果;只被 llm_rosetta/__init__ 导入"]
-    CLI["cli/ 包 · __main__&lt;br/&gt;分发器(__init__) · area 表与 commands 处理器(areas.py)(#1773、#1789)"]
-    DET["auto_detect.py&lt;br/&gt;0.13.0 的转发,无逻辑,0.15.0 删除;无人导入(#1797)"]
-    CAP["capabilities.py&lt;br/&gt;0.13.0 的转发,警告,0.15.0 删除;无人导入"]
-  end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]
       PIPE["pipeline/&lt;br/&gt;chat · embeddings · rerank · decisions · typed&lt;br/&gt;enforcement(感知 shim 的能力 pass,#1745) · tool_locations(#1744)"]
       CVT["converters/&lt;br/&gt;base(含 ConversionError) · llm/各格式 · embeddings · rerank · decisions(各含 lookup) · registry"]
       subgraph IRCORE["ir/(一个包,#1710)"]
-        IROPS["ir/ 逻辑&lt;br/&gt;primitives · tools · passes · context"]
         IRMODEL["ir/model/&lt;br/&gt;数据类 · 类型守卫 · 校验 · IR_VERSION&lt;br/&gt;只依赖标准库"]
+        IROPS["ir/ 逻辑&lt;br/&gt;primitives · tools · passes · context"]
       end
     end
+  end
+  subgraph FACADE["入口与门面(core 内部不得导入 api)"]
+    TOOL["tool_ops.py&lt;br/&gt;入口便捷层:为 toolregistry 直接转换工具定义/调用/结果;只被 llm_rosetta/__init__ 导入"]
+    CLI["cli/ 包 · __main__&lt;br/&gt;分发器(__init__) · area 表与 commands 处理器(areas.py)(#1773、#1789)"]
+    CAP["capabilities.py&lt;br/&gt;0.13.0 的转发,警告,0.15.0 删除;无人导入"]
+    TESTING["testing.py&lt;br/&gt;测试辅助:snapshot_registry · restore_registry(core 不导入)"]
+    INIT["llm_rosetta/__init__&lt;br/&gt;convert() · get_converter_for_provider()"]
+    DET["auto_detect.py&lt;br/&gt;0.13.0 的转发,无逻辑,0.15.0 删除;无人导入(#1797)"]
+    API["api.py&lt;br/&gt;宿主门面:只做再导出(再导出的边不画)"]
+  end
+  subgraph TOOLS["运行时附件与作者工具"]
+    PROF["profiling/"]
+    DEV["authoring/&lt;br/&gt;扩展作者工具(随包发布):ext new · ext check · ext migrate&lt;br/&gt;树契约 · kinds(shims/transports/commands 的规则)· 样本模板树(#1803-#1817)"]
+    FID["fidelity/"]
   end
   subgraph OPT["可选外层(没有它们,转换库照样完整)"]
     SHIM["shims/&lt;br/&gt;provider_shim 注册表 · _loader · builtin/各 vendor · providers 转发层"]
     EXTS["extensions/&lt;br/&gt;_discovery · _load · _dirs · _install · _cli"]
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
-    subgraph CONS["contracts/"]
-      CDECL["声明层&lt;br/&gt;shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · _schema(清单校验用的 schema 解释器)&lt;br/&gt;依赖 ir.model · formats · retired_names(都按纯数据)"]
-      CXF["transform.py&lt;br/&gt;再导出 ir 原语&lt;br/&gt;contracts 里唯一导入 ir.primitives 的模块"]
-    end
-    FMT["formats/&lt;br/&gt;catalog · detect · spec · batch"]
-    VOCAB["model_vocabulary · retired_names · conversion_warnings"]
     REF["types/&lt;br/&gt;提供方参考形状:openai · google · messages&lt;br/&gt;types.ir 是 0.13.0 的转发,0.15.0 删除"]
-  end
-  subgraph TOOLS["运行时附件与作者工具"]
-    FID["fidelity/"]
-    PROF["profiling/"]
-    DEV["authoring/&lt;br/&gt;扩展作者工具(随包发布):ext new · ext check · ext migrate&lt;br/&gt;树契约 · kinds(shims/transports/commands 的规则)· 样本模板树(#1803-#1817)"]
+    FMT["formats/&lt;br/&gt;catalog · detect · spec · batch"]
+    subgraph CONS["contracts/"]
+      CXF["transform.py&lt;br/&gt;再导出 ir 原语&lt;br/&gt;contracts 里唯一导入 ir.primitives 的模块"]
+      CDECL["声明层&lt;br/&gt;shim 数据类 · resolver(叶子) · auth · quota · routing · usage · transport · command · extension · cli_login · _schema(清单校验用的 schema 解释器)&lt;br/&gt;依赖 ir.model · formats · retired_names(都按纯数据)"]
+    end
+    VOCAB["model_vocabulary · retired_names · conversion_warnings"]
   end
 
 
   INIT --&gt; PIPE
-  INIT --&gt; CVT
-  INIT --&gt;|"接线(带保护的导入)"| SHIM
-  INIT --&gt; TOOL
-  TOOL --&gt; CVT
-  CLI --&gt; CDECL
-  GW -.-&gt;|"经 api 注册 transports 处理器"| EXTS
-  CLI --&gt;|"注册 commands 处理器(加载器回放已加载的扩展)"| EXTS
-  PIPE --&gt; CVT
-  PIPE --&gt; IROPS
-  PIPE --&gt; CDECL
-  CVT --&gt; IROPS
+  SHIM --&gt;|"注册 resolver"| CDECL
+  CLI -.-&gt;|"把 ExtVerb 传给 ext_main"| DEV
   CVT --&gt; IRMODEL
+  SHIM --&gt;|"模块级:注册 shims 处理器;load_providers() 调 load_extensions()(#1735)"| EXTS
+  INIT --&gt;|"接线(带保护的导入)"| SHIM
+  PIPE -.-&gt;|"按需加载"| FID
+  DEV -.-&gt;|"按需加载"| SHIM
+  EXTS --&gt; CDECL
+  DEV --&gt; CDECL
   CVT --&gt; CDECL
   IROPS --&gt; IRMODEL
-  SHIM --&gt; IROPS
-  SHIM --&gt;|"注册 resolver"| CDECL
-  SHIM --&gt; FMT
-  SHIM --&gt;|"模块级:注册 shims 处理器;load_providers() 调 load_extensions()(#1735)"| EXTS
-  EXTS --&gt; CDECL
+  CXF --&gt; IROPS
   DEV --&gt;|"ext new / check 的 ExtVerb 记录(#1752)"| EXTS
-  CLI -.-&gt;|"把 ExtVerb 传给 ext_main"| DEV
+  PIPE --&gt; CVT
+  CAP --&gt; CVT
   CDECL --&gt;|"IREffort · IRMode · IR_VERSION"| IRMODEL
   CDECL --&gt;|"usage.semantics"| FMT
-  CDECL --&gt;|"retired_names"| VOCAB
-  CXF --&gt; IROPS
-  FMT --&gt; IRMODEL
-  CAP --&gt; CVT
-  CAP --&gt;|"转发 enforcement"| PIPE
-  DEV --&gt; CDECL
+  PIPE --&gt; IROPS
+  CVT --&gt; IROPS
+  PIPE --&gt; CDECL
   REF --&gt;|"转发(带警告)"| IRMODEL
-  DET --&gt;|"转发 get_converter_for_provider · detect_provider"| CVT
-  DET --&gt;|"转发 convert · convert_response(pipeline/facade)"| PIPE
+  SHIM --&gt; IROPS
+  CAP --&gt;|"转发 enforcement"| PIPE
   CVT --&gt;|"detect_provider 读格式目录(#1797)"| FMT
+  CLI --&gt;|"注册 commands 处理器(加载器回放已加载的扩展)"| EXTS
   SHIM --&gt;|"清转换器缓存(#1797)"| CVT
-  DEV -.-&gt;|"按需加载"| SHIM
-  PIPE -.-&gt;|"按需加载"| FID
+  DET --&gt;|"转发 get_converter_for_provider · detect_provider"| CVT
+  INIT --&gt; CVT
+  GW -.-&gt;|"经 api 注册 transports 处理器"| EXTS
+  DET --&gt;|"转发 convert · convert_response(pipeline/facade)"| PIPE
+  TOOL --&gt; CVT
+  CLI --&gt; CDECL
+  CDECL --&gt;|"retired_names"| VOCAB
+  SHIM --&gt; FMT
+  INIT --&gt; TOOL
+  FMT --&gt; IRMODEL
 
-  linkStyle 6 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 7 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 18 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 25 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 4 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 12 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 25 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 29 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
 </pre></div></div>
 </section>
 <section id="gateway">
@@ -116,17 +116,24 @@ pre.error { color: #b00; white-space: pre-wrap; }
   <p class="note">分层来自 tests/gateway/test_layers.py,只能向下导入。每个包都会用 core,图里只画了几条代表性的到 CORE 的线。admin 除了 admin_api 之外还有一批旧 allowlist 导入(config、keystore、maintenance、middleware、observability、ops、quota、routing、shims、transport、updates),名单只允许缩小,图里没画。shims 里的 manifest_sources 是要被 index.json 取代的部分。</p>
   <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gateway"> <span id="z-gateway">100%</span></label></div>
   <div class="scroll"><div class="stage" id="stage-gateway"><pre class="mermaid" id="m-gateway">flowchart TB
-  CLIENT(["客户端&lt;br/&gt;OpenAI / Anthropic / Google 格式"])
-  UP(["上游提供方"])
-  CORE["llm_rosetta.api + llm_rosetta.contracts&lt;br/&gt;(gateway 进入 core 的唯一入口,测试强制)"]
-
-  subgraph ENTRY["entry"]
-    CLI["cli/&lt;br/&gt;llm-rosetta-gateway · banner&lt;br/&gt;注册 gateway 与 serve 两个命令;gateway 下分发 serve/init/add/credential/password/db/usage/migrate(#1748)"]
+  subgraph STATE["state"]
+    KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库 · maintenance(schema 步骤,#1795)"]
+    MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup"]
+    JOBS["jobs/&lt;br/&gt;envelope · queue · worker · handlers"]
+    QUOTA["quota/&lt;br/&gt;service · allowance · signals · probes · rate_limit"]
+    ROUTING["routing/&lt;br/&gt;select · strategy · failover · session · same_format"]
   end
-  subgraph SERVING["serving"]
-    APP["app/&lt;br/&gt;factory · routes_llm · routes_typed · routes_models&lt;br/&gt;routes_compact · routes_count_tokens · routes_health · tasks · admin_context"]
-    ADMIN["admin/&lt;br/&gt;routes/ · js/ · admin.html"]
-    ADMINAPI["admin_api.py&lt;br/&gt;AdminContext 协议"]
+  subgraph POLICY["policy"]
+    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings · migrate/(配置迁移,原 maintenance,#1793)"]
+    MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context"]
+  end
+  subgraph FOUNDATION["foundation"]
+    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info"]
+    SURF["surface.py"]
+    OBS["observability/&lt;br/&gt;logging · metrics · request_log · ops_log · error_dump · capture · retention · usage · persistence"]
+    UPD["updates.py"]
+    MT["model_types/"]
+    SHIMS["shims/&lt;br/&gt;extension_view · manifest_sources · source_view(读扩展 index.json,#1728)&lt;br/&gt;本地目录来源与 shims.yaml 加载器已删(#1732)"]
   end
   subgraph ENGINE["engine"]
     PROXY["proxy/&lt;br/&gt;prepare · engine · streaming · failover · fidelity · preflight · lifecycle · errors"]
@@ -135,80 +142,71 @@ pre.error { color: #b00; white-space: pre-wrap; }
   subgraph OPERATIONS["operations"]
     OPS["ops/&lt;br/&gt;OpsBase 审计层 · data · keys · security · proxy"]
   end
-  subgraph POLICY["policy"]
-    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings · migrate/(配置迁移,原 maintenance,#1793)"]
-    MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context"]
+  subgraph ENTRY["entry"]
+    CLI["cli/&lt;br/&gt;llm-rosetta-gateway · banner&lt;br/&gt;注册 gateway 与 serve 两个命令;gateway 下分发 serve/init/add/credential/password/db/usage/migrate(#1748)"]
   end
-  subgraph STATE["state"]
-    ROUTING["routing/&lt;br/&gt;select · strategy · failover · session · same_format"]
-    QUOTA["quota/&lt;br/&gt;service · allowance · signals · probes · rate_limit"]
-    KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库 · maintenance(schema 步骤,#1795)"]
-    JOBS["jobs/&lt;br/&gt;envelope · queue · worker · handlers"]
-    MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup"]
+  CLIENT(["客户端&lt;br/&gt;OpenAI / Anthropic / Google 格式"])
+  CORE["llm_rosetta.api + llm_rosetta.contracts&lt;br/&gt;(gateway 进入 core 的唯一入口,测试强制)"]
+  UP(["上游提供方"])
+  subgraph SERVING["serving"]
+    ADMINAPI["admin_api.py&lt;br/&gt;AdminContext 协议"]
+    ADMIN["admin/&lt;br/&gt;routes/ · js/ · admin.html"]
+    APP["app/&lt;br/&gt;factory · routes_llm · routes_typed · routes_models&lt;br/&gt;routes_compact · routes_count_tokens · routes_health · tasks · admin_context"]
   end
-  subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info"]
-    OBS["observability/&lt;br/&gt;logging · metrics · request_log · ops_log · error_dump · capture · retention · usage · persistence"]
-    SHIMS["shims/&lt;br/&gt;extension_view · manifest_sources · source_view(读扩展 index.json,#1728)&lt;br/&gt;本地目录来源与 shims.yaml 加载器已删(#1732)"]
-    MT["model_types/"]
-    UPD["updates.py"]
-    SURF["surface.py"]
-  end
-
-  CLIENT --&gt;|HTTP| APP
-  TRANSPORT --&gt;|HTTP/SSE · ACP stdio| UP
-  CLI --&gt; CONFIG
-  CLI --&gt; OBS
-  CLI --&gt; SHIMS
-  CLI -.-&gt;|serve| APP
   APP --&gt; PROXY
-  APP --&gt; CONFIG
-  APP --&gt; MW
-  APP --&gt; KEYSTORE
-  APP --&gt; OPS
+  CONFIG --&gt; CORE
   APP --&gt; ROUTING
-  APP --&gt; QUOTA
-  APP --&gt; MAINT
-  APP --&gt; MT
-  APP --&gt;|"内置类型处理函数表 BUILTIN_HANDLERS(#1791)"| PIPES
-  APP --&gt; TRANSPORT
-  APP --&gt; OBS
-  APP -.-&gt;|只有 factory.py| ADMIN
-  APP --&gt;|适配器 admin_context.py| ADMINAPI
-  ADMIN --&gt;|唯一允许| ADMINAPI
+  APP --&gt; KEYSTORE
+  CLI --&gt; OBS
   ADMINAPI --&gt; OBS
-  PIPES --&gt; PROXY
-  PIPES --&gt; CONFIG
-  CONFIG -.-&gt;|"ProviderNotReady"| MAINT
+  APP --&gt; MAINT
+  TRANSPORT --&gt;|HTTP/SSE · ACP stdio| UP
+  CONFIG --&gt; ROUTING
+  CLI -.-&gt;|serve| APP
+  APP --&gt; OPS
+  CLI --&gt; CONFIG
+  APP --&gt; MW
   PIPES --&gt; MW
-  PIPES --&gt; TRANSPORT
+  APP --&gt; CONFIG
+  ADMIN --&gt;|唯一允许| ADMINAPI
+  OBS --&gt; CORE
+  PROXY --&gt; MAINT
+  CLI --&gt; SHIMS
+  SHIMS --&gt; CORE
+  PIPES --&gt; CONFIG
+  MW --&gt; KEYSTORE
+  APP -.-&gt;|只有 factory.py| ADMIN
+  APP --&gt; OBS
+  APP --&gt; TRANSPORT
   PROXY --&gt; MW
   PROXY --&gt; ROUTING
-  PROXY --&gt; TRANSPORT
-  PROXY --&gt; OPS
-  PROXY --&gt; MAINT
-  PROXY --&gt; OBS
-  OPS --&gt; MW
-  OPS --&gt; ROUTING
-  OPS --&gt; MT
-  OPS --&gt; SHIMS
-  OPS --&gt; OBS
-  CONFIG --&gt; MT
-  CONFIG --&gt; ROUTING
-  CONFIG --&gt; TRANSPORT
   CONFIG --&gt; OBS
-  MW --&gt; KEYSTORE
-  MW --&gt; OBS
-  ROUTING --&gt; QUOTA
-  QUOTA --&gt; OBS
-  JOBS --&gt; OBS
-  KEYSTORE --&gt; OBS
+  PIPES --&gt; PROXY
+  PROXY --&gt; OPS
   MAINT --&gt; OBS
-  CONFIG --&gt; CORE
-  PROXY --&gt; CORE
+  JOBS --&gt; OBS
+  OPS --&gt; OBS
+  OPS --&gt; MT
+  KEYSTORE --&gt; OBS
+  APP --&gt; QUOTA
+  QUOTA --&gt; OBS
   TRANSPORT --&gt; CORE
-  SHIMS --&gt; CORE
-  OBS --&gt; CORE
+  CONFIG --&gt; MT
+  OPS --&gt; SHIMS
+  APP --&gt;|"内置类型处理函数表 BUILTIN_HANDLERS(#1791)"| PIPES
+  CONFIG --&gt; TRANSPORT
+  OPS --&gt; ROUTING
+  CLIENT --&gt;|HTTP| APP
+  APP --&gt; MT
+  OPS --&gt; MW
+  ROUTING --&gt; QUOTA
+  PROXY --&gt; CORE
+  MW --&gt; OBS
+  PROXY --&gt; TRANSPORT
+  CONFIG -.-&gt;|"ProviderNotReady"| MAINT
+  APP --&gt;|适配器 admin_context.py| ADMINAPI
+  PROXY --&gt; OBS
+  PIPES --&gt; TRANSPORT
 </pre></div></div>
 </section>
 <section id="admin">
@@ -216,116 +214,112 @@ pre.error { color: #b00; white-space: pre-wrap; }
   <p class="note">已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。GET /admin/api/extensions 后端已有,目前没有页面调用它。</p>
   <div class="bar"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="admin"> <span id="z-admin">100%</span></label></div>
   <div class="scroll"><div class="stage" id="stage-admin"><pre class="mermaid" id="m-admin">flowchart LR
-  subgraph PAGES["页面(admin.html 的 9 个标签页)"]
-    P_DASH["dashboard 仪表盘"]
-    P_PROV["providers 提供方"]
-    P_MOD["models 模型"]
-    P_ROUTE["routing 路由&lt;br/&gt;policy · decisions · sessions"]
-    P_KEYS["keys 密钥"]
-    P_OBS["observability 可观测&lt;br/&gt;请求日志 · ops 日志 · 错误转储"]
-    P_SHIM["shims"]
-    P_JOBS["jobs 任务"]
-    P_SET["settings 设置&lt;br/&gt;appearance · behavior · rateLimit · retention · security · about"]
-  end
-  subgraph TABJS["页面脚本 js/tabs/"]
-    T_DASH["dashboard.js"]
-    T_PROV["providers.js"]
-    T_MOD["models.js"]
-    T_ROUTE["routing.js"]
-    T_KEYS["keys.js"]
-    T_KEX["key-examples.js"]
-    T_LOGS["logs.js"]
-    T_OPS["ops-log.js"]
-    T_SHIMS["shims.js · shims-page.js · shim-sources-editor.js&lt;br/&gt;+ core/shim-sources.js&lt;br/&gt;后端的编辑、删除、预览路由已删,只读(#1732);前端编辑器是否清理未确认"]
-    T_JOBS["jobs.js"]
-  end
   COMP["js/components/&lt;br/&gt;provider-picker · provider-row · logo-picker · logo-select · type-picker · fetch-models · test-runner"]
-  SHARED["js/core/ 共享&lt;br/&gt;state · i18n · route · init · auth · topbar · themes · html · dialog · pagination · ..."]
-
   subgraph APIS["/admin/api 分组(这几组名字来自各 JS 的调用)"]
     A_CFG["config"]
-    A_KEYS["keys"]
-    A_REQ["requests"]
-    A_DUMP["error-dumps"]
-    A_MET["metrics"]
-    A_TOK["token-usage"]
-    A_CAP["capture"]
-    A_PROF["profiling"]
-    A_OPS["ops-log"]
     A_JOBS["jobs"]
-    A_ROUTE["routing"]
-    A_DIAG["diagnostics"]
+    A_KEYS["keys"]
+    A_CAP["capture"]
+    A_REQ["requests"]
+    A_TOK["token-usage"]
+    A_DUMP["error-dumps"]
     A_TEST["test"]
+    A_DIAG["diagnostics"]
     A_OTHER["login · token · sessions · rate-limits · circuit-breakers&lt;br/&gt;maintenance · db · updates · changelog · extensions · logo"]
+    A_OPS["ops-log"]
+    A_MET["metrics"]
+    A_PROF["profiling"]
+    A_ROUTE["routing"]
+  end
+  subgraph PAGES["页面(admin.html 的 9 个标签页)"]
+    P_SET["settings 设置&lt;br/&gt;appearance · behavior · rateLimit · retention · security · about"]
+    P_OBS["observability 可观测&lt;br/&gt;请求日志 · ops 日志 · 错误转储"]
+    P_JOBS["jobs 任务"]
+    P_KEYS["keys 密钥"]
+    P_PROV["providers 提供方"]
+    P_ROUTE["routing 路由&lt;br/&gt;policy · decisions · sessions"]
+    P_SHIM["shims"]
+    P_DASH["dashboard 仪表盘"]
+    P_MOD["models 模型"]
   end
   subgraph BACK["后端组件(对应关系按名字推断)"]
+    B_UPD["updates"]
+    B_ROUTE["routing + quota"]
+    B_MW["middleware"]
+    B_REQ["proxy + transport + pipelines"]
     B_CFG["config + ops + maintenance + shims"]
     B_KS["keystore + middleware.auth"]
     B_OBS["observability"]
     B_JOBS["jobs"]
-    B_ROUTE["routing + quota"]
-    B_REQ["proxy + transport + pipelines"]
-    B_MW["middleware"]
-    B_UPD["updates"]
   end
-
-  P_DASH --&gt; T_DASH
-  P_PROV --&gt; T_PROV
-  P_MOD --&gt; T_MOD
-  P_ROUTE --&gt; T_ROUTE
-  P_KEYS --&gt; T_KEYS
-  P_KEYS --&gt; T_KEX
-  P_OBS --&gt; T_LOGS
-  P_OBS --&gt; T_OPS
-  P_SHIM --&gt; T_SHIMS
-  P_JOBS --&gt; T_JOBS
+  subgraph TABJS["页面脚本 js/tabs/"]
+    T_DASH["dashboard.js"]
+    T_LOGS["logs.js"]
+    T_SHIMS["shims.js · shims-page.js · shim-sources-editor.js&lt;br/&gt;+ core/shim-sources.js&lt;br/&gt;后端的编辑、删除、预览路由已删,只读(#1732);前端编辑器是否清理未确认"]
+    T_OPS["ops-log.js"]
+    T_MOD["models.js"]
+    T_ROUTE["routing.js"]
+    T_KEX["key-examples.js"]
+    T_KEYS["keys.js"]
+    T_PROV["providers.js"]
+    T_JOBS["jobs.js"]
+  end
+  SHARED["js/core/ 共享&lt;br/&gt;state · i18n · route · init · auth · topbar · themes · html · dialog · pagination · ..."]
   P_SET --&gt; SHARED
-  T_PROV --&gt; COMP
-  T_DASH --&gt; SHARED
-  T_PROV --&gt; SHARED
-
-  T_DASH --&gt; A_CAP
-  T_DASH --&gt; A_DUMP
-  T_DASH --&gt; A_MET
-  T_DASH --&gt; A_PROF
-  T_DASH --&gt; A_REQ
-  T_DASH --&gt; A_TOK
-  T_PROV --&gt; A_CFG
-  T_PROV --&gt; A_DIAG
-  T_PROV --&gt; A_MET
-  COMP --&gt; A_CFG
-  COMP --&gt; A_TEST
-  T_MOD --&gt; A_CFG
-  T_ROUTE --&gt; A_CFG
-  T_ROUTE --&gt; A_ROUTE
-  T_KEYS --&gt; A_KEYS
   T_KEYS --&gt; A_REQ
-  T_KEX --&gt; A_CFG
-  T_KEX --&gt; A_KEYS
-  T_LOGS --&gt; A_CFG
-  T_LOGS --&gt; A_DUMP
-  T_LOGS --&gt; A_REQ
-  T_OPS --&gt; A_OPS
-  T_SHIMS --&gt; A_CFG
-  T_JOBS --&gt; A_JOBS
-  SHARED --&gt; A_OTHER
-
-  A_CFG --&gt; B_CFG
-  A_KEYS --&gt; B_KS
+  P_MOD --&gt; T_MOD
+  P_DASH --&gt; T_DASH
+  T_ROUTE --&gt; A_ROUTE
   A_REQ --&gt; B_OBS
-  A_DUMP --&gt; B_OBS
+  P_JOBS --&gt; T_JOBS
+  COMP --&gt; A_CFG
+  T_DASH --&gt; A_PROF
+  T_ROUTE --&gt; A_CFG
+  T_LOGS --&gt; A_DUMP
   A_MET --&gt; B_OBS
-  A_TOK --&gt; B_OBS
-  A_CAP --&gt; B_OBS
-  A_PROF --&gt; B_OBS
-  A_OPS --&gt; B_OBS
-  A_JOBS --&gt; B_JOBS
-  A_ROUTE --&gt; B_ROUTE
-  A_DIAG --&gt; B_REQ
-  A_TEST --&gt; B_REQ
-  A_OTHER --&gt; B_MW
-  A_OTHER --&gt; B_UPD
+  T_PROV --&gt; A_DIAG
+  A_CFG --&gt; B_CFG
+  T_PROV --&gt; A_CFG
   A_OTHER --&gt; B_KS
+  P_ROUTE --&gt; T_ROUTE
+  T_LOGS --&gt; A_REQ
+  P_SHIM --&gt; T_SHIMS
+  T_DASH --&gt; A_DUMP
+  A_DIAG --&gt; B_REQ
+  T_DASH --&gt; A_TOK
+  T_OPS --&gt; A_OPS
+  P_KEYS --&gt; T_KEX
+  A_DUMP --&gt; B_OBS
+  A_ROUTE --&gt; B_ROUTE
+  SHARED --&gt; A_OTHER
+  A_CAP --&gt; B_OBS
+  P_PROV --&gt; T_PROV
+  T_SHIMS --&gt; A_CFG
+  T_LOGS --&gt; A_CFG
+  T_KEX --&gt; A_KEYS
+  A_OTHER --&gt; B_UPD
+  T_KEYS --&gt; A_KEYS
+  A_KEYS --&gt; B_KS
+  T_MOD --&gt; A_CFG
+  T_KEX --&gt; A_CFG
+  P_OBS --&gt; T_OPS
+  T_DASH --&gt; A_CAP
+  P_OBS --&gt; T_LOGS
+  T_JOBS --&gt; A_JOBS
+  A_JOBS --&gt; B_JOBS
+  T_PROV --&gt; SHARED
+  T_PROV --&gt; A_MET
+  P_KEYS --&gt; T_KEYS
+  A_TOK --&gt; B_OBS
+  T_DASH --&gt; SHARED
+  COMP --&gt; A_TEST
+  A_OTHER --&gt; B_MW
+  A_PROF --&gt; B_OBS
+  A_TEST --&gt; B_REQ
+  T_PROV --&gt; COMP
+  T_DASH --&gt; A_MET
+  A_OPS --&gt; B_OBS
+  T_DASH --&gt; A_REQ
 </pre></div></div>
 </section>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
