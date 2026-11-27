@@ -49,6 +49,10 @@ KEPT_DEPRECATIONS = dict(
             "for one minor",
         ),
         (
+            "llm_rosetta/auto_detect.py",
+            "0.13.0 module, forwards its five names to their current homes for one minor",
+        ),
+        (
             "llm_rosetta/routing.py",
             "0.13.0 flat module, forwards to llm_rosetta.contracts.routing for one minor",
         ),
@@ -99,6 +103,10 @@ KEPT_SHELLS = dict(
         (
             "llm_rosetta/types/ir/extensions.py",
             "0.13.0 module kept for one minor (2026-11-21 compat decision)",
+        ),
+        (
+            "llm_rosetta/auto_detect.py",
+            "0.13.0 module kept for one minor (#1796)",
         ),
         (
             "llm_rosetta/routing.py",

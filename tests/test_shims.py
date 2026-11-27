@@ -843,35 +843,35 @@ class TestShimConverterIntegration:
         load_providers_with_moved()
 
     def test_deepseek_resolves_to_openai_chat_converter(self):
-        from llm_rosetta.auto_detect import get_converter_for_provider
+        from llm_rosetta import get_converter_for_provider
         from llm_rosetta.converters import ChatCompletionsConverter
 
         converter = get_converter_for_provider("deepseek--chat_completions")
         assert isinstance(converter, ChatCompletionsConverter)
 
     def test_deepseek_responses_resolves_to_responses_converter(self):
-        from llm_rosetta.auto_detect import get_converter_for_provider
+        from llm_rosetta import get_converter_for_provider
         from llm_rosetta.converters import OpenResponsesConverter
 
         converter = get_converter_for_provider("deepseek--open_responses")
         assert isinstance(converter, OpenResponsesConverter)
 
     def test_openai_responses_resolves_to_responses_converter(self):
-        from llm_rosetta.auto_detect import get_converter_for_provider
+        from llm_rosetta import get_converter_for_provider
         from llm_rosetta.converters import OpenResponsesConverter
 
         converter = get_converter_for_provider("openai--open_responses")
         assert isinstance(converter, OpenResponsesConverter)
 
     def test_volcengine_resolves_to_openai_chat_converter(self):
-        from llm_rosetta.auto_detect import get_converter_for_provider
+        from llm_rosetta import get_converter_for_provider
         from llm_rosetta.converters import ChatCompletionsConverter
 
         converter = get_converter_for_provider("volcengine--chat_completions")
         assert isinstance(converter, ChatCompletionsConverter)
 
     def test_base_types_still_work(self):
-        from llm_rosetta.auto_detect import get_converter_for_provider
+        from llm_rosetta import get_converter_for_provider
         from llm_rosetta.converters import (
             MessagesConverter,
             GoogleGenerateConverter,
@@ -887,7 +887,7 @@ class TestShimConverterIntegration:
         )
 
     def test_unknown_provider_raises(self):
-        from llm_rosetta.auto_detect import get_converter_for_provider
+        from llm_rosetta import get_converter_for_provider
 
         with pytest.raises(ValueError, match="Unsupported provider"):
             get_converter_for_provider("totally_unknown")
@@ -980,7 +980,7 @@ class TestMultimodalToolResultCapability:
         from unittest.mock import patch
         from typing import Any
 
-        from llm_rosetta.auto_detect import convert
+        from llm_rosetta import convert
         from llm_rosetta.ir.context import ConversionContext
 
         register_shim(
@@ -1025,7 +1025,7 @@ class TestMultimodalToolResultCapability:
         from unittest.mock import patch
         from typing import Any
 
-        from llm_rosetta.auto_detect import convert
+        from llm_rosetta import convert
 
         register_shim(ProviderShim(name="plain-target", format="chat_completions"))
         register_shim(ProviderShim(name="plain-source", format="messages"))

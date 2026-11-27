@@ -255,7 +255,7 @@ def test_merge_connection_agrees_with_describe_vendor_manifest(tmp_path):
 
 # ----------------------------------------------------------- staging_registry
 def test_staging_registry_drops_derived_caches_on_entry():
-    from llm_rosetta.auto_detect import _converter_cache
+    from llm_rosetta.converters.registry import _converter_cache
 
     _converter_cache["sentinel"] = object()  # type: ignore[assignment]
     _model_list_transforms["sentinel"] = lambda *a: a  # type: ignore[assignment]

@@ -33,7 +33,6 @@ CONVERSION_LAYERS = (
     "formats",
     "fidelity",
     "profiling",
-    "auto_detect.py",
     "tool_ops.py",
     "model_vocabulary.py",
     "conversion_warnings.py",
@@ -273,12 +272,13 @@ def test_every_converter_pair_converts_without_the_shim_layer():
 #: * foundation: ``types``, ``ir``, ``formats``, ``retired_names``,
 #:   ``conversion_warnings``, ``model_vocabulary``;
 #: * ``contracts``: what an outside party implements or receives;
-#: * conversion: ``converters``, ``tool_ops``, ``auto_detect``, ``pipeline``,
-#:   ``fidelity``, ``profiling``;
+#: * conversion: ``converters``, ``tool_ops``, ``pipeline``, ``fidelity``,
+#:   ``profiling``;
 #: * optional layers: ``shims``, ``extensions``, ``routing``, ``devtools``,
 #:   ``testing``;
-#: * entry: ``cli``, ``api``, ``capabilities`` (the 0.13.0 forwarder, imported by
-#:   nothing), ``<root>``, ``__main__``.
+#: * entry: ``cli``, ``api``, ``auto_detect`` and ``capabilities`` (the 0.13.0
+#:   forwarders: they hold no logic and nothing imports them), ``<root>``,
+#:   ``__main__``.
 #:
 #: The table only records the edges that exist.  A new edge fails the first test
 #: below until its author adds it here, where a reviewer sees it; an edge that
@@ -288,7 +288,6 @@ def test_every_converter_pair_converts_without_the_shim_layer():
 #: untie.
 CORE_EDGES: dict[str, tuple[str, ...]] = {
     "<root>": (
-        "auto_detect",
         "contracts",
         "converters",
         "ir",
@@ -314,9 +313,7 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
     "auto_detect": (
         "contracts",
         "converters",
-        "formats",
         "pipeline",
-        "retired_names",
     ),
     "capabilities": (
         "contracts",
@@ -336,6 +333,7 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
     ),
     "converters": (
         "contracts",
+        "formats",
         "conversion_warnings",
         "ir",
         "model_vocabulary",
@@ -364,8 +362,8 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
     ),
     "routing": ("contracts",),
     "shims": (
-        "auto_detect",
         "contracts",
+        "converters",
         "extensions",
         "formats",
         "ir",
@@ -425,8 +423,6 @@ def _actual_edges() -> dict[tuple[str, str], str]:
 #: lazy-only edge must be listed with its reason; an edge that becomes eager (or
 #: goes) must leave it.
 LAZY_ONLY_EDGES: dict[tuple[str, str], str] = {
-    ("auto_detect", "converters"): "a converter is built on the first call",
-    ("auto_detect", "pipeline"): "convert() builds its pipeline on the first call",
     ("cli", "devtools"): "a command loads only the code it runs",
     (
         "devtools",
@@ -434,8 +430,6 @@ LAZY_ONLY_EDGES: dict[tuple[str, str], str] = {
     ): "read when a command runs; a partial install still starts",
     ("devtools", "shims"): "the scaffold commands load the shim loader when they run",
     ("pipeline", "fidelity"): "the checker is built only when a fidelity mode is set",
-    ("shims", "auto_detect"): "the registry clears the converter cache when it is "
-    "rebuilt or restored",
 }
 
 
@@ -509,6 +503,26 @@ def test_every_edge_that_exists_only_inside_functions_is_listed_with_its_reason(
 def test_the_lazy_only_table_lists_no_edge_that_is_eager_or_gone():
     stale = sorted(set(LAZY_ONLY_EDGES) - _lazy_only_edges())
     assert stale == [], f"delete these rows from LAZY_ONLY_EDGES: {stale}"
+
+
+#: Entry-level units and who may import them.  The 0.13.0 forwarders hold no
+#: logic and no unit imports them: only a caller of the deprecated path does.
+ENTRY_IMPORTED_BY: dict[str, frozenset[str]] = {
+    "auto_detect": frozenset(),
+    "capabilities": frozenset(),
+}
+
+
+def test_an_entry_level_unit_is_imported_only_by_those_that_may():
+    offenders = [
+        f"{src} -> {dst} ({where})"
+        for (src, dst), where in sorted(_actual_edges().items())
+        if dst in ENTRY_IMPORTED_BY and src not in ENTRY_IMPORTED_BY[dst]
+    ]
+    assert offenders == [], (
+        "an entry-level unit is not imported from below it: a deprecated "
+        f"forwarder is for outside callers, so import the new home instead: {offenders}"
+    )
 
 
 def test_no_core_package_gains_an_import_the_table_does_not_list():

@@ -206,7 +206,7 @@ import llm_rosetta.contracts.usage.semantics as semantics
 importlib.reload(semantics)
 assert semantics.shape_for("fake_wire") is semantics.OPENAI_DETAILS, "usage shape"
 
-from llm_rosetta.auto_detect import detect_provider
+from llm_rosetta import detect_provider
 
 assert detect_provider({"fake_marker": 1}) == "fake_wire", "auto-detection"
 assert detect_provider({"messages": [{"role": "user"}]}) == "chat_completions"

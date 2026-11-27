@@ -20,7 +20,7 @@ into the parent package's ``__init__``, which imports that same pipeline.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import cast
+from typing import Any, cast
 
 from llm_rosetta.converters.llm.acp.converter import AcpConverter
 from llm_rosetta.converters.llm.chat_completions.converter import (
@@ -39,14 +39,20 @@ from llm_rosetta.converters.llm.open_responses.converter import OpenResponsesCon
 from llm_rosetta.converters.rerank.lookup import _RERANK_CONVERTERS
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE as _DECLARED_FORMATS
 from llm_rosetta import retired_names
+from llm_rosetta.contracts.resolver import resolve_format
+from llm_rosetta.contracts.routing import ProviderType
+from llm_rosetta.formats.detect import detect_format as _detect_body
 from llm_rosetta.model_vocabulary import MODEL_TYPES
 
 __all__ = [
     "CONVERTER_REGISTRY",
     "FORMATS_BY_TYPE",
     "MODEL_TYPES",
+    "clear_converter_cache",
+    "detect_provider",
     "formats_for",
     "get_converter_class",
+    "get_converter_for_provider",
 ]
 
 #: ``model_type → format → converter class``.  The binding lives here because
@@ -149,3 +155,92 @@ def converter_map(model_type: str) -> Mapping[str, type]:
         raise ValueError(
             f"Unknown model type: '{model_type}'. Available: {', '.join(MODEL_TYPES)}"
         ) from None
+
+
+def detect_provider(body: dict[str, Any]) -> ProviderType | None:
+    """Auto-detect provider type from request body structure.
+
+    Args:
+        body: Provider request body dict.
+
+    Returns:
+        Detected provider type, or ``None`` if unrecognised.
+
+    Examples:
+        >>> detect_provider({"messages": [{"role": "user", "content": "Hello"}]})
+        'chat_completions'
+        >>> detect_provider({"input": [{"type": "message", "role": "user"}]})
+        'open_responses'
+        >>> detect_provider({"messages": [{"role": "user", "content": [{"type": "text"}]}]})
+        'messages'
+        >>> detect_provider({"contents": [{"role": "user", "parts": [{"text": "Hi"}]}]})
+        'google_generate'
+    """
+    # Detection order (and each predicate) lives in the format catalog; a new
+    # format joins it by adding one ``FormatSpec`` there.
+    return cast("ProviderType | None", _detect_body(body))
+
+
+_converter_cache: dict[str, Any] = {}
+
+
+def clear_converter_cache() -> None:
+    """Forget every cached converter.
+
+    The shim registry calls this when it is rebuilt or restored: a cached
+    converter was derived from a shim that may no longer exist.
+    """
+    _converter_cache.clear()
+
+
+def get_converter_for_provider(provider: str):
+    """Get the corresponding converter for a provider type or shim name.
+
+    Converter instances are cached — the same object is returned for the
+    same resolved base provider.  This is safe because converters are
+    stateless (all per-request state lives in ``ConversionContext``).
+
+    Args:
+        provider: Provider type string or registered shim name.
+
+    Returns:
+        Corresponding converter instance (cached).
+
+    Raises:
+        ValueError: If the provider is not a known type or shim name.  A
+            retired spelling gets the retired-names message, which names its
+            replacement.
+    """
+    # The OpenAI Responses profile shim shares the base converter (its traits
+    # come from the shim's ``context.options``, not a subclass).  Fold it onto
+    # the base so both spellings return the same cached instance, and so the
+    # profile resolves without the shim registry.
+    if provider == "openai--open_responses":
+        provider = "open_responses"
+    if provider in _converter_cache:
+        return _converter_cache[provider]
+
+    converter_map = CONVERTER_REGISTRY["llm"]
+
+    # Direct match against base converter types
+    if provider in converter_map:
+        instance = converter_map[provider]()
+        _converter_cache[provider] = instance
+        return instance
+
+    # Resolve through the shim registry.
+    base = resolve_format(provider)
+    if base in converter_map:
+        instance = converter_map[base]()
+        _converter_cache[provider] = instance
+        _converter_cache[base] = instance
+        return instance
+
+    retired_names.check_not_retired(
+        provider, retired_names.PROVIDER_TYPE, retired_names.SHIM
+    )
+    # A shim whose vendor left core (#1660) is not a typo: say where it went.
+    moved = retired_names.moved_shim_message(provider)
+    if moved is not None:
+        raise ValueError(f"Unsupported provider: {provider}; {moved}")
+    raise ValueError(f"Unsupported provider: {provider}")

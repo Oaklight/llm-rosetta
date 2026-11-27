@@ -38,7 +38,6 @@ imports and that no ``REMOVED`` module does.
 
 USER: tuple[str, ...] = (
     "llm_rosetta",
-    "llm_rosetta.auto_detect",
     "llm_rosetta.converters",
     "llm_rosetta.converters.base",
     "llm_rosetta.converters.decisions",
@@ -77,6 +76,10 @@ EXTENSION: tuple[str, ...] = (
 )
 
 COMPAT: tuple[str, ...] = (
+    # 0.13.0 module, forwards detect_provider, get_converter_for_provider,
+    # convert, convert_response and ProviderType to their current homes (all
+    # importable from llm_rosetta); removed in 0.15.0.
+    "llm_rosetta.auto_detect",
     # Forwards to llm_rosetta_gateway (deprecated); removed in 0.15.0.
     "llm_rosetta.gateway",
     # The 0.13 observability package: an alias finder for the telemetry that

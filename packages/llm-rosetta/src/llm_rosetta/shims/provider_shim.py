@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any
 
 from llm_rosetta import retired_names
 from llm_rosetta.contracts.resolver import set_shim_resolver
+from llm_rosetta.converters.registry import clear_converter_cache
 from llm_rosetta.model_vocabulary import (
     FORMATS_BY_TYPE,
     MODEL_TYPES,
@@ -240,8 +241,6 @@ def _clear_registry_caches() -> None:
     """
     # Also clear the converter cache since shim resolution may have
     # cached converters for names that are now unregistered.
-    from llm_rosetta.auto_detect import clear_converter_cache
-
     clear_converter_cache()
 
     # Clear convention-based model list transforms.
@@ -319,8 +318,6 @@ def restore_registry(snapshot: RegistrySnapshot) -> None:
         snapshot: A snapshot from :func:`snapshot_registry`.
     """
     global _SHIM_REGISTRY
-    from llm_rosetta.auto_detect import clear_converter_cache
-
     from ._loader import _model_list_transforms
 
     _SHIM_REGISTRY = dict(snapshot.registry)

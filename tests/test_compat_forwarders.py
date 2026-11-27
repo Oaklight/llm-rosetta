@@ -17,6 +17,14 @@ import warnings
 import pytest
 
 ROUTING_NAMES = ["ProviderType", "ResolvedRoute", "Router"]
+#: ``llm_rosetta.auto_detect``'s public names on the v0.13.0 tag.
+AUTO_DETECT_NAMES = [
+    "ProviderType",
+    "convert",
+    "convert_response",
+    "detect_provider",
+    "get_converter_for_provider",
+]
 CAPABILITIES_NAMES = [
     "ConversionContext",
     "ProviderShim",
@@ -67,6 +75,7 @@ def _fresh_import(name: str):
 @pytest.mark.parametrize(
     ("name", "names"),
     [
+        ("llm_rosetta.auto_detect", AUTO_DETECT_NAMES),
         ("llm_rosetta.routing", ROUTING_NAMES),
         ("llm_rosetta.capabilities", CAPABILITIES_NAMES),
         ("llm_rosetta.types.ir.extensions", EXTENSIONS_NAMES),
@@ -82,6 +91,67 @@ def test_a_forwarder_warns_once_and_names_its_removal(name, names):
     assert not caught[0].filename.endswith(name.rsplit(".", 1)[-1] + ".py")
     assert sorted(module.__all__) == sorted(names)
     assert "0.15.0" in (module.__doc__ or "")
+
+
+def test_auto_detect_forwards_the_objects_of_the_new_homes():
+    module, _ = _fresh_import("llm_rosetta.auto_detect")
+    import llm_rosetta
+    import llm_rosetta.contracts.routing as routing
+    import llm_rosetta.converters.registry as registry
+    import llm_rosetta.pipeline.facade as facade
+
+    assert module.ProviderType is routing.ProviderType
+    assert module.detect_provider is registry.detect_provider
+    assert module.get_converter_for_provider is registry.get_converter_for_provider
+    assert module.convert is facade.convert
+    assert module.convert_response is facade.convert_response
+    for name in AUTO_DETECT_NAMES:
+        assert getattr(llm_rosetta, name) is getattr(module, name), name
+
+
+def test_the_converter_cache_is_one_dict_behind_the_old_and_the_new_name():
+    module, _ = _fresh_import("llm_rosetta.auto_detect")
+    import llm_rosetta.converters.registry as registry
+
+    registry.clear_converter_cache()
+    old = module.get_converter_for_provider("messages")
+    assert registry._converter_cache["messages"] is old
+    assert registry.get_converter_for_provider("messages") is old
+
+    registry.clear_converter_cache()
+    assert "messages" not in registry._converter_cache
+    assert module.get_converter_for_provider("messages") is not old
+
+
+def test_importing_llm_rosetta_does_not_import_or_warn_for_auto_detect():
+    """Only a caller of the old path pays for it: the package root uses the homes."""
+    import os
+    import subprocess
+
+    import llm_rosetta
+
+    src = os.path.dirname(os.path.dirname(llm_rosetta.__file__))
+    code = (
+        "import sys; import llm_rosetta; "
+        "from llm_rosetta import convert, convert_response, detect_provider, "
+        "get_converter_for_provider, ProviderType; "
+        "sys.exit(1 if 'llm_rosetta.auto_detect' in sys.modules else 0)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-W", "error::DeprecationWarning", "-c", code],
+        env={**os.environ, "PYTHONPATH": src},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_auto_detect_is_in_the_compat_tier_and_not_the_user_tier():
+    from llm_rosetta import _tiers
+
+    assert "llm_rosetta.auto_detect" in _tiers.COMPAT
+    assert "llm_rosetta.auto_detect" not in _tiers.USER
 
 
 def test_routing_forwards_the_contract_objects():

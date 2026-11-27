@@ -83,7 +83,7 @@ single home for per-format facts: wire family, auth builder key, URL
 templates, SSE formatter key, usage shape, chat route path, default upstream
 path, models-listing path, picker order and detection order.  The model
 vocabulary, the gateway's provider tables, the SSE / error-envelope /
-usage-shape maps, `auto_detect.detect_provider` and the model-type descriptor
+usage-shape maps, `detect_provider` and the model-type descriptor
 format lists and chat routes are all derived from it.  Adding a format means
 adding a record, its converter binding (`converters/registry.py`) and its body
 detector (`formats/detect.py`) — nothing else.
@@ -118,7 +118,7 @@ rejects them with the replacement and the `llm-rosetta gateway migrate` command.
 
 They are reached through `EmbeddingConversionPipeline` /
 `RerankConversionPipeline` (or `get_embedding_converter(format)`), not through
-`auto_detect.detect_provider()`: the gateway's model-type descriptors own
+`detect_provider()`: the gateway's model-type descriptors own
 source detection for embedding, rerank and decision routes
 (`model_types/source_formats.py`), and an embedding body cannot be attributed to
 a vendor from its model name.  The decision detector also reads the route
@@ -252,7 +252,7 @@ Core modules (`packages/llm-rosetta/src/llm_rosetta/`):
 | Module | Holds |
 |--------|-------|
 | `__init__.py` | Public API: `convert()`, `get_converter_for_provider()` |
-| `auto_detect.py` | Provider auto-detection (delegates to `formats/detect.py`) |
+| `auto_detect.py` | The 0.13.0 module, kept as a forwarder (deprecated, removed in 0.15.0): `detect_provider`, `get_converter_for_provider` and the converter cache live in `converters/registry.py`, `convert` and `convert_response` in `pipeline/facade.py`; all are importable from `llm_rosetta` |
 | `tool_ops.py` | Cross-provider tool-call utilities |
 | `model_vocabulary.py` | The model-type and format vocabulary |
 | `retired_names.py` | The table of renamed provider types, shims and model types, and the error each one raises (an error table, never an alias) |
@@ -547,7 +547,7 @@ gate — missing any item means the converter is not fully integrated.
    error-envelope and usage-shape maps, the detection order, and the
    model-type descriptor format lists and chat routes.  The registry's
    import-time check refuses a catalog entry with no converter binding.
-   Add the name to the `ProviderType` literal in `contracts/routing.py` (`auto_detect.py` imports it).
+   Add the name to the `ProviderType` literal in `contracts/routing.py` (`converters/registry.py` imports it).
 5. **Provider shim** — create `shims/builtin/<vendor>/llm/<format>/provider.yaml`
    (chat) or `shims/builtin/<vendor>/<type>/provider.yaml` (embeddings, rerank,
    decision) with `model_type: <type>` and `format: <format>`.  The loader

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta.auto_detect import get_converter_for_provider
+from llm_rosetta import get_converter_for_provider
 from llm_rosetta.converters.llm.open_responses import (
     OpenAIResponsesConverter,
     OpenResponsesConverter,

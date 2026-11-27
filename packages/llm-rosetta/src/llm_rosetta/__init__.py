@@ -5,14 +5,9 @@ LLM-Rosetta
 A library for converting message formats between different LLM providers
 """
 
-from .auto_detect import (
-    ProviderType,
-    convert,
-    convert_response,
-    detect_provider,
-    get_converter_for_provider,
-)
-from .pipeline import ConversionError, ConversionPipeline
+from .contracts.routing import ProviderType
+from .converters.registry import detect_provider, get_converter_for_provider
+from .pipeline import ConversionError, ConversionPipeline, convert, convert_response
 from .pipeline.decisions import DecisionConversionPipeline
 from .pipeline.embeddings import EmbeddingConversionPipeline
 from .pipeline.rerank import RerankConversionPipeline

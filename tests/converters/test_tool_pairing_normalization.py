@@ -18,7 +18,7 @@ from typing import Any, cast
 
 import pytest
 
-from llm_rosetta.auto_detect import get_converter_for_provider
+from llm_rosetta import get_converter_for_provider
 from llm_rosetta.conversion_warnings import WarningSink
 from llm_rosetta.converters.llm.chat_completions.message_ops import (
     ChatCompletionsMessageOps,
