@@ -6,7 +6,7 @@ title: Shim Placement and Maturity
 
 A provider shim lives in one of two places: in **core** (it ships inside the
 `llm-rosetta` distribution) or in a **source repository** that publishes a
-versioned manifest and that the gateway installs from
+versioned extension index and that the gateway installs from
 ([Manifest sources](shims.md#manifest-sources)). This page states which shims
 belong where, how a shim moves between the two, and what a gateway does when
 both provide the same name. The rules come from epic
@@ -45,7 +45,7 @@ applies to the existing core vendors too.
 | `stable` | contrib | Meets the promotion criteria; a candidate for core |
 | core | core | Ships with core, under core's compatibility rules |
 
-The source records the stage per vendor in its manifest (`maturity`, `since`,
+The source records the stage per vendor in its index (`maturity`, `since`,
 and the last `conformance` result). The admin panel shows it on every vendor
 card (**Shims → Available**).
 
@@ -63,9 +63,9 @@ A vendor is promoted only when **all** of these hold:
    required.
 7. The promotion is a reviewed PR.
 
-When the vendor reaches core, its manifest record says
-`promoted_to: core@X.Y.Z`. A gateway running core `X.Y.Z` or later stops
-installing the vendor from the source (see [Precedence](#precedence)).
+When the vendor reaches core, core registers its shim names. A gateway
+running that core no longer loads them from the source: core wins per shim
+(see [Precedence](#precedence)).
 
 ## Demotion back to contrib { #demotion }
 
@@ -94,16 +94,8 @@ When core and a source provide the same shim name:
   and logs the source, the vendor and the ignored names. The vendor's other
   shims still install. A vendor whose shims are all core names is skipped, and
   its card says *already provided by …*.
-- **`promoted_to` is read from the release that would be installed.** It holds
-  only when the running core is at or after the named version (a dev or
-  pre-release of that version is before it) **and** core registers the
-  record's shims. A claim that is due but not borne out is logged, and the
-  vendor installs from the source as before. A later release without the claim
-  un-promotes the vendor.
 - **Between two sources, the first in `shims.sources` order wins** for a vendor
   both publish; the other copy is logged and ignored.
-- **Explicit sources override manifest installs.** A manifest install loads
-  before `shims.paths`.
 
 ## Where today's vendors sit { #placement-today }
 

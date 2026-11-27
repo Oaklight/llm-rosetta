@@ -4,9 +4,36 @@ title: CLI Reference
 
 # CLI Reference
 
+## The command surface
+
+The `llm-rosetta` command is a dispatcher. Core owns two names, `ext` (manage extensions) and `help`; every other command is contributed by an installed distribution. The gateway distribution adds `gateway` and `serve`. Running `llm-rosetta` with no arguments prints the list and never starts a server.
+
+| Command | Does |
+|---------|------|
+| `llm-rosetta gateway <verb>` | The gateway's verbs: `serve`, `init`, `add`, `credential`, `password`, `db`, `usage`, `migrate` |
+| `llm-rosetta serve` | Shortcut for `llm-rosetta gateway serve` |
+| `llm-rosetta ext <verb>` | Extensions: `list`, `show`, `install`, `remove`, `update`, `doctor`, `new`, `check`, `migrate`; see [Extensions](../guide/extensions.md) |
+| `llm-rosetta <id> <verb>` | A command an installed extension adds |
+| `llm-rosetta-gateway [COMMAND]` | The gateway's own entry point; same verbs, and no command starts the server |
+
+`llm-rosetta-gateway` is the only console script of the gateway distribution. The console scripts `llm-rosetta-usage` and `llm-rosetta-migrate` that earlier 0.14 development releases shipped are removed, and so is `python -m llm_rosetta_gateway`:
+
+| Earlier 0.14 development releases | Now |
+|--------|-----|
+| `llm-rosetta-usage ...` | `llm-rosetta gateway usage ...` |
+| `llm-rosetta-migrate ...` | `llm-rosetta gateway migrate ...` |
+| `llm-rosetta-gateway shims new / check / migrate` | `llm-rosetta ext new / check / migrate` (see [Adding an extension](../contributing/adding-an-extension.md)) |
+| `llm-rosetta-gateway set-password` (0.13.0) | `llm-rosetta gateway password` (`set-password` is still accepted as an alias) |
+| `python -m llm_rosetta_gateway` | `llm-rosetta serve` or `llm-rosetta-gateway` |
+
+Every verb is also reachable as `llm-rosetta-gateway <verb>`, so the examples below work with either spelling. `llm-rosetta-gateway` also forwards `ext`, `help` and the commands of installed extensions to the dispatcher: the compiled binary and the Docker image have no separate `llm-rosetta` script, and this is how an operator without pip installs an extension (`llm-rosetta-gateway ext install <id>`). Options placed before such a command are refused.
+
+Exit codes: `0` success, `1` the command failed, `2` a usage error; a command that documents another code keeps it (`gateway migrate --check` returns `3` for pending work). An unexpected exception prints one line, `llm-rosetta <command>: <message>`, and exits `1`; set `LLM_ROSETTA_DEBUG` to any value to get the traceback.
+
 ## Usage
 
 ```
+llm-rosetta serve [OPTIONS]
 llm-rosetta-gateway [OPTIONS] [COMMAND]
 ```
 
@@ -23,6 +50,9 @@ llm-rosetta-gateway [OPTIONS] [COMMAND]
 | `--proxy` URL | HTTP/SOCKS proxy URL for all upstream requests |
 | `--verbose`, `-v` | Enable verbose (DEBUG) logging; overrides config and `--log-level` |
 | `--log-level` LEVEL | Log level: `debug`, `info`, `warning`, `error` (default: `info`) |
+| `--socket`, `-S` PATH | Listen on a Unix domain socket instead of TCP |
+| `--tls-cert` PEM, `--tls-key` PEM | Serve TLS; each requires the other |
+| `--data-dir` DIR | Directory for `gateway.db` and other persistent data (overrides config) |
 
 ## Commands
 
@@ -31,7 +61,7 @@ llm-rosetta-gateway [OPTIONS] [COMMAND]
 Create a template `config.jsonc` at `~/.config/llm-rosetta-gateway/`:
 
 ```bash
-llm-rosetta-gateway init
+llm-rosetta gateway init
 ```
 
 ### `add provider <name>`
@@ -62,137 +92,45 @@ llm-rosetta-gateway add model gemini-2.0-flash --provider my-google
 |------|-------------|
 | `--provider` NAME | Target provider name |
 
-### `shims new [vendor]`
+### `password [config]`
 
-Create the files for a new provider shim, then load them through the same loader
-a gateway uses:
-
-```bash
-llm-rosetta-gateway shims new                  # asks for every field
-llm-rosetta-gateway shims new acme --no-input \
-  --base-url https://api.acme.example/v1 --check
-```
-
-Run with no flags on a terminal it is a questionnaire — the scan root first, then
-vendor, model type, wire format, lane, base URL, credential variable, optional
-row label / logo / group title, and which optional modules to write — and
-pressing Enter takes the value in brackets.  The root is asked first because
-everything after it follows what the package already does (see below).
-**Interactive is the default**; a value a flag already gave is not asked for
-again.  `--no-input` (implied when stdin is not a
-terminal) never prompts, so the same command works in a script.
-
-| Flag | Description |
-|------|-------------|
-| `--root DIR` | The directory a gateway scans; default `providers` |
-| `--model-type` | `llm` (default), `embeddings`, `rerank`, `decisions` |
-| `--format` | Wire format; the prompt and `--format`'s help list every format the model type registers, and an unregistered one is refused before anything is written |
-| `--lane` | A named instance of the vendor, written between the vendor and its type directory (`<vendor>/<lane>/<type>/`); ALCF's clusters |
-| `--base-url` | Upstream base URL; a placeholder is written when omitted |
-| `--probe` | Check that `--base-url` answers, and print what it answered |
-| `--models-path` | Model-list URL or path, when it is not the default |
-| `--api-key-env` | Credential variable; default `<VENDOR>_API_KEY` |
-| `--display-name` | Row label inside the vendor group |
-| `--logo`, `--group`, `--group-label` | Vendor identity, written to the vendor manifest |
-| `--auto-logo` | Take the mark from the lobehub icon set on jsDelivr, found by vendor name; fails when there is no icon under that name |
-| `--localize-logo` | Save `--logo` into the package's `assets/` and reference its jsDelivr URL |
-| `--transform` | Also write a `transforms.py` stub |
-| `--auth`, `--quota` | Also write a vendor-level `auth.py` or `quota.py` stub |
-| `--package DISTRIBUTION` | Write the external package shell too (`pyproject.toml`, entry point, CI, README), with the tree under `src/<package>/providers` |
-| `--no-registry-manifest` | Do not touch the package's `shims.yaml` |
-| `--check` | Load the new leaf and report what it resolves to |
-
-When the vendor already has a `provider.yaml`, the credential and the vendor
-identity stay there and the leaf carries only its own fields.  When the scan root
-ships a `shims.yaml`, the new leaf is appended to it — that file is authoritative
-for a gateway, so a leaf it does not list never loads.
-
-**The scan root is read, not copied.**  Everything is written in the contract
-shape — `<vendor>[/<lane>]/<type>[/<format>]/provider.yaml` — and the root only
-decides whether `<format>` is needed: a vendor that already holds a second lane
-of the type gets one, and a vendor's first lane goes straight into the type
-directory.  A root whose vendors hold format directories directly under them
-(`kilo_free/chat_completions/`) is the pre-contract shape, so the new leaf is
-written canonically and the vendor is noted with the `shims check` command that
-reports the rest.
-
-Three targets are refused before anything is written:
-
-- a vendor whose own `provider.yaml` is a shim — the loader reads that directory
-  as that one shim and never looks below it, so a second lane there would load
-  nowhere;
-- a shim name another file already declares, with the file named;
-- a vendor name the loader skips or misreads — an `_`/`.` prefix, or one of
-  `llm`, `embeddings`, `rerank`, `decisions`.
-
-A vendor still holding format directories directly under it is only noted, never
-blocked: the loader reads those too, and `shims migrate` moves them.
-
-A pasted base URL is checked before it is written.  A trailing `/models` (what
-vendor consoles copy) is dropped, then `<base>/models` is requested without a
-credential: `200`, `401` or `403` prove the host answers on that path, and any
-other answer is reported with the base URL's own status so a wrong suffix shows
-up now rather than as an empty model list later.  The interactive mode always
-checks; in flag mode pass `--probe`.  A negative answer is a warning, not a
-refusal — the host may not be reachable from this machine.
-
-One <kbd>Ctrl</kbd>+<kbd>C</kbd> re-asks the current question; a second one
-cancels the run with exit code 130 and says whether anything was written.
-<kbd>Ctrl</kbd>+<kbd>D</kbd> cancels at once — there is no value to take from an
-ended stream, and every later prompt would read it ended too.  There is no
-traceback in any of the three cases.
-
-A mark lives in the package, not on someone else's host: when a logo URL is
-given, the interactive mode asks whether to download it into the package's
-`assets/` and point `logo:` at the jsDelivr copy of that file.  The package is
-identified from the scan root's git remote, so the URL is the one this repository
-will actually serve; a scan root outside a git repository keeps the URL as typed
-and says why.  `--localize-logo` does the same without the question.
-
-Before it asks, the vendor name is looked up in the lobehub icon set
-(`@lobehub/icons-static-svg` on jsDelivr) and a hit becomes the default answer —
-Enter takes it.  The whole name is tried first, then the leading segment and the
-name without a pool marker, so `opencode_zen_free` still finds `opencode`; each
-try is one `HEAD`, and an unreachable CDN ends the search rather than costing a
-timeout per name.  A URL that is already on jsDelivr is kept as typed, because
-there is nothing to copy: the mark is served from the CDN either way.
-`--auto-logo` does the lookup without the questionnaire and fails when there is
-no icon.
-
-### `shims check [--root DIR]`
-
-Report a shim tree that the loader would misread, and exit non-zero when anything
-is found:
+Set or change the admin password (recovery when the password is forgotten):
 
 ```bash
-llm-rosetta-gateway shims check --root src/llm_rosetta_shim_acme/providers
-# ok      .../providers: no deviation from the shim contract
-# problem acme/chat_completions: <type>/ is missing above this leaf
+llm-rosetta gateway password --config config.jsonc
 ```
 
-It loads nothing, writes nothing and needs no config, so it runs against a package
-repository whose gateway is not set up yet.  Reportable: a leaf that is not at a
-canonical path, a vendor directory used as a leaf, a type directory that mixes the
-leaf and format levels, more than one lane directory above a type directory, a
-vendor-level `transforms.py`, `auth.py` declared at both the vendor and the leaf,
-a file outside the allow-list, and a missing `provider.yaml`.  The contract itself
-is in `llm_rosetta/devtools/_shim_template/README_en.md`.
+### `db <action>`
 
-### `shims migrate [--root DIR] [--write]`
+Database maintenance. `--data-dir` (or `--config`) selects the directory that holds `gateway.db`.
 
-Move a tree onto the contract.  Without `--write` it prints the moves and touches
-nothing:
+| Action | Does |
+|--------|------|
+| `cleanup [--max-age-days N]` | Delete all records older than `N` days (default 90) and vacuum |
+| `cleanup-logs [--max-age-days N]` | Delete request logs older than `N` days |
+| `cleanup-errors [--max-age-days N]` | Delete error dumps older than `N` days |
+| `export-errors [--start D] [--end D] [-o FILE]` | Export error dumps to a `tar.gz` (default `error-dumps.tar.gz`) |
+
+### `usage`
+
+See [Reading usage from the shell](#reading-usage-from-the-shell).
+
+### `migrate`
+
+Rewrite what the 0.14.0 removals break: a config file, the persisted tags in a gateway database, and source code. A dry run is the default.
 
 ```bash
-llm-rosetta-gateway shims migrate --root src/llm_rosetta_shim_acme/providers
-llm-rosetta-gateway shims migrate --root src/llm_rosetta_shim_acme/providers --write
+llm-rosetta gateway migrate --config config.jsonc            # dry run: diff and report
+llm-rosetta gateway migrate --config config.jsonc --write    # .bak copy, then rewrite
+llm-rosetta gateway migrate --db /var/lib/llm-rosetta --write
+llm-rosetta gateway migrate --scan src/ --json
 ```
 
-It renames directories and rewrites the `shims.yaml` entry for each moved leaf,
-including the second-lane case where the existing leaf has to move down into
-`<type>/<its format>/`.  It does **not** rewrite relative imports: a `transforms.py`
-that imported `model_utils` one level up needs one more dot, and the package's own
-tests are what catch it.  Run the package's tests after `--write`.
+See [Migrating to 0.14](../guide/migrating-to-0.14.md#llm-rosetta-migrate).
+
+### `ext`
+
+`llm-rosetta ext` is not a gateway verb, but the gateway binary forwards it. See [Extensions](../guide/extensions.md#the-ext-verbs).
 
 ### `credential <provider>`
 
@@ -200,7 +138,7 @@ Run a shim's interactive sign-in on this machine and emit the credential
 record it produces:
 
 ```bash
-llm-rosetta-gateway credential chatgpt --out record.json
+llm-rosetta gateway credential chatgpt --out record.json
 ```
 
 A provider whose shim ships `auth.py` has no key to type in — the exchange
@@ -258,14 +196,10 @@ uvicorn.run(app, host="0.0.0.0", port=8765)
 
 ## Reading usage from the shell
 
-`llm-rosetta-usage` is a separate command for the token ledger the gateway
-keeps — the same figures the admin panel's dashboard and API Keys tab show,
-without starting anything:
+`llm-rosetta gateway usage` reports the token ledger the gateway keeps, the same figures the admin panel's dashboard and API Keys tab show, without starting anything:
 
 ```console
-$ llm-rosetta-usage --db /var/lib/llm-rosetta --window 24h --by subject,model
+$ llm-rosetta gateway usage --db /var/lib/llm-rosetta --window 24h --by subject,model
 ```
 
-It reads the store and, when it is beside it, the keys database, so it reports
-against a running gateway's files.  See
-[Observability — The `llm-rosetta-usage` command](../api/observability.md#the-llm-rosetta-usage-command).
+It reads the store and, when it is beside it, the keys database, so it reports against a running gateway's files. See [Observability: The usage command](../api/observability.md#the-llm-rosetta-usage-command).

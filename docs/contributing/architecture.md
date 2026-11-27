@@ -40,9 +40,29 @@ If you find yourself duplicating logic across converters, consider extracting it
 
 ## Shim Layer
 
-A `ProviderShim` is a lightweight identity card that declares which base converter a provider uses, plus connection defaults and field-level transforms. Shims live under `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<type>/provider.yaml`, with a `<format>/` level below the type only when that type holds a second lane (`<vendor>/llm/chat_completions/` beside `<vendor>/llm/messages/`) and a lane directory above it only for a vendor with several named instances (`alcf/metis/llm/`). The contract, the template `shims new` renders, and the checks `shims check` and `shims migrate` apply are in `llm_rosetta/devtools/_shim_template/`.
+A `ProviderShim` is a lightweight identity card that declares which base converter a provider uses, plus connection defaults and field-level transforms. Shims live under `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<type>/provider.yaml`, with a `<format>/` level below the type only when that type holds a second lane (`<vendor>/llm/chat_completions/` beside `<vendor>/llm/messages/`) and a lane directory above it only for a vendor with several named instances (`alcf/metis/llm/`). The contract is in `llm_rosetta/authoring/_shim_template/`; `scripts/dev/new_shim.py` scaffolds a built-in shim, and `llm-rosetta ext new`, `ext check` and `ext migrate` create, check and move an extension's tree.
 
 Converters stay format-generic; shims declare provider-specific differences (e.g. response ID prefix, default headers, field renames).
+
+Shims outside core are provided by **extensions** (`llm_rosetta.extensions`): installable folders with a `plugin.yaml` manifest, imported as `llm_rosetta_ext.<id>`. An extension provides one or more kinds (`shims`, `transports`, `commands`); core manages the packages, and the layer that owns a kind registers a handler for it. See [Extensions](../guide/extensions.md) and [Adding an Extension](adding-an-extension.md).
+
+## Layering
+
+Core (`packages/llm-rosetta`) and the gateway (`packages/llm-rosetta-gateway`) are layered, and the allowed imports are tests, not conventions. Each table lists the edges that exist; a new edge fails with its place, and an edge that no longer exists must be deleted from the table.
+
+**Core** (`CORE_EDGES` in `tests/test_core_layering.py`; module level and function-local imports; `_vendor` excluded; no package-level cycle). From the bottom:
+
+1. **Foundation**: `ir` (including `ir/model`, the IR types), `formats`, `retired_names`, `conversion_warnings`, `model_vocabulary`. `ir` imports only `conversion_warnings`; `formats` imports only `ir`.
+2. **Contracts** (`llm_rosetta.contracts`): what outside parties implement or receive (`shim`, `transform`, `auth`, `quota`, `routing`, `resolver`, `command`, `extension`, `transport`, `cli_login`, `usage`). A contract imports other contracts, `_vendor` and the data modules (`ir.model`, `formats`, `retired_names`); only `contracts/transform.py` imports `ir.primitives`.
+3. **Conversion**: `converters` (imports no `pipeline`), `pipeline` (including `pipeline/facade.py` with `convert` and `convert_response`, the typed pipelines, `enforcement.py` and `tool_locations.py`), `fidelity`, `profiling`. These layers never import `shims` or `extensions`; they read shim names through `contracts.resolver`, which the shim layer registers. With both packages blocked, `import llm_rosetta` still works and every chat format converts to every other.
+4. **Optional layers**: `shims` (registers its `shims` handler with `extensions`), `extensions` (packages only: manifest, discovery, install, index, state and a handler registry per `provides` kind; it imports neither `shims`, `converters`, `pipeline`, `api` nor `authoring`), `routing`, `authoring` (what `ext new`, `ext check` and `ext migrate` use; the shim tree contract), `testing`.
+5. **Entry**: `cli` (a package: the dispatcher in `__init__.py`, `areas.py` for extension areas), `api` (the host surface; core never imports it), `tool_ops` (the toolregistry convenience entry; imported by the package root only), and the 0.13.0 forwarders `auto_detect` and `capabilities`, which nothing imports.
+
+`auto_detect` is a deprecated forwarder: `detect_provider`, `get_converter_for_provider`, `convert`, `convert_response` and `ProviderType` live in `converters/registry`, `pipeline/facade` and `contracts/routing`, and all of them are importable from `llm_rosetta`. The compat forwarders are listed in `llm_rosetta/_tiers.py` and are removed in 0.15.0.
+
+**Gateway** (`tests/gateway/test_layers.py`): the layers, bottom to top, are foundation, state, policy, operations, engine, serving and entry; imports go down only, and the module-level graph has no cycle. Function-local upward imports are frozen in `LAZY_UPWARD`, which may only shrink; `GATEWAY_EDGES` lists every cross-package import. The gateway reaches core only through `llm_rosetta.api` and `llm_rosetta.contracts` (`tests/gateway/test_core_surface_boundary.py`); admin reaches the gateway through `admin_api.py`.
+
+The tier of each public module (user, extension, compat) is stated in `llm_rosetta/_tiers.py`; see [The core surface](../api/index.md#the-core-surface).
 
 ## Adding a New Converter
 

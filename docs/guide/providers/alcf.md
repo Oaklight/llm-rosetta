@@ -4,9 +4,9 @@ ALCF (Argonne Leadership Computing Facility) Inference Service is supported thro
 
 !!! warning "Ships as a standalone package"
     Since 0.14.0 the three ALCF shims are no longer built into LLM-Rosetta; they
-    ship in the
-    [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf)
-    package. Declare it with `shims.install` and the names below keep working.
+    ship in the `alcf` extension of
+    [llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne).
+    Declare it with `shims.install` and the names below keep working.
     **Gateway → Shims → Available** offers the same entry as a one-click install.
 
     ```jsonc
@@ -17,9 +17,9 @@ ALCF (Argonne Leadership Computing Facility) Inference Service is supported thro
 
 | Shim Name | Base Type | Default Base URL | API Key Env | Hardware |
 |:---|:---|:---|:---|:---|
-| `alcf_metis--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | `ALCF_API_KEY` | SambaNova SN40L |
-| `alcf_minerva--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | NVIDIA B200 |
-| `alcf_sophia--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | vLLM on A100 |
+| `alcf_metis--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | (Globus sign-in) | SambaNova SN40L |
+| `alcf_minerva--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | (Globus sign-in) | NVIDIA B200 |
+| `alcf_sophia--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | (Globus sign-in) | vLLM on A100 |
 
 The three share one admin-panel top level: each declares `group: alcf`, so the
 provider-type picker shows a single `alcf` group whose rows read
@@ -70,129 +70,48 @@ All three clusters also export a `model_list_transform` that normalizes the mode
 
 ## Authentication
 
-ALCF uses Globus OAuth for authentication. Access tokens are short-lived (~48 hours) and must be refreshed periodically. The refresh token itself expires after **30 days** due to ALCF's session policy — after that, interactive re-login is required.
+ALCF uses Globus OAuth. The inference service takes a Globus access token minted from a grant that a person obtains once by signing in at `auth.globus.org`; the refresh token that comes back is spent on every later mint, without a browser. The refresh token expires after **30 days** because of ALCF's session policy; after that, an interactive sign-in is required.
 
-The Globus exchange ships **inside the shim package**: `llm-rosetta-shim-alcf` carries the zero-dependency (stdlib only) helper at `llm_rosetta_shim_alcf.providers.alcf.token`, and the vendor manifest (`providers/alcf/provider.yaml`) declares it once as `connection.token_command` — the three cluster shims inherit it, and each keeps its own `base_url` and `models_path`. There is nothing to download and no `token_command` to write in your config — the gateway runs the exchange at startup, on the shim's interval and after an upstream 401.
+The exchange ships **inside the extension**: the `alcf` extension carries `auth.py` beside its vendor manifest, so the three cluster shims authenticate alike. The provider is just its shim; there is no `token_command` to write and no `ALCF_API_KEY` to export. The gateway asks the exchange for a credential at startup, on the shim's interval and after an upstream 401.
 
-### Initial login
+### Sign in
 
-Run on any machine with a browser (or copy the URL to a machine that has one):
+In the admin panel, use the provider's **Sign in** action: it shows a Globus URL and accepts the authorization code you paste back, so the gateway host needs no browser and no loopback port.
 
-```bash
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login
-```
-
-This opens a Globus authorization URL, prompts you to paste the authorization code, and saves the token to `~/.globus/app/<client_id>/inference_app/tokens.json`.
-
-### Token management
+When the gateway runs somewhere without a browser you can also run the sign-in on a machine that has one and hand the record over; see [`credential <provider>`](../../gateway/cli.md#credential-provider):
 
 ```bash
-# Print a fresh access token (auto-refreshes if expired):
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token
-
-# Check token status and remaining lifetime:
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --status
-
-# Verify the token works against a cluster:
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --probe sophia
-
-# Force a refresh even if not expired:
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --force
+llm-rosetta gateway credential alcf-sophia --out record.json
 ```
 
-### Multi-user token pooling
-
-Multiple ALCF users can pool their tokens for round-robin key rotation. The gateway runs the shipped command without arguments, so pooling needs one override — point `token_command` at `--tokens-dir`:
-
-```bash
-# Each user logs in to their own file:
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login --token-file /shared/alcf-tokens/alice.json
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login --token-file /shared/alcf-tokens/bob.json
-```
-
-```jsonc
-{
-  "providers": {
-    "alcf-sophia": {
-      "shim": "alcf_sophia--chat_completions",
-      "token_command": [
-        "python3", "-m", "llm_rosetta_shim_alcf.providers.alcf.token",
-        "--tokens-dir", "/shared/alcf-tokens/"
-      ]
-    }
-  }
-}
-```
-
-The command prints one comma-separated string for all files; the gateway uses it as a key ring.
+The grant is stored where the vendor's own tooling keeps it, `~/.globus/app/<client_id>/inference_app/tokens.json`, and written back in that layout. An installation that already signed in with `alcf-ai` therefore needs no second sign-in, and a container that mounts `~/.globus` is configured once for both.
 
 ### 30-day session expiry
 
 !!! warning "Session policy limitation"
-    ALCF's Globus session policy enforces a 30-day lifetime. When the session expires, the refresh token stops working and the gateway enters a 401 retry loop. **Interactive re-login is required** — this cannot be automated because ALCF requires browser-based institutional SSO.
+    ALCF's Globus session policy enforces a 30-day lifetime. When the session expires, the refresh token stops working and the gateway enters a 401 retry loop. **Interactive re-login is required**: this cannot be automated because ALCF requires browser-based institutional SSO.
 
-    Watch for `consecutive_failures` escalating in the admin panel's token status, and re-run `--login` when it happens.
+    Watch for `consecutive_failures` escalating in the admin panel's token status, and sign in again when it happens.
 
     Tracking: [#687](https://github.com/Oaklight/llm-rosetta/issues/687)
 
 ## Gateway Configuration
 
-=== "Static API Key"
-
-    Obtain a token manually and set it as an environment variable:
-
-    ```bash
-    export ALCF_API_KEY=$(python3 -m llm_rosetta_shim_alcf.providers.alcf.token)
-    ```
-
-    ```jsonc
-    {
-      "providers": {
-        "alcf-sophia": {
-          "shim": "alcf_sophia--chat_completions",
-          "api_key": "${ALCF_API_KEY}"
-        }
-      }
+```jsonc
+{
+  "providers": {
+    "alcf-sophia": {
+      "shim": "alcf_sophia--chat_completions"
     }
-    ```
+  }
+}
+```
 
-    This requires restarting the gateway when the token expires.
-
-=== "Shipped exchange (recommended)"
-
-    Nothing to wire up — the shim declares the exchange, so the provider is just its shim:
-
-    ```jsonc
-    {
-      "providers": {
-        "alcf-sophia": {
-          "shim": "alcf_sophia--chat_completions"
-        }
-      }
-    }
-    ```
-
-    The gateway runs the command at startup, on the shim's declared interval and after an upstream 401 response. To change the interval without replacing the command, set `token_refresh_interval` on the provider.
-
-=== "Override the command"
-
-    A provider that names its own `token_command` replaces the shipped one — the multi-user pooling setup above, or a script of your own:
-
-    ```jsonc
-    {
-      "providers": {
-        "alcf-sophia": {
-          "shim": "alcf_sophia--chat_completions",
-          "token_command": ["python3", "/opt/alcf/token-from-vault.py"],
-          "token_refresh_interval": 1800
-        }
-      }
-    }
-    ```
+To change the refresh interval, set `token_refresh_interval` on the provider. To pool several ALCF accounts, declare one provider per account: the gateway gives each provider its own state directory.
 
 ### Docker deployment
 
-The refresh script lives inside the package, which the image installs, so only the token file needs mounting:
+The exchange lives inside the extension, which the gateway installs from the `argonne` source, so only the token file needs mounting:
 
 ```yaml
 # docker-compose.yaml
@@ -204,13 +123,7 @@ services:
       - ~/.globus:/home/appuser/.globus              # Globus token file (rw for refresh)
 ```
 
-Setup steps:
-
-1. **Login on the host** (one-time): `python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login`
-2. **Start the container** with the volume mount above
-3. **Add the provider** through the admin panel or `config.jsonc` — no `token_command`
-
-The container runs as `${PUID:-1000}` — Compose's `user:` directive, default the image's `appuser` (uid 1000) — so the mounted `~/.globus` must be writable by that uid for the refresh token to be updated in place. If your host uid differs, set `PUID`/`PGID` in the compose file and make the `.globus` directory belong to the same uid.
+The image keeps installed extensions in `/config/extensions` (`LLM_ROSETTA_EXTENSIONS_DIR`), so they survive the container. The container runs as `${PUID:-1000}` (Compose's `user:` directive, default the image's `appuser`, uid 1000), so the mounted `~/.globus` must be writable by that uid for the refresh token to be updated in place. If your host uid differs, set `PUID`/`PGID` in the compose file and make the `.globus` directory belong to the same uid.
 
 See [`docker/docker-compose.yaml`](https://github.com/Oaklight/llm-rosetta/blob/master/docker/docker-compose.yaml) for the full example.
 

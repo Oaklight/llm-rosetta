@@ -7,7 +7,7 @@ title: Free Endpoints
 Four providers publish a free pool that needs no account. None of them carries
 a contract: the roster, the rate limit and the endpoint itself can change or
 close without notice. They therefore ship as a standalone package,
-[llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free) —
+[llm-rosetta-ext-contrib](https://github.com/Oaklight/llm-rosetta-ext-contrib) —
 so a pool that disappears can be withdrawn without a core release.
 
 | Shim Name | Vendor | Default Base URL | Free slice |

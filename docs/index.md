@@ -42,7 +42,7 @@ Provider A ↔ **IR** ↔ Provider B — any supported format in, any supported 
 | | Toolbox | Raw converter | Pipeline | Gateway |
 |---|---|---|---|---|
 | **Use case** | Convert one IR value or tool | Translate one leg inside your own loop | Source → IR → target in one call | HTTP proxy for any client |
-| **Entry point** | `tool_ops`, `transforms`, `capabilities` | `ChatCompletionsConverter()` | `convert()` / `ConversionPipeline` | `llm-rosetta-gateway` |
+| **Entry point** | `tool_ops`, `contracts.transform` | `ChatCompletionsConverter()` | `convert()` / `ConversionPipeline` | `llm-rosetta-gateway` |
 | **Provider call** | You | You | You | The gateway |
 | **Routing, keys, admin** | — | — | — | Built in |
 

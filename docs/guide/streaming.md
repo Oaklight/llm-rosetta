@@ -183,6 +183,23 @@ finish = ctx.pop_pending_finish()  # returns dict and clears buffer
 
 This pattern is used internally by converters to merge usage into finish events, avoiding separate `UsageEvent` + `FinishEvent` pairs that would inflate the output stream during cross-provider conversion.
 
+## Usage Across a Stream
+
+Several `UsageEvent` in one stream are **increments**. A consumer adds them: numeric fields (including `total_tokens` and nested detail dicts) sum, non-numeric fields take the latest value, and a field an event does not state contributes nothing. Writers add through `buffer_usage`, the gateway's usage record adds, and `fold_response_events` adds.
+
+Some wires report cumulative snapshots instead, so their readers emit the difference against the previous report, and the sum of the events is the stream's total. Measured live:
+
+| Wire | What it sends | Reader |
+|------|---------------|--------|
+| Google `generateContent` | `usageMetadata` repeated on every chunk | emits the increase |
+| Anthropic Messages | `message_delta` repeats the `message_start` input beside the output so far (24/1, then 24/83) | emits the increase |
+| OpenAI Chat Completions | `usage` once, on the last chunk | treats every repeat of `usage` as a cumulative snapshot |
+| Google Interactions | usage only on `interaction.completed` | no change needed |
+
+The running report lives in the `StreamContext`, so a stream read without a context is not increment-safe; every caller inside the package passes one. After the first snapshot, each numeric field is a high-water mark: only a rise above the highest value seen counts, and the first decrease in a stream is logged once. A snapshot that adds nothing emits no event.
+
+A same-format stream that the gateway does not convert is recorded the same way: the usage object is found where the dialect keeps it (`usage`, `message.usage`, `response.usage`, `interaction.usage`), the Interactions `total_input_tokens` / `total_output_tokens` names are read, and each snapshot is folded in field by field, so a Messages `message_start` input survives an output-only `message_delta`.
+
 ## Cross-Provider Streaming
 
 A complete example converting OpenAI Chat SSE → IR → Anthropic SSE:

@@ -27,7 +27,7 @@ speaks. The shim signs the request the way the endpoint expects:
 ## Standalone package
 
 The shims ship in
-[`llm-rosetta-shim-opendesign`](https://github.com/Oaklight/llm-rosetta-shim-opendesign),
+[`llm-rosetta-ext-contrib`](https://github.com/Oaklight/llm-rosetta-ext-contrib),
 not in core. Declare the vendor before using the names:
 
 ```jsonc

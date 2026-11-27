@@ -11,7 +11,7 @@ the free pool sends none and offers only the models the upstream marks free.
 | Shim Name | Base Type | Default Base URL | Credentials | Ships in |
 |:---|:---|:---|:---|:---|
 | `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | `KILO_API_KEY` | core |
-| `kilo_free--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | none (keyless) | [llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free) |
+| `kilo_free--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | none (keyless) | [llm-rosetta-ext-contrib](https://github.com/Oaklight/llm-rosetta-ext-contrib) |
 
 ## Paid lane
 

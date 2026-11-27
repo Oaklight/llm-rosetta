@@ -129,6 +129,7 @@ nav:
           - Auto Detection: guide/auto-detection.md
       - Providers:
           - Provider Compatibility: guide/compatibility.md
+          - Extensions: guide/extensions.md
           - Provider Shims: guide/shims.md
           - Shim Placement and Maturity: guide/shim-placement.md
           - Provider Quota: guide/quota.md
@@ -197,6 +198,7 @@ nav:
           - Contributing Guide: contributing/guide.md
           - Style Guide: contributing/style-guide.md
           - Architecture Guide: contributing/architecture.md
+          - Adding an Extension: contributing/adding-an-extension.md
           - Naming Conventions: contributing/naming-conventions.md
           - Admin Themes: contributing/admin-themes.md
       - Roadmap: roadmap.md

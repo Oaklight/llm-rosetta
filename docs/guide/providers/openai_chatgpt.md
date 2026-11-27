@@ -24,7 +24,7 @@ refuses.
 
 There is deliberately no `api_key_env`: the credential is minted by the vendor's
 own `auth.py` (`src/llm_rosetta_shim_contrib/providers/openai_chatgpt/auth.py`
-in [llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib),
+in [llm-rosetta-ext-contrib](https://github.com/Oaklight/llm-rosetta-ext-contrib),
 beside the vendor manifest; the vendor left core in [#1664](https://github.com/Oaklight/llm-rosetta/pull/1664)). An `api_key` beside an exchange that does not consume one is
 rejected at config load, because the two are alternative sources for one
 credential.
@@ -81,7 +81,7 @@ The sign-in needs a browser and a loopback listener, so it can also run where
 the browser is — not necessarily on the gateway host:
 
 ```bash
-llm-rosetta-gateway credential chatgpt --out record.json
+llm-rosetta gateway credential chatgpt --out record.json
 ```
 
 That runs the shim's interactive login and writes the credential record with

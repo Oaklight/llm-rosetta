@@ -48,76 +48,77 @@ You can also register custom shims programmatically via `register_shim()`.
 
 ### External Shim Sources
 
-Shims need not live inside the package. The top-level `shims` section installs
-vendors from manifest sources and scans extra local directories, so a shim set
-can be maintained in its own repository and consumed without installing
-anything into the gateway image.
+Shims need not live inside the package. The top-level `shims` section reads
+**extension indexes** and installs vendors from them, so a shim set can be
+maintained in its own repository and consumed without rebuilding the gateway
+image. A source is an index (`index.json`) published by an extension
+repository; an install is an [extension](../guide/extensions.md) wheel placed
+in the extensions directory.
 
 ```jsonc
 "shims": {
-  // Manifest sources (catalogue ids or manifest URLs) and the vendors to
+  // Extension indexes (catalogue ids or index URLs) and the vendors to
   // install from them: a vendor name, tag:<tag>, *, each optionally behind
   // "<source>:", or !<source>:<vendor> to exclude one. install without sources
   // reads contrib and argonne.
   "sources": ["contrib", "argonne"],
   "install": ["opendesign", "tag:tier:free", "argonne:*"],
 
-  // Scanned for <vendor>/<type>/provider.yaml (the built-in shape), or the older
-  // <name>/provider.yaml (flat) and <group>/<leaf>/provider.yaml (grouped) shapes.
-  // Relative entries are anchored to the directory containing this config file.
-  "paths": ["./local-shims", "../shared/rosetta-shims"],
-
   // Shim names to switch off (the per-shim switch in the admin panel).
   "disabled": ["argo--messages"],
 
   "cache_dir": "./shims-cache",   // optional; default <config_dir>/shims-cache
-  "remote_ttl": 86400,            // optional; manifest freshness (seconds)
+  "remote_ttl": 86400,            // optional; index freshness (seconds)
   "strict": false                 // optional; true => a failed source aborts startup
 }
 ```
 
-These are the keys the gateway reads: `sources`, `install`, `paths`,
-`disabled`, `cache_dir`, `remote_ttl` and `strict`.
+These are the keys the gateway reads: `sources`, `install`, `disabled`,
+`cache_dir`, `remote_ttl` and `strict`.
 
 !!! danger "Removed in 0.15.0"
-    `shims.presets`, `shims.include`, `shims.exclude` and `shims.remotes` are no
-    longer read. A config that still carries one is **refused when it loads**,
-    with `config: 'shims.<key>' was removed in 0.15.0: <advice>`. Run
-    `llm-rosetta-migrate --config <path>` (dry run) and `--write` to rewrite
-    `presets`, `include` and `exclude` into the new form; see
+    `shims.presets`, `shims.include`, `shims.exclude`, `shims.remotes` and
+    `shims.paths` are no longer read, and the gateway no longer reads a
+    `shims.yaml` from a directory. A config that still carries a non-empty one
+    is **refused when it loads**, with
+    `config: 'shims.<key>' was removed in 0.15.0: <advice>`. Run
+    `llm-rosetta gateway migrate --config <path>` (dry run) and `--write` to
+    rewrite `presets`, `include` and `exclude` into the new form; see
     [Retired keys](../guide/shims.md#retired-keys). A `remotes` entry (an
-    explicit archive URL with `ref`, `sha256`, `mirror`, `path`, `token_env` or
-    `refresh`) has no manifest equivalent and cannot be rewritten: publish a
-    manifest source and list it in `shims.sources`, or point `shims.paths` at a
-    local copy.
+    explicit archive URL) and a `paths` directory have no rewrite: publish an
+    extension index and list it in `shims.sources`, or turn the directory into
+    an [extension folder](../contributing/adding-an-extension.md) and install it
+    into the extensions directory.
 
-**Layout.** A directory under `paths` may group by model type
-(`vendor/embeddings/provider.yaml`, `vendor/llm/chat_completions/provider.yaml`),
-the shape the built-in shims use; the older shapes still load unchanged — a
-`provider.yaml` directly in a child (`my-provider/provider.yaml`) or one group
-level (`vendor/messages/provider.yaml`, `vendor/chat_completions/provider.yaml`).
-A directory may declare what it ships in a `shims.yaml` at its root; a
-manifest that is present is authoritative — unlisted directories are never
-read. It is data, not code: relative paths only, no URLs.
-
-**Manifest sources.** `sources` lists manifest sources: a catalogue id
-(`contrib`, `argonne`), a manifest URL, or `{"url", "fallback", "token_env"}`.
+**Extension sources.** `sources` lists extension indexes: a catalogue id
+(`contrib`, `argonne`), an index URL, or `{"url", "fallback", "token_env"}`. A
+catalogue id resolves to the `releases/latest/download/index.json` of
+`Oaklight/llm-rosetta-ext-contrib` or `Oaklight/llm-rosetta-ext-argonne`.
 `install` selects vendors from them: `<vendor>`, `tag:<tag>` (matched whole,
 e.g. `tag:tier:free`), `*`, each optionally behind `<source>:`; `!<vendor>` and
 `!<source>:<vendor>` exclude a vendor and `<source>:<vendor>@<version>` pins
 one. Per vendor the gateway installs the newest stable version whose
-`requires` matches this core (`surface` equal to `SURFACE_VERSION`, `ir` not
-above `IR_VERSION`; a pre-release only when no stable version is installable),
-checks the archive's sha256, loads only the shim names the release record
-lists when the archive has no `shims.yaml`, and upgrades only when a newer
-installable version appears. An entry that matches nothing in a source that
-answered is logged and reported as a *not in the manifest* row. The manifest
-is reused for `remote_ttl`; an unreachable source keeps the cached manifest
-and the last good install. Core wins per shim: a core shim name is refused and
-the vendor's other shims install. A record saying `promoted_to: core@X` skips
-the vendor only when this core is at `X` or later (a dev or pre-release of `X`
-is before it) and core registers the record's shims. See
+requirements match this core and interpreter (`surface` equal to
+`SURFACE_VERSION`, `ir` not above `IR_VERSION`; a pre-release only when no
+stable version is installable), downloads the wheel, checks its sha256 against
+the index entry, and installs it into the extensions directory with core's
+standard-library installer. It upgrades only when a newer installable version
+appears. An entry that matches nothing in a source that answered is logged and
+reported as a *not in the manifest* row. The index is reused for `remote_ttl`;
+an unreachable source keeps the cached index and the last good install. Core
+wins per shim: a shim name that core (or another owner) already registers is
+not replaced, and the extension's status says which owner holds the name. See
 [Manifest sources](../guide/shims.md#manifest-sources).
+
+An installed extension loads whether or not `shims.install` still selects it:
+the selection decides what is installed and kept current, `shims.disabled`
+what is switched off. Dropping a source or the whole `shims` section does not
+uninstall anything.
+
+**Where extensions install.** The gateway installs into `<data dir>/extensions`.
+When `LLM_ROSETTA_EXTENSIONS_DIR` is set it wins, and the `llm-rosetta ext`
+commands read the same variable, so installing with them and serving from the
+gateway meet in one place. The Docker images set it to `/config/extensions`.
 
 **Standalone packages.** The ALCF, AskSage, Argo, free-endpoint and Open
 Design shims ship outside core, in the `argonne` and `contrib` sources. Declare
@@ -125,31 +126,34 @@ a vendor with `shims.install`: `argonne:alcf`, `argonne:argo`,
 `argonne:asksage`, `contrib:tag:tier:free` (the free endpoints) and
 `contrib:opendesign`. A provider config that still names one of these shims
 without a declared source fails at startup with an error naming the vendor and
-the `shims.install` entry to add.
+the `shims.install` entry to add. A vendor that moved out of core is installed
+by itself when a config names its shim.
 
-**Cache and refresh.** Manifests and archives are stored under `cache_dir`
-(default `<config_dir>/shims-cache`, next to the config file) and a manifest
-is reused for `remote_ttl` seconds. A warm cache covers every failure except
-the source's verdict on its own bytes: a transport failure, an HTTP error, a
-disk that cannot be written and an unset `token_env` are served from the cache
-and reported as stale. Two are never masked: a `sha256` mismatch, and a body
-that is not an installable archive.
+**Cache and refresh.** Indexes and the install records are stored under
+`cache_dir` (default `<config_dir>/shims-cache`, next to the config file) and
+an index is reused for `remote_ttl` seconds. A warm cache covers a transport
+failure, an HTTP error, a disk that cannot be written and an unset
+`token_env`: the cached index is served and reported as stale. A `sha256`
+mismatch is never masked, and an index whose `generated_at` is older than the
+cached one never replaces it.
 
-**Precedence.** On a shim-name collision, later sources win: built-ins, then
-entry-point plugins, then manifest installs, then `paths` in order.
+**Precedence.** On a shim-name collision core wins: built-ins first, then
+installed extensions. An extension all of whose shims are held is skipped
+before it is downloaded.
 
 **Failure handling.** By default a bad source is logged, reported in the admin
 panel, and skipped — the gateway still starts. Set `shims.strict: true` to abort
 startup instead (an unknown `<source>:` qualifier in `install` is refused too).
 
-**Programmatic use.** `llm_rosetta.shims.rebuild_shims()` loads directories
-directly (no config file needed); `llm_rosetta_gateway.apply_shim_sources(raw, config_path)`
-applies a config dict. `create_app` also applies the section automatically.
+**Programmatic use.** `llm_rosetta_gateway.apply_shim_sources(raw, config_path)`
+applies a config dict; `create_app` also applies the section automatically.
 
 !!! warning "Declared sources run code"
-    A shim directory may ship a `transforms.py`, which is executed when the shim
-    loads — the same trust level as `pip install`ing a plugin package. Only add
-    sources you trust. The trust boundary is whoever can edit the config file.
+    An installed extension may ship a `transforms.py` or a transport, which is
+    executed when the extension loads: the same trust level as `pip install`ing
+    a package. An index is code execution at the trust level of the repository
+    that publishes it. Only add sources you trust. The trust boundary is whoever
+    can edit the config file.
 
 ### Non-LLM Endpoints
 
@@ -269,7 +273,7 @@ they serve.  The config loader no longer reads the pre-rename spellings:
 `default_decision_format`, a provider's `embedding:` or `decision:` block, or a
 model tagged `"type": "embedding"` / `"type": "decision"`.  Each fails at load
 with one `llm-rosetta-gateway: error: ...` line that names the file, the key
-and its replacement, and exits 1.  `llm-rosetta-migrate --config <path>
+and its replacement, and exits 1.  `llm-rosetta gateway migrate --config <path>
 --write` rewrites them; see [Migrating to 0.14](../guide/migrating-to-0.14.md#llm-rosetta-migrate).
 A document older than the current `config_version` is still upgraded on load
 (the original is kept beside it as `.pre-migration.bak`); only a document
@@ -299,7 +303,7 @@ You can declare equivalent limits in a custom shim registered via `register_shim
     The provider type resolution order is: `shim` → `type` → provider name (fallback).
 
 !!! note "Backward compatibility"
-    If both `shim` and `type` are omitted, the provider name itself is used as the type. A retired spelling in `shim` / `type` (e.g. `openai_chat`, `openai_responses`, `anthropic`, `google`, …) is rejected at startup with an error that names the file, the key and the replacement, and the gateway exits 1; it is no longer rewritten. Run `llm-rosetta-migrate --config <path> --write` to rewrite the config, see [Migrating to 0.14](../guide/migrating-to-0.14.md#retired-names).
+    If both `shim` and `type` are omitted, the provider name itself is used as the type. A retired spelling in `shim` / `type` (e.g. `openai_chat`, `openai_responses`, `anthropic`, `google`, …) is rejected at startup with an error that names the file, the key and the replacement, and the gateway exits 1; it is no longer rewritten. Run `llm-rosetta gateway migrate --config <path> --write` to rewrite the config, see [Migrating to 0.14](../guide/migrating-to-0.14.md#retired-names).
 
 ### Enabling / Disabling Providers
 
@@ -381,7 +385,7 @@ one with a `401`.
 
 #### ALCF example with Docker
 
-ALCF providers use Globus OAuth tokens, and the exchange ships inside `llm-rosetta-shim-alcf` — which the image installs — so only the token file needs mounting:
+ALCF providers use Globus OAuth tokens, and the exchange ships inside the `alcf` extension (the `argonne` source; declare `shims.install: ["argonne:alcf"]`), so only the token file needs mounting:
 
 ```yaml
 # docker-compose.yaml

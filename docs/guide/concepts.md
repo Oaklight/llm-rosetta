@@ -30,7 +30,7 @@ The IR is the same at every level; only who calls the provider changes.
 | | Toolbox | Raw converter | Pipeline | Gateway |
 |---|---|---|---|---|
 | **Use case** | Convert one IR value or tool | Translate one leg | Source → IR → target | HTTP proxy for any client |
-| **Entry point** | `tool_ops`, `transforms`, `capabilities` | `ChatCompletionsConverter()` | `convert()` / `ConversionPipeline` | `llm-rosetta-gateway` |
+| **Entry point** | `tool_ops`, `contracts.transform` | `ChatCompletionsConverter()` | `convert()` / `ConversionPipeline` | `llm-rosetta-gateway` |
 | **Provider call** | You | You | You | The gateway |
 
 All three levels share the same IR and converters, and the toolbox operates on that same IR. Start at the level you need and move up without rewriting the translation.

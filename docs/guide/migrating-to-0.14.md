@@ -5,9 +5,9 @@ title: Migrating to 0.14
 # Migrating to 0.14
 
 !!! warning "0.15.0 removed `shims.presets`"
-    This page records 0.14. The `shims.presets`, `shims.include`, `shims.exclude` and `shims.remotes` keys it mentions are no longer read as of 0.15.0, and a config that carries one is refused at load. Declare the vendor in `shims.install` instead (`argonne:alcf`, `argonne:argo`, `argonne:asksage`, `contrib:tag:tier:free`, `contrib:opendesign`) and run `llm-rosetta-migrate --config <path>` to rewrite the file. See [Retired keys](shims.md#retired-keys).
+    This page records 0.14. The `shims.presets`, `shims.include`, `shims.exclude`, `shims.remotes` and `shims.paths` keys it mentions are no longer read as of 0.15.0, and a config that carries one is refused at load. Declare the vendor in `shims.install` instead (`argonne:alcf`, `argonne:argo`, `argonne:asksage`, `contrib:tag:tier:free`, `contrib:opendesign`) and run `llm-rosetta gateway migrate --config <path>` to rewrite the file. See [Retired keys](shims.md#retired-keys).
 
-Release 0.14.0 removes the deprecated import paths and class aliases that 0.13.0 kept for one release (epic [#919](https://github.com/Oaklight/llm-rosetta/issues/919)). A removed name fails with a plain `ImportError`, `ModuleNotFoundError` or `AttributeError`; the [retired-names](#retired-names) diagnostic covers provider, shim and model-type names, not Python import paths. This page lists what is gone, what replaces it, and what still works. To rewrite a gateway config and database, use [`llm-rosetta-migrate`](#llm-rosetta-migrate); the [upgrade recipe](#upgrade-recipe) gives the order.
+Release 0.14.0 removes the deprecated import paths and class aliases that 0.13.0 kept for one release (epic [#919](https://github.com/Oaklight/llm-rosetta/issues/919)). A removed name fails with a plain `ImportError`, `ModuleNotFoundError` or `AttributeError`; the [retired-names](#retired-names) diagnostic covers provider, shim and model-type names, not Python import paths. This page lists what is gone, what replaces it, and what still works. To rewrite a gateway config and database, use [`llm-rosetta gateway migrate`](#llm-rosetta-migrate); the [upgrade recipe](#upgrade-recipe) gives the order.
 
 The rows up to [Removed helper modules, gateway stubs and `tool_ops` aliases](#removed-shims) were checked against `origin/master` (commit `756f084169`). The rows from [Removed facades](#removed-facades) on were checked against the head of PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656) (commit `0a8c0be374`): each removed name fails to import or raises, and each replacement imports.
 
@@ -113,10 +113,10 @@ The names are gone from `llm_rosetta`, `llm_rosetta.api` and `llm_rosetta.fideli
 The gateway no longer rewrites a retired name when it loads a config, so a config that still spells one does not start. The error names the file and the key and ends with the migrate command when the gateway is installed, for example:
 
 ```text
-llm-rosetta-gateway: error: config.jsonc: providers.p.type: 'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta-migrate --config <path>' (add --write to apply), see the migration guide (https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/)
+llm-rosetta-gateway: error: config.jsonc: providers.p.type: 'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta gateway migrate --config <path>' (add --write to apply), see the migration guide (https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/)
 ```
 
-`llm-rosetta-migrate` ships with the gateway distribution. In a core-only install (the library without `llm-rosetta-gateway`) a retired-name error ends with `see the migration guide (<url>)` instead, because the command is not there to run. The sentence is `llm_rosetta.retired_names.MIGRATE_HINT`.
+`llm-rosetta gateway migrate` ships with the gateway distribution. In a core-only install (the library without `llm-rosetta-gateway`) a retired-name error ends with `see the migration guide (<url>)` instead, because the command is not there to run. The sentence is `llm_rosetta.retired_names.MIGRATE_HINT`.
 
 The process exits 1 and prints no traceback. In code, the exception is `RetiredConfigName`, a `ValueError` whose message is `<config file>: <json path>: <retired-names message>`.
 
@@ -206,7 +206,7 @@ The versioned `config_version` migrations still upgrade a document older than th
 
 Removed in PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656). `openai_chat`, `openai_responses`, `anthropic` and `google` are no longer rows of `STANDARD_SHAPES` or `ADDITIVE_CACHE_STANDARDS` (`llm_rosetta.contracts.usage`). The usage vocabulary names the current standards only: `chat_completions`, `open_responses`, `messages`, `google_generate`.
 
-A database row written under a retired tag is not misread and does not stop the gateway. `shape_for` answers `None` and `cache_is_additive` answers `False` for it, so the startup total repair leaves the row's total as the old writer stored it. `backfill_total_tokens` logs one warning with the count of such rows, the retired tags and the command `llm-rosetta-migrate --db`. Run that command to rewrite the tags; see [below](#llm-rosetta-migrate).
+A database row written under a retired tag is not misread and does not stop the gateway. `shape_for` answers `None` and `cache_is_additive` answers `False` for it, so the startup total repair leaves the row's total as the old writer stored it. `backfill_total_tokens` logs one warning with the count of such rows, the retired tags and the command `llm-rosetta gateway migrate --db`. Run that command to rewrite the tags; see [below](#llm-rosetta-migrate).
 
 ## The extension contracts move to `llm_rosetta.contracts` {#contracts-home}
 
@@ -231,7 +231,7 @@ Upgrade shim packages together with core. The shim packages (`alcf`, `argo`, `as
 
 A shim package's `transforms.py`, `auth.py` and `quota.py` must import from `llm_rosetta.contracts` only; see [What a shim may import](shims.md#what-a-shim-may-import).
 
-`llm-rosetta-migrate --scan` (PR [#1658](https://github.com/Oaklight/llm-rosetta/pull/1658)) reports an import of a removed path in this table as an `import` item that names the replacement. It reports a path only when the path does not resolve in the installed core. `llm_rosetta.routing` and `llm_rosetta.capabilities` still resolve as forwarders, so the scan does not report them; their `DeprecationWarning` does. To find every old path, including the forwarders:
+`llm-rosetta gateway migrate --scan` (PR [#1658](https://github.com/Oaklight/llm-rosetta/pull/1658)) reports an import of a removed path in this table as an `import` item that names the replacement. It reports a path only when the path does not resolve in the installed core. `llm_rosetta.routing` and `llm_rosetta.capabilities` still resolve as forwarders, so the scan does not report them; their `DeprecationWarning` does. To find every old path, including the forwarders:
 
 ```bash
 grep -rnE "llm_rosetta\.(transforms|shims\.(auth_exchange|quota_probe)|observability\.usage|routing|capabilities)\b|\b_Named(IR)?Transform\b" .
@@ -242,7 +242,7 @@ These rows were checked against the head of PR #1659 (commit `cdc6354af3`, versi
 ## Shim vendors that moved to contrib {#moved-to-contrib}
 
 Fifteen vendors left core for the
-[contrib shim repository](https://github.com/Oaklight/llm-rosetta-shim-contrib)
+[contrib extension repository](https://github.com/Oaklight/llm-rosetta-ext-contrib)
 ([#1660](https://github.com/Oaklight/llm-rosetta/issues/1660)); the rule that
 decides what stays is in [Shim placement](shim-placement.md). Their shim names
 did not change, so nothing here is a rename and nothing needs an edit:
@@ -279,15 +279,54 @@ for any source.
 
 **Library.** `get_converter_for_provider("opencode--chat_completions")` and a
 `ConversionPipeline` whose shim names a moved vendor raise a `ValueError` that
-names `llm-rosetta-shim-contrib`. To use the shim without the gateway, check out
-that repository and call `llm_rosetta.api.load_providers_from_dir(<checkout>/providers)`.
+names the extension repository `llm-rosetta-ext-contrib`. To use the shim without the gateway, install the vendor as an extension: `llm-rosetta ext install <vendor>`. `llm_rosetta` loads installed extensions on import; call `llm_rosetta.extensions.load_extensions()` to pick up a later install.
 The table is `llm_rosetta.retired_names.MOVED_VENDORS`.
 
-**`llm-rosetta-migrate`.** `--config` and `--scan` report each moved name as a
+**`llm-rosetta gateway migrate`.** `--config` and `--scan` report each moved name as a
 `note` — `--scan` also finds the probe ids `openai_codex` and `opencode_go`,
 and the bare names `xai`, `qwen`, `zhipu` and `moonshot` where they are a whole
-`type`/`shim` value, a provider key or an `install` item — ("now in llm-rosetta-shim-contrib; the gateway installs it
+`type`/`shim` value, a provider key or an `install` item — ("now in the contrib extension repository; the gateway installs it
 automatically"), which never counts in the exit code.
+
+## Retired extension paths {#retired-extension-paths}
+
+0.14.0 replaces the 0.13 plugin mechanisms with [extensions](extensions.md) (epic [#1703](https://github.com/Oaklight/llm-rosetta/issues/1703)). What was removed, and what to do:
+
+| Removed | Use instead |
+|---------|-------------|
+| The `llm_rosetta.shim_providers` entry-point group and the `register_shims` callable | An extension folder with a `plugin.yaml`, imported as `llm_rosetta_ext.<id>`, and the `llm_rosetta.extensions` entry-point group. `llm-rosetta ext new <id>` scaffolds one; `llm-rosetta ext migrate` moves an older shim tree onto the tree contract. A package that still declares an entry point in the retired group is not run; `llm-rosetta ext doctor` and `llm-rosetta gateway migrate` report it with a pointer to `ext new`. |
+| `shims.paths` and the `shims.yaml` a directory could ship | An extension folder installed into the extensions directory, or an extension index listed in `shims.sources`. A config with a non-empty `shims.paths` is refused at load. |
+| The scaffolder's external "package shell" (`shims new --package`: `pyproject.toml`, entry point, CI, README) | `llm-rosetta ext new`, which writes the folder, `plugin.yaml` and `pyproject.toml`. |
+| Manifest sources published as `manifest.json` on a `dist` branch (`llm_rosetta.contracts.shim_manifest`) | The extension index, `index.json`, with a wheel per version (`llm_rosetta.contracts.extension` and `llm_rosetta.api`: `load_index`, `install_from_index`). |
+| `llm-rosetta-gateway shims new`, `shims check`, `shims migrate` | `llm-rosetta ext new`, `ext check`, `ext migrate`; `scripts/dev/new_shim.py` for a built-in shim. |
+
+Installed extensions stay installed when a source or the `shims` section is dropped from the config; the selection decides what is installed and kept current, not what loads.
+
+## The command surface {#command-surface}
+
+The gateway distribution ships one console script, `llm-rosetta-gateway`. The `llm-rosetta` dispatcher (core) runs the rest; see the [CLI reference](../gateway/cli.md).
+
+| Before | Now |
+|--------|-----|
+| `llm-rosetta-usage` | `llm-rosetta gateway usage` |
+| `llm-rosetta-migrate` | `llm-rosetta gateway migrate` |
+| `llm-rosetta-gateway set-password` | `llm-rosetta gateway password` (the old spelling is still accepted) |
+| `python -m llm_rosetta_gateway` | `llm-rosetta serve`, or `llm-rosetta-gateway` |
+
+The old top-level names have no forwarder. `llm-rosetta-gateway [options]` still starts the server, and `llm-rosetta-gateway <verb>` still runs a gateway verb.
+
+## Removed in 0.15.0 {#removed-in-0150}
+
+Every 0.13.0 forwarder emits a `DeprecationWarning` that names 0.15.0 as its removal. The nine modules are listed in `llm_rosetta/_tiers.py` (`COMPAT`):
+
+- `llm_rosetta.auto_detect` (split by what it holds; `detect_provider`, `get_converter_for_provider`, `convert`, `convert_response` and `ProviderType` are importable from `llm_rosetta`)
+- `llm_rosetta.capabilities`, `llm_rosetta.routing`
+- `llm_rosetta.converters.base.context`
+- `llm_rosetta.types.ir` (and `.extensions`), which forward to `llm_rosetta.ir.model`
+- `llm_rosetta.shims.provider_shim` (the data-class re-exports) and `llm_rosetta.shims.providers` (per name)
+- `llm_rosetta.gateway`, `llm_rosetta.observability` (per name)
+
+On the gateway side, a non-empty `shims.presets`, `include`, `exclude`, `remotes` or `paths` is refused with an error that says "removed in 0.15.0".
 
 ## Find the old names in your code {#find-old-names}
 
@@ -308,7 +347,7 @@ grep -rnE "converters\.(openai_chat|openai_responses|anthropic|google_genai|goog
 `llm_rosetta.retired_names.RETIRED_NAMES` lists 31 names that earlier releases renamed. Each row says what the name became. The table is an error table, not an alias table: every row raises `ValueError` and nothing is translated, for example:
 
 ```text
-'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta-migrate --config <path>' (add --write to apply), see the migration guide (https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/)
+'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta gateway migrate --config <path>' (add --write to apply), see the migration guide (https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/)
 ```
 
 For a shim that moved to a standalone package, the message also names the `shims.presets` key to declare. Every retired-name error ends with the migrate command (`retired_names.MIGRATE_HINT`), including the gateway's config guard.
@@ -365,21 +404,21 @@ The model-type spelling follows its endpoint.
 | `embedding` | `embeddings` |
 | `decision` | `decisions` |
 
-## `llm-rosetta-migrate` {#llm-rosetta-migrate}
+## `llm-rosetta gateway migrate` {#llm-rosetta-migrate}
 
-`llm-rosetta-migrate` is a console script of the `llm-rosetta-gateway` distribution. It rewrites retired names in a gateway config, rewrites the persisted tags in `gateway.db`, and scans source for retired names. It reads `llm_rosetta.retired_names` only, so it keeps working after the alias tables are gone, and it never guesses: a name it cannot map is reported and left in place.
+`llm-rosetta gateway migrate` is a command of the `llm-rosetta-gateway` distribution (earlier 0.14 development releases shipped it as the console script `llm-rosetta gateway migrate`, which is gone). It rewrites retired names in a gateway config, rewrites the persisted tags in `gateway.db`, and scans source for retired names. It reads `llm_rosetta.retired_names` only, so it keeps working after the alias tables are gone, and it never guesses: a name it cannot map is reported and left in place.
 
 ```bash
-llm-rosetta-migrate --config config.jsonc                  # dry run: diff and report
-llm-rosetta-migrate --config config.jsonc --write          # .bak copy, then rewrite
-llm-rosetta-migrate --db /var/lib/llm-rosetta --write      # gateway.db, or the directory that holds it
-llm-rosetta-migrate --config config.jsonc --check          # exit 3 when rewrites are pending
-llm-rosetta-migrate --scan src/                            # advisory report, edits nothing
+llm-rosetta gateway migrate --config config.jsonc                  # dry run: diff and report
+llm-rosetta gateway migrate --config config.jsonc --write          # .bak copy, then rewrite
+llm-rosetta gateway migrate --db /var/lib/llm-rosetta --write      # gateway.db, or the directory that holds it
+llm-rosetta gateway migrate --config config.jsonc --check          # exit 3 when rewrites are pending
+llm-rosetta gateway migrate --scan src/                            # advisory report, edits nothing
 ```
 
 `--config`, `--db` and `--scan` can be repeated. With none of the three, the command looks for the gateway's config file.
 
-**Config.** The edit is at text level: comments, key order and layout outside the rewritten names are untouched. It rewrites retired `type:` and `shim:` values, model `type:` and `capabilities:` entries, the `embedding_*` and `decision_*` keys and sections to their plural names, and adds the `shims.presets` entry when a shim moved to a standalone package. For example, `"type": "openai_chat"` becomes `"type": "chat_completions"`, `"shim": "argo--openai_chat"` becomes `"argo--chat_completions"` with `"shims": {"presets": ["argo"]}` added, and `embedding_providers` becomes `embeddings_providers`.
+**Config.** The edit is at text level: comments, key order and layout outside the rewritten names are untouched. It rewrites retired `type:` and `shim:` values, model `type:` and `capabilities:` entries, the `embedding_*` and `decision_*` keys and sections to their plural names, and adds the `shims.install` entry when a shim moved to a standalone package. It also rewrites the retired `shims.presets`, `include` and `exclude` keys into `shims.install` selectors and `shims.disabled`; a `remotes` or `paths` entry has no rewrite and is reported. For example, `"type": "openai_chat"` becomes `"type": "chat_completions"`, `"shim": "argo--openai_chat"` becomes `"argo--chat_completions"` with `"shims": {"install": ["argonne:argo"]}` added, and `embedding_providers` becomes `embeddings_providers`.
 
 **Database.** It rewrites the retired tags in `request_log.source_provider`, `request_log.target_provider`, `error_dumps.source_provider` and `error_dumps.target_provider`: the retired format names, and the value `embedding`, which becomes `embeddings`. It also folds `metrics.counters.by_source_provider["embedding"]` into `embeddings`. A `by_target_provider` key `embedding` is reported as a note and not rewritten (the `--json` report lists notes under `notes`, apart from `items`), and `request_log.model_type` is unchanged. The write runs in one transaction after a backup, and the command refuses while another process holds the file (`--force` overrides). The rewrite is idempotent. On a copy of a production-sized database (268275 `request_log` rows, 775 `error_dumps` rows), the 334 rows tagged `embedding` became `embeddings` in both columns, with row counts, token sums, a checksum of the untouched columns and `integrity_check` unchanged, and a second run wrote nothing.
 
@@ -402,12 +441,12 @@ Persisted internal keys stay as they are by decision: the `provider_metadata` ta
 
 ## Upgrade recipe {#upgrade-recipe}
 
-1. Stop the gateway. `llm-rosetta-migrate --db` refuses a database that a running process holds.
+1. Stop the gateway. `llm-rosetta gateway migrate --db` refuses a database that a running process holds.
 2. Back up the config file and the data directory (`gateway.db`). `--write` also keeps a `.bak` copy, but a backup you made yourself does not depend on the command.
-3. Dry run: `llm-rosetta-migrate --config <config> --db <data dir>`. Read the diff and the report. Exit `1` or `2` needs a person before you go on.
-4. Write: `llm-rosetta-migrate --config <config> --db <data dir> --write`.
+3. Dry run: `llm-rosetta gateway migrate --config <config> --db <data dir>`. Read the diff and the report. Exit `1` or `2` needs a person before you go on.
+4. Write: `llm-rosetta gateway migrate --config <config> --db <data dir> --write`.
 5. Start the gateway. A config that still holds a retired name stops at start with one `llm-rosetta-gateway: error: ...` line that names the file and the key.
-6. Optional: run `llm-rosetta-migrate --scan <your code>` and read the findings. Library callers, shim packages and scripts are not rewritten by the command.
+6. Optional: run `llm-rosetta gateway migrate --scan <your code>` and read the findings. Library callers, shim packages and scripts are not rewritten by the command.
 
 ## The core surface {#core-surface}
 

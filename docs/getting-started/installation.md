@@ -106,6 +106,18 @@ and both publish port 8765, so run one at a time.
 The release path is unchanged: `make build-docker` still builds
 `docker/Dockerfile`, which installs wheels from `dist/` or PyPI.
 
+### Extensions in the container and the binary
+
+The image (and the compiled binary) has no separate `llm-rosetta` script and no pip. The gateway binary forwards the `ext` command, so an extension installs with the standard-library installer:
+
+```bash
+docker run --rm -v ./config:/config oaklight/llm-rosetta-gateway llm-rosetta-gateway ext install kilo_free
+```
+
+Both entrypoints set `LLM_ROSETTA_EXTENSIONS_DIR` to `/config/extensions` unless you set it, so installed extensions (and the vendors the gateway installs by itself at start) live in the config volume and survive the container. The directory must be writable by the container's uid, like `HOME`; the entrypoint exits with one line naming the directory and the uid when it is not. A run that replaces the entrypoint with `--entrypoint` gets no default. The entrypoints write the config template only when the server starts: `ext`, `init`, `add`, `gateway usage` and a shell do not create `config.jsonc`. See [Extensions](../guide/extensions.md).
+
+The compiled binary is built with Nuitka; `make build-binary-musl` builds the musl (Alpine) binary in a `python:3.12-alpine` container and pins Nuitka to 4.2.1, because 4.4 stops the Alpine build before it compiles anything. Inside a binary, `ext check` skips the wheel check ("pip is not available").
+
 ## Development
 
 ```bash

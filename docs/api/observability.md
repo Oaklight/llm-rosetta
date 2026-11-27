@@ -582,14 +582,14 @@ bucket to the key's id, and renames the remainder.
 classification rather than in the gateway, so the code that writes the admin
 token's rows and any reader that groups them name one thing once.
 
-### The `llm-rosetta-usage` command
+### The `llm-rosetta gateway usage` command { #the-llm-rosetta-usage-command }
 
 The gateway renders this report in its admin panel and a library gets it from
 `UsageReport.build`; the third reader is a shell.  The command ships with the
 **gateway** distribution, because it reads the store only the gateway writes:
 
 ```console
-$ llm-rosetta-usage --db /var/lib/llm-rosetta --window 24h
+$ llm-rosetta gateway usage --db /var/lib/llm-rosetta --window 24h
 store: /var/lib/llm-rosetta
 window: 24h (rolling)
 

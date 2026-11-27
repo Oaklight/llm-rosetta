@@ -54,3 +54,4 @@ By contributing, you agree that your contributions will be licensed under the [M
 
 - [Style Guide](style-guide.md) — code style, naming, docstrings, and tooling
 - [Architecture Guide](architecture.md) — converter structure, ops modules, and round-trip compatibility
+- [Adding an Extension](adding-an-extension.md) — `ext new`, `ext check`, the shim tree contract, and where the layering tables live

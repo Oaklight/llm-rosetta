@@ -4,7 +4,7 @@ Argo is Argonne National Laboratory's internal API gateway, providing access to 
 
 !!! warning "Not built in"
     The three Argo shims ship in the standalone
-    [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo)
+    [llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne)
     package. Declare it before using the names below:
 
     ```jsonc

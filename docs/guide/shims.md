@@ -59,7 +59,7 @@ accepts.
    vendor normally serves several dialects, so it keeps the format level; a
    vendor with one lane of a type puts `provider.yaml` directly in the type
    directory — `anthropic/llm/provider.yaml`. Add the second lane and the first
-   moves down into its own format directory, which is what `shims migrate` does.
+   moves down into its own format directory, which is what `llm-rosetta ext migrate` does.
 
 The built-in tree, in that shape:
 
@@ -84,24 +84,15 @@ packages/llm-rosetta/src/llm_rosetta/shims/builtin/
 └── ...
 ```
 
-**The file rule.** The gateway reads five names and nothing else:
-`provider.yaml`, `auth.py`, `quota.py`, `transforms.py` inside a shim
-directory, and `shims.yaml` at a package root. Everything else in the tree is
+**The file rule.** The gateway reads four names and nothing else:
+`provider.yaml`, `auth.py`, `quota.py` and `transforms.py` inside a shim
+directory. Everything else in the tree is
 private to the package and is never imported — an `__init__.py` a package keeps
 for its own imports is fine and stays unread. `auth.py` and `quota.py` execute
 as flat modules, so they must be self-contained; `transforms.py` may use
 relative imports.
 
-**Check a tree, then move it.** `llm-rosetta-gateway shims check --root
-<providers dir>` reports a tree the loader would misread — a leaf that is not
-at a canonical path, a vendor directory used as a leaf, a type directory that
-mixes the leaf and format levels, a file outside the allow-list — and exits
-non-zero. `shims migrate --root <dir>` prints the moves that would put the tree
-right and applies them with `--write`; it moves directories and rewrites
-`shims.yaml` paths, but not relative imports, which the package's own tests
-will catch. `shims new` scaffolds from the same template. The full contract,
-with the scaffold's output and its placeholder list, is in
-`llm_rosetta/devtools/_shim_template/README_en.md`.
+**Check a tree, then move it.** For an extension, `llm-rosetta ext check <folder>` reports a tree the loader would misread (a leaf that is not at a canonical path, a vendor directory used as a leaf, a type directory that mixes the leaf and format levels, a file outside the allow-list) and exits non-zero. `llm-rosetta ext migrate <folder>` prints the moves that would put the tree right and applies them with `--write`; it moves directories but not relative imports, which the extension's own tests will catch. `llm-rosetta ext new` scaffolds from the same template, and `scripts/dev/new_shim.py` scaffolds a built-in shim. The full contract, with the placeholder list, is in `llm_rosetta/authoring/_shim_template/README_en.md`; see [Adding an Extension](../contributing/adding-an-extension.md).
 
 Each leaf directory contains:
 
@@ -157,31 +148,7 @@ for an override — so `token.py` sits beside whichever file names it.
 exchange, attached to every leaf; beside a leaf it belongs to that leaf. A
 vendor declares one exchange, and one leaf declaring another is a load error.
 
-**Scaffolding.** `llm-rosetta-gateway shims new` writes the files for a new
-shim — the leaf, the vendor manifest when the vendor has none, the package's
-`shims.yaml` entry when it ships one — and then loads the result through the real
-loader, so a shape no gateway could use fails there instead of at startup. With
-no flags on a terminal it asks for each field; **interactive is the default**,
-and `--no-input` plus flags does the same in a script. Everything is written in
-the contract shape: `--lane` puts a named instance between the vendor and its
-type directory, `--auth` and `--quota` write the vendor-level stubs, `--package`
-adds the external package shell, and `--transform` adds a `transforms.py` stub.
-Inside a checkout, `scripts/dev/new_shim.py` is the same command with the
-built-in tree as its default root. A logo URL is offered for saving into the
-package's `assets/`, and what gets written is the jsDelivr URL of that file, so a
-shipped mark never points at the vendor's host. The wire format is picked from
-what the converter registry lists for the model type, and a pasted base URL is
-normalised and then asked whether it answers — a negative answer is a warning,
-not a refusal. An existing tree is read first, so the type's first lane lands in `<type>/`
-and a vendor that already holds one gets `<type>/<format>/`; a vendor still
-keeping format directories under itself is noted with the `shims check` command
-rather than copied. A lane that would never load — below a directory that is
-itself a shim, under a name another file already declares, or under a vendor
-name the loader skips — is refused before anything is written. The mark is offered from the lobehub icon set on jsDelivr
-when the vendor name matches one, and a URL already on jsDelivr is left alone
-instead of being copied into `assets/`. Ctrl+C re-asks the current question once,
-a second press cancels, and Ctrl+D cancels at once. See
-[`shims new`](../gateway/cli.md#shims-new-vendor).
+**Scaffolding.** `scripts/dev/new_shim.py` (in a checkout) writes the files for a new built-in shim — the leaf, and the vendor manifest when the vendor has none — and then loads the result through the real loader, so a shape no gateway could use fails there instead of at startup. With no flags on a terminal it asks for each field; **interactive is the default**, and `--no-input` plus flags does the same in a script. Everything is written in the contract shape: `--lane` puts a named instance between the vendor and its type directory, `--auth` and `--quota` write the vendor-level stubs, and `--transform` adds a `transforms.py` stub. The wire format is picked from what the converter registry lists for the model type, and a pasted base URL is normalised and then asked whether it answers; a negative answer is a warning, not a refusal. An existing tree is read first, so the type's first lane lands in `<type>/` and a vendor that already holds one gets `<type>/<format>/`. A lane that would never load (below a directory that is itself a shim, under a name another file already declares, or under a vendor name the loader skips) is refused before anything is written. The prompts, the probe and the icon lookup live in the script and not in the wheel; the generator they share with `llm-rosetta ext new` is in `llm_rosetta/authoring/`. For an extension, use `llm-rosetta ext new` ([Adding an Extension](../contributing/adding-an-extension.md)).
 
 **Per-type parameter defaults.** A non-chat shim may declare the request fields its vendor differs on, in a section named after its own model type:
 
@@ -447,11 +414,11 @@ post_ir_transforms = (strip_fields("n", "logit_bias", "seed"),)
 pre_ir_transforms = ()
 ```
 
-At import time, `shims/__init__.py` scans all provider directories and registers them automatically, then discovers any plugin shims via entry points.
+At import time, `shims/__init__.py` scans all provider directories and registers them automatically, then loads the installed [extensions](extensions.md) that provide shims.
 
 ### What a shim may import {#what-a-shim-may-import}
 
-A shim's sidecars (`transforms.py`, `auth.py`, `quota.py` and any helper module beside them) and the `register_shims` entry point of a shim package import `llm_rosetta` only through `llm_rosetta.contracts` and its submodules:
+A shim's sidecars (`transforms.py`, `auth.py`, `quota.py` and any helper module beside them) and the code of an extension that provides shims import `llm_rosetta` only through `llm_rosetta.contracts` and its submodules:
 
 | Need | Import from |
 | --- | --- |
@@ -461,7 +428,7 @@ A shim's sidecars (`transforms.py`, `auth.py`, `quota.py` and any helper module 
 | The allowance probe of `quota.py` | `llm_rosetta.contracts.quota` |
 | The sidecar hook names (`PRE_IR_TRANSFORMS`, `QUOTA_PROBES`, …) | `llm_rosetta.contracts` |
 
-Not `llm_rosetta.api`, and no internal module. The loader runs plugin entry points and sidecars while `import llm_rosetta` is still in progress. `llm_rosetta.api` needs the finished package, so it cannot load at that point; the contract modules can. The contracts are also the stable part: within a minor release they only gain names, and an internal module may move in any release. A vendor directory does not import another vendor's directory either, so that each one can move out of core on its own.
+Not `llm_rosetta.api`, and no internal module. The loader runs extensions and sidecars while `import llm_rosetta` is still in progress. `llm_rosetta.api` needs the finished package, so it cannot load at that point; the contract modules can. The contracts are also the stable part: within a minor release they only gain names, and an internal module may move in any release. A vendor directory does not import another vendor's directory either, so that each one can move out of core on its own.
 
 For the built-in shims, `tests/test_shim_sidecar_boundary.py` enforces the rule over every `.py` file under `shims/builtin/<vendor>/`, over the scaffold templates and over what the scaffolder writes. See [The core surface](../api/index.md#the-core-surface) for the tiers.
 
@@ -473,8 +440,8 @@ flowchart LR
         direction TB
         A["load_providers()"] --> B["load_providers_from_dir()
         scan built-in YAML dirs"]
-        A --> C["_load_plugin_shims()
-        scan entry points"]
+        A --> C["load_extensions()
+        installed extensions"]
         B --> D["register_shim()
         _SHIM_REGISTRY[name] = shim"]
         C --> D
@@ -492,96 +459,37 @@ flowchart LR
     Registration --> Usage
 ```
 
-- **Registration** happens once at import time. `load_providers()` scans the built-in `providers/` directory, then discovers `llm_rosetta.shim_providers` entry points to load plugin shims.
+- **Registration** happens once at import time. `load_providers()` scans the built-in `shims/builtin/` tree, then loads the installed [extensions](extensions.md) that provide shims.
 - **Usage** happens per request. `get_shim(name)` looks up the registry; the gateway injects reasoning config and applies transforms around the converter.
 
-## Plugin Shims
+## Extension Shims { #plugin-shims }
 
-Downstream packages can register their own shims without modifying llm-rosetta. Two approaches:
+Shims that do not ship in core are provided by [extensions](extensions.md). An extension is a folder with a `plugin.yaml` manifest whose `provides.shims` lists the shim names, and whose shim tree (`provider.yaml` files and the `auth.py`, `quota.py` and `transforms.py` sidecars) follows the same contract as the built-in tree. It is imported as `llm_rosetta_ext.<id>` and registered through the same vendor-tree reader the built-in shims use.
 
-### Entry Point (recommended)
-
-Declare an entry point in your `pyproject.toml`:
-
-```toml
-[project.entry-points."llm_rosetta.shim_providers"]
-my_provider = "my_package.shims:register_shims"
+```bash
+llm-rosetta ext new acme --format chat_completions   # scaffold
+llm-rosetta ext check packages/acme                  # check the tree
+llm-rosetta ext install ./acme-0.1.0-py3-none-any.whl
 ```
 
-The callable scans a local YAML directory and returns the registered shims:
-
-```python
-# my_package/shims/__init__.py
-from pathlib import Path
-from llm_rosetta.contracts.shim import load_providers_from_dir
-
-def register_shims():
-    return load_providers_from_dir(Path(__file__).parent / "providers")
-```
-
-### Conditional Registration
-
-For advanced use cases (environment-specific shims, dynamic config), call `register_shim()` directly:
-
-```python
-import os
-from llm_rosetta.shims import ConnectionConfig, register_shim, ProviderShim
-
-def register_shims():
-    if os.getenv("MY_INTERNAL_PROVIDER"):
-        register_shim(ProviderShim(
-            name="my-internal",
-            format="chat_completions",
-            connection=ConnectionConfig(base_url="http://internal:8080/v1"),
-        ))
-```
+The 0.13 mechanisms are gone: the `llm_rosetta.shim_providers` entry-point group (a distribution that still declares one is reported by `ext doctor` and not run), the `register_shims` callable, the gateway's `shims.paths` directories and the `shims.yaml` file. Turn a shim directory into an extension folder instead; see [Migrating to 0.14](migrating-to-0.14.md#retired-extension-paths).
 
 !!! note
-    When a plugin registers a shim with the same name as a built-in, the built-in is silently overridden (INFO log emitted). This is intentional — it allows plugins to customize built-in provider behavior.
+    A shim name that core already registers wins: an extension that declares it is not loaded, and its status names the owner that holds the name.
 
-### Config-declared directories
-
-A directory of shims can also be consumed **without installing a plugin**. The
-gateway's top-level `shims` config section scans extra directories — useful
-when the official image is used as-is (it ships no `pip` and no `git`) and the
-shims live next to the config:
-
-```jsonc
-"shims": {
-  "paths": ["/config/shims"]   // dirs holding <vendor>/<type>/provider.yaml (or the older flat/grouped shapes)
-}
-```
-
-A shim set published in a repository is installed from a manifest source
-instead (see [Manifest sources](#manifest-sources)). See
-[Gateway → External Shim Sources](../gateway/configuration.md#external-shim-sources)
-for the full field list, caching behaviour, precedence, and the security note.
-Programmatically, use `llm_rosetta.shims.rebuild_shims()` (no config file
-needed) or `llm_rosetta_gateway.apply_shim_sources(raw, config_path)`.
-
-An unknown `<source>:` qualifier in `shims.install` is skipped with a warning
-unless `shims.strict` is `true`, which refuses it, so a config written by a
-newer build still starts on an older one. A malformed section is refused when
-the config loads rather than at startup. The retired keys (`presets`,
-`include`, `exclude`, `remotes`) are refused as well; see
-[Retired keys](#retired-keys).
-
+An unknown `<source>:` qualifier in `shims.install` is skipped with a warning unless `shims.strict` is `true`, which refuses it, so a config written by a newer build still starts on an older one. A malformed section is refused when the config loads rather than at startup. The retired keys (`presets`, `include`, `exclude`, `remotes`, `paths`) are refused as well; see [Retired keys](#retired-keys). See [Gateway: External Shim Sources](../gateway/configuration.md#external-shim-sources) for the full field list, caching behaviour, precedence and the security note.
 
 ### Manifest sources { #manifest-sources }
 
-Since 0.14.0 the standalone packages are published from two curated source
-repositories, each with a versioned `manifest.json` on its `dist` branch:
-[llm-rosetta-shim-argonne](https://github.com/Oaklight/llm-rosetta-shim-argonne)
+Since 0.14.0 the standalone packages are published as [extensions](extensions.md) from two curated extension repositories. Each publishes its wheels as release assets and an `index.json` beside them:
+[llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne)
 (`alcf`, `argo`, `asksage`) and
-[llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib)
-(the free endpoints and `opendesign`). The manifest has one record per released
-vendor version: its shims, tags, maturity, the archive and its sha256, and the
-core it needs (`requires: {surface, ir}`). The format is
-`llm_rosetta.contracts.shim_manifest` and its schema ships with core.
+[llm-rosetta-ext-contrib](https://github.com/Oaklight/llm-rosetta-ext-contrib)
+(the free endpoints, `opendesign` and more). The index has one entry per released extension version: the wheel's `url` and `sha256`, the core it needs (`surface`, `ir`, `requires_python`), and the listing fields (`name`, `maturity`, `tags`, `shims`, `logo`). The format is described in [Extensions](extensions.md#the-extension-index). The gateway calls an index a *manifest source*; the name survives in the config and the admin panel.
 
 ```jsonc
 "shims": {
-  "sources": ["contrib", "argonne"],               // catalogue ids or manifest URLs
+  "sources": ["contrib", "argonne"],               // catalogue ids or index URLs
   "install": ["opendesign", "tag:tier:free", "argonne:*"]
 }
 ```
@@ -591,101 +499,31 @@ core it needs (`requires: {surface, ir}`). The format is
 | Entry | Selects |
 |-------|---------|
 | `opendesign` | the vendor of that name, in every source |
-| `tag:tier:free` | every vendor whose newest record carries that tag; tags are matched whole (`tier:free`, `tier:subscription`, `auth:oauth`, `org:argonne`) |
+| `tag:tier:free` | every vendor whose newest entry carries that tag; tags are matched whole (`tier:free`, `tier:subscription`, `auth:oauth`, `org:argonne`) |
 | `*` | every vendor |
 | `argonne:*`, `argonne:alcf`, `contrib:tag:tier:free` | any of the above, limited to one source |
 
-`install` without `sources` reads `contrib` and `argonne`. A source may also be
-a manifest URL, or an object `{"url": …, "fallback": …, "token_env": …}`.
+`install` without `sources` reads `contrib` and `argonne`. A catalogue id reads the `releases/latest/download/index.json` of the repository. A source may also be an index URL, or an object `{"url": …, "fallback": …, "token_env": …}`.
 
-For each selected vendor the gateway installs the newest **stable** version
-whose `requires` this core satisfies — `surface` equal to
-`llm_rosetta.contracts.SURFACE_VERSION` and `ir` not above `IR_VERSION` — and
-logs a WARNING for each newer incompatible version it passed over, with the
-reason. A pre-release (`0.5.0-rc.1`) is installed only when no stable version
-is installable, so one pre-release on `dist` does not upgrade every gateway.
-Versions are `MAJOR.MINOR.PATCH` with an optional pre-release and no build
-metadata (`+build` makes the manifest invalid). A tag selector reads the tags
-of the vendor's newest installable record. The
-archive is checked against the record's sha256 before it is installed into the
-shim cache. The release record is authoritative for what registers: an
-archive without a `shims.yaml` loads only the shim names its record lists, and
-any other name is refused with a WARNING. The installed version is kept until
-a newer *installable* version appears; re-reading the manifest never
-downgrades it, and an installed version the manifest no longer lists is kept
-with a WARNING. The manifest is read from
-jsDelivr (`…@dist/manifest.json`), with `raw.githubusercontent.com` as the
-fallback, and reused for `remote_ttl`; **Refetch** reads it at once. When the
-source cannot be reached the cached manifest and the last good install are used,
-and a digest mismatch never installs (the previous version stays, marked
-stale). A CDN can answer with an old copy after a publish, so the gateway
-checks the answer's `generated_at` and the vendors it lists. The check covers
-an explicit `<source>:<vendor>` selector, and a vendor
-that moved out of core; a plain tag or `*` selector is not checked, and a
-vendor whose every record is invalid counts as missing. When the answer is
-older than the cached manifest or lacks one of those vendors, the other URL is
-fetched once and the manifest with the newer `generated_at` is used; on a tie
-the first answer is kept, even when it is the copy that lacks the vendor. One
-INFO line names the URL used and the reason. A cached manifest within
-`remote_ttl` that lacks one of those vendors is refetched; when the fetch still
-finds it absent, the check is not repeated for the same vendors for 10
-minutes (**Refetch** ignores that window). The URL that served last is tried
-first only while its copy is within `remote_ttl`; after that the primary is
-first again. A cached manifest is never replaced by an older one, whatever
-URL served it: it is kept, the source is marked `stale` with both
-`generated_at` values in the reason, and every later apply refetches until a
-manifest at least as new arrives.
+For each selected vendor the gateway installs the newest **stable** version whose requirements this core and interpreter satisfy (`surface` equal to `llm_rosetta.contracts.SURFACE_VERSION`, `ir` not above `IR_VERSION`, `requires_python`) and logs a WARNING for each newer incompatible version it passed over, with the reason. A pre-release (`0.5.0-rc.1`) is installed only when no stable version is installable, so one pre-release in an index does not upgrade every gateway. The wheel is downloaded (size-capped), its sha256 is checked against the entry, and core's standard-library installer places it in the extensions directory. An extension named in `requires_extensions` that is not installed is reported in the vendor's note, not installed on its behalf.
 
-**Core wins, per shim.** A shim name core already registers is not loaded
-from the source, and the log names the source, the vendor and the ignored
-names; the vendor's other shims still install (a vendor all of whose shims core
-registers is skipped). `promoted_to: core@X` is read from the record that
-would be installed, so a later release without it un-promotes the vendor. The
-claim is honoured only when the running core is at `X` or later — a dev or
-pre-release of `X` (`0.14.0.dev35`) is before `X` — and core registers the
-record's shims; a claim that is due but not borne out is logged and the vendor
-installs normally. A manifest install loads before
-`paths`, so a local directory still overrides it.
+The installed version is kept until a newer *installable* version appears; re-reading the index never downgrades it, and an installed version the index no longer lists is kept with a WARNING. The index is reused for `remote_ttl`; **Refetch** reads it at once. When the source cannot be reached the cached index and the last good install are used, and a digest mismatch never installs (the previous version stays, marked stale). A cached index is never replaced by an older one: the gateway compares `generated_at`, keeps the cached copy, marks the source `stale` with both values in the reason, and refetches on every later apply until an index at least as new arrives. A URL source with a `fallback` fetches the other URL once when the first answers with an older copy or lacks an extension the selectors expect.
 
-**Retired keys.** The 0.14.x `shims.presets`, `shims.include`, `shims.exclude`
-and `shims.remotes` keys were removed in 0.15.0; see [Retired keys](#retired-keys).
+**Core wins, per shim.** A shim name core already registers is not loaded from the source, and the log names the source, the vendor and the ignored names; the vendor's other shims still install. An extension all of whose shims are held by another owner is skipped before it is downloaded, and the status says which owner holds the names.
 
-**Display fields.** A release record may carry `label` (1–80 characters, no
-control characters or `<`/`>`) and `logo` (an `https://` URL of at most 512
-characters); the source's builder reads them from the vendor's root
-`provider.yaml` (`group_label`, `logo`). The gateway reads them from the record
-it would install — the pinned one when a pin holds — so a vendor that is not
-installed is still drawn with its name and mark; core keeps no copy. A
-producer's validation refuses a bad value; a gateway drops only the bad field,
-with a WARNING, and keeps the record. Older gateways ignore both keys.
+**Display fields.** An index entry carries `name` and `logo`, which the gateway reads from the entry it would install (the pinned one when a pin holds), so a vendor that is not installed is still drawn with its name and mark; core keeps no copy.
 
-**One bad record does not take a source down.** The gateway reads a published
-manifest record by record. An invalid top level — not an object, an unknown
-`manifest_version`, a missing required key, `vendors` not an object — fails the
-whole source (the cached manifest is used, or nothing on a cold cache). An
-invalid vendor entry or release record is skipped with one WARNING naming the
-vendor, the version and the JSON-path reason, and the rest of the manifest is
-used, so a record written by a newer producer does not cost the free tier its
-other vendors; selection only ever sees valid records. A record's shim names
-must belong to its vendor: the vendor key itself (the bare `xai`, `qwen`,
-`moonshot` and `zhipu`), `<vendor>--<name>`, or `<vendor>_<lane>--<name>`
-(`alcf_sophia--chat_completions` under `alcf`); a name with another vendor's
-prefix invalidates the record, and so does a lane prefix that is itself
-another vendor key of the same manifest (`openai` may not publish
-`openai_chatgpt--x` when `openai_chatgpt` is a vendor there too). A selected
-vendor whose every record is invalid is reported as *no valid release:
-<first reason>*; when it already has a good install, that install is kept,
-marked stale with the same reason — a record that goes bad never uninstalls a
-working vendor.
+**An invalid index fails its source.** An index that is not a version-1 object, names a bad extension id or holds a malformed entry is refused with a message that names the problem. The cached index is used, or nothing on a cold cache. A shim name in a manifest must belong to its extension: the id itself (the bare `xai`, `qwen`, `moonshot` and `zhipu`), `<id>--<name>`, or `<id>_<lane>--<name>` (`alcf_sophia--chat_completions` under `alcf`).
 
-**A vendor that moved out of core is installed by itself.** When a config
-names a shim or quota probe of a vendor that left core
+**An index names its own source.** An index whose `source` header differs from the catalogue id it was fetched as is refused. The header is the index's own claim and proves no publisher.
+
+**A vendor that moved out of core is installed by itself.** When a config names a shim or quota probe of a vendor that left core
 ([Migrating to 0.14](migrating-to-0.14.md#moved-to-contrib)), the gateway adds
 `contrib:<vendor>` to this selection, with or without a `shims` section. It
 adds the `contrib` source too only when the config declares no
 `shims.sources`. An explicit `sources` list is the operator's choice of where
 to fetch from (a mirror, or no egress), so only the selector is added: a
-declared source whose manifest calls itself `contrib` — a mirror — still
+declared source whose index calls itself `contrib` (a mirror) still
 serves the vendor, and when none does, the startup WARNING names `contrib` as
 where the vendor is published.
 
@@ -694,19 +532,17 @@ between the two, is described in [Shim Placement and Maturity](shim-placement.md
 
 #### Adding a source { #adding-a-source }
 
-A source is any repository that publishes a manifest in the
-`llm_rosetta.contracts.shim_manifest` format: `dist/manifest.json`, with each
-vendor archive at the relative path its record names. Three spellings are
+A source is any repository that publishes an extension index: `index.json` with a wheel for each extension version at the `url` its entry names (absolute, or relative to the index). Three spellings are
 accepted in `shims.sources`:
 
 ```jsonc
 "shims": {
   "sources": [
     "contrib",                                              // a catalogue id
-    "https://shims.example.org/dist/manifest.json",         // a manifest URL
+    "https://shims.example.org/index.json",                 // an index URL
     {                                                       // a URL with options
-      "url": "https://cdn.example.org/acme@dist/manifest.json",
-      "fallback": "https://raw.example.org/acme/dist/manifest.json",
+      "url": "https://cdn.example.org/acme/index.json",
+      "fallback": "https://raw.example.org/acme/index.json",
       "token_env": "ACME_SHIMS_TOKEN"
     }
   ],
@@ -714,14 +550,14 @@ accepted in `shims.sources`:
 }
 ```
 
-- A catalogue id (`contrib`, `argonne`) expands to the jsDelivr URL of the
-  repository's `dist` branch, with `raw.githubusercontent.com` as the
-  fallback.
-- A URL must be HTTPS. The archives are resolved against the directory that
-  holds the manifest, first on the URL that served it, then on the other one.
+- A catalogue id (`contrib`, `argonne`) expands to the
+  `releases/latest/download/index.json` of `Oaklight/llm-rosetta-ext-contrib`
+  or `Oaklight/llm-rosetta-ext-argonne`; it has no second URL.
+- A URL must be HTTPS. A relative wheel `url` is resolved against the
+  directory that holds the index.
 - `token_env` names an environment variable whose value is sent as a bearer
   token, and only to the primary URL's origin.
-- The selector prefix of a URL source is the manifest's own `source` field
+- The selector prefix of a URL source is the index's own `source` field
   (`acme` above), not the URL.
 - Declaring `sources` replaces the defaults. To keep reading `contrib` and
   `argonne`, list them too.
@@ -761,7 +597,7 @@ Tags are free-form and written by the source. The two curated sources use
 Shims page list each vendor's tags.
 
 A source is code execution at the trust level of whoever publishes it: an
-installed vendor may ship `auth.py`, `quota.py` and `transforms.py`, which run
+installed extension may ship `auth.py`, `quota.py`, `transforms.py` and a transport, which run
 inside the gateway process. Add only sources you trust.
 
 #### Managing sources from the admin panel { #panel }
@@ -778,12 +614,11 @@ version. Open, it shows:
 - the source, the installed version, a newer installable version, and the
   newest published version, with the reason when this core cannot run it;
 - whether the installed release's `requires` matches this core;
-- maturity and the date it was reached, the last conformance result and any
-  `promoted_to`;
+- maturity and the date it was reached, and the last conformance result;
 - the tags, and the shims the release registers, each marked installed or not;
 - the `install` entry that selects the vendor, the reason a
   selected vendor was skipped (*not in the manifest*, *already provided by …*,
-  *promoted to …*), and the earlier source that provides the same vendor.
+  and the like), and the earlier source that provides the same vendor.
 
 **Install** adds `<source>:<vendor>` to `shims.install` and reloads, which
 installs the vendor. When the declared `shims.sources` does not name the
@@ -808,7 +643,7 @@ loaded shim on the card has its enable switch (`shims.disabled`).
 
 **Shims → Sources → Manifest sources** edits both keys at once. Each source has
 a block with a checkbox for every vendor (`<source>:*`), one per tag and one per
-vendor. The field under the blocks adds a catalogue id or a manifest URL, and
+vendor. The field under the blocks adds a catalogue id or an index URL, and
 *Remove source* drops a source together with the entries qualified with its id.
 A new URL source is read after the first save. The edits stay a draft until
 **Save**, which writes `shims.sources` and `shims.install` through the
@@ -818,20 +653,19 @@ included, stays as written. An unqualified entry (`opendesign`,
 `tag:tier:free`) reads every source, so it is listed as written; edit it in the
 config file. The source list is written whenever it differs from the declared
 one, so a config that only implied the defaults gets them written out.
-**Re-read manifests** fetches every manifest again. The *Directories* field
-below the group edits `shims.paths`.
+**Re-read manifests** fetches every index again.
 
 A save from the panel rewrites the config file as plain JSON, without its
 comments. The file it replaces is kept beside it as `<config>.prev`: one rolling
 copy of the file as it was before the last gateway write, replaced on every
 save and not written when the file is created. The gateway never writes
-`<config>.bak`, which belongs to `llm-rosetta-migrate --write` (the
+`<config>.bak`, which belongs to `llm-rosetta gateway migrate --write` (the
 pre-migration original) and to any copy you make yourself. The editor states
 this under its blocks.
 #### Retired keys { #retired-keys }
 
 0.15.0 removed the 0.14.x install path. The gateway reads `sources`,
-`install`, `paths`, `disabled`, `cache_dir`, `remote_ttl` and `strict` and
+`install`, `disabled`, `cache_dir`, `remote_ttl` and `strict` and
 nothing else. These keys are **refused when the config loads**, with
 `config: 'shims.<key>' was removed in 0.15.0: <advice>`. One error names every
 retired key the section carries, and a key that holds nothing (`null`, `[]`,
@@ -842,15 +676,16 @@ retired key the section carries, and a key that holds nothing (`null`, `[]`,
 | `shims.presets` | `shims.install` entries: `alcf` → `argonne:alcf`, `argo` → `argonne:argo`, `asksage` → `argonne:asksage`, `free` → `contrib:tag:tier:free`, `opendesign` → `contrib:opendesign` |
 | `shims.include` | explicit `<source>:<vendor>` entries in `shims.install`, plus `shims.disabled` for a shim of a kept vendor |
 | `shims.exclude` | `!<source>:<vendor>` entries in `shims.install`, plus `shims.disabled` for a single shim |
-| `shims.remotes` | nothing: an explicit archive URL (`ref`, `sha256`, `mirror`, `path`, `token_env`, `refresh`) has no manifest equivalent. Publish a manifest source and list it in `shims.sources`, or point `shims.paths` at a local copy |
+| `shims.remotes` | nothing: an explicit archive URL (`ref`, `sha256`, `mirror`, `path`, `token_env`, `refresh`) has no index equivalent. Publish an extension index and list it in `shims.sources`, or install the extension folder into the extensions directory |
+| `shims.paths` | nothing: a local shim directory is no longer a source, and a `shims.yaml` in it is no longer read. Turn the directory into an [extension folder](extensions.md) (`llm-rosetta ext new`, then move the tree in) and install it, or publish it through an index |
 
-Run `llm-rosetta-migrate --config config.jsonc` (dry run) and then `--write`:
+Run `llm-rosetta gateway migrate --config config.jsonc` (dry run) and then `--write`:
 each preset becomes its selector, an `include` one `<source>:<vendor>` per kept
 vendor, an `exclude` one `!<source>:<vendor>` per dropped vendor, and a shim
 dropped from a kept vendor goes to `shims.disabled`. Comments outside the
 rewritten keys stay. A source is added to a declared `shims.sources` only when
 no entry names it by id or by its catalogue manifest URL; an unknown URL may be
-a mirror, so the tool reports it instead. A `remotes` entry cannot be
+a mirror, so the tool reports it instead. A `remotes` or `paths` entry cannot be
 rewritten: the tool reports it and exits 1 so a person decides.
 
 The scheduled removal of built-in shims (advisories, `make check-shim-removals`
@@ -859,9 +694,8 @@ leaves core through the move described in
 [Shim Placement and Maturity](shim-placement.md).
 
 !!! warning
-    A declared source may ship a `transforms.py` that is executed on load — the
-    same trust level as installing a plugin package. Only add sources you
-    trust.
+    An installed extension is code that runs on load, at the trust level of the
+    repository that publishes it. Only add sources you trust.
 
 ## Built-in Shims
 
@@ -907,15 +741,17 @@ here; every shim's full declaration is in its own `transforms.py`.
 
 ### Standalone shim packages
 
-Five shim sets live in their own repositories rather than in core:
+Five shim sets live in extension repositories rather than in core:
 
-| Package | Shim names | Repository |
-|---------|------------|------------|
-| ALCF | `alcf_metis--chat_completions`, `alcf_minerva--chat_completions`, `alcf_sophia--chat_completions` | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
-| Argo | `argo--chat_completions`, `argo--messages`, `argo--open_responses` | [llm-rosetta-shim-argonne](https://github.com/Oaklight/llm-rosetta-shim-argonne) (formerly `-argo`) |
-| AskSage | `asksage--chat_completions`, `asksage--messages`, `asksage--open_responses`, `asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
-| Open Design | `opendesign--chat_completions`, `opendesign--open_responses`, `opendesign--messages` | [llm-rosetta-shim-opendesign](https://github.com/Oaklight/llm-rosetta-shim-opendesign) |
-| Free Endpoints | `kilo_free--chat_completions`, `llm7--chat_completions`, `opencode_zen_free--chat_completions`, `ovhcloud--chat_completions` | [llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib) (formerly `-free`) |
+| Package | Shim names | Extension repository |
+|---------|------------|----------------------|
+| ALCF | `alcf_metis--chat_completions`, `alcf_minerva--chat_completions`, `alcf_sophia--chat_completions` | [llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne) |
+| Argo | `argo--chat_completions`, `argo--messages`, `argo--open_responses` | [llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne) |
+| AskSage | `asksage--chat_completions`, `asksage--messages`, `asksage--open_responses`, `asksage--google_generate`, `asksage--embeddings` | [llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne) |
+| Open Design | `opendesign--chat_completions`, `opendesign--open_responses`, `opendesign--messages` | [llm-rosetta-ext-contrib](https://github.com/Oaklight/llm-rosetta-ext-contrib) |
+| Free Endpoints | `kilo_free--chat_completions`, `llm7--chat_completions`, `opencode_zen_free--chat_completions`, `ovhcloud--chat_completions` | [llm-rosetta-ext-contrib](https://github.com/Oaklight/llm-rosetta-ext-contrib) |
+
+The two repositories were named `llm-rosetta-shim-argonne` and `llm-rosetta-shim-contrib` earlier in the 0.14 series; GitHub redirects the old names, and a config that names one still resolves.
 
 ALCF and AskSage were introduced during the 0.14.0 development cycle and never
 appeared in a stable release's built-in set; Argo had shipped built in since
@@ -927,7 +763,7 @@ Their packages register the same canonical shim names, so a provider's `shim`
 value does not change — only the source declaration is new.
 
 **Install a vendor from its card.** **Gateway → Shims → Available** shows one
-section per manifest source and one card per vendor it publishes, with the
+section per source and one card per vendor it publishes, with the
 vendor's maturity, version and tags (see
 [Managing sources from the admin panel](#panel)). **Install** adds
 `<source>:<vendor>` to `shims.install`. To declare a package by hand:
@@ -940,16 +776,15 @@ vendor's maturity, version and tags (see
 | Free Endpoints | `contrib:tag:tier:free` |
 | Open Design | `contrib:opendesign` |
 
-**Updates.** An installed vendor moves only when its manifest lists a newer
+**Updates.** An installed vendor moves only when its index lists a newer
 version that this core can run. The vendor's card states the installed version
-and the newest installable one, and **Update to X** (on a pinned vendor) or a
-manifest re-read applies it. Update checking is manifest-only: the gateway
-compares each installed vendor with its source's manifest and reports the
+and the newest installable one, and **Update to X** (on a pinned vendor) or an
+index re-read applies it. From a shell, `llm-rosetta ext update` installs the newest compatible version of each extension. The gateway compares each installed vendor with its source's index and reports the
 verdict on the vendor's row.
 
 **CI keeps the source list in step.** `scripts/dev/check_shim_catalog.py` lists
-the `llm-rosetta-shim-*` repositories the account publishes, compares them with
-the manifest sources the gateway knows (`SHIM_SOURCES`), and prints the entry
+the `llm-rosetta-ext-*` repositories the account publishes (the `llm-rosetta-shim-*` names are known predecessors), compares them with
+the sources the gateway knows (`SHIM_SOURCES`), and prints the entry
 to paste when a repository is missing or has moved. It runs in the
 `shim-catalog` CI job on every push and exits non-zero on drift.
 
@@ -958,7 +793,7 @@ Legacy spellings do **not** resolve to a shim any more: `argo--openai_chat`,
 shims, and the standalone packages register canonical names only. A config
 that still spells one fails at load with the retired-names error, which names
 the canonical shim, the `shims.install` entry to declare and the
-`llm-rosetta-migrate` command that rewrites the config; see
+`llm-rosetta gateway migrate` command that rewrites the config; see
 [Migrating to 0.14](migrating-to-0.14.md#retired-names).
 
 ## Argo Shims
@@ -1314,7 +1149,7 @@ After registration the shim name works everywhere — `get_converter_for_provide
 
 To add a new provider to the built-in registry:
 
-1. Create the leaf at `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<type>/provider.yaml`, where `<type>` is the format's model type (`llm`, `embeddings`, `rerank`, `decisions`). A `<format>/` level appears below it only when the type holds a second lane, so a vendor serving `chat_completions` and `messages` keeps both under `llm/`; a vendor with several named instances puts a lane directory above the type (`<vendor>/<lane>/<type>/`). `llm-rosetta-gateway shims new` writes this shape, and `shims check` reports a tree that departs from it.
+1. Create the leaf at `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<type>/provider.yaml`, where `<type>` is the format's model type (`llm`, `embeddings`, `rerank`, `decisions`). A `<format>/` level appears below it only when the type holds a second lane, so a vendor serving `chat_completions` and `messages` keeps both under `llm/`; a vendor with several named instances puts a lane directory above the type (`<vendor>/<lane>/<type>/`). `scripts/dev/new_shim.py` writes this shape for the built-in tree, and `llm-rosetta ext new` and `ext check` do the same for an extension.
 2. If the vendor's leaves share connection facts — the credential, usually — add `<vendor>/provider.yaml` with no `name`: it is the vendor manifest, and every leaf inherits it.
 
     ```yaml
@@ -1344,7 +1179,7 @@ To add a new provider to the built-in registry:
     pre_ir_transforms = ()
     ```
 
-The provider is automatically discovered and registered at import time.
+The provider is automatically discovered and registered at import time. A shim that does not belong in core goes in an extension instead; see [Adding an Extension](../contributing/adding-an-extension.md).
 
 ### Listing and Removing Shims
 

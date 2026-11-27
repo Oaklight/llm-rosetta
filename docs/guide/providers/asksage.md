@@ -5,7 +5,7 @@
 !!! warning "Ships as a standalone package"
     Since 0.14.0 the four AskSage shims are no longer built into LLM-Rosetta; they
     ship in the
-    [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage)
+    [llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne)
     package. Declare it with `shims.install` and the names below keep working.
     **Gateway → Shims → Available** offers the same entry as a one-click install.
 
