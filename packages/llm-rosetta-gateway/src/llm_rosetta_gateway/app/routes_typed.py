@@ -18,21 +18,40 @@ from llm_rosetta_gateway._vendor.httpserver import (
 from ..config import GatewayConfig
 from ..proxy.lifecycle import instrumented_handler
 from ..observability.logging import get_logger
-
+from ..pipelines.decision import handle_decision
+from ..pipelines.embeddings import handle_embeddings
+from ..pipelines.rerank import handle_rerank
 
 from . import _state
 
 logger = get_logger()
 
+#: The handler of each built-in typed model type, by descriptor name.  The
+#: descriptors live in ``model_types`` (a lower layer) and name no handler; a
+#: type registered from outside gives its descriptor a ``pipeline`` callable
+#: instead, and that wins.
+BUILTIN_HANDLERS: dict[str, Callable[..., Any]] = {
+    "embeddings": handle_embeddings,
+    "rerank": handle_rerank,
+    "decisions": handle_decision,
+}
+
+
+def _handler_of(desc: Any) -> Callable[..., Any] | None:
+    """The pipeline handler of a model type, or ``None`` when it has none."""
+    if desc.pipeline is not None:
+        return desc.pipeline()
+    return BUILTIN_HANDLERS.get(desc.name)
+
 
 def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
     """Register HTTP routes for all non-LLM model types from the registry.
 
-    For each non-LLM descriptor whose ``pipeline`` is set, resolves the
-    handler via ``desc.pipeline()`` (a lazy import wrapper) and registers
-    its routes.  Descriptors with ``pipeline=None`` are skipped with a
-    warning — this is expected only for the ``llm`` type, whose routes come
-    from the descriptor's ``RouteSpec`` list via :func:`_register_llm_routes`.
+    For each non-LLM descriptor, resolves the handler (the descriptor's own
+    ``pipeline`` callable, else the entry of :data:`BUILTIN_HANDLERS`) and
+    registers its routes.  A type with neither is skipped with a warning — the
+    ``llm`` type is not one of them: its routes come from the descriptor's
+    ``RouteSpec`` list via :func:`_register_llm_routes`.
 
     The handler runs inside :func:`~.lifecycle.instrumented_handler`, the same
     lifecycle the chat routes use, so telemetry, profiling, error dumps,
@@ -44,17 +63,14 @@ def _register_non_llm_routes(app: App, config: GatewayConfig) -> None:
         if desc.name == "llm":
             continue
 
-        if desc.pipeline is None:
+        raw_handler = _handler_of(desc)
+        if raw_handler is None:
             logger.warning(
                 "Model type %r has no pipeline — routes skipped",
                 desc.name,
             )
             continue
 
-        # Resolve the handler via the lazy import wrapper stored in
-        # the descriptor.  The wrapper defers imports to avoid circular
-        # dependencies between model_types and handler modules.
-        raw_handler = desc.pipeline()
         handler = _make_typed_handler(raw_handler, desc.name)
 
         for route_spec in desc.routes:
