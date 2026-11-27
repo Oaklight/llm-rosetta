@@ -26,7 +26,7 @@ Open Design 在三种 API 上都提供每个模型，因此按客户端使用的
 ## 独立包
 
 这些 shim 位于
-[`llm-rosetta-shim-opendesign`](https://github.com/Oaklight/llm-rosetta-shim-opendesign)，
+[`llm-rosetta-ext-contrib`](https://github.com/Oaklight/llm-rosetta-ext-contrib)，
 不在核心包内。使用这些名称前需先声明服务方：
 
 ```jsonc

@@ -54,3 +54,4 @@ title: 贡献指南
 
 - [风格指南](style-guide.md) — 代码风格、命名、docstring 和工具链
 - [架构指南](architecture.md) — 转换器结构、ops 模块和 round-trip 兼容性
+- [添加扩展](adding-an-extension.md) — `ext new`、`ext check`、shim 目录树契约，以及分层表在哪里

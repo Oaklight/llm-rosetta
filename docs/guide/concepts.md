@@ -30,7 +30,7 @@ graph LR
 | | 工具箱 | 原始转换器 | 管线 | 网关 |
 |---|---|---|---|---|
 | **适用场景** | 转换单个 IR 值或工具 | 转换单条链路 | 一次调用完成 source → IR → target | 面向任意客户端的 HTTP 代理 |
-| **入口** | `tool_ops`、`transforms`、`capabilities` | `ChatCompletionsConverter()` | `convert()` / `ConversionPipeline` | `llm-rosetta-gateway` |
+| **入口** | `tool_ops`、`contracts.transform` | `ChatCompletionsConverter()` | `convert()` / `ConversionPipeline` | `llm-rosetta-gateway` |
 | **调用提供方** | 你 | 你 | 你 | 网关 |
 
 三种粒度共用同一套 IR 和转换器，工具箱也基于同一套 IR。从需要的层级开始，向上迁移时不用重写翻译逻辑。

@@ -87,6 +87,18 @@ PUID=$(id -u) PGID=$(id -g) docker compose -f docker/docker-compose.source.yaml 
 
 发布路径不变：`make build-docker` 仍构建 `docker/Dockerfile`，从 `dist/` 或 PyPI 安装 wheel。
 
+### 容器与二进制中的扩展 { #extensions-in-the-container-and-the-binary }
+
+镜像（以及编译后的二进制）没有单独的 `llm-rosetta` 脚本，也没有 pip。网关二进制会转发 `ext` 命令，因此扩展可以用标准库安装器安装：
+
+```bash
+docker run --rm -v ./config:/config oaklight/llm-rosetta-gateway llm-rosetta-gateway ext install kilo_free
+```
+
+两个入口脚本在未设置时都会把 `LLM_ROSETTA_EXTENSIONS_DIR` 设为 `/config/extensions`，因此已安装的扩展（以及网关在启动时自行安装的服务方）都存放在配置卷里，不会随容器消失。该目录必须可被容器的 uid 写入，和 `HOME` 一样；不可写时，入口脚本会以一行消息退出，点明目录和 uid。用 `--entrypoint` 替换入口脚本的运行方式没有默认值。入口脚本只在服务器启动时才写配置模板：`ext`、`init`、`add`、`gateway usage` 和 shell 不会创建 `config.jsonc`。见[扩展](../guide/extensions.md)。
+
+编译后的二进制由 Nuitka 构建；`make build-binary-musl` 在 `python:3.12-alpine` 容器里构建 musl（Alpine）二进制，并把 Nuitka 固定为 4.2.1，因为 4.4 会在编译任何内容之前就让 Alpine 构建停下。在二进制里，`ext check` 会跳过 wheel 检查（“pip is not available”）。
+
 ## 开发
 
 ```bash

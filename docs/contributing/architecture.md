@@ -40,9 +40,29 @@ converters/llm/<name>/
 
 ## Shim 层
 
-`ProviderShim` 是一个轻量级身份卡，声明 provider 使用的基础转换器以及连接默认值和字段级变换。Shim 位于 `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<type>/provider.yaml`；只有该类型下存在第二条 lane 时才在类型下再加 `<format>/` 层（`<vendor>/llm/chat_completions/` 与 `<vendor>/llm/messages/` 并排），只有存在多个具名实例的服务方才在类型之上加 lane 目录（`alcf/metis/llm/`）。这份约定、`shims new` 渲染的模板，以及 `shims check` 与 `shims migrate` 执行的检查，都在 `llm_rosetta/devtools/_shim_template/`。
+`ProviderShim` 是一个轻量级身份卡，声明 provider 使用的基础转换器以及连接默认值和字段级变换。Shim 位于 `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<type>/provider.yaml`；只有该类型下存在第二条 lane 时才在类型下再加 `<format>/` 层（`<vendor>/llm/chat_completions/` 与 `<vendor>/llm/messages/` 并排），只有存在多个具名实例的服务方才在类型之上加 lane 目录（`alcf/metis/llm/`）。这份约定在 `llm_rosetta/authoring/_shim_template/`；`scripts/dev/new_shim.py` 为内置 shim 生成脚手架，`llm-rosetta ext new`、`ext check` 和 `ext migrate` 则创建、检查和移动扩展的目录树。
 
 转换器保持格式通用；shim 声明 provider 特定的差异（如 response ID 前缀、默认请求头、字段重命名）。
+
+core 之外的 shim 由**扩展**（`llm_rosetta.extensions`）提供：可安装的文件夹，带 `plugin.yaml` 清单，以 `llm_rosetta_ext.<id>` 导入。一个扩展可以提供一种或多种类别（`shims`、`transports`、`commands`）；core 只管理包，拥有某个类别的那一层为它注册处理器。见[扩展](../guide/extensions.md)和[添加扩展](adding-an-extension.md)。
+
+## 分层 { #layering }
+
+core（`packages/llm-rosetta`）和网关（`packages/llm-rosetta-gateway`）都是分层的，允许的导入关系是测试而不是约定。每张表列出实际存在的边；新增的边会连同其位置一起失败，不再存在的边必须从表中删除。
+
+**core**（`tests/test_core_layering.py` 中的 `CORE_EDGES`；含模块级和函数内导入；排除 `_vendor`；包级无环）。自下而上：
+
+1. **基础层**：`ir`（含 IR 类型 `ir/model`）、`formats`、`retired_names`、`conversion_warnings`、`model_vocabulary`。`ir` 只导入 `conversion_warnings`；`formats` 只导入 `ir`。
+2. **契约层**（`llm_rosetta.contracts`）：外部方实现或接收的内容（`shim`、`transform`、`auth`、`quota`、`routing`、`resolver`、`command`、`extension`、`transport`、`cli_login`、`usage`）。契约可导入其他契约、`_vendor` 和数据模块（`ir.model`、`formats`、`retired_names`）；只有 `contracts/transform.py` 导入 `ir.primitives`。
+3. **转换层**：`converters`（不导入 `pipeline`）、`pipeline`（含 `pipeline/facade.py` 中的 `convert` 与 `convert_response`、各类型化管线、`enforcement.py` 和 `tool_locations.py`）、`fidelity`、`profiling`。这些层从不导入 `shims` 或 `extensions`；它们通过 shim 层注册的 `contracts.resolver` 读取 shim 名称。把这两个包都屏蔽后，`import llm_rosetta` 仍然可用，且每种 chat 格式都能转换为其他任一种。
+4. **可选层**：`shims`（向 `extensions` 注册自己的 `shims` 处理器）、`extensions`（只管包：清单、发现、安装、索引、状态，以及按 `provides` 类别划分的处理器注册表；它不导入 `shims`、`converters`、`pipeline`、`api` 或 `authoring`）、`routing`、`authoring`（`ext new`、`ext check`、`ext migrate` 使用的内容；shim 目录树契约）、`testing`。
+5. **入口层**：`cli`（一个包：`__init__.py` 中是分发器，`areas.py` 处理扩展区域）、`api`（宿主接口；core 从不导入它）、`tool_ops`（toolregistry 的入口便利层；只由包根导入），以及 0.13.0 的转发器 `auto_detect` 和 `capabilities`，没有任何模块导入它们。
+
+`auto_detect` 是已弃用的转发器：`detect_provider`、`get_converter_for_provider`、`convert`、`convert_response` 和 `ProviderType` 分别位于 `converters/registry`、`pipeline/facade` 和 `contracts/routing`，并且都可以从 `llm_rosetta` 导入。兼容转发器列在 `llm_rosetta/_tiers.py` 中，将在 0.15.0 移除。
+
+**网关**（`tests/gateway/test_layers.py`）：自下而上的层是 foundation、state、policy、operations、engine、serving 和 entry；导入只能向下，模块级图无环。函数内的向上导入冻结在 `LAZY_UPWARD` 中，只能减少；`GATEWAY_EDGES` 列出每一个跨包导入。网关只通过 `llm_rosetta.api` 与 `llm_rosetta.contracts` 访问 core（`tests/gateway/test_core_surface_boundary.py`）；admin 通过 `admin_api.py` 访问网关。
+
+每个公开模块的层级（user、extension、compat）写在 `llm_rosetta/_tiers.py` 中；见 [core 接口](../api/index.md#the-core-surface)。
 
 ## 添加新的转换器
 

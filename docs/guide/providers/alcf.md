@@ -4,8 +4,8 @@ ALCF（阿贡领先计算设施）推理服务通过三个 shim 端点提供支�
 
 !!! warning "以独立包形式发布"
     自 0.14.0 起，三个 ALCF shim 不再内置在 LLM-Rosetta 中，而是由
-    [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf)
-    包提供。通过 `shims.install` 声明后，下面的名称即可继续使用。
+    [llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne)
+    的 `alcf` 扩展提供。通过 `shims.install` 声明后，下面的名称即可继续使用。
     **网关 → Shims → 可安装** 提供同一条目的一键安装。
 
     ```jsonc
@@ -16,9 +16,9 @@ ALCF（阿贡领先计算设施）推理服务通过三个 shim 端点提供支�
 
 | Shim 名称 | 基础类型 | 默认 Base URL | API Key 环境变量 | 硬件 |
 |:---|:---|:---|:---|:---|
-| `alcf_metis--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | `ALCF_API_KEY` | SambaNova SN40L |
-| `alcf_minerva--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | `ALCF_API_KEY` | NVIDIA B200 |
-| `alcf_sophia--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | `ALCF_API_KEY` | vLLM on A100 |
+| `alcf_metis--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/metis/api/v1` | （Globus 登录） | SambaNova SN40L |
+| `alcf_minerva--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/minerva/api/v1` | （Globus 登录） | NVIDIA B200 |
+| `alcf_sophia--chat_completions` | `chat_completions` | `https://inference-api.alcf.anl.gov/resource_server/sophia/vllm/v1` | （Globus 登录） | vLLM on A100 |
 
 三个集群共用一个管理面板顶层：每个都声明 `group: alcf`，因此提供方类型选择器只显示一个
 `alcf` 分组，其条目读作 `metis · chat_completions`、`minerva · chat_completions` 和
@@ -67,132 +67,48 @@ Metis 和 Minerva 目前没有支持推理的模型。
 
 ## 认证
 
-ALCF 使用 Globus OAuth 进行认证。访问令牌的有效期较短（约 48 小时），需要定期刷新。刷新令牌本身在 **30 天**后因 ALCF 的会话策略过期 — 届时需要交互式重新登录。
+ALCF 使用 Globus OAuth。推理服务接受的是由 Globus 授权生成的访问令牌，授权要由人到 `auth.globus.org` 登录一次才能获得；随后返回的刷新令牌会在之后每次生成令牌时被消耗，无需浏览器。因为 ALCF 的会话策略，刷新令牌在 **30 天**后过期；之后需要交互式重新登录。
 
-Globus 交换随 **shim 包一起发布**：`llm-rosetta-shim-alcf` 内含这个零依赖（仅标准库）的辅助脚本，模块路径为 `llm_rosetta_shim_alcf.providers.alcf.token`，服务方清单（`providers/alcf/provider.yaml`）把它声明为 `connection.token_command`，三个集群 shim 共同继承，各自只保留自己的 `base_url` 与 `models_path`。因此无需下载脚本，配置里也不必写 `token_command` —— 网关会在启动时、按 shim 声明的间隔、以及收到上游 401 之后运行它。
+交换逻辑**随扩展一起发布**：`alcf` 扩展在服务方清单旁带有 `auth.py`，因此三个集群 shim 的认证方式相同。提供方就是它的 shim；不需要编写 `token_command`，也不需要导出 `ALCF_API_KEY`。网关会在启动时、按 shim 的间隔以及上游返回 401 之后向该交换请求凭据。
 
-### 初始登录
+### 登录
 
-在有浏览器的机器上运行（或将 URL 复制到有浏览器的机器上）：
-
-```bash
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login
-```
-
-这会打开一个 Globus 授权 URL，提示你粘贴授权码，并将令牌保存到 `~/.globus/app/<client_id>/inference_app/tokens.json`。
-
-### 令牌管理
+在有浏览器的机器上运行登录，再把记录交给网关（[`credential <provider>`](../../gateway/cli.md#credential-provider)）。命令会打印一个 Globus 授权 URL，并接收你粘贴回来的授权码：
 
 ```bash
-# 打印新的访问令牌（过期时自动刷新）：
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token
-
-# 检查令牌状态和剩余有效期：
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --status
-
-# 验证令牌对某个集群是否可用：
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --probe sophia
-
-# 强制刷新（即使未过期）：
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --force
+llm-rosetta gateway credential alcf-sophia --out record.json
 ```
 
-### 多用户令牌池
+在管理面板中，提供方认证页上的 **安装记录** 接收这份记录。提供方在还没有记录时也可以先保存。
 
-多个 ALCF 用户可以汇集令牌用于轮转。网关运行的是 shim 声明的命令（不带参数），因此池化需要一处覆盖 —— 把 `token_command` 指向 `--tokens-dir`：
+授权保存在厂商自己的工具存放它的位置，即 `~/.globus/app/<client_id>/inference_app/tokens.json`，并以同样的布局写回。因此已经用 `alcf-ai` 登录过的环境无需再次登录，挂载了 `~/.globus` 的容器也只需配置一次。
 
-```bash
-# 每个用户登录到自己的文件：
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login --token-file /shared/alcf-tokens/alice.json
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login --token-file /shared/alcf-tokens/bob.json
+### 30 天会话过期
 
-# 手动查看所有令牌（逗号分隔输出）：
-python3 -m llm_rosetta_shim_alcf.providers.alcf.token --tokens-dir /shared/alcf-tokens/
-```
+!!! warning "会话策略限制"
+    ALCF 的 Globus 会话策略强制 30 天有效期。会话过期后，刷新令牌失效，网关会进入 401 重试循环。**需要交互式重新登录**——这无法自动化，因为 ALCF 要求基于浏览器的机构 SSO。
+
+    请留意管理面板令牌状态中 `consecutive_failures` 不断升高，出现时请重新登录。
+
+    跟踪议题：[#687](https://github.com/Oaklight/llm-rosetta/issues/687)
+
+## 网关配置
 
 ```jsonc
 {
   "providers": {
     "alcf-sophia": {
-      "shim": "alcf_sophia--chat_completions",
-      "token_command": [
-        "python3", "-m", "llm_rosetta_shim_alcf.providers.alcf.token",
-        "--tokens-dir", "/shared/alcf-tokens/"
-      ]
+      "shim": "alcf_sophia--chat_completions"
     }
   }
 }
 ```
 
-命令会为所有文件输出一个逗号分隔的字符串，网关把它当作 key ring。
-
-### 30 天会话过期
-
-!!! warning "会话策略限制"
-    ALCF 的 Globus 会话策略强制执行 30 天的生命周期。会话过期后，刷新令牌停止工作，网关将进入 401 重试循环。**需要交互式重新登录** — 由于 ALCF 要求基于浏览器的机构 SSO 认证，此过程无法自动化。
-
-    请关注管理面板中令牌状态的 `consecutive_failures` 是否持续上升，出现时重新运行 `--login`。
-
-    跟踪：[#687](https://github.com/Oaklight/llm-rosetta/issues/687)
-
-## 网关配置
-
-=== "静态 API Key"
-
-    手动获取令牌并设置为环境变量：
-
-    ```bash
-    export ALCF_API_KEY=$(python3 -m llm_rosetta_shim_alcf.providers.alcf.token)
-    ```
-
-    ```jsonc
-    {
-      "providers": {
-        "alcf-sophia": {
-          "shim": "alcf_sophia--chat_completions",
-          "api_key": "${ALCF_API_KEY}"
-        }
-      }
-    }
-    ```
-
-    令牌过期时需要重启网关。
-
-=== "随包发布的交换（推荐）"
-
-    无需接线 —— shim 已经声明了交换，提供方只需要写 shim：
-
-    ```jsonc
-    {
-      "providers": {
-        "alcf-sophia": {
-          "shim": "alcf_sophia--chat_completions"
-        }
-      }
-    }
-    ```
-
-    网关在启动时运行命令，按 shim 声明的间隔重新运行，并在收到上游 401 响应时立即触发一次非周期性刷新。只想改间隔而不替换命令时，在提供方上设置 `token_refresh_interval` 即可。
-
-=== "覆盖命令"
-
-    提供方自己声明的 `token_command` 会替换随包发布的那个 —— 即上面的多用户池化，或你自己的脚本：
-
-    ```jsonc
-    {
-      "providers": {
-        "alcf-sophia": {
-          "shim": "alcf_sophia--chat_completions",
-          "token_command": ["python3", "/opt/alcf/token-from-vault.py"],
-          "token_refresh_interval": 1800
-        }
-      }
-    }
-    ```
+要修改刷新间隔，在提供方上设置 `token_refresh_interval`。要汇集多个 ALCF 账号，请为每个账号声明一个提供方：网关会给每个提供方各自的状态目录。
 
 ### Docker 部署
 
-刷新脚本随包发布，镜像已安装该包，因此只需要挂载令牌文件：
+交换逻辑在扩展里，网关会从 `argonne` 源安装该扩展，因此只需要挂载令牌文件：
 
 ```yaml
 # docker-compose.yaml
@@ -204,15 +120,9 @@ services:
       - ~/.globus:/home/appuser/.globus              # Globus 令牌文件（需读写权限以刷新）
 ```
 
-操作步骤：
+镜像把已安装的扩展放在 `/config/extensions`（`LLM_ROSETTA_EXTENSIONS_DIR`），因此扩展不会随容器消失。容器以 `${PUID:-1000}` 运行（compose 的 `user:` 指令，默认即镜像里的 `appuser`，uid 1000），挂载的 `~/.globus` 必须可被该 uid 写入，刷新令牌才能原地更新。如果你的宿主 uid 不同，请在 compose 文件里设置 `PUID`/`PGID`，并让 `.globus` 目录属于同一个 uid。
 
-1. **在宿主机上登录**（仅需一次）：`python3 -m llm_rosetta_shim_alcf.providers.alcf.token --login`
-2. 使用上述 volume 挂载**启动容器**
-3. 通过管理面板或 `config.jsonc` **添加提供方** —— 不需要 `token_command`
-
-容器以 `${PUID:-1000}` 运行（compose 的 `user:` 指令，默认即镜像里的 `appuser`，uid 1000），挂载的 `~/.globus` 必须对该 uid 可写，以便就地更新刷新令牌。如果宿主机 uid 不同，在 compose 文件中设置 `PUID`/`PGID`，并让 `.globus` 目录属于同一个 uid。
-
-参见 [`docker/docker-compose.yaml`](https://github.com/Oaklight/llm-rosetta/blob/master/docker/docker-compose.yaml) 获取完整示例。
+完整示例见 [`docker/docker-compose.yaml`](https://github.com/Oaklight/llm-rosetta/blob/master/docker/docker-compose.yaml)。
 
 ## 备注
 

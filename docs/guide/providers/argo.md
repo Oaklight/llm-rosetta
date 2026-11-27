@@ -4,7 +4,7 @@ Argo 是美国阿贡国家实验室的内部 API 网关，通过统一端点提�
 
 !!! warning "不是内置的"
     三个 Argo shim 位于独立的
-    [llm-rosetta-shim-argo](https://github.com/Oaklight/llm-rosetta-shim-argo)
+    [llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne)
     包中。使用下面的名称前请先声明它：
 
     ```jsonc

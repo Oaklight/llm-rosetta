@@ -10,7 +10,7 @@ Kilo Code 运营一个公共模型网关。我们用两个 shim 分别对接，�
 | Shim 名称 | 基础类型 | 默认 Base URL | 凭据 | 所在位置 |
 |:---|:---|:---|:---|:---|
 | `kilo--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | `KILO_API_KEY` | 核心包 |
-| `kilo_free--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | 无（keyless） | [llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free) |
+| `kilo_free--chat_completions` | `chat_completions` | `https://api.kilo.ai/api/gateway` | 无（keyless） | [llm-rosetta-ext-contrib](https://github.com/Oaklight/llm-rosetta-ext-contrib) |
 
 ## 付费线路
 

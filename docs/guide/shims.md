@@ -28,7 +28,7 @@ ProviderShim ("deepseek--chat_completions")
 !!! note "0.13 的旧写法已移除"
     对于 `base`、`to_transforms`、`from_transforms` 以及扁平的连接与工具关键字（`default_base_url`、`default_api_key_env`、`models_path`、`default_path`、`model_id_field`、`supports_custom_tools`、`max_tool_description_length`、`tool_search_mode`、`multimodal_tool_result`），`ProviderShim(...)` 会抛出 `TypeError` 并写出替代写法。声明了 `base:` 或扁平连接/工具键的 `provider.yaml`，以及导出 `to_transforms` 或 `from_transforms` 的 `transforms.py`，在加载时同样被拒绝。参见 [迁移到 0.14](migrating-to-0.14.md#removed-shim-declarations)。
 
-### 声明式提供方目录
+### 声明式提供方目录 { #declarative-provider-directory }
 
 内置 shim 以目录结构定义在 `shims/builtin/` 下。所有服务方共用同一种形状，下面的三条规则
 就是 loader 接受的形状。
@@ -54,7 +54,7 @@ ProviderShim ("deepseek--chat_completions")
 3. **`<format>/` 仅当该类型下有多条 lane 时才出现。** chat 服务方通常会提供多种方言，
    因此保留格式层；某类型只有一条 lane 的服务方把 `provider.yaml` 直接放在类型目录里 ——
    `anthropic/llm/provider.yaml`。加第二条 lane 时，第一条会下沉到它自己的格式目录，
-   这正是 `shims migrate` 做的事。
+   这正是 `llm-rosetta ext migrate` 做的事。
 
 内置树按这个形状排列：
 
@@ -79,17 +79,12 @@ packages/llm-rosetta/src/llm_rosetta/shims/builtin/
 └── ...
 ```
 
-**文件规则。** gateway 只读五个名字，别的一概不读：shim 目录内的 `provider.yaml`、
-`auth.py`、`quota.py`、`transforms.py`，以及包根部的 `shims.yaml`。树里其余文件都只属于
+**文件规则。** gateway 只读四个名字，别的一概不读：shim 目录内的 `provider.yaml`、
+`auth.py`、`quota.py` 和 `transforms.py`。树里其余文件都只属于
 该包，永远不会被导入 —— 包为自己的导入保留 `__init__.py` 没有问题，它不会被读取。
 `auth.py` 与 `quota.py` 以扁平模块执行，因此必须自包含；`transforms.py` 可以使用相对导入。
 
-**先检查，再迁移。** `llm-rosetta-gateway shims check --root <providers 目录>` 报告
-loader 会读错的树 —— 叶子不在规范路径上、把服务方目录当叶子用、类型目录同时混有叶子层和
-格式层、文件不在允许清单内 —— 并以非零退出。`shims migrate --root <目录>` 打印让它归位的
-移动，加 `--write` 才执行；它只移动目录并改写 `shims.yaml` 路径，不重写相对导入，那部分由
-包自己的测试兜住。`shims new` 用同一份模板生成骨架。完整约定、骨架的输出与占位符清单见
-`llm_rosetta/devtools/_shim_template/README_zh.md`。
+**先检查，再迁移。** 对扩展来说，`llm-rosetta ext check <文件夹>` 报告 loader 会读错的树 —— 叶子不在规范路径上、把服务方目录当叶子用、类型目录同时混有叶子层和格式层、文件不在允许清单内 —— 并以非零退出。`llm-rosetta ext migrate <文件夹>` 打印让它归位的移动，加 `--write` 才执行；它只移动目录，不重写相对导入，那部分由扩展自己的测试兜住。`llm-rosetta ext new` 用同一份模板生成骨架，`scripts/dev/new_shim.py` 为内置 shim 生成骨架。完整约定与占位符清单见 `llm_rosetta/authoring/_shim_template/README_zh.md`；参见[添加扩展](../contributing/adding-an-extension.md)。
 
 每个叶子目录包含：
 
@@ -135,21 +130,7 @@ shim 不需要任何改动。叶子也可以为某条 lane 覆盖凭据字段；
 `auth.py` 遵循同样的规则：与服务方清单放在一起时它是服务方的交换，附加到每个叶子；放在叶子里
 时它属于该叶子。一个服务方只声明一个交换，某个叶子再声明一个会加载失败。
 
-**脚手架。** `llm-rosetta-gateway shims new` 写出新 shim 所需的文件 —— 叶子、服务方还没有清单
-时的服务方清单、包提供 `shims.yaml` 时的那条登记 —— 然后用真实的 loader 装载一遍，所以网关
-用不了的形状在这里失败，而不是等到启动。在终端上不带 flag 时它逐项询问；**交互是默认
-模式**，`--no-input` 加 flag 则是脚本里的同一件事。一切都按约定形状写出：`--lane`
-把具名实例写在服务方与类型目录之间，`--auth`、`--quota` 写出服务方级桩，`--package`
-补上外部包外壳，`--transform` 追加 `transforms.py` 桩。在仓库检出里，
-`scripts/dev/new_shim.py` 就是同一条命令，只是默认根指向内置树。给出 logo URL 时它会问是否
-存进包的 `assets/`，写进配置的是该文件的 jsDelivr URL，因此发布出去的标志图不指向服务方主机。
-线上格式从 converter registry 为该模型类型列出的格式中挑选；粘贴进来的 base URL 会先规范化，
-再检查是否可达 —— 不可达只是警告，不是拒绝。已有的树会被先读一遍，因此某类型的第一条 lane 落在 `<type>/` 里，已有 lane
-的服务方得到 `<type>/<format>/`；仍把格式目录放在服务方目录下的只给出提示并附上 `shims check`
-命令，而不是照抄。永远不会被加载的 lane —— 位于本身就是一个 shim 的目录之下、名字已被别的
-文件声明、或服务方名会被 loader 跳过 —— 在写任何文件之前就拒绝。标志图会从 jsDelivr 上的 lobehub 图标集里按服务方名查找并
-作为默认值；已经在 jsDelivr 上的 URL 原样保留，不再复制进 `assets/`。按一次 Ctrl+C 重新询问
-当前问题，再按一次取消，Ctrl+D 立即取消。详见 [`shims new`](../gateway/cli.md#shims-new-vendor)。
+**脚手架。** `scripts/dev/new_shim.py`（在仓库检出里）写出新内置 shim 所需的文件 —— 叶子，以及服务方还没有清单时的服务方清单 —— 然后用真实的 loader 装载一遍，所以网关用不了的形状在这里失败，而不是等到启动。在终端上不带 flag 时它逐项询问；**交互是默认模式**，`--no-input` 加 flag 则是脚本里的同一件事。一切都按约定形状写出：`--lane` 把具名实例写在服务方与类型目录之间，`--auth`、`--quota` 写出服务方级桩，`--transform` 追加 `transforms.py` 桩。线上格式从 converter registry 为该模型类型列出的格式中挑选；粘贴进来的 base URL 会先规范化，再检查是否可达 —— 不可达只是警告，不是拒绝。已有的树会被先读一遍，因此某类型的第一条 lane 落在 `<type>/` 里，已有 lane 的服务方得到 `<type>/<format>/`。永远不会被加载的 lane —— 位于本身就是一个 shim 的目录之下、名字已被别的文件声明、或服务方名会被 loader 跳过 —— 在写任何文件之前就拒绝。交互提示、探测和图标查找都在脚本里而不在 wheel 里；它们与 `llm-rosetta ext new` 共用的生成器在 `llm_rosetta/authoring/` 中。对扩展，请用 `llm-rosetta ext new`（[添加扩展](../contributing/adding-an-extension.md)）。
 
 **按类型声明的参数默认值。** 非 chat shim 可以在以自身模型类型命名的段里，声明该 vendor 真正有差异的请求字段：
 
@@ -378,11 +359,11 @@ post_ir_transforms = (strip_fields("n", "logit_bias", "seed"),)
 pre_ir_transforms = ()
 ```
 
-导入时，`shims/__init__.py` 自动扫描所有提供方目录并注册，然后发现通过 entry point 声明的插件 shim。
+导入时，`shims/__init__.py` 自动扫描所有提供方目录并注册，然后加载提供 shim 的已安装[扩展](extensions.md)。
 
 ### shim 可以导入什么 {#what-a-shim-may-import}
 
-shim 的旁挂模块（`transforms.py`、`auth.py`、`quota.py` 以及它们旁边的辅助模块）和 shim 包的 `register_shims` entry point 只通过 `llm_rosetta.contracts` 及其子模块导入 `llm_rosetta`：
+shim 的旁挂模块（`transforms.py`、`auth.py`、`quota.py` 以及它们旁边的辅助模块）和提供 shim 的扩展的代码只通过 `llm_rosetta.contracts` 及其子模块导入 `llm_rosetta`：
 
 | 需要 | 导入自 |
 | --- | --- |
@@ -392,7 +373,7 @@ shim 的旁挂模块（`transforms.py`、`auth.py`、`quota.py` 以及它们旁�
 | `quota.py` 的额度探测 | `llm_rosetta.contracts.quota` |
 | 旁挂模块的钩子名（`PRE_IR_TRANSFORMS`、`QUOTA_PROBES` 等） | `llm_rosetta.contracts` |
 
-不能导入 `llm_rosetta.api`，也不能导入任何内部模块。加载器在 `import llm_rosetta` 尚未完成时就运行插件 entry point 与旁挂模块。`llm_rosetta.api` 需要完整加载的包，此时无法加载；契约模块可以。契约也是稳定的部分：在一个次版本内只增加名字，而内部模块在任何版本都可能移动。一个服务方目录也不导入其他服务方的目录，这样每个目录都能单独移出 core。
+不能导入 `llm_rosetta.api`，也不能导入任何内部模块。加载器在 `import llm_rosetta` 尚未完成时就运行扩展与旁挂模块。`llm_rosetta.api` 需要完整加载的包，此时无法加载；契约模块可以。契约也是稳定的部分：在一个次版本内只增加名字，而内部模块在任何版本都可能移动。一个服务方目录也不导入其他服务方的目录，这样每个目录都能单独移出 core。
 
 对于内置 shim，`tests/test_shim_sidecar_boundary.py` 对 `shims/builtin/<vendor>/` 下的每个 `.py` 文件、脚手架模板以及脚手架生成的文件执行这条规则。层级划分见 [core 接口](../api/index.md#the-core-surface)。
 
@@ -404,8 +385,8 @@ flowchart LR
         direction TB
         A["load_providers()"] --> B["load_providers_from_dir()
         扫描内置 YAML 目录"]
-        A --> C["_load_plugin_shims()
-        扫描 entry points"]
+        A --> C["load_extensions()
+        已安装的扩展"]
         B --> D["register_shim()
         _SHIM_REGISTRY[name] = shim"]
         C --> D
@@ -423,87 +404,37 @@ flowchart LR
     注册 --> 使用
 ```
 
-- **注册阶段**在导入时执行一次。`load_providers()` 扫描内置 `providers/` 目录，然后发现 `llm_rosetta.shim_providers` entry point 以加载插件 shim。
+- **注册阶段**在导入时执行一次。`load_providers()` 扫描内置 `shims/builtin/` 目录树，然后加载提供 shim 的已安装[扩展](extensions.md)。
 - **使用阶段**在每个请求中执行。`get_shim(name)` 查询注册表；gateway 注入推理配置并在转换器前后应用 transforms。
 
-## 插件 Shim
+## 扩展 Shim { #plugin-shims }
 
-下游包可以在不修改 llm-rosetta 的情况下注册自己的 shim。两种方式：
+不随 core 发布的 shim 由[扩展](extensions.md)提供。扩展是一个带 `plugin.yaml` 清单的文件夹，其 `provides.shims` 列出 shim 名称，shim 目录树（`provider.yaml` 文件以及 `auth.py`、`quota.py`、`transforms.py` 附属文件）遵循与内置树相同的契约。它以 `llm_rosetta_ext.<id>` 导入，并通过内置 shim 使用的同一个服务方目录树读取器注册。
 
-### Entry Point（推荐）
-
-在 `pyproject.toml` 中声明 entry point：
-
-```toml
-[project.entry-points."llm_rosetta.shim_providers"]
-my_provider = "my_package.shims:register_shims"
+```bash
+llm-rosetta ext new acme --format chat_completions   # 生成脚手架
+llm-rosetta ext check packages/acme                  # 检查目录树
+llm-rosetta ext install ./acme-0.1.0-py3-none-any.whl
 ```
 
-callable 扫描本地 YAML 目录并返回注册的 shim：
-
-```python
-# my_package/shims/__init__.py
-from pathlib import Path
-from llm_rosetta.contracts.shim import load_providers_from_dir
-
-def register_shims():
-    return load_providers_from_dir(Path(__file__).parent / "providers")
-```
-
-### 条件注册
-
-高级场景（按环境注册、动态配置）可以直接调用 `register_shim()`：
-
-```python
-import os
-from llm_rosetta.shims import ConnectionConfig, register_shim, ProviderShim
-
-def register_shims():
-    if os.getenv("MY_INTERNAL_PROVIDER"):
-        register_shim(ProviderShim(
-            name="my-internal",
-            format="chat_completions",
-            connection=ConnectionConfig(base_url="http://internal:8080/v1"),
-        ))
-```
+0.13 的机制已经移除：`llm_rosetta.shim_providers` entry point 组（仍声明它的发行版会被 `ext doctor` 报告，但不会运行）、`register_shims` 可调用对象、网关的 `shims.paths` 目录以及 `shims.yaml` 文件。请改为把 shim 目录变成扩展文件夹；见[迁移到 0.14](migrating-to-0.14.md#retired-extension-paths)。
 
 !!! note
-    当插件注册了与内置同名的 shim 时，内置 shim 会被静默覆盖（输出 INFO 日志）。这是有意设计——允许插件定制内置提供方的行为。
+    core 已经注册的 shim 名称优先：声明该名称的扩展不会被加载，其状态会写明是哪个持有者占用了该名称。
 
-### 配置声明的目录 { #config-declared-directories }
-
-一个 shim 目录也可以**无需安装插件**就被消费。gateway 的顶层 `shims` 配置段会扫描额外目录 —— 这在直接使用
-官方镜像（既没有 `pip` 也没有 `git`）而 shim 就放在配置旁边时很有用：
-
-```jsonc
-"shims": {
-  "paths": ["/config/shims"]   // 存放 <vendor>/<type>/provider.yaml 的目录（或旧的平铺 / 分组布局）
-}
-```
-
-发布在仓库里的 shim 集合改由 manifest 源安装（见 [Manifest 源](#manifest-sources)）。完整字段、缓存行为、
-优先级与安全说明见 [Gateway → 外部 Shim 源](../gateway/configuration.md#external-shim-sources)。
-以编程方式使用时，可调用 `llm_rosetta.shims.rebuild_shims()`（不需要配置文件）或
-`llm_rosetta_gateway.apply_shim_sources(raw, config_path)`。
-
-`shims.install` 中未知的 `<source>:` 限定符默认跳过并告警，`shims.strict` 为 `true` 时改为拒绝 —— 因此较新
-版本写出的配置仍能在较旧版本上启动。配置段形状错误会在加载配置时被拒绝，而不是等到启动时。已移除的键
-（`presets`、`include`、`exclude`、`remotes`）同样会被拒绝；见[已移除的键](#retired-keys)。
+`shims.install` 中未知的 `<source>:` 限定符默认跳过并告警，`shims.strict` 为 `true` 时改为拒绝 —— 因此较新版本写出的配置仍能在较旧版本上启动。配置段形状错误会在加载配置时被拒绝，而不是等到启动时。已移除的键（`presets`、`include`、`exclude`、`remotes`、`paths`）同样会被拒绝；见[已移除的键](#retired-keys)。完整字段、缓存行为、优先级与安全说明见 [Gateway → 外部 Shim 源](../gateway/configuration.md#external-shim-sources)。
 
 ### Manifest 源 { #manifest-sources }
 
-自 0.14.0 起，独立包由两个精选的源仓库发布，每个仓库在 `dist` 分支上提供带版本的
-`manifest.json`：
-[llm-rosetta-shim-argonne](https://github.com/Oaklight/llm-rosetta-shim-argonne)
+自 0.14.0 起，独立包以[扩展](extensions.md)的形式由两个精选的扩展仓库发布。每个仓库把 wheel 作为 release 资源发布，并在旁边放一个 `index.json`：
+[llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne)
 （`alcf`、`argo`、`asksage`）与
-[llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib)
-（免费端点与 `opendesign`）。manifest 中每个已发布的服务方版本对应一条记录：它的
-shim、标签、成熟度、归档及其 sha256，以及它需要的 core（`requires: {surface, ir}`）。
-格式定义在 `llm_rosetta.contracts.shim_manifest`，schema 随 core 一起发布。
+[llm-rosetta-ext-contrib](https://github.com/Oaklight/llm-rosetta-ext-contrib)
+（免费端点、`opendesign` 等）。索引中每个已发布的扩展版本对应一条：wheel 的 `url` 与 `sha256`、所需的 core（`surface`、`ir`、`requires_python`），以及展示用字段（`name`、`maturity`、`tags`、`shims`、`logo`）。格式见[扩展](extensions.md#the-extension-index)。网关把索引称为 *manifest 源*；这个名称保留在配置和管理面板里。
 
 ```jsonc
 "shims": {
-  "sources": ["contrib", "argonne"],               // catalog id 或 manifest URL
+  "sources": ["contrib", "argonne"],               // catalog id 或索引 URL
   "install": ["opendesign", "tag:tier:free", "argonne:*"]
 }
 ```
@@ -511,80 +442,42 @@ shim、标签、成熟度、归档及其 sha256，以及它需要的 core（`req
 `install` 条目：
 
 | 条目 | 选中 |
-|------|------|
+|-------|---------|
 | `opendesign` | 所有源中该名称的服务方 |
-| `tag:tier:free` | 最新记录带有该标签的所有服务方；标签整体匹配（`tier:free`、`tier:subscription`、`auth:oauth`、`org:argonne`） |
+| `tag:tier:free` | 最新条目带有该标签的所有服务方；标签整体匹配（`tier:free`、`tier:subscription`、`auth:oauth`、`org:argonne`） |
 | `*` | 所有服务方 |
-| `argonne:*`、`argonne:alcf`、`contrib:tag:tier:free` | 以上任一种，限定在一个源内 |
+| `argonne:*`、`argonne:alcf`、`contrib:tag:tier:free` | 以上任一项，只限一个源 |
 
-只写 `install` 而不写 `sources` 时读取 `contrib` 与 `argonne`。源也可以是 manifest
-URL，或对象 `{"url": …, "fallback": …, "token_env": …}`。
+只写 `install` 而不写 `sources` 时读取 `contrib` 与 `argonne`。catalog id 读取该仓库的 `releases/latest/download/index.json`。源也可以是索引 URL，或对象 `{"url": …, "fallback": …, "token_env": …}`。
 
-对每个选中的服务方，网关安装 `requires` 被本 core 满足的最新**稳定**版本 —— `surface`
-等于 `llm_rosetta.contracts.SURFACE_VERSION`，`ir` 不高于 `IR_VERSION` —— 并为每个被跳过
-的更新的不兼容版本记录一条 WARNING，写明原因。只有在没有可安装的稳定版本时才会安装预发布
-版本（`0.5.0-rc.1`），因此 `dist` 上的一个预发布版本不会让所有网关都升级。版本号格式为
-`MAJOR.MINOR.PATCH`，可带预发布后缀，不允许构建元数据（`+build` 会使 manifest 无效）。
-标签选择器读取服务方最新可安装记录的标签。归档在装入 shim 缓存前先按记录中的 sha256 校验。
-发布记录决定注册哪些 shim：归档中没有 `shims.yaml` 时，只加载记录中列出的 shim 名称，
-其他名称会被拒绝并记录 WARNING。已安装的版本会一直保留，直到出现更新的*可安装*版本；重读
-manifest 从不降级，manifest 不再列出的已安装版本也会保留，并记录一条 WARNING。manifest
-从 jsDelivr（`…@dist/manifest.json`）读取，`raw.githubusercontent.com` 作为备用，并在
-`remote_ttl` 内复用；**重新拉取**会立即重读。源不可达时使用缓存的 manifest 与上一次成功
-的安装；摘要不匹配时绝不安装（保留之前的版本，并标记为过期）。发布之后 CDN 可能仍返回旧副本，
-因此网关会检查返回内容的 `generated_at` 及其列出的服务方。检查范围包括：显式的
-`<source>:<vendor>` 选择器；以及移出
-core 的服务方。普通的标签选择器或 `*` 不受检查；所有记录都无效的服务方视为缺失。返回内容早于
-缓存的 manifest，或缺少上述某个服务方时，网关会再请求另一个 URL 一次，采用 `generated_at`
-较新的 manifest；两者相同时保留第一个返回的副本，即使它正是缺少该服务方的那一份。一条 INFO
-日志写明采用的 URL 与原因。`remote_ttl` 内的缓存 manifest 缺少上述某个服务方时会重新拉取；
-拉取后仍然缺少时，同一组服务方在 10 分钟内不再重复检查（**重新拉取**不受此限制）。上次返回
-内容的 URL 只在其副本仍处于 `remote_ttl` 内时优先尝试，之后重新优先尝试主地址。无论由哪个
-URL 返回，缓存的 manifest 都不会被更旧的副本替换：缓存会保留，源标记为 `stale`，原因中写明
-两个 `generated_at` 值，之后每次应用都会重新拉取，直到拿到至少同样新的 manifest。
+网关为每个选中的服务方安装当前 core 与解释器都满足要求的最新**稳定**版本（`surface` 等于 `llm_rosetta.contracts.SURFACE_VERSION`，`ir` 不高于 `IR_VERSION`，满足 `requires_python`），并对每个被跳过的更新但不兼容的版本记录一条带原因的 WARNING。预发布版本（`0.5.0-rc.1`）只在没有可安装的稳定版本时才安装，因此索引里的一个预发布版本不会升级所有网关。wheel 会被下载（有大小上限），其 sha256 按条目校验，再由 core 的标准库安装器放入扩展目录。`requires_extensions` 里列出但尚未安装的扩展会写在该服务方的备注里，不会代为安装。
 
-**core 优先，按 shim 判定。** core 已注册的 shim 名称不会从源加载，日志会写明源、服务方与
-被忽略的名称；该服务方的其他 shim 照常安装（所有 shim 都已由 core 注册的服务方会被跳过）。
-`promoted_to: core@X` 从将要安装的记录中读取，因此之后不带该字段的版本会撤销晋升。只有当
-运行中的 core 达到 `X` 或更高版本 —— `X` 的开发版或预发布版（`0.14.0.dev35`）早于 `X` ——
-且 core 确实注册了该记录的 shim 时，该声明才生效；声明已到期但不成立时会记录日志，服务方照常
-安装。manifest 安装先于 `paths` 加载，因此本地目录仍会覆盖它。
+已安装的版本会一直保留，直到出现更新的*可安装*版本；重新读取索引从不降级，索引不再列出的已安装版本也会保留，并记录一条 WARNING。索引在 `remote_ttl` 内复用；**重新拉取**会立即重读。源不可达时使用缓存的索引与上一次成功的安装，摘要不符则永不安装（上一个版本保留，标为 stale）。缓存的索引不会被更旧的索引替换：网关比较 `generated_at`，保留缓存副本，把源标记为 `stale` 并在原因里写出两个值，之后每次应用都重新拉取，直到拿到至少同样新的索引。带 `fallback` 的 URL 源在第一个 URL 返回较旧副本、或缺少选择器期望的扩展时，会再请求另一个 URL 一次。
 
-**已移除的键。** 0.14.x 的 `shims.presets`、`shims.include`、`shims.exclude` 与 `shims.remotes` 已在 0.15.0 移除；见[已移除的键](#retired-keys)。
+**core 按 shim 优先。** core 已注册的 shim 名称不会从源加载，日志会写出源、服务方和被忽略的名称；该服务方的其他 shim 照常安装。所有 shim 都被其他持有者占用的扩展会在下载之前就被跳过，状态里会写明是谁持有这些名称。
 
-**显示字段。** 发布记录可以带 `label`（1–80 个字符，不含控制字符和 `<`/`>`）与 `logo`（不超过 512 个字符的 `https://` URL），由来源的构建脚本从服务方根目录的 `provider.yaml`（`group_label`、`logo`）读取。网关从它会安装的那条记录（固定版本时为固定的那条）读取它们，因此尚未安装的服务方也能显示名称和图标；核心不再保留副本。发布方的校验拒绝无效值；网关只丢弃无效字段并记录 WARNING，保留该记录。旧版网关会忽略这两个键。
+**展示字段。** 索引条目携带 `name` 与 `logo`，网关从它将要安装的条目（有固定版本时取固定的那条）读取，因此未安装的服务方也能以名称和标志展示；core 不保存副本。
 
-**一条坏记录不会拖垮整个源。** 网关逐条读取已发布的 manifest。顶层无效——不是对象、未知的
-`manifest_version`、缺少必需键、`vendors` 不是对象——会让整个源失败（使用缓存的 manifest；
-冷缓存时则什么也没有）。无效的提供方条目或发布记录会被跳过，并记录一条 WARNING，写明提供方、
-版本和 JSON 路径形式的原因，manifest 的其余部分照常使用，因此新版生产方写出的一条记录不会让
-免费层失去其他提供方；选择只看到有效记录。记录中的 shim 名必须属于该提供方：提供方键本身（裸名
-`xai`、`qwen`、`moonshot`、`zhipu`）、`<vendor>--<name>`，或 `<vendor>_<lane>--<name>`（`alcf`
-下的 `alcf_sophia--chat_completions`）；带其他提供方前缀的名字会让该记录无效；lane 前缀本身是同一 manifest 中另一个提供方键时同样无效（`openai_chatgpt` 也是该 manifest 的提供方时，`openai` 不得发布 `openai_chatgpt--x`）。被选中的提供方若所有记录都无效，会报告为
-*no valid release: <第一条原因>*；若它已有一个可用的安装，则保留该安装并以同一原因标记为
-stale——记录变坏绝不会卸载一个正常工作的提供方。
+**无效的索引会使其源失败。** 不是第 1 版对象、含有非法扩展 id 或畸形条目的索引会被拒绝，并给出点明问题的消息。此时使用缓存的索引，缓存为空则什么也不装。manifest 中的 shim 名称必须属于其扩展：id 本身（裸名 `xai`、`qwen`、`moonshot`、`zhipu`）、`<id>--<name>`，或 `<id>_<lane>--<name>`（`alcf` 下的 `alcf_sophia--chat_completions`）。
 
-**离开 core 的提供方会被自动安装。** 当配置引用了已离开 core 的提供方的 shim 或额度探测
-（[迁移到 0.14](migrating-to-0.14.md#moved-to-contrib)）时，网关会把 `contrib:<vendor>` 加入这里的
-选择，有无 `shims` 段都一样。只有当配置没有声明 `shims.sources` 时，才会同时加入 `contrib`
-源。显式的 `sources` 列表是运维对拉取来源的选择（镜像，或不允许外网），因此只加入选择器：
-manifest 自称 `contrib` 的已声明源（即镜像）仍能提供该提供方；没有任何已声明源提供它时，
-启动 WARNING 会指出它发布在 `contrib`。
+**索引点名自己的源。** 索引的 `source` 头与它被获取时所用的 catalog id 不同时会被拒绝。该头只是索引自己的声明，不能证明发布者是谁。
+
+**已迁出 core 的服务方会被自动安装。** 配置里引用了已离开 core 的服务方的 shim 或额度探测（[迁移到 0.14](migrating-to-0.14.md#moved-to-contrib)）时，网关会把 `contrib:<vendor>` 加入这次选择，无论有没有 `shims` 段。只有当配置没有声明 `shims.sources` 时才会一并加入 `contrib` 源。显式的 `sources` 列表是运维人员对获取位置的选择（镜像，或完全不出网），所以只加选择器：自称 `contrib` 的已声明源（即镜像）仍能提供该服务方；没有任何已声明源提供它时，启动 WARNING 会指出它发布在 `contrib`。
 
 哪些服务方放在核心、哪些放在源，以及服务方如何在两处之间迁移，见 [Shim 归属与成熟度](shim-placement.md)。
 
 #### 添加源 { #adding-a-source }
 
-源是任何以 `llm_rosetta.contracts.shim_manifest` 格式发布 manifest 的仓库：`dist/manifest.json`，每个服务方的归档放在其记录给出的相对路径上。`shims.sources` 接受三种写法：
+源是任何发布扩展索引的仓库：`index.json`，每个扩展版本的 wheel 放在其条目给出的 `url` 上（绝对地址，或相对索引的地址）。`shims.sources` 接受三种写法：
 
 ```jsonc
 "shims": {
   "sources": [
     "contrib",                                              // 目录 id
-    "https://shims.example.org/dist/manifest.json",         // manifest URL
+    "https://shims.example.org/index.json",                 // 索引 URL
     {                                                       // 带选项的 URL
-      "url": "https://cdn.example.org/acme@dist/manifest.json",
-      "fallback": "https://raw.example.org/acme/dist/manifest.json",
+      "url": "https://cdn.example.org/acme/index.json",
+      "fallback": "https://raw.example.org/acme/index.json",
       "token_env": "ACME_SHIMS_TOKEN"
     }
   ],
@@ -592,10 +485,10 @@ manifest 自称 `contrib` 的已声明源（即镜像）仍能提供该提供方
 }
 ```
 
-- 目录 id（`contrib`、`argonne`）展开为该仓库 `dist` 分支的 jsDelivr URL，以 `raw.githubusercontent.com` 作为备用地址。
-- URL 必须是 HTTPS。归档相对于 manifest 所在目录解析，先用提供 manifest 的那个 URL，再用另一个。
+- 目录 id（`contrib`、`argonne`）展开为 `Oaklight/llm-rosetta-ext-contrib` 或 `Oaklight/llm-rosetta-ext-argonne` 的 `releases/latest/download/index.json`；它没有第二个 URL。
+- URL 必须是 HTTPS。相对的 wheel `url` 相对于索引所在目录解析。
 - `token_env` 指定一个环境变量，其值作为 bearer token 发送，且只发给主 URL 的源站。
-- URL 源的选择器前缀是 manifest 自己的 `source` 字段（上例中是 `acme`），不是 URL。
+- URL 源的选择器前缀是索引自己的 `source` 字段（上例中是 `acme`），不是 URL。
 - 声明 `sources` 会替换默认值。要继续读取 `contrib` 和 `argonne`，需要把它们也列上。
 
 `install` 条目对所有源使用同一种语法：
@@ -613,7 +506,7 @@ manifest 自称 `contrib` 的已声明源（即镜像）仍能提供该提供方
 
 标签由源自由定义。两个精选源使用 `tier:free`、`tier:subscription`、`auth:oauth`、`auth:device`、`auth:account`、`auth:token-exchange`、`org:argonne`、`access:institutional` 和 `network:ssh-tunnel`。适配模块页的服务方卡片列出每个服务方的标签。
 
-源相当于以发布者的信任级别执行代码：已安装的服务方可以带 `auth.py`、`quota.py` 和 `transforms.py`，它们在网关进程内运行。只添加你信任的源。
+源相当于以发布者的信任级别执行代码：已安装的扩展可以带 `auth.py`、`quota.py`、`transforms.py` 和 transport，它们在网关进程内运行。只添加你信任的源。
 
 #### 在管理面板中管理源 { #panel }
 
@@ -623,9 +516,9 @@ manifest 自称 `contrib` 的已声明源（即镜像）仍能提供该提供方
 
 - 来源、已安装版本、可安装的更新版本，以及最新发布版本（当前核心无法运行时附原因）；
 - 已安装版本的 `requires` 是否与当前核心匹配；
-- 成熟度及其达到日期、最近一次一致性测试结果，以及 `promoted_to`（如有）；
+- 成熟度及其达到日期，以及最近一次一致性测试结果；
 - 标签，以及该版本注册的 shim，每个都标明是否已安装；
-- 选中该服务方的 `install` 条目、选中的服务方被跳过的原因（*not in the manifest*、*已提供（由核心或已安装插件）…*、*promoted to …*），以及先提供同一服务方的源。
+- 选中该服务方的 `install` 条目、选中的服务方被跳过的原因（*not in the manifest*、*已提供（由核心或已安装插件）…* 等），以及先提供同一服务方的源。
 
 **安装**把 `<source>:<vendor>` 加入 `shims.install` 并重载，从而安装该服务方。如果声明的 `shims.sources` 没有列出该源，也会把该源写进去。没有 `sources` 键的配置会连同默认源一起写出，这样保存后的文件列出它读取的每个源，不依赖内置的默认列表。
 
@@ -635,12 +528,12 @@ manifest 自称 `contrib` 的已声明源（即镜像）仍能提供该提供方
 
 **固定此版本** 写入 `<source>:<vendor>@<已安装版本>`；已固定的服务方上，**更新到 X** 把固定版本移到最新的可安装版本，**跟随最新版本** 取消固定。新的固定版本替换该服务方之前的固定条目。卡片上每个已加载的 shim 都有自己的启用开关（`shims.disabled`）。
 
-**适配模块 → 来源 → 清单来源**同时编辑这两个键。每个源有一个区块，含“全部服务方”（`<source>:*`）、每个标签和每个服务方的复选框。区块下方的输入框用于添加目录 id 或 manifest URL；*移除来源*会删掉该源以及带有其 id 前缀的条目。新的 URL 源在第一次保存后才会读取。修改在点击**保存**之前只是草稿；保存时通过配置保存路径（在配置锁内）写入 `shims.sources` 和 `shims.install`，并重载来源。只重建被编辑的源带前缀的条目；其他条目（包括重复项）保持原样。不带前缀的条目（`opendesign`、`tag:tier:free`）读取所有源，所以按原样列出；请在配置文件中修改它。来源列表只要与声明的列表不同就会写入，因此只是隐含默认源的配置会把默认源写出。**重新读取清单**会重新拉取每个 manifest。该区块下方的*本地目录*字段编辑 `shims.paths`。
+**适配模块 → 来源 → 清单来源**同时编辑这两个键。每个源有一个区块，含“全部服务方”（`<source>:*`）、每个标签和每个服务方的复选框。区块下方的输入框用于添加目录 id 或索引 URL；*移除来源*会删掉该源以及带有其 id 前缀的条目。新的 URL 源在第一次保存后才会读取。修改在点击**保存**之前只是草稿；保存时通过配置保存路径（在配置锁内）写入 `shims.sources` 和 `shims.install`，并重载来源。只重建被编辑的源带前缀的条目；其他条目（包括重复项）保持原样。不带前缀的条目（`opendesign`、`tag:tier:free`）读取所有源，所以按原样列出；请在配置文件中修改它。来源列表只要与声明的列表不同就会写入，因此只是隐含默认源的配置会把默认源写出。**重新读取清单**会重新拉取每个索引。
 
-在面板中保存会把配置文件重写为普通 JSON，注释不会保留。被替换的文件以 `<config>.prev` 保存在同一目录：这是上一次网关写入之前的文件，只保留一份，每次保存都会替换，新建文件时不写。网关从不写 `<config>.bak`，那个名字属于 `llm-rosetta-migrate --write`（迁移前的原始文件）以及你自己做的备份。编辑器在区块下方会提示这一点。
+在面板中保存会把配置文件重写为普通 JSON，注释不会保留。被替换的文件以 `<config>.prev` 保存在同一目录：这是上一次网关写入之前的文件，只保留一份，每次保存都会替换，新建文件时不写。网关从不写 `<config>.bak`，那个名字属于 `llm-rosetta gateway migrate --write`（迁移前的原始文件）以及你自己做的备份。编辑器在区块下方会提示这一点。
 #### 已移除的键 { #retired-keys }
 
-0.15.0 移除了 0.14.x 的安装路径。网关只读取 `sources`、`install`、`paths`、`disabled`、`cache_dir`、
+0.15.0 移除了 0.14.x 的安装路径。网关只读取 `sources`、`install`、`disabled`、`cache_dir`、
 `remote_ttl` 与 `strict`，别的都不读。下列键在**加载配置时即被拒绝**，错误为
 `config: 'shims.<key>' was removed in 0.15.0: <建议>`。一条错误会列出配置段里所有已移除的键；
 值为空（`null`、`[]`、`{}`）的键不算声明，会被接受：
@@ -650,19 +543,20 @@ manifest 自称 `contrib` 的已声明源（即镜像）仍能提供该提供方
 | `shims.presets` | `shims.install` 条目：`alcf` → `argonne:alcf`、`argo` → `argonne:argo`、`asksage` → `argonne:asksage`、`free` → `contrib:tag:tier:free`、`opendesign` → `contrib:opendesign` |
 | `shims.include` | `shims.install` 中显式的 `<source>:<vendor>` 条目；保留的服务方里要关的单个 shim 用 `shims.disabled` |
 | `shims.exclude` | `shims.install` 中的 `!<source>:<vendor>` 条目；单个 shim 用 `shims.disabled` |
-| `shims.remotes` | 没有对应写法：显式归档 URL（`ref`、`sha256`、`mirror`、`path`、`token_env`、`refresh`）在 manifest 中没有等价物。请发布一个 manifest 源并写进 `shims.sources`，或让 `shims.paths` 指向本地副本 |
+| `shims.remotes` | 没有对应写法：显式归档 URL（`ref`、`sha256`、`mirror`、`path`、`token_env`、`refresh`）在索引中没有等价物。请发布一个扩展索引并写进 `shims.sources`，或把扩展文件夹安装到扩展目录里 |
+| `shims.paths` | 没有对应写法：本地 shim 目录不再是源，其中的 `shims.yaml` 也不再被读取。请把目录变成[扩展文件夹](extensions.md)（`llm-rosetta ext new`，再把目录树移进去）并安装，或通过索引发布 |
 
-运行 `llm-rosetta-migrate --config config.jsonc`（试运行）再加 `--write`：每个预设变为其选择器；
+运行 `llm-rosetta gateway migrate --config config.jsonc`（试运行）再加 `--write`：每个预设变为其选择器；
 `include` 变为每个保留服务方一条 `<source>:<vendor>`；`exclude` 变为每个被丢弃服务方一条
 `!<source>:<vendor>`；从保留服务方中丢掉的单个 shim 进入 `shims.disabled`。被改写的键之外的注释保持不变。
 只有当没有任何条目按 id 或 catalog manifest URL 点名某个源时，才会把它加入已声明的 `shims.sources`；未知 URL
-可能是镜像，所以工具只报告它。`remotes` 条目无法改写：工具会报告它并以退出码 1 结束，交给人决定。
+可能是镜像，所以工具只报告它。`remotes` 或 `paths` 条目无法改写：工具会报告它并以退出码 1 结束，交给人决定。
 
 内置 shim 的计划移除机制（公告、`make check-shim-removals` 与 `shim-removal-check` CI 任务）同样已在 0.15.0
 移除；服务方离开 core 走[Shim 归属与成熟度](shim-placement.md)描述的迁移。
 
 !!! warning
-    声明的源可能携带在加载时被执行的 `transforms.py` —— 与安装插件包是同一信任级别。
+    已安装的扩展是加载时就会运行的代码，信任级别等同于发布它的仓库。
     请只添加你信任的源。
 
 ## 内置 Shim
@@ -707,13 +601,15 @@ argonne 源安装 —— 参见[独立 Shim 包](#standalone-shim-packages)。
 
 有五套 shim 维护在各自的仓库中，而不在核心包内：
 
-| 包 | Shim 名称 | 仓库 |
-|----|----------|------|
-| ALCF | `alcf_metis--chat_completions`、`alcf_minerva--chat_completions`、`alcf_sophia--chat_completions` | [llm-rosetta-shim-alcf](https://github.com/Oaklight/llm-rosetta-shim-alcf) |
-| Argo | `argo--chat_completions`、`argo--messages`、`argo--open_responses` | [llm-rosetta-shim-argonne](https://github.com/Oaklight/llm-rosetta-shim-argonne)（原 `-argo`） |
-| AskSage | `asksage--chat_completions`、`asksage--messages`、`asksage--open_responses`、`asksage--google_generate` | [llm-rosetta-shim-asksage](https://github.com/Oaklight/llm-rosetta-shim-asksage) |
-| Open Design | `opendesign--chat_completions`、`opendesign--open_responses`、`opendesign--messages` | [llm-rosetta-shim-opendesign](https://github.com/Oaklight/llm-rosetta-shim-opendesign) |
-| 免费端点 | `kilo_free--chat_completions`、`llm7--chat_completions`、`opencode_zen_free--chat_completions`、`ovhcloud--chat_completions` | [llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib)（原 `-free`） |
+| 包 | Shim 名称 | 扩展仓库 |
+|----|----------|----------|
+| ALCF | `alcf_metis--chat_completions`、`alcf_minerva--chat_completions`、`alcf_sophia--chat_completions` | [llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne) |
+| Argo | `argo--chat_completions`、`argo--messages`、`argo--open_responses` | [llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne) |
+| AskSage | `asksage--chat_completions`、`asksage--messages`、`asksage--open_responses`、`asksage--google_generate`、`asksage--embeddings` | [llm-rosetta-ext-argonne](https://github.com/Oaklight/llm-rosetta-ext-argonne) |
+| Open Design | `opendesign--chat_completions`、`opendesign--open_responses`、`opendesign--messages` | [llm-rosetta-ext-contrib](https://github.com/Oaklight/llm-rosetta-ext-contrib) |
+| 免费端点 | `kilo_free--chat_completions`、`llm7--chat_completions`、`opencode_zen_free--chat_completions`、`ovhcloud--chat_completions` | [llm-rosetta-ext-contrib](https://github.com/Oaklight/llm-rosetta-ext-contrib) |
+
+这两个仓库在 0.14 系列早期名为 `llm-rosetta-shim-argonne` 和 `llm-rosetta-shim-contrib`；GitHub 会重定向旧名称，配置里写旧名称仍能解析。
 
 ALCF 与 AskSage 是在 0.14.0 开发周期中引入的，从未出现在任何稳定版的内置集合中；Argo 则自
 v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心。OpenCode 免费通道在 0.14 之后
@@ -721,7 +617,7 @@ v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心�
 [OpenCode](providers/opencode.md#public-free-lane)。独立包注册相同的规范 shim
 名称，因此提供方的 `shim` 值无需改动 —— 新增的只是源声明。
 
-**在卡片上安装服务方。** **网关 → Shims → 可安装** 按 manifest 源分组，每个源发布的服务方各有一张卡片，
+**在卡片上安装服务方。** **网关 → Shims → 可安装** 按源分组，每个源发布的服务方各有一张卡片，
 带服务方的成熟度、版本与标签（见[在管理面板中管理源](#panel)）。**安装**会把 `<source>:<vendor>` 加入
 `shims.install`。手工声明各个包：
 
@@ -733,18 +629,18 @@ v0.6.3 起一直作为内置 shim 发布。三者均已在 0.14.0 离开核心�
 | 免费端点 | `contrib:tag:tier:free` |
 | Open Design | `contrib:opendesign` |
 
-**更新。** 已安装的服务方只有在其 manifest 列出本 core 能运行的更新版本时才会前进。服务方卡片写出已安装版本与最新
-的可安装版本；已固定的服务方用 **更新到 X**，或重新读取 manifest 即可应用。更新检查只看 manifest：网关把每个
-已安装服务方与其源的 manifest 比较，并在该服务方的行上给出结论。
+**更新。** 已安装的服务方只有在其索引列出本 core 能运行的更新版本时才会前进。服务方卡片写出已安装版本与最新
+的可安装版本；已固定的服务方用 **更新到 X**，或重新读取索引即可应用。在 shell 里，`llm-rosetta ext update` 会为每个扩展安装最新的兼容版本。网关把每个
+已安装服务方与其源的索引比较，并在该服务方的行上给出结论。
 
 **CI 让源列表与已发布的仓库同步。** `scripts/dev/check_shim_catalog.py` 列出该账号发布的
-`llm-rosetta-shim-*` 仓库，与网关已知的 manifest 源（`SHIM_SOURCES`）对比，并在缺少某个仓库或它已迁移时
+`llm-rosetta-ext-*` 仓库（`llm-rosetta-shim-*` 是已知的旧名称），与网关已知的源（`SHIM_SOURCES`）对比，并在缺少某个仓库或它已迁移时
 打印可直接粘贴的条目。它随每次推送在 `shim-catalog` CI 任务中运行，发现漂移即以非零状态退出。
 
 旧拼写**不再**解析到 shim：`argo--openai_chat`、`argo--anthropic` 和
 `argo--openai_responses` 是内置 shim 的别名，独立包只注册规范名称。仍写旧值的配置会在加载时
 以 retired-names 错误失败，错误信息写出规范 shim 名称、需要声明的 `shims.install` 项，以及
-改写配置的 `llm-rosetta-migrate` 命令；参见 [迁移到 0.14](migrating-to-0.14.md#retired-names)。
+改写配置的 `llm-rosetta gateway migrate` 命令；参见 [迁移到 0.14](migrating-to-0.14.md#retired-names)。
 
 ## 推理配置 { #reasoning-configuration }
 
@@ -877,7 +773,7 @@ Responses 格式通道，为拒绝 temperature 的 GPT/o 系列模型按模型�
 ```
 
 !!! note
-    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。三个 Argo shim 位于独立的 [`llm-rosetta-shim-argonne`](https://github.com/Oaklight/llm-rosetta-shim-argonne) 源中（原 `llm-rosetta-shim-argo`） —— 声明 `"shims": {"install": ["argonne:argo"]}`，配置中的名称即可继续使用。**网关 → Shims → 可安装** 已将该包作为卡片提供。
+    默认 URL（`https://apps.inside.anl.gov/argoapi/`）仅在 ANL 内网可达。三个 Argo shim 位于独立的 [`llm-rosetta-ext-argonne`](https://github.com/Oaklight/llm-rosetta-ext-argonne) 源中 —— 声明 `"shims": {"install": ["argonne:argo"]}`，配置中的名称即可继续使用。**网关 → Shims → 可安装** 已将该包作为卡片提供。
 
 ## 能力标志
 
@@ -1084,7 +980,7 @@ register_shim(my_shim)
 
 要向内置注册表添加新提供方：
 
-1. 把叶子放在 `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<type>/provider.yaml`，其中 `<type>` 是格式所属的模型类型（`llm`、`embeddings`、`rerank`、`decisions`）。只有该类型下存在第二条 lane 时才在其下再加 `<format>/` 层，因此同一服务方的 `chat_completions` 与 `messages` 并排放在 `llm/` 里；有多个具名实例的服务方在类型之上再加 lane 目录（`<vendor>/<lane>/<type>/`）。`llm-rosetta-gateway shims new` 写出的就是这个形状，`shims check` 报告偏离它的树。
+1. 把叶子放在 `packages/llm-rosetta/src/llm_rosetta/shims/builtin/<vendor>/<type>/provider.yaml`，其中 `<type>` 是格式所属的模型类型（`llm`、`embeddings`、`rerank`、`decisions`）。只有该类型下存在第二条 lane 时才在其下再加 `<format>/` 层，因此同一服务方的 `chat_completions` 与 `messages` 并排放在 `llm/` 里；有多个具名实例的服务方在类型之上再加 lane 目录（`<vendor>/<lane>/<type>/`）。`scripts/dev/new_shim.py` 为内置树写出这个形状，`llm-rosetta ext new` 与 `ext check` 对扩展做同样的事。
 2. 若该服务方的叶子共用连接信息（通常就是凭据），添加不带 `name` 的 `<vendor>/provider.yaml`：它是服务方清单，每个叶子都继承它。
 
     ```yaml
@@ -1114,7 +1010,7 @@ register_shim(my_shim)
     pre_ir_transforms = ()
     ```
 
-提供方在导入时自动发现并注册。
+提供方在导入时自动发现并注册。不属于 core 的 shim 应改放进扩展；见[添加扩展](../contributing/adding-an-extension.md)。
 
 ### 列出和移除 Shim
 

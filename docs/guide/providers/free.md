@@ -2,7 +2,7 @@
 
 有四家服务方提供无需账号的免费池，且都没有合同约束：模型清单、速率限制甚至端点本身
 都可能随时变更或关闭。因此它们作为独立包发布：
-[llm-rosetta-shim-free](https://github.com/Oaklight/llm-rosetta-shim-free)——
+[llm-rosetta-ext-contrib](https://github.com/Oaklight/llm-rosetta-ext-contrib)——
 某个池消失时可以在不发版的情况下撤下。
 
 | Shim 名称 | 服务方 | 默认 Base URL | 免费范围 |

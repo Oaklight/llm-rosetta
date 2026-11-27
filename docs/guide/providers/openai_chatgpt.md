@@ -19,7 +19,7 @@ Go/Plus/Pro 套餐额度，而不是 Platform API 计费。它使用与 `openai-
 |:---|:---|:---|:---|
 | `openai_chatgpt--open_responses` | `open_responses` | `https://api.openai.com/v1` | 无 —— 通过登录取得 |
 
-这里刻意没有 `api_key_env`：凭据由服务方自带的 `auth.py`（[llm-rosetta-shim-contrib](https://github.com/Oaklight/llm-rosetta-shim-contrib)
+这里刻意没有 `api_key_env`：凭据由服务方自带的 `auth.py`（[llm-rosetta-ext-contrib](https://github.com/Oaklight/llm-rosetta-ext-contrib)
 中的 `src/llm_rosetta_shim_contrib/providers/openai_chatgpt/auth.py`，与服务方清单放在一起；
 该服务方已在 [#1664](https://github.com/Oaklight/llm-rosetta/pull/1664) 中移出 core）生成。若在声明了交换却 `consumes_key=false` 的提供方旁配置 `api_key`，
 加载配置时会被拒绝 —— 两者是同一个凭据的两种来源。
@@ -69,7 +69,7 @@ PKCE verifier、state 和 nonce 都保存在该提供方的私有状态目录中
 登录需要一个浏览器和一个 loopback 监听，因此它在有浏览器的一侧完成 —— 不一定是网关主机：
 
 ```bash
-llm-rosetta-gateway credential chatgpt --out record.json
+llm-rosetta gateway credential chatgpt --out record.json
 ```
 
 该命令运行 shim 的交互式登录，并把凭据记录以 `0600` 权限写入文件。请尽快把记录交给网关

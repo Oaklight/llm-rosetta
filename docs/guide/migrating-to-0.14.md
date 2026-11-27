@@ -5,9 +5,9 @@ title: 迁移到 0.14
 # 迁移到 0.14
 
 !!! warning "0.15.0 已移除 `shims.presets`"
-    本页记录的是 0.14。其中提到的 `shims.presets`、`shims.include`、`shims.exclude` 与 `shims.remotes` 键自 0.15.0 起不再被读取，配置里带着其中任何一个都会在加载时被拒绝。请改在 `shims.install` 中声明服务方（`argonne:alcf`、`argonne:argo`、`argonne:asksage`、`contrib:tag:tier:free`、`contrib:opendesign`），并运行 `llm-rosetta-migrate --config <path>` 改写文件。见[已移除的键](shims.md#retired-keys)。
+    本页记录的是 0.14。其中提到的 `shims.presets`、`shims.include`、`shims.exclude`、`shims.remotes` 与 `shims.paths` 键自 0.15.0 起不再被读取，配置里带着其中任何一个都会在加载时被拒绝。请改在 `shims.install` 中声明服务方（`argonne:alcf`、`argonne:argo`、`argonne:asksage`、`contrib:tag:tier:free`、`contrib:opendesign`），并运行 `llm-rosetta gateway migrate --config <path>` 改写文件。见[已移除的键](shims.md#retired-keys)。
 
-0.14.0 移除了 0.13.0 为过渡保留一个版本的已弃用导入路径与类别名（epic [#919](https://github.com/Oaklight/llm-rosetta/issues/919)）。被移除的名字会以普通的 `ImportError`、`ModuleNotFoundError` 或 `AttributeError` 失败；[retired-names](#retired-names) 诊断只覆盖提供方、shim 与模型类型名称，不覆盖 Python 导入路径。本页列出已移除的内容、替代写法，以及仍然可用的部分。要改写网关配置和数据库，请使用 [`llm-rosetta-migrate`](#llm-rosetta-migrate)；[升级流程](#upgrade-recipe)给出了步骤顺序。
+0.14.0 移除了 0.13.0 为过渡保留一个版本的已弃用导入路径与类别名（epic [#919](https://github.com/Oaklight/llm-rosetta/issues/919)）。被移除的名字会以普通的 `ImportError`、`ModuleNotFoundError` 或 `AttributeError` 失败；[retired-names](#retired-names) 诊断只覆盖提供方、shim 与模型类型名称，不覆盖 Python 导入路径。本页列出已移除的内容、替代写法，以及仍然可用的部分。要改写网关配置和数据库，请使用 [`llm-rosetta gateway migrate`](#llm-rosetta-migrate)；[升级流程](#upgrade-recipe)给出了步骤顺序。
 
 截至 [已移除的 helper 模块、网关存根与 `tool_ops` 别名](#removed-shims) 的各行已针对 `origin/master`（commit `756f084169`）核对。从 [已移除的 facade](#removed-facades) 起的各行已针对 PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656) 的 head（commit `0a8c0be374`）核对：每个被移除的名字导入失败或抛出异常，每个替代写法都能导入。
 
@@ -113,10 +113,10 @@ title: 迁移到 0.14
 网关在加载配置时不再改写退役名称，因此仍写着退役名称的配置无法启动。错误信息写出文件与键名，安装了网关时以迁移命令结尾，例如：
 
 ```text
-llm-rosetta-gateway: error: config.jsonc: providers.p.type: 'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta-migrate --config <path>' (add --write to apply), see the migration guide (https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/)
+llm-rosetta-gateway: error: config.jsonc: providers.p.type: 'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta gateway migrate --config <path>' (add --write to apply), see the migration guide (https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/)
 ```
 
-`llm-rosetta-migrate` 随网关发行版提供。在只装了 core 的环境中（没有 `llm-rosetta-gateway` 的库），退役名称错误改以 `see the migration guide (<url>)` 结尾，因为那里没有该命令可运行。该句子是 `llm_rosetta.retired_names.MIGRATE_HINT`。
+`llm-rosetta gateway migrate` 随网关发行版提供。在只装了 core 的环境中（没有 `llm-rosetta-gateway` 的库），退役名称错误改以 `see the migration guide (<url>)` 结尾，因为那里没有该命令可运行。该句子是 `llm_rosetta.retired_names.MIGRATE_HINT`。
 
 进程以退出码 1 结束，不打印 traceback。在代码里，该异常是 `RetiredConfigName`（`ValueError` 的子类），消息格式为 `<配置文件>: <json 路径>: <retired-names 消息>`。
 
@@ -206,7 +206,7 @@ connection:
 
 在 PR [#1656](https://github.com/Oaklight/llm-rosetta/pull/1656) 中移除。`openai_chat`、`openai_responses`、`anthropic` 与 `google` 不再是 `STANDARD_SHAPES` 或 `ADDITIVE_CACHE_STANDARDS`（`llm_rosetta.contracts.usage`）的行。用量词汇表只列当前标准：`chat_completions`、`open_responses`、`messages`、`google_generate`。
 
-以退役标签写入的数据库行不会被误读，也不会让网关无法启动。对这样的行，`shape_for` 返回 `None`，`cache_is_additive` 返回 `False`，因此启动时的总量修复会保持该行总量为旧写入方存下的值。`backfill_total_tokens` 记录一条警告，写出这类行的数量、退役标签和命令 `llm-rosetta-migrate --db`。运行该命令即可改写标签，见[下文](#llm-rosetta-migrate)。
+以退役标签写入的数据库行不会被误读，也不会让网关无法启动。对这样的行，`shape_for` 返回 `None`，`cache_is_additive` 返回 `False`，因此启动时的总量修复会保持该行总量为旧写入方存下的值。`backfill_total_tokens` 记录一条警告，写出这类行的数量、退役标签和命令 `llm-rosetta gateway migrate --db`。运行该命令即可改写标签，见[下文](#llm-rosetta-migrate)。
 
 ## 扩展契约迁入 `llm_rosetta.contracts` {#contracts-home}
 
@@ -231,7 +231,7 @@ shim 包的 `transforms.py`、`auth.py` 与 `quota.py` 只能从 `llm_rosetta.co
 
 shim 包要和 core 一起升级。shim 包（`alcf`、`argo`、`asksage`、`free`、`opendesign`）不在 PyPI 上：网关通过 `shims.presets` 从它们的 GitHub 仓库安装（见 [shim 指南](shims.md)）。为更早的 0.14 开发版构建的副本会导入已经不存在的 `llm_rosetta.transforms` 或 `llm_rosetta.shims.auth_exchange`；加载器会跳过这个包，并记录一条 WARNING，写明缺失的模块并提示升级 shim 包，网关则在没有这些 shim 的情况下运行。升级 core 后，请在管理面板中该包的卡片上更新它，或刷新 preset。
 
-`llm-rosetta-migrate --scan`（PR [#1658](https://github.com/Oaklight/llm-rosetta/pull/1658)）把对本表中已移除路径的导入报告为 `import` 条目，并写出替代路径。只有在已安装的 core 中无法解析的路径才会被报告。`llm_rosetta.routing` 与 `llm_rosetta.capabilities` 作为转发模块仍能解析，因此扫描不报告它们，由它们的 `DeprecationWarning` 提示。要找出所有旧路径（包括转发模块）：
+`llm-rosetta gateway migrate --scan`（PR [#1658](https://github.com/Oaklight/llm-rosetta/pull/1658)）把对本表中已移除路径的导入报告为 `import` 条目，并写出替代路径。只有在已安装的 core 中无法解析的路径才会被报告。`llm_rosetta.routing` 与 `llm_rosetta.capabilities` 作为转发模块仍能解析，因此扫描不报告它们，由它们的 `DeprecationWarning` 提示。要找出所有旧路径（包括转发模块）：
 
 ```bash
 grep -rnE "llm_rosetta\.(transforms|shims\.(auth_exchange|quota_probe)|observability\.usage|routing|capabilities)\b|\b_Named(IR)?Transform\b" .
@@ -242,7 +242,7 @@ grep -rnE "llm_rosetta\.(transforms|shims\.(auth_exchange|quota_probe)|observabi
 ## 迁往 contrib 的 shim 提供方 {#moved-to-contrib}
 
 有 15 个提供方离开 core，迁入
-[contrib shim 仓库](https://github.com/Oaklight/llm-rosetta-shim-contrib)
+[contrib 扩展仓库](https://github.com/Oaklight/llm-rosetta-ext-contrib)
 （[#1660](https://github.com/Oaklight/llm-rosetta/issues/1660)）；决定谁留在 core 的规则见
 [Shim 归属](shim-placement.md)。它们的 shim 名称没有变，因此这里没有改名，也不需要修改配置：
 
@@ -268,14 +268,54 @@ siliconflow--embedding`）丢失的提供方，会以同样的措辞禁用该端
 这些提供方会自动恢复。在 `shims.strict: true` 下，这一失败与任何源失败一样会中止加载。
 
 **库。** `get_converter_for_provider("opencode--chat_completions")` 以及 shim 指向已迁移提供方的
-`ConversionPipeline` 会抛出 `ValueError`，其中写明 `llm-rosetta-shim-contrib`。不经网关使用这些
-shim 时，检出该仓库并调用 `llm_rosetta.api.load_providers_from_dir(<checkout>/providers)`。
+`ConversionPipeline` 会抛出 `ValueError`，其中写明扩展仓库 `llm-rosetta-ext-contrib`。不经网关使用这些
+shim 时，把该服务方作为扩展安装：`llm-rosetta ext install <vendor>`。`llm_rosetta` 在导入时加载已安装的扩展；之后再安装时，调用 `llm_rosetta.extensions.load_extensions()` 来拾取。
 这张表是 `llm_rosetta.retired_names.MOVED_VENDORS`。
 
-**`llm-rosetta-migrate`。** `--config` 与 `--scan` 把每个已迁移的名字报告为 `note`——`--scan`
+**`llm-rosetta gateway migrate`。** `--config` 与 `--scan` 把每个已迁移的名字报告为 `note`——`--scan`
 还会找出探测 id `openai_codex` 与 `opencode_go`，以及作为完整 `type`/`shim` 值、提供方键名或
 `install` 条目出现的裸名 `xai`、`qwen`、`zhipu`、`moonshot`——
-（"now in llm-rosetta-shim-contrib; the gateway installs it automatically"），不计入退出码。
+（“now in the contrib extension repository; the gateway installs it automatically”），不计入退出码。
+
+## 已退役的扩展路径 {#retired-extension-paths}
+
+0.14.0 用[扩展](extensions.md)取代了 0.13 的插件机制（epic [#1703](https://github.com/Oaklight/llm-rosetta/issues/1703)）。移除了什么、该怎么做：
+
+| 已移除 | 改用 |
+|---------|-------------|
+| `llm_rosetta.shim_providers` entry point 组和 `register_shims` 可调用对象 | 带 `plugin.yaml` 的扩展文件夹，以 `llm_rosetta_ext.<id>` 导入，并使用 `llm_rosetta.extensions` entry point 组。`llm-rosetta ext new <id>` 生成脚手架；`llm-rosetta ext migrate` 把旧的 shim 目录树移到目录树契约上。仍在已退役组里声明 entry point 的包不会运行；`llm-rosetta ext doctor` 与 `llm-rosetta gateway migrate` 会报告它，并指向 `ext new`。 |
+| `shims.paths` 以及目录可以携带的 `shims.yaml` | 装进扩展目录的扩展文件夹，或在 `shims.sources` 里列出的扩展索引。带有非空 `shims.paths` 的配置会在加载时被拒绝。 |
+| 脚手架的外部“包外壳”（`shims new --package`：`pyproject.toml`、entry point、CI、README） | `llm-rosetta ext new`，它写出文件夹、`plugin.yaml` 和 `pyproject.toml`。 |
+| 作为 `dist` 分支上 `manifest.json` 发布的 manifest 源（`llm_rosetta.contracts.shim_manifest`） | 扩展索引 `index.json`，每个版本一个 wheel（`llm_rosetta.contracts.extension` 以及 `llm_rosetta.api`：`load_index`、`install_from_index`）。 |
+| `llm-rosetta-gateway shims new`、`shims check`、`shims migrate` | `llm-rosetta ext new`、`ext check`、`ext migrate`；内置 shim 用 `scripts/dev/new_shim.py`。 |
+
+从配置里去掉某个源或整个 `shims` 段时，已安装的扩展仍保持已安装；选择决定的是安装什么和保持更新什么，而不是加载什么。
+
+## 命令面 {#command-surface}
+
+网关发行版只提供一个控制台脚本 `llm-rosetta-gateway`。其余命令由 `llm-rosetta` 分发器（core）运行；见 [CLI 参考](../gateway/cli.md)。
+
+| 之前 | 现在 |
+|--------|-----|
+| `llm-rosetta-usage` | `llm-rosetta gateway usage` |
+| `llm-rosetta-migrate` | `llm-rosetta gateway migrate` |
+| `llm-rosetta-gateway set-password` | `llm-rosetta gateway password`（旧写法仍被接受） |
+| `python -m llm_rosetta_gateway` | `llm-rosetta serve` 或 `llm-rosetta-gateway` |
+
+旧的顶层名称没有转发。`llm-rosetta-gateway [选项]` 仍会启动服务器，`llm-rosetta-gateway <verb>` 仍会运行网关的动词。
+
+## 0.15.0 移除 {#removed-in-0150}
+
+每个 0.13.0 转发器都会发出 `DeprecationWarning`，并写明 0.15.0 是它的移除版本。这九个模块列在 `llm_rosetta/_tiers.py`（`COMPAT`）中：
+
+- `llm_rosetta.auto_detect`（已按内容拆分；`detect_provider`、`get_converter_for_provider`、`convert`、`convert_response` 和 `ProviderType` 都可以从 `llm_rosetta` 导入）
+- `llm_rosetta.capabilities`、`llm_rosetta.routing`
+- `llm_rosetta.converters.base.context`
+- `llm_rosetta.types.ir`（及 `.extensions`），转发到 `llm_rosetta.ir.model`
+- `llm_rosetta.shims.provider_shim`（数据类的再导出）和 `llm_rosetta.shims.providers`（按名称）
+- `llm_rosetta.gateway`、`llm_rosetta.observability`（按名称）
+
+在网关一侧，非空的 `shims.presets`、`include`、`exclude`、`remotes` 或 `paths` 会被拒绝，错误中写明 “removed in 0.15.0”。
 
 ## 在代码中查找旧名字 {#find-old-names}
 
@@ -296,7 +336,7 @@ grep -rnE "converters\.(openai_chat|openai_responses|anthropic|google_genai|goog
 `llm_rosetta.retired_names.RETIRED_NAMES` 列出 31 个早先版本改过名的名字，每一行说明该名字变成了什么。这张表是错误表，不是别名表：每一行都会抛 `ValueError`，不做任何翻译，例如：
 
 ```text
-'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta-migrate --config <path>' (add --write to apply), see the migration guide (https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/)
+'openai_chat' was renamed to 'chat_completions' in 0.14 and the old spelling is no longer accepted (use 'chat_completions'); run 'llm-rosetta gateway migrate --config <path>' (add --write to apply), see the migration guide (https://llm-rosetta.readthedocs.io/en/latest/guide/migrating-to-0.14/)
 ```
 
 对于已迁入独立包的 shim，消息还会写出需要声明的 `shims.presets` 键。每条退役名称错误都以迁移命令结尾（`retired_names.MIGRATE_HINT`），网关的配置检查也一样。
@@ -353,21 +393,21 @@ grep -rnE "converters\.(openai_chat|openai_responses|anthropic|google_genai|goog
 | `embedding` | `embeddings` |
 | `decision` | `decisions` |
 
-## `llm-rosetta-migrate` {#llm-rosetta-migrate}
+## `llm-rosetta gateway migrate` {#llm-rosetta-migrate}
 
-`llm-rosetta-migrate` 是 `llm-rosetta-gateway` 发行版的控制台脚本。它改写网关配置中的退役名称，改写 `gateway.db` 中持久化的标签，并扫描源码中的退役名称。它只读取 `llm_rosetta.retired_names`，因此别名表删除后仍可使用；它从不猜测：无法映射的名称会被报告，并原样保留。
+`llm-rosetta gateway migrate` 是 `llm-rosetta-gateway` 发行版的命令（早先的 0.14 开发版把它作为控制台脚本 `llm-rosetta gateway migrate` 发布，该脚本已移除）。它改写网关配置中的退役名称，改写 `gateway.db` 中持久化的标签，并扫描源码中的退役名称。它只读取 `llm_rosetta.retired_names`，因此别名表删除后仍可使用；它从不猜测：无法映射的名称会被报告，并原样保留。
 
 ```bash
-llm-rosetta-migrate --config config.jsonc                  # 试运行：输出 diff 与报告
-llm-rosetta-migrate --config config.jsonc --write          # 先做 .bak 副本，再改写
-llm-rosetta-migrate --db /var/lib/llm-rosetta --write      # gateway.db，或其所在目录
-llm-rosetta-migrate --config config.jsonc --check          # 有待改写项时退出码为 3
-llm-rosetta-migrate --scan src/                            # 仅提示，不修改任何文件
+llm-rosetta gateway migrate --config config.jsonc                  # 试运行：输出 diff 与报告
+llm-rosetta gateway migrate --config config.jsonc --write          # 先做 .bak 副本，再改写
+llm-rosetta gateway migrate --db /var/lib/llm-rosetta --write      # gateway.db，或其所在目录
+llm-rosetta gateway migrate --config config.jsonc --check          # 有待改写项时退出码为 3
+llm-rosetta gateway migrate --scan src/                            # 仅提示，不修改任何文件
 ```
 
 `--config`、`--db` 与 `--scan` 可重复使用。三者都不给时，命令会查找网关的配置文件。
 
-**配置。** 编辑在文本层面进行：被改写名称之外的注释、键顺序与排版保持不变。它改写已退役的 `type:` 与 `shim:` 值、模型的 `type:` 与 `capabilities:` 项、`embedding_*` 与 `decision_*` 的键和段（改为复数名），并在 shim 已迁入独立包时添加 `shims.presets` 项。例如 `"type": "openai_chat"` 变为 `"type": "chat_completions"`，`"shim": "argo--openai_chat"` 变为 `"argo--chat_completions"` 并添加 `"shims": {"presets": ["argo"]}`，`embedding_providers` 变为 `embeddings_providers`。
+**配置。** 编辑在文本层面进行：被改写名称之外的注释、键顺序与排版保持不变。它改写已退役的 `type:` 与 `shim:` 值、模型的 `type:` 与 `capabilities:` 项、`embedding_*` 与 `decision_*` 的键和段（改为复数名），并在 shim 已迁入独立包时添加 `shims.install` 项。它还会把已退役的 `shims.presets`、`include`、`exclude` 键改写成 `shims.install` 选择器和 `shims.disabled`；`remotes` 或 `paths` 条目没有对应的改写，只会被报告。例如 `"type": "openai_chat"` 变为 `"type": "chat_completions"`，`"shim": "argo--openai_chat"` 变为 `"argo--chat_completions"` 并添加 `"shims": {"install": ["argonne:argo"]}`，`embedding_providers` 变为 `embeddings_providers`。
 
 **数据库。** 它改写 `request_log.source_provider`、`request_log.target_provider`、`error_dumps.source_provider` 与 `error_dumps.target_provider` 中的退役标签：退役的格式名，以及值 `embedding`（改为 `embeddings`）。它还把 `metrics.counters.by_source_provider["embedding"]` 合并进 `embeddings`。`by_target_provider` 中的 `embedding` 键只作为注记报告、不改写（`--json` 报告把注记列在 `notes` 下，与 `items` 分开），`request_log.model_type` 不变。写入在备份之后的一个事务中完成，另一个进程占用该文件时命令拒绝执行（`--force` 可覆盖）。改写是幂等的。在一份生产规模数据库的副本上（268275 行 `request_log`，775 行 `error_dumps`），334 行标记为 `embedding` 的数据在两列中都变成了 `embeddings`，行数、token 总和、未触及列的校验和以及 `integrity_check` 均未变化，第二次运行没有写入任何内容。
 
@@ -390,12 +430,12 @@ llm-rosetta-migrate --scan src/                            # 仅提示，不修�
 
 ## 升级流程 {#upgrade-recipe}
 
-1. 停止网关。`llm-rosetta-migrate --db` 会拒绝被运行中的进程占用的数据库。
+1. 停止网关。`llm-rosetta gateway migrate --db` 会拒绝被运行中的进程占用的数据库。
 2. 备份配置文件与数据目录（`gateway.db`）。`--write` 也会保留 `.bak` 副本，但自己做的备份不依赖该命令。
-3. 试运行：`llm-rosetta-migrate --config <config> --db <数据目录>`。阅读 diff 与报告。退出码 `1` 或 `2` 需要先人工处理再继续。
-4. 写入：`llm-rosetta-migrate --config <config> --db <数据目录> --write`。
+3. 试运行：`llm-rosetta gateway migrate --config <config> --db <数据目录>`。阅读 diff 与报告。退出码 `1` 或 `2` 需要先人工处理再继续。
+4. 写入：`llm-rosetta gateway migrate --config <config> --db <数据目录> --write`。
 5. 启动网关。仍含退役名称的配置会在启动时以一行 `llm-rosetta-gateway: error: ...` 终止，其中写出文件与键名。
-6. 可选：运行 `llm-rosetta-migrate --scan <你的代码>` 并阅读结果。库调用方、shim 包与脚本不会被该命令改写。
+6. 可选：运行 `llm-rosetta gateway migrate --scan <你的代码>` 并阅读结果。库调用方、shim 包与脚本不会被该命令改写。
 
 ## core 接口 {#core-surface}
 

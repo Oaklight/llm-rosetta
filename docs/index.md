@@ -42,13 +42,13 @@ hide:
 | | 工具箱 | 原始转换器 | 管线 | 网关 |
 |---|---|---|---|---|
 | **适用场景** | 转换单个 IR 值或工具 | 在自己的循环里转换单条链路 | 一次调用完成 source → IR → target | 面向任意客户端的 HTTP 代理 |
-| **入口** | `tool_ops`、`transforms`、`capabilities` | `ChatCompletionsConverter()` | `convert()` / `ConversionPipeline` | `llm-rosetta-gateway` |
+| **入口** | `tool_ops`、`contracts.transform` | `ChatCompletionsConverter()` | `convert()` / `ConversionPipeline` | `llm-rosetta-gateway` |
 | **调用提供方** | 你 | 你 | 你 | 网关 |
 | **路由、密钥、管理面板** | — | — | — | 内置 |
 
 三种粒度共用同一套 IR 和转换器，工具箱也基于同一套 IR。从需要的层级开始，向上迁移时不用重写翻译逻辑。
 `tool_ops` 把单个工具定义、选择、调用或结果在提供方方言与 IR 之间转换；
-`transforms` 和 `capabilities` 只执行一次字段变换或能力处理，不需要创建转换器。管线会解析两侧的 shim，因此目标 shim 的默认值可能让输出与原始转换器不同——Anthropic 默认的 `cache_control` 断点就是一例。
+`llm_rosetta.contracts.transform` 只执行一次 body 或 IR 变换，不需要创建转换器。管线会解析两侧的 shim，因此目标 shim 的默认值可能让输出与原始转换器不同——Anthropic 默认的 `cache_control` 断点就是一例。
 
 Python 3.11+ 没有第三方运行时依赖；3.10 上也只需要 `typing_extensions`，即标准库
 `typing` 模块的向后移植包（backport）。对多提供方网关来说这并不常见，也意味着同一条

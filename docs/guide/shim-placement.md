@@ -4,7 +4,7 @@ title: Shim 归属与成熟度
 
 # Shim 归属与成熟度 { #shim-placement-and-maturity }
 
-provider shim 放在两处之一：**核心**（随 `llm-rosetta` 发行包一起发布），或者一个发布带版本 manifest、由网关从中安装的**源仓库**（见 [Manifest 源](shims.md#manifest-sources)）。本页说明哪些 shim 放在哪里、shim 如何在两处之间迁移，以及核心与源提供同名 shim 时网关怎么做。规则来自 epic [#1660](https://github.com/Oaklight/llm-rosetta/issues/1660)。
+provider shim 放在两处之一：**核心**（随 `llm-rosetta` 发行包一起发布），或者一个发布带版本扩展索引、由网关从中安装的**源仓库**（见 [Manifest 源](shims.md#manifest-sources)）。本页说明哪些 shim 放在哪里、shim 如何在两处之间迁移，以及核心与源提供同名 shim 时网关怎么做。规则来自 epic [#1660](https://github.com/Oaklight/llm-rosetta/issues/1660)。
 
 ## 归属规则 { #placement-rule }
 
@@ -32,7 +32,7 @@ provider shim 放在两处之一：**核心**（随 `llm-rosetta` 发行包一�
 | `stable` | contrib | 满足升入核心的条件；是核心的候选 |
 | core | 核心 | 随核心发布，遵守核心的兼容性规则 |
 
-源在 manifest 中按服务方记录阶段（`maturity`、`since` 和最近一次 `conformance` 结果）。管理面板在每张服务方卡片上显示它（**适配模块 → 可安装**）。
+源在索引中按服务方记录阶段（`maturity`、`since` 和最近一次 `conformance` 结果）。管理面板在每张服务方卡片上显示它（**适配模块 → 可安装**）。
 
 ## 升入核心 { #promotion }
 
@@ -46,7 +46,7 @@ provider shim 放在两处之一：**核心**（随 `llm-rosetta` 发行包一�
 6. 有任意网关上的真实使用证据。这一条是参考，不是必需。
 7. 升入核心经过 PR 评审。
 
-服务方进入核心后，它的 manifest 记录写上 `promoted_to: core@X.Y.Z`。运行核心 `X.Y.Z` 或更高版本的网关不再从源安装该服务方（见[优先级](#precedence)）。
+服务方进入核心后，核心会注册它的 shim 名称。运行该核心的网关不再从源加载这些名称：按 shim 判定，核心优先（见[优先级](#precedence)）。
 
 ## 降回 contrib { #demotion }
 
@@ -67,9 +67,7 @@ shim 名称（provider 条目里的 `type: <vendor>--<format>`）在核心和源
 当核心和源提供同一个 shim 名称时：
 
 - **按 shim 判定，核心优先。** 网关不从源加载该名称，并在日志里写明源、服务方和被忽略的名称。该服务方的其他 shim 照常安装。所有 shim 都是核心或已安装插件名称的服务方会被跳过，其卡片显示*已提供（由核心或已安装插件）…*。
-- **`promoted_to` 从将要安装的那个版本记录中读取。** 只有运行中的核心不低于该版本（该版本的 dev 或预发布版本算作低于它），**并且**核心注册了记录中的 shim，这一声明才生效。到期但不成立的声明会记入日志，服务方照常从源安装。之后不带该声明的版本会撤销升入。
 - **两个源发布同一服务方时，`shims.sources` 中排在前面的源优先**；另一份会记入日志并被忽略。
-- **显式来源覆盖 manifest 安装。** manifest 安装在 `shims.paths` 之前加载。
 
 ## 现有服务方的归属 { #placement-today }
 

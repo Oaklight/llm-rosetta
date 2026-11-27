@@ -183,6 +183,23 @@ finish = ctx.pop_pending_finish()  # 返回 dict 并清空缓冲
 
 此模式在转换器内部使用，将 usage 合并到 finish 事件中，避免跨提供方转换时产生独立的 `UsageEvent` + `FinishEvent` 对导致输出流膨胀。
 
+## 整条流的用量 { #usage-across-a-stream }
+
+同一条流里的多个 `UsageEvent` 是**增量**。消费方把它们相加：数值字段（包括 `total_tokens` 和嵌套的明细字典）求和，非数值字段取最新值，事件没有给出的字段不产生任何贡献。写入端通过 `buffer_usage` 累加，网关的用量记录也累加，`fold_response_events` 同样累加。
+
+有些线路格式报告的是累计快照，它们的读取端会输出相对上一次报告的差值，这样事件之和就是整条流的总量。实测如下：
+
+| 线路格式 | 发送内容 | 读取端 |
+|------|---------------|--------|
+| Google `generateContent` | 每个数据块都重复 `usageMetadata` | 输出增加的部分 |
+| Anthropic Messages | `message_delta` 在到目前为止的输出旁边重复 `message_start` 的输入（24/1，然后 24/83） | 输出增加的部分 |
+| OpenAI Chat Completions | 只在最后一个数据块发送一次 `usage` | 把每次重复的 `usage` 都当作累计快照 |
+| Google Interactions | 只在 `interaction.completed` 上有用量 | 无需改动 |
+
+运行中的报告保存在 `StreamContext` 里，因此不带上下文读取的流不是增量安全的；包内的每个调用方都会传入上下文。第一次快照之后，每个数值字段都是一个高水位：只有超过已见最大值的上升才计入，流中第一次出现下降时会记录一次日志。没有增加任何内容的快照不会产生事件。
+
+网关不转换、原样转发的同格式流也按同样方式记录：用量对象从方言存放它的位置（`usage`、`message.usage`、`response.usage`、`interaction.usage`）中找到，Interactions 的 `total_input_tokens` / `total_output_tokens` 字段名也会被读取，每个快照逐字段合并，所以 Messages 的 `message_start` 输入在只带输出的 `message_delta` 之后依然保留。
+
 ## 跨提供方流式转换
 
 完整示例：将 OpenAI Chat SSE → IR → Anthropic SSE：
