@@ -299,6 +299,7 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
         "cli",
         "contracts",
         "converters",
+        "devtools",
         "extensions",
         "fidelity",
         "formats",
