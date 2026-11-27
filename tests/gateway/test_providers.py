@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from llm_rosetta_gateway.routing.eligibility import provider_eligibility
 from llm_rosetta_gateway.config.providers import build_provider_info
 from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
 from _moved_vendors import load_providers_with_moved
@@ -107,7 +108,7 @@ class TestKeylessProvider:
         info = build_provider_info("chat_completions", {}, shim_name=keyless_shim)
 
         assert info.auth_headers() == {}
-        assert info.ready is True
+        assert provider_eligibility(info).eligible is True
         assert info.keyless is True
         assert info.base_url == "https://keyless.example.com/v1"
 
@@ -501,7 +502,7 @@ class TestShimAuthExchange:
         assert info.credential_source == "auth_exchange"
         assert info.token_refresh_interval == 1800
         assert info.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
-        assert info.ready is False
+        assert provider_eligibility(info).eligible is False
 
     def test_the_providers_own_command_wins(self, shims):
         name, *_ = shims
@@ -681,7 +682,7 @@ class TestVendorManagedExchange:
 
         info = build_provider_info("chat_completions", {}, shim_name=name)
 
-        assert info.ready is True
+        assert provider_eligibility(info).eligible is True
 
     def test_a_non_keyless_shim_is_refused(self, make_shim):
         name = make_shim("__test_vendor_managed_paid__", keyless=False)

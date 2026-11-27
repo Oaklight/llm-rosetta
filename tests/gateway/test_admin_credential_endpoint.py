@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 
 
+from llm_rosetta_gateway.routing.eligibility import provider_eligibility
 from llm_rosetta_gateway.admin.routes.credential import (
     begin_provider_login,
     complete_provider_login,
@@ -537,7 +538,7 @@ class TestPut:
         assert exchange.installed == [RECORD]
         # The key ring now holds what the exchange minted, without a restart.
         assert pinfo.key_ring.next() == "minted-token"
-        assert pinfo.ready is True
+        assert provider_eligibility(pinfo).eligible is True
 
     def test_the_record_is_passed_through_untouched(self):
         """The exchange owns the shape; the gateway is a courier."""
@@ -609,7 +610,7 @@ class TestPut:
         assert response.status_code == 200
         assert exchange.installed == [RECORD]
         assert pinfo.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
-        assert pinfo.ready is False
+        assert provider_eligibility(pinfo).eligible is False
         # The record is in; only the minting failed, and the caller is told.
         payload = json.loads(response.body)
         assert payload["installed"] is True
@@ -681,7 +682,7 @@ class TestDelete:
         assert payload == {"provider": "chatgpt", "removed": True, "revoked": True}
         assert exchange.revoked == 1
         assert pinfo.key_ring.contains_only(TOKEN_PENDING_SENTINEL)
-        assert pinfo.ready is False
+        assert provider_eligibility(pinfo).eligible is False
 
     def test_a_provider_with_no_exchange_is_refused(self):
         response = _call(delete_provider_credential, _Request(_config(key="sk-static")))

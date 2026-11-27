@@ -42,14 +42,14 @@ def _config(providers: dict[str, object], deferred: object | None = None):
 
 
 def _unready(name: str) -> SimpleNamespace:
-    return SimpleNamespace(name=name, ready=False)
+    return SimpleNamespace(name=name, credentials_pending=True)
 
 
 def _blocked(name: str, identity: str, seconds: int) -> SimpleNamespace:
     QUOTA_STATE.block_provider(identity, seconds, "usage limit")
     pinfo = SimpleNamespace(
         name=name,
-        ready=False,
+        credentials_pending=True,
         quota_identity=identity,
         quota_provider_blocked=lambda: QUOTA_STATE.provider_block(identity) is not None,
     )
@@ -66,7 +66,7 @@ class TestTheLaneExclusion:
     """
 
     def test_a_refused_lane_is_not_counted_as_available(self):
-        refuser = SimpleNamespace(name="a", ready=True)
+        refuser = SimpleNamespace(name="a")
         blocked = _blocked("b", "@unavail-lane-block", 30)
         ctx = SelectionContext("m", "chat_completions")
         ctx.model_route = ModelRoute(
@@ -91,7 +91,7 @@ class TestTheLaneExclusion:
         of by lane would drop ``a`` from the route, leaving ``b`` alone and
         turning the same state into "blocked".
         """
-        refuser = SimpleNamespace(name="a", ready=True)
+        refuser = SimpleNamespace(name="a")
         blocked = _blocked("b", "@unavail-lane-sibling", 30)
         ctx = SelectionContext("m", "chat_completions")
         ctx.model_route = ModelRoute(
@@ -129,14 +129,14 @@ class TestTheBlock:
         """The route's story is not (only) a quota story, so it falls through."""
         blocked = _blocked("a", "@unavail-block-mixed", 30)
         other = SimpleNamespace(
-            name="b", ready=False, quota_provider_blocked=lambda: False
+            name="b", credentials_pending=True, quota_provider_blocked=lambda: False
         )
 
         assert blocked_until([blocked, other]) is None
 
     def test_a_block_that_cannot_be_dated_is_unknown(self):
         pinfo = SimpleNamespace(
-            name="a", ready=False, quota_provider_blocked=lambda: True
+            name="a", credentials_pending=True, quota_provider_blocked=lambda: True
         )
         assert blocked_until([pinfo]) is None
 
@@ -165,7 +165,7 @@ class TestTheBlock:
         over the whole route would count the refuser as an available provider
         and answer "initializing".
         """
-        refuser = SimpleNamespace(name="a", ready=True)
+        refuser = SimpleNamespace(name="a")
         blocked = _blocked("b", "@unavail-block-after-failover", 30)
         ctx = _ctx(["a", "b"])
         ctx.failover_excluded = frozenset({"a"})
@@ -176,9 +176,9 @@ class TestTheBlock:
         assert state.as_kwargs()["blocked_until"] is not None
 
     def test_a_retry_with_another_candidate_left_is_not_a_full_block(self):
-        refuser = SimpleNamespace(name="a", ready=True)
+        refuser = SimpleNamespace(name="a")
         blocked = _blocked("b", "@unavail-block-partial-retry", 30)
-        spare = SimpleNamespace(name="c", ready=False)
+        spare = SimpleNamespace(name="c", credentials_pending=True)
         ctx = _ctx(["a", "b", "c"])
         ctx.failover_excluded = frozenset({"a"})
 
@@ -196,7 +196,7 @@ class TestTheSpentAllowance:
             "provider_exhausted_until",
             lambda pinfo: NOW + timedelta(minutes=5),
         )
-        pinfo = SimpleNamespace(name="a", ready=True)
+        pinfo = SimpleNamespace(name="a")
         ctx = _ctx(["a"], excluded=frozenset({"a"}))
 
         state = classify(_config({"a": pinfo}), ctx)
@@ -210,7 +210,7 @@ class TestTheSpentAllowance:
         from llm_rosetta_gateway.quota import service
 
         monkeypatch.setattr(service, "provider_exhausted_until", lambda pinfo: None)
-        pinfo = SimpleNamespace(name="a", ready=True)
+        pinfo = SimpleNamespace(name="a")
         ctx = _ctx(["a"], excluded=frozenset({"a"}))
 
         state = classify(_config({"a": pinfo}), ctx)
@@ -223,7 +223,7 @@ class TestTheSpentAllowance:
         from llm_rosetta_gateway.quota import service
 
         monkeypatch.setattr(service, "provider_exhausted_until", lambda pinfo: NOW)
-        pinfo = SimpleNamespace(name="a", ready=True)
+        pinfo = SimpleNamespace(name="a")
         ctx = _ctx(["a", "b"], excluded=frozenset({"a"}))
 
         state = classify(_config({"a": pinfo, "b": pinfo}), ctx)
@@ -244,8 +244,8 @@ class TestTheSpentAllowance:
         monkeypatch.setattr(
             service, "provider_exhausted_until", lambda pinfo: resets[pinfo.name]
         )
-        spent = SimpleNamespace(name="a", ready=True)
-        spent_b = SimpleNamespace(name="b", ready=True)
+        spent = SimpleNamespace(name="a")
+        spent_b = SimpleNamespace(name="b")
         ctx = _ctx(["a", "b"], excluded=frozenset({"a", "b"}))
         ctx.failover_excluded = frozenset({"a"})
 
@@ -309,7 +309,7 @@ class TestTheRateLimitLadder:
 
     @staticmethod
     def _ready(name):
-        return SimpleNamespace(name=name, ready=True)
+        return SimpleNamespace(name=name)
 
     def test_every_candidate_limited_is_rate_limited_with_the_latest_end(self):
         ctx = _ctx(["a", "b"])

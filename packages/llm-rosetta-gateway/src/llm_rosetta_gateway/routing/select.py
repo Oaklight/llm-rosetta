@@ -11,7 +11,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from collections.abc import Mapping
 
-from .eligibility import HEADROOM_FLOOR, Eligibility, quota_weight
+from ..quota.allowance import HEADROOM_FLOOR, quota_weight
+from .eligibility import Eligibility
 from .stage import RoutingStage
 
 if TYPE_CHECKING:

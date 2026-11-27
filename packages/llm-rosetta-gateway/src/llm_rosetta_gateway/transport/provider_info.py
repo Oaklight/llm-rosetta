@@ -496,21 +496,6 @@ class ProviderInfo:
         owner = getattr(self, "transport_owner", None)
         return self.transport if owner is None else f"{owner}:{self.transport}"
 
-    @property
-    def ready(self) -> bool:
-        """Whether this provider can accept traffic.
-
-        The one eligibility predicate's answer (see
-        :func:`~llm_rosetta_gateway.routing.eligibility.provider_eligibility`):
-        a provider-wide quota block, a rate-limit disable, a key ring with no
-        usable credential, and readings that say the allowance is spent are
-        all "no".  Admin callers that need to tell "still starting" from the
-        rest ask :attr:`credentials_pending`.
-        """
-        from ..routing.eligibility import provider_eligibility
-
-        return provider_eligibility(self).eligible
-
     # -- public helpers used by the proxy -----------------------------------
 
     def account_token(self, provider_name: str) -> str:

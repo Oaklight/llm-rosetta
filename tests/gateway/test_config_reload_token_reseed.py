@@ -15,6 +15,7 @@ import json
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+from llm_rosetta_gateway.routing.eligibility import provider_eligibility
 from llm_rosetta_gateway.admin.routes._shared import _reload_gateway_config
 from llm_rosetta_gateway.admin.routes.config import fetch_upstream_models
 from llm_rosetta_gateway.admin.routes.connectivity import (
@@ -129,7 +130,7 @@ class TestApplyConfigReload:
 
         asyncio.run(_run())
 
-        assert reloaded.ready is True
+        assert provider_eligibility(reloaded).eligible is True
         assert reloaded.key_ring.next() == "fresh-token"
         assert ds.provider_state("alcf") == ProviderInitState.READY
 
@@ -241,7 +242,7 @@ class TestApplyConfigReload:
                 # provider, minting tokens on the same interval.
                 assert refresher_calls == [{"alcf"}]
                 assert len(ds._app._token_refresh_tasks) == 1
-                assert reloaded.ready is True
+                assert provider_eligibility(reloaded).eligible is True
 
         asyncio.run(_run())
 

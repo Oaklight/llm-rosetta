@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from llm_rosetta_gateway.routing.eligibility import provider_eligibility
 from llm_rosetta_gateway.maintenance.startup import (
     DeferredStartup,
     ProviderInitState,
@@ -91,26 +92,26 @@ class _FakeConfig:
 class TestProviderInfoReady:
     def test_ready_with_real_key(self):
         pinfo = _make_pinfo(api_key="sk-real")
-        assert pinfo.ready is True
+        assert provider_eligibility(pinfo).eligible is True
 
     def test_not_ready_with_sentinel(self):
         pinfo = _make_pinfo(api_key=TOKEN_PENDING_SENTINEL)
-        assert pinfo.ready is False
+        assert provider_eligibility(pinfo).eligible is False
 
     def test_ready_after_refresh(self):
         pinfo = _make_pinfo(api_key=TOKEN_PENDING_SENTINEL)
-        assert pinfo.ready is False
+        assert provider_eligibility(pinfo).eligible is False
         pinfo.key_ring.refresh("sk-actual-key")
-        assert pinfo.ready is True
+        assert provider_eligibility(pinfo).eligible is True
 
     def test_ready_with_multiple_keys(self):
         pinfo = _make_pinfo(api_key="key1,key2")
-        assert pinfo.ready is True
+        assert provider_eligibility(pinfo).eligible is True
 
     def test_not_ready_sentinel_only_key(self):
         pinfo = _make_pinfo(api_key=TOKEN_PENDING_SENTINEL)
         assert len(pinfo.key_ring) == 1
-        assert pinfo.ready is False
+        assert provider_eligibility(pinfo).eligible is False
 
 
 # ---------------------------------------------------------------------------
@@ -306,7 +307,7 @@ class TestTokenSeeding:
         asyncio.run(_run())
 
         assert ds.provider_state("alcf") == ProviderInitState.READY
-        assert pinfo.ready is True
+        assert provider_eligibility(pinfo).eligible is True
         assert pinfo.key_ring.next() == "real-token"
 
     def test_seed_failure(self):
@@ -335,7 +336,7 @@ class TestTokenSeeding:
         asyncio.run(_run())
 
         assert ds.provider_state("alcf") == ProviderInitState.FAILED
-        assert pinfo.ready is False
+        assert provider_eligibility(pinfo).eligible is False
 
     def test_seed_parallel_mixed(self):
         """One provider succeeds, one fails — both tracked correctly."""
@@ -744,7 +745,7 @@ class TestResolveSkipsUnready:
         cfg = self._build_config(providers)
         route, pinfo = cfg.resolve(cfg.selection_context("test-model", "openai_chat"))
         assert route.provider_name == "ready"
-        assert pinfo.ready is True
+        assert provider_eligibility(pinfo).eligible is True
 
     def test_all_unready_raises_pending(self):
         """All providers unready → ProviderNotReady with failed=False."""
@@ -972,7 +973,7 @@ class TestExchangeSeeding:
         asyncio.run(_run())
 
         assert ds.provider_state("chatgpt") == ProviderInitState.READY
-        assert pinfo.ready is True
+        assert provider_eligibility(pinfo).eligible is True
         assert pinfo.key_ring.next() == "access-token"
 
     def test_a_sign_in_requirement_is_reported_and_not_retried(self):

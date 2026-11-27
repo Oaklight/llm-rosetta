@@ -194,7 +194,7 @@ def classify(
     # block check because ``ready`` cannot tell the two apart: a disabled
     # provider is unready, so the block check would call it a quota block
     # ("plan refusal") when a ladder is what actually holds it out.
-    from .eligibility import RATE_LIMITED
+    from .eligibility import RATE_LIMITED, provider_eligibility
 
     answers = [ctx.eligibility.get(p.key) for p in remaining]
     if remaining and all(
@@ -203,7 +203,9 @@ def classify(
         return Unavailable("rate_limited", _latest_until(answers))
 
     unready = [
-        table[p.name] for p in remaining if p.name in table and not table[p.name].ready
+        table[p.name]
+        for p in remaining
+        if p.name in table and not provider_eligibility(table[p.name]).eligible
     ]
 
     end = blocked_until(unready)

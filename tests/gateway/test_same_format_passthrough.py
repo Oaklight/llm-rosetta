@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import pytest
 
+from llm_rosetta_gateway.routing.eligibility import provider_eligibility
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.routing import EligibilityStage, SelectionContext
 from _moved_vendors import load_providers_with_moved
@@ -113,7 +114,7 @@ def _make_unready(config: GatewayConfig, *names: str) -> None:
             url_template="{base_url}/chat/completions",
             token_command=["echo", "x"],
         )
-        assert config.providers[name].ready is False
+        assert provider_eligibility(config.providers[name]).eligible is False
 
 
 def _tier_context(config: GatewayConfig, source_format: str) -> SelectionContext:

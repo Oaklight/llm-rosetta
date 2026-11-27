@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from llm_rosetta_gateway.routing.eligibility import provider_eligibility
 from llm_rosetta_gateway.transport.provider_info import (
     KeyRing,
     ProviderInfo,
@@ -400,7 +401,7 @@ class TestBuildProviderInfoTokenCommand:
             "token_command": ["echo", "seeded-key"],
         }
         pinfo = build_provider_info("chat_completions", cfg)
-        assert pinfo.ready is False
+        assert provider_eligibility(pinfo).eligible is False
         assert pinfo.key_ring.next() == TOKEN_PENDING_SENTINEL
         assert pinfo.token_command == ["echo", "seeded-key"]
         assert pinfo.token_refresh_interval == 3600
@@ -466,7 +467,7 @@ class TestBuildProviderInfoTokenCommand:
             "token_command": ["/nonexistent/binary-xyz"],
         }
         pinfo = build_provider_info("chat_completions", cfg)
-        assert pinfo.ready is False
+        assert provider_eligibility(pinfo).eligible is False
         assert pinfo.token_command == ["/nonexistent/binary-xyz"]
 
     def test_without_token_command_unchanged(self):
