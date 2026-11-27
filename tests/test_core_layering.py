@@ -325,13 +325,8 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
         "pipeline",
     ),
     "cli": (
-        "cli_areas",
         "contracts",
         "devtools",
-        "extensions",
-    ),
-    "cli_areas": (
-        "contracts",
         "extensions",
     ),
     "contracts": (
@@ -432,9 +427,7 @@ def _actual_edges() -> dict[tuple[str, str], str]:
 LAZY_ONLY_EDGES: dict[tuple[str, str], str] = {
     ("auto_detect", "converters"): "a converter is built on the first call",
     ("auto_detect", "pipeline"): "convert() builds its pipeline on the first call",
-    ("cli", "cli_areas"): "a command loads only the code it runs",
     ("cli", "devtools"): "a command loads only the code it runs",
-    ("cli", "extensions"): "a command loads only the code it runs",
     (
         "devtools",
         "converters",
