@@ -5,14 +5,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 
-def {{command_function}}(argv: Sequence[str] | None = None) -> int:
-    """Say what this command does."""
-    print("{{id}} {{command}}", *(argv or ()))
-    return 0
-
-
+{{command_functions}}
 #: Verb to callable.  ``llm-rosetta {{id}} <verb> ...`` calls the callable with the
 #: arguments after the verb; it returns the exit code (0 success, 1 failure,
 #: 2 usage error).  The verb's one-line summary is in plugin.yaml, under
 #: provides.commands.  Keep this a dict literal: ``llm-rosetta ext check`` reads it.
-COMMANDS = {"{{command}}": {{command_function}}}
+COMMANDS = {{command_mapping}}

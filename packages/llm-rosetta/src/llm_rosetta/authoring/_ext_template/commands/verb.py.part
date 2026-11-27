@@ -1,0 +1,6 @@
+def {{command_function}}(argv: Sequence[str] | None = None) -> int:
+    """Say what this command does."""
+    print("{{id}} {{command}}", *(argv or ()))
+    return 0
+
+

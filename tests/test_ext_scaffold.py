@@ -66,7 +66,7 @@ def _has(problems: list[str], *needles: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("flags", [(), ("--transport",)])
+@pytest.mark.parametrize("flags", [(), ("--provides", "shims,transports")])
 def test_a_new_extension_passes_check_without_edits(tmp_path, flags):
     folder = _make(tmp_path, "acme_free", *flags)
     result = check_extension(folder, build=False)
@@ -76,7 +76,7 @@ def test_a_new_extension_passes_check_without_edits(tmp_path, flags):
 
 
 @needs_build
-@pytest.mark.parametrize("flags", [(), ("--transport",)])
+@pytest.mark.parametrize("flags", [(), ("--provides", "shims,transports")])
 def test_a_new_extension_builds_a_wheel_that_carries_its_files(tmp_path, flags):
     folder = _make(tmp_path, "acme_free", *flags)
     result = check_extension(folder, build=True)
@@ -88,7 +88,7 @@ def test_a_new_extension_builds_a_wheel_that_carries_its_files(tmp_path, flags):
 
 
 def test_the_folder_holds_the_files_the_layout_names(tmp_path):
-    folder = _make(tmp_path, "acme", "--transport")
+    folder = _make(tmp_path, "acme", "--provides", "shims,transports")
     files = {p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file()}
     assert files == {
         "plugin.yaml",
@@ -96,22 +96,20 @@ def test_the_folder_holds_the_files_the_layout_names(tmp_path):
         "README.md",
         "__init__.py",
         "provider.yaml",
-        "llm/chat_completions/provider.yaml",
+        "llm/provider.yaml",
         "transport/__init__.py",
         "transport/transport.py",
         "tests/test_extension.py",
     }
     assert "transports: [acme]" in (folder / "plugin.yaml").read_text()
-    assert (
-        "transport: acme" in (folder / "llm/chat_completions/provider.yaml").read_text()
-    )
+    assert "transport: acme" in (folder / "llm/provider.yaml").read_text()
     plain = _make(tmp_path / "plain", "acme")
     assert "transport" not in (plain / "plugin.yaml").read_text()
     assert not (plain / "transport").exists()
 
 
 def test_todo_markers_stay_in_prose(tmp_path):
-    folder = _make(tmp_path, "acme", "--transport")
+    folder = _make(tmp_path, "acme", "--provides", "shims,transports")
     marked = sorted(
         p.relative_to(folder).as_posix()
         for p in folder.rglob("*")
@@ -123,7 +121,8 @@ def test_todo_markers_stay_in_prose(tmp_path):
 @pytest.mark.parametrize("fmt", chat_formats())
 def test_every_chat_format_scaffolds_a_loadable_lane(tmp_path, fmt):
     folder = _make(tmp_path, "acme", "--format", fmt)
-    assert (folder / "llm" / fmt / "provider.yaml").is_file()
+    lane = folder / "llm" / "provider.yaml"
+    assert f"format: {fmt}\n" in lane.read_text(encoding="utf-8")
     assert _problems(folder) == []
 
 
@@ -192,15 +191,16 @@ def test_the_template_files_are_shipped_as_package_data():
 
 
 def test_the_template_has_no_orphan_file(tmp_path):
-    used = {src for src, _ in ext_scaffold._BASE_TEMPLATES}
-    used |= {src for src, _ in ext_scaffold._TRANSPORT_TEMPLATES}
-    used |= {src for src, _ in ext_scaffold._COMMAND_TEMPLATES}
-    used |= {"pyproject.toml.tmpl", "llm/format/provider.yaml.tmpl"}
-    found = {
-        p.relative_to(ext_scaffold.EXT_TEMPLATE_DIR).as_posix()
-        for p in ext_scaffold.EXT_TEMPLATE_DIR.rglob("*.tmpl")
-    }
-    assert found == used
+    folders = {ext_scaffold.BASE_KIND, *ext_scaffold.KINDS}
+    for path in ext_scaffold.EXT_TEMPLATE_DIR.rglob("*"):
+        if path.is_file():
+            relative = path.relative_to(ext_scaffold.EXT_TEMPLATE_DIR)
+            assert relative.parts[0] in folders, f"{relative} is outside every kind"
+            assert path.suffix in {".tmpl", ".part"}, relative
+    for kind in ext_scaffold.KINDS:
+        # each kind adds its own line to the manifest's provides block
+        assert (ext_scaffold.EXT_TEMPLATE_DIR / kind / "provides.yaml.part").is_file()
+        assert ext_scaffold._template_files(kind), kind
 
 
 # ---------------------------------------------------------------------------
@@ -231,8 +231,8 @@ def test_a_shim_declared_but_absent_from_the_tree_is_reported(tmp_path):
 
 def test_a_shim_in_the_tree_but_not_declared_is_reported(tmp_path):
     folder = _make(tmp_path, "acme")
-    lane = folder / "llm" / "messages"
-    lane.mkdir()
+    lane = folder / "second" / "llm"
+    lane.mkdir(parents=True)
     (lane / "provider.yaml").write_text(
         "name: acme--messages\nmodel_type: llm\nformat: messages\n"
         "connection:\n  base_url: https://example.invalid/v1\n",
@@ -247,7 +247,7 @@ def test_a_shim_in_the_tree_but_not_declared_is_reported(tmp_path):
 def test_a_tree_the_loader_refuses_is_reported_not_raised(tmp_path):
     folder = _make(tmp_path, "acme")
     _edit(
-        folder / "llm/chat_completions/provider.yaml",
+        folder / "llm/provider.yaml",
         "format: chat_completions",
         "format: no_such",
     )
@@ -364,34 +364,34 @@ def test_a_missing_pyproject_is_reported(tmp_path):
 def test_a_declared_transport_needs_a_module(tmp_path):
     import shutil
 
-    folder = _make(tmp_path, "acme", "--transport")
+    folder = _make(tmp_path, "acme", "--provides", "shims,transports")
     shutil.rmtree(folder / "transport")
     assert _has(_problems(folder), "provides.transports", "acme")
 
 
 def test_the_scaffolded_transport_exposes_the_mapping_the_gateway_reads(tmp_path):
-    folder = _make(tmp_path, "acme", "--transport")
+    folder = _make(tmp_path, "acme", "--provides", "shims,transports")
     init = (folder / "transport" / "__init__.py").read_text()
     assert 'TRANSPORTS = {"acme": ' in init
     assert _problems(folder) == []
 
 
 def test_a_transport_module_without_the_mapping_is_a_problem(tmp_path):
-    folder = _make(tmp_path, "acme", "--transport")
+    folder = _make(tmp_path, "acme", "--provides", "shims,transports")
     init = folder / "transport" / "__init__.py"
     init.write_text(init.read_text().replace("TRANSPORTS = ", "NOT_THE_MAPPING = "))
     assert _has(_problems(folder), "no TRANSPORTS mapping")
 
 
 def test_a_mapping_that_disagrees_with_the_manifest_is_a_problem(tmp_path):
-    folder = _make(tmp_path, "acme", "--transport")
+    folder = _make(tmp_path, "acme", "--provides", "shims,transports")
     init = folder / "transport" / "__init__.py"
     init.write_text(init.read_text().replace('{"acme": ', '{"other": '))
     assert _has(_problems(folder), "TRANSPORTS has", "other")
 
 
 def test_a_transport_module_that_does_not_parse_is_a_problem(tmp_path):
-    folder = _make(tmp_path, "acme", "--transport")
+    folder = _make(tmp_path, "acme", "--provides", "shims,transports")
     (folder / "transport" / "__init__.py").write_text("def broken(:\n")
     assert _has(_problems(folder), "does not parse")
 
@@ -399,7 +399,7 @@ def test_a_transport_module_that_does_not_parse_is_a_problem(tmp_path):
 def test_a_transport_module_file_also_counts(tmp_path):
     import shutil
 
-    folder = _make(tmp_path, "acme", "--transport")
+    folder = _make(tmp_path, "acme", "--provides", "shims,transports")
     shutil.rmtree(folder / "transport")
     (folder / "transport.py").write_text(
         'TRANSPORTS = {"acme": object}\n', encoding="utf-8"
@@ -410,17 +410,19 @@ def test_a_transport_module_file_also_counts(tmp_path):
 @needs_build
 def test_a_data_file_missing_from_package_data_is_caught_in_the_wheel(tmp_path):
     folder = _make(tmp_path, "acme")
-    leaf = folder / "llm" / "chat_completions"
-    (leaf / "transforms.py").write_text(
+    (folder / "llm" / "transforms.py").write_text(
         "response_body_transforms = ()\n", encoding="utf-8"
     )
-    # The shipped globs cover llm/*/*.py; a pyproject that omits it loses the file.
-    assert _problems(folder, build=True) == []
-    _edit(folder / "pyproject.toml", ', "llm/*/*.py"', "")
+    # A leaf is not a package, so its ``.py`` ships only when package-data names
+    # it: a pyproject written before the file existed loses it.
     problems = _problems(folder, build=True)
-    assert problems == [
-        "wheel lacks llm_rosetta_ext/acme/llm/chat_completions/transforms.py"
-    ]
+    assert problems == ["wheel lacks llm_rosetta_ext/acme/llm/transforms.py"]
+    _edit(
+        folder / "pyproject.toml",
+        '"llm/provider.yaml", ',
+        '"llm/provider.yaml", "llm/transforms.py", ',
+    )
+    assert _problems(folder, build=True) == []
     # The build ran on a copy: the folder holds no build output.
     assert not (folder / "build").exists()
 
@@ -428,9 +430,9 @@ def test_a_data_file_missing_from_package_data_is_caught_in_the_wheel(tmp_path):
 @needs_build
 def test_a_provider_yaml_missing_from_package_data_is_caught(tmp_path):
     folder = _make(tmp_path, "acme")
-    _edit(folder / "pyproject.toml", ', "llm/*/provider.yaml"', "")
+    _edit(folder / "pyproject.toml", '"llm/provider.yaml", ', "")
     assert _problems(folder, build=True) == [
-        "wheel lacks llm_rosetta_ext/acme/llm/chat_completions/provider.yaml"
+        "wheel lacks llm_rosetta_ext/acme/llm/provider.yaml"
     ]
 
 
@@ -501,7 +503,7 @@ def test_checking_leaves_the_live_registry_alone(tmp_path):
     assert "acme--chat_completions" not in before
     # ...and a tree that fails to load leaves it alone as well.
     _edit(
-        folder / "llm/chat_completions/provider.yaml",
+        folder / "llm/provider.yaml",
         "format: chat_completions",
         "format: no_such",
     )
@@ -569,11 +571,15 @@ def test_the_new_flags_default_to_chat_completions_in_packages():
     parser = argparse.ArgumentParser()
     ext_scaffold.add_ext_arguments(parser)
     args = parser.parse_args(["acme"])
-    assert (args.format, args.dest, args.transport) == (
-        "chat_completions",
+    assert (args.format, args.dest, args.provides, args.verb) == (
+        None,
         "packages",
-        False,
+        "shims",
+        None,
     )
+    # The format default is applied when the shims kind is rendered.
+    files = ext_scaffold.render_extension("acme")
+    assert "format: chat_completions\n" in files["llm/provider.yaml"]
 
 
 def test_the_generated_test_runs_the_check(tmp_path):
@@ -584,8 +590,13 @@ def test_the_generated_test_runs_the_check(tmp_path):
 
 @pytest.mark.parametrize(
     "flags",
-    [[], ["--transport", "--command", "hello"]],
-    ids=["shim-only", "shim-transport-command"],
+    [
+        [],
+        ["--provides", "transports"],
+        ["--provides", "commands", "--verb", "hello"],
+        ["--provides", "shims,transports,commands", "--verb", "hello"],
+    ],
+    ids=["shim-only", "transport-only", "command-only", "all-three"],
 )
 def test_the_generated_extension_passes_its_own_tests(tmp_path, flags):
     """A new extension is not born with a red test (``run_ext_check`` once left the api).
@@ -607,3 +618,121 @@ def test_the_generated_extension_passes_its_own_tests(tmp_path, flags):
         check=False,
     )
     assert result.returncode == 0, result.stdout[-800:] + result.stderr[-400:]
+
+
+# ---------------------------------------------------------------------------
+# ext new --provides: every shape an extension can have
+# ---------------------------------------------------------------------------
+
+SHAPES = {
+    "shim-only": (["--provides", "shims"], {"shims"}),
+    "transport-only": (["--provides", "transports"], {"transports"}),
+    "command-only": (["--provides", "commands", "--verb", "hello"], {"commands"}),
+    "all-three": (
+        ["--provides", "shims,transports,commands", "--verb", "hello"],
+        {"shims", "transports", "commands"},
+    ),
+}
+
+
+@pytest.mark.parametrize(("flags", "kinds"), SHAPES.values(), ids=SHAPES.keys())
+def test_a_shape_declares_exactly_the_kinds_it_provides(tmp_path, flags, kinds):
+    from llm_rosetta.authoring.ext_scaffold import _read_manifest
+
+    folder = _make(tmp_path, "acme", *flags)
+    manifest = _read_manifest(folder)
+    provided = {
+        kind
+        for kind, value in (
+            ("shims", manifest.shims),
+            ("transports", manifest.transports),
+            ("commands", manifest.commands),
+        )
+        if value
+    }
+    assert provided == kinds
+    assert _problems(folder) == []
+
+
+@needs_build
+@pytest.mark.parametrize(("flags", "kinds"), SHAPES.values(), ids=SHAPES.keys())
+def test_a_shape_builds_a_wheel_that_carries_its_files(tmp_path, flags, kinds):
+    folder = _make(tmp_path, "acme", *flags)
+    assert _problems(folder, build=True) == []
+    members, error = ext_scaffold._wheel_members(folder)
+    assert members is not None, error
+    assert members == ext_scaffold.expected_wheel_files(folder)
+    assert ("llm_rosetta_ext/acme/llm/provider.yaml" in members) == ("shims" in kinds)
+    assert ("llm_rosetta_ext/acme/transport/__init__.py" in members) == (
+        "transports" in kinds
+    )
+    assert ("llm_rosetta_ext/acme/commands.py" in members) == ("commands" in kinds)
+
+
+@pytest.mark.parametrize(("flags", "kinds"), SHAPES.values(), ids=SHAPES.keys())
+def test_what_ext_new_writes_follows_the_shim_tree_contract(tmp_path, flags, kinds):
+    from llm_rosetta.authoring.tree_contract import check_tree
+
+    _make(tmp_path, "acme", *flags)
+    assert check_tree(tmp_path) == []
+
+
+def test_several_verbs_are_all_declared_and_all_in_the_mapping(tmp_path):
+    folder = _make(
+        tmp_path,
+        "acme",
+        "--provides",
+        "commands",
+        "--verb",
+        "hello",
+        "--verb",
+        "bye-now",
+    )
+    manifest = (folder / "plugin.yaml").read_text(encoding="utf-8")
+    assert 'hello: { en: "Run acme hello." }' in manifest
+    assert 'bye-now: { en: "Run acme bye-now." }' in manifest
+    commands = (folder / "commands.py").read_text(encoding="utf-8")
+    assert 'COMMANDS = {"hello": hello, "bye-now": bye_now}' in commands
+    assert _problems(folder) == []
+
+
+def test_a_command_extension_defaults_to_the_run_verb(tmp_path):
+    folder = _make(tmp_path, "acme", "--provides", "commands")
+    assert 'run: { en: "Run acme run." }' in (folder / "plugin.yaml").read_text()
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"provides": ()}, "provides is empty"),
+        ({"provides": ("widgets",)}, "unknown kind 'widgets'"),
+        ({"provides": ("commands",), "format_": "messages"}, "format applies"),
+        ({"provides": ("shims",), "verbs": ("run",)}, "verb applies"),
+        ({"provides": ("shims",), "format_": "no_such"}, "not a chat format"),
+    ],
+)
+def test_an_option_for_a_kind_that_is_not_provided_is_refused(kwargs, message):
+    with pytest.raises(ExtensionScaffoldError, match=message):
+        render_extension("acme", **kwargs)
+
+
+def test_package_data_is_read_from_the_tree_not_from_a_fixed_list():
+    targets = {
+        "__init__.py",
+        "plugin.yaml",
+        "provider.yaml",
+        "README.md",
+        "pyproject.toml",
+        "tests/test_extension.py",
+        "llm/provider.yaml",
+        "llm/transforms.py",
+        "transport/__init__.py",
+        "transport/transport.py",
+        "commands.py",
+    }
+    assert ext_scaffold.package_data(targets) == [
+        "llm/provider.yaml",
+        "llm/transforms.py",
+        "plugin.yaml",
+        "provider.yaml",
+    ]
