@@ -145,11 +145,15 @@ def _manifest_with_cli(
     return base + "\n".join(lines) + "\n"
 
 
-def _put_cli(tools: Path, ext_id: str, version: str) -> None:
-    """What ``ext install-cli`` leaves: an entry link that reports *version*."""
+def _put_cli(tools: Path, ext_id: str, version: str, needs: str | None = None) -> None:
+    """What ``ext install-cli`` leaves: an entry link that reports *version*.
+
+    *needs* names a command the program runs first, as an npm script runs node.
+    """
     link = tools / ext_id / "bin" / "acmecli"
     link.parent.mkdir(parents=True)
-    link.write_text(f"#!/bin/sh\necho acmecli {version}\n")
+    guard = f"{needs} --version >/dev/null || exit $?\n" if needs else ""
+    link.write_text(f"#!/bin/sh\n{guard}echo acmecli {version}\n")
     link.chmod(0o755)
 
 
@@ -189,6 +193,29 @@ class TestAnExternalProgramHasThreeStates:
 
         assert (program["status"], program["found"]) == ("too_old", "2.0.0")
         assert program["install_command"] == "llm-rosetta ext install-cli acme"
+
+    def test_a_program_whose_node_is_gone_is_broken_and_names_the_command(
+        self, ext_dir, tools
+    ):
+        _install(ext_dir, "acme", _manifest_with_cli("acme", minimum="2.1.299"))
+        _put_cli(tools, "acme", "2.1.299", needs="node")
+        load_providers()
+
+        program = self._program()
+
+        assert (program["state"], program["status"]) == ("broken", "broken")
+        assert program["install_command"] == "llm-rosetta ext install-cli acme"
+
+    def test_the_shared_node_link_lets_the_same_program_run(self, ext_dir, tools):
+        _install(ext_dir, "acme", _manifest_with_cli("acme", minimum="2.1.299"))
+        _put_cli(tools, "acme", "2.1.299", needs="node")
+        node = tools / "bin" / "node"
+        node.parent.mkdir(parents=True)
+        node.write_text("#!/bin/sh\necho v24.0.0\n")
+        node.chmod(0o755)
+        load_providers()
+
+        assert self._program()["status"] == "ready"
 
     def test_a_program_installed_by_install_cli_is_ready_outside_path(
         self, ext_dir, tools

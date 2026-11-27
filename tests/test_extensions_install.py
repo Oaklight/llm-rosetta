@@ -761,6 +761,37 @@ class TestDoctor:
         )
         assert check_external(ExternalProgram("t", check)).state == "ok"
 
+    def test_a_program_that_starts_and_fails_with_no_version_is_broken(self, tmp_path):
+        check = _stub(
+            tmp_path,
+            "tool",
+            "import sys; print('no node here', file=sys.stderr); sys.exit(127)",
+        )
+        for minimum in (None, "1.0"):
+            status = check_external(ExternalProgram("t", check, minimum=minimum))
+            assert status.state == "broken"
+            assert "127" in (status.detail or "") and "no node here" in (
+                status.detail or ""
+            )
+
+    def test_a_failure_that_still_reports_a_version_keeps_its_verdict(self, tmp_path):
+        check = _stub(tmp_path, "tool", "import sys; print('tool 2.0.0'); sys.exit(3)")
+        status = check_external(ExternalProgram("t", check, minimum="1.0"))
+        assert (status.state, status.found) == ("ok", "2.0.0")
+
+    def test_search_directories_are_on_the_path_of_the_check(self, tmp_path):
+        helper_dir = tmp_path / "bin"
+        helper_dir.mkdir()
+        helper = helper_dir / "helper"
+        helper.write_text("#!/bin/sh\necho helper 3.1.4\n")
+        helper.chmod(0o755)
+        tool = tmp_path / "tool"
+        tool.write_text("#!/bin/sh\nhelper --version\n")
+        tool.chmod(0o755)
+        program = ExternalProgram("tool", (str(tool), "--version"))
+        assert check_external(program, search=[helper_dir]).found == "3.1.4"
+        assert check_external(program).state == "broken"
+
     def test_no_shell_is_used(self, tmp_path):
         marker = tmp_path / "pwned"
         program = ExternalProgram("t", (f"echo hi; touch {marker}",))

@@ -7,18 +7,22 @@ extension's manifest and puts the program under ``<tools>/<id>/`` (see
     <tools>/bin/<link>                 one directory to put on PATH (the entry
                                        links of every extension, side by side)
     <tools>/<id>/bin/<link>            the entry link ``check`` finds
+    <tools>/node/<version>/            the Node.js (and npm) the npm programs use
     <tools>/<id>/npm-<version>/        an npm install (its own prefix)
     <tools>/<id>/release-<version>/    an unpacked release archive
     <tools>/<id>/installed.json        what is installed, written last
 
 Nothing is installed from a source that was not checked: a release archive
-must match the SHA-256 the manifest records for the platform before it is
-unpacked, and a member that would land outside the directory refuses the whole
-archive.  An npm package is fetched by ``npm`` at the pinned version, and
-``npm`` checks it against the registry's integrity record.  The install runs as
-the calling user, never as root, writes only under the tools directory (npm's
-cache included), and a run that finds the pinned version in place changes
-nothing.
+(and the Node.js, see :mod:`~llm_rosetta.extensions._node`) must match the
+SHA-256 pinned for the platform before it is unpacked, and a member that would
+land outside the directory refuses the whole archive.  An npm package is
+fetched by the pinned Node.js's ``npm`` at the pinned version, and ``npm``
+checks it against the registry's integrity record.  The install runs as the
+calling user, never as root, writes only under the tools directory (npm's cache
+and its ``HOME`` included), and a run that finds the pinned version in place
+changes nothing.  Nothing is read from the image: a program installed here
+runs after the image changed, or is reported ``broken`` with the command that
+reinstalls it.
 """
 
 from __future__ import annotations
@@ -45,6 +49,7 @@ from llm_rosetta.contracts.extension import ExternalProgram
 
 from ._dirs import ExtensionInstallError, tools_dir
 from ._install import check_external
+from ._node import NODE_BUILDS, NODE_VERSION
 
 #: The largest download accepted, in bytes.
 MAX_DOWNLOAD = 1 << 30
@@ -217,26 +222,136 @@ def _prune(root: Path, keep: Path) -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Node.js
+# --------------------------------------------------------------------------- #
+
+_NODE_LINKS = ("node", "npm", "npx")
+
+
+def _node_problem(directory: Path) -> str | None:
+    """Why *directory*'s ``node`` does not run at the pinned version, or ``None``."""
+    try:
+        run = subprocess.run(
+            [str(directory / "bin" / "node"), "--version"],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return str(exc)
+    if run.returncode != 0:
+        tail = (run.stderr or run.stdout).strip().splitlines()[:1]
+        return f"exit {run.returncode}: {tail[0] if tail else 'no output'}"
+    if run.stdout.strip() != f"v{NODE_VERSION}":
+        return f"it reports {run.stdout.strip()!r}"
+    return None
+
+
+def install_node(
+    *, platform: str | None = None, fetch: Fetch | None = None
+) -> tuple[Path, str]:
+    """Install the pinned Node.js into ``<tools>/node/<version>/``.
+
+    The archive's SHA-256 is checked before it is unpacked.  A run that finds
+    that directory holding a ``node`` that runs at the pinned version changes
+    nothing; one that finds it broken (another libc, a damaged file) installs
+    it again.  The shared links ``<tools>/bin/{node,npm,npx}`` follow it.
+
+    Args:
+        platform: The platform key the build is chosen for; this machine's by
+            default.
+        fetch: ``fetch(url, dest)``; an https download by default.
+
+    Returns:
+        The Node.js directory and ``installed`` or ``unchanged``.
+
+    Raises:
+        CliInstallError: No build is pinned for the platform, the download or
+            its checksum fails, or the unpacked ``node`` does not run.  Nothing
+            is left installed by a failed run.
+    """
+    root = tools_dir() / "node"
+    final = root / NODE_VERSION
+    shared = tools_dir() / "bin"
+    links_ok = all((shared / name).exists() for name in _NODE_LINKS)
+    if links_ok and _node_problem(final) is None:
+        return final, "unchanged"
+    key = platform or platform_key()
+    build = NODE_BUILDS.get(key)
+    if build is None:
+        known = ", ".join(sorted(NODE_BUILDS))
+        raise CliInstallError(f"no Node.js build is pinned for {key}; pinned: {known}")
+    root.mkdir(parents=True, exist_ok=True)
+    stage = Path(tempfile.mkdtemp(prefix=".stage-", dir=root))
+    try:
+        archive = stage / "download"
+        (fetch or _fetch)(build.url, archive)
+        got = _sha256(archive)
+        if got != build.sha256:
+            raise CliInstallError(
+                f"the archive of {build.url} does not match the pinned sha256 "
+                f"(pinned {build.sha256}, got {got}); nothing was installed"
+            )
+        unpacked = stage / "unpacked"
+        unpacked.mkdir()
+        _unpack(archive, unpacked, build.url)
+        tops = [entry for entry in unpacked.iterdir() if entry.is_dir()]
+        if len(tops) != 1 or not (tops[0] / "bin" / "node").is_file():
+            raise CliInstallError(f"the archive of {build.url} holds no bin/node")
+        # A node runs from wherever it is: the unpacked copy is tried before it
+        # replaces anything, so a failed run leaves what was there.
+        problem = _node_problem(tops[0])
+        if problem is not None:
+            raise CliInstallError(
+                f"Node.js {NODE_VERSION} was unpacked but does not run on this "
+                f"system ({problem}); on Alpine it needs the libstdc++ package"
+            )
+        shutil.rmtree(final, ignore_errors=True)
+        os.replace(tops[0], final)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
+    for name in _NODE_LINKS:
+        _point_link(shared / name, final / "bin" / name)
+    for entry in root.iterdir():
+        if entry != final and not entry.name.startswith("."):
+            shutil.rmtree(entry, ignore_errors=True)
+    return final, "installed"
+
+
+# --------------------------------------------------------------------------- #
 # the two sources
 # --------------------------------------------------------------------------- #
 
 
-def _npm_install(program: ExternalProgram, root: Path, npm: str) -> tuple[Path, Path]:
+def _npm_install(
+    program: ExternalProgram,
+    root: Path,
+    npm: str | None,
+    key: str | None,
+    fetch: Fetch | None,
+) -> tuple[Path, Path]:
     install = program.install
     assert install is not None and install.npm is not None
-    exe = shutil.which(npm)
-    if exe is None:
-        raise CliInstallError(
-            f"{npm!r} is not installed: this program installs from npm, so Node.js and "
-            "npm must be on PATH (the '-agents' image tag has both)"
-        )
+    path = os.environ.get("PATH", "")
+    if npm is None:
+        node, _ = install_node(platform=key, fetch=fetch)
+        exe = str(node / "bin" / "npm")
+        path = os.pathsep.join([str(node / "bin"), path])
+    else:
+        found = shutil.which(npm)
+        if found is None:
+            raise CliInstallError(f"{npm!r} is not installed")
+        exe = found
     root.mkdir(parents=True, exist_ok=True)
     prefix = root / f"npm-{install.version}"
     shutil.rmtree(prefix, ignore_errors=True)
     env = {
         **os.environ,
+        "PATH": path,
         # Everything npm writes goes under the tools directory: a uid with no
-        # home must not send it to ``/``.
+        # home must not send its cache or its config to ``/``.
+        "HOME": str(root / ".home"),
         "npm_config_cache": str(root / ".npm-cache"),
         "npm_config_update_notifier": "false",
         "npm_config_fund": "false",
@@ -334,7 +449,7 @@ def install_cli(
     *,
     platform: str | None = None,
     fetch: Fetch | None = None,
-    npm: str = "npm",
+    npm: str | None = None,
     dry_run: bool = False,
 ) -> CliInstallResult:
     """Install *program* of extension *ext_id* at its pinned version.
@@ -344,9 +459,10 @@ def install_cli(
         program: The declaration, with an ``install`` spec.
         platform: The platform key a release is chosen for; this machine's by
             default.
-        fetch: ``fetch(url, dest)``, how a release archive is downloaded; an
-            https download by default.
-        npm: The npm command.
+        fetch: ``fetch(url, dest)``, how a release archive (or the Node.js) is
+            downloaded; an https download by default.
+        npm: An npm command to use instead of the one in the pinned Node.js
+            this installs under ``<tools>/node``.
         dry_run: Report what would happen and change nothing.
 
     Returns:
@@ -373,7 +489,8 @@ def install_cli(
     if (
         {k: state.get(k) for k in current} == current
         and link.exists()
-        and check_external(program, search=[root / "bin"]).state == "ok"
+        and check_external(program, search=[root / "bin", tools_dir() / "bin"]).state
+        == "ok"
     ):
         return CliInstallResult(
             program.name, "unchanged", install.version, str(link), install.version
@@ -382,14 +499,17 @@ def install_cli(
         return CliInstallResult(
             program.name, "would_install", install.version, str(link)
         )
-    key = platform or (platform_key() if install.release is not None else "")
     if install.npm is not None:
-        directory, binary = _npm_install(program, root, npm)
+        key = platform
+        if key is None and npm is None:
+            key = platform_key()
+        directory, binary = _npm_install(program, root, npm, key, fetch)
     else:
+        key = platform or platform_key()
         directory, binary = _release_install(program, root, key, fetch or _fetch)
     _point_link(link, binary)
     _point_link(tools_dir() / "bin" / link.name, link)
-    status = check_external(program, search=[root / "bin"])
+    status = check_external(program, search=[root / "bin", tools_dir() / "bin"])
     if status.state != "ok":
         for failed in (link, tools_dir() / "bin" / link.name):
             with contextlib.suppress(FileNotFoundError):

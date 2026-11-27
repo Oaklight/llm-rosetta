@@ -38,6 +38,7 @@ test('a program is missing, too old or ready, and anything else is unknown', () 
   assert.equal(programStatus({ status: 'ready' }), 'ready');
   assert.equal(programStatus({ status: 'missing' }), 'missing');
   assert.equal(programStatus({ status: 'too_old' }), 'too_old');
+  assert.equal(programStatus({ status: 'broken' }), 'broken');
   assert.equal(programStatus({ status: 'something-new' }), 'unknown');
   assert.equal(programStatus({}), 'unknown');
   assert.equal(programStatus(null), 'unknown');
@@ -61,6 +62,8 @@ test('a card takes the worst status of its programs', () => {
   const rows = [{ status: 'ready' }, { status: 'too_old' }, { status: 'missing' }];
   assert.equal(cardStatus(rows), 'missing');
   assert.equal(cardStatus([{ status: 'ready' }, { status: 'too_old' }]), 'too_old');
+  assert.equal(cardStatus([{ status: 'too_old' }, { status: 'broken' }]), 'broken');
+  assert.equal(cardStatus([{ status: 'broken' }, { status: 'missing' }]), 'missing');
   assert.equal(cardStatus([{ status: 'ready' }, { status: 'unknown' }]), 'unknown');
   assert.equal(cardStatus([{ status: 'ready' }]), 'ready');
 });
@@ -85,7 +88,7 @@ test('cards that need attention come first, then by id', () => {
 test('every status and the labels the card paints exist in both languages', () => {
   const source = readFileSync(I18N, 'utf8');
   const keys = [
-    'ext.status.ready', 'ext.status.missing', 'ext.status.too_old', 'ext.status.unknown',
+    'ext.status.ready', 'ext.status.missing', 'ext.status.broken', 'ext.status.too_old', 'ext.status.unknown',
     'ext.found', 'ext.minimum', 'ext.pinned', 'ext.install', 'ext.empty', 'ext.copy',
     'shimPage.extensions',
   ];

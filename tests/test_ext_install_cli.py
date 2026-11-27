@@ -11,10 +11,13 @@ import hashlib
 import io
 import json
 import os
+import re
+import shutil
 import stat
 import sys
 import tarfile
 import textwrap
+import urllib.parse
 from pathlib import Path
 
 import pytest
@@ -29,6 +32,8 @@ from llm_rosetta.contracts.extension import (
 from llm_rosetta.extensions import _cli, _tools
 from llm_rosetta.extensions._dirs import tool_bin_dir, tools_dir
 from llm_rosetta.extensions._install import check_external
+from llm_rosetta.extensions._node import NODE_BUILDS as PINNED_BUILDS
+from llm_rosetta.extensions._node import NODE_VERSION, NodeBuild
 from llm_rosetta.extensions._tools import CliInstallError, install_cli, platform_key
 
 MUSL_X64 = "linux_x64_musl"
@@ -57,7 +62,8 @@ def fake_npm(tmp_path, monkeypatch) -> Path:
             args = sys.argv[1:]
             with open({str(log)!r}, "a") as out:
                 out.write(json.dumps({{"args": args, "cache": os.environ.get("npm_config_cache"),
-                                       "home": os.environ.get("HOME")}}) + "\\n")
+                                       "home": os.environ.get("HOME"),
+                                       "path": os.environ.get("PATH"), "self": sys.argv[0]}}) + "\\n")
             if os.environ.get("FAKE_NPM_FAIL"):
                 print("npm ERR! 404", file=sys.stderr)
                 sys.exit(1)
@@ -69,7 +75,8 @@ def fake_npm(tmp_path, monkeypatch) -> Path:
             os.makedirs(bin_dir)
             path = os.path.join(bin_dir, binary)
             with open(path, "w") as handle:
-                handle.write("#!/bin/sh\\necho " + binary + " " + version + "\\n")
+                guard = "node --version >/dev/null || exit $?\\n" if os.environ.get("FAKE_NPM_NEEDS_NODE") else ""
+                handle.write("#!/bin/sh\\n" + guard + "echo " + binary + " " + version + "\\n")
             os.chmod(path, 0o755)
             """
         )
@@ -77,6 +84,55 @@ def fake_npm(tmp_path, monkeypatch) -> Path:
     script.chmod(0o755)
     monkeypatch.setenv("FAKE_NPM_BIN", "claude")
     return script
+
+
+REAL_FETCH = _tools._fetch
+
+
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """Nothing here may download: a test that needs a download supplies one."""
+
+    def refuse(url, dest):
+        raise AssertionError(f"a test reached the network: {url}")
+
+    monkeypatch.setattr(_tools, "_fetch", refuse)
+
+
+NODE_URL = "https://example.test/node/v{version}/node-{platform}.tar.gz"
+
+
+def _node_archive(
+    fake_npm: Path | None = None, *, node_body: str | None = None
+) -> bytes:
+    """A tar.gz shaped like a Node.js release: ``node-vX/bin/{node,npm,npx}``."""
+    node = node_body or f"#!/bin/sh\necho v{NODE_VERSION}\n"
+    npm = fake_npm.read_bytes() if fake_npm else b"#!/bin/sh\nexit 0\n"
+    top = f"node-v{NODE_VERSION}-linux-x64-musl"
+    return _archive(
+        {
+            f"{top}/bin/node": node.encode(),
+            f"{top}/bin/npm": npm,
+            f"{top}/bin/npx": b"#!/bin/sh\nexit 0\n",
+        }
+    )
+
+
+def _pin_node(monkeypatch, blob: bytes, *, sha: str | None = None) -> _Net:
+    """Pin *blob* as the Node.js of ``linux_x64_musl`` and serve it."""
+    net = _Net(blob)
+    url = NODE_URL.format(version=NODE_VERSION, platform="linux-x64-musl")
+    digest = sha if sha is not None else hashlib.sha256(blob).hexdigest()
+    monkeypatch.setitem(_tools.NODE_BUILDS, MUSL_X64, NodeBuild(url, digest))
+    monkeypatch.setattr(_tools, "_fetch", net)
+    return net
+
+
+@pytest.fixture
+def managed_node(fake_npm, monkeypatch) -> _Net:
+    """The pinned Node.js is an archive whose ``npm`` is the fake one."""
+    monkeypatch.setattr(_tools, "platform_key", lambda: MUSL_X64)
+    return _pin_node(monkeypatch, _node_archive(fake_npm))
 
 
 def _npm_calls(fake_npm: Path) -> list[dict]:
@@ -150,7 +206,7 @@ def _install(program, *, fake_npm=None, net=None, **kwargs):
         "demo",
         program,
         platform=MUSL_X64,
-        npm=str(fake_npm) if fake_npm else "npm",
+        npm=str(fake_npm) if fake_npm else None,
         fetch=net,
         **kwargs,
     )
@@ -273,11 +329,10 @@ class TestNpmInstall:
         assert not (tools / "demo" / "installed.json").exists()
         assert not (tools / "demo" / "npm-2.1.299").exists()
 
-    def test_without_npm_it_says_what_to_install(self, tools, tmp_path, monkeypatch):
-        monkeypatch.setenv("PATH", str(tmp_path / "empty"))
-        with pytest.raises(CliInstallError, match="npm"):
-            install_cli("demo", _npm_program(), platform=MUSL_X64)
-        assert not tools.exists()
+    def test_an_npm_override_that_is_not_there_is_named(self, tools, tmp_path):
+        with pytest.raises(CliInstallError, match="no-such-npm"):
+            install_cli("demo", _npm_program(), platform=MUSL_X64, npm="no-such-npm")
+        assert not (tools / "demo" / "installed.json").exists()
 
     def test_a_package_that_provides_no_bin_is_a_failure(
         self, tools, fake_npm, monkeypatch
@@ -286,6 +341,191 @@ class TestNpmInstall:
         with pytest.raises(CliInstallError, match="claude"):
             _install(_npm_program(), fake_npm=fake_npm)
         assert not (tools / "demo" / "installed.json").exists()
+
+
+class TestNodeInstall:
+    def test_it_unpacks_the_pinned_build_and_links_the_commands(
+        self, tools, monkeypatch
+    ):
+        net = _pin_node(monkeypatch, _node_archive())
+        directory, state = _tools.install_node(platform=MUSL_X64)
+        assert state == "installed"
+        assert directory == tools / "node" / NODE_VERSION
+        assert net.urls == [
+            NODE_URL.format(version=NODE_VERSION, platform="linux-x64-musl")
+        ]
+        for name in ("node", "npm", "npx"):
+            link = tools / "bin" / name
+            assert link.is_symlink()
+            assert link.resolve() == (directory / "bin" / name).resolve()
+
+    def test_a_second_run_changes_nothing(self, tools, monkeypatch):
+        net = _pin_node(monkeypatch, _node_archive())
+        _tools.install_node(platform=MUSL_X64)
+        _, state = _tools.install_node(platform=MUSL_X64)
+        assert state == "unchanged"
+        assert len(net.urls) == 1
+
+    def test_a_node_that_no_longer_runs_is_installed_again(self, tools, monkeypatch):
+        net = _pin_node(monkeypatch, _node_archive())
+        directory, _ = _tools.install_node(platform=MUSL_X64)
+        (directory / "bin" / "node").write_text("#!/bin/sh\nexit 127\n")
+        _, state = _tools.install_node(platform=MUSL_X64)
+        assert state == "installed"
+        assert len(net.urls) == 2
+        assert (directory / "bin" / "node").read_text().endswith(f"v{NODE_VERSION}\n")
+
+    def test_a_missing_shared_link_is_repaired(self, tools, monkeypatch):
+        _pin_node(monkeypatch, _node_archive())
+        _tools.install_node(platform=MUSL_X64)
+        (tools / "bin" / "npm").unlink()
+        assert _tools.install_node(platform=MUSL_X64)[1] == "installed"
+        assert (tools / "bin" / "npm").is_symlink()
+
+    def test_a_wrong_checksum_installs_nothing(self, tools, monkeypatch):
+        _pin_node(monkeypatch, _node_archive(), sha="0" * 64)
+        with pytest.raises(CliInstallError, match="sha256"):
+            _tools.install_node(platform=MUSL_X64)
+        assert not (tools / "node" / NODE_VERSION).exists()
+        assert not (tools / "bin").exists()
+        assert [p.name for p in (tools / "node").iterdir()] == []
+
+    def test_a_member_outside_its_directory_refuses_the_archive(
+        self, tools, monkeypatch
+    ):
+        blob = _archive(
+            {"../escape": b"x", f"node-v{NODE_VERSION}/bin/node": b"#!/bin/sh\n"}
+        )
+        _pin_node(monkeypatch, blob)
+        with pytest.raises(CliInstallError, match="outside"):
+            _tools.install_node(platform=MUSL_X64)
+        assert not (tools / "node" / NODE_VERSION).exists()
+        assert not (tools / "node" / "escape").exists()
+
+    def test_an_archive_without_bin_node_is_refused(self, tools, monkeypatch):
+        _pin_node(monkeypatch, _archive({"node-v1/README": b"x"}))
+        with pytest.raises(CliInstallError, match="bin/node"):
+            _tools.install_node(platform=MUSL_X64)
+        assert not (tools / "node" / NODE_VERSION).exists()
+
+    def test_a_node_that_does_not_run_here_leaves_nothing(self, tools, monkeypatch):
+        blob = _node_archive(
+            node_body="#!/bin/sh\necho 'Error loading shared library libstdc++.so.6' >&2\nexit 1\n"
+        )
+        _pin_node(monkeypatch, blob)
+        with pytest.raises(CliInstallError, match="libstdc\\+\\+.so.6") as seen:
+            _tools.install_node(platform=MUSL_X64)
+        assert "exit 1" in str(seen.value)
+        assert not (tools / "node" / NODE_VERSION).exists()
+        assert not (tools / "bin" / "node").exists()
+
+    def test_a_node_that_does_not_run_does_not_replace_the_one_there(
+        self, tools, monkeypatch
+    ):
+        kept = tools / "node" / NODE_VERSION
+        (kept / "bin").mkdir(parents=True)
+        (kept / "marker").write_text("old")
+        _pin_node(monkeypatch, _node_archive(node_body="#!/bin/sh\nexit 1\n"))
+        with pytest.raises(CliInstallError, match="does not run"):
+            _tools.install_node(platform=MUSL_X64)
+        assert (kept / "marker").read_text() == "old"
+
+    def test_another_version_is_pruned(self, tools, monkeypatch):
+        stale = tools / "node" / "20.0.0"
+        stale.mkdir(parents=True)
+        _pin_node(monkeypatch, _node_archive())
+        _tools.install_node(platform=MUSL_X64)
+        assert not stale.exists()
+
+    def test_a_platform_with_no_pin_names_the_pinned_ones(self, tools):
+        with pytest.raises(CliInstallError, match="linux_riscv64_gnu") as seen:
+            _tools.install_node(platform="linux_riscv64_gnu")
+        assert "linux_x64_musl" in str(seen.value)
+        assert not tools.exists()
+
+
+class TestNodePins:
+    def test_every_supported_platform_is_pinned(self):
+        assert set(PINNED_BUILDS) == {
+            "linux_x64_gnu",
+            "linux_arm64_gnu",
+            "linux_x64_musl",
+            "linux_arm64_musl",
+            "darwin_x64",
+            "darwin_arm64",
+        }
+
+    @pytest.mark.parametrize("key", sorted(PINNED_BUILDS))
+    def test_a_pin_is_an_https_archive_of_the_pinned_version(self, key):
+        build = PINNED_BUILDS[key]
+        assert build.url.startswith("https://")
+        assert f"/v{NODE_VERSION}/node-v{NODE_VERSION}-" in build.url
+        assert re.fullmatch(r"[0-9a-f]{64}", build.sha256)
+
+    @pytest.mark.parametrize("key", sorted(PINNED_BUILDS))
+    def test_only_musl_comes_from_the_unofficial_builds(self, key):
+        host = urllib.parse.urlsplit(PINNED_BUILDS[key].url).hostname
+        assert host == (
+            "unofficial-builds.nodejs.org" if key.endswith("musl") else "nodejs.org"
+        )
+
+    def test_the_version_is_exact(self):
+        assert re.fullmatch(r"\d+\.\d+\.\d+", NODE_VERSION)
+
+
+class TestNpmUsesTheManagedNode:
+    def test_it_runs_the_npm_of_the_node_in_the_tools_directory(
+        self, tools, managed_node, fake_npm
+    ):
+        result = install_cli("demo", _npm_program(), platform=MUSL_X64)
+        assert result.state == "installed"
+        (call,) = _npm_calls(fake_npm)
+        node_bin = tools / "node" / NODE_VERSION / "bin"
+        assert Path(call["self"]) == node_bin / "npm"
+        assert call["path"].split(os.pathsep)[0] == str(node_bin)
+        assert len(managed_node.urls) == 1
+
+    def test_the_node_is_installed_once_for_many_programs(
+        self, tools, managed_node, fake_npm
+    ):
+        install_cli("demo", _npm_program(), platform=MUSL_X64)
+        install_cli("other", _npm_program(), platform=MUSL_X64)
+        assert len(managed_node.urls) == 1
+        assert len(_npm_calls(fake_npm)) == 2
+
+    def test_npm_keeps_its_home_and_cache_in_the_programs_directory(
+        self, tools, managed_node, fake_npm
+    ):
+        install_cli("demo", _npm_program(), platform=MUSL_X64)
+        (call,) = _npm_calls(fake_npm)
+        assert call["home"] == str(tools / "demo" / ".home")
+        assert call["cache"] == str(tools / "demo" / ".npm-cache")
+
+    def test_a_failed_node_download_installs_no_program(
+        self, tools, fake_npm, monkeypatch
+    ):
+        _pin_node(monkeypatch, _node_archive(fake_npm), sha="0" * 64)
+        with pytest.raises(CliInstallError, match="sha256"):
+            install_cli("demo", _npm_program(), platform=MUSL_X64)
+        assert _npm_calls(fake_npm) == []
+        assert not (tools / "demo" / "installed.json").exists()
+
+    def test_a_program_whose_node_is_gone_is_broken_then_repaired(
+        self, tools, managed_node, monkeypatch
+    ):
+        monkeypatch.setenv("FAKE_NPM_NEEDS_NODE", "1")
+        program = _npm_program()
+        install_cli("demo", program, platform=MUSL_X64)
+        search = [tool_bin_dir("demo"), tools / "bin"]
+        assert check_external(program, search=search).state == "ok"
+        shutil.rmtree(tools / "node")
+        (tools / "bin" / "node").unlink()
+        # this host's own node must not stand in for the one that is gone
+        monkeypatch.setenv("PATH", str(tools.parent / "empty"))
+        assert check_external(program, search=search).state == "broken"
+        again = install_cli("demo", program, platform=MUSL_X64)
+        assert again.state == "installed"
+        assert check_external(program, search=search).state == "ok"
 
 
 class TestReleaseInstall:
@@ -363,9 +603,9 @@ class TestReleaseInstall:
 
     def test_the_default_fetch_refuses_a_URL_that_is_not_https(self, tmp_path):
         with pytest.raises(CliInstallError, match="https"):
-            _tools._fetch("http://example.test/a.tar.gz", tmp_path / "a")
+            REAL_FETCH("http://example.test/a.tar.gz", tmp_path / "a")
         with pytest.raises(CliInstallError, match="https"):
-            _tools._fetch("file:///etc/passwd", tmp_path / "a")
+            REAL_FETCH("file:///etc/passwd", tmp_path / "a")
 
 
 class TestRefusals:
@@ -408,9 +648,8 @@ class TestTheCommand:
         return _cli.ext_main(["install-cli", *args])
 
     def test_it_installs_and_exits_zero(
-        self, tools, fake_npm, declared, monkeypatch, capsys
+        self, tools, managed_node, declared, monkeypatch, capsys
     ):
-        monkeypatch.setenv("PATH", f"{fake_npm.parent}{os.pathsep}{os.environ['PATH']}")
         assert self._run("demo") == 0
         assert "installed" in capsys.readouterr().out
         assert self._run("demo") == 0
@@ -421,17 +660,15 @@ class TestTheCommand:
         assert "nope" in capsys.readouterr().err
 
     def test_a_failure_exits_non_zero_and_says_why(
-        self, tools, fake_npm, declared, monkeypatch, capsys
+        self, tools, managed_node, declared, monkeypatch, capsys
     ):
-        monkeypatch.setenv("PATH", f"{fake_npm.parent}{os.pathsep}{os.environ['PATH']}")
         monkeypatch.setenv("FAKE_NPM_FAIL", "1")
         assert self._run("demo") == 1
         assert "npm" in capsys.readouterr().err
 
     def test_json_reports_the_state(
-        self, tools, fake_npm, declared, monkeypatch, capsys
+        self, tools, managed_node, declared, monkeypatch, capsys
     ):
-        monkeypatch.setenv("PATH", f"{fake_npm.parent}{os.pathsep}{os.environ['PATH']}")
         assert self._run("demo", "--json") == 0
         report = json.loads(capsys.readouterr().out)
         assert report["programs"][0]["state"] == "installed"

@@ -32,6 +32,7 @@ from ._dirs import (
     configure_extensions_dir,
     extensions_dir,
     tool_bin_dir,
+    tools_dir,
 )
 from ._discovery import retired_entry_points
 from ._index import (
@@ -622,9 +623,13 @@ def _manifest_of(ext_id: str) -> ExtensionManifest | None:
 
 
 def _tool_search(ext_id: str) -> list[Any]:
-    """Where ``install-cli`` puts an extension's entry links; none if unknown."""
+    """Where ``install-cli`` puts an extension's entry links; none if unknown.
+
+    The shared ``<tools>/bin`` comes second: it holds the ``node`` link an npm
+    program's script starts with.
+    """
     try:
-        return [tool_bin_dir(ext_id)]
+        return [tool_bin_dir(ext_id), tools_dir() / "bin"]
     except ExtensionInstallError:
         return []
 
@@ -667,7 +672,7 @@ def _install_cli(ext_id: str, only: str | None, dry_run: bool, as_json: bool) ->
 # doctor
 # --------------------------------------------------------------------------- #
 
-_PROBLEM_STATES = ("missing", "too_old", "unknown")
+_PROBLEM_STATES = ("missing", "broken", "too_old", "unknown")
 
 
 def _examine(

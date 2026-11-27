@@ -102,9 +102,10 @@ class ExternalStatus:
 
     Attributes:
         name: The program's name.
-        state: ``"ok"``, ``"missing"`` (not runnable), ``"too_old"`` (older than
-            the minimum) or ``"unknown"`` (it ran, a minimum is required, and
-            its output holds no version number).
+        state: ``"ok"``, ``"missing"`` (not runnable), ``"broken"`` (it starts
+            and fails with no version, e.g. its Node.js no longer runs),
+            ``"too_old"`` (older than the minimum) or ``"unknown"`` (it ran, a
+            minimum is required, and its output holds no version number).
         found: The version found, when there was one.
         minimum: The version the extension requires, if any.
         detail: One sentence on what happened; ``None`` when ``ok``.
@@ -872,9 +873,11 @@ def check_external(
         timeout: Seconds the command may run.
         search: Directories looked in before ``PATH`` for a command named
             without a directory (the entry links ``ext install-cli`` makes).
+            The command runs with them first on ``PATH`` too, so a script that
+            starts with ``env node`` finds the Node.js installed beside it.
 
     Returns:
-        The status: ``ok``, ``missing``, ``too_old`` or ``unknown``.
+        The status: ``ok``, ``missing``, ``broken``, ``too_old`` or ``unknown``.
 
     Raises:
         ValueError: ``program.minimum`` holds no dotted version number.
@@ -888,9 +891,12 @@ def check_external(
     if not program.check:
         return ExternalStatus(state="missing", detail="no check command", **base)
     argv = list(program.check)
-    if search and os.sep not in argv[0]:
+    env = None
+    if search:
         path = os.pathsep.join([*(str(d) for d in search), os.environ.get("PATH", "")])
-        argv[0] = shutil.which(argv[0], path=path) or argv[0]
+        env = {**os.environ, "PATH": path}
+        if os.sep not in argv[0]:
+            argv[0] = shutil.which(argv[0], path=path) or argv[0]
     try:
         run = subprocess.run(
             argv,
@@ -899,6 +905,7 @@ def check_external(
             timeout=timeout,
             shell=False,
             stdin=subprocess.DEVNULL,
+            env=env,
         )
     except FileNotFoundError:
         return ExternalStatus(
@@ -912,6 +919,13 @@ def check_external(
         return ExternalStatus(state="missing", detail=f"cannot run it: {exc}", **base)
     output = f"{run.stdout}\n{run.stderr}"
     found = _version_tuple(output)
+    if found is None and run.returncode != 0:
+        tail = (run.stderr or run.stdout).strip().splitlines()[-1:]
+        return ExternalStatus(
+            state="broken",
+            detail=f"it exited with {run.returncode}: {tail[0] if tail else 'no output'}",
+            **base,
+        )
     if found is None:
         if minimum is None:
             return ExternalStatus(state="ok", **base)
