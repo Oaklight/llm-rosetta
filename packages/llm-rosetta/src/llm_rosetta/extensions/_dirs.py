@@ -95,6 +95,33 @@ def extensions_dir() -> Path:
     return _default_dir()
 
 
+#: The environment variable that names the directory external CLIs install into.
+TOOLS_ENV_VAR = "LLM_ROSETTA_TOOLS_DIR"
+
+
+def tools_dir() -> Path:
+    """Return the directory ``ext install-cli`` installs external programs into.
+
+    Returns:
+        ``$LLM_ROSETTA_TOOLS_DIR`` when set, else ``tools`` beside the
+        extensions directory (``/config/tools`` when that is
+        ``/config/extensions``).  The directory need not exist yet.
+
+    Raises:
+        ExtensionsDirError: Nothing names it and no extensions directory can be
+            derived.
+    """
+    env = os.environ.get(TOOLS_ENV_VAR)
+    if env:
+        return Path(env).expanduser()
+    return extensions_dir().parent / "tools"
+
+
+def tool_bin_dir(ext_id: str) -> Path:
+    """Return the directory holding the entry links of an extension's programs."""
+    return tools_dir() / ext_id / "bin"
+
+
 def activate_extensions_dir(path: str | os.PathLike[str] | None = None) -> Path:
     """Make the extensions in a directory importable in this process.
 

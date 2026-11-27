@@ -857,7 +857,10 @@ def _at_least(found: tuple[int, ...], minimum: tuple[int, ...]) -> bool:
 
 
 def check_external(
-    program: ExternalProgram, *, timeout: float = 10.0
+    program: ExternalProgram,
+    *,
+    timeout: float = 10.0,
+    search: Sequence[str | os.PathLike[str]] = (),
 ) -> ExternalStatus:
     """Run an external program's version check and compare to its minimum.
 
@@ -867,6 +870,8 @@ def check_external(
     Args:
         program: The declaration from the manifest.
         timeout: Seconds the command may run.
+        search: Directories looked in before ``PATH`` for a command named
+            without a directory (the entry links ``ext install-cli`` makes).
 
     Returns:
         The status: ``ok``, ``missing``, ``too_old`` or ``unknown``.
@@ -882,9 +887,13 @@ def check_external(
     base = {"name": program.name, "minimum": program.minimum}
     if not program.check:
         return ExternalStatus(state="missing", detail="no check command", **base)
+    argv = list(program.check)
+    if search and os.sep not in argv[0]:
+        path = os.pathsep.join([*(str(d) for d in search), os.environ.get("PATH", "")])
+        argv[0] = shutil.which(argv[0], path=path) or argv[0]
     try:
         run = subprocess.run(
-            list(program.check),
+            argv,
             capture_output=True,
             text=True,
             timeout=timeout,
