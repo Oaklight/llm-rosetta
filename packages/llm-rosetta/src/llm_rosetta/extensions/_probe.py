@@ -17,24 +17,35 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from llm_rosetta.contracts.extension import ExtensionManifest
+from llm_rosetta.contracts.extension import (
+    COMMANDS_ATTRIBUTE,
+    COMMANDS_MODULE,
+    TRANSPORT_MODULE,
+    TRANSPORTS_ATTRIBUTE,
+    ExtensionManifest,
+)
 
 from ._dirs import extensions_dir
 
 #: Seconds a child may take to import one extension.
 IMPORT_TIMEOUT = 30.0
 
+#: The module and the mapping of each kind the child checks, in the order of the
+#: ``verbs`` and ``transports`` it is given (the names are the contract's).
+_KINDS = json.dumps(
+    [[COMMANDS_MODULE, COMMANDS_ATTRIBUTE], [TRANSPORT_MODULE, TRANSPORTS_ATTRIBUTE]]
+)
+
 _SCRIPT = r"""
 import importlib, json, sys
 
-directory, ext_id, verbs, transports = sys.argv[1:5]
+directory, ext_id, verbs, transports, kinds = sys.argv[1:6]
 sys.path.insert(0, directory)
 problems = []
 try:
     importlib.import_module("llm_rosetta_ext." + ext_id)
-    for module, attribute, wanted in (
-        ("commands", "COMMANDS", json.loads(verbs)),
-        ("transport", "TRANSPORTS", json.loads(transports)),
+    for (module, attribute), wanted in zip(
+        json.loads(kinds), (json.loads(verbs), json.loads(transports))
     ):
         if not wanted:
             continue
@@ -82,7 +93,14 @@ def _run_in_process(
     saved_out = sys.stdout
     import io
 
-    sys.argv = ["", directory, ext_id, json.dumps(verbs), json.dumps(transports)]
+    sys.argv = [
+        "",
+        directory,
+        ext_id,
+        json.dumps(verbs),
+        json.dumps(transports),
+        _KINDS,
+    ]
     sys.stdout = captured = io.StringIO()
     try:
         exec(compile(_SCRIPT, "<ext-doctor>", "exec"), namespace)  # noqa: S102
@@ -135,6 +153,7 @@ def check_import(
                 ext_id,
                 json.dumps(verbs),
                 json.dumps(transports),
+                _KINDS,
             ],
             capture_output=True,
             text=True,

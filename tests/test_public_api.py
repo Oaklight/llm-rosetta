@@ -309,10 +309,14 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
     },
     "llm_rosetta.contracts.extension": {
         "items": [
+            "COMMANDS_ATTRIBUTE",
+            "COMMANDS_MODULE",
             "MANIFEST_FILENAME",
             "MATURITY_LEVELS",
             "PLATFORMS",
             "SCHEMA_FILENAME",
+            "TRANSPORTS_ATTRIBUTE",
+            "TRANSPORT_MODULE",
             "ExtensionManifest",
             "ExtensionManifestInvalid",
             "ExtensionRequirement",
@@ -327,7 +331,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "resolve_transport",
             "validate_extension_manifest",
         ],
-        "max_count": 17,
+        "max_count": 21,
     },
     "llm_rosetta.contracts.transform": {
         "items": [
