@@ -688,21 +688,40 @@ class TestAdminModelTypeMetadata:
 
 
 class TestPipelineField:
-    """Verify that non-LLM descriptors have a callable pipeline."""
+    """The built-in typed types name no handler; the app supplies theirs."""
+
+    @staticmethod
+    def _handler_of_builtin(name: str):
+        from llm_rosetta_gateway.app.routes_typed import _handler_of
+
+        desc = get_model_type(name)
+        assert desc is not None
+        # The descriptor names no handler; the app's table supplies it.
+        assert desc.pipeline is None
+        return _handler_of(desc)
 
     def test_embedding_pipeline_returns_handler(self) -> None:
-        desc = get_model_type("embeddings")
-        assert desc is not None
-        assert desc.pipeline is not None
-        handler = desc.pipeline()
-        assert callable(handler)
+        assert callable(self._handler_of_builtin("embeddings"))
 
     def test_rerank_pipeline_returns_handler(self) -> None:
-        desc = get_model_type("rerank")
-        assert desc is not None
-        assert desc.pipeline is not None
-        handler = desc.pipeline()
-        assert callable(handler)
+        assert callable(self._handler_of_builtin("rerank"))
+
+    def test_decision_pipeline_returns_handler(self) -> None:
+        assert callable(self._handler_of_builtin("decisions"))
+
+    def test_a_descriptors_own_pipeline_wins_over_the_builtin_table(self) -> None:
+        from llm_rosetta_gateway.app.routes_typed import _handler_of
+
+        async def mine(request, config):  # pragma: no cover - never called
+            return None
+
+        desc = ModelTypeDescriptor(
+            name="embeddings",
+            routes=[RouteSpec("/v1/embeddings")],
+            formats=["openai"],
+            pipeline=lambda: mine,
+        )
+        assert _handler_of(desc) is mine
 
     def test_llm_pipeline_is_none(self) -> None:
         desc = get_model_type("llm")

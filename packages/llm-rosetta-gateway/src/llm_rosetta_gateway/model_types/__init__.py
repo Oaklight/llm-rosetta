@@ -11,8 +11,10 @@ LLM is special: it uses the full converter pipeline via ``_proxy_handler``
 in ``app.py``, so its ``pipeline`` is ``None``.  Its routes are still the
 descriptor's: ``app.py`` walks :attr:`ModelTypeDescriptor.routes` and picks a
 handler by ``source_format``, so the chat path list exists only here.
-Non-LLM types (embeddings, rerank) point to their dedicated pipeline-handler
-callables.
+Non-LLM types (embeddings, rerank, decisions) have their handler in
+``app/routes_typed.py`` (``BUILTIN_HANDLERS``): this module sits below the
+pipelines and names none of them.  A type registered from outside points its
+descriptor's ``pipeline`` at its own handler.
 
 Every descriptor takes its format list from the format catalog
 (:mod:`llm_rosetta.formats`), and the LLM route list from each format's
@@ -55,10 +57,10 @@ class ModelTypeDescriptor:
         formats: Provider API format strings this type supports.  For the
             non-LLM types this is the converter registry's own key set.
         pipeline: A zero-argument callable that returns the async handler
-            ``(request, config) -> Response`` for non-LLM types.  The
-            callable is invoked lazily at route registration time to
-            avoid circular imports.  ``None`` for LLM, which uses the
-            full converter pipeline via ``_proxy_handler``.
+            ``(request, config) -> Response``, for a non-LLM type registered
+            from outside.  ``None`` for LLM, which uses the full converter
+            pipeline via ``_proxy_handler``, and for the built-in typed types,
+            whose handler is in ``app/routes_typed.py``.
         supports_streaming: Whether streaming is relevant for this type.
         badge_class: CSS class for the admin UI badge.
         config_format_key: Provider config key for the type's format
@@ -191,29 +193,6 @@ def _reset_registry() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _embedding_pipeline() -> Callable[..., Any]:
-    """Lazy import wrapper for the embedding handler.
-
-    Returned by the embedding descriptor's ``pipeline`` field.  Defers
-    the import of ``gateway.embeddings`` to route-registration time so
-    that ``model_types`` can be imported without pulling in the full
-    handler dependency graph (which would cause circular imports).
-    """
-    from llm_rosetta_gateway.pipelines.embeddings import handle_embeddings
-
-    return handle_embeddings
-
-
-def _rerank_pipeline() -> Callable[..., Any]:
-    """Lazy import wrapper for the rerank handler.
-
-    Same rationale as :func:`_embedding_pipeline`.
-    """
-    from llm_rosetta_gateway.pipelines.rerank import handle_rerank
-
-    return handle_rerank
-
-
 def _default_paths(model_type: str) -> dict[str, str]:
     """Per-format upstream path *overrides*, derived from the format catalog.
 
@@ -279,7 +258,6 @@ def _register_builtins() -> None:
                 RouteSpec("/v1/embeddings"),
             ],
             formats=formats_of("embeddings"),
-            pipeline=_embedding_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-embedding",
             config_format_key="embeddings_format",
@@ -312,7 +290,6 @@ def _register_builtins() -> None:
                 RouteSpec("/v2/rerank"),
             ],
             formats=formats_of("rerank"),
-            pipeline=_rerank_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-rerank",
             config_format_key="rerank_format",
@@ -333,13 +310,6 @@ def _register_builtins() -> None:
             color="var(--warn)",
         )
     )
-
-
-def _decision_pipeline() -> Callable[..., Any]:
-    """Lazy import wrapper for the decision handler."""
-    from llm_rosetta_gateway.pipelines.decision import handle_decision
-
-    return handle_decision
 
 
 def _register_decision() -> None:
@@ -366,7 +336,6 @@ def _register_decision() -> None:
                 RouteSpec("/v1/systemone"),
             ],
             formats=formats_of("decisions"),
-            pipeline=_decision_pipeline,
             supports_streaming=False,
             badge_class="cap-badge-decision",
             config_format_key="decisions_format",

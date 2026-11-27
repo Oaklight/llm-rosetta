@@ -106,9 +106,6 @@ LAZY_UPWARD: dict[tuple[str, str, str], int] = {
     ("maintenance/migrations.py", "config", "_migrate_v4_to_v5"): 1,
     ("maintenance/migrations.py", "config", "_serving_providers"): 1,
     ("maintenance/names.py", "config", "legacy_name_error"): 1,
-    ("model_types/__init__.py", "pipelines", "_decision_pipeline"): 1,
-    ("model_types/__init__.py", "pipelines", "_embedding_pipeline"): 1,
-    ("model_types/__init__.py", "pipelines", "_rerank_pipeline"): 1,
 }
 
 
@@ -321,6 +318,7 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
         "model_types",
         "observability",
         "ops",
+        "pipelines",
         "proxy",
         "quota",
         "routing",
@@ -366,7 +364,7 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
         "keystore",
         "observability",
     ),
-    "model_types": ("pipelines",),
+    "model_types": (),
     "ops": (
         "config",
         "middleware",

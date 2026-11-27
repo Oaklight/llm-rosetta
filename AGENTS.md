@@ -634,12 +634,15 @@ declarative — steps 1–3 are the core work, the rest is wiring.
    hooks, and nothing else.  `handle_<name>(request, config)` stays the
    public entry point.
 2. **Register descriptor** — in `model_types/__init__.py`, add a
-   `_<name>_pipeline()` lazy import wrapper and a
    `_register_<name>()` function that calls `register_model_type()`
    with a `ModelTypeDescriptor`.  Required fields: `name`, `routes`,
-   `formats`, `pipeline`, `badge_class`, `config_format_key`,
+   `formats`, `badge_class`, `config_format_key`,
    `config_path_key`, `default_format`, `default_path`, `icon_svg`,
    `color`.  Call it at module level after `_register_builtins()`.
+   `model_types` sits below the pipelines and names no handler: add
+   `"<name>": handle_<name>` to `BUILTIN_HANDLERS` in
+   `app/routes_typed.py` (a type registered from outside sets the
+   descriptor's `pipeline` to a callable returning its handler).
 3. **Config pool** — nothing to do: `GatewayConfig.__init__` walks the
    registry and builds `<name>_providers` / `<name>_provider_infos` /
    `<name>_models` plus `default_<name>_format` from the descriptor's
