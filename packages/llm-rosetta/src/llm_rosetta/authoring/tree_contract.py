@@ -576,14 +576,19 @@ def apply_migration(root: Path, moves: list[Move]) -> list[str]:
     return actions
 
 
-def run_migrate(root: Path, *, write: bool = False) -> int:
+def run_migrate(root: Path, *, write: bool = False, only: str | None = None) -> int:
     """Plan (and optionally apply) the migration of *root*.
+
+    Args:
+        root: The directory a gateway scans.
+        write: Apply the moves; a dry run prints them.
+        only: The name of one vendor directory of *root* to migrate alone.
 
     Returns:
         ``0`` when there is nothing to do or the migration was applied;
         ``1`` when a dry run found work, so a script can tell the two apart.
     """
-    moves, notes = plan_migration(root)
+    moves, notes = plan_migration(root, only=only)
     for note in notes:
         print(f"note    {note}")
     if not moves:
@@ -600,7 +605,7 @@ def run_migrate(root: Path, *, write: bool = False) -> int:
     for action in apply_migration(root, moves):
         print(action)
     print(
-        "\nnext: imports that moved one level deeper need a hand — check "
+        "\nnext: imports in a moved leaf need a hand when its depth changed — check "
         "`from ..` against the new depth, then run the package's tests."
     )
     return 0

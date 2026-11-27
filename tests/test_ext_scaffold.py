@@ -795,3 +795,98 @@ def test_every_kind_has_its_own_rules():
     from llm_rosetta.extensions import KINDS
 
     assert set(PROBLEMS) == set(KINDS)
+
+
+# ---------------------------------------------------------------------------
+# ext migrate: the shim tree moves onto the contract, the folder is the vendor
+# ---------------------------------------------------------------------------
+
+
+def _migrate(folder: Path, *flags: str) -> int:
+    parser = argparse.ArgumentParser()
+    ext_scaffold.add_ext_arguments(parser, command="migrate")
+    return ext_scaffold.run_ext_migrate(parser.parse_args([str(folder), *flags]))
+
+
+def _legacy(tmp_path: Path, ext_id: str = "acme") -> Path:
+    """An extension whose only lane sits in a format directory (what ext new once wrote)."""
+    folder = _make(tmp_path, ext_id)
+    lane = folder / "llm" / "chat_completions"
+    lane.mkdir()
+    (folder / "llm" / "provider.yaml").rename(lane / "provider.yaml")
+    return folder
+
+
+def test_a_dry_run_prints_the_move_and_moves_nothing(tmp_path, capsys):
+    folder = _legacy(tmp_path)
+    assert _migrate(folder) == 1
+    out = capsys.readouterr().out
+    assert "move    acme/llm/chat_completions -> acme/llm" in out
+    assert "rerun with --write" in out
+    assert (folder / "llm" / "chat_completions" / "provider.yaml").is_file()
+    assert not (folder / "llm" / "provider.yaml").exists()
+
+
+def test_write_moves_the_lane_and_ext_check_agrees(tmp_path, capsys):
+    folder = _legacy(tmp_path)
+    assert _problems(folder) != []
+    assert _migrate(folder, "--write") == 0
+    assert (folder / "llm" / "provider.yaml").is_file()
+    assert not (folder / "llm" / "chat_completions").exists()
+    assert "llm-rosetta ext check" in capsys.readouterr().out
+    assert _problems(folder) == []
+    # a second run has nothing to do
+    assert _migrate(folder) == 0
+    assert "nothing to migrate" in capsys.readouterr().out
+
+
+def test_a_conforming_extension_has_nothing_to_migrate(tmp_path, capsys):
+    folder = _make(tmp_path, "acme", "--provides", "shims,transports,commands")
+    assert _migrate(folder) == 0
+    assert "nothing to migrate" in capsys.readouterr().out
+
+
+def test_migrating_one_extension_leaves_its_sibling_alone(tmp_path):
+    mine = _legacy(tmp_path, "mine")
+    other = _legacy(tmp_path, "other")
+    assert _migrate(mine, "--write") == 0
+    assert (mine / "llm" / "provider.yaml").is_file()
+    assert (other / "llm" / "chat_completions" / "provider.yaml").is_file()
+
+
+def test_a_root_migrates_every_package_under_it(tmp_path):
+    packages = tmp_path / "packages"
+    packages.mkdir()
+    one = _legacy(packages, "one")
+    two = _legacy(packages, "two")
+    assert _migrate(tmp_path, "--write") == 0
+    assert (one / "llm" / "provider.yaml").is_file()
+    assert (two / "llm" / "provider.yaml").is_file()
+
+
+@needs_build
+def test_a_move_that_leaves_package_data_stale_is_caught_in_the_wheel(tmp_path):
+    folder = _legacy(tmp_path)
+    _edit(
+        folder / "pyproject.toml",
+        '"llm/provider.yaml"',
+        '"llm/chat_completions/provider.yaml"',
+    )
+    assert _migrate(folder, "--write") == 0
+    assert _problems(folder, build=True) == [
+        "wheel lacks llm_rosetta_ext/acme/llm/provider.yaml"
+    ]
+    _edit(
+        folder / "pyproject.toml",
+        '"llm/chat_completions/provider.yaml"',
+        '"llm/provider.yaml"',
+    )
+    assert _problems(folder, build=True) == []
+
+
+def test_the_dispatcher_runs_ext_migrate(tmp_path, capsys):
+    from llm_rosetta import cli
+
+    folder = _legacy(tmp_path)
+    assert cli.main(["ext", "migrate", str(folder), "--write"]) == 0
+    assert (folder / "llm" / "provider.yaml").is_file()
