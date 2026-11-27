@@ -9,7 +9,7 @@ with sync_playwright() as p:
     pg.on("pageerror", lambda e: msgs.append(f"pageerror: {e}"))
     pg.goto(f"file://{d}/architecture.html")
     pg.wait_for_function("document.body.dataset.done === '1'", timeout=60000)
-    for key in ("core", "core_target", "gateway", "admin"):
+    for key in ("core", "gateway", "admin"):
         ok = pg.evaluate(f"(() => {{ const s=document.getElementById('stage-{key}'); const r=s.querySelector('.rendered'); const e=s.querySelector('pre.error'); return {{ok: !!r && !e, nodes: r? r.querySelectorAll('.node').length:0, edges: r? r.querySelectorAll('.edgePath, path.flowchart-link').length:0, clusters: r? r.querySelectorAll('.cluster').length:0, err: e? e.textContent.slice(0,300):'', w: r? r.querySelector('svg').getBoundingClientRect().width:0, h: r? r.querySelector('svg').getBoundingClientRect().height:0}}; }})()")
         print(key, ok, "zoom=", pg.evaluate(f"document.getElementById('z-{key}').textContent"))
         el = pg.query_selector(f"#stage-{key}")
