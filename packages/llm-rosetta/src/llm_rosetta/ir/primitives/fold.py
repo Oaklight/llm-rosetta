@@ -393,13 +393,37 @@ class _Folder:
         self.usage = _merge_usage(self.usage, event.get("usage"))
 
     def passthrough_event(self, event: dict[str, Any]) -> None:
-        """A dialect-private event rides the response's opaque item list."""
+        """A dialect-private event rides the response's opaque item list.
+
+        An event that names the item it frames (``item``) contributes that item
+        at its ``position``, and a later frame of the same position replaces the
+        earlier one; any other event contributes its payload as it always has.
+        """
         payload = event.get("payload")
-        if isinstance(payload, dict):
+        provider = str(event.get("provider") or "")
+        item = event.get("item")
+        if isinstance(item, dict):
+            record: dict[str, Any] = {
+                "type": "provider_passthrough_item",
+                "provider": provider,
+                "payload": dict(item),
+            }
+            position = event.get("position")
+            if isinstance(position, int):
+                record["position"] = position
+                for index, kept in enumerate(self.passthrough):
+                    if (
+                        kept.get("position") == position
+                        and kept.get("provider") == provider
+                    ):
+                        self.passthrough[index] = record
+                        return
+            self.passthrough.append(record)
+        elif isinstance(payload, dict):
             self.passthrough.append(
                 {
                     "type": "provider_passthrough_item",
-                    "provider": str(event.get("provider") or ""),
+                    "provider": provider,
                     "payload": dict(payload),
                 }
             )

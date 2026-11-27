@@ -17,6 +17,14 @@ class ProviderPassthroughEvent(TypedDict):
     type: Required[Literal["provider_passthrough"]]
     provider: Required[str]
     payload: Required[dict[str, Any]]
+    #: The output item this event is a frame of, when the dialect streams items
+    #: (Open Responses ``output_item.added`` / ``done``).  Folding a stream keeps
+    #: the item, not the frame, so the folded body holds the record the body leg
+    #: would have given.  The later frame of the same ``position`` supersedes the
+    #: earlier one.  ``payload`` stays the whole frame for the writer to replay.
+    item: NotRequired[dict[str, Any]]
+    #: The item's index in the response's output list.
+    position: NotRequired[int]
 
 
 class ProviderPassthroughItem(TypedDict):

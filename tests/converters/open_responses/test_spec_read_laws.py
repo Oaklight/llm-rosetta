@@ -583,14 +583,217 @@ def test_a_provider_slug_item_does_not_break_the_stream(converter_cls) -> None:
     assert [e["text"] for e in events if e["type"] == "text_delta"] == ["hi"]
 
 
-@pytest.mark.xfail(
-    strict=False, reason="the stream leg emits no passthrough event for an unknown item"
-)
 @pytest.mark.parametrize("converter_cls", CONVERTERS)
-def test_a_provider_slug_item_is_kept_on_the_stream_leg(converter_cls) -> None:
-    body = _body("completed", [{"type": "acme:search_result", "id": "x_1"}])
-    events = _read_stream(converter_cls, body)
-    assert any("passthrough" in e["type"] for e in events)
+@LAW
+@given(known=_output(min_size=1, max_size=3), extra=_slugged())
+def test_a_provider_slug_item_is_kept_on_the_stream_leg(
+    converter_cls, known, extra
+) -> None:
+    """The stream leg keeps every item the body leg keeps (#1740).
+
+    An item of a type the reader does not know is an opaque record.  The stream
+    carries it as passthrough events whose payload holds that item, once for the
+    item being added and once for it being done, and the items around it still
+    read.
+    """
+    output = list(known)
+    for at, item in extra:
+        output.insert(min(at, len(output)), item)
+    events = _read_stream(converter_cls, _body("completed", output))
+    slugged = [item for item in output if ":" in item["type"]]
+    carried = [e["payload"] for e in events if e["type"] == "provider_passthrough"]
+    for kind in ("added", "done"):
+        frames = [p for p in carried if p["type"] == f"response.output_item.{kind}"]
+        assert [p["item"]["id"] for p in frames] == [i["id"] for i in slugged]
+        if kind == "done":
+            assert [p["item"] for p in frames] == slugged
+    assert _stream_reasons(events) == [_expected_completed(known)]
+
+
+OPAQUE_ITEMS = [
+    {"type": "acme:search_result", "id": "x_1", "data": {"q": 1}},
+    {"type": "compaction", "id": "cmp_1", "encrypted_content": "abc"},
+    {"type": "image_generation_call", "id": "ig_1", "status": "completed"},
+    {"type": "tool_search_call", "id": "ts_1", "execution": "server"},
+    {"type": "local_shell_call", "id": "ls_1", "status": "completed"},
+    {"type": "mcp_list_tools", "id": "mcp_1", "tools": []},
+    {"type": "apply_patch_call", "id": "ap_1", "status": "completed"},
+    {"type": "item_reference", "id": "ref_1"},
+]
+
+
+def _folded_output(converter_cls: type, body: dict[str, Any]) -> list[dict[str, Any]]:
+    """The output list of the body a stream folds to, as the gateway builds it."""
+    from llm_rosetta.pipeline import ConversionPipeline
+
+    converter = converter_cls()
+    events = list(
+        converter.iter_stream_from_provider(
+            _stream_of(body), context=converter.create_stream_context()
+        )
+    )
+    pipeline = ConversionPipeline("open_responses", "open_responses")
+    pipeline.convert_request({"model": "m", "input": "hi"})
+    return pipeline.convert_stream_events(events)["output"]
+
+
+@pytest.mark.parametrize("converter_cls", [OpenResponsesConverter])
+@pytest.mark.parametrize("item", OPAQUE_ITEMS, ids=lambda i: i["type"])
+def test_a_folded_stream_holds_the_opaque_item_the_body_leg_keeps(
+    converter_cls, item
+) -> None:
+    """The fold keeps one record holding the item, as the body leg does (#1740).
+
+    Only the base class: the ``open_responses`` pipeline writes its own dialect's
+    opaque items, and the OpenAI profile's are another dialect's.
+    """
+    body = _body("completed", [_message(0, "hi"), item])
+    kept = _folded_output(converter_cls, body)
+    assert [i["type"] for i in kept] == ["message", item["type"]]
+    assert kept[1] == item
+    via_body = converter_cls().response_to_provider(_read_body(converter_cls, body))
+    assert [i["type"] for i in via_body["output"]] == [i["type"] for i in kept]
+
+
+@pytest.mark.parametrize("reader", CONVERTERS)
+@pytest.mark.parametrize("writer", CONVERTERS)
+@pytest.mark.parametrize("item", OPAQUE_ITEMS[:3], ids=lambda i: i["type"])
+def test_the_fold_keeps_an_opaque_item_exactly_where_the_body_leg_does(
+    reader, writer, item
+) -> None:
+    """Pin (#1740): an opaque item belongs to the dialect that read it.
+
+    A passthrough record is restored only by the converter whose tag it carries
+    (``restore_provider_passthrough_item``): the base class tags ``open_responses``
+    and the OpenAI profile ``openai_responses``.  Folding a stream into a writer
+    of the other class drops the item with a ``dropped`` warning, exactly as the
+    body leg does between the same two classes, so the legs agree in all four
+    pairs.  The product builds every ``open_responses`` and
+    ``openai--open_responses`` pipeline on the base class
+    (``test_a_shim_target_keeps_the_item``), so the pairs that mix the two
+    classes are only reachable from a direct library call.
+    """
+    from llm_rosetta.ir.primitives import fold_response_events
+
+    body = _body("completed", [_message(0, "hi"), item])
+    source = reader()
+    events = list(
+        source.iter_stream_from_provider(
+            _stream_of(body), context=source.create_stream_context()
+        )
+    )
+    folded = writer().response_to_provider(fold_response_events(events))
+    via_body = writer().response_to_provider(source.response_from_provider(body))
+    kinds = [i["type"] for i in folded["output"]]
+    assert kinds == [i["type"] for i in via_body["output"]]
+    kept = reader is writer
+    assert kinds == (["message", item["type"]] if kept else ["message"])
+
+
+def test_a_shim_target_keeps_the_item() -> None:
+    """The real stream-only path: ``openai--open_responses`` is the base class."""
+    from llm_rosetta.pipeline import ConversionPipeline
+
+    item = OPAQUE_ITEMS[0]
+    source = OpenResponsesConverter()
+    events: list[dict[str, Any]] = [
+        dict(e)
+        for e in source.iter_stream_from_provider(
+            _stream_of(_body("completed", [_message(0, "hi"), item])),
+            context=source.create_stream_context(),
+        )
+    ]
+    for client in ("open_responses", "openai--open_responses"):
+        pipeline = ConversionPipeline(client, "openai--open_responses")
+        pipeline.convert_request({"model": "m", "input": "hi"})
+        body = pipeline.convert_stream_events(events)
+        assert [i["type"] for i in body["output"]] == ["message", item["type"]]
+
+
+@pytest.mark.parametrize("converter_cls", CONVERTERS)
+@pytest.mark.parametrize(
+    "item_type",
+    ["computer_call_output", "shell_call_output", "code_interpreter_call_output"],
+)
+def test_a_server_result_item_is_a_tool_result_and_not_also_passthrough(
+    converter_cls, item_type
+) -> None:
+    """The stream turns these into IR events itself, so it keeps no second copy."""
+    item = {"type": item_type, "id": "r_1", "call_id": "call_1", "output": []}
+    events = _read_stream(converter_cls, _body("completed", [item]))
+    assert not [e for e in events if e["type"] == "provider_passthrough"]
+
+
+@pytest.mark.parametrize("converter_cls", CONVERTERS)
+@pytest.mark.parametrize("item_type", ["", None, 5])
+def test_pin_the_legs_differ_on_an_item_with_no_usable_type(
+    converter_cls, item_type
+) -> None:
+    """Pin (#1740): the one place the two legs still disagree.
+
+    The body leg keeps any dict it does not rebuild, so an item whose ``type`` is
+    empty, missing or not a string reads to a passthrough record.  The stream leg
+    drops it: a frame with no type name is malformed and not an unknown type,
+    and there is nothing to name the opaque record by.
+    """
+    item: dict[str, Any] = {"id": "x_1", "data": 1}
+    if item_type is not None:
+        item["type"] = item_type
+    ir = _read_body(converter_cls, _body("completed", [item]))
+    assert [k["payload"] for k in ir.get("provider_passthrough_items", [])] == [item]
+    frames = [
+        {"type": "response.output_item.added", "output_index": 0, "item": item},
+        {"type": "response.output_item.done", "output_index": 0, "item": item},
+    ]
+    converter = converter_cls()
+    context = converter.create_stream_context()
+    events = [
+        e
+        for frame in frames
+        for e in converter.stream_response_from_provider(frame, context)
+    ]
+    assert not [e for e in events if e["type"] == "provider_passthrough"]
+
+
+@pytest.mark.parametrize("converter_cls", CONVERTERS)
+def test_pin_the_writer_closes_an_item_after_the_next_one_opens(converter_cls) -> None:
+    """Pin (#1740): item frames replay in the order the writer closes items.
+
+    The spec gives each item the lifecycle ``added``, deltas, ``done`` and says
+    nothing of the order between two items.  The writer closes a message item
+    when the response finishes or the next message opens, so after a message the
+    message's ``done`` comes after the next item's ``added``.  A tool call after a
+    message does the same, so an opaque item is no different.  Each item still
+    has exactly one ``added`` before its ``done``.
+    """
+    body = _body("completed", [_message(0, "hi"), OPAQUE_ITEMS[0]])
+    converter = converter_cls()
+    events = list(
+        converter.iter_stream_from_provider(
+            _stream_of(body), context=converter.create_stream_context()
+        )
+    )
+    context = converter.create_stream_context()
+    written: list[dict[str, Any]] = []
+    for event in events:
+        out = converter.stream_response_to_provider(event, context=context)
+        written.extend(out if isinstance(out, list) else [out])
+    lifecycle = [
+        (c["type"].rsplit(".", 1)[1], c["output_index"], c["item"]["type"])
+        for c in written
+        if c["type"] in ("response.output_item.added", "response.output_item.done")
+    ]
+    assert sorted(lifecycle) == sorted(
+        [
+            ("added", 0, "message"),
+            ("done", 0, "message"),
+            ("added", 1, "acme:search_result"),
+            ("done", 1, "acme:search_result"),
+        ]
+    )
+    for kind_index in (0, 1):
+        pair = [e for e in lifecycle if e[1] == kind_index]
+        assert [e[0] for e in pair] == ["added", "done"]
 
 
 # --- rule 5: outside the spec -----------------------------------------------
