@@ -125,6 +125,116 @@ class TestTheListing:
         assert GatewayAdminContext().extension_listing() == []
 
 
+def _manifest_with_cli(
+    ext_id: str, *, minimum: str | None = None, install: bool = True
+) -> str:
+    base = plugin_yaml(ext_id, "0.1.0", [f"{ext_id}--chat_completions"])
+    lines = [
+        "external:",
+        "  - name: acmecli",
+        '    check: ["acmecli", "--version"]',
+    ]
+    if minimum:
+        lines.append(f'    minimum: "{minimum}"')
+    if install:
+        lines += [
+            "    install:",
+            '      npm: "@acme/cli"',
+            '      version: "2.1.299"',
+        ]
+    return base + "\n".join(lines) + "\n"
+
+
+def _put_cli(tools: Path, ext_id: str, version: str) -> None:
+    """What ``ext install-cli`` leaves: an entry link that reports *version*."""
+    link = tools / ext_id / "bin" / "acmecli"
+    link.parent.mkdir(parents=True)
+    link.write_text(f"#!/bin/sh\necho acmecli {version}\n")
+    link.chmod(0o755)
+
+
+@pytest.fixture
+def tools(tmp_path: Path, monkeypatch) -> Path:
+    path = tmp_path / "tools"
+    monkeypatch.setenv("LLM_ROSETTA_TOOLS_DIR", str(path))
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    return path
+
+
+class TestAnExternalProgramHasThreeStates:
+    """The extension card says: missing, older than the minimum, or ready (#1820)."""
+
+    @staticmethod
+    def _program(ext_id: str = "acme") -> dict:
+        return _by_id()[ext_id]["external"][0]
+
+    def test_a_program_that_is_not_installed_is_missing_and_names_the_command(
+        self, ext_dir, tools
+    ):
+        _install(ext_dir, "acme", _manifest_with_cli("acme", minimum="2.1.299"))
+        load_providers()
+
+        program = self._program()
+
+        assert program["status"] == "missing"
+        assert program["install_command"] == "llm-rosetta ext install-cli acme"
+        assert program["install"] == {"version": "2.1.299", "source": "npm"}
+
+    def test_a_program_older_than_the_minimum_is_too_old(self, ext_dir, tools):
+        _install(ext_dir, "acme", _manifest_with_cli("acme", minimum="2.1.299"))
+        _put_cli(tools, "acme", "2.0.0")
+        load_providers()
+
+        program = self._program()
+
+        assert (program["status"], program["found"]) == ("too_old", "2.0.0")
+        assert program["install_command"] == "llm-rosetta ext install-cli acme"
+
+    def test_a_program_installed_by_install_cli_is_ready_outside_path(
+        self, ext_dir, tools
+    ):
+        _install(ext_dir, "acme", _manifest_with_cli("acme", minimum="2.1.299"))
+        _put_cli(tools, "acme", "2.1.299")
+        load_providers()
+
+        program = self._program()
+
+        assert (program["status"], program["found"]) == ("ready", "2.1.299")
+        assert program["install_command"] is None
+
+    def test_a_program_with_no_install_spec_has_no_command(self, ext_dir, tools):
+        _install(ext_dir, "acme", _manifest_with_cli("acme", install=False))
+        load_providers()
+
+        program = self._program()
+
+        assert program["status"] == "missing"
+        assert program["install"] is None
+        assert program["install_command"] is None
+
+    def test_a_second_program_names_itself_in_the_command(self, ext_dir, tools):
+        manifest = _manifest_with_cli("acme") + (
+            "  - name: other\n"
+            '    check: ["other", "--version"]\n'
+            "    install:\n"
+            '      npm: "other-cli"\n'
+            '      version: "1.0.0"\n'
+        )
+        _install(ext_dir, "acme", manifest)
+        load_providers()
+
+        commands = {
+            p["name"]: p["install_command"] for p in _by_id()["acme"]["external"]
+        }
+
+        assert commands["other"] == "llm-rosetta ext install-cli acme --program other"
+
+    def test_the_listing_stays_json_safe(self, ext_dir, tools):
+        _install(ext_dir, "acme", _manifest_with_cli("acme", minimum="2.1.299"))
+        load_providers()
+        json.dumps(GatewayAdminContext().extension_listing())
+
+
 class TestTheEndpoint:
     @staticmethod
     def _call(app: object):

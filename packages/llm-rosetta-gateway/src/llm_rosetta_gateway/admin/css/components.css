@@ -3151,6 +3151,25 @@ button.shim-update.unknown { color: var(--tag-warn); }
 .shim-card-actions .shim-card-tools { margin-left: auto; }
 .shim-empty { grid-column: 1 / -1; }
 
+/* ── Extension card: the external programs an extension drives ─────── */
+.ext-card { padding: 12px 14px; gap: 10px; }
+.ext-card-head { display: flex; align-items: baseline; gap: 8px; }
+.ext-card-name { font-size: 14px; font-weight: 600; }
+.ext-program { display: flex; flex-direction: column; gap: 6px; }
+.ext-program + .ext-program { border-top: 1px solid var(--hairline); padding-top: 10px; }
+.ext-program-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ext-program-name { font-family: var(--mono, monospace); font-size: 13px; }
+.ext-program-facts { font-size: 11px; color: var(--text-muted); }
+.ext-status-ready { color: var(--pos); }
+.ext-status-missing, .ext-status-too_old { color: var(--warn); }
+.ext-status-unknown { color: var(--text-dim); }
+.ext-cmd { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--text-muted); }
+.ext-cmd-line {
+  flex: 1 1 auto; min-width: 0; overflow-x: auto; white-space: nowrap;
+  font-family: var(--mono, monospace); font-size: 12px; color: var(--text);
+  border: 1px solid var(--hairline); border-radius: var(--radius-control); padding: 3px 6px;
+}
+
 /* The package card's overflow menu: the "⋯" at the end of the action row, on
    the same baseline as the buttons it sits beside.  It is not in the head
    because the head is a <button>, and a button cannot hold one. */

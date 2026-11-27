@@ -69,6 +69,8 @@ from llm_rosetta.extensions import (
     configure_extensions_dir,
     entry_problems,
     extensions_dir,
+    tool_bin_dir,
+    tools_dir,
     import_extension_module,
     install_from_index,
     install_wheel,
@@ -221,6 +223,8 @@ __all__ = [
     "remove_extension",
     "retired_entry_points",
     "select_entry",
+    "tool_bin_dir",
+    "tools_dir",
     "version_key",
     # Fidelity and profiling
     "DeepProfiler",

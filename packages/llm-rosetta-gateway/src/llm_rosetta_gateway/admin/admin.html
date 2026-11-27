@@ -788,6 +788,7 @@
         <button type="button" role="tab" class="active" aria-selected="true" data-view="installed" onclick="setShimsView('installed')" data-i18n="shimPage.installed">Installed</button>
         <button type="button" role="tab" aria-selected="false" data-view="available" onclick="setShimsView('available')" data-i18n="shimPage.available">Available</button>
         <button type="button" role="tab" aria-selected="false" data-view="sources" onclick="setShimsView('sources')" data-i18n="shimPage.sources">Sources</button>
+        <button type="button" role="tab" aria-selected="false" data-view="extensions" onclick="setShimsView('extensions')" data-i18n="shimPage.extensions">Extensions</button>
       </div>
     </div>
 
@@ -816,6 +817,7 @@
 
     <div id="shimGrid" class="shim-grid"></div>
     <div id="shimCatalogGrid" class="shim-grid" hidden></div>
+    <div id="shimExtensionGrid" class="shim-grid ext-grid" hidden></div>
     <div id="shimPageSources" class="shims-sources" hidden>
         <header class="settings-pane-head shims-sources-head">
           <label class="shims-sources-toggle" title="List built-in shims in the inventory">

@@ -79,7 +79,14 @@ class AdminExtensions(Protocol):
         ``skipped``, ``failed`` or ``installed`` when it is on disk and not yet
         loaded), ``reason``, ``path``, ``maturity``, ``shims`` (the names it
         registered), ``transports``, ``external`` (one status per program it
-        drives) and ``missing_dependencies``.  Blocking: it runs the external
+        drives) and ``missing_dependencies``.  A program's status holds
+        ``state`` (the check's: ``ok``, ``missing``, ``too_old``, ``unknown``),
+        ``status`` (the card's: ``ready``, ``missing``, ``too_old``,
+        ``unknown``), ``found``, ``minimum``, ``install`` (the pinned
+        ``{version, source}`` or ``None``) and ``install_command`` (the
+        ``llm-rosetta ext install-cli`` line that installs it, or ``None`` when
+        it is ready or declares no install).  The check also looks in the
+        directory ``ext install-cli`` fills.  Blocking: it runs the external
         programs' version checks, so call it off the loop.
         """
         ...

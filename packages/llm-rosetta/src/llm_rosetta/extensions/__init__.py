@@ -27,6 +27,8 @@ from ._dirs import (
     activate_extensions_dir,
     configure_extensions_dir,
     extensions_dir,
+    tool_bin_dir,
+    tools_dir,
 )
 from ._index import (
     DEFAULT_INDEX_URL,
@@ -97,6 +99,8 @@ __all__ = [
     "discover",
     "entry_problems",
     "extensions_dir",
+    "tool_bin_dir",
+    "tools_dir",
     "import_extension_module",
     "inspect_wheel",
     "install_from_index",
