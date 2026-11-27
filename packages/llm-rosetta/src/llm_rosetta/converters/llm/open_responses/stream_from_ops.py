@@ -268,14 +268,46 @@ class OpenResponsesStreamFromMixin(OpenResponsesMixinHost):
                         side if isinstance(side, str) else ""
                     )
 
-            elif item_type in ("tool_search_call", "tool_search_output"):
-                events.append(
-                    ProviderPassthroughEvent(
-                        type="provider_passthrough",
-                        provider=self._CONVERTER_TAG,
-                        payload=dict(chunk),
-                    )
-                )
+            elif self._is_opaque_item(item):
+                events.append(self._opaque_item_event(chunk, item))
+
+    def _opaque_item_event(
+        self, chunk: dict[str, Any], item: dict[str, Any]
+    ) -> ProviderPassthroughEvent:
+        """The passthrough event for one frame of an opaque item.
+
+        The payload is the whole frame, for the writer to replay; ``item`` and
+        ``position`` let a fold keep the item itself (see
+        :class:`ProviderPassthroughEvent`).
+        """
+        event = ProviderPassthroughEvent(
+            type="provider_passthrough",
+            provider=self._CONVERTER_TAG,
+            payload=dict(chunk),
+            item=dict(item),
+        )
+        position = chunk.get("output_index")
+        if isinstance(position, int):
+            event["position"] = position
+        return event
+
+    def _is_opaque_item(self, item: dict[str, Any]) -> bool:
+        """Whether a streamed item is one the body leg keeps as passthrough.
+
+        The body leg keeps every item type it does not rebuild
+        (:meth:`is_portable_response_output_item`): ``tool_search_*``,
+        ``compaction`` and the implementor-prefixed types the spec allows
+        (``acme:search_result``).  The stream leg keeps the same set (#1740),
+        less the server result items it turns into IR events itself.  An item
+        with no type is malformed, not an unknown type, and is dropped.
+        """
+        item_type = item.get("type")
+        return (
+            isinstance(item_type, str)
+            and bool(item_type)
+            and not self.message_ops.is_portable_response_output_item(item)
+            and item_type not in _SERVER_RESULT_ITEM_TYPES
+        )
 
     @staticmethod
     def _emit_client_call_start_ir(
@@ -494,14 +526,8 @@ class OpenResponsesStreamFromMixin(OpenResponsesMixinHost):
                     }
                 set_opaque_origin(event, redacted_data="open_responses")
                 events.append(event)
-        elif item_type in ("tool_search_call", "tool_search_output"):
-            events.append(
-                ProviderPassthroughEvent(
-                    type="provider_passthrough",
-                    provider=self._CONVERTER_TAG,
-                    payload=dict(chunk),
-                )
-            )
+        elif self._is_opaque_item(item):
+            events.append(self._opaque_item_event(chunk, item))
 
     def _handle_p_function_call_args_delta_to_ir(
         self,
