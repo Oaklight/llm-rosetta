@@ -187,9 +187,10 @@ llm-rosetta ext doctor claude               # external claude: ok 2.1.299
 | `<tools>/<id>/npm-<version>/` 或 `release-<version>/` | 安装本体 |
 | `<tools>/<id>/bin/<name>` | `check` 与 `ext doctor` 找到的入口链接 |
 | `<tools>/bin/<name>` | 供 `PATH` 使用的统一目录；镜像的入口脚本把它放在最前 |
-| `<tools>/<id>/.npm-cache/` | npm 缓存；不会向 `$HOME` 写任何东西 |
+| `<tools>/node/<version>/` | npm 类程序安装与运行所用的 Node.js（含其自带 npm） |
+| `<tools>/<id>/.home/`、`<tools>/<id>/.npm-cache/` | npm 的 `HOME` 与缓存；不会向用户的 `$HOME` 写任何东西 |
 
-已是固定版本时重复运行不会改动任何东西。固定版本变了就替换旧版本。校验和不符、下载或 npm 失败、归档含有越出其目录的路径、或程序的检查没通过，都不会留下任何安装，并以 `1` 退出。npm 包由 npm 按注册表的完整性记录校验；release 归档在解包前按清单里的 SHA-256 校验。需要 npm 的程序需要 Node.js：镜像的 `-agents` 标签自带（见[Docker](../getting-started/installation.md#docker)）。
+已是固定版本时重复运行不会改动任何东西。固定版本变了就替换旧版本。校验和不符、下载或 npm 失败、归档含有越出其目录的路径、或程序的检查没通过，都不会留下任何安装，并以 `1` 退出。npm 包由 npm 按注册表的完整性记录校验；release 归档在解包前按清单里的 SHA-256 校验。来自 npm 的程序需要 Node.js，`install-cli` 也会装它：先把固定版本的 Node.js（24.22.3，含其自带的 npm）装进 `<tools>/node/<version>/`，再从那里运行 npm，因此镜像既不需要 `node` 也不需要 `npm`。glibc 与 macOS 的构建来自 nodejs.org；musl 构建来自 `unofficial-builds.nodejs.org`，该站只发布校验和清单、没有签名，所以每个构建的 SHA-256 都固定在源码里，并在解包前校验。在 Alpine 上 `node` 需要 `libstdc++` 包，镜像已带上。换镜像后无法启动的程序（例如它的 `node` 加载失败）在 `ext doctor` 和面板的“扩展”视图里显示为 `broken`；再运行一次 `install-cli` 即可修复。
 
 随附扩展声明的固定版本：
 
