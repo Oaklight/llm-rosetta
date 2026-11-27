@@ -18,6 +18,7 @@ from llm_rosetta.api import (
     ExtensionInstallError,
     check_external,
     installed_extensions,
+    tool_bin_dir,
     list_extensions,
     missing_dependencies,
 )
@@ -26,32 +27,67 @@ from llm_rosetta.api import (
 DIRECTORY_SOURCE = "extensions directory"
 
 
-def _external(manifest: Any) -> list[dict[str, Any]]:
+#: The three states of the extension card, from the check's own states.
+_CARD_STATUS = {
+    "ok": "ready",
+    "missing": "missing",
+    "too_old": "too_old",
+    "unknown": "unknown",
+}
+
+
+def _search(ext_id: str) -> list[Any]:
+    """Where ``ext install-cli`` puts the extension's entry links, if known."""
+    try:
+        return [tool_bin_dir(ext_id)]
+    except ExtensionInstallError:
+        return []
+
+
+def _install_view(program: Any) -> dict[str, str] | None:
+    install = program.install
+    if install is None:
+        return None
+    return {
+        "version": install.version,
+        "source": "npm" if install.npm is not None else "release",
+    }
+
+
+def _install_command(
+    ext_id: str, program: Any, manifest: Any, state: str
+) -> str | None:
+    """The command that installs the program: only when it can and must run."""
+    if program.install is None or state == "ok":
+        return None
+    command = f"llm-rosetta ext install-cli {ext_id}"
+    if len(manifest.external) > 1:
+        command += f" --program {program.name}"
+    return command
+
+
+def _external(ext_id: str, manifest: Any) -> list[dict[str, Any]]:
     """The status of each external program a manifest declares."""
     rows: list[dict[str, Any]] = []
+    search = _search(ext_id)
     for program in manifest.external:
         try:
-            result = check_external(program)
+            result = check_external(program, search=search)
         except ValueError as exc:  # a malformed minimum is the manifest's fault
-            rows.append(
-                {
-                    "name": program.name,
-                    "state": "unknown",
-                    "found": None,
-                    "minimum": program.minimum,
-                    "detail": str(exc),
-                    "install_hint": program.install_hint,
-                }
-            )
-            continue
+            state, found, detail = "unknown", None, str(exc)
+        else:
+            state, found, detail = result.state, result.found, result.detail
         rows.append(
             {
-                "name": result.name,
-                "state": result.state,
-                "found": result.found,
-                "minimum": result.minimum,
-                "detail": result.detail,
+                "name": program.name,
+                "state": state,
+                "status": _CARD_STATUS.get(state, "unknown"),
+                "found": found,
+                "minimum": program.minimum,
+                "detail": detail,
                 "install_hint": program.install_hint,
+                "install": _install_view(program),
+                "install_command": _install_command(ext_id, program, manifest, state),
             }
         )
     return rows
@@ -81,7 +117,7 @@ def _record(
         "provides_shims": list(manifest.shims) if manifest else [],
         "transports": list(manifest.transports) if manifest else [],
         "requires": list(manifest.requires.extensions) if manifest else [],
-        "external": _external(manifest) if manifest else [],
+        "external": _external(ext_id, manifest) if manifest else [],
         "missing_dependencies": (
             missing_dependencies(manifest, present) if manifest else []
         ),

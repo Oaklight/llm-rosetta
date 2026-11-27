@@ -14,15 +14,18 @@
 
 import { S, _CAP_ICONS } from '../core/state.js';
 import { t, typeLabel, typeLabelAlt } from '../core/i18n.js';
-import { api, esc, showToast, withBusyButton } from '../core/utils.js';
+import { api, copyText, esc, showToast, withBusyButton } from '../core/utils.js';
 import { cssValue, jsArg, logoUrl, safeUrl } from '../core/html.js';
 import { toggleCard } from '../core/disclosure.js';
+import { extensionCards } from '../core/extension-cards.js';
 import {
   declareSource, deselectVendor, followLatest, notInstalledVendors, pinVendor, selectVendor,
   vendorFacts, vendorMatches, vendorStateKey, vendorTier,
 } from '../core/shim-sources.js';
 
 let _view = 'installed';
+/** The extension cards of the last listing, or `null` before it arrived. */
+let _extensionCards = null;
 let _shims = [];
 let _shimMeta = {};
 let _loaded = false;
@@ -143,6 +146,53 @@ async function loadShimsPage() {
 function setShimsView(view) {
   _view = view;
   renderShimsPage();
+  if (view === 'extensions') loadExtensionCards();
+}
+
+/** Read the extension listing; it runs each program's version check, so it is
+ *  fetched when the view opens, not with the shims. */
+async function loadExtensionCards() {
+  try {
+    const body = await api.get('/admin/api/extensions');
+    _extensionCards = extensionCards(body && body.extensions);
+  } catch (e) {
+    _extensionCards = [];
+    showToast(String(e.message || e), 'error');
+  }
+  if (_view === 'extensions') renderShimsPage();
+}
+
+/** One program of an extension card: its status, versions and install command. */
+function _programHtml(extId, program) {
+  const facts = [];
+  if (program.found) facts.push(t('ext.found', {v: program.found}));
+  if (program.minimum) facts.push(t('ext.minimum', {v: program.minimum}));
+  if (program.command && program.pinned) facts.push(t('ext.pinned', {v: program.pinned}));
+  const command = program.command
+    ? `<div class="ext-cmd"><span class="ext-cmd-label">${esc(t('ext.install'))}</span>`
+      + `<code class="ext-cmd-line">${esc(program.command)}</code>`
+      + `<button type="button" class="btn btn-sm" onclick="copyExtensionCommand(${jsArg(program.command)})">${esc(t('ext.copy'))}</button></div>`
+    : (program.status !== 'ready' && program.hint
+      ? `<div class="ext-cmd"><span class="ext-cmd-label">${esc(t('ext.noInstall'))}</span><code class="ext-cmd-line">${esc(program.hint)}</code></div>`
+      : '');
+  return `<div class="ext-program" data-status="${esc(program.status)}">`
+    + `<div class="ext-program-head"><span class="ext-program-name">${esc(program.name)}</span>`
+    + `<span class="tag is-square ext-status ext-status-${esc(program.status)}">${esc(t('ext.status.' + program.status))}</span></div>`
+    + (facts.length ? `<div class="ext-program-facts">${esc(facts.join(' · '))}</div>` : '')
+    + command + `</div>`;
+}
+
+function _extensionCardHtml(card) {
+  return `<article class="shim-vendor-card ext-card" data-extension="${esc(card.id)}" data-status="${esc(card.status)}">`
+    + `<div class="ext-card-head"><span class="ext-card-name">${esc(card.id)}</span>`
+    + (card.version ? `<span class="shim-vendor-meta">${esc(card.version)}</span>` : '')
+    + `</div>`
+    + card.programs.map((p) => _programHtml(card.id, p)).join('')
+    + `</article>`;
+}
+
+async function copyExtensionCommand(command) {
+  await copyText(command, t('ext.copied'));
 }
 
 function _filters() {
@@ -667,12 +717,14 @@ function renderShimsPage() {
   const toolbar = document.getElementById('shimPageToolbar');
   const count = document.getElementById('shimsCount');
   if (!installed || !catalog) return;
+  const extensions = document.getElementById('shimExtensionGrid');
   installed.hidden = _view !== 'installed';
   catalog.hidden = _view !== 'available';
+  if (extensions) extensions.hidden = _view !== 'extensions';
   if (sources) sources.hidden = _view !== 'sources';
   // Search and tier read the same way on both lists; origin and model type
   // only mean something for loaded shims.
-  if (toolbar) toolbar.hidden = _view === 'sources';
+  if (toolbar) toolbar.hidden = _view === 'sources' || _view === 'extensions';
   const originFilter = document.getElementById('shimOriginFilter');
   if (originFilter) originFilter.hidden = _view !== 'installed';
   const typeFilter = document.getElementById('shimTypeFilter');
@@ -727,6 +779,12 @@ function renderShimsPage() {
     catalog.innerHTML = sections.html
       ? sections.html
       : '<div class="shim-empty">' + esc(t('shimSrc.noSources')) + '</div>';
+  } else if (_view === 'extensions' && extensions) {
+    extensions.innerHTML = _extensionCards === null ? ''
+      : _extensionCards.length
+        ? _extensionCards.map(_extensionCardHtml).join('')
+        : '<div class="shim-empty">' + esc(t('ext.empty')) + '</div>';
+    if (count) count.textContent = '';
   } else if (count) {
     count.textContent = '';
   }
@@ -773,6 +831,7 @@ export async function shimToggleEnabled(input, name) {
 
 Object.assign(window, {
   loadShimsPage, renderShimsPage, setShimsView, toggleShimVendor, shimToggleEnabled,
+  copyExtensionCommand,
   toggleShimSourceVendor, selectShimSourceVendor, deselectShimSourceVendor,
   pinShimSourceVendor, followShimSourceVendor,
   // Repainted on a language change: the per-shim rows carry translated marks.
