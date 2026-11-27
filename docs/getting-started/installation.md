@@ -28,13 +28,14 @@ pip install llm-rosetta-gateway
 
 ### Docker
 
-[DockerHub](https://hub.docker.com/r/oaklight/llm-rosetta-gateway) 提供三种镜像变体：
+[DockerHub](https://hub.docker.com/r/oaklight/llm-rosetta-gateway) 提供四种镜像变体：
 
 | 标签 | 基础镜像 | 大小 | 用途 |
 |------|---------|------|------|
 | `:<ver>` / `latest` | Alpine + 二进制 | ~21 MB | 默认，最小 |
 | `:<ver>-glibc` | busybox:glibc + 二进制 | ~25 MB | 仅 glibc 环境 |
 | `:<ver>-python` | python:alpine + pip | ~80 MB | 需要 pip 扩展 |
+| `:<ver>-agents` | python:alpine + pip + Node.js 与 npm | ~150 MB | 用 `ext install-cli` 安装智能体 CLI（[外部程序](../guide/extensions.md#external-programs)） |
 
 ```bash
 # 默认（Alpine，推荐）

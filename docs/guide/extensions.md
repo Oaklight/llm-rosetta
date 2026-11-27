@@ -56,7 +56,7 @@ summary:
 | `provides.transports` | 扩展实现的 transport id。shim 的 `connection.transport` 先解析为自己所属扩展的 transport，其次是宿主内置的，最后是 `requires.extensions` 中所列扩展的 transport。 |
 | `provides.commands` | 扩展新增的动词，每个带一行按语言给出的摘要（必须有 `en`）。`llm-rosetta <id> <verb>` 运行它；id 中的下划线写作连字符。 |
 | `requires.extensions` | 本扩展所引用 transport 的其他扩展的 id。 |
-| `external` | 扩展驱动但不自带的程序（`name`、`check`、`minimum`、`install_hint`）；`ext doctor` 会报告它们。 |
+| `external` | 扩展驱动但不自带的程序（`name`、`check`、`minimum`、`install_hint`，以及 `install`：[`ext install-cli`](#external-programs) 依据的精确版本安装说明）；`ext doctor` 会报告它们。 |
 | `platforms` | `linux`、`darwin`、`windows` 的子集。 |
 | `tags`、`homepage`、`summary` | 列表展示用的元数据。 |
 
@@ -143,10 +143,60 @@ llm-rosetta ext doctor                         # 哪里有问题，缺什么
 | `install <wheel \| URL \| id> [--sha256 H] [--version V] [--index I] [--pip SPEC] [--dry-run]` | 安装。`--pip` 用 pip 安装，仅在 pip 可用时有效。 |
 | `remove <id> [--dry-run]` | 移除已安装的扩展。 |
 | `update [<id>] [--index I] [--dry-run]` | 安装索引中最新的兼容版本。 |
-| `doctor [<id>] [--no-import] [--json]` | 检查兼容性、缺失的所需扩展、外部程序，并在子进程中做导入检查。 |
+| `install-cli <id> [--program P] [--dry-run] [--json]` | 按固定版本安装扩展声明的外部程序（`external[].install`）；见[外部程序](#external-programs)。 |
+| `doctor [<id>] [--no-import] [--json]` | 检查兼容性、缺失的所需扩展、外部程序（包括 `install-cli` 装进 tools 目录的），并在子进程中做导入检查。 |
 | `new`、`check`、`migrate` | 开发扩展；见[添加扩展](../contributing/adding-an-extension.md)。 |
 
-`list`、`show`、`doctor` 接受 `--json`；`install`、`remove`、`update` 接受 `--dry-run`，只说明会改什么，不做任何改动。退出码：`0` 成功，`1` 失败或发现问题，`2` 用法错误。
+`list`、`show`、`doctor`、`install-cli` 接受 `--json`；`install`、`remove`、`update`、`install-cli` 接受 `--dry-run`，只说明会改什么，不做任何改动。退出码：`0` 成功，`1` 失败或发现问题，`2` 用法错误。
+
+### 外部程序 { #external-programs }
+
+驱动某个智能体 CLI（`claude`、`agy`）的扩展并不自带它。扩展在 `external:` 下声明这个程序，并声明如何按**一个精确版本**安装，这样运维人员不必猜版本：
+
+```yaml
+external:
+  - name: claude
+    check: ["claude", "--version"]
+    minimum: "2.1.299"
+    install:
+      npm: "@anthropic-ai/claude-code"
+      version: "2.1.299"
+  - name: agy
+    check: ["agy", "--version"]
+    install:
+      version: "1.5.15"
+      release:
+        url: "https://github.com/google-antigravity/antigravity-cli/releases/download/{version}/agy_cli_{platform}.tar.gz"
+        sha256: {linux_x64_musl: "a12514fb…", linux_arm64_musl: "455d20cc…"}
+        binary: antigravity   # 归档里的文件
+        link: agy             # `check` 运行的名字
+```
+
+`version` 必须精确（`2.1.299`，可带 `-pre`）：范围、`latest`、不完整的版本都会被拒绝，`ext check` 会报告。`npm` 与 `release` 恰好给出一个。release 的 URL 必须是 https，`{platform}` 取 `linux_x64_musl`、`linux_arm64_musl`、`linux_x64_gnu`、`linux_arm64_gnu`、`darwin_x64` 或 `darwin_arm64`，它支持的每个平台都要写出归档的 SHA-256。`check` 运行的必须是入口链接的名字（`link`，否则是 npm 的 `bin`，否则是程序名）。
+
+```bash
+llm-rosetta ext install-cli claude          # 以运行网关的用户身份，不要用 root
+llm-rosetta ext install-cli claude --dry-run
+llm-rosetta ext doctor claude               # external claude: ok 2.1.299
+```
+
+`install-cli` 把程序装到 `<tools>/<id>/` 下，`<tools>` 是 `$LLM_ROSETTA_TOOLS_DIR`，否则是扩展目录旁的 `tools`（镜像里是 `/config/tools`）：
+
+| 路径 | 内容 |
+|------|------|
+| `<tools>/<id>/npm-<version>/` 或 `release-<version>/` | 安装本体 |
+| `<tools>/<id>/bin/<name>` | `check` 与 `ext doctor` 找到的入口链接 |
+| `<tools>/bin/<name>` | 供 `PATH` 使用的统一目录；镜像的入口脚本把它放在最前 |
+| `<tools>/<id>/.npm-cache/` | npm 缓存；不会向 `$HOME` 写任何东西 |
+
+已是固定版本时重复运行不会改动任何东西。固定版本变了就替换旧版本。校验和不符、下载或 npm 失败、归档含有越出其目录的路径、或程序的检查没通过，都不会留下任何安装，并以 `1` 退出。npm 包由 npm 按注册表的完整性记录校验；release 归档在解包前按清单里的 SHA-256 校验。需要 npm 的程序需要 Node.js：镜像的 `-agents` 标签自带（见[Docker](../getting-started/installation.md#docker)）。
+
+随附扩展声明的固定版本：
+
+| 扩展 | 程序 | 来源 | 版本 | 平台 |
+|------|------|------|------|------|
+| `claude` | `claude` | npm `@anthropic-ai/claude-code` | `2.1.299` | npm 支持的平台（Alpine 上选 musl 构建） |
+| `antigravity` | `agy` | release 归档 `agy_cli_<platform>.tar.gz` | `1.5.15` | `linux_x64_musl`、`linux_arm64_musl` |
 
 ## 网关与扩展 { #the-gateway-and-extensions }
 
