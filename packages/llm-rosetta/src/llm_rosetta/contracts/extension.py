@@ -40,6 +40,18 @@ from llm_rosetta.contracts._schema import _check
 #: The manifest file an extension carries beside its code.
 MANIFEST_FILENAME = "plugin.yaml"
 
+#: Where an extension keeps what ``provides.commands`` names: the module
+#: ``llm_rosetta_ext.<id>.commands``, which exposes ``COMMANDS``, a mapping of
+#: verb to callable.  The dispatcher, the import probe and ``ext check`` read it.
+COMMANDS_MODULE = "commands"
+COMMANDS_ATTRIBUTE = "COMMANDS"
+
+#: Where an extension keeps what ``provides.transports`` names: the module
+#: ``llm_rosetta_ext.<id>.transport``, which exposes ``TRANSPORTS``, a mapping of
+#: transport id to factory.  The gateway, the import probe and ``ext check`` read it.
+TRANSPORT_MODULE = "transport"
+TRANSPORTS_ATTRIBUTE = "TRANSPORTS"
+
 #: The schema file, shipped beside this module.
 SCHEMA_FILENAME = "extension_manifest.schema.json"
 
@@ -395,10 +407,14 @@ def resolve_transport(
 
 
 __all__ = [
+    "COMMANDS_ATTRIBUTE",
+    "COMMANDS_MODULE",
     "MANIFEST_FILENAME",
     "MATURITY_LEVELS",
     "PLATFORMS",
     "SCHEMA_FILENAME",
+    "TRANSPORTS_ATTRIBUTE",
+    "TRANSPORT_MODULE",
     "ExtensionManifest",
     "ExtensionManifestInvalid",
     "ExtensionRequirement",

@@ -23,6 +23,8 @@ from pathlib import Path
 
 from llm_rosetta.contracts.command import CommandError
 from llm_rosetta.contracts.extension import (
+    COMMANDS_ATTRIBUTE,
+    COMMANDS_MODULE,
     ExtensionManifest,
     command_area,
 )
@@ -36,12 +38,6 @@ from llm_rosetta.extensions import (
     load_extensions,
     register_kind_handler,
 )
-
-#: The module of an extension that holds its ``COMMANDS`` mapping.
-COMMANDS_MODULE = "commands"
-
-#: The mapping that module exposes.
-COMMANDS_ATTRIBUTE = "COMMANDS"
 
 
 @dataclass(frozen=True)

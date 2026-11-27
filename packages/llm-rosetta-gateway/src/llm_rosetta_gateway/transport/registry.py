@@ -49,6 +49,8 @@ from llm_rosetta.api import (
     register_kind_handler,
 )
 from llm_rosetta.contracts.extension import (
+    TRANSPORT_MODULE,
+    TRANSPORTS_ATTRIBUTE,
     ExtensionManifest,
     UnresolvedTransport,
     resolve_transport,
@@ -59,9 +61,6 @@ from .acp import AcpTransport
 from .http import HttpTransport
 
 logger = logging.getLogger("llm-rosetta-gateway")
-
-#: The module attribute an extension's transport module exposes.
-TRANSPORTS_ATTRIBUTE = "TRANSPORTS"
 
 #: What a ``TRANSPORTS`` entry must be.
 TransportFactory = Callable[..., UpstreamTransport]
@@ -230,9 +229,9 @@ def _build(
 
 def _factory(ext_id: str, name: str) -> TransportFactory:
     """Import ``llm_rosetta_ext.<id>.transport`` and return the factory for *name*."""
-    module_name = f"llm_rosetta_ext.{ext_id}.transport"
+    module_name = f"llm_rosetta_ext.{ext_id}.{TRANSPORT_MODULE}"
     try:
-        module = import_extension_module(ext_id, "transport")
+        module = import_extension_module(ext_id, TRANSPORT_MODULE)
     except Exception as exc:  # noqa: BLE001 - name the extension that broke
         raise TransportPluginError(
             f"Extension {ext_id!r}: transport module {module_name} failed to "

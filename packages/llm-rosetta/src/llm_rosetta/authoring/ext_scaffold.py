@@ -32,7 +32,11 @@ from typing import Any
 
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
 from llm_rosetta.contracts.extension import (
+    COMMANDS_ATTRIBUTE,
+    COMMANDS_MODULE,
     MANIFEST_FILENAME,
+    TRANSPORT_MODULE,
+    TRANSPORTS_ATTRIBUTE,
     ExtensionManifest,
     ExtensionManifestInvalid,
     parse_extension_manifest,
@@ -74,10 +78,10 @@ _BASE_TEMPLATES = (
     ("README.md.tmpl", "README.md"),
     ("tests/test_extension.py.tmpl", "tests/test_extension.py"),
 )
-_COMMAND_TEMPLATES = (("commands.py.tmpl", "commands.py"),)
+_COMMAND_TEMPLATES = (("commands.py.tmpl", f"{COMMANDS_MODULE}.py"),)
 _TRANSPORT_TEMPLATES = (
-    ("transport/__init__.py.tmpl", "transport/__init__.py"),
-    ("transport/transport.py.tmpl", "transport/transport.py"),
+    ("transport/__init__.py.tmpl", f"{TRANSPORT_MODULE}/__init__.py"),
+    ("transport/transport.py.tmpl", f"{TRANSPORT_MODULE}/transport.py"),
 )
 
 
@@ -511,7 +515,10 @@ def _command_problems(folder: Path, declared: tuple[str, ...]) -> list[str]:
     module = next(
         (
             path
-            for path in (folder / "commands.py", folder / "commands" / "__init__.py")
+            for path in (
+                folder / f"{COMMANDS_MODULE}.py",
+                folder / COMMANDS_MODULE / "__init__.py",
+            )
             if path.is_file()
         ),
         None,
@@ -525,7 +532,7 @@ def _command_problems(folder: Path, declared: tuple[str, ...]) -> list[str]:
         tree = ast.parse(module.read_text(encoding="utf-8"))
     except SyntaxError as exc:
         return [f"{module.name} does not parse: {exc}"]
-    keys = _literal_keys(tree, "COMMANDS")
+    keys = _literal_keys(tree, COMMANDS_ATTRIBUTE)
     if keys is None:
         return [
             "the commands module has no COMMANDS mapping (a dict literal of verb "
@@ -549,7 +556,10 @@ def _transport_problems(folder: Path, declared: tuple[str, ...]) -> list[str]:
     module = next(
         (
             path
-            for path in (folder / "transport" / "__init__.py", folder / "transport.py")
+            for path in (
+                folder / TRANSPORT_MODULE / "__init__.py",
+                folder / f"{TRANSPORT_MODULE}.py",
+            )
             if path.is_file()
         ),
         None,
@@ -563,7 +573,7 @@ def _transport_problems(folder: Path, declared: tuple[str, ...]) -> list[str]:
         tree = ast.parse(module.read_text(encoding="utf-8"))
     except SyntaxError as exc:
         return [f"{module.name} does not parse: {exc}"]
-    keys = _literal_keys(tree, "TRANSPORTS")
+    keys = _literal_keys(tree, TRANSPORTS_ATTRIBUTE)
     if keys is None:
         return [
             f"the transport module has no TRANSPORTS mapping (a dict literal of "
