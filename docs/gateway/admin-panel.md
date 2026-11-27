@@ -321,6 +321,7 @@ The ops log records mutations and security events with structured metadata.
 | API Keys | `key_create`, `key_update`, `key_delete`, `key_rotate` | Key management operations |
 | Data Mutations | `data_cleared`, `data_cleanup`, `data_trimmed`, `data_vacuumed`, `data_rebuilt` | Database maintenance operations |
 | Security | `password_changed`, `token_rotated`, `session_logout_all` | Authentication and session events |
+| Extensions | `extension_cli_install` | An administrator installed a program an extension declares (extension, program, pinned version, outcome; no environment or install output) |
 | Health | `health_status_change` | Provider health state changes |
 
 #### Severity levels
