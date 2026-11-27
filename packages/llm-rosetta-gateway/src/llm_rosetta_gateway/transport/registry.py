@@ -38,9 +38,16 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from llm_rosetta.api import get_shim, import_extension_module, list_extensions
+from llm_rosetta.api import (
+    KindLoadError,
+    get_shim,
+    import_extension_module,
+    list_extensions,
+    register_kind_handler,
+)
 from llm_rosetta.contracts.extension import (
     ExtensionManifest,
     UnresolvedTransport,
@@ -129,16 +136,23 @@ def owning_extension(shim_name: str | None) -> str | None:
     return None
 
 
-def _refuse_builtin_claims(manifests: Mapping[str, ExtensionManifest]) -> None:
-    """Refuse an extension that declares a transport id the gateway ships."""
-    for ext_id in sorted(manifests):
-        claimed = sorted(set(manifests[ext_id].transports) & set(BUILTIN_TRANSPORTS))
-        if claimed:
-            raise TransportPluginError(
-                f"Extension {ext_id!r} claims transport {', '.join(map(repr, claimed))}, "
-                "which this gateway already ships; refusing to let it shadow "
-                "the built-in transport"
-            )
+def _claim_check(manifest: ExtensionManifest, folder: Path) -> list[object]:
+    """The ``transports`` kind handler: refuse an extension that claims a built-in id.
+
+    The extension fails at load time, so it never reaches the lane table and its
+    shims are not registered.  Building a transport stays in
+    :func:`build_lane_transports`.
+    """
+    claimed = sorted(set(manifest.transports) & set(BUILTIN_TRANSPORTS))
+    if claimed:
+        raise KindLoadError(
+            f"claims transport {', '.join(map(repr, claimed))}, which this gateway "
+            "already ships; refusing to let it shadow the built-in transport"
+        )
+    return []
+
+
+register_kind_handler("transports", _claim_check)
 
 
 def resolve_lane(name: str, shim_name: str | None = None) -> LaneRef:
@@ -155,7 +169,6 @@ def resolve_lane(name: str, shim_name: str | None = None) -> LaneRef:
     Raises:
         UnresolvedTransport: Nothing the shim's extension may reach provides
             *name*.
-        TransportPluginError: The shim's extension claims a built-in id.
     """
     manifests = loaded_manifests()
     owner_id = owning_extension(shim_name)
@@ -167,7 +180,6 @@ def resolve_lane(name: str, shim_name: str | None = None) -> LaneRef:
             f"({', '.join(sorted(BUILTIN_TRANSPORTS))}); only the shims of an "
             "extension can name an extension's transport"
         )
-    _refuse_builtin_claims({owner_id: manifests[owner_id]})
     owner = resolve_transport(name, manifests[owner_id], manifests, BUILTIN_TRANSPORTS)
     return LaneRef(name, owner.extension)
 
@@ -298,7 +310,7 @@ def build_lane_transports(
         One instance per lane key, excluding ``http``.
 
     Raises:
-        TransportPluginError: An extension claims a built-in id, fails to
+        TransportPluginError: An extension fails to
             import its transport module, or does not expose a callable factory
             for a transport it declares.
     """
@@ -313,7 +325,6 @@ def build_lane_transports(
         ]
         return {key: override for key in keys}
 
-    _refuse_builtin_claims(manifests)
     transports: dict[str, UpstreamTransport] = {
         name: _build(factory, timeout, label=repr(name))
         for name, factory in BUILTIN_TRANSPORTS.items()

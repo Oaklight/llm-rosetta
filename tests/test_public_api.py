@@ -152,6 +152,9 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             # Installed extensions and what happened to each at load time
             "ExtensionStatus",
             "list_extensions",
+            # The code that loads one kind of an extension, registered by the layer that owns it
+            "KindLoadError",
+            "register_kind_handler",
             # Installing extensions (a standard-library installer and directory manager)
             "EXTENSIONS_DIR_ENV",
             "ExtensionIndex",
