@@ -212,9 +212,9 @@ pre.error { color: #b00; white-space: pre-wrap; }
   subgraph STATE["state"]
     ROUTING["routing/&lt;br/&gt;select · strategy · failover · session · same_format"]
     QUOTA["quota/&lt;br/&gt;service · allowance · signals · probes · rate_limit"]
-    KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库"]
+    KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库 · maintenance(schema 步骤,#1795)"]
     JOBS["jobs/&lt;br/&gt;envelope · queue · worker · handlers"]
-    MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup · keystore 步骤"]
+    MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup"]
   end
   subgraph FOUNDATION["foundation"]
     TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info"]
@@ -272,7 +272,6 @@ pre.error { color: #b00; white-space: pre-wrap; }
   ROUTING --&gt; QUOTA
   QUOTA --&gt; OBS
   JOBS --&gt; OBS
-  KEYSTORE --&gt; MAINT
   KEYSTORE --&gt; OBS
   MAINT --&gt; OBS
   CONFIG --&gt; CORE

@@ -25,9 +25,9 @@ flowchart TB
   subgraph STATE["state"]
     ROUTING["routing/<br/>select · strategy · failover · session · same_format"]
     QUOTA["quota/<br/>service · allowance · signals · probes · rate_limit"]
-    KEYSTORE["keystore/<br/>SQLite API key 库"]
+    KEYSTORE["keystore/<br/>SQLite API key 库 · maintenance(schema 步骤,#1795)"]
     JOBS["jobs/<br/>envelope · queue · worker · handlers"]
-    MAINT["maintenance/<br/>backfills · dumps · startup · keystore 步骤"]
+    MAINT["maintenance/<br/>backfills · dumps · startup"]
   end
   subgraph FOUNDATION["foundation"]
     TRANSPORT["transport/<br/>http · acp · registry · provider_info"]
@@ -85,7 +85,6 @@ flowchart TB
   ROUTING --> QUOTA
   QUOTA --> OBS
   JOBS --> OBS
-  KEYSTORE --> MAINT
   KEYSTORE --> OBS
   MAINT --> OBS
   CONFIG --> CORE
