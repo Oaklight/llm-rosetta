@@ -145,7 +145,7 @@ RETIRED_KEYS: dict[str, str] = {
     "extension index and list it in 'shims.sources', or install the extension "
     "folder into the extensions directory",
     "paths": "a local shim directory is no longer a source; turn it into an "
-    "extension folder (an 'extension.yaml' beside its shim directories) and "
+    "extension folder (a 'plugin.yaml' beside its shim directories) and "
     "put that folder in the extensions directory, or publish it through an "
     "extension index and list the index in 'shims.sources'",
 }

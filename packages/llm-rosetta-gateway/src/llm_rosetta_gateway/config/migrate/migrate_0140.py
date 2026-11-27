@@ -67,6 +67,7 @@ from llm_rosetta.api import FORMATS_BY_TYPE, retired_entry_points, retired_names
 
 from ...shims.catalog import STANDALONE_VENDORS
 
+from .legacy_sources import index_for, is_old_manifest
 from .jsonc_spans import (
     Edits,
     Member,
@@ -486,6 +487,72 @@ class _ConfigPlanner:
         member = obj.member("disabled")
         if member is not None:
             self._shim_list(member.value, "shims.disabled")
+        sources = obj.member("sources")
+        if sources is not None and sources.value.kind == "arr":
+            for index, item in enumerate(sources.value.items):
+                self._source(item, f"shims.sources[{index}]")
+
+    def _source_url(self, node: Node, where: str) -> str | None:
+        """Point one old ``manifest.json`` address at its index; report one it cannot.
+
+        Returns:
+            The index URL it was rewritten to, or ``None``.
+        """
+        if node.kind != "str" or not is_old_manifest(str(node.value)):
+            return None
+        index = index_for(str(node.value))
+        if index is None:
+            self._unmapped(
+                node,
+                where,
+                str(node.value),
+                "the gateway reads an index.json, not a manifest.json, and this "
+                "address is not one of the two published indexes: ask its "
+                "publisher for the index.json URL and put it in shims.sources, "
+                "or install the extension folder into the extensions directory; "
+                "until then this source is not loaded",
+            )
+            return None
+        self._rewrite(node, index, where)
+        return index
+
+    def _source(self, entry: Node, where: str) -> None:
+        """One ``shims.sources`` entry: a string, or an object with ``url``."""
+        if entry.kind == "str":
+            self._source_url(entry, where)
+            return
+        if entry.kind != "obj":
+            return
+        url = entry.member("url")
+        if url is not None:
+            self._source_url(url.value, f"{where}.url")
+        fallback = entry.member("fallback")
+        if fallback is None or fallback.value.kind != "str":
+            return
+        old = str(fallback.value.value)
+        if not is_old_manifest(old):
+            return
+        if index_for(old) is None:
+            self._source_url(fallback.value, f"{where}.fallback")
+            return
+        # An index has one address, so a fallback that was a manifest has no
+        # successor: it is dropped, and the report says so.
+        members = entry.members
+        position = members.index(fallback)
+        previous = members[position - 1] if position == len(members) - 1 else None
+        remove_member(self.edits, fallback, previous)
+        self.items.append(
+            Item(
+                "config",
+                "rewrite",
+                self.file,
+                f"{where}.fallback",
+                line_of(self.text, fallback.value.start),
+                old,
+                "(removed)",
+                detail="an index has one address",
+            )
+        )
 
     # -- the document -----------------------------------------------------
 
