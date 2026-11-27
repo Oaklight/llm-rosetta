@@ -440,7 +440,9 @@ class TestScaffold:
                     "ext",
                     "new",
                     "acme_tool",
-                    "--command",
+                    "--provides",
+                    "shims,commands",
+                    "--verb",
                     "run-it",
                     "--dest",
                     str(home / "llm_rosetta_ext"),
@@ -462,7 +464,9 @@ class TestScaffold:
                     "ext",
                     "new",
                     "acme_tool",
-                    "--command",
+                    "--provides",
+                    "commands",
+                    "--verb",
                     "Run_It",
                     "--dest",
                     str(tmp_path),
@@ -476,7 +480,7 @@ class TestScaffold:
 class TestCheck:
     def _folder(self, tmp_path, commands: str | None) -> Path:
         files = ext_scaffold.render_extension(
-            "acme_tool", format_="chat_completions", command="run-it"
+            "acme_tool", provides=("shims", "commands"), verbs=("run-it",)
         )
         folder = tmp_path / "acme_tool"
         for relative, text in files.items():

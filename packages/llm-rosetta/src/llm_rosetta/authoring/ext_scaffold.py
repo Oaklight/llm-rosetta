@@ -26,6 +26,7 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -42,6 +43,7 @@ from llm_rosetta.contracts.extension import (
     parse_extension_manifest,
 )
 from llm_rosetta.authoring.scaffold import _render
+from llm_rosetta.extensions import KINDS
 from llm_rosetta.extensions._cli import ExtVerb
 from llm_rosetta.model_vocabulary import FORMATS_BY_TYPE
 
@@ -62,27 +64,12 @@ RESERVED_IDS = frozenset(
     {"scripts", "skills", "docs", "tests", "packages", "core", "contrib"}
 )
 
-#: The package-data globs a shim tree needs.  ``.py`` files in a package folder
-#: ship by themselves; the leaves are not packages, so their files are listed.
-PACKAGE_DATA = ("plugin.yaml", "provider.yaml", "llm/*/provider.yaml", "llm/*/*.py")
-
 #: Files and folders that are in the folder but not in the wheel.
 _NOT_SHIPPED_FILES = frozenset({"pyproject.toml", "README.md"})
 _NOT_SHIPPED_DIRS = frozenset({"tests", "build", "dist", "__pycache__"})
 
-#: Template files and the folders they land in, relative to the template.
-_BASE_TEMPLATES = (
-    ("plugin.yaml.tmpl", "plugin.yaml"),
-    ("provider.yaml.tmpl", "provider.yaml"),
-    ("__init__.py.tmpl", "__init__.py"),
-    ("README.md.tmpl", "README.md"),
-    ("tests/test_extension.py.tmpl", "tests/test_extension.py"),
-)
-_COMMAND_TEMPLATES = (("commands.py.tmpl", f"{COMMANDS_MODULE}.py"),)
-_TRANSPORT_TEMPLATES = (
-    ("transport/__init__.py.tmpl", f"{TRANSPORT_MODULE}/__init__.py"),
-    ("transport/transport.py.tmpl", f"{TRANSPORT_MODULE}/transport.py"),
-)
+#: The template folder every extension starts from, whatever it provides.
+BASE_KIND = "base"
 
 
 class ExtensionScaffoldError(ValueError):
@@ -126,34 +113,73 @@ def _quote(items: list[str]) -> str:
     return ", ".join(f'"{item}"' for item in items)
 
 
-def render_extension(
-    ext_id: str,
-    *,
-    format_: str,
-    name: str | None = None,
-    transport: bool = False,
-    command: str | None = None,
-) -> dict[str, str]:
-    """Render the files of a new extension.
+def _template_files(kind: str) -> list[tuple[Path, str]]:
+    """List ``(template, target)`` of one template folder, found by walking it.
 
-    Args:
-        ext_id: The extension id.
-        format_: A chat format from the catalog.
-        name: The display name; the id by default.
-        transport: Add a ``transport/`` package and declare it.
-        command: Add a ``commands.py`` with this verb and declare it, so
-            ``llm-rosetta <id> <verb>`` runs it.
-
-    Returns:
-        The file contents, keyed by path relative to the extension folder.
-
-    Raises:
-        ExtensionScaffoldError: The id or the format is not acceptable.
+    The target is the template's path below the folder, without ``.tmpl``.  A
+    ``.part`` file is a partial the renderer composes, not a file of the
+    extension, so the walk does not see it.
     """
+    root = EXT_TEMPLATE_DIR / kind
+    return [
+        (path, path.relative_to(root).as_posix()[: -len(".tmpl")])
+        for path in sorted(root.rglob("*.tmpl"))
+    ]
+
+
+def _partial(kind: str, name: str, values: dict[str, str]) -> str:
+    return _render((EXT_TEMPLATE_DIR / kind / name).read_text(encoding="utf-8"), values)
+
+
+def package_data(targets: Collection[str]) -> list[str]:
+    """Return the package-data entries a tree needs, from the files it has.
+
+    ``.py`` files in a package folder ship by themselves; every other file, and
+    a ``.py`` in a folder with no ``__init__.py`` (a shim leaf is not a package),
+    is listed.  The tree decides, so a shape the template does not know needs no
+    edit here.
+    """
+    packages = {""} | {
+        target[: -len("/__init__.py")]
+        for target in targets
+        if target.endswith("/__init__.py")
+    }
+    return sorted(
+        target
+        for target in targets
+        if not target.startswith("tests/")
+        and target not in _NOT_SHIPPED_FILES
+        and target != "__init__.py"
+        and (not target.endswith(".py") or target.rpartition("/")[0] not in packages)
+    )
+
+
+def _checked_inputs(
+    ext_id: str,
+    provides: Sequence[str],
+    format_: str | None,
+    name: str | None,
+    verbs: Sequence[str],
+) -> tuple[tuple[str, ...], str, str, tuple[str, ...]]:
+    """Validate what ``ext new`` was asked for; return kinds, format, name, verbs."""
     problem = id_problem(ext_id)
     if problem is not None:
         raise ExtensionScaffoldError(problem)
-    if format_ not in chat_formats():
+    kinds = tuple(dict.fromkeys(provides))
+    if not kinds:
+        raise ExtensionScaffoldError("provides is empty: name at least one kind")
+    unknown = [kind for kind in kinds if kind not in KINDS]
+    if unknown:
+        raise ExtensionScaffoldError(
+            f"unknown kind {', '.join(map(repr, unknown))}; available: "
+            + ", ".join(KINDS)
+        )
+    if format_ is not None and "shims" not in kinds:
+        raise ExtensionScaffoldError("format applies to the shims kind, not provided")
+    if verbs and "commands" not in kinds:
+        raise ExtensionScaffoldError("verb applies to the commands kind, not provided")
+    format_ = format_ or "chat_completions"
+    if "shims" in kinds and format_ not in chat_formats():
         raise ExtensionScaffoldError(
             f"format {format_!r} is not a chat format; available: "
             + ", ".join(chat_formats())
@@ -163,48 +189,130 @@ def render_extension(
         raise ExtensionScaffoldError(
             "name may not contain a quote, a backslash or a control character"
         )
-    if command is not None and not COMMAND_VERB.match(command):
-        raise ExtensionScaffoldError(
-            f"command {command!r}: a verb is lowercase letters, digits and "
-            "hyphens, and starts with a letter"
+    verbs = tuple(dict.fromkeys(verbs)) or (("run",) if "commands" in kinds else ())
+    for verb in verbs:
+        if not COMMAND_VERB.match(verb):
+            raise ExtensionScaffoldError(
+                f"verb {verb!r}: a verb is lowercase letters, digits and "
+                "hyphens, and starts with a letter"
+            )
+    return kinds, format_, display, verbs
+
+
+def _command_values(ext_id: str, verbs: Sequence[str], values: dict[str, str]) -> None:
+    """Fill the placeholders of the commands kind for *verbs*."""
+    values["command_entries"] = "\n".join(
+        f'    {verb}: {{ en: "Run {ext_id} {verb}." }}' for verb in verbs
+    )
+    values["command_mapping"] = (
+        "{" + ", ".join(f'"{verb}": {verb.replace("-", "_")}' for verb in verbs) + "}"
+    )
+    values["command_functions"] = "".join(
+        _partial(
+            "commands",
+            "verb.py.part",
+            {**values, "command": verb, "command_function": verb.replace("-", "_")},
         )
-    transport_id = ext_id if transport else ""
-    shim = f"{ext_id}--{format_}"
-    templates = list(_BASE_TEMPLATES) + [
-        ("llm/format/provider.yaml.tmpl", f"llm/{format_}/provider.yaml")
-    ]
-    if transport:
-        templates.extend(_TRANSPORT_TEMPLATES)
-    if command is not None:
-        templates.extend(_COMMAND_TEMPLATES)
-    packages = [f"{NAMESPACE}.{ext_id}"]
-    for _, target in templates:
-        if target.endswith("/__init__.py") and not target.startswith("tests/"):
-            packages.append(f"{NAMESPACE}.{ext_id}." + target[: -len("/__init__.py")])
+        for verb in verbs
+    )
+
+
+def _provides_summary(values: dict[str, str], verbs: Sequence[str]) -> str:
+    """The README's list of what the extension provides."""
+    lines = []
+    if values["shim"]:
+        lines.append(
+            f"- shim `{values['shim']}`: default base URL "
+            f"`https://example.invalid/v1`, credential `{values['api_key_env']}`"
+        )
+    if values["transport_id"]:
+        lines.append(f"- transport `{values['transport_id']}`")
+    lines.extend(f"- command `llm-rosetta {values['id']} {verb}`" for verb in verbs)
+    return "\n".join(lines)
+
+
+def render_extension(
+    ext_id: str,
+    *,
+    provides: Sequence[str] = ("shims",),
+    format_: str | None = None,
+    name: str | None = None,
+    verbs: Sequence[str] = (),
+) -> dict[str, str]:
+    """Render the files of a new extension.
+
+    Args:
+        ext_id: The extension id.
+        provides: The kinds it provides: any of ``shims``, ``transports``,
+            ``commands`` (the names of the template folders and of the
+            ``provides`` keys).
+        format_: A chat format from the catalog, for the ``shims`` kind
+            (``chat_completions`` by default).
+        name: The display name; the id by default.
+        verbs: The command verbs of the ``commands`` kind, so
+            ``llm-rosetta <id> <verb>`` runs one (``run`` by default).
+
+    Returns:
+        The file contents, keyed by path relative to the extension folder.
+
+    Raises:
+        ExtensionScaffoldError: The id, a kind, the format or a verb is not
+            acceptable, or an option names a kind that is not provided.
+    """
+    kinds, format_, display, verbs = _checked_inputs(
+        ext_id, provides, format_, name, verbs
+    )
+    transport_id = ext_id if "transports" in kinds else ""
     values = {
         "id": ext_id,
         "name": display,
         "name_yaml": f'"{display}"',
         "format": format_,
-        "shim": shim,
+        "shim": f"{ext_id}--{format_}" if "shims" in kinds else "",
         "surface": str(SURFACE_VERSION),
         "ir": str(IR_VERSION),
         "transport_id": transport_id,
-        "command": command or "",
-        "command_function": (command or "").replace("-", "_"),
-        "command_summary": f"Run {ext_id} {command}." if command else "",
-        "transport_class": _class_name(ext_id) if transport else "",
+        "transport_class": _class_name(ext_id) if transport_id else "",
         "api_key_env": ext_id.upper() + "_API_KEY",
         "distribution": distribution_name(ext_id),
         "core_floor": _core_floor(),
-        "packages": _quote(packages),
-        "package_data": _quote(list(PACKAGE_DATA)),
+        "command": "",
+        "command_function": "",
+        "command_entries": "",
+        "command_functions": "",
+        "command_mapping": "",
+        "provides": "",
+        "provides_summary": "",
+        "packages": "",
+        "package_data": "",
     }
-    files = {
-        target: _render((EXT_TEMPLATE_DIR / source).read_text(encoding="utf-8"), values)
-        for source, target in templates + [("pyproject.toml.tmpl", "pyproject.toml")]
+    if verbs:
+        _command_values(ext_id, verbs, values)
+    values["provides"] = "".join(
+        _partial(kind, "provides.yaml.part", values) for kind in kinds
+    ).rstrip("\n")
+    values["provides_summary"] = _provides_summary(values, verbs)
+    templates = [
+        (path, target)
+        for kind in (BASE_KIND, *(k for k in KINDS if k in kinds))
+        for path, target in _template_files(kind)
+    ]
+    targets = {target for _, target in templates}
+    packages = [f"{NAMESPACE}.{ext_id}"] + [
+        f"{NAMESPACE}.{ext_id}." + target[: -len("/__init__.py")].replace("/", ".")
+        for _, target in templates
+        if target.endswith("/__init__.py") and not target.startswith("tests/")
+    ]
+    values["packages"] = _quote(packages)
+    values["package_data"] = _quote(package_data(targets | {MANIFEST_FILENAME}))
+    return {
+        target: _render(path.read_text(encoding="utf-8"), values)
+        for path, target in templates
     }
-    return files
+
+
+def _split_kinds(text: str) -> tuple[str, ...]:
+    return tuple(part.strip() for part in text.split(",") if part.strip())
 
 
 def run_ext_new(args: argparse.Namespace) -> int:
@@ -220,10 +328,10 @@ def run_ext_new(args: argparse.Namespace) -> int:
     try:
         files = render_extension(
             ext_id,
-            format_=getattr(args, "format", "") or "chat_completions",
+            provides=_split_kinds(getattr(args, "provides", None) or "shims"),
+            format_=getattr(args, "format", None),
             name=getattr(args, "name", None),
-            transport=bool(getattr(args, "transport", False)),
-            command=getattr(args, "command", None),
+            verbs=tuple(getattr(args, "verb", None) or ()),
         )
     except ExtensionScaffoldError as exc:
         print(f"error   {exc}", file=sys.stderr)
@@ -255,26 +363,30 @@ def add_ext_arguments(parser: argparse.ArgumentParser, *, command: str = "new") 
         parser.add_argument("ext_id", help="Extension id, e.g. together")
         parser.add_argument("--name", help="Display name; default the id")
         parser.add_argument(
+            "--provides",
+            default="shims",
+            metavar="KINDS",
+            help="What the extension provides, comma separated: "
+            + ", ".join(KINDS)
+            + " (default shims)",
+        )
+        parser.add_argument(
             "--format",
-            default="chat_completions",
-            help="Chat format of the first lane. Available: "
-            + ", ".join(chat_formats()),
+            help="Chat format of the first lane, for the shims kind. Available: "
+            + ", ".join(chat_formats())
+            + " (default chat_completions)",
+        )
+        parser.add_argument(
+            "--verb",
+            action="append",
+            metavar="VERB",
+            help="A command verb, for the commands kind: 'llm-rosetta <id> VERB' "
+            "runs it; repeat for several (default run)",
         )
         parser.add_argument(
             "--dest",
             default="packages",
             help="Directory the extension folder is created in",
-        )
-        parser.add_argument(
-            "--transport",
-            action="store_true",
-            help="Add a transport/ package and declare it in plugin.yaml",
-        )
-        parser.add_argument(
-            "--command",
-            metavar="VERB",
-            help="Add commands.py with this verb and declare it, so "
-            "'llm-rosetta <id> VERB' runs it",
         )
     elif command == "check":
         parser.add_argument(
