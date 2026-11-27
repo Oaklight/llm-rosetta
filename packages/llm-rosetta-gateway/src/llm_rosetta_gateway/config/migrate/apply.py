@@ -49,7 +49,7 @@ STEPS = ["config.migrate_structure"]
 def _migrate_structure(context: StepContext) -> int:
     """Apply the versioned config migrations, which own ``config_version``.
 
-    The migrations themselves stay where they are (:mod:`~...gateway.maintenance.migrations`):
+    The migrations themselves stay where they are (:mod:`~...gateway.config.migrate.migrations`):
     the table is written once, with its own log line per migration, and this
     step is what puts it in the load's order and reports whether it moved.
     """

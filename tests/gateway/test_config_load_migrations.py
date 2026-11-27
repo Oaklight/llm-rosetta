@@ -38,8 +38,8 @@ from pathlib import Path
 import pytest
 
 from llm_rosetta_gateway import config as config_module
-from llm_rosetta_gateway.maintenance import config as config_maintenance
-from llm_rosetta_gateway.maintenance.migrations import CURRENT_VERSION
+from llm_rosetta_gateway.config.migrate import apply as config_maintenance
+from llm_rosetta_gateway.config.migrate.migrations import CURRENT_VERSION
 from llm_rosetta_gateway.cli import _load_startup_config
 from llm_rosetta_gateway.config import (
     GatewayConfig,
@@ -48,7 +48,7 @@ from llm_rosetta_gateway.config import (
     load_config_raw,
     load_gateway_config,
 )
-from llm_rosetta_gateway.maintenance.config import ConfigMigrationError
+from llm_rosetta_gateway.config.migrate.apply import ConfigMigrationError
 
 #: A document as an older release wrote it: version 0, the legacy pools beside
 #: ``providers``, and a name that has since been renamed.

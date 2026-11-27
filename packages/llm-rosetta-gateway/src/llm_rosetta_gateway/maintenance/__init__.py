@@ -8,15 +8,16 @@ and the deferred-startup runner.
 
 Each store keeps its own ledger:
 
-- :mod:`.config` — load-time config steps, recorded by ``config_version`` in
-  the document itself.
 - :mod:`.keystore` — key-store schema steps, recorded in ``keys.db``.
 - :mod:`.backfills` — post-boot data repairs, recorded in the deferred
   registry's results.
 - :mod:`.startup` — the deferred task that runs the backfills.
 - :mod:`.dumps` — error dumps held until their request-log row exists.
-- :mod:`.names` — the guard that rejects a retired provider/shim name.
-- :mod:`.migrations` — versioned config-schema migrations.
+
+The config-file migrations (the load-time steps recorded by ``config_version``,
+the versioned schema migrations, the retired-name guard and the
+``llm-rosetta gateway migrate`` tool) live in :mod:`llm_rosetta_gateway.config.migrate`:
+they read the config's own parser, so they belong to the layer above this one.
 
 The public names are re-exported lazily: importing a submodule (for example
 ``gateway.keystore`` importing ``maintenance.keystore``) does not pull in
@@ -31,52 +32,30 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .backfills import build_registry as build_deferred_registry
-    from .config import (
-        STEPS,
-        ConfigMigrationError,
-        apply,
-        build_registry as build_config_registry,
-    )
     from .dumps import DeferredDumpStore
     from .keystore import COLUMN_OF, build_registry as build_keystore_registry
-    from .migrations import CURRENT_VERSION, migrate
-    from .names import legacy_name_error
     from .startup import DeferredStartup, ProviderInitState, ProviderNotReady
 
 #: Public name -> (submodule, attribute).  Kept as data so the façade costs
 #: nothing at import time; see the module docstring for why that matters.
 _EXPORTS: dict[str, tuple[str, str]] = {
     "COLUMN_OF": (".keystore", "COLUMN_OF"),
-    "CURRENT_VERSION": (".migrations", "CURRENT_VERSION"),
-    "STEPS": (".config", "STEPS"),
-    "ConfigMigrationError": (".config", "ConfigMigrationError"),
     "DeferredDumpStore": (".dumps", "DeferredDumpStore"),
     "DeferredStartup": (".startup", "DeferredStartup"),
     "ProviderInitState": (".startup", "ProviderInitState"),
     "ProviderNotReady": (".startup", "ProviderNotReady"),
-    "apply": (".config", "apply"),
-    "build_config_registry": (".config", "build_registry"),
     "build_deferred_registry": (".backfills", "build_registry"),
     "build_keystore_registry": (".keystore", "build_registry"),
-    "legacy_name_error": (".names", "legacy_name_error"),
-    "migrate": (".migrations", "migrate"),
 }
 
 __all__ = [
     "COLUMN_OF",
-    "CURRENT_VERSION",
-    "STEPS",
-    "ConfigMigrationError",
     "DeferredDumpStore",
     "DeferredStartup",
     "ProviderInitState",
     "ProviderNotReady",
-    "apply",
-    "build_config_registry",
     "build_deferred_registry",
     "build_keystore_registry",
-    "legacy_name_error",
-    "migrate",
 ]
 
 

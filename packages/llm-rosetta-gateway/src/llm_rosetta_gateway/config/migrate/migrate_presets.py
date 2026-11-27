@@ -13,8 +13,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-from ..shims.catalog import DEFAULT_SOURCES, get_shim_source, get_standalone
-from ..shims.manifest_sources.plan import parse_selector
+from ...shims.catalog import DEFAULT_SOURCES, get_shim_source, get_standalone
+from ...shims.manifest_sources.plan import parse_selector
 
 
 @dataclass

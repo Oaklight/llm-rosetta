@@ -12,7 +12,7 @@ from pathlib import Path
 
 from llm_rosetta.api import retired_names
 
-from llm_rosetta_gateway.maintenance import migrate_0140 as mig
+from llm_rosetta_gateway.config.migrate import migrate_0140 as mig
 
 
 def _imports(tmp_path: Path, source: str) -> list[tuple]:

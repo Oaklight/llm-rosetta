@@ -9,8 +9,8 @@ from __future__ import annotations
 import pytest
 
 from llm_rosetta import retired_names
-from llm_rosetta_gateway.maintenance import names
-from llm_rosetta_gateway.maintenance.names import legacy_name_error
+from llm_rosetta_gateway.config.migrate import names
+from llm_rosetta_gateway.config.migrate.names import legacy_name_error
 
 
 def test_the_rewrite_is_gone() -> None:

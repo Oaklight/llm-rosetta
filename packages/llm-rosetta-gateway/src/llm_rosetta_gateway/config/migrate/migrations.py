@@ -293,7 +293,7 @@ def _migrate_v3_to_v4(raw: dict[str, Any]) -> None:
     models = raw.get("models")
     if not isinstance(models, dict):
         return
-    from ..config.parse import declared_model_type, declared_provider_names
+    from ..parse import declared_model_type, declared_provider_names
 
     serving: dict[str, set[str]] = {}
     for cfg in models.values():
@@ -327,7 +327,7 @@ def _serving_providers(raw: dict[str, Any]) -> dict[str, set[str]]:
     question (it is disabled there with a reason), while whether the document
     routes the type at it is a document question.
     """
-    from ..config.typed import _typed_descriptors, parse_typed_config
+    from ..typed import _typed_descriptors, parse_typed_config
 
     raw_providers = raw.get("providers") or {}
     proxy = (raw.get("server") or {}).get("proxy")
@@ -382,7 +382,7 @@ def _migrate_v4_to_v5(raw: dict[str, Any]) -> None:
     mean "cleared", and leaving the flat twin behind would make the entry
     carry two spellings of one setting that disagree.
     """
-    from ..config.typed import _typed_descriptors
+    from ..typed import _typed_descriptors
 
     providers = raw.get("providers")
     if not isinstance(providers, dict):

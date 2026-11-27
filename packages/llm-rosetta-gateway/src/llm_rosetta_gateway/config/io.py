@@ -245,7 +245,7 @@ class JsoncConfigIO:
         the registry that ran is kept on this reader, which is what read the
         document, and is handed to the config built from it.
         """
-        from ..maintenance.config import apply
+        from .migrate.apply import apply
 
         raw, changed, registry = apply(raw, path=path)
         self.last_load_registry = registry
@@ -267,7 +267,7 @@ class JsoncConfigIO:
         the process holds the migrated one either way, and the version on disk
         simply does not advance.
         """
-        from ..maintenance.config import apply
+        from .migrate.apply import apply
 
         if is_raw:
             disk_data = raw

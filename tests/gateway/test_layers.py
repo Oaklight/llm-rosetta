@@ -99,13 +99,6 @@ ROOT_MODULES: dict[str, str] = {
 #: only.
 LAZY_UPWARD: dict[tuple[str, str, str], int] = {
     ("jobs/handlers/data.py", "ops", "data_handlers"): 1,
-    ("maintenance/migrate_0140.py", "config", "_ConfigPlanner._version"): 1,
-    ("maintenance/migrate_0140.py", "config", "_write_config"): 1,
-    ("maintenance/migrate_0140.py", "config", "main"): 1,
-    ("maintenance/migrations.py", "config", "_migrate_v3_to_v4"): 1,
-    ("maintenance/migrations.py", "config", "_migrate_v4_to_v5"): 1,
-    ("maintenance/migrations.py", "config", "_serving_providers"): 1,
-    ("maintenance/names.py", "config", "legacy_name_error"): 1,
 }
 
 
@@ -329,7 +322,6 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
     "cli": (
         "app",
         "config",
-        "maintenance",
         "observability",
         "ops",
         "shims",
@@ -353,11 +345,9 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
         "observability",
     ),
     "maintenance": (
-        "config",
         "keystore",
         "observability",
         "quota",
-        "shims",
         "transport",
     ),
     "middleware": (

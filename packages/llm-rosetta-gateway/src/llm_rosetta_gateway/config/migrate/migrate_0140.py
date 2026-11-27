@@ -65,7 +65,7 @@ from typing import Any
 
 from llm_rosetta.api import FORMATS_BY_TYPE, retired_entry_points, retired_names
 
-from ..shims.catalog import STANDALONE_VENDORS
+from ...shims.catalog import STANDALONE_VENDORS
 
 from .jsonc_spans import (
     Edits,
@@ -523,7 +523,7 @@ class _ConfigPlanner:
         """
         import copy
 
-        from ..config.io import _loads
+        from ..io import _loads
         from .migrations import CURRENT_VERSION, migrate
 
         try:
@@ -604,7 +604,7 @@ class _ConfigPlanner:
 
         The declared presets, and the ones a rewritten legacy shim name needs,
         are replaced by the entries
-        :func:`~llm_rosetta_gateway.maintenance.migrate_presets.presets_as_install` gives:
+        :func:`~llm_rosetta_gateway.config.migrate.migrate_presets.presets_as_install` gives:
         the mapped selector, one ``<source>:<vendor>`` per vendor an
         ``include`` keeps, ``!<source>:<vendor>`` per vendor an ``exclude``
         drops, and ``shims.disabled`` for a shim dropped from a kept vendor.
@@ -1037,7 +1037,7 @@ def _write_config(path: Path, result: ConfigResult, bom: bool) -> str:
     Returns:
         The backup path.
     """
-    from ..config.io import config_lock
+    from ..io import config_lock
 
     with config_lock(str(path)):
         current, _ = _read_text(path)
@@ -1705,7 +1705,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     if not (args.config or args.db or args.scan):
-        from ..config import discover_config
+        from .. import discover_config
 
         found = discover_config()
         if found is None:

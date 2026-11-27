@@ -37,7 +37,7 @@ from hypothesis import strategies as st  # noqa: E402
 from llm_rosetta.api import retired_names  # noqa: E402
 
 from llm_rosetta_gateway._vendor import jsonx  # noqa: E402
-from llm_rosetta_gateway.maintenance import migrate_0140 as mig  # noqa: E402
+from llm_rosetta_gateway.config.migrate import migrate_0140 as mig  # noqa: E402
 from tests.gateway.test_migrate_0140 import _config_for  # noqa: E402
 
 ROWS = retired_names.RETIRED_NAMES

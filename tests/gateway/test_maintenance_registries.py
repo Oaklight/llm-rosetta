@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 
-from llm_rosetta_gateway.maintenance.config import (
+from llm_rosetta_gateway.config.migrate.apply import (
     build_registry as config_registry,
 )
 from llm_rosetta_gateway.keystore import KeyStore
