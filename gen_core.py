@@ -19,6 +19,8 @@ current_header = '''flowchart TB
     INIT["llm_rosetta/__init__<br/>convert() · get_converter_for_provider()"]
     TOOL["tool_ops.py<br/>入口便捷层:为 toolregistry 直接转换工具定义/调用/结果;只被 llm_rosetta/__init__ 导入"]
     CLI["cli/ 包 · __main__<br/>分发器(__init__) · area 表与 commands 处理器(areas.py)(#1773、#1789)"]
+    DET["auto_detect.py<br/>0.13.0 的转发,无逻辑,0.15.0 删除;无人导入(#1797)"]
+    CAP["capabilities.py<br/>0.13.0 的转发,警告,0.15.0 删除;无人导入"]
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]
@@ -28,10 +30,6 @@ current_header = '''flowchart TB
         IROPS["ir/ 逻辑<br/>primitives · tools · passes · context"]
         IRMODEL["ir/model/<br/>数据类 · 类型守卫 · 校验 · IR_VERSION<br/>只依赖标准库"]
       end
-    end
-    subgraph SIDE["辅助"]
-      DET["auto_detect.py"]
-      CAP["capabilities.py<br/>0.13.0 的转发,警告,0.15.0 删除;无人导入"]
     end
   end
   subgraph OPT["可选外层(没有它们,转换库照样完整)"]
@@ -55,7 +53,7 @@ current_header = '''flowchart TB
 '''
 current_edges = [
  ("INIT","PIPE","","solid",None), ("INIT","CVT","","solid",None),
- ("INIT","SHIM","接线(带保护的导入)","solid",None), ("INIT","DET","","solid",None),
+ ("INIT","SHIM","接线(带保护的导入)","solid",None),
  ("INIT","TOOL","","solid",None), ("TOOL","CVT","","solid",None), ("CLI","CDECL","","solid",None), 
  ("GW","EXTS","经 api 注册 transports 处理器","lazy",GREEN),
  ("CLI","EXTS","注册 commands 处理器(加载器回放已加载的扩展)","solid",GREEN),
@@ -67,15 +65,15 @@ current_edges = [
  ("EXTS","CDECL","","solid",None), ("DEV","EXTS","ext new / check 的 ExtVerb 记录(#1752)","solid",None), ("CLI","DEV","把 ExtVerb 传给 ext_main","lazy",None),
  ("CDECL","IRMODEL","IREffort · IRMode · IR_VERSION","solid",None),
  ("CDECL","FMT","usage.semantics","solid",None),
- ("DET","CDECL","ProviderType 定义在 contracts.routing(#1738)","solid",None),
  ("CDECL","VOCAB","retired_names","solid",None),
  ("CXF","IROPS","","solid",RED),
- ("DET","FMT","","solid",None), ("FMT","IRMODEL","","solid",None),
+ ("FMT","IRMODEL","","solid",None),
  ("CAP","CVT","","solid",None), ("CAP","PIPE","转发 enforcement","solid",None), ("DEV","CDECL","","solid",None),
  ("REF","IRMODEL","转发(带警告)","solid",None),
- ("DET","CVT","按需加载(LAZY_ONLY_EDGES,#1787)","lazy",None), ("DET","PIPE","按需加载","lazy",None),
+ ("DET","CVT","转发 get_converter_for_provider · detect_provider","solid",None), ("DET","PIPE","转发 convert · convert_response(pipeline/facade)","solid",None),
+ ("CVT","FMT","detect_provider 读格式目录(#1797)","solid",None), ("SHIM","CVT","清转换器缓存(#1797)","solid",None),
  ("DEV","CVT","按需加载","lazy",None), ("DEV","SHIM","按需加载","lazy",None),
- ("PIPE","FID","按需加载","lazy",None), ("SHIM","DET","按需加载:clear_converter_cache()","lazy",None),
+ ("PIPE","FID","按需加载","lazy",None),
 ]
 open("core.mmd","w",encoding="utf-8").write(render(current_header, current_edges))
 

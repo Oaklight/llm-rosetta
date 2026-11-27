@@ -34,6 +34,8 @@ pre.error { color: #b00; white-space: pre-wrap; }
     INIT["llm_rosetta/__init__&lt;br/&gt;convert() · get_converter_for_provider()"]
     TOOL["tool_ops.py&lt;br/&gt;入口便捷层:为 toolregistry 直接转换工具定义/调用/结果;只被 llm_rosetta/__init__ 导入"]
     CLI["cli/ 包 · __main__&lt;br/&gt;分发器(__init__) · area 表与 commands 处理器(areas.py)(#1773、#1789)"]
+    DET["auto_detect.py&lt;br/&gt;0.13.0 的转发,无逻辑,0.15.0 删除;无人导入(#1797)"]
+    CAP["capabilities.py&lt;br/&gt;0.13.0 的转发,警告,0.15.0 删除;无人导入"]
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]
@@ -43,10 +45,6 @@ pre.error { color: #b00; white-space: pre-wrap; }
         IROPS["ir/ 逻辑&lt;br/&gt;primitives · tools · passes · context"]
         IRMODEL["ir/model/&lt;br/&gt;数据类 · 类型守卫 · 校验 · IR_VERSION&lt;br/&gt;只依赖标准库"]
       end
-    end
-    subgraph SIDE["辅助"]
-      DET["auto_detect.py"]
-      CAP["capabilities.py&lt;br/&gt;0.13.0 的转发,警告,0.15.0 删除;无人导入"]
     end
   end
   subgraph OPT["可选外层(没有它们,转换库照样完整)"]
@@ -72,7 +70,6 @@ pre.error { color: #b00; white-space: pre-wrap; }
   INIT --&gt; PIPE
   INIT --&gt; CVT
   INIT --&gt;|"接线(带保护的导入)"| SHIM
-  INIT --&gt; DET
   INIT --&gt; TOOL
   TOOL --&gt; CVT
   CLI --&gt; CDECL
@@ -94,26 +91,25 @@ pre.error { color: #b00; white-space: pre-wrap; }
   CLI -.-&gt;|"把 ExtVerb 传给 ext_main"| DEV
   CDECL --&gt;|"IREffort · IRMode · IR_VERSION"| IRMODEL
   CDECL --&gt;|"usage.semantics"| FMT
-  DET --&gt;|"ProviderType 定义在 contracts.routing(#1738)"| CDECL
   CDECL --&gt;|"retired_names"| VOCAB
   CXF --&gt; IROPS
-  DET --&gt; FMT
   FMT --&gt; IRMODEL
   CAP --&gt; CVT
   CAP --&gt;|"转发 enforcement"| PIPE
   DEV --&gt; CDECL
   REF --&gt;|"转发(带警告)"| IRMODEL
-  DET -.-&gt;|"按需加载(LAZY_ONLY_EDGES,#1787)"| CVT
-  DET -.-&gt;|"按需加载"| PIPE
+  DET --&gt;|"转发 get_converter_for_provider · detect_provider"| CVT
+  DET --&gt;|"转发 convert · convert_response(pipeline/facade)"| PIPE
+  CVT --&gt;|"detect_provider 读格式目录(#1797)"| FMT
+  SHIM --&gt;|"清转换器缓存(#1797)"| CVT
   DEV -.-&gt;|"按需加载"| CVT
   DEV -.-&gt;|"按需加载"| SHIM
   PIPE -.-&gt;|"按需加载"| FID
-  SHIM -.-&gt;|"按需加载:clear_converter_cache()"| DET
 
+  linkStyle 6 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
   linkStyle 7 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 8 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 19 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 27 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 18 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 25 stroke:#d33,stroke-width:2.5px,color:#d33
 </pre></div></div>
 </section>
 <section id="core_target">
