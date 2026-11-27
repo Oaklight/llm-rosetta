@@ -7,7 +7,6 @@ template.
 
 from __future__ import annotations
 
-import importlib.util
 from pathlib import Path
 
 import pytest
@@ -15,17 +14,12 @@ import pytest
 from llm_rosetta.shims.provider_shim import _reset_registry
 from llm_rosetta.shims import _loader as providers_module
 from llm_rosetta.shims._loader import load_providers, load_providers_from_dir
-from llm_rosetta.authoring import scaffold
+from llm_rosetta.authoring import scaffold as shim_tree
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts/dev/new_shim.py"
+from _new_shim_script import load as _script
 
-
-def _script():
-    spec = importlib.util.spec_from_file_location("new_shim", SCRIPT)
-    assert spec is not None and spec.loader is not None, SCRIPT
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+#: The scaffolder script: its prompts, probe and icon lookup are not in the wheel.
+scaffold = _script()
 
 
 @pytest.fixture(autouse=True)
@@ -900,8 +894,8 @@ class TestTemplate:
     def test_every_template_renders(self):
         """A placeholder the scaffold does not fill must fail here, not at use."""
 
-        for template in sorted(scaffold.TEMPLATE_DIR.rglob("*.tmpl")):
-            rendered = scaffold._render(
+        for template in sorted(shim_tree.TEMPLATE_DIR.rglob("*.tmpl")):
+            rendered = shim_tree._render(
                 template.read_text(encoding="utf-8"), self._VALUES
             )
             assert "{{" not in rendered, template
@@ -909,7 +903,7 @@ class TestTemplate:
     def test_the_tree_carries_exactly_the_modules_the_loader_reads(self):
         """The template set and the loader's allow-list are the same list."""
 
-        names = {path.name for path in scaffold.TREE_DIR.rglob("*.tmpl")}
+        names = {path.name for path in shim_tree.TREE_DIR.rglob("*.tmpl")}
         assert names == {
             "provider.yaml.tmpl",
             "transforms.py.tmpl",
@@ -922,7 +916,7 @@ class TestTemplate:
 
         text = "a: {{one}}\nb: {{two}}\nc: x\n"
 
-        assert scaffold._render(text, {"one": "1", "two": ""}) == "a: 1\nc: x\n"
+        assert shim_tree._render(text, {"one": "1", "two": ""}) == "a: 1\nc: x\n"
 
     def test_the_second_lane_moves_the_leaf_modules_with_it(self, new_shim, root):
         new_shim.main(["acme", "--root", str(root), "--transform"])
@@ -930,3 +924,25 @@ class TestTemplate:
 
         assert (root / "acme" / "llm" / "chat_completions" / "transforms.py").is_file()
         assert not (root / "acme" / "llm" / "transforms.py").exists()
+
+
+def test_the_generator_in_the_wheel_has_no_prompt_or_network_code():
+    """Prompts, the base-url probe and the icon lookup stay in the script."""
+    import ast
+
+    tree = ast.parse(Path(shim_tree.__file__).read_text(encoding="utf-8"))
+    imported = {
+        alias.name.split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    } | {
+        (node.module or "").split(".")[0]
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ImportFrom) and node.level == 0
+    }
+    assert not imported & {"urllib", "signal", "threading", "argparse", "input"}
+    assert not hasattr(shim_tree, "main")
+    assert not hasattr(shim_tree, "probe_base_url")
+    assert not hasattr(shim_tree, "find_lobehub_logo")
+    assert hasattr(scaffold, "probe_base_url")

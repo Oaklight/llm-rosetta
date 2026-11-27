@@ -341,7 +341,6 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
     ),
     "authoring": (
         "contracts",
-        "converters",
         "extensions",
         "model_vocabulary",
         "shims",
@@ -424,10 +423,6 @@ def _actual_edges() -> dict[tuple[str, str], str]:
 #: goes) must leave it.
 LAZY_ONLY_EDGES: dict[tuple[str, str], str] = {
     ("cli", "authoring"): "a command loads only the code it runs",
-    (
-        "authoring",
-        "converters",
-    ): "read when a command runs; a partial install still starts",
     ("authoring", "shims"): "the scaffold commands load the shim loader when they run",
     ("pipeline", "fidelity"): "the checker is built only when a fidelity mode is set",
 }

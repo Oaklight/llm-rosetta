@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from llm_rosetta.authoring import scaffold
+from _new_shim_script import load as _load_new_shim
 
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -125,7 +125,7 @@ def test_the_scaffolded_vendor_imports_core_only_through_the_contracts(tmp_path)
     root.mkdir()
     argv = ["acme", "--root", str(root), "--base-url", "https://example.invalid/v1"]
     argv += ["--transform", "--auth", "--quota", "--no-input"]
-    assert scaffold.main(argv) == 0
+    assert _load_new_shim().main(argv) == 0
     written = sorted(root.rglob("*.py"))
     assert SIDECAR_NAMES <= frozenset(p.name for p in written)
     for path in written:
