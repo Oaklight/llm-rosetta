@@ -116,6 +116,44 @@ class ExtensionRequirement:
 
 
 @dataclass(frozen=True)
+class ReleaseArchive:
+    """A program published as an archive per platform.
+
+    Attributes:
+        url: An https URL template; ``{version}`` and ``{platform}`` are filled in.
+        sha256: The archive's SHA-256 (lower-case hex) for each platform it
+            exists for, keyed by platform (``linux_x64_musl``).
+        binary: The path of the executable inside the archive.
+        link: The name of the entry link, if it is not the program's name.
+    """
+
+    url: str
+    sha256: Mapping[str, str]
+    binary: str
+    link: str | None = None
+
+
+@dataclass(frozen=True)
+class ExternalInstall:
+    """How ``llm-rosetta ext install-cli`` installs a program: one exact version.
+
+    Exactly one of *npm* and *release* is set.
+
+    Attributes:
+        version: The exact version; never a range or a tag.
+        npm: The npm package, installed at *version*.
+        bin: The executable the npm package provides, if it is not the
+            program's name.
+        release: The release archive.
+    """
+
+    version: str
+    npm: str | None = None
+    bin: str | None = None
+    release: ReleaseArchive | None = None
+
+
+@dataclass(frozen=True)
 class ExternalProgram:
     """A program an extension drives and does not ship.
 
@@ -124,12 +162,14 @@ class ExternalProgram:
         check: The command that reports its version.
         minimum: The oldest version the extension supports, if it states one.
         install_hint: What to tell the operator when it is missing.
+        install: How to install it at a pinned version, if the extension says.
     """
 
     name: str
     check: tuple[str, ...]
     minimum: str | None = None
     install_hint: str | None = None
+    install: ExternalInstall | None = None
 
 
 @dataclass(frozen=True)
@@ -243,6 +283,38 @@ def validate_extension_manifest(document: Any) -> list[str]:
             )
     if ext_id in document["requires"].get("extensions", []):
         problems.append("$.requires.extensions: an extension cannot require itself")
+    for index, program in enumerate(document.get("external", ())):
+        if "install" in program:
+            problems += _install_problems(program, f"$.external[{index}]")
+    return problems
+
+
+def _install_problems(program: Mapping[str, Any], where: str) -> list[str]:
+    """The rules for an ``external[].install`` the schema cannot say."""
+    install = program["install"]
+    where = f"{where}.install"
+    problems: list[str] = []
+    npm, release = "npm" in install, "release" in install
+    if npm == release:
+        problems.append(f"{where}: needs exactly one of 'npm' and 'release'")
+    if "bin" in install and not npm:
+        problems.append(f"{where}.bin: only an 'npm' install has a bin")
+    link = program["name"]
+    if npm:
+        link = install.get("bin", link)
+    if release:
+        spec = install["release"]
+        link = spec.get("link", link)
+        if not spec["sha256"]:
+            problems.append(f"{where}.release.sha256: lists no platform")
+        if ".." in spec["binary"].split("/"):
+            problems.append(f"{where}.release.binary: must stay inside the archive")
+    # ``check`` runs the entry link, so its command is the link's name.
+    if program["check"][0] != link:
+        problems.append(
+            f"{where}: the entry link is named {link!r} but check runs "
+            f"{program['check'][0]!r}"
+        )
     return problems
 
 
@@ -288,11 +360,31 @@ def parse_extension_manifest(document: Any) -> ExtensionManifest:
                 check=tuple(item["check"]),
                 minimum=item.get("minimum"),
                 install_hint=item.get("install_hint"),
+                install=_parse_install(item.get("install")),
             )
             for item in document.get("external", ())
         ),
         platforms=tuple(document.get("platforms", ())),
         summary=dict(summary) if summary is not None else None,
+    )
+
+
+def _parse_install(raw: Mapping[str, Any] | None) -> ExternalInstall | None:
+    if raw is None:
+        return None
+    release = raw.get("release")
+    return ExternalInstall(
+        version=raw["version"],
+        npm=raw.get("npm"),
+        bin=raw.get("bin"),
+        release=ReleaseArchive(
+            url=release["url"],
+            sha256=dict(release["sha256"]),
+            binary=release["binary"],
+            link=release.get("link"),
+        )
+        if release is not None
+        else None,
     )
 
 
@@ -418,7 +510,9 @@ __all__ = [
     "ExtensionManifest",
     "ExtensionManifestInvalid",
     "ExtensionRequirement",
+    "ExternalInstall",
     "ExternalProgram",
+    "ReleaseArchive",
     "TransportOwner",
     "UnresolvedTransport",
     "command_area",

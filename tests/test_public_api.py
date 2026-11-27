@@ -320,7 +320,9 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "ExtensionManifest",
             "ExtensionManifestInvalid",
             "ExtensionRequirement",
+            "ExternalInstall",
             "ExternalProgram",
+            "ReleaseArchive",
             "TransportOwner",
             "UnresolvedTransport",
             "command_area",
@@ -331,7 +333,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "resolve_transport",
             "validate_extension_manifest",
         ],
-        "max_count": 21,
+        "max_count": 23,
     },
     "llm_rosetta.contracts.transform": {
         "items": [

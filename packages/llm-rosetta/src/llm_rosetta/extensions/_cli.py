@@ -309,10 +309,27 @@ def _manifest_document(manifest: ExtensionManifest) -> dict[str, Any]:
                 "check": list(program.check),
                 "minimum": program.minimum,
                 "install_hint": program.install_hint,
+                "install": _install_view(program),
             }
             for program in manifest.external
         ],
     }
+
+
+def _install_view(program: Any) -> dict[str, Any] | None:
+    """The pinned install of an external program as ``show --json`` spells it."""
+    install = program.install
+    if install is None:
+        return None
+    view: dict[str, Any] = {"version": install.version}
+    if install.npm is not None:
+        view["npm"] = install.npm
+    if install.release is not None:
+        view["release"] = {
+            "url": install.release.url,
+            "platforms": sorted(install.release.sha256),
+        }
+    return view
 
 
 def _show_problems(
@@ -356,6 +373,8 @@ def _print_manifest(manifest: ExtensionManifest) -> None:
     for program in manifest.external:
         minimum = f" >= {program.minimum}" if program.minimum else ""
         print(f"  external:    {program.name}{minimum} ({' '.join(program.check)})")
+        if program.install is not None:
+            print(f"  install-cli: {program.name} {program.install.version} (pinned)")
 
 
 def _show(ext_id: str, as_json: bool) -> int:

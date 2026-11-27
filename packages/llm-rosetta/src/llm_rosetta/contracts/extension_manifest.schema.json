@@ -95,7 +95,62 @@
             "items": { "type": "string" }
           },
           "minimum": { "type": "string", "minLength": 1 },
-          "install_hint": { "type": "string", "minLength": 1 }
+          "install_hint": { "type": "string", "minLength": 1 },
+          "install": {
+            "description": "How `llm-rosetta ext install-cli` installs the program: an npm package or a release archive, at one exact version.",
+            "type": "object",
+            "required": ["version"],
+            "additionalProperties": false,
+            "properties": {
+              "version": {
+                "description": "The exact version installed: no range, no tag such as latest.",
+                "type": "string",
+                "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$"
+              },
+              "npm": {
+                "description": "The npm package to install.",
+                "type": "string",
+                "pattern": "^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$"
+              },
+              "bin": {
+                "description": "The executable the npm package puts on its bin path; the program's name by default.",
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+              },
+              "release": {
+                "description": "A release archive, fetched by URL and checked against a SHA-256 per platform.",
+                "type": "object",
+                "required": ["url", "sha256", "binary"],
+                "additionalProperties": false,
+                "properties": {
+                  "url": {
+                    "description": "An https URL; {version} and {platform} (for example linux_x64_musl) are filled in.",
+                    "type": "string",
+                    "pattern": "^https://[^ ]+$"
+                  },
+                  "sha256": {
+                    "description": "The SHA-256 of the archive, lower-case hex, per platform.",
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string",
+                      "pattern": "^(linux_(x64|arm64)_(musl|gnu)|darwin_(x64|arm64))$"
+                    },
+                    "additionalProperties": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+                  },
+                  "binary": {
+                    "description": "The path of the executable inside the archive.",
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$"
+                  },
+                  "link": {
+                    "description": "The name of the entry link; the program's name by default.",
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },

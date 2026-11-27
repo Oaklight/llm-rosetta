@@ -921,3 +921,36 @@ def test_the_shim_kind_folder_holds_no_copy_of_the_shim_templates():
     assert sorted(p.name for p in kind.rglob("*") if p.is_file()) == [
         "provides.yaml.part"
     ]
+
+
+# ---------------------------------------------------------------------------
+# the pinned install of an external program (#1820)
+# ---------------------------------------------------------------------------
+
+
+def _declare_cli(folder: Path, version: str) -> None:
+    manifest = folder / "plugin.yaml"
+    manifest.write_text(
+        manifest.read_text(encoding="utf-8")
+        + "external:\n"
+        + "  - name: acmecli\n"
+        + '    check: ["acmecli", "--version"]\n'
+        + "    install:\n"
+        + '      npm: "@acme/cli"\n'
+        + f'      version: "{version}"\n',
+        encoding="utf-8",
+    )
+
+
+def test_ext_check_accepts_a_pinned_cli_install(tmp_path):
+    folder = _make(tmp_path, "acme")
+    _declare_cli(folder, "2.1.299")
+    assert _problems(folder) == []
+
+
+@pytest.mark.parametrize("version", ["latest", "^2.1.299", ">=2.1", "2.1"])
+def test_ext_check_refuses_a_cli_install_that_is_not_pinned(tmp_path, version):
+    folder = _make(tmp_path, "acme")
+    _declare_cli(folder, version)
+    problems = _problems(folder)
+    assert any("install.version" in p for p in problems), problems
