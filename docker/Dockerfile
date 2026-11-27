@@ -53,6 +53,12 @@ RUN set -e; \
 RUN mkdir -p /config && chown appuser:appgroup /config
 VOLUME /config
 
+# The extensions and the programs they drive live on the volume.  The gateway and
+# `docker exec <container> llm-rosetta ext ...` read these variables, so both meet
+# in one place (without them the command reads the per-user directory).
+ENV LLM_ROSETTA_EXTENSIONS_DIR=/config/extensions \
+    LLM_ROSETTA_TOOLS_DIR=/config/tools
+
 COPY --chmod=755 docker/entrypoint.sh /entrypoint.sh
 
 USER appuser
