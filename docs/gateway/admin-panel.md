@@ -131,9 +131,9 @@ A vendor's shims share one logo and one heading — a keyless pool is named for 
 ![Shims page — installed](images/admin-shims.png)
 
 !!! warning
-    A declared shim directory or archive runs third-party Python
-    (`transforms.py`) at load time. Only add sources you trust, and prefer
-    pinning a tag or commit SHA.
+    An installed extension runs third-party Python (`transforms.py`, a
+    transport) at load time. Only add sources you trust, and prefer pinning a
+    version.
 
 ## Models
 

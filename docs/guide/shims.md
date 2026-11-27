@@ -841,7 +841,7 @@ Override the shim's `connection.base_url` in your gateway config:
 ```
 
 !!! note
-    The default URL (`https://apps.inside.anl.gov/argoapi/`) is only reachable from within the ANL network. The three Argo shims ship in the standalone [`llm-rosetta-shim-argonne`](https://github.com/Oaklight/llm-rosetta-shim-argonne) source (formerly `llm-rosetta-shim-argo`) — declare `"shims": {"install": ["argonne:argo"]}` and the names in your config keep working. **Gateway → Shims → Available** offers that package as a card.
+    The default URL (`https://apps.inside.anl.gov/argoapi/`) is only reachable from within the ANL network. The three Argo shims ship in the standalone [`llm-rosetta-ext-argonne`](https://github.com/Oaklight/llm-rosetta-ext-argonne) source — declare `"shims": {"install": ["argonne:argo"]}` and the names in your config keep working. **Gateway → Shims → Available** offers that package as a card.
 
 ## Reasoning Configuration
 

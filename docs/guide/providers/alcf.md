@@ -76,13 +76,13 @@ The exchange ships **inside the extension**: the `alcf` extension carries `auth.
 
 ### Sign in
 
-In the admin panel, use the provider's **Sign in** action: it shows a Globus URL and accepts the authorization code you paste back, so the gateway host needs no browser and no loopback port.
-
-When the gateway runs somewhere without a browser you can also run the sign-in on a machine that has one and hand the record over; see [`credential <provider>`](../../gateway/cli.md#credential-provider):
+Run the sign-in on a machine that has a browser, then hand the record to the gateway ([`credential <provider>`](../../gateway/cli.md#credential-provider)). The command prints a Globus authorization URL and takes the authorization code you paste back:
 
 ```bash
 llm-rosetta gateway credential alcf-sophia --out record.json
 ```
+
+In the admin panel, **Install a record** on the provider's Auth pane takes that record. The provider may be saved before it has one.
 
 The grant is stored where the vendor's own tooling keeps it, `~/.globus/app/<client_id>/inference_app/tokens.json`, and written back in that layout. An installation that already signed in with `alcf-ai` therefore needs no second sign-in, and a container that mounts `~/.globus` is configured once for both.
 
