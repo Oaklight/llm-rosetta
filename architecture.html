@@ -32,6 +32,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
     API["api.py&lt;br/&gt;宿主门面:只做再导出(再导出的边不画)"]
     TESTING["testing.py&lt;br/&gt;测试辅助:snapshot_registry · restore_registry(core 不导入)"]
     INIT["llm_rosetta/__init__&lt;br/&gt;convert() · get_converter_for_provider()"]
+    TOOL["tool_ops.py&lt;br/&gt;入口便捷层:为 toolregistry 直接转换工具定义/调用/结果;只被 llm_rosetta/__init__ 导入"]
     CLI["cli/ 包 · __main__&lt;br/&gt;分发器(__init__) · area 表与 commands 处理器(areas.py)(#1773、#1789)"]
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
@@ -46,7 +47,6 @@ pre.error { color: #b00; white-space: pre-wrap; }
     subgraph SIDE["辅助"]
       DET["auto_detect.py"]
       CAP["capabilities.py&lt;br/&gt;0.13.0 的转发,警告,0.15.0 删除;无人导入"]
-      TOOL["tool_ops.py"]
     end
   end
   subgraph OPT["可选外层(没有它们,转换库照样完整)"]
@@ -73,6 +73,10 @@ pre.error { color: #b00; white-space: pre-wrap; }
   INIT --&gt; CVT
   INIT --&gt;|"接线(带保护的导入)"| SHIM
   INIT --&gt; DET
+  INIT --&gt; TOOL
+  TOOL --&gt; CVT
+  TOOL --&gt; IROPS
+  TOOL --&gt;|"retired_names"| VOCAB
   CLI --&gt; CDECL
   GW -.-&gt;|"经 api 注册 transports 处理器"| EXTS
   CLI --&gt;|"注册 commands 处理器(加载器回放已加载的扩展)"| EXTS
@@ -108,10 +112,10 @@ pre.error { color: #b00; white-space: pre-wrap; }
   PIPE -.-&gt;|"按需加载"| FID
   SHIM -.-&gt;|"按需加载:clear_converter_cache()"| DET
 
-  linkStyle 5 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 6 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 17 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 25 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 9 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 10 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 21 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 29 stroke:#d33,stroke-width:2.5px,color:#d33
 </pre></div></div>
 </section>
 <section id="core_target">

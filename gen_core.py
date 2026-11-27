@@ -17,6 +17,7 @@ current_header = '''flowchart TB
     API["api.py<br/>宿主门面:只做再导出(再导出的边不画)"]
     TESTING["testing.py<br/>测试辅助:snapshot_registry · restore_registry(core 不导入)"]
     INIT["llm_rosetta/__init__<br/>convert() · get_converter_for_provider()"]
+    TOOL["tool_ops.py<br/>入口便捷层:为 toolregistry 直接转换工具定义/调用/结果;只被 llm_rosetta/__init__ 导入"]
     CLI["cli/ 包 · __main__<br/>分发器(__init__) · area 表与 commands 处理器(areas.py)(#1773、#1789)"]
   end
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
@@ -31,7 +32,6 @@ current_header = '''flowchart TB
     subgraph SIDE["辅助"]
       DET["auto_detect.py"]
       CAP["capabilities.py<br/>0.13.0 的转发,警告,0.15.0 删除;无人导入"]
-      TOOL["tool_ops.py"]
     end
   end
   subgraph OPT["可选外层(没有它们,转换库照样完整)"]
@@ -56,6 +56,7 @@ current_header = '''flowchart TB
 current_edges = [
  ("INIT","PIPE","","solid",None), ("INIT","CVT","","solid",None),
  ("INIT","SHIM","接线(带保护的导入)","solid",None), ("INIT","DET","","solid",None),
+ ("INIT","TOOL","","solid",None), ("TOOL","CVT","","solid",None), ("TOOL","IROPS","","solid",None), ("TOOL","VOCAB","retired_names","solid",None),
  ("CLI","CDECL","","solid",None), 
  ("GW","EXTS","经 api 注册 transports 处理器","lazy",GREEN),
  ("CLI","EXTS","注册 commands 处理器(加载器回放已加载的扩展)","solid",GREEN),
