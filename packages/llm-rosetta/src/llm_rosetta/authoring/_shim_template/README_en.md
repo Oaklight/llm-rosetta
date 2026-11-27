@@ -108,11 +108,8 @@ llm-rosetta ext new together
 
 Every run loads its own output through the real loader before it reports
 success, so a shape no gateway could read fails at creation rather than at
-startup. Check an extension folder with `llm-rosetta ext check <folder>`, or a bare tree with:
-
-```bash
-python -c "import sys; from pathlib import Path; from llm_rosetta.api import run_scaffold_check; sys.exit(run_scaffold_check(Path(sys.argv[1])))" src/llm_rosetta/shims/builtin
-```
+startup. `llm-rosetta ext check <folder>` reads an extension folder against this
+contract, with the folder as the one vendor.
 
 ## How the template directory maps to a shim
 
