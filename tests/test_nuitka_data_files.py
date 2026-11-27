@@ -150,9 +150,10 @@ def test_the_musl_recipe_pins_nuitka():
 def test_the_install_guard_runs_the_recipe_with_the_makefiles_pin():
     """``binary-recipe.yml`` checks the recipe's install steps on pull requests.
 
-    It reads the Nuitka pin from the Makefile (the one place it lives), installs
-    the two packages the recipe installs, and runs on the files that can break
-    them.
+    It reads the Nuitka pin and the packages to install from the Makefile (the
+    one place they live), and runs on the files that can break them.  A copy of
+    either in the workflow would let a recipe that drops the gateway go green
+    (#1781 showed it).
     """
     path = ROOT / ".github" / "workflows" / "binary-recipe.yml"
     if not path.is_file():
@@ -166,7 +167,11 @@ def test_the_install_guard_runs_the_recipe_with_the_makefiles_pin():
         "docker/**",
     ):
         assert trigger in text, trigger
-    assert "-e packages/llm-rosetta -e packages/llm-rosetta-gateway" in text
+    assert not re.search(r"-e\s+packages/", text), (
+        "the packages are read from the Makefile, not repeated"
+    )
+    assert "pip install --break-system-packages $EDITABLE" in text
+    assert "from llm_rosetta_gateway import main" in text
     assert "Makefile" in text and "nuitka\\[onefile\\]" in text
     assert not re.search(r"nuitka\[onefile\]==\d", text), (
         "the pin is read, not repeated"
