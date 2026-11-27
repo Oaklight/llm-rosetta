@@ -200,7 +200,8 @@ def test_the_template_has_no_orphan_file(tmp_path):
     for kind in ext_scaffold.KINDS:
         # each kind adds its own line to the manifest's provides block
         assert (ext_scaffold.EXT_TEMPLATE_DIR / kind / "provides.yaml.part").is_file()
-        assert ext_scaffold._template_files(kind), kind
+        if kind != "shims":  # its files come from the shim tree generator
+            assert ext_scaffold._template_files(kind), kind
 
 
 # ---------------------------------------------------------------------------
@@ -890,3 +891,33 @@ def test_the_dispatcher_runs_ext_migrate(tmp_path, capsys):
     folder = _legacy(tmp_path)
     assert cli.main(["ext", "migrate", str(folder), "--write"]) == 0
     assert (folder / "llm" / "provider.yaml").is_file()
+
+
+# ---------------------------------------------------------------------------
+# one generator for the shim tree
+# ---------------------------------------------------------------------------
+
+
+def test_ext_new_writes_the_shim_files_the_tree_generator_writes(tmp_path):
+    """The built-in tree's scaffolder and ``ext new`` render the same templates."""
+    from llm_rosetta.authoring import scaffold
+
+    files = render_extension("acme", provides=("shims", "transports"))
+    assert files["provider.yaml"] == scaffold.vendor_manifest_text(
+        "acme", api_key_env="ACME_API_KEY", group="acme", group_label="acme"
+    )
+    assert files["llm/provider.yaml"] == scaffold.leaf_text(
+        "acme",
+        name="acme--chat_completions",
+        model_type="llm",
+        format_="chat_completions",
+        display_name="acme",
+        transport="acme",
+    )
+
+
+def test_the_shim_kind_folder_holds_no_copy_of_the_shim_templates():
+    kind = ext_scaffold.EXT_TEMPLATE_DIR / "shims"
+    assert sorted(p.name for p in kind.rglob("*") if p.is_file()) == [
+        "provides.yaml.part"
+    ]
