@@ -18,9 +18,10 @@ from llm_rosetta.api import (
     ExtensionInstallError,
     check_external,
     installed_extensions,
-    tool_bin_dir,
     list_extensions,
     missing_dependencies,
+    tool_bin_dir,
+    tools_dir,
 )
 
 #: Where an extension was found when only the extensions directory holds it.
@@ -31,15 +32,20 @@ DIRECTORY_SOURCE = "extensions directory"
 _CARD_STATUS = {
     "ok": "ready",
     "missing": "missing",
+    "broken": "broken",
     "too_old": "too_old",
     "unknown": "unknown",
 }
 
 
 def _search(ext_id: str) -> list[Any]:
-    """Where ``ext install-cli`` puts the extension's entry links, if known."""
+    """Where ``ext install-cli`` puts the extension's entry links, if known.
+
+    The shared ``<tools>/bin`` comes second: it holds the ``node`` link an npm
+    program's script starts with.
+    """
     try:
-        return [tool_bin_dir(ext_id)]
+        return [tool_bin_dir(ext_id), tools_dir() / "bin"]
     except ExtensionInstallError:
         return []
 

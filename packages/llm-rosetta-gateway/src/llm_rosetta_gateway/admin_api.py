@@ -80,9 +80,9 @@ class AdminExtensions(Protocol):
         loaded), ``reason``, ``path``, ``maturity``, ``shims`` (the names it
         registered), ``transports``, ``external`` (one status per program it
         drives) and ``missing_dependencies``.  A program's status holds
-        ``state`` (the check's: ``ok``, ``missing``, ``too_old``, ``unknown``),
-        ``status`` (the card's: ``ready``, ``missing``, ``too_old``,
-        ``unknown``), ``found``, ``minimum``, ``install`` (the pinned
+        ``state`` (the check's: ``ok``, ``missing``, ``broken``, ``too_old``,
+        ``unknown``), ``status`` (the card's: ``ready``, ``missing``, ``broken``,
+        ``too_old``, ``unknown``), ``found``, ``minimum``, ``install`` (the pinned
         ``{version, source}`` or ``None``) and ``install_command`` (the
         ``llm-rosetta ext install-cli`` line that installs it, or ``None`` when
         it is ready or declares no install).  The check also looks in the

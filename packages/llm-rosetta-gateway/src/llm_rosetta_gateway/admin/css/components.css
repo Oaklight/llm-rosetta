@@ -3162,6 +3162,7 @@ button.shim-update.unknown { color: var(--tag-warn); }
 .ext-program-facts { font-size: 11px; color: var(--text-muted); }
 .ext-status-ready { color: var(--pos); }
 .ext-status-missing, .ext-status-too_old { color: var(--warn); }
+.ext-status-broken { color: var(--neg); }
 .ext-status-unknown { color: var(--text-dim); }
 .ext-cmd { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--text-muted); }
 .ext-cmd-line {

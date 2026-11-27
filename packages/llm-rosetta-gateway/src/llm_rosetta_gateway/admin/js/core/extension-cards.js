@@ -3,12 +3,13 @@
 // An extension that drives an agent CLI (`claude`, `agy`) declares it; the
 // listing (`GET /admin/api/extensions`) checks it and says one of three things
 // that matter — missing, older than the extension's minimum, ready — plus
+// `broken` when the program starts and fails (its Node.js no longer runs) and
 // `unknown` when the check ran but reported no version.  This module turns the
 // listing into the cards the panel paints and decides which need attention.
 // It is DOM-free: the panel builds the nodes, and the tests call these directly.
 
 /** The card statuses, in the order a card with several programs reports them. */
-export const STATUSES = ['missing', 'too_old', 'unknown', 'ready'];
+export const STATUSES = ['missing', 'broken', 'too_old', 'unknown', 'ready'];
 
 /** The status a program shows; an unknown spelling is `unknown`, never `ready`. */
 export function programStatus(program) {
