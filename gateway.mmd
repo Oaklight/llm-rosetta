@@ -19,7 +19,7 @@ flowchart TB
     OPS["ops/<br/>OpsBase 审计层 · data · keys · security · proxy"]
   end
   subgraph POLICY["policy"]
-    CONFIG["config/<br/>loader · parse · resolve · providers · settings"]
+    CONFIG["config/<br/>loader · parse · resolve · providers · settings · migrate/(配置迁移,原 maintenance,#1793)"]
     MW["middleware/<br/>auth · ratelimit · hop_limit · circuit_breaker · request_context"]
   end
   subgraph STATE["state"]
@@ -27,7 +27,7 @@ flowchart TB
     QUOTA["quota/<br/>service · allowance · signals · probes · rate_limit"]
     KEYSTORE["keystore/<br/>SQLite API key 库"]
     JOBS["jobs/<br/>envelope · queue · worker · handlers"]
-    MAINT["maintenance/<br/>migrations · backfills · dumps · startup · names 守卫"]
+    MAINT["maintenance/<br/>backfills · dumps · startup · keystore 步骤"]
   end
   subgraph FOUNDATION["foundation"]
     TRANSPORT["transport/<br/>http · acp · registry · provider_info"]
@@ -53,6 +53,7 @@ flowchart TB
   APP --> QUOTA
   APP --> MAINT
   APP --> MT
+  APP -->|"内置类型处理函数表 BUILTIN_HANDLERS(#1791)"| PIPES
   APP --> TRANSPORT
   APP --> OBS
   APP -.->|只有 factory.py| ADMIN
@@ -61,6 +62,7 @@ flowchart TB
   ADMINAPI --> OBS
   PIPES --> PROXY
   PIPES --> CONFIG
+  CONFIG -.->|"ProviderNotReady"| MAINT
   PIPES --> MW
   PIPES --> TRANSPORT
   PROXY --> MW
@@ -85,7 +87,6 @@ flowchart TB
   JOBS --> OBS
   KEYSTORE --> MAINT
   KEYSTORE --> OBS
-  MAINT --> SHIMS
   MAINT --> OBS
   CONFIG --> CORE
   PROXY --> CORE

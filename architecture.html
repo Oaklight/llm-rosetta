@@ -202,7 +202,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
     OPS["ops/&lt;br/&gt;OpsBase 审计层 · data · keys · security · proxy"]
   end
   subgraph POLICY["policy"]
-    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings"]
+    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings · migrate/(配置迁移,原 maintenance,#1793)"]
     MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context"]
   end
   subgraph STATE["state"]
@@ -210,7 +210,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
     QUOTA["quota/&lt;br/&gt;service · allowance · signals · probes · rate_limit"]
     KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库"]
     JOBS["jobs/&lt;br/&gt;envelope · queue · worker · handlers"]
-    MAINT["maintenance/&lt;br/&gt;migrations · backfills · dumps · startup · names 守卫"]
+    MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup · keystore 步骤"]
   end
   subgraph FOUNDATION["foundation"]
     TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info"]
@@ -236,6 +236,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   APP --&gt; QUOTA
   APP --&gt; MAINT
   APP --&gt; MT
+  APP --&gt;|"内置类型处理函数表 BUILTIN_HANDLERS(#1791)"| PIPES
   APP --&gt; TRANSPORT
   APP --&gt; OBS
   APP -.-&gt;|只有 factory.py| ADMIN
@@ -244,6 +245,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   ADMINAPI --&gt; OBS
   PIPES --&gt; PROXY
   PIPES --&gt; CONFIG
+  CONFIG -.-&gt;|"ProviderNotReady"| MAINT
   PIPES --&gt; MW
   PIPES --&gt; TRANSPORT
   PROXY --&gt; MW
@@ -268,7 +270,6 @@ pre.error { color: #b00; white-space: pre-wrap; }
   JOBS --&gt; OBS
   KEYSTORE --&gt; MAINT
   KEYSTORE --&gt; OBS
-  MAINT --&gt; SHIMS
   MAINT --&gt; OBS
   CONFIG --&gt; CORE
   PROXY --&gt; CORE
