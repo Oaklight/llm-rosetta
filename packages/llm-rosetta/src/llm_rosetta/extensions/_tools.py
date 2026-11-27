@@ -87,8 +87,20 @@ class CliInstallResult:
     found: str | None = None
 
 
-def _is_musl() -> bool:
+def _has_musl_loader() -> bool:
     return any(Path(d).glob("ld-musl-*") for d in ("/lib", "/usr/lib"))
+
+
+def _is_musl() -> bool:
+    """True when this Python runs on musl.
+
+    A glibc interpreter is never musl, even on a host that also installs musl's
+    loader (a distribution may ship it for static tools): the loader's presence
+    alone chose a build that could not run there.
+    """
+    if platform.libc_ver()[0] == "glibc":
+        return False
+    return _has_musl_loader()
 
 
 def platform_key() -> str:
