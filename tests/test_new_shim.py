@@ -15,10 +15,10 @@ import pytest
 from llm_rosetta.shims.provider_shim import _reset_registry
 from llm_rosetta.shims import _loader as providers_module
 from llm_rosetta.shims._loader import load_providers, load_providers_from_dir
-from llm_rosetta.devtools import scaffold
-from llm_rosetta.devtools.scaffold import check_tree
-from llm_rosetta.devtools.scaffold import apply_migration, plan_migration
-from llm_rosetta.devtools.scaffold import run_migrate
+from llm_rosetta.authoring import scaffold
+from llm_rosetta.authoring.scaffold import check_tree
+from llm_rosetta.authoring.scaffold import apply_migration, plan_migration
+from llm_rosetta.authoring.scaffold import run_migrate
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/dev/new_shim.py"
 

@@ -216,7 +216,7 @@ NUITKA_FLAGS = \
 	--include-data-dir=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/css=llm_rosetta_gateway/admin/css \
 	--include-data-dir=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js=llm_rosetta_gateway/admin/js \
 	--include-data-dir=packages/llm-rosetta/src/llm_rosetta/shims/builtin=llm_rosetta/shims/builtin \
-	--include-data-dir=packages/llm-rosetta/src/llm_rosetta/devtools/_ext_template=llm_rosetta/devtools/_ext_template \
+	--include-data-dir=packages/llm-rosetta/src/llm_rosetta/authoring/_ext_template=llm_rosetta/authoring/_ext_template \
 	--include-data-files=packages/llm-rosetta/src/llm_rosetta/shims/_loader/provider.schema.json=llm_rosetta/shims/_loader/provider.schema.json \
 	--include-data-files=packages/llm-rosetta/src/llm_rosetta/contracts/extension_manifest.schema.json=llm_rosetta/contracts/extension_manifest.schema.json \
 	$(NUITKA_NOFOLLOW_FLAGS) \
@@ -271,7 +271,7 @@ build-binary-musl:
 				--include-data-dir=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/css=llm_rosetta_gateway/admin/css \
 				--include-data-dir=packages/llm-rosetta-gateway/src/llm_rosetta_gateway/admin/js=llm_rosetta_gateway/admin/js \
 				--include-data-dir=packages/llm-rosetta/src/llm_rosetta/shims/builtin=llm_rosetta/shims/builtin \
-				--include-data-dir=packages/llm-rosetta/src/llm_rosetta/devtools/_ext_template=llm_rosetta/devtools/_ext_template \
+				--include-data-dir=packages/llm-rosetta/src/llm_rosetta/authoring/_ext_template=llm_rosetta/authoring/_ext_template \
 				--include-data-files=packages/llm-rosetta/src/llm_rosetta/shims/_loader/provider.schema.json=llm_rosetta/shims/_loader/provider.schema.json \
 				--include-data-files=packages/llm-rosetta/src/llm_rosetta/contracts/extension_manifest.schema.json=llm_rosetta/contracts/extension_manifest.schema.json \
 				$(NUITKA_NOFOLLOW_FLAGS) \

@@ -97,14 +97,14 @@ def test_the_extension_loader_imports_neither_the_shim_layer_nor_the_converters(
 
     The shim layer imports the extension loader to register its ``shims`` kind
     handler, never the other way round.  The ``ext new`` and ``ext check`` actions
-    come from ``devtools`` as :class:`ExtVerb` records handed in by the CLI.
+    come from ``authoring`` as :class:`ExtVerb` records handed in by the CLI.
     """
     forbidden = (
         "llm_rosetta.shims",
         "llm_rosetta.converters",
         "llm_rosetta.pipeline",
         "llm_rosetta.api",
-        "llm_rosetta.devtools",
+        "llm_rosetta.authoring",
     )
     offenders = [
         f"{path.relative_to(_CORE)}:{line} imports {name}"
@@ -272,7 +272,7 @@ def test_every_converter_pair_converts_without_the_shim_layer():
 #:   ``conversion_warnings``, ``model_vocabulary``;
 #: * ``contracts``: what an outside party implements or receives;
 #: * conversion: ``converters``, ``pipeline``, ``fidelity``, ``profiling``;
-#: * optional layers: ``shims``, ``extensions``, ``routing``, ``devtools``,
+#: * optional layers: ``shims``, ``extensions``, ``routing``, ``authoring``,
 #:   ``testing``;
 #: * entry: ``cli``, ``api``, ``tool_ops`` (the convenience entry point for
 #:   toolregistry, imported by ``<root>`` only), ``auto_detect`` and
@@ -299,7 +299,7 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
         "cli",
         "contracts",
         "converters",
-        "devtools",
+        "authoring",
         "extensions",
         "fidelity",
         "formats",
@@ -323,7 +323,7 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
     ),
     "cli": (
         "contracts",
-        "devtools",
+        "authoring",
         "extensions",
     ),
     "contracts": (
@@ -339,7 +339,7 @@ CORE_EDGES: dict[str, tuple[str, ...]] = {
         "model_vocabulary",
         "retired_names",
     ),
-    "devtools": (
+    "authoring": (
         "contracts",
         "converters",
         "extensions",
@@ -423,12 +423,12 @@ def _actual_edges() -> dict[tuple[str, str], str]:
 #: lazy-only edge must be listed with its reason; an edge that becomes eager (or
 #: goes) must leave it.
 LAZY_ONLY_EDGES: dict[tuple[str, str], str] = {
-    ("cli", "devtools"): "a command loads only the code it runs",
+    ("cli", "authoring"): "a command loads only the code it runs",
     (
-        "devtools",
+        "authoring",
         "converters",
     ): "read when a command runs; a partial install still starts",
-    ("devtools", "shims"): "the scaffold commands load the shim loader when they run",
+    ("authoring", "shims"): "the scaffold commands load the shim loader when they run",
     ("pipeline", "fidelity"): "the checker is built only when a fidelity mode is set",
 }
 
@@ -536,7 +536,7 @@ def test_an_entry_level_unit_is_imported_only_by_those_that_may():
 #: command line and the other optional layers.
 ENTRY_NEVER_IMPORTS: dict[str, frozenset[str]] = {
     "tool_ops": frozenset(
-        {"shims", "extensions", "cli", "routing", "devtools", "testing"}
+        {"shims", "extensions", "cli", "routing", "authoring", "testing"}
     ),
 }
 

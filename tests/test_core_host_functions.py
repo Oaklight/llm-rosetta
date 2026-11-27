@@ -14,7 +14,7 @@ from llm_rosetta.shims._loader import (
     describe_vendor_manifest,
 )
 from llm_rosetta.shims._loader import _model_list_transforms
-from llm_rosetta.devtools import scaffold
+from llm_rosetta.authoring import scaffold
 
 
 # ---------------------------------------------------------------- spec_for

@@ -30,7 +30,7 @@ RUNTIME_SUFFIXES = {".json", ".yaml", ".html", ".css", ".js", ".tmpl"}
 NOT_SHIPPED = {
     # ``scripts/dev/new_shim.py`` renders the built-in shim template; the binary
     # has no command that does (``ext new`` uses ``_ext_template``).
-    "llm_rosetta/devtools/_shim_template",
+    "llm_rosetta/authoring/_shim_template",
 }
 
 

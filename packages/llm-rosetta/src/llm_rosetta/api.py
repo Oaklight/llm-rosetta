@@ -52,7 +52,7 @@ from llm_rosetta.contracts.command import (
     resolve_command,
 )
 from llm_rosetta.converters import get_converter_class
-from llm_rosetta.devtools.ext_scaffold import run_ext_check
+from llm_rosetta.authoring.ext_scaffold import run_ext_check
 from llm_rosetta.extensions import (
     ENV_VAR as EXTENSIONS_DIR_ENV,
 )

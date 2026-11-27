@@ -2,7 +2,7 @@
 
 ``list``, ``show``, ``install``, ``remove``, ``update`` and ``doctor`` wrap the
 installer, the index and the loader in this package.  ``new`` and ``check`` wrap
-the scaffold in :mod:`llm_rosetta.devtools.ext_scaffold`, which hands them in as
+the scaffold in :mod:`llm_rosetta.authoring.ext_scaffold`, which hands them in as
 :class:`ExtVerb` records (this package imports no dev tool).  ``list``, ``show`` and
 ``doctor`` take ``--json``; ``install``, ``remove`` and ``update`` take
 ``--dry-run``, which reports what would change and changes nothing.  Every
