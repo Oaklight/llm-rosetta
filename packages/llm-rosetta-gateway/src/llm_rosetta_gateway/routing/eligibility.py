@@ -27,6 +27,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
+from ..quota.allowance import quota_weight
 from ..quota.state import QUOTA_STATE
 from .stage import RoutingStage
 from .strategy import EntryKey
@@ -34,10 +35,6 @@ from .strategy import EntryKey
 if TYPE_CHECKING:
     from .context import SelectionContext
 
-#: How much of a provider's configured weight survives a spent window.  The
-#: floor keeps a live provider in rotation — a headroom of 0.0 is "nearly
-#: spent", and the quota state, not this factor, is what removes it.
-HEADROOM_FLOOR = 0.25
 
 #: Why a provider is not a candidate.  ``None`` means it is one.
 BLOCKED = "blocked"
@@ -75,22 +72,6 @@ def required_capabilities(facts: Any) -> frozenset[str]:
     if getattr(facts, "effort", None) or getattr(facts, "thinking", False):
         needed.add("reasoning")
     return frozenset(needed)
-
-
-def quota_weight(headroom: float | None) -> float:
-    """Scale a weight by the provider's remaining allowance.
-
-    Args:
-        headroom: Smallest remaining share, 0..1, or ``None`` when nothing has
-            measured this provider.
-
-    Returns:
-        The multiplier: ``1.0`` for an unmeasured or untouched provider, the
-        floor for a spent one.
-    """
-    if headroom is None:
-        return 1.0
-    return HEADROOM_FLOOR + (1.0 - HEADROOM_FLOOR) * max(0.0, min(1.0, headroom))
 
 
 @dataclass(frozen=True, slots=True)

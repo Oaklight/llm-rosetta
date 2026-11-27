@@ -109,7 +109,6 @@ LAZY_UPWARD: dict[tuple[str, str, str], int] = {
     ("model_types/__init__.py", "pipelines", "_decision_pipeline"): 1,
     ("model_types/__init__.py", "pipelines", "_embedding_pipeline"): 1,
     ("model_types/__init__.py", "pipelines", "_rerank_pipeline"): 1,
-    ("transport/provider_info.py", "routing", "ProviderInfo.ready"): 1,
 }
 
 
@@ -397,7 +396,6 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
     ),
     "quota": (
         "observability",
-        "routing",
         "transport",
     ),
     "routing": (
@@ -405,7 +403,7 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
         "quota",
         "transport",
     ),
-    "transport": ("routing",),
+    "transport": (),
 }
 
 

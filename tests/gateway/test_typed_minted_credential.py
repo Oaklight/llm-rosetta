@@ -21,6 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from llm_rosetta_gateway.routing.eligibility import provider_eligibility
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.maintenance.startup import DeferredStartup, ProviderInitState
 from llm_rosetta_gateway.transport.token_refresh import reset_reactive_state
@@ -185,7 +186,7 @@ class TestOneCredentialSource:
         # The endpoint is configured, and says why it cannot serve: the same
         # status object the panel renders, naming the command and its error.
         assert info.credentials_pending is True
-        assert info.ready is False
+        assert provider_eligibility(info).eligible is False
         status = info.token_status
         assert status is not None
         assert "exit" in status["last_error"]

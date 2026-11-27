@@ -24,6 +24,28 @@ from .models import (
 from .state import QUOTA_STATE
 
 
+#: How much of a provider's configured weight survives a spent window.  The
+#: floor keeps a live provider in rotation — a headroom of 0.0 is "nearly
+#: spent", and the quota state, not this factor, is what removes it.
+HEADROOM_FLOOR = 0.25
+
+
+def quota_weight(headroom: float | None) -> float:
+    """Scale a weight by the provider's remaining allowance.
+
+    Args:
+        headroom: Smallest remaining share, 0..1, or ``None`` when nothing has
+            measured this provider.
+
+    Returns:
+        The multiplier: ``1.0`` for an unmeasured or untouched provider, the
+        floor for a spent one.
+    """
+    if headroom is None:
+        return 1.0
+    return HEADROOM_FLOOR + (1.0 - HEADROOM_FLOOR) * max(0.0, min(1.0, headroom))
+
+
 @dataclass(frozen=True, slots=True)
 class Allowance:
     """Whether a provider may still spend, and how much room it has.
@@ -238,8 +260,6 @@ def routing_facts(pinfo: Any, name: str | None = None) -> dict[str, Any]:
     - ``sunk`` — a recent refusal orders this provider last without taking it
       out; the panel shows it as deprioritised rather than blocked.
     """
-    from ..routing.eligibility import quota_weight
-
     headroom = provider_headroom(pinfo)
     excluded = provider_spent(pinfo)
     # Derived from the same call the payload's ``provider_block`` comes from,

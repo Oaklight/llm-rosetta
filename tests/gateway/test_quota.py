@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from llm_rosetta_gateway.routing.eligibility import provider_eligibility
 from llm_rosetta_gateway.quota.models import (
     QuotaReading,
     QuotaWindow,
@@ -806,13 +807,13 @@ class TestInBandOnlyLane:
         pinfo.credential_token = "acct:inband-ready-test"
         bind_provider_quota("chatgpt", pinfo)
 
-        assert pinfo.ready is True
+        assert provider_eligibility(pinfo).eligible is True
 
         QUOTA_STATE.block_provider(
             "acct:inband-ready-test", 60, "ChatGPT plan usage limit exceeded"
         )
 
-        assert pinfo.ready is False
+        assert provider_eligibility(pinfo).eligible is False
         # And the admin surface can say why.
         from llm_rosetta_gateway.quota.service import provider_cooldown
 
