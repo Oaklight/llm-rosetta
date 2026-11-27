@@ -141,7 +141,8 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "unregister_shim",
             "validate_shim_declaration",
             # Shim scaffolding
-            # Extension authoring
+            # Extension authoring: the check a generated extension's own test runs
+            "run_ext_check",
             # Vendor CLI sign-in
             # Subcommands a distribution adds to the ``llm-rosetta`` dispatcher
             "CORE_COMMAND_NAMES",

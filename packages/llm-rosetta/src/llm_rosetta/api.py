@@ -52,6 +52,7 @@ from llm_rosetta.contracts.command import (
     resolve_command,
 )
 from llm_rosetta.converters import get_converter_class
+from llm_rosetta.devtools.ext_scaffold import run_ext_check
 from llm_rosetta.extensions import (
     ENV_VAR as EXTENSIONS_DIR_ENV,
 )
@@ -192,6 +193,8 @@ __all__ = [
     # Installed extensions and what happened to each at load time
     "ExtensionStatus",
     "list_extensions",
+    # Extension authoring: the check a generated extension's own test runs
+    "run_ext_check",
     # The code that loads one kind of an extension, registered by the layer that owns it
     "KindLoadError",
     "register_kind_handler",

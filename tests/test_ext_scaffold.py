@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -577,3 +580,30 @@ def test_the_generated_test_runs_the_check(tmp_path):
     folder = _make(tmp_path, "acme")
     text = (folder / "tests" / "test_extension.py").read_text()
     assert re.search(r"run_ext_check\(.*build=False\) == 0", text)
+
+
+@pytest.mark.parametrize(
+    "flags",
+    [[], ["--transport", "--command", "hello"]],
+    ids=["shim-only", "shim-transport-command"],
+)
+def test_the_generated_extension_passes_its_own_tests(tmp_path, flags):
+    """A new extension is not born with a red test (``run_ext_check`` once left the api).
+
+    The generated ``tests/test_extension.py`` runs in a child interpreter that
+    imports the core under test, as an author's checkout would.
+    """
+    import llm_rosetta
+
+    folder = _make(tmp_path, "acme", *flags)
+    source = Path(llm_rosetta.__file__).resolve().parent.parent
+    env = {**os.environ, "PYTHONPATH": str(source)}
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests"],
+        cwd=folder,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stdout[-800:] + result.stderr[-400:]
