@@ -58,6 +58,7 @@ from llm_rosetta.extensions import (
 )
 from llm_rosetta.extensions import (
     ExtensionIndex,
+    CliInstallError,
     ExtensionInstallError,
     ExtensionStatus,
     ExternalStatus,
@@ -72,6 +73,7 @@ from llm_rosetta.extensions import (
     tool_bin_dir,
     tools_dir,
     import_extension_module,
+    install_cli,
     install_from_index,
     install_wheel,
     installed_extensions,
@@ -202,6 +204,7 @@ __all__ = [
     "register_kind_handler",
     # Installing extensions (a standard-library installer, the extension index and
     # the directory manager)
+    "CliInstallError",
     "EXTENSIONS_DIR_ENV",
     "ExtensionIndex",
     "ExtensionInstallError",
@@ -214,6 +217,7 @@ __all__ = [
     "entry_problems",
     "extensions_dir",
     "import_extension_module",
+    "install_cli",
     "install_from_index",
     "install_wheel",
     "installed_extensions",

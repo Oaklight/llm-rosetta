@@ -157,6 +157,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "KindLoadError",
             "register_kind_handler",
             # Installing extensions (a standard-library installer and directory manager)
+            "CliInstallError",
             "EXTENSIONS_DIR_ENV",
             "ExtensionIndex",
             "ExtensionInstallError",
@@ -171,6 +172,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "tool_bin_dir",
             "tools_dir",
             "import_extension_module",
+            "install_cli",
             "install_from_index",
             "install_wheel",
             "installed_extensions",
@@ -194,7 +196,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             # Version
             "__version__",
         ],
-        "max_count": 85,
+        "max_count": 87,
     },
     "llm_rosetta.ir.model": {
         "items": None,  # too many to enumerate; just check count

@@ -30,6 +30,7 @@ from ._dirs import (
     tool_bin_dir,
     tools_dir,
 )
+from ._tools import CliInstallError, install_cli
 from ._index import (
     DEFAULT_INDEX_URL,
     INDEX_ENV,
@@ -83,6 +84,7 @@ __all__ = [
     "INDEX_ENV",
     "LEGACY_ENTRY_POINT_GROUP",
     "NAMESPACE",
+    "CliInstallError",
     "ExtensionIndex",
     "ExtensionInstallError",
     "ExtensionStatus",
@@ -103,6 +105,7 @@ __all__ = [
     "tools_dir",
     "import_extension_module",
     "inspect_wheel",
+    "install_cli",
     "install_from_index",
     "install_wheel",
     "install_wheel_url",

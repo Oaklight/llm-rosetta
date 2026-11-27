@@ -17,7 +17,7 @@ import { t, typeLabel, typeLabelAlt } from '../core/i18n.js';
 import { api, copyText, esc, showToast, withBusyButton } from '../core/utils.js';
 import { cssValue, jsArg, logoUrl, safeUrl } from '../core/html.js';
 import { toggleCard } from '../core/disclosure.js';
-import { extensionCards } from '../core/extension-cards.js';
+import { extensionCards, installOutcome, installRequest } from '../core/extension-cards.js';
 import {
   declareSource, deselectVendor, followLatest, notInstalledVendors, pinVendor, selectVendor,
   vendorFacts, vendorMatches, vendorStateKey, vendorTier,
@@ -171,7 +171,11 @@ function _programHtml(extId, program) {
   const command = program.command
     ? `<div class="ext-cmd"><span class="ext-cmd-label">${esc(t('ext.install'))}</span>`
       + `<code class="ext-cmd-line">${esc(program.command)}</code>`
-      + `<button type="button" class="btn btn-sm" onclick="copyExtensionCommand(${jsArg(program.command)})">${esc(t('ext.copy'))}</button></div>`
+      + `<button type="button" class="btn btn-sm" onclick="copyExtensionCommand(${jsArg(program.command)})">${esc(t('ext.copy'))}</button>`
+      + (program.pinned
+        ? `<button type="button" class="btn btn-sm btn-primary" onclick="installExtensionProgram(this, ${jsArg(extId)}, ${jsArg(program.name)}, ${jsArg(program.pinned)})">${esc(t('ext.installBtn'))}</button>`
+        : '')
+      + `</div>`
     : (program.status !== 'ready' && program.hint
       ? `<div class="ext-cmd"><span class="ext-cmd-label">${esc(t('ext.noInstall'))}</span><code class="ext-cmd-line">${esc(program.hint)}</code></div>`
       : '');
@@ -193,6 +197,18 @@ function _extensionCardHtml(card) {
 
 async function copyExtensionCommand(command) {
   await copyText(command, t('ext.copied'));
+}
+
+/** Install one program at the version its extension pins, then re-read the cards. */
+async function installExtensionProgram(btn, extId, programName, version) {
+  const { url, body } = installRequest(extId, programName);
+  await withBusyButton(btn, async () => {
+    showToast(t('ext.installing', {name: programName, v: version}));
+    const outcome = installOutcome(await api.post(url, body));
+    if (outcome.ok) showToast(t('ext.installDone', {name: programName, v: version}));
+    else showToast(outcome.error, 'error');
+    await loadExtensionCards();
+  });
 }
 
 function _filters() {
@@ -832,6 +848,7 @@ export async function shimToggleEnabled(input, name) {
 Object.assign(window, {
   loadShimsPage, renderShimsPage, setShimsView, toggleShimVendor, shimToggleEnabled,
   copyExtensionCommand,
+  installExtensionProgram,
   toggleShimSourceVendor, selectShimSourceVendor, deselectShimSourceVendor,
   pinShimSourceVendor, followShimSourceVendor,
   // Repainted on a language change: the per-shim rows carry translated marks.

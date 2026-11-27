@@ -34,6 +34,37 @@ export function programRow(program) {
   };
 }
 
+/**
+ * The request that installs one program of an extension.
+ *
+ * Only the program's name travels: the version, the source and the checksum are
+ * the ones the extension's manifest pins, which the server reads itself.
+ *
+ * @param {string} extId
+ * @param {string} programName
+ * @returns {{url: string, body: {program: string}}}
+ */
+export function installRequest(extId, programName) {
+  return {
+    url: `/admin/api/extensions/${encodeURIComponent(extId)}/install-cli`,
+    body: { program: programName },
+  };
+}
+
+/**
+ * What an install answered.  `api.post` resolves for every status (a refusal is
+ * `{ok: false, error}`, see write-result.js), so success is `ok === true` and
+ * nothing else: a missing field is not a pass.
+ *
+ * @param {unknown} result
+ * @returns {{ok: true} | {ok: false, error: string}}
+ */
+export function installOutcome(result) {
+  const r = result && typeof result === 'object' ? result : {};
+  if (r.ok === true) return { ok: true };
+  return { ok: false, error: String(r.error || 'Install failed') };
+}
+
 /** The worst status of a card's programs: the one the card is badged with. */
 export function cardStatus(programs) {
   for (const status of STATUSES) {

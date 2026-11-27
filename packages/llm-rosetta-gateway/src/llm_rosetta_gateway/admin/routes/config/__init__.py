@@ -13,7 +13,7 @@ each handler lives in the module for the resource it edits:
 :mod:`.shim_files`            loaded shims: inventory, view, enable switch
 :mod:`.shim_manifests`        vendor manifests: rows, view, inheritance
 :mod:`.shim_source_catalog`   manifest sources and every vendor they publish
-:mod:`.extensions`            installed extensions (read-only listing)
+:mod:`.extensions`            installed extensions (listing; install of a declared program)
 :mod:`.upstream`              upstream model discovery and routing loops
 :mod:`.bulk`                  bulk add: merge a provider into a model entry
 ============================  ============================================
@@ -57,7 +57,7 @@ from .shim_manifests import (
     get_shim_manifest,
     get_shim_manifests,
 )
-from .extensions import get_extensions
+from .extensions import get_extensions, post_extension_install_cli
 from .shim_source_catalog import get_shim_source_catalog
 from .shims import (
     _merge_shim_sources_body,
@@ -99,6 +99,7 @@ __all__ = [
     "fetch_upstream_models",
     "get_config",
     "get_extensions",
+    "post_extension_install_cli",
     "get_loaded_shim",
     "get_loaded_shims",
     "get_shim_manifest",
@@ -176,6 +177,9 @@ def register_config_routes(app: Any) -> None:
     )
     app.route("/admin/api/extensions", methods=["GET"])(
         _guard("providers", get_extensions)
+    )
+    app.route("/admin/api/extensions/<ext_id>/install-cli", methods=["POST"])(
+        _guard("providers", post_extension_install_cli)
     )
     app.route("/admin/api/config/shims/<name>", methods=["GET"])(
         _guard("providers", get_loaded_shim)

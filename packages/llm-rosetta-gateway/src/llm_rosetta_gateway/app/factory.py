@@ -588,7 +588,7 @@ async def create_app(
     app.internal_token = internal_token  # type: ignore
     app.auth_state = auth_state  # type: ignore
     app.keystore = keystore  # type: ignore
-    app.admin = GatewayAdminContext()  # type: ignore
+    app.admin = GatewayAdminContext(app)  # type: ignore
 
     if not ext.skip_admin_setup:
         await setup_admin(
