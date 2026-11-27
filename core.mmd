@@ -47,8 +47,6 @@ flowchart TB
   INIT --> DET
   INIT --> TOOL
   TOOL --> CVT
-  TOOL --> IROPS
-  TOOL -->|"retired_names"| VOCAB
   CLI --> CDECL
   GW -.->|"经 api 注册 transports 处理器"| EXTS
   CLI -->|"注册 commands 处理器(加载器回放已加载的扩展)"| EXTS
@@ -84,7 +82,7 @@ flowchart TB
   PIPE -.->|"按需加载"| FID
   SHIM -.->|"按需加载:clear_converter_cache()"| DET
 
-  linkStyle 9 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 10 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 21 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 29 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 7 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 8 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 19 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 27 stroke:#d33,stroke-width:2.5px,color:#d33

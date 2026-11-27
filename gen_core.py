@@ -56,8 +56,7 @@ current_header = '''flowchart TB
 current_edges = [
  ("INIT","PIPE","","solid",None), ("INIT","CVT","","solid",None),
  ("INIT","SHIM","接线(带保护的导入)","solid",None), ("INIT","DET","","solid",None),
- ("INIT","TOOL","","solid",None), ("TOOL","CVT","","solid",None), ("TOOL","IROPS","","solid",None), ("TOOL","VOCAB","retired_names","solid",None),
- ("CLI","CDECL","","solid",None), 
+ ("INIT","TOOL","","solid",None), ("TOOL","CVT","","solid",None), ("CLI","CDECL","","solid",None), 
  ("GW","EXTS","经 api 注册 transports 处理器","lazy",GREEN),
  ("CLI","EXTS","注册 commands 处理器(加载器回放已加载的扩展)","solid",GREEN),
  ("PIPE","CVT","","solid",None), ("PIPE","IROPS","","solid",None), ("PIPE","CDECL","","solid",None),
