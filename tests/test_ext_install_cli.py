@@ -246,6 +246,24 @@ class TestPlatformKey:
         monkeypatch.setattr(_tools, "_is_musl", lambda: libc == "musl")
         assert platform_key() == key
 
+    @pytest.mark.parametrize(
+        ("libc", "loader", "musl"),
+        [
+            (
+                ("glibc", "2.40"),
+                True,
+                False,
+            ),  # a glibc host that also ships musl's loader
+            (("glibc", "2.40"), False, False),
+            (("", ""), True, True),  # Python on Alpine reports no libc name
+            (("", ""), False, False),
+        ],
+    )
+    def test_the_libc_is_the_one_python_runs_on(self, monkeypatch, libc, loader, musl):
+        monkeypatch.setattr(_tools.platform, "libc_ver", lambda: libc)
+        monkeypatch.setattr(_tools, "_has_musl_loader", lambda: loader)
+        assert _tools._is_musl() is musl
+
     def test_macos_has_no_libc(self, monkeypatch):
         monkeypatch.setattr(_tools.sys, "platform", "darwin")
         monkeypatch.setattr(_tools.platform, "machine", lambda: "arm64")
