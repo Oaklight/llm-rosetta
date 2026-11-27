@@ -62,6 +62,7 @@ from llm_rosetta.extensions import (
     ExternalStatus,
     IndexEntry,
     InstalledExtension,
+    KindLoadError,
     RetiredEntryPoint,
     check_external,
     configure_extensions_dir,
@@ -75,6 +76,7 @@ from llm_rosetta.extensions import (
     load_index,
     missing_dependencies,
     parse_index,
+    register_kind_handler,
     remove_extension,
     retired_entry_points,
     select_entry,
@@ -190,6 +192,9 @@ __all__ = [
     # Installed extensions and what happened to each at load time
     "ExtensionStatus",
     "list_extensions",
+    # The code that loads one kind of an extension, registered by the layer that owns it
+    "KindLoadError",
+    "register_kind_handler",
     # Installing extensions (a standard-library installer, the extension index and
     # the directory manager)
     "EXTENSIONS_DIR_ENV",

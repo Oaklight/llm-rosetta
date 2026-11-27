@@ -18,9 +18,11 @@ import pytest
 from _ext_wheels import build_wheel
 from llm_rosetta.api import (
     configure_extensions_dir,
+    get_shim,
     install_wheel,
     list_extensions,
     load_providers,
+    register_kind_handler,
 )
 from llm_rosetta.contracts.extension import UnresolvedTransport
 from llm_rosetta_gateway.config.providers import build_provider_info
@@ -86,6 +88,10 @@ def _load() -> None:
     load_providers()
     for item in list_extensions():
         assert item.state == "loaded", (item.id, item.reason)
+
+
+def _status(ext_id: str):
+    return next(item for item in list_extensions() if item.id == ext_id)
 
 
 def _imported(ext_id: str) -> bool:
@@ -166,10 +172,39 @@ class TestResolvingFromTheShimsScope:
 
     def test_a_builtin_id_claimed_by_a_shims_extension_is_refused(self, ext_dir):
         _install(ext_dir, "acme", transports=("acp",))
-        _load()
+        load_providers()
 
-        with pytest.raises(registry.TransportPluginError, match="'acme'.*'acp'"):
-            registry.resolve_lane("acp", "acme--chat_completions")
+        status = _status("acme")
+        assert status.state == "failed"
+        assert "claims transport 'acp'" in status.reason
+        # Its shim is not registered, so it has no scope of its own to resolve in.
+        assert get_shim("acme--chat_completions") is None
+        assert registry.owning_extension("acme--chat_completions") is None
+
+
+class TestTheTransportsKind:
+    """The gateway registers the ``transports`` kind with core's loader."""
+
+    def test_a_late_registration_fails_an_extension_that_is_already_loaded(
+        self, ext_dir
+    ):
+        register_kind_handler("transports", lambda manifest, folder: [])
+        try:
+            _install(ext_dir, "acme", transports=("acp",))
+            load_providers()
+            assert _status("acme").state == "loaded"
+
+            register_kind_handler("transports", registry._claim_check)
+
+            assert _status("acme").state == "failed"
+            assert get_shim("acme--chat_completions") is None
+        finally:
+            register_kind_handler("transports", registry._claim_check)
+
+    def test_an_extension_with_its_own_ids_is_loaded(self, ext_dir):
+        _install(ext_dir, "acme", transports=("pigeon",))
+        _load()
+        assert _status("acme").state == "loaded"
 
 
 class TestBuildingTheLaneTable:
@@ -224,12 +259,17 @@ class TestBuildingTheLaneTable:
         assert built["lanes:pigeon"].owner == "lanes"
         assert not _imported("acme")
 
-    def test_a_builtin_id_claimed_by_an_extension_fails_startup(self, ext_dir):
+    def test_a_builtin_id_claimed_by_an_extension_does_not_reach_the_lane_table(
+        self, ext_dir
+    ):
         _install(ext_dir, "acme", transports=("acp",))
-        _load()
+        load_providers()
 
-        with pytest.raises(registry.TransportPluginError, match="'acme'.*'acp'"):
-            registry.build_lane_transports(timeout=60.0)
+        built: Any = registry.build_lane_transports(timeout=60.0)
+
+        assert set(built) == {"acp"}
+        assert isinstance(built["acp"], registry.AcpTransport)
+        assert not _imported("acme")
 
     @pytest.mark.parametrize(
         ("source", "message"),
@@ -284,13 +324,13 @@ class TestBuildingTheLaneTable:
         self, ext_dir
     ):
         _install(ext_dir, "acme", transports=("pigeon",), uses="pigeon")
-        _install(ext_dir, "claims", transports=("acp",))
+        _install(ext_dir, "claims", transports=("pigeon",))
         _load()
         override = object()
 
         built: Any = registry.build_lane_transports(timeout=60.0, override=override)
 
-        assert set(built) == {"acp", "acme:pigeon", "claims:acp"}
+        assert set(built) == {"acp", "acme:pigeon", "claims:pigeon"}
         assert all(value is override for value in built.values())
         assert not _imported("acme") and not _imported("claims")
 
