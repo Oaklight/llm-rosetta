@@ -35,7 +35,7 @@ flowchart TB
   subgraph TOOLS["运行时附件与作者工具"]
     FID["fidelity/"]
     PROF["profiling/"]
-    DEV["authoring/<br/>扩展作者工具(随包发布):ext new · ext check · 模板(#1803)"]
+    DEV["authoring/<br/>扩展作者工具(随包发布):ext new · ext check · ext migrate<br/>树契约 · kinds(shims/transports/commands 的规则)· 样本模板树(#1803-#1817)"]
   end
 
 
@@ -74,7 +74,6 @@ flowchart TB
   DET -->|"转发 convert · convert_response(pipeline/facade)"| PIPE
   CVT -->|"detect_provider 读格式目录(#1797)"| FMT
   SHIM -->|"清转换器缓存(#1797)"| CVT
-  DEV -.->|"按需加载"| CVT
   DEV -.->|"按需加载"| SHIM
   PIPE -.->|"按需加载"| FID
 

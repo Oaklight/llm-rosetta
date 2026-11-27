@@ -48,7 +48,7 @@ current_header = '''flowchart TB
   subgraph TOOLS["运行时附件与作者工具"]
     FID["fidelity/"]
     PROF["profiling/"]
-    DEV["authoring/<br/>扩展作者工具(随包发布):ext new · ext check · 模板(#1803)"]
+    DEV["authoring/<br/>扩展作者工具(随包发布):ext new · ext check · ext migrate<br/>树契约 · kinds(shims/transports/commands 的规则)· 样本模板树(#1803-#1817)"]
   end
 '''
 current_edges = [
@@ -72,7 +72,7 @@ current_edges = [
  ("REF","IRMODEL","转发(带警告)","solid",None),
  ("DET","CVT","转发 get_converter_for_provider · detect_provider","solid",None), ("DET","PIPE","转发 convert · convert_response(pipeline/facade)","solid",None),
  ("CVT","FMT","detect_provider 读格式目录(#1797)","solid",None), ("SHIM","CVT","清转换器缓存(#1797)","solid",None),
- ("DEV","CVT","按需加载","lazy",None), ("DEV","SHIM","按需加载","lazy",None),
+ ("DEV","SHIM","按需加载","lazy",None),
  ("PIPE","FID","按需加载","lazy",None),
 ]
 open("core.mmd","w",encoding="utf-8").write(render(current_header, current_edges))

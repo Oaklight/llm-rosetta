@@ -63,7 +63,7 @@ pre.error { color: #b00; white-space: pre-wrap; }
   subgraph TOOLS["运行时附件与作者工具"]
     FID["fidelity/"]
     PROF["profiling/"]
-    DEV["authoring/&lt;br/&gt;扩展作者工具(随包发布):ext new · ext check · 模板(#1803)"]
+    DEV["authoring/&lt;br/&gt;扩展作者工具(随包发布):ext new · ext check · ext migrate&lt;br/&gt;树契约 · kinds(shims/transports/commands 的规则)· 样本模板树(#1803-#1817)"]
   end
 
 
@@ -102,7 +102,6 @@ pre.error { color: #b00; white-space: pre-wrap; }
   DET --&gt;|"转发 convert · convert_response(pipeline/facade)"| PIPE
   CVT --&gt;|"detect_provider 读格式目录(#1797)"| FMT
   SHIM --&gt;|"清转换器缓存(#1797)"| CVT
-  DEV -.-&gt;|"按需加载"| CVT
   DEV -.-&gt;|"按需加载"| SHIM
   PIPE -.-&gt;|"按需加载"| FID
 
