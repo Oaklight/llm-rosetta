@@ -1,38 +1,38 @@
 flowchart TB
   subgraph STATE["state"]
-    KEYSTORE["keystore/<br/>SQLite API key 库 · maintenance(schema 步骤,#1795)"]
+    KEYSTORE["keystore/<br/>SQLite API key 库 · maintenance(schema 步骤)"]
     MAINT["maintenance/<br/>backfills · dumps · startup"]
     JOBS["jobs/<br/>envelope · queue · worker · handlers"]
     QUOTA["quota/<br/>service · allowance · signals · probes · rate_limit"]
     ROUTING["routing/<br/>select · strategy · failover · session · same_format"]
   end
   subgraph POLICY["policy"]
-    CONFIG["config/<br/>loader · parse · resolve · providers · settings · migrate/(配置迁移,原 maintenance,#1793)"]
-    MW["middleware/<br/>auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies,#1831)"]
+    CONFIG["config/<br/>loader · parse · resolve · providers · settings · migrate/(配置迁移)"]
+    MW["middleware/<br/>auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/<br/>http · acp · registry · provider_info · provider_readiness(ProviderNotReady,#1832)"]
+    TRANSPORT["transport/<br/>http · acp · registry · provider_info · provider_readiness(ProviderNotReady)"]
     SURF["surface.py"]
-    OBS["observability/<br/>logging · metrics · request_log · ops_log · error_dump · capture · retention · usage · persistence"]
+    OBS["observability/<br/>logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]
     MT["model_types/"]
-    SHIMS["shims/<br/>extension_view · manifest_sources · source_view(读扩展 index.json,#1728)<br/>本地目录来源与 shims.yaml 加载器已删(#1732)"]
+    SHIMS["shims/<br/>extension_view · manifest_sources · source_view(读扩展 index.json)"]
   end
   subgraph ENGINE["engine"]
     PROXY["proxy/<br/>prepare · engine · streaming · failover · fidelity · preflight · lifecycle · errors"]
     PIPES["pipelines/<br/>embeddings · rerank · decision"]
   end
   subgraph OPERATIONS["operations"]
-    OPS["ops/<br/>OpsBase 审计层 · data · keys · security · proxy · lifecycle(启动/关闭/重载审计,#1835)"]
+    OPS["ops/<br/>OpsBase 审计层 · data · keys · security · proxy · lifecycle(启动/关闭/重载审计)"]
   end
   subgraph ENTRY["entry"]
-    CLI["cli/<br/>llm-rosetta-gateway · banner<br/>注册 gateway 与 serve 两个命令;gateway 下分发 serve/init/add/credential/password/db/usage/migrate(#1748)"]
+    CLI["cli/<br/>llm-rosetta-gateway · banner<br/>注册 gateway 与 serve 两个命令;gateway 下分发 serve/init/add/credential/password/db/usage/migrate"]
   end
   CLIENT(["客户端<br/>OpenAI / Anthropic / Google 格式"])
   CORE["llm_rosetta.api + llm_rosetta.contracts<br/>(gateway 进入 core 的唯一入口,测试强制)"]
   UP(["上游提供方"])
   subgraph SERVING["serving"]
-    ADMINAPI["admin_api.py<br/>AdminContext 协议;不再导入 app 与 observability(回退已删,#1833)"]
+    ADMINAPI["admin_api.py<br/>AdminContext 协议;不导入 app 与 observability"]
     ADMIN["admin/<br/>routes/ · js/ · admin.html"]
     APP["app/<br/>factory · routes_llm · routes_typed · routes_models<br/>routes_compact · routes_count_tokens · routes_health · tasks · admin_context"]
   end
@@ -60,7 +60,7 @@ flowchart TB
   APP --> MT
   APP --> OBS
   APP --> OPS
-  APP -->|"内置类型处理函数表 BUILTIN_HANDLERS(#1791)"| PIPES
+  APP -->|"内置类型处理函数表 BUILTIN_HANDLERS"| PIPES
   APP --> PROXY
   APP --> QUOTA
   APP --> ROUTING

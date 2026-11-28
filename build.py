@@ -3,13 +3,13 @@ d = pathlib.Path(".")
 def src(n): return html.escape((d / f"{n}.mmd").read_text(encoding="utf-8"), quote=False)
 sections = [
  ("core", "1. core 现状:组件与依赖",
-  "实线是模块顶层导入,虚线是函数内的懒加载。已解决(#1708):ir、pipeline、formats、auto_detect 不再导入 shims,shim 名字经 contracts/resolver.py 读取(shims 注册,llm_rosetta/__init__ 接线),contracts 也不再导入 shims 和 extensions。已解决(#1709):四个编排器(chat、embeddings、rerank、decisions)都在 pipeline/,converters 不再导入 pipeline(任何深度),ConversionError 只定义在 converters/base/errors.py(各公开名字指向同一个类),pipeline 从 ir.context 取 ConversionContext;边界测试在 tests/test_core_layering.py。已解决(#1710):IR 合成一个包 llm_rosetta.ir:ir/model(原 types/ir,数据,只依赖标准库)在底层,ir/primitives、ir/tools、ir/passes 在它之上;types/ 只剩提供方参考形状,types.ir 是 0.13.0 的转发(警告,0.15.0 删除),只包含 0.13.0 出现过的 72 个名字和 15 个子模块。已解决(#1735):shims 与 extensions 不再互相依赖,shims 向 extensions 注册 shims 处理器(绿线)。仍是红色的依赖只剩一条:contracts/transform.py 导入 ir.primitives(contracts 里唯一的这类模块,边表由 tests/test_core_layering.py 固定,目标图接受它作为例外)。“转换库”组里是三层:pipeline 在最上,converters 在中间,IR 在最下(ir/model 在 ir/ 逻辑之下),自上而下依赖,没有 shim 时这一组就是完整的转换库;shims 和 extensions 是它外面的可选层;contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。api 只是把下面各包再导出一遍,0.14.0 dev 期间还会大改,这些再导出的边不画,免得遮住真正的依赖。tool_ops(入口便捷层)只画到 converters 的边,它到 ir 和 retired_names 的边(类型与错误消息)在 CORE_EDGES 里有,图里不画。未画的:shims/providers 转发层、已弃用的 gateway/ 与 observability/ 转发包。画的是 master 的树。"),
+  "实线是模块顶层导入,虚线是函数内的懒加载。ir、pipeline、formats、auto_detect、contracts 都不导入 shims 与 extensions,shim 名字经 contracts/resolver.py 读取。四个编排器(chat、embeddings、rerank、decisions)都在 pipeline/,converters 不导入 pipeline,ConversionError 只定义在 converters/base/errors.py。IR 是一个包 llm_rosetta.ir:ir/model(数据,只依赖标准库)在底层,ir/primitives、ir/tools、ir/passes 在它之上;types/ 只放提供方参考形状。shims 向 extensions 注册 shims 处理器(绿线),两者不互相导入。红色的依赖只有一条:contracts/transform.py 导入 ir.primitives(边表由 tests/test_core_layering.py 固定)。“转换库”组是三层:pipeline 在最上,converters 在中间,IR 在最下,自上而下依赖;没有 shim 时这一组就是完整的转换库。shims 和 extensions 是它外面的可选层;contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。api 只是把下面各包再导出一遍,这些再导出的边不画,免得遮住真正的依赖。tool_ops(入口便捷层)只画到 converters 的边,它到 ir 和 retired_names 的边在 CORE_EDGES 里有,图里不画。未画的:shims/providers 转发层、弃用的 gateway/ 与 observability/ 转发包。画的是 master 的树。"),
  ("gateway", "2. gateway 后端的组件与关系",
-  "分层来自 tests/gateway/test_layers.py,只能向下导入。每个包都会用 core,图里只画了几条代表性的到 CORE 的线。admin 除了 admin_api 之外还有一批旧 allowlist 导入(config、keystore、maintenance、middleware、observability、ops、quota、routing、shims、transport、updates),名单只允许缩小,图里没画。shims 里的 manifest_sources 是要被 index.json 取代的部分。"),
+  "分层来自 tests/gateway/test_layers.py,只能向下导入;包间的边直接取自该文件的 GATEWAY_EDGES(由 gen_gateway.py 生成)。每个包都会用 core,图里只画了几条代表性的到 CORE 的线。admin 除了 admin_api 之外还有一批 legacy allowlist 导入(config、keystore、maintenance、middleware、observability、ops、quota、routing、shims、transport、updates),名单只允许缩小,图里没画。"),
  ("admin", "3. admin 页面与组件的关系",
-  "已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。GET /admin/api/extensions 后端已有,目前没有页面调用它。"),
-("gap_actual", "4. gateway 现实:偏离设计的地方(#1830 的 A1–A9)",
-  "红线是评审量出来的问题:每条标了 #1830 里的编号。已合并并从图上去掉的:A3 与 A11(#1831,client_ip 一次解析,server.trusted_proxies)、A5(#1832,ProviderNotReady 移到 transport/provider_readiness.py)、A6(#1833,admin_api 的回退已删)、A7(#1835,生命周期审计走 ops)、A2(#1837,扩展安装策略归核心)。进行中:A12(请求日志保留来源地址,peer_ip 与 forwarded_for)、A4、A1、A8、A9。数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。A4:上游尝试的记账有 5 份拷贝。A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。A9:quota 的进程级状态放在 transport 里。图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。",
+  "已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。"),
+("gap_actual", "4. gateway 现实:仍偏离设计的地方(#1830)",
+  "红线是评审量出来的问题,每条标了 #1830 里的编号;图里只留还没解决的:A1、A4、A8、A9。数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。A4:上游尝试的记账有 5 份拷贝。A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。A9:quota 的进程级状态放在 transport 里。图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。",
   "现状 · master @ 215c832bbe", "now"),
 ("gap_ideal", "5. gateway 理想:#1830 完成之后",
   "同一批节点,红线都没有了。admin 只经 AdminContext;热重载、已生效配置和审计写入各有唯一的家;记账是一个 attempt_upstream;ACP lane 解析在 transport 一侧;quota 的状态回到 quota/,通过启动时注册的接收器进入 transport;ProviderNotReady 在叶子模块;扩展安装只有核心一套策略。这是目标态,不是承诺的实现细节;每一项落地后,对应的红线从上一张图里去掉。",
@@ -26,7 +26,7 @@ def note_html(text):
     parts = [p.strip() for p in re.split(r"(?<=。)", text) if p.strip()]
     lede = html.escape(parts[0])
     items = "".join(f"<li>{html.escape(p)}</li>" for p in parts[1:])
-    return f'<p class="sub">{lede}</p>' + (f'<details class="notes"><summary>说明与已解决项({len(parts) - 1} 条)</summary><ul>{items}</ul></details>' if items else "")
+    return f'<p class="sub">{lede}</p>' + (f'<details class="notes"><summary>说明({len(parts) - 1} 条)</summary><ul>{items}</ul></details>' if items else "")
 
 blocks = ""
 toc = ""

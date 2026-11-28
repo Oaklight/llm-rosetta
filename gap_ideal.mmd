@@ -3,7 +3,7 @@ flowchart LR
   ADMINAPI["admin_api.py<br/>AdminContext:reload_config 等"]
   APP["app/<br/>factory · routes · admin_context<br/>热重载与唯一的已生效配置"]
   LOGIN["admin/routes/auth.py<br/>限流状态在 app.auth_state,有上限"]
-  MWCTX["middleware/request_context<br/>client_ip 一次解析,按 server.trusted_proxies(#1831)"]
+  MWCTX["middleware/request_context<br/>client_ip 一次解析,按 server.trusted_proxies"]
   PROXY["proxy/<br/>engine · streaming<br/>attempt_upstream(...)(A4)"]
   PIPES["pipelines/typed.py"]
   RELAY["app/routes_compact + routes_count_tokens"]
@@ -13,15 +13,15 @@ flowchart LR
   TRANSPORT["transport/acp.py"]
   SINK["transport 的 quota 接收器<br/>(启动时由 quota 注册,A9)"]
   QUOTA["quota/<br/>读数与锁在这里"]
-  PSTATE["transport/provider_readiness.py(叶子)<br/>ProviderInitState · ProviderNotReady(A5,#1832 已合并)"]
+  PSTATE["transport/provider_readiness.py(叶子)<br/>ProviderInitState · ProviderNotReady"]
   MAINT["maintenance/startup.py"]
   OPS["ops/<br/>唯一的审计写入者(A7)"]
   OPSLOG["observability/ops_log"]
-  EXTCORE["core 的唯一安装策略<br/>choose_release + prefer_stable(A2,#1837 已合并)"]
+  EXTCORE["core 的唯一安装策略<br/>choose_release + prefer_stable"]
   EXTGW["gateway shims/<br/>调用核心策略"]
   EXTDIR[("/config/extensions")]
   ADMIN -->|"只经这一条"| ADMINAPI
-  APP -->|"适配器(必须存在,无回退;A6,#1833 已合并)"| ADMINAPI
+  APP -->|"适配器(必须存在,无回退)"| ADMINAPI
   ADMIN --> LOGIN
   LOGIN --> MWCTX
   PROXY --> QUOTA

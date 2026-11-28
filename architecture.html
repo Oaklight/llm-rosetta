@@ -106,21 +106,21 @@
     <span><i class="green"></i>接线(注册处理器)</span>
   </div>
 </header>
-<nav class="toc"><a href="#core">01 core 现状:组件与依赖</a><a href="#gateway">02 gateway 后端的组件与关系</a><a href="#admin">03 admin 页面与组件的关系</a><a href="#gap_actual">04 gateway 现实:偏离设计的地方(#1830 的 A1–A9)</a><a href="#gap_ideal">05 gateway 理想:#1830 完成之后</a></nav>
+<nav class="toc"><a href="#core">01 core 现状:组件与依赖</a><a href="#gateway">02 gateway 后端的组件与关系</a><a href="#admin">03 admin 页面与组件的关系</a><a href="#gap_actual">04 gateway 现实:仍偏离设计的地方(#1830)</a><a href="#gap_ideal">05 gateway 理想:#1830 完成之后</a></nav>
 
 <section id="core">
   <h2><span class="num">01</span>core 现状:组件与依赖</h2>
-  <p class="sub">实线是模块顶层导入,虚线是函数内的懒加载。</p><details class="notes"><summary>说明与已解决项(10 条)</summary><ul><li>已解决(#1708):ir、pipeline、formats、auto_detect 不再导入 shims,shim 名字经 contracts/resolver.py 读取(shims 注册,llm_rosetta/__init__ 接线),contracts 也不再导入 shims 和 extensions。</li><li>已解决(#1709):四个编排器(chat、embeddings、rerank、decisions)都在 pipeline/,converters 不再导入 pipeline(任何深度),ConversionError 只定义在 converters/base/errors.py(各公开名字指向同一个类),pipeline 从 ir.context 取 ConversionContext;边界测试在 tests/test_core_layering.py。</li><li>已解决(#1710):IR 合成一个包 llm_rosetta.ir:ir/model(原 types/ir,数据,只依赖标准库)在底层,ir/primitives、ir/tools、ir/passes 在它之上;types/ 只剩提供方参考形状,types.ir 是 0.13.0 的转发(警告,0.15.0 删除),只包含 0.13.0 出现过的 72 个名字和 15 个子模块。</li><li>已解决(#1735):shims 与 extensions 不再互相依赖,shims 向 extensions 注册 shims 处理器(绿线)。</li><li>仍是红色的依赖只剩一条:contracts/transform.py 导入 ir.primitives(contracts 里唯一的这类模块,边表由 tests/test_core_layering.py 固定,目标图接受它作为例外)。</li><li>“转换库”组里是三层:pipeline 在最上,converters 在中间,IR 在最下(ir/model 在 ir/ 逻辑之下),自上而下依赖,没有 shim 时这一组就是完整的转换库;shims 和 extensions 是它外面的可选层;contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。</li><li>api 只是把下面各包再导出一遍,0.14.0 dev 期间还会大改,这些再导出的边不画,免得遮住真正的依赖。</li><li>tool_ops(入口便捷层)只画到 converters 的边,它到 ir 和 retired_names 的边(类型与错误消息)在 CORE_EDGES 里有,图里不画。</li><li>未画的:shims/providers 转发层、已弃用的 gateway/ 与 observability/ 转发包。</li><li>画的是 master 的树。</li></ul></details>
+  <p class="sub">实线是模块顶层导入,虚线是函数内的懒加载。</p><details class="notes"><summary>说明(11 条)</summary><ul><li>ir、pipeline、formats、auto_detect、contracts 都不导入 shims 与 extensions,shim 名字经 contracts/resolver.py 读取。</li><li>四个编排器(chat、embeddings、rerank、decisions)都在 pipeline/,converters 不导入 pipeline,ConversionError 只定义在 converters/base/errors.py。</li><li>IR 是一个包 llm_rosetta.ir:ir/model(数据,只依赖标准库)在底层,ir/primitives、ir/tools、ir/passes 在它之上;types/ 只放提供方参考形状。</li><li>shims 向 extensions 注册 shims 处理器(绿线),两者不互相导入。</li><li>红色的依赖只有一条:contracts/transform.py 导入 ir.primitives(边表由 tests/test_core_layering.py 固定)。</li><li>“转换库”组是三层:pipeline 在最上,converters 在中间,IR 在最下,自上而下依赖;没有 shim 时这一组就是完整的转换库。</li><li>shims 和 extensions 是它外面的可选层;contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。</li><li>api 只是把下面各包再导出一遍,这些再导出的边不画,免得遮住真正的依赖。</li><li>tool_ops(入口便捷层)只画到 converters 的边,它到 ir 和 retired_names 的边在 CORE_EDGES 里有,图里不画。</li><li>未画的:shims/providers 转发层、弃用的 gateway/ 与 observability/ 转发包。</li><li>画的是 master 的树。</li></ul></details>
   <div class="panel">
     <span class="tag now">现状 · master @ master</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="core"> <span id="z-core">100%</span></label></div>
     <div class="scroll"><div class="stage" id="stage-core"><pre class="mermaid" id="m-core">flowchart TB
-  GW["gateway:transport 注册表&lt;br/&gt;经 api 注册 transports 处理器(#1774)"]
+  GW["gateway:transport 注册表&lt;br/&gt;经 api 注册 transports 处理器"]
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]
-      PIPE["pipeline/&lt;br/&gt;chat · embeddings · rerank · decisions · typed&lt;br/&gt;enforcement(感知 shim 的能力 pass,#1745) · tool_locations(#1744)"]
+      PIPE["pipeline/&lt;br/&gt;chat · embeddings · rerank · decisions · typed&lt;br/&gt;enforcement(感知 shim 的能力 pass) · tool_locations"]
       CVT["converters/&lt;br/&gt;base(含 ConversionError) · llm/各格式 · embeddings · rerank · decisions(各含 lookup) · registry"]
-      subgraph IRCORE["ir/(一个包,#1710)"]
+      subgraph IRCORE["ir/(一个包)"]
         IRMODEL["ir/model/&lt;br/&gt;数据类 · 类型守卫 · 校验 · IR_VERSION&lt;br/&gt;只依赖标准库"]
         IROPS["ir/ 逻辑&lt;br/&gt;primitives · tools · passes · context"]
       end
@@ -128,21 +128,21 @@
   end
   subgraph FACADE["入口与门面(core 内部不得导入 api)"]
     TOOL["tool_ops.py&lt;br/&gt;入口便捷层:为 toolregistry 直接转换工具定义/调用/结果;只被 llm_rosetta/__init__ 导入"]
-    CLI["cli/ 包 · __main__&lt;br/&gt;分发器(__init__) · area 表与 commands 处理器(areas.py)(#1773、#1789)"]
+    CLI["cli/ 包 · __main__&lt;br/&gt;分发器(__init__) · area 表与 commands 处理器(areas.py)"]
     CAP["capabilities.py&lt;br/&gt;0.13.0 的转发,警告,0.15.0 删除;无人导入"]
     TESTING["testing.py&lt;br/&gt;测试辅助:snapshot_registry · restore_registry(core 不导入)"]
     INIT["llm_rosetta/__init__&lt;br/&gt;convert() · get_converter_for_provider()"]
-    DET["auto_detect.py&lt;br/&gt;0.13.0 的转发,无逻辑,0.15.0 删除;无人导入(#1797)"]
+    DET["auto_detect.py&lt;br/&gt;弃用的转发层,无逻辑,0.15.0 删除;无人导入"]
     API["api.py&lt;br/&gt;宿主门面:只做再导出(再导出的边不画)"]
   end
   subgraph TOOLS["运行时附件与作者工具"]
     PROF["profiling/"]
-    DEV["authoring/&lt;br/&gt;扩展作者工具(随包发布):ext new · ext check · ext migrate&lt;br/&gt;树契约 · kinds(shims/transports/commands 的规则)· 样本模板树(#1803-#1817)"]
+    DEV["authoring/&lt;br/&gt;扩展作者工具(随包发布):ext new · ext check · ext migrate&lt;br/&gt;树契约 · kinds(shims/transports/commands 的规则)· 样本模板树"]
     FID["fidelity/"]
   end
   subgraph OPT["可选外层(没有它们,转换库照样完整)"]
     SHIM["shims/&lt;br/&gt;provider_shim 注册表 · _loader · builtin/各 vendor · providers 转发层"]
-    EXTS["extensions/&lt;br/&gt;_discovery · _load · _dirs · _install · _index · _probe · _tools · _node · _manage · _cli&lt;br/&gt;ext install-cli:外部程序按精确版本装进 /config/tools(#1821、#1823);node 24.22.3 也装进 /config/tools/node(musl 用 unofficial-builds,#1825);_manage:移除计划(连程序一起删,共享 node 最后一个用户走才删)与 shim 的 needs(#1834)"]
+    EXTS["extensions/&lt;br/&gt;_discovery · _load · _dirs · _install · _index · _probe · _tools · _node · _manage · _cli&lt;br/&gt;ext install-cli:外部程序按精确版本装进 /config/tools;node 24.22.3 也装进 /config/tools/node(musl 用 unofficial-builds);_manage:移除计划(连程序一起删,共享 node 最后一个用户走才删)与 shim 的 needs"]
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
     REF["types/&lt;br/&gt;提供方参考形状:openai · google · messages&lt;br/&gt;types.ir 是 0.13.0 的转发,0.15.0 删除"]
@@ -159,7 +159,7 @@
   SHIM --&gt;|"注册 resolver"| CDECL
   CLI -.-&gt;|"把 ExtVerb 传给 ext_main"| DEV
   CVT --&gt; IRMODEL
-  SHIM --&gt;|"模块级:注册 shims 处理器;load_providers() 调 load_extensions()(#1735)"| EXTS
+  SHIM --&gt;|"模块级:注册 shims 处理器;load_providers() 调 load_extensions()"| EXTS
   INIT --&gt;|"接线(带保护的导入)"| SHIM
   PIPE -.-&gt;|"按需加载"| FID
   DEV -.-&gt;|"按需加载"| SHIM
@@ -168,7 +168,7 @@
   CVT --&gt; CDECL
   IROPS --&gt; IRMODEL
   CXF --&gt; IROPS
-  DEV --&gt;|"ext new / check 的 ExtVerb 记录(#1752)"| EXTS
+  DEV --&gt;|"ext new / check 的 ExtVerb 记录"| EXTS
   PIPE --&gt; CVT
   CAP --&gt; CVT
   CDECL --&gt;|"IREffort · IRMode · IR_VERSION"| IRMODEL
@@ -179,9 +179,9 @@
   REF --&gt;|"转发(带警告)"| IRMODEL
   SHIM --&gt; IROPS
   CAP --&gt;|"转发 enforcement"| PIPE
-  CVT --&gt;|"detect_provider 读格式目录(#1797)"| FMT
+  CVT --&gt;|"detect_provider 读格式目录"| FMT
   CLI --&gt;|"注册 commands 处理器(加载器回放已加载的扩展)"| EXTS
-  SHIM --&gt;|"清转换器缓存(#1797)"| CVT
+  SHIM --&gt;|"清转换器缓存"| CVT
   DET --&gt;|"转发 get_converter_for_provider · detect_provider"| CVT
   INIT --&gt; CVT
   GW -.-&gt;|"经 api 注册 transports 处理器"| EXTS
@@ -202,45 +202,45 @@
 </section>
 <section id="gateway">
   <h2><span class="num">02</span>gateway 后端的组件与关系</h2>
-  <p class="sub">分层来自 tests/gateway/test_layers.py,只能向下导入。</p><details class="notes"><summary>说明与已解决项(3 条)</summary><ul><li>每个包都会用 core,图里只画了几条代表性的到 CORE 的线。</li><li>admin 除了 admin_api 之外还有一批旧 allowlist 导入(config、keystore、maintenance、middleware、observability、ops、quota、routing、shims、transport、updates),名单只允许缩小,图里没画。</li><li>shims 里的 manifest_sources 是要被 index.json 取代的部分。</li></ul></details>
+  <p class="sub">分层来自 tests/gateway/test_layers.py,只能向下导入;包间的边直接取自该文件的 GATEWAY_EDGES(由 gen_gateway.py 生成)。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>每个包都会用 core,图里只画了几条代表性的到 CORE 的线。</li><li>admin 除了 admin_api 之外还有一批 legacy allowlist 导入(config、keystore、maintenance、middleware、observability、ops、quota、routing、shims、transport、updates),名单只允许缩小,图里没画。</li></ul></details>
   <div class="panel">
     <span class="tag now">现状 · master @ master</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gateway"> <span id="z-gateway">100%</span></label></div>
     <div class="scroll"><div class="stage" id="stage-gateway"><pre class="mermaid" id="m-gateway">flowchart TB
   subgraph STATE["state"]
-    KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库 · maintenance(schema 步骤,#1795)"]
+    KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库 · maintenance(schema 步骤)"]
     MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup"]
     JOBS["jobs/&lt;br/&gt;envelope · queue · worker · handlers"]
     QUOTA["quota/&lt;br/&gt;service · allowance · signals · probes · rate_limit"]
     ROUTING["routing/&lt;br/&gt;select · strategy · failover · session · same_format"]
   end
   subgraph POLICY["policy"]
-    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings · migrate/(配置迁移,原 maintenance,#1793)"]
-    MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies,#1831)"]
+    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings · migrate/(配置迁移)"]
+    MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info · provider_readiness(ProviderNotReady,#1832)"]
+    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info · provider_readiness(ProviderNotReady)"]
     SURF["surface.py"]
-    OBS["observability/&lt;br/&gt;logging · metrics · request_log · ops_log · error_dump · capture · retention · usage · persistence"]
+    OBS["observability/&lt;br/&gt;logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]
     MT["model_types/"]
-    SHIMS["shims/&lt;br/&gt;extension_view · manifest_sources · source_view(读扩展 index.json,#1728)&lt;br/&gt;本地目录来源与 shims.yaml 加载器已删(#1732)"]
+    SHIMS["shims/&lt;br/&gt;extension_view · manifest_sources · source_view(读扩展 index.json)"]
   end
   subgraph ENGINE["engine"]
     PROXY["proxy/&lt;br/&gt;prepare · engine · streaming · failover · fidelity · preflight · lifecycle · errors"]
     PIPES["pipelines/&lt;br/&gt;embeddings · rerank · decision"]
   end
   subgraph OPERATIONS["operations"]
-    OPS["ops/&lt;br/&gt;OpsBase 审计层 · data · keys · security · proxy · lifecycle(启动/关闭/重载审计,#1835)"]
+    OPS["ops/&lt;br/&gt;OpsBase 审计层 · data · keys · security · proxy · lifecycle(启动/关闭/重载审计)"]
   end
   subgraph ENTRY["entry"]
-    CLI["cli/&lt;br/&gt;llm-rosetta-gateway · banner&lt;br/&gt;注册 gateway 与 serve 两个命令;gateway 下分发 serve/init/add/credential/password/db/usage/migrate(#1748)"]
+    CLI["cli/&lt;br/&gt;llm-rosetta-gateway · banner&lt;br/&gt;注册 gateway 与 serve 两个命令;gateway 下分发 serve/init/add/credential/password/db/usage/migrate"]
   end
   CLIENT(["客户端&lt;br/&gt;OpenAI / Anthropic / Google 格式"])
   CORE["llm_rosetta.api + llm_rosetta.contracts&lt;br/&gt;(gateway 进入 core 的唯一入口,测试强制)"]
   UP(["上游提供方"])
   subgraph SERVING["serving"]
-    ADMINAPI["admin_api.py&lt;br/&gt;AdminContext 协议;不再导入 app 与 observability(回退已删,#1833)"]
+    ADMINAPI["admin_api.py&lt;br/&gt;AdminContext 协议;不导入 app 与 observability"]
     ADMIN["admin/&lt;br/&gt;routes/ · js/ · admin.html"]
     APP["app/&lt;br/&gt;factory · routes_llm · routes_typed · routes_models&lt;br/&gt;routes_compact · routes_count_tokens · routes_health · tasks · admin_context"]
   end
@@ -268,7 +268,7 @@
   APP --&gt; MT
   APP --&gt; OBS
   APP --&gt; OPS
-  APP --&gt;|"内置类型处理函数表 BUILTIN_HANDLERS(#1791)"| PIPES
+  APP --&gt;|"内置类型处理函数表 BUILTIN_HANDLERS"| PIPES
   APP --&gt; PROXY
   APP --&gt; QUOTA
   APP --&gt; ROUTING
@@ -332,7 +332,7 @@
 </section>
 <section id="admin">
   <h2><span class="num">03</span>admin 页面与组件的关系</h2>
-  <p class="sub">已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。</p><details class="notes"><summary>说明与已解决项(2 条)</summary><ul><li>未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。</li><li>GET /admin/api/extensions 后端已有,目前没有页面调用它。</li></ul></details>
+  <p class="sub">已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。</p><details class="notes"><summary>说明(1 条)</summary><ul><li>未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。</li></ul></details>
   <div class="panel">
     <span class="tag now">现状 · master @ master</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="admin"> <span id="z-admin">100%</span></label></div>
@@ -378,7 +378,7 @@
   subgraph TABJS["页面脚本 js/tabs/"]
     T_DASH["dashboard.js"]
     T_LOGS["logs.js"]
-    T_SHIMS["shims.js · shims-page.js · shim-sources-editor.js&lt;br/&gt;+ core/shim-sources.js · core/extension-cards.js(外部程序状态与安装按钮,#1824、#1828)· core/extension-manage.js(Sources 标签里每个已装扩展一行:检查更新、更新、移除、改用声明源,pip 来源的行不放移除按钮,#1834);独立的 Extensions 标签已撤&lt;br/&gt;后端的编辑、删除、预览路由已删,只读(#1732);前端编辑器是否清理未确认"]
+    T_SHIMS["shims.js · shims-page.js · shim-sources-editor.js&lt;br/&gt;+ core/shim-sources.js · core/extension-cards.js(外部程序状态与安装按钮)· core/extension-manage.js(Sources 标签里每个已装扩展一行:检查更新、更新、移除、改用声明源,pip 来源的行不放移除按钮)&lt;br/&gt;后端对 shims 来源只读(没有编辑、删除、预览路由);前端编辑器是否清理未确认"]
     T_OPS["ops-log.js"]
     T_MOD["models.js"]
     T_ROUTE["routing.js"]
@@ -447,8 +447,8 @@
   </div>
 </section>
 <section id="gap_actual">
-  <h2><span class="num">04</span>gateway 现实:偏离设计的地方(#1830 的 A1–A9)</h2>
-  <p class="sub">红线是评审量出来的问题:每条标了 #1830 里的编号。</p><details class="notes"><summary>说明与已解决项(8 条)</summary><ul><li>已合并并从图上去掉的:A3 与 A11(#1831,client_ip 一次解析,server.trusted_proxies)、A5(#1832,ProviderNotReady 移到 transport/provider_readiness.py)、A6(#1833,admin_api 的回退已删)、A7(#1835,生命周期审计走 ops)、A2(#1837,扩展安装策略归核心)。</li><li>进行中:A12(请求日志保留来源地址,peer_ip 与 forwarded_for)、A4、A1、A8、A9。</li><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。</li><li>A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。</li><li>A4:上游尝试的记账有 5 份拷贝。</li><li>A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。</li><li>A9:quota 的进程级状态放在 transport 里。</li><li>图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。</li></ul></details>
+  <h2><span class="num">04</span>gateway 现实:仍偏离设计的地方(#1830)</h2>
+  <p class="sub">红线是评审量出来的问题,每条标了 #1830 里的编号;图里只留还没解决的:A1、A4、A8、A9。</p><details class="notes"><summary>说明(6 条)</summary><ul><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。</li><li>A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。</li><li>A4:上游尝试的记账有 5 份拷贝。</li><li>A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。</li><li>A9:quota 的进程级状态放在 transport 里。</li><li>图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。</li></ul></details>
   <div class="panel">
     <span class="tag now">现状 · master @ 215c832bbe</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_actual"> <span id="z-gap_actual">100%</span></label></div>
@@ -458,8 +458,8 @@
   APP["app/&lt;br/&gt;factory · routes · admin_context"]
   STATE["app/_state._config&lt;br/&gt;+ app.gateway_config(两个落点)"]
   RELOAD["admin/routes/_shared.py&lt;br/&gt;_reload_gateway_config(A1)"]
-  LOGIN["admin/routes/auth.py&lt;br/&gt;登录限流按 RequestContext.client_ip(A3,#1831 已合并)"]
-  MWCTX["middleware/request_context&lt;br/&gt;client_ip 一次解析,按 server.trusted_proxies(#1831)"]
+  LOGIN["admin/routes/auth.py&lt;br/&gt;登录限流按 RequestContext.client_ip"]
+  MWCTX["middleware/request_context&lt;br/&gt;client_ip 一次解析,按 server.trusted_proxies"]
   PROXY["proxy/&lt;br/&gt;engine · streaming"]
   PIPES["pipelines/typed.py"]
   RELAY["app/routes_compact + routes_count_tokens&lt;br/&gt;(各 140-150 行,复杂度 22-23)"]
@@ -468,10 +468,10 @@
   TRANSPORT["transport/acp.py(2535 行)"]
   ACPQ["transport/acp_quota.py&lt;br/&gt;进程级 _READINGS / _LOCKS(A9)"]
   QUOTA["quota/service.py"]
-  MAINT["maintenance/startup.py(716 行)&lt;br/&gt;ProviderNotReady 已移走(A5,#1832 已合并)"]
-  OPS["ops/&lt;br/&gt;OpsBase 子类 + lifecycle(A7,#1835 已合并)"]
+  MAINT["maintenance/startup.py(716 行)"]
+  OPS["ops/&lt;br/&gt;OpsBase 子类 + lifecycle"]
   OPSLOG["observability/ops_log"]
-  EXTCORE["core extensions/_index&lt;br/&gt;choose_release / select_entry(prefer_stable)(A2,#1837 已合并)"]
+  EXTCORE["core extensions/_index&lt;br/&gt;choose_release / select_entry(prefer_stable)"]
   EXTGW["gateway shims/manifest_sources&lt;br/&gt;调用核心策略(prefer_stable)"]
   EXTDIR[("/config/extensions")]
   ADMIN --&gt; ADMINAPI
@@ -483,7 +483,7 @@
   RELOAD --&gt;|"写 5 个 app 属性(A1)"| STATE
   APP --&gt; STATE
   ADMIN --&gt; LOGIN
-  LOGIN --&gt;|"读 client_ip(A3,#1831 已合并)"| MWCTX
+  LOGIN --&gt;|"读 client_ip"| MWCTX
   PROXY --&gt;|"自己记账(A4)"| QUOTA
   PIPES --&gt;|"自己记账(A4)"| QUOTA
   RELAY --&gt;|"自己记账(A4)"| QUOTA
@@ -495,7 +495,7 @@
   PROXY --&gt; OPS
   OPS --&gt; OPSLOG
   EXTCORE --&gt;|"ext install / update"| EXTDIR
-  EXTGW --&gt;|"choose_release(A2,#1837 已合并)"| EXTCORE
+  EXTGW --&gt;|"choose_release"| EXTCORE
   EXTGW --&gt;|"重建 shim 来源"| EXTDIR
   linkStyle 2,3,4,6,10,11,12,15,17 stroke:#c0392b,stroke-width:2px
 </pre></div></div>
@@ -503,7 +503,7 @@
 </section>
 <section id="gap_ideal">
   <h2><span class="num">05</span>gateway 理想:#1830 完成之后</h2>
-  <p class="sub">同一批节点,红线都没有了。</p><details class="notes"><summary>说明与已解决项(2 条)</summary><ul><li>admin 只经 AdminContext;热重载、已生效配置和审计写入各有唯一的家;记账是一个 attempt_upstream;ACP lane 解析在 transport 一侧;quota 的状态回到 quota/,通过启动时注册的接收器进入 transport;ProviderNotReady 在叶子模块;扩展安装只有核心一套策略。</li><li>这是目标态,不是承诺的实现细节;每一项落地后,对应的红线从上一张图里去掉。</li></ul></details>
+  <p class="sub">同一批节点,红线都没有了。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>admin 只经 AdminContext;热重载、已生效配置和审计写入各有唯一的家;记账是一个 attempt_upstream;ACP lane 解析在 transport 一侧;quota 的状态回到 quota/,通过启动时注册的接收器进入 transport;ProviderNotReady 在叶子模块;扩展安装只有核心一套策略。</li><li>这是目标态,不是承诺的实现细节;每一项落地后,对应的红线从上一张图里去掉。</li></ul></details>
   <div class="panel">
     <span class="tag ">目标 · #1830</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_ideal"> <span id="z-gap_ideal">100%</span></label></div>
@@ -512,7 +512,7 @@
   ADMINAPI["admin_api.py&lt;br/&gt;AdminContext:reload_config 等"]
   APP["app/&lt;br/&gt;factory · routes · admin_context&lt;br/&gt;热重载与唯一的已生效配置"]
   LOGIN["admin/routes/auth.py&lt;br/&gt;限流状态在 app.auth_state,有上限"]
-  MWCTX["middleware/request_context&lt;br/&gt;client_ip 一次解析,按 server.trusted_proxies(#1831)"]
+  MWCTX["middleware/request_context&lt;br/&gt;client_ip 一次解析,按 server.trusted_proxies"]
   PROXY["proxy/&lt;br/&gt;engine · streaming&lt;br/&gt;attempt_upstream(...)(A4)"]
   PIPES["pipelines/typed.py"]
   RELAY["app/routes_compact + routes_count_tokens"]
@@ -522,15 +522,15 @@
   TRANSPORT["transport/acp.py"]
   SINK["transport 的 quota 接收器&lt;br/&gt;(启动时由 quota 注册,A9)"]
   QUOTA["quota/&lt;br/&gt;读数与锁在这里"]
-  PSTATE["transport/provider_readiness.py(叶子)&lt;br/&gt;ProviderInitState · ProviderNotReady(A5,#1832 已合并)"]
+  PSTATE["transport/provider_readiness.py(叶子)&lt;br/&gt;ProviderInitState · ProviderNotReady"]
   MAINT["maintenance/startup.py"]
   OPS["ops/&lt;br/&gt;唯一的审计写入者(A7)"]
   OPSLOG["observability/ops_log"]
-  EXTCORE["core 的唯一安装策略&lt;br/&gt;choose_release + prefer_stable(A2,#1837 已合并)"]
+  EXTCORE["core 的唯一安装策略&lt;br/&gt;choose_release + prefer_stable"]
   EXTGW["gateway shims/&lt;br/&gt;调用核心策略"]
   EXTDIR[("/config/extensions")]
   ADMIN --&gt;|"只经这一条"| ADMINAPI
-  APP --&gt;|"适配器(必须存在,无回退;A6,#1833 已合并)"| ADMINAPI
+  APP --&gt;|"适配器(必须存在,无回退)"| ADMINAPI
   ADMIN --&gt; LOGIN
   LOGIN --&gt; MWCTX
   PROXY --&gt; QUOTA
