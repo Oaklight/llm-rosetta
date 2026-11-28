@@ -23,6 +23,7 @@ from typing import Any
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from ..config import GatewayConfig, TypedRoute
+from ..proxy.attempt import attempt_upstream
 from ..proxy.lifecycle import begin_typed, finish_typed
 from ..observability.logging import get_logger
 from ..middleware.headers import build_upstream_extra_headers, get_request_id
@@ -268,46 +269,6 @@ async def _retry_action(
         if next_route is not None:
             return next_route, refreshed, excluded | {route.provider_name}
     return None
-
-
-def _lane(route: TypedRoute, model: str) -> str:
-    """The lane key a typed attempt is counted under.
-
-    A typed route carries no selection state, so this is the fallback
-    :func:`proxy.failover.attempted_lane` uses when no candidate was chosen:
-    the upstream model the config names, else the model the client asked for.
-    The request log records the same string.
-    """
-    return route.upstream_model or model
-
-
-def _note_connection_failure(
-    route: TypedRoute,
-    model: str,
-    config: GatewayConfig,
-    exc: UpstreamConnectionError,
-) -> None:
-    """Count a host that did not answer against the lane that tried it.
-
-    Retry stays chat-only: a typed request that a timeout may have delivered
-    is answered ``502``/``504`` rather than sent to a second provider.  Only
-    the record is shared, so the routing panel stops calling a dead lane
-    available.
-    """
-    from ..proxy.errors import note_transport_refusal
-
-    note_transport_refusal(
-        route.provider_info,
-        rate_limit=getattr(config, "routing_rate_limit", None),
-        lane=_lane(route, model),
-    )
-
-
-def _note_served(route: TypedRoute, model: str) -> None:
-    """Drop the lane record a served request disproves, as the chat proxy does."""
-    from ..quota.service import note_upstream_success
-
-    note_upstream_success(route.provider_info, lane=_lane(route, model))
 
 
 def _error(message: str, error_type: str, status_code: int) -> JSONResponse:
@@ -587,7 +548,9 @@ async def handle_typed_request(
                 error_detail = inband_error
                 return with_request_id(_error(inband_error, "upstream_error", 502))
 
-            _note_served(route, model)
+            attempt_upstream(
+                config, route.provider_info, route=route, model=model
+            ).served()
             return with_request_id(
                 _success_response(
                     handler,
@@ -603,14 +566,18 @@ async def handle_typed_request(
         except UpstreamTimeoutError as exc:
             status_code = 504
             error_detail = f"Upstream timeout: {exc}"
-            _note_connection_failure(route, model, config, exc)
+            attempt_upstream(
+                config, route.provider_info, route=route, model=model
+            ).unreachable()
             return with_request_id(
                 _error(f"Upstream timeout: {exc}", "upstream_error", 504)
             )
         except UpstreamConnectionError as exc:
             status_code = 502
             error_detail = f"{handler.connection_error_message}: {exc}"
-            _note_connection_failure(route, model, config, exc)
+            attempt_upstream(
+                config, route.provider_info, route=route, model=model
+            ).unreachable()
             return with_request_id(_error(error_detail, "upstream_error", 502))
         finally:
             if not retrying:

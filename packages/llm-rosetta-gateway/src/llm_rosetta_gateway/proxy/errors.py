@@ -545,21 +545,6 @@ def connection_refusal_decision(
     )
 
 
-def note_upstream_success(provider_info: ProviderInfo, *, lane: str) -> None:
-    """Clear the ladder entries a served request is evidence about.
-
-    Args:
-        provider_info: The provider that served the request.
-        lane: The key of the lane the served attempt was made on.
-    """
-    from ..quota.service import note_upstream_success as _note
-
-    try:
-        _note(provider_info, lane=lane)
-    except Exception:  # noqa: BLE001 - bookkeeping must not fail a served request
-        logger.warning("Could not clear the transient refusals", exc_info=True)
-
-
 class RefusalAction(str, Enum):
     """What a failed upstream attempt means for the request.
 

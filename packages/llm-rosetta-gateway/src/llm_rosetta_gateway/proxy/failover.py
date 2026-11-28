@@ -31,7 +31,7 @@ a different answer can still be given.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ..routing.failover import (
     reselect_after_credential_refusal,
@@ -185,8 +185,19 @@ def prepare_failover(
     return new_route, new_pinfo, retry_body, budget.after(route, new_route)
 
 
+class RoutedModel(Protocol):
+    """What the lane key reads from a route: the upstream model it names.
+
+    A chat route and a typed route both carry it; only the chat route has a
+    selection.
+    """
+
+    @property
+    def upstream_model(self) -> str | None: ...
+
+
 def attempted_lane(
-    selection: SelectionContext | None, route: ResolvedRoute, model: str
+    selection: SelectionContext | None, route: RoutedModel, model: str
 ) -> str:
     """The lane key this attempt was made on.
 

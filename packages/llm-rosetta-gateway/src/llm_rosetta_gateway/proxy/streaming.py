@@ -45,11 +45,10 @@ from .errors import (
     DumpContext,
     connection_refusal_decision,
     decide_on_refusal,
-    note_upstream_success,
 )
+from .attempt import attempt_upstream
 from .failover import (
     FailoverBudget,
-    attempted_lane,
     prepare_failover,
     record_failover,
 )
@@ -695,6 +694,13 @@ async def _connection_failover_stream(
     See :func:`proxy.engine._connection_failover`: one decision, kept out of a
     handler that already carries too many.
     """
+    attempt = attempt_upstream(
+        config,
+        provider_info,
+        route=route,
+        model=selection.model,
+        selection=selection,
+    )
     return await _failover_stream(
         config,
         selection,
@@ -704,8 +710,8 @@ async def _connection_failover_stream(
         decision=connection_refusal_decision(
             provider_info,
             exc,
-            rate_limit=getattr(config, "routing_rate_limit", None),
-            lane=attempted_lane(selection, route, selection.model),
+            rate_limit=attempt.rate_limit,
+            lane=attempt.lane,
         ),
         transport=transport,
         metadata_store=metadata_store,
@@ -878,6 +884,13 @@ async def handle_streaming(  # noqa: C901
     stream = None
     stream_error_text: str | None = None
     stream_error_code: int = 0
+    attempt = attempt_upstream(
+        config,
+        provider_info,
+        route=route,
+        model=selection.model,
+        selection=selection,
+    )
     for _attempt in range(2):
         t_connect = time.perf_counter()
         try:
@@ -921,9 +934,7 @@ async def handle_streaming(  # noqa: C901
             from ..quota.service import clear_upstream_rate_limit
 
             clear_upstream_rate_limit(provider_info)
-            note_upstream_success(
-                provider_info, lane=attempted_lane(selection, route, selection.model)
-            )
+            attempt.served()
             stream_error_text = None
             break
 
@@ -937,8 +948,8 @@ async def handle_streaming(  # noqa: C901
             stream_error_code,
             stream_error_text,
             route.source_provider,
-            rate_limit=getattr(config, "routing_rate_limit", None),
-            lane=attempted_lane(selection, route, selection.model),
+            rate_limit=attempt.rate_limit,
+            lane=attempt.lane,
         )
         if decision.action is RefusalAction.RETURN:
             assert decision.response is not None

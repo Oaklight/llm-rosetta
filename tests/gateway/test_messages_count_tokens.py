@@ -330,6 +330,31 @@ async def test_a_dead_host_is_counted_against_its_lane() -> None:
     QUOTA_STATE.clear()
 
 
+@pytest.mark.asyncio
+async def test_a_served_count_clears_its_lane(served: Served) -> None:
+    """The other half of the lane record: an answer clears it.
+
+    A lane sunk by an earlier refusal must not stay sunk once the upstream
+    answers, or one transient failure would outlive the host's recovery.
+    """
+    from types import SimpleNamespace
+
+    from llm_rosetta_gateway.quota.service import note_lane_refusal
+    from llm_rosetta_gateway.quota.state import QUOTA_STATE
+
+    QUOTA_STATE.clear()
+    note_lane_refusal(
+        SimpleNamespace(config_name="Up", name="Up"), 502, None, lane="claude-alias"
+    )
+    assert QUOTA_STATE.rate_limits.upstream_sunk("Up", "claude-alias")
+
+    status, _, _ = await served.post("/v1/messages/count_tokens", _COUNT_BODY)
+
+    assert status == 200
+    assert not QUOTA_STATE.rate_limits.upstream_sunk("Up", "claude-alias")
+    QUOTA_STATE.clear()
+
+
 def _acp_config() -> dict[str, Any]:
     """One ACP lane under an alias, for the local-estimate path."""
     return {
