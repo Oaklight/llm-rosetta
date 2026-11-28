@@ -427,6 +427,18 @@
       <div id="providerBreakdownGrid" class="pb-grid"></div>
     </div>
   </div>
+  <!-- Remove / replace an extension: what is deleted and what is kept (#1829) -->
+  <div class="modal-overlay" id="extManageModal">
+    <div class="modal" style="width:560px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="extManageTitle">
+      <h3 id="extManageTitle"></h3>
+      <div id="extManageBody"></div>
+      <div class="panel-foot">
+        <button class="btn" onclick="closeModal('extManageModal')" data-i18n="btn.cancel">Cancel</button>
+        <button class="btn btn-danger" id="extManageGo" onclick="confirmRemoveExtension()"></button>
+      </div>
+    </div>
+  </div>
+
   <!-- Clear Dumps Confirm Modal -->
   <div class="modal-overlay" id="clearDumpsModal">
     <div class="modal" style="width:400px" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="clearDumpsModalTitle">
@@ -788,7 +800,6 @@
         <button type="button" role="tab" class="active" aria-selected="true" data-view="installed" onclick="setShimsView('installed')" data-i18n="shimPage.installed">Installed</button>
         <button type="button" role="tab" aria-selected="false" data-view="available" onclick="setShimsView('available')" data-i18n="shimPage.available">Available</button>
         <button type="button" role="tab" aria-selected="false" data-view="sources" onclick="setShimsView('sources')" data-i18n="shimPage.sources">Sources</button>
-        <button type="button" role="tab" aria-selected="false" data-view="extensions" onclick="setShimsView('extensions')" data-i18n="shimPage.extensions">Extensions</button>
       </div>
     </div>
 
@@ -817,7 +828,6 @@
 
     <div id="shimGrid" class="shim-grid"></div>
     <div id="shimCatalogGrid" class="shim-grid" hidden></div>
-    <div id="shimExtensionGrid" class="shim-grid ext-grid" hidden></div>
     <div id="shimPageSources" class="shims-sources" hidden>
         <header class="settings-pane-head shims-sources-head">
           <label class="shims-sources-toggle" title="List built-in shims in the inventory">
@@ -826,6 +836,14 @@
           </label>
           <span class="scope-badge server"><span class="dot is-sm" aria-hidden="true"></span><span data-i18n="scope.serverNow">Server config · saves on change</span></span>
         </header>
+        <div class="settings-group" id="shimExtensionsGroup">
+          <div class="settings-group-head">
+            <h4 data-i18n="extMgr.title">Installed extensions</h4>
+            <p data-i18n="extMgr.hint"></p>
+            <button type="button" class="btn btn-sm" onclick="checkExtensionUpdates(this, null)" data-i18n="extMgr.checkAll">Check all for updates</button>
+          </div>
+          <div id="shimExtensionRows" class="ext-rows"></div>
+        </div>
         <div class="settings-group" id="shimManifestGroup">
           <div class="settings-group-head">
             <h4 data-i18n="shimSrc.editorTitle">Manifest sources</h4>
@@ -1403,6 +1421,7 @@
         </div>
       </div>
       <div class="shim-hint" id="provShimHint" hidden></div>
+      <div class="shim-needs-box" id="provShimNeeds" hidden></div>
       <div class="form-row align-end">
         <div class="form-group" style="flex:0 0 69%">
           <label data-i18n="label.proxyUrl">Proxy URL<span class="hint-icon">?<span class="menu hint-popup" data-i18n="hint.docker">In Docker, "localhost" refers to the container itself. Use "host.docker.internal" (macOS/Windows) or "172.17.0.1" (Linux) to reach the host machine.</span></span></label>

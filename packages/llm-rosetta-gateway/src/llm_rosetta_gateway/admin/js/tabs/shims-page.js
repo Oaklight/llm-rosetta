@@ -14,18 +14,25 @@
 
 import { S, _CAP_ICONS } from '../core/state.js';
 import { t, typeLabel, typeLabelAlt } from '../core/i18n.js';
-import { api, copyText, esc, showToast, withBusyButton } from '../core/utils.js';
+import { api, closeModal, copyText, esc, openModal, showToast, withBusyButton } from '../core/utils.js';
 import { cssValue, jsArg, logoUrl, safeUrl } from '../core/html.js';
 import { toggleCard } from '../core/disclosure.js';
-import { extensionCards, installOutcome, installRequest } from '../core/extension-cards.js';
+import { installOutcome, installRequest, programRow } from '../core/extension-cards.js';
+import {
+  checkUpdatesRequest, declaredFor, extensionForVendor, neededPrograms, planRequest,
+  removalSummary, removeRequest, rowActions, skippedDeclaration, updateLine, updateRequest,
+  writeOutcome,
+} from '../core/extension-manage.js';
 import {
   declareSource, deselectVendor, followLatest, notInstalledVendors, pinVendor, selectVendor,
   vendorFacts, vendorMatches, vendorStateKey, vendorTier,
 } from '../core/shim-sources.js';
 
 let _view = 'installed';
-/** The extension cards of the last listing, or `null` before it arrived. */
-let _extensionCards = null;
+/** The extension listing (`GET /admin/api/extensions`), or `null` before it arrived. */
+let _extensions = null;
+/** The last update check, by extension id. */
+let _updates = {};
 let _shims = [];
 let _shimMeta = {};
 let _loaded = false;
@@ -141,59 +148,203 @@ async function loadShimsPage() {
     showToast(String(e.message || e), 'error');
   }
   renderShimsPage();
+  loadExtensions();
 }
 
 function setShimsView(view) {
   _view = view;
   renderShimsPage();
-  if (view === 'extensions') loadExtensionCards();
 }
 
 /** Read the extension listing; it runs each program's version check, so it is
- *  fetched when the view opens, not with the shims. */
-async function loadExtensionCards() {
+ *  fetched after the shims, not with them. */
+async function loadExtensions() {
   try {
     const body = await api.get('/admin/api/extensions');
-    _extensionCards = extensionCards(body && body.extensions);
+    _extensions = Array.isArray(body && body.extensions) ? body.extensions : [];
+    S.extensions = _extensions;
   } catch (e) {
-    _extensionCards = [];
+    _extensions = [];
     showToast(String(e.message || e), 'error');
   }
-  if (_view === 'extensions') renderShimsPage();
+  renderShimsPage();
+  window.refreshShimHint?.();
 }
 
-/** One program of an extension card: its status, versions and install command. */
-function _programHtml(extId, program) {
-  const facts = [];
-  if (program.found) facts.push(t('ext.found', {v: program.found}));
-  if (program.minimum) facts.push(t('ext.minimum', {v: program.minimum}));
-  if (program.command && program.pinned) facts.push(t('ext.pinned', {v: program.pinned}));
-  const command = program.command
-    ? `<div class="ext-cmd"><span class="ext-cmd-label">${esc(t('ext.install'))}</span>`
-      + `<code class="ext-cmd-line">${esc(program.command)}</code>`
-      + `<button type="button" class="btn btn-sm" onclick="copyExtensionCommand(${jsArg(program.command)})">${esc(t('ext.copy'))}</button>`
-      + (program.pinned
-        ? `<button type="button" class="btn btn-sm btn-primary" onclick="installExtensionProgram(this, ${jsArg(extId)}, ${jsArg(program.name)}, ${jsArg(program.pinned)})">${esc(t('ext.installBtn'))}</button>`
-        : '')
-      + `</div>`
+// ── External programs and installed extensions (#1829) ──
+
+/** One required program of a vendor: its state, who needs it, and Install. */
+function _requirementHtml(extId, raw) {
+  const program = programRow(raw);
+  const by = Array.isArray(raw.used_by) ? raw.used_by : [];
+  const minimum = program.minimum ? t('extMgr.atLeast', {v: program.minimum}) : '';
+  const found = program.found && program.status === 'ready' ? ` · ${t('ext.found', {v: program.found})}` : '';
+  const install = program.command && program.pinned
+    ? `<button type="button" class="btn btn-sm btn-primary" onclick="installExtensionProgram(this, ${jsArg(extId)}, ${jsArg(program.name)}, ${jsArg(program.pinned)})">${esc(t('ext.installBtn'))}</button>`
     : (program.status !== 'ready' && program.hint
-      ? `<div class="ext-cmd"><span class="ext-cmd-label">${esc(t('ext.noInstall'))}</span><code class="ext-cmd-line">${esc(program.hint)}</code></div>`
-      : '');
-  return `<div class="ext-program" data-status="${esc(program.status)}">`
-    + `<div class="ext-program-head"><span class="ext-program-name">${esc(program.name)}</span>`
-    + `<span class="tag is-square ext-status ext-status-${esc(program.status)}">${esc(t('ext.status.' + program.status))}</span></div>`
-    + (facts.length ? `<div class="ext-program-facts">${esc(facts.join(' · '))}</div>` : '')
-    + command + `</div>`;
+      ? `<span class="ext-cmd-line">${esc(program.hint)}</span>` : '');
+  return `<div class="ext-requires" data-status="${esc(program.status)}">`
+    + `<span class="tag is-square ext-status ext-status-${esc(program.status)}">${esc(t('ext.status.' + program.status))}</span>`
+    + `<span class="ext-requires-text">${esc(t('extMgr.requires', {name: program.name}))}${esc(minimum)}${esc(found)}`
+    + ` <span class="shim-vendor-meta">(${esc(by.join(', '))})</span></span>`
+    + `<span class="ext-requires-act">${install}</span></div>`;
 }
 
-function _extensionCardHtml(card) {
-  return `<article class="shim-vendor-card ext-card" data-extension="${esc(card.id)}" data-status="${esc(card.status)}">`
-    + `<div class="ext-card-head"><span class="ext-card-name">${esc(card.id)}</span>`
-    + (card.version ? `<span class="shim-vendor-meta">${esc(card.version)}</span>` : '')
-    + `</div>`
-    + card.programs.map((p) => _programHtml(card.id, p)).join('')
-    + `</article>`;
+/** What a vendor's installed extension needs on this host, one line per program. */
+function _requiresHtml(vendor) {
+  const ext = extensionForVendor(_extensions, vendor);
+  const lines = neededPrograms(ext).map((p) => _requirementHtml(ext.id, p));
+  return lines.length ? `<div class="ext-requires-list">${lines.join('')}</div>` : '';
 }
+
+function _tag(text) { return `<span class="ext-chip">${esc(text)}</span>`; }
+
+/** One installed extension, whatever put it on the host. */
+function _extensionRowHtml(ext) {
+  const update = _updates[ext.id] || null;
+  const declared = declaredFor(_sourceCat, ext.id);
+  const skipped = skippedDeclaration(_sourceCat, ext.id);
+  const a = rowActions(ext, update, declared);
+  const line = updateLine(ext, update);
+  const id = jsArg(ext.id);
+  const programs = (ext.external || []).filter((p) => (p.used_by || []).length)
+    .map((p) => `${p.name}: ${t('ext.status.' + programRow(p).status)}`).join(' · ');
+  const origin = t(a.origin === 'image' ? 'extMgr.originImage' : 'extMgr.originDir');
+  const buttons = [
+    a.canUpdate ? `<button type="button" class="btn btn-sm btn-primary" onclick="updateExtensionTo(this, ${id}, ${jsArg(a.updateTo)})">${esc(t('extMgr.update', {v: a.updateTo}))}</button>` : '',
+    `<button type="button" class="btn btn-sm" onclick="checkExtensionUpdates(this, ${id})">${esc(t('extMgr.check'))}</button>`,
+    a.replace === 'declared' ? `<button type="button" class="btn btn-sm" onclick="askRemoveExtension(${id}, true)">${esc(t('extMgr.useDeclared'))}</button>` : '',
+    a.canRemove ? `<button type="button" class="btn btn-sm" onclick="askRemoveExtension(${id}, false)">${esc(t('extMgr.remove'))}</button>` : '',
+  ].join('');
+  const versions = a.versions.length
+    ? `<select class="ext-ver" id="${esc('extVer-' + ext.id)}" aria-label="${esc(t('extMgr.pickVersion'))}">`
+      + a.versions.map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join('')
+      + `</select><button type="button" class="btn btn-sm" onclick="installExtensionVersion(this, ${id})">${esc(t('extMgr.installVersion'))}</button>`
+    : '';
+  return `<div class="ext-row" data-extension="${esc(ext.id)}" data-origin="${esc(a.origin)}">`
+    + `<div class="ext-row-head"><b>${esc(ext.id)}</b>`
+    + `<span class="shim-vendor-meta">${esc(ext.version || '')}</span>${_tag(origin)}`
+    + (ext.shims || []).slice(0, 3).map(_tag).join('')
+    + ((ext.shims || []).length > 3 ? _tag(`+${ext.shims.length - 3}`) : '')
+    + `<span class="ext-row-programs">${esc(programs || t('extMgr.noPrograms'))}</span></div>`
+    + (line ? `<div class="ext-row-line ${esc(line.cls || '')}">${esc(t(line.key, line.params))}</div>` : '')
+    + (skipped ? `<div class="ext-row-line is-warn">${esc(t('extMgr.declaredSkipped', {source: skipped.source, reason: skipped.reason}))}</div>` : '')
+    + (a.removeHint ? `<div class="ext-row-line is-warn">${esc(a.removeHint)}</div>` : '')
+    + `<div class="ext-row-act">${versions}<span class="sp"></span>${buttons}</div></div>`;
+}
+
+function _paintExtensionRows() {
+  const box = document.getElementById('shimExtensionRows');
+  if (!box) return;
+  box.innerHTML = _extensions === null ? ''
+    : _extensions.length
+      ? _extensions.map(_extensionRowHtml).join('')
+      : `<div class="shim-empty">${esc(t('ext.empty'))}</div>`;
+}
+
+/** Re-read the sources and compare; `id` limits it to one extension. */
+async function checkExtensionUpdates(btn, id) {
+  const { url, body } = checkUpdatesRequest(id ? [id] : null);
+  await withBusyButton(btn, async () => {
+    const outcome = writeOutcome(await api.post(url, body));
+    if (!outcome.ok) {
+      showToast(outcome.error, 'error');
+      return;
+    }
+    for (const row of outcome.result.updates || []) _updates[row.id] = row;
+    // A new check also re-reads the sources the panel shows.
+    try {
+      const sc = await api.get('/admin/api/config/shims/source-catalog');
+      _sourceCat = sc && Array.isArray(sc.sources) ? sc : _sourceCat;
+    } catch { /* the rows still say what the check found */ }
+    renderShimsPage();
+  });
+}
+
+async function _afterExtensionWrite() {
+  _updates = {};
+  await loadShimsPage();
+}
+
+async function _installRelease(btn, id, version) {
+  const { url, body } = updateRequest(id, version);
+  await withBusyButton(btn, async () => {
+    showToast(t('extMgr.updating', {id}));
+    const outcome = writeOutcome(await api.post(url, body));
+    if (!outcome.ok) {
+      showToast(outcome.error, 'error');
+      return;
+    }
+    const r = outcome.result;
+    showToast(r.reload_error ? t('extMgr.reloadFailed', {reason: r.reload_error})
+      : t('extMgr.updated', {id, before: r.before || '?', after: r.after || '?'}),
+    r.reload_error ? 'error' : undefined);
+    await _afterExtensionWrite();
+  });
+}
+
+const updateExtensionTo = (btn, id, version) => _installRelease(btn, id, version);
+function installExtensionVersion(btn, id) {
+  const pick = document.getElementById('extVer-' + id);
+  return _installRelease(btn, id, pick ? pick.value : null);
+}
+
+let _pendingRemoval = null;
+
+function _removalBodyHtml(plan, replace) {
+  const sum = removalSummary(plan);
+  const list = (rows, fmt) => `<ul class="ext-paths">${rows.map(fmt).join('')}</ul>`;
+  const keep = sum.keep.length
+    ? `<p><b>${esc(t('extMgr.willKeep'))}</b></p>${list(sum.keep, (k) => `<li><code>${esc(k.path)}</code> — ${esc(k.note)}</li>`)}` : '';
+  return `<p class="ext-dlg-note">${esc(t(replace ? 'extMgr.replaceNote' : 'extMgr.removeNote', {id: plan.id}))}</p>`
+    + `<p><b>${esc(t('extMgr.willDelete'))}</b></p>`
+    + list(sum.del, (d) => `<li><code>${esc(d.path)}</code> <span class="shim-vendor-meta">${esc(d.size)}</span></li>`)
+    + keep;
+}
+
+/** Show what removing the extension deletes and keeps; nothing happens until confirmed. */
+async function askRemoveExtension(id, replace) {
+  const res = await api.get(planRequest(id).url);
+  if (!res || res.error || res.ok === false) {
+    showToast((res && res.error) || t('toast.error'), 'error');
+    return;
+  }
+  if (!res.removable) {
+    showToast(res.hint || t('extMgr.notRemovable'), 'error');
+    return;
+  }
+  _pendingRemoval = { id, replace: Boolean(replace) };
+  document.getElementById('extManageTitle').textContent = t(replace ? 'extMgr.replaceTitle' : 'extMgr.removeTitle', {id, v: res.version || ''});
+  document.getElementById('extManageBody').innerHTML = _removalBodyHtml(res, replace);
+  const go = document.getElementById('extManageGo');
+  go.textContent = t('extMgr.deleteGo', {n: res.delete.length});
+  go.disabled = false;
+  openModal('extManageModal');
+}
+
+async function confirmRemoveExtension() {
+  const pending = _pendingRemoval;
+  if (!pending) return;
+  const go = document.getElementById('extManageGo');
+  await withBusyButton(go, async () => {
+    const { url, body } = removeRequest(pending.id, pending.replace);
+    const outcome = writeOutcome(await api.post(url, body));
+    closeModal('extManageModal');
+    _pendingRemoval = null;
+    if (!outcome.ok) {
+      showToast(outcome.error, 'error');
+      return;
+    }
+    const r = outcome.result;
+    const failed = (r.failed || []).length;
+    showToast(r.reload_error ? t('extMgr.reloadFailed', {reason: r.reload_error})
+      : failed ? t('extMgr.removedPartly', {id: pending.id, n: failed})
+        : t('extMgr.removed', {id: pending.id}),
+    r.reload_error || failed ? 'error' : undefined);
+    await _afterExtensionWrite();
+  });
+}
+
 
 async function copyExtensionCommand(command) {
   await copyText(command, t('ext.copied'));
@@ -207,7 +358,7 @@ async function installExtensionProgram(btn, extId, programName, version) {
     const outcome = installOutcome(await api.post(url, body));
     if (outcome.ok) showToast(t('ext.installDone', {name: programName, v: version}));
     else showToast(outcome.error, 'error');
-    await loadExtensionCards();
+    await loadExtensions();
   });
 }
 
@@ -369,6 +520,7 @@ function _vendorCard(vendor, rows) {
           ${_sourceLink(source, 'shim-repo') || `<span class="shim-vendor-src-path">${esc(t('shimPage.sourceUnknown'))}</span>`}
         </div>` : ''}
         ${_installedManifestLine(vendor)}
+        ${_requiresHtml(vendor)}
         ${rows.map(_formatRow).join('')}
       </div>
     </article>`;
@@ -733,19 +885,20 @@ function renderShimsPage() {
   const toolbar = document.getElementById('shimPageToolbar');
   const count = document.getElementById('shimsCount');
   if (!installed || !catalog) return;
-  const extensions = document.getElementById('shimExtensionGrid');
   installed.hidden = _view !== 'installed';
   catalog.hidden = _view !== 'available';
-  if (extensions) extensions.hidden = _view !== 'extensions';
   if (sources) sources.hidden = _view !== 'sources';
   // Search and tier read the same way on both lists; origin and model type
   // only mean something for loaded shims.
-  if (toolbar) toolbar.hidden = _view === 'sources' || _view === 'extensions';
+  if (toolbar) toolbar.hidden = _view === 'sources';
   const originFilter = document.getElementById('shimOriginFilter');
   if (originFilter) originFilter.hidden = _view !== 'installed';
   const typeFilter = document.getElementById('shimTypeFilter');
   if (typeFilter) typeFilter.hidden = _view !== 'installed';
-  if (_view === 'sources') window.renderShimSources?.();
+  if (_view === 'sources') {
+    window.renderShimSources?.();
+    _paintExtensionRows();
+  }
 
   if (_view === 'installed') {
     const f = _filters();
@@ -795,12 +948,6 @@ function renderShimsPage() {
     catalog.innerHTML = sections.html
       ? sections.html
       : '<div class="shim-empty">' + esc(t('shimSrc.noSources')) + '</div>';
-  } else if (_view === 'extensions' && extensions) {
-    extensions.innerHTML = _extensionCards === null ? ''
-      : _extensionCards.length
-        ? _extensionCards.map(_extensionCardHtml).join('')
-        : '<div class="shim-empty">' + esc(t('ext.empty')) + '</div>';
-    if (count) count.textContent = '';
   } else if (count) {
     count.textContent = '';
   }
@@ -849,6 +996,8 @@ Object.assign(window, {
   loadShimsPage, renderShimsPage, setShimsView, toggleShimVendor, shimToggleEnabled,
   copyExtensionCommand,
   installExtensionProgram,
+  checkExtensionUpdates, updateExtensionTo, installExtensionVersion,
+  askRemoveExtension, confirmRemoveExtension,
   toggleShimSourceVendor, selectShimSourceVendor, deselectShimSourceVendor,
   pinShimSourceVendor, followShimSourceVendor,
   // Repainted on a language change: the per-shim rows carry translated marks.

@@ -3163,6 +3163,27 @@ button.shim-update.unknown { color: var(--tag-warn); }
 .ext-status-ready { color: var(--pos); }
 .ext-status-missing, .ext-status-too_old { color: var(--warn); }
 .ext-status-broken { color: var(--neg); }
+.shim-needs-box { display: flex; flex-direction: column; gap: 6px; margin: 4px 0 8px; }
+.shim-needs { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; padding: 8px 10px; border-left: 3px solid var(--warn); background: var(--surface-2, rgba(200,140,0,.08)); border-radius: 4px; }
+.shim-needs[data-status="broken"] { border-left-color: var(--neg); }
+.ext-requires-list { display: flex; flex-direction: column; gap: 6px; padding: 0 14px 6px; }
+.ext-requires { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; }
+.ext-requires-text { flex: 1; min-width: 0; }
+.ext-requires-act { display: inline-flex; align-items: center; gap: 6px; }
+.ext-rows { display: flex; flex-direction: column; }
+.ext-row { display: flex; flex-direction: column; gap: 6px; padding: 12px 0; border-top: 1px solid var(--hairline); }
+.ext-row:first-child { border-top: 0; }
+.ext-row-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; }
+.ext-row-programs { margin-left: auto; font-size: 11px; color: var(--text-muted); }
+.ext-row-line { font-size: 12px; color: var(--text-muted); }
+.ext-row-line.is-warn { color: var(--warn); }
+.ext-row-line.is-bad { color: var(--neg); }
+.ext-row-act { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.ext-row-act .sp { flex: 1; }
+.ext-chip { font-size: 10px; padding: 1px 6px; border: 1px solid var(--hairline); border-radius: 3px; color: var(--text-muted); }
+.ext-paths { margin: 4px 0 10px; padding-left: 18px; font-size: 12px; }
+.ext-paths code { word-break: break-all; }
+.ext-dlg-note { font-size: 13px; color: var(--text-dim); }
 .ext-status-unknown { color: var(--text-dim); }
 .ext-cmd { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 11px; color: var(--text-muted); }
 .ext-cmd-line {
