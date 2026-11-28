@@ -932,6 +932,35 @@ Each client (identified by API key or IP) is tracked independently. When any win
 
 Rate limit state is visible in the admin panel via `GET /admin/api/rate-limits`.
 
+## Trusted Proxies { #trusted-proxies }
+
+`server.trusted_proxies` lists the reverse proxies in front of the gateway, as CIDRs (a bare address is a single host):
+
+```jsonc
+{
+  "server": {
+    "trusted_proxies": ["10.0.0.0/8", "172.16.0.0/12", "127.0.0.1/32"]
+  }
+}
+```
+
+The client address is resolved once per request, and the per-IP rate limit, the admin login lockout, the request log and the rejected-request log all use it:
+
+- With nothing listed (the default), the client is the TCP peer and every forwarding header is ignored.
+- A peer outside the list is the client, whatever headers it sends.
+- A peer in the list lets `X-Forwarded-For` speak. The chain is read **from the right**, skipping addresses in the list; the first other address is the client. Entries to the left of it are whatever the original caller wrote and are not used.
+- A chain that is empty, entirely trusted, or holds an entry that is not an IP address names no client, and the peer is used.
+- `X-Real-IP` is read only for a trusted peer that sent no usable `X-Forwarded-For`, and never overrides the chain.
+- `X-Forwarded-Proto: https` (which decides the `Secure` flag of the admin session cookie) counts only from a trusted peer.
+
+An invalid entry stops the start and names the item, for example `server.trusted_proxies[1]`. The list is applied again when the config is reloaded.
+
+!!! warning "Behind a reverse proxy"
+    Without a list, every client behind the proxy is the proxy's address: they share one per-IP limit and one admin login counter, so five wrong passwords lock everyone out. List the proxy, using the addresses the gateway actually sees as the TCP peer.
+
+!!! note "Migration"
+    `rate_limit.trust_proxy` was removed. The gateway refuses to start while it is in the config; replace it with `server.trusted_proxies`.
+
 ## Routing Loop Detection
 
 When multiple gateway instances are chained (e.g. a campus gateway forwarding to a cloud gateway), routing loops can occur. The gateway detects these via a hop-count header:
