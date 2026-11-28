@@ -19,6 +19,7 @@ from llm_rosetta_gateway.admin.routes.config import payload
 from llm_rosetta_gateway.admin.routes.config.payload import _normalize_model_entry
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.config.errors import RetiredConfigName
+from _admin_app import fake_app
 
 _CONFIG_PATH = "/srv/gateway/config.jsonc"
 
@@ -51,7 +52,7 @@ def _get_config(monkeypatch, models: dict) -> tuple[int, dict]:
     cfg.credential_visible = False
     cfg.api_keys_db = None
     request = SimpleNamespace(
-        app=SimpleNamespace(
+        app=fake_app(
             gateway_config=cfg,
             auth_state=SimpleNamespace(admin_password=None),
         )

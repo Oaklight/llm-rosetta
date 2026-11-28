@@ -28,6 +28,7 @@ from llm_rosetta_gateway.admin.routes.routing import (
 )
 from llm_rosetta_gateway.config import JsoncConfigIO
 from llm_rosetta_gateway.quota.rate_limit import RateLimitPolicy
+from _admin_app import fake_app
 from llm_rosetta_gateway.routing import (
     Eligibility,
     ModelRoute,
@@ -96,7 +97,7 @@ def _request(
     request_log: Any = None,
     query: dict[str, list[str]] | None = None,
 ) -> SimpleNamespace:
-    app: SimpleNamespace = SimpleNamespace(
+    app = fake_app(
         gateway_config=SimpleNamespace(
             models=models if models is not None else {model: _route()},
             providers=providers if providers is not None else {"a": _provider("a")},

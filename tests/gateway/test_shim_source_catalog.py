@@ -28,6 +28,7 @@ from llm_rosetta_gateway.shims.source_view import (
     vendor_view,
 )
 from llm_rosetta_gateway.shims.sources import ShimSourceStatus
+from _admin_app import fake_app
 
 A = "https://a.example/dist/index.json"
 B = "https://b.example/dist/index.json"
@@ -296,7 +297,7 @@ class TestEndpoint:
             proxy=None,
         )
         request = SimpleNamespace(
-            app=SimpleNamespace(
+            app=fake_app(
                 admin=GatewayAdminContext(),
                 gateway_config=config,
                 shim_source_report=None,

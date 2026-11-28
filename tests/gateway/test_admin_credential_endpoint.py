@@ -32,6 +32,7 @@ from llm_rosetta_gateway.transport.provider_info import (
     openai_auth,
 )
 from llm_rosetta.contracts.auth import AuthContext, AuthExchangeError
+from _admin_app import fake_app
 
 RECORD = {"access_token": "a", "refresh_token": "r", "id_token": "i", "client_id": "c"}
 
@@ -199,7 +200,7 @@ class _Request:
     """The slice of the request object these handlers read."""
 
     def __init__(self, config: Any, body: dict[str, Any] | None = None) -> None:
-        self.app = SimpleNamespace(gateway_config=config)
+        self.app = fake_app(gateway_config=config)
         self._body = body or {}
 
     def json(self) -> dict[str, Any]:
