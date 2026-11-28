@@ -16,7 +16,6 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.observability.profiling import ProfilerState  # noqa: F401 (re-exported)
 
 from ._shared import _qp
 
@@ -28,13 +27,13 @@ from ._shared import _qp
 
 async def get_profiling_status(request: Any) -> Response:
     """Return current profiling status."""
-    state: ProfilerState = request.app.profiler_state
+    state: Any = request.app.profiler_state
     return JSONResponse(state.status())
 
 
 async def enable_profiling(request: Any) -> Response:
     """Enable profiling for the next N requests."""
-    state: ProfilerState = request.app.profiler_state
+    state: Any = request.app.profiler_state
 
     try:
         body = request.json()
@@ -48,13 +47,13 @@ async def enable_profiling(request: Any) -> Response:
 
 async def disable_profiling(request: Any) -> Response:
     """Disable profiling."""
-    state: ProfilerState = request.app.profiler_state
+    state: Any = request.app.profiler_state
     return JSONResponse(state.disable())
 
 
 async def get_profiling_results(request: Any) -> Response:
     """Return profiling results (summaries without HTML/text bodies)."""
-    state: ProfilerState = request.app.profiler_state
+    state: Any = request.app.profiler_state
     summaries = [
         {k: v for k, v in r.items() if k not in ("html", "text")} for r in state.results
     ]
@@ -67,7 +66,7 @@ async def get_profiling_result(request: Any, **kwargs: Any) -> Response:
     Query param ``format=html`` returns the flamegraph HTML directly
     (with ``text/html`` content type).
     """
-    state: ProfilerState = request.app.profiler_state
+    state: Any = request.app.profiler_state
     try:
         index = int(request.path_params["index"])
     except (ValueError, TypeError, KeyError):
@@ -93,7 +92,7 @@ async def download_profiling_results(request: Any) -> Response:
     import io
     import zipfile
 
-    state: ProfilerState = request.app.profiler_state
+    state: Any = request.app.profiler_state
     if not state.results:
         return JSONResponse({"error": "No results to download"}, status_code=404)
 
@@ -116,6 +115,6 @@ async def download_profiling_results(request: Any) -> Response:
 
 async def clear_profiling_results(request: Any) -> Response:
     """Clear all profiling results."""
-    state: ProfilerState = request.app.profiler_state
+    state: Any = request.app.profiler_state
     state.clear_results()
     return JSONResponse({"ok": True})

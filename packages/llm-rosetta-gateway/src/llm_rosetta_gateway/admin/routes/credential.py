@@ -18,12 +18,7 @@ import json
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.config.providers import account_token_for
-from llm_rosetta_gateway.transport.provider_info import TOKEN_PENDING_SENTINEL
-from llm_rosetta_gateway.transport.token_refresh import (
-    force_refresh,
-    public_token_status,
-)
+from llm_rosetta_gateway.admin_api import catalogue
 
 from ._shared import exchange_field_text, exchange_fields, parse_json_body
 from .config.payload import _get_gateway_config
@@ -133,7 +128,7 @@ def _public_status(pinfo: Any) -> dict[str, Any]:
     directly on the provider.  It never hides why the mint failed — the
     sentence is bounded, not removed.
     """
-    return public_token_status(pinfo.token_status)
+    return catalogue().public_token_status(pinfo.token_status)
 
 
 def _command_payload(pinfo: Any, name: str) -> dict[str, Any]:
@@ -246,7 +241,7 @@ async def get_provider_credential(request: Any, name: str) -> Response:
             # digest everywhere else, and a raw subject would be one surface
             # that can be correlated across providers.  ``summary`` is where
             # the exchange may say which account this is, in its own words.
-            "account": account_token_for(exchange.account_id(ctx)),
+            "account": catalogue().account_token_for(exchange.account_id(ctx)),
             "summary": summary,
             "credential": pinfo.credential_token,
             "refresh_interval": pinfo.token_refresh_interval,
@@ -371,7 +366,7 @@ async def refresh_provider_credential(request: Any, name: str) -> Response:
             status_code=409,
         )
 
-    refreshed = await force_refresh(pinfo, debounce=False)
+    refreshed = await catalogue().refresh_credential(pinfo, debounce=False)
     status = _public_status(pinfo)
     payload: dict[str, Any] = {
         "provider": name,
@@ -473,7 +468,7 @@ async def test_provider_credential(request: Any, name: str) -> Response:
             status_code=409,
         )
 
-    refreshed = await force_refresh(pinfo, debounce=False)
+    refreshed = await catalogue().refresh_credential(pinfo, debounce=False)
     status = _public_status(pinfo)
     if not refreshed:
         # No new token, so there is nothing to put to the upstream: probing
@@ -663,7 +658,7 @@ async def _reseed(pinfo: Any) -> str | None:
     try:
         token = await pinfo.auth_exchange.credential(pinfo.auth_context)
     except Exception as exc:  # noqa: BLE001 - the ring is emptied below either way
-        pinfo.key_ring.refresh(TOKEN_PENDING_SENTINEL)
+        pinfo.key_ring.refresh(catalogue().token_pending_sentinel())
         return str(exc)
     pinfo.key_ring.refresh(token)
     return None

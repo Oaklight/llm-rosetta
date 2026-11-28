@@ -7,13 +7,15 @@ import logging
 import os
 import re
 from contextlib import asynccontextmanager
-from typing import Any, overload
+from typing import TYPE_CHECKING, Any, overload
 from collections.abc import AsyncGenerator
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from ...admin_api import admin_context, catalogue
-from ...config import ConfigIO, GatewayConfig, async_config_lock
+
+if TYPE_CHECKING:
+    from ...admin_api import ConfigIO, GatewayConfig
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -245,7 +247,7 @@ async def config_mutate(
     ctx = ConfigMutationContext()
     config_path = _get_config_path(request)
 
-    async with async_config_lock(config_path):
+    async with catalogue().config_lock(config_path):
         try:
             ctx.data = _get_config_io(request).load_raw(config_path)
         except Exception as exc:
@@ -318,9 +320,6 @@ def _config_preflight_error(
     needs it: without it two entries whose ``acp.home`` is defaulted could
     appear distinct when they are not.
     """
-    from ...config.resolve import resolve_provider_identities
-    from ...config.providers import build_provider_info, validate_provider_profiles
-
     providers = data.get("providers") or {}
     enabled = {
         str(name): _expand_env(cfg)
@@ -329,27 +328,7 @@ def _config_preflight_error(
     }
     if not enabled:
         return None
-    try:
-        identities, shim_names = resolve_provider_identities(enabled)
-        built: dict[str, Any] = {}
-        for name, cfg in enabled.items():
-            identity = identities.get(name)
-            if identity is None:  # pragma: no cover - resolver covers every entry
-                continue
-            built[name] = build_provider_info(
-                identity.format,
-                cfg,
-                shim_name=shim_names.get(name),
-                config_name=name,
-                data_dir=data_dir,
-                # Every enabled provider is rebuilt on every save; its
-                # startup notices would otherwise repeat once per save.
-                quiet=True,
-            )
-        validate_provider_profiles(built)
-    except Exception as exc:  # noqa: BLE001 - the message is the caller's to read
-        return str(exc)
-    return None
+    return catalogue().provider_preflight_error(enabled, data_dir)
 
 
 def _mask_api_key(value: str) -> str:

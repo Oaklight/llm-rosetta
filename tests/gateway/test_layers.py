@@ -281,21 +281,7 @@ def test_function_local_upward_imports_only_shrink():
 #: new dependency a reviewer should see, so it fails until it is listed here, and
 #: an entry whose import has gone fails until it is deleted.
 GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
-    "admin": (
-        "admin_api",
-        "config",
-        "jobs",
-        "keystore",
-        "maintenance",
-        "middleware",
-        "observability",
-        "ops",
-        "quota",
-        "routing",
-        "shims",
-        "transport",
-        "updates",
-    ),
+    "admin": ("admin_api",),
     "admin_api": (),
     "app": (
         "admin",
@@ -315,6 +301,7 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
         "shims",
         "surface",
         "transport",
+        "updates",
     ),
     "cli": (
         "app",

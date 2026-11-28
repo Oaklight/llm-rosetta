@@ -20,6 +20,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway.admin_api import catalogue
 
 from ._shared import _qp
 
@@ -84,17 +85,12 @@ async def get_logo(request: Any) -> Response:
             headers=dict(_RESPONSE_HEADERS),
         )
 
-    from llm_rosetta_gateway._vendor.httpclient import (
-        AsyncClient,
-        Response as HttpAnswer,
-    )
-
     try:
-        async with AsyncClient(timeout=5) as client:
+        async with catalogue().http_client(timeout=5) as client:
             answer = await client.get(src)
     except Exception as exc:  # pragma: no cover - network failure path
         return JSONResponse({"error": f"Logo fetch failed: {exc}"}, status_code=502)
-    if not isinstance(answer, HttpAnswer):
+    if not catalogue().is_http_response(answer):
         return JSONResponse({"error": "Logo fetch failed"}, status_code=502)
     # The allow-list has to hold for the URL the bytes came from, not the one
     # the caller asked for: an allowed host that redirects is still a door to

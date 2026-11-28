@@ -20,7 +20,7 @@ from typing import Any
 
 from llm_rosetta.api import leaf_connection, manifest_vocabulary
 
-from llm_rosetta_gateway._vendor.yaml import load as yaml_load
+from llm_rosetta_gateway.admin_api import catalogue
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from .._shared import _qp
@@ -53,7 +53,7 @@ def _read_definition(path: Path) -> dict[str, Any] | None:
     comments beside the vendor's ``auth.py``.
     """
     try:
-        cfg = yaml_load(path.read_text(encoding="utf-8"))
+        cfg = catalogue().yaml_load(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if cfg is None:
@@ -210,7 +210,7 @@ def _leaf_entries(manifest_path: Path) -> list[dict[str, Any]]:
         if meta is None:
             continue
         try:
-            cfg = yaml_load(path.read_text(encoding="utf-8"))
+            cfg = catalogue().yaml_load(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             cfg = {}
         leaves.append(
@@ -258,7 +258,7 @@ def _fields(connection: dict[str, Any], leaves: list[dict[str, Any]]) -> dict[st
 def _connection_of(text: str) -> dict[str, Any]:
     """The ``connection:`` block of a manifest text, or an empty mapping."""
     try:
-        cfg = yaml_load(text)
+        cfg = catalogue().yaml_load(text)
     except Exception:  # noqa: BLE001 - the caller validated the text first
         return {}
     if not isinstance(cfg, dict):

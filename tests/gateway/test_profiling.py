@@ -2,7 +2,7 @@
 
 import pytest
 
-from llm_rosetta_gateway.admin.routes.profiling import ProfilerState
+from llm_rosetta_gateway.observability.profiling import ProfilerState
 
 
 class TestProfilerState:

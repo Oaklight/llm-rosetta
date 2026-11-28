@@ -23,6 +23,7 @@ from llm_rosetta_gateway.shims.shim_sources import (
     resolve_source_config,
     shims_signature,
 )
+from llm_rosetta_gateway.app.admin_catalogue import GatewayCatalogue
 from llm_rosetta_gateway.shims._types import ShimLoadReport, ShimSourceStatus
 from llm_rosetta_gateway.shims.sources import check_source_updates
 from llm_rosetta.api import staging_registry
@@ -228,8 +229,12 @@ class TestReloadWiring:
         request = SimpleNamespace(app=app, json=lambda: {"refresh": "always"})
         new_report = SimpleNamespace(to_dict=lambda: {"sources": []})
 
-        monkeypatch.setattr(route, "apply_shim_sources", lambda *a, **k: new_report)
-        monkeypatch.setattr(route, "shims_signature", lambda raw: "new-signature")
+        monkeypatch.setattr(
+            GatewayCatalogue, "apply_shim_sources", lambda self, *a, **k: new_report
+        )
+        monkeypatch.setattr(
+            GatewayCatalogue, "shims_signature", lambda self, raw: "new-signature"
+        )
 
         async def fake_reload(request, path, *, force_shims=False):
             return SimpleNamespace(providers={})

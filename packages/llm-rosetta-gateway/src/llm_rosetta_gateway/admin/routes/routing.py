@@ -20,13 +20,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ..._vendor.httpserver import JSONResponse, Response
-from ...quota.service import provider_allowance, provider_cooldown
-from ...routing import (
-    lane_eligibility,
-    parse_model_routing,
-    provider_eligibility,
-)
-from ...routing.eligibility import RATE_LIMITED
+from ...admin_api import catalogue
 from ._shared import _qp, config_mutate, parse_json_body
 from .config.payload import _get_gateway_config
 
@@ -66,7 +60,9 @@ def _model_lanes(
     for entry in route.providers:
         pinfo = config.providers.get(entry.name)
         answer = (
-            lane_eligibility(pinfo, entry.name, lane=entry.upstream_model or model)
+            catalogue().lane_eligibility(
+                pinfo, entry.name, lane=entry.upstream_model or model
+            )
             if pinfo is not None
             else None
         )
@@ -75,7 +71,7 @@ def _model_lanes(
             (entry, answer, factor, bool(answer is not None and answer.eligible))
         )
         lane_ready.append(
-            (answer, provider_eligibility(pinfo, entry.name).eligible)
+            (answer, catalogue().provider_eligibility(pinfo, entry.name).eligible)
             if pinfo is not None
             else (None, False)
         )
@@ -111,7 +107,9 @@ def _lane_blocks(lanes: list[tuple[Any, bool]]) -> dict[str, Any]:
     limited = [
         answer
         for answer, ready in lanes
-        if ready and answer is not None and answer.reason == RATE_LIMITED
+        if ready
+        and answer is not None
+        and answer.reason == catalogue().rate_limited_reason()
     ]
     ends = [answer.until for answer in limited if answer.until is not None]
     if limited and len(ends) != len(limited):
@@ -374,7 +372,7 @@ async def list_routable_models(request: Any, **kwargs: Any) -> Response:
 def _lane_row(config: Any, entry: Any, answer: Any, share: float) -> dict[str, Any]:
     """One candidate as the board draws it: what the selector will do with it."""
     pinfo = config.providers.get(entry.name)
-    allowance = provider_allowance(pinfo) if pinfo is not None else None
+    allowance = catalogue().provider_allowance(pinfo) if pinfo is not None else None
     return {
         "name": entry.name,
         "weight": entry.weight,
@@ -385,7 +383,9 @@ def _lane_row(config: Any, entry: Any, answer: Any, share: float) -> dict[str, A
         "reason": answer.reason if answer is not None else None,
         "until": _iso(answer.until) if answer is not None else None,
         "sunk": bool(answer is not None and answer.sunk),
-        "block": provider_cooldown(entry.name, pinfo) if pinfo is not None else None,
+        "block": catalogue().provider_cooldown(entry.name, pinfo)
+        if pinfo is not None
+        else None,
         # Whether the lane may still spend, and every window the vendor
         # reports, tightest first: 0.00 alone does not say which window is
         # spent.
@@ -560,7 +560,7 @@ async def put_model_routing(request: Any, **kwargs: Any) -> Response:
         # the loader reads back: an unknown key here would not mislabel the
         # panel, it would stop the next start.
         try:
-            parse_model_routing(routing, label=f"models.{model}.routing")
+            catalogue().parse_model_routing(routing, label=f"models.{model}.routing")
         except ValueError as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
 

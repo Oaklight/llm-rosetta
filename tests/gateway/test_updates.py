@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 
+from _admin_app import fake_app
 from llm_rosetta_gateway import updates
 
 
@@ -333,7 +334,7 @@ def test_a_build_without_a_changelog_says_so(
 
 
 def _request(body: dict[str, Any] | None = None, config: Any = None) -> Any:
-    app = SimpleNamespace(config=config, ops_ctx=None)
+    app = fake_app(config=config, ops_ctx=None)
 
     def _json() -> dict[str, Any]:
         if body is None:

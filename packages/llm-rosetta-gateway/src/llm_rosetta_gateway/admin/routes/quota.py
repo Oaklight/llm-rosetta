@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.observability.sanitize import scrub_credential_patterns
+from llm_rosetta_gateway.admin_api import catalogue
 
 from ._shared import _qp
 from .config.payload import _get_gateway_config
@@ -34,17 +34,17 @@ async def get_provider_quota(request: Any, name: str) -> Response:
     if name not in getattr(config, "providers", {}):
         return JSONResponse({"error": f"Provider '{name}' not found"}, status_code=404)
 
-    from ...quota.service import read_provider_quota
-
     try:
-        payload = await read_provider_quota(config, name, force=_wants_refresh(request))
+        payload = await catalogue().read_provider_quota(
+            config, name, force=_wants_refresh(request)
+        )
     except Exception as exc:  # noqa: BLE001 - report, never 500 the panel
         return JSONResponse(
             {
                 "provider": name,
                 "supported": True,
                 "status": "error",
-                "error": scrub_credential_patterns(str(exc)),
+                "error": catalogue().scrub_credential_patterns(str(exc)),
             },
             status_code=200,
         )

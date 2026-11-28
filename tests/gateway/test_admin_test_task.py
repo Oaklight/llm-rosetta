@@ -14,6 +14,7 @@ from typing import Any
 
 import pytest
 
+from llm_rosetta_gateway._vendor import httpclient
 from llm_rosetta_gateway.admin.routes import testing
 from llm_rosetta_gateway._vendor.httpclient import (
     CaseInsensitiveDict,
@@ -97,7 +98,7 @@ def _client(monkeypatch: pytest.MonkeyPatch, responses: list[Any]) -> list[Any]:
         async def aclose(self) -> None:
             return None
 
-    monkeypatch.setattr(testing, "AsyncClient", _Client)
+    monkeypatch.setattr(httpclient, "AsyncClient", _Client)
     return calls
 
 

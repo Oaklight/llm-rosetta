@@ -9,14 +9,13 @@ from collections.abc import Mapping
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.admin_api import catalogue
+from llm_rosetta_gateway.admin_api import admin_context, catalogue
 from llm_rosetta.contracts.usage import UsageReport
 
-from ...keystore import INTERNAL_LABEL, INTERNAL_USAGE_BUCKET, KeyStore
 from ._shared import parse_json_body
 
 
-def _get_keystore(request: Any) -> KeyStore:
+def _get_keystore(request: Any) -> Any:
     ks = getattr(request.app, "keystore", None)
     if ks is None:
         raise RuntimeError("KeyStore not configured on this application")
@@ -138,8 +137,8 @@ async def get_key_usage(request: Any) -> Response:
     report = UsageReport.build(
         groups=groups,
         subjects=subjects,
-        internal_subject=INTERNAL_USAGE_BUCKET,
-        internal_label=INTERNAL_LABEL,
+        internal_subject=catalogue().internal_usage_bucket(),
+        internal_label=catalogue().internal_key_label(),
     )
     payload = report.to_payload(key_ids)
     request.app._usage_payload = (time.monotonic(), payload)
@@ -176,11 +175,7 @@ async def create_api_key(request: Any) -> Response:
     entry = await keystore.list_keys()
     created_entry = next((k for k in entry if k["id"] == key_id), {"id": key_id})
     created_entry["key"] = raw_key
-    from llm_rosetta_gateway.ops.keys import OpsKeyCreate
-
-    _ops_ctx = getattr(request.app, "ops_ctx", None)
-    if _ops_ctx is not None:
-        await OpsKeyCreate(_ops_ctx, key_id=key_id, label=label or "").execute()
+    await admin_context(request).record_key_created(key_id, label or "")
     return JSONResponse({"ok": True, "key": created_entry})
 
 
@@ -218,14 +213,10 @@ async def update_api_key(request: Any, **kwargs: Any) -> Response:
         result["allowed_models"] = allowed_models
     if body.get("rate_limit") is not None:
         result["rate_limit"] = rate_limit
-    from llm_rosetta_gateway.ops.keys import OpsKeyUpdate
-
     changed = [
         k for k in ("label", "allowed_models", "rate_limit") if body.get(k) is not None
     ]
-    _ops_ctx = getattr(request.app, "ops_ctx", None)
-    if _ops_ctx is not None:
-        await OpsKeyUpdate(_ops_ctx, key_id=key_id, changed_fields=changed).execute()
+    await admin_context(request).record_key_updated(key_id, changed)
     return JSONResponse(result)
 
 
@@ -242,11 +233,7 @@ async def delete_api_key(request: Any, **kwargs: Any) -> Response:
     if not await keystore.delete(key_id):
         return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
-    from llm_rosetta_gateway.ops.keys import OpsKeyDelete
-
-    _ops_ctx = getattr(request.app, "ops_ctx", None)
-    if _ops_ctx is not None:
-        await OpsKeyDelete(_ops_ctx, key_id=key_id, label=label).execute()
+    await admin_context(request).record_key_deleted(key_id, label)
     return JSONResponse({"ok": True, "deleted": key_id})
 
 
@@ -263,11 +250,7 @@ async def rotate_api_key(request: Any, **kwargs: Any) -> Response:
     if new_key is None:
         return JSONResponse({"error": f"Key '{key_id}' not found"}, status_code=404)
 
-    from llm_rosetta_gateway.ops.keys import OpsKeyRotate
-
-    _ops_ctx = getattr(request.app, "ops_ctx", None)
-    if _ops_ctx is not None:
-        await OpsKeyRotate(_ops_ctx, key_id=key_id, label=label).execute()
+    await admin_context(request).record_key_rotated(key_id, label)
     return JSONResponse({"ok": True, "id": key_id, "key": new_key})
 
 

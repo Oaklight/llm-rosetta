@@ -8,7 +8,7 @@ from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
-from llm_rosetta_gateway.middleware.auth import ADMIN_COOKIE_NAME, request_is_https
+from llm_rosetta_gateway.admin_api import admin_context, catalogue
 
 from ..static import load_admin_html, load_static_file
 from ..themes import registry_payload
@@ -218,7 +218,7 @@ def _set_session_cookie(
     server-side idle window is the only limit on the session.
     """
     resp.set_cookie(
-        ADMIN_COOKIE_NAME,
+        catalogue().admin_cookie_name(),
         token,
         path="/admin",
         httponly=True,
@@ -267,7 +267,7 @@ async def admin_login(request: Any) -> Response:
     _set_session_cookie(
         resp,
         session_id,
-        secure=request_is_https(request),
+        secure=catalogue().request_is_https(request),
         max_age=auth_state.remember_seconds if remember else None,
     )
     return resp
@@ -286,7 +286,7 @@ async def admin_check(request: Any) -> Response:
     """
     auth_state = request.app.auth_state
     requires_auth = bool(auth_state.admin_password)
-    cookie_token = request.cookies.get(ADMIN_COOKIE_NAME, "")
+    cookie_token = request.cookies.get(catalogue().admin_cookie_name(), "")
     session = auth_state.get_session(cookie_token) if cookie_token else None
     return JSONResponse(
         {
@@ -301,17 +301,16 @@ async def admin_check(request: Any) -> Response:
 async def admin_logout(request: Any) -> Response:
     """Clear the admin session cookie and invalidate the session."""
     auth_state = request.app.auth_state
-    cookie_token = request.cookies.get(ADMIN_COOKIE_NAME, "")
+    cookie_token = request.cookies.get(catalogue().admin_cookie_name(), "")
     if cookie_token:
         auth_state.invalidate_session(cookie_token)
     resp = JSONResponse({"ok": True})
-    resp.delete_cookie(ADMIN_COOKIE_NAME, path="/admin")
+    resp.delete_cookie(catalogue().admin_cookie_name(), path="/admin")
     return resp
 
 
 async def change_password(request: Any) -> Response:
     """Change the admin password (requires current password)."""
-    from ...config import async_config_lock
     from ._shared import _get_config_io, _get_config_path, _reload_gateway_config
 
     auth_state = request.app.auth_state
@@ -358,7 +357,7 @@ async def change_password(request: Any) -> Response:
     # Persist to config file
     config_path = _get_config_path(request)
 
-    async with async_config_lock(config_path):
+    async with catalogue().config_lock(config_path):
         try:
             data = _get_config_io(request).load_raw(config_path)
         except Exception as exc:
@@ -379,24 +378,21 @@ async def change_password(request: Any) -> Response:
     # This calls change_password() on AuthState, which invalidates all sessions.
     await _reload_gateway_config(request, config_path)
 
-    # Audit log
-    from llm_rosetta_gateway.ops.security import OpsPasswordChange
-
-    _ops_ctx = getattr(request.app, "ops_ctx", None)
-    if _ops_ctx is not None:
-        await OpsPasswordChange(_ops_ctx).execute()
+    await admin_context(request).record_password_change()
 
     # Create a new session for the current user so they stay logged in, with
     # the lifetime they chose at login: changing a password must not quietly
     # turn a remembered session into one that dies with the browser.
-    old_session = auth_state.get_session(request.cookies.get(ADMIN_COOKIE_NAME, ""))
+    old_session = auth_state.get_session(
+        request.cookies.get(catalogue().admin_cookie_name(), "")
+    )
     was_remembered = bool(old_session and old_session.remember)
     session_id = auth_state.create_session(ip=ip, remember=was_remembered)
     resp = JSONResponse({"ok": True})
     _set_session_cookie(
         resp,
         session_id,
-        secure=request_is_https(request),
+        secure=catalogue().request_is_https(request),
         max_age=auth_state.remember_seconds if was_remembered else None,
     )
     return resp
@@ -413,11 +409,7 @@ async def rotate_token(request: Any) -> Response:
     auth_state.rotate_internal_token()
     request.app.internal_token = auth_state.internal_token
 
-    from llm_rosetta_gateway.ops.security import OpsTokenRotate
-
-    _ops_ctx = getattr(request.app, "ops_ctx", None)
-    if _ops_ctx is not None:
-        await OpsTokenRotate(_ops_ctx).execute()
+    await admin_context(request).record_token_rotation()
 
     return JSONResponse({"ok": True})
 
@@ -427,12 +419,8 @@ async def logout_all_sessions(request: Any) -> Response:
     auth_state = request.app.auth_state
     count = auth_state.invalidate_all_sessions()
 
-    from llm_rosetta_gateway.ops.security import OpsSessionLogoutAll
-
-    _ops_ctx = getattr(request.app, "ops_ctx", None)
-    if _ops_ctx is not None:
-        await OpsSessionLogoutAll(_ops_ctx, count=count).execute()
+    await admin_context(request).record_sessions_cleared(count)
 
     resp = JSONResponse({"ok": True, "sessions_cleared": count})
-    resp.delete_cookie(ADMIN_COOKIE_NAME, path="/admin")
+    resp.delete_cookie(catalogue().admin_cookie_name(), path="/admin")
     return resp
