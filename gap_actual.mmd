@@ -1,0 +1,50 @@
+flowchart LR
+  ADMIN["admin/<br/>routes · js"]
+  ADMINAPI["admin_api.py<br/>AdminContext(5 个成员)"]
+  APP["app/<br/>factory · routes · admin_context"]
+  STATE["app/_state._config<br/>+ app.gateway_config(两个落点)"]
+  RELOAD["admin/routes/_shared.py<br/>_reload_gateway_config(A1)"]
+  LOGIN["admin/routes/auth.py<br/>登录限流:总信任 X-Forwarded-For(A3)"]
+  MWCTX["middleware/request_context<br/>extract_client_ip(遵守 trust_proxy)"]
+  PROXY["proxy/<br/>engine · streaming"]
+  PIPES["pipelines/typed.py"]
+  RELAY["app/routes_compact + routes_count_tokens<br/>(各 140-150 行,复杂度 22-23)"]
+  CONFIG["config/providers.py<br/>build_provider_info 294 行,复杂度 49<br/>+ 约 20 个 ACP lane 辅助(A8)"]
+  PINFO["transport/provider_info.py<br/>ProviderInfo:58 个属性"]
+  TRANSPORT["transport/acp.py(2535 行)"]
+  ACPQ["transport/acp_quota.py<br/>进程级 _READINGS / _LOCKS(A9)"]
+  QUOTA["quota/service.py"]
+  MAINT["maintenance/startup.py(716 行)<br/>ProviderNotReady(A5)"]
+  OPS["ops/<br/>OpsBase 子类"]
+  OPSLOG["observability/ops_log"]
+  EXTCORE["core extensions/_index.select_entry<br/>最新兼容版,含预发布"]
+  EXTGW["gateway shims/manifest_sources<br/>select_release:稳定优先"]
+  EXTDIR[("/config/extensions")]
+  ADMIN --> ADMINAPI
+  APP -->|"适配器"| ADMINAPI
+  ADMIN -->|"读 request.app.* 28 种,约 113 处(A1)"| APP
+  ADMIN -->|"67 对 allowlist 导入(A1)"| CONFIG
+  ADMIN -->|"旧 allowlist 导入(A1)"| QUOTA
+  ADMIN --> RELOAD
+  RELOAD -->|"写 5 个 app 属性(A1)"| STATE
+  APP --> STATE
+  ADMINAPI -.->|"回退 import app.admin_context(A6)"| APP
+  ADMIN --> LOGIN
+  LOGIN -->|"不调用(A3)"| MWCTX
+  PROXY -->|"自己记账(A4)"| QUOTA
+  PIPES -->|"自己记账(A4)"| QUOTA
+  RELAY -->|"自己记账(A4)"| QUOTA
+  APP --> CONFIG
+  CONFIG --> PINFO
+  CONFIG -->|"ACP lane 解析在 config 里(A8)"| TRANSPORT
+  TRANSPORT --> ACPQ
+  ACPQ -->|"状态放错地方(A9)"| QUOTA
+  CONFIG -.->|"ProviderNotReady 函数内导入 7 处(A5)"| MAINT
+  PIPES -.->|"函数内导入(A5)"| MAINT
+  PROXY --> OPS
+  OPS --> OPSLOG
+  ADMIN -->|"绕过 ops 直接写(A7)"| OPSLOG
+  APP -->|"绕过 ops 直接写(A7)"| OPSLOG
+  EXTCORE -->|"ext install / update"| EXTDIR
+  EXTGW -->|"重建 shim 来源(A2:两套策略)"| EXTDIR
+  linkStyle 2,3,4,6,8,10,11,12,13,16,18,19,20,23,24,26 stroke:#c0392b,stroke-width:2px

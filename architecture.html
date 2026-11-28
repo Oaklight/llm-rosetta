@@ -92,8 +92,8 @@
 <div class="wrap">
 <header>
   <div class="eyebrow">LLM-Rosetta · Architecture</div>
-  <h1>现状:core、gateway 与 admin 的组件和依赖</h1>
-  <p class="lede">三张图都画 master 的实际结构,不画目标态。红色表示还没解决的反向依赖,绿色表示 core 与扩展之间的接线,虚线是函数内的懒加载。合并任一分层 PR 后,本页按 master 更新。</p>
+  <h1>现状:core、gateway 与 admin 的组件和依赖,以及 gateway 的理想与现实</h1>
+  <p class="lede">前三张图画 master 的实际结构,不画目标态;第 4、5 张把 #1830 评审出的问题画成“现实”与“理想”两张对照图。红色表示还没解决的反向依赖,绿色表示 core 与扩展之间的接线,虚线是函数内的懒加载。合并任一分层 PR 后,本页按 master 更新。</p>
   <div class="meta">
     <span>现状快照:<code>master @ master</code></span>
     <span>分支:<code>docs_arch</code></span>
@@ -106,7 +106,7 @@
     <span><i class="green"></i>接线(注册处理器)</span>
   </div>
 </header>
-<nav class="toc"><a href="#core">01 core 现状:组件与依赖</a><a href="#gateway">02 gateway 后端的组件与关系</a><a href="#admin">03 admin 页面与组件的关系</a></nav>
+<nav class="toc"><a href="#core">01 core 现状:组件与依赖</a><a href="#gateway">02 gateway 后端的组件与关系</a><a href="#admin">03 admin 页面与组件的关系</a><a href="#gap_actual">04 gateway 现实:偏离设计的地方(#1830 的 A1–A9)</a><a href="#gap_ideal">05 gateway 理想:#1830 完成之后</a></nav>
 
 <section id="core">
   <h2><span class="num">01</span>core 现状:组件与依赖</h2>
@@ -414,6 +414,118 @@
   T_DASH --&gt; A_MET
   A_OPS --&gt; B_OBS
   T_DASH --&gt; A_REQ
+</pre></div></div>
+  </div>
+</section>
+<section id="gap_actual">
+  <h2><span class="num">04</span>gateway 现实:偏离设计的地方(#1830 的 A1–A9)</h2>
+  <p class="sub">红线是评审量出来的问题:每条标了 #1830 里的编号。</p><details class="notes"><summary>说明与已解决项(11 条)</summary><ul><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。</li><li>A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。</li><li>A2:核心与 gateway 各有一套扩展安装策略,写同一个目录。</li><li>A3:admin 登录限流总是信任 X-Forwarded-For,不看 trust_proxy。</li><li>A4:上游尝试的记账有 5 份拷贝。</li><li>A5:ProviderNotReady 放在 716 行的启动管理器里,7 处函数内导入。</li><li>A6:admin_api 的回退导入让 admin、app、admin_api 成环。</li><li>A7:4 处直接写 ops_log,绕过 ops 层。</li><li>A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。</li><li>A9:quota 的进程级状态放在 transport 里。</li><li>图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。</li></ul></details>
+  <div class="panel">
+    <span class="tag now">现状 · master @ 215c832bbe</span>
+    <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_actual"> <span id="z-gap_actual">100%</span></label></div>
+    <div class="scroll"><div class="stage" id="stage-gap_actual"><pre class="mermaid" id="m-gap_actual">flowchart LR
+  ADMIN["admin/&lt;br/&gt;routes · js"]
+  ADMINAPI["admin_api.py&lt;br/&gt;AdminContext(5 个成员)"]
+  APP["app/&lt;br/&gt;factory · routes · admin_context"]
+  STATE["app/_state._config&lt;br/&gt;+ app.gateway_config(两个落点)"]
+  RELOAD["admin/routes/_shared.py&lt;br/&gt;_reload_gateway_config(A1)"]
+  LOGIN["admin/routes/auth.py&lt;br/&gt;登录限流:总信任 X-Forwarded-For(A3)"]
+  MWCTX["middleware/request_context&lt;br/&gt;extract_client_ip(遵守 trust_proxy)"]
+  PROXY["proxy/&lt;br/&gt;engine · streaming"]
+  PIPES["pipelines/typed.py"]
+  RELAY["app/routes_compact + routes_count_tokens&lt;br/&gt;(各 140-150 行,复杂度 22-23)"]
+  CONFIG["config/providers.py&lt;br/&gt;build_provider_info 294 行,复杂度 49&lt;br/&gt;+ 约 20 个 ACP lane 辅助(A8)"]
+  PINFO["transport/provider_info.py&lt;br/&gt;ProviderInfo:58 个属性"]
+  TRANSPORT["transport/acp.py(2535 行)"]
+  ACPQ["transport/acp_quota.py&lt;br/&gt;进程级 _READINGS / _LOCKS(A9)"]
+  QUOTA["quota/service.py"]
+  MAINT["maintenance/startup.py(716 行)&lt;br/&gt;ProviderNotReady(A5)"]
+  OPS["ops/&lt;br/&gt;OpsBase 子类"]
+  OPSLOG["observability/ops_log"]
+  EXTCORE["core extensions/_index.select_entry&lt;br/&gt;最新兼容版,含预发布"]
+  EXTGW["gateway shims/manifest_sources&lt;br/&gt;select_release:稳定优先"]
+  EXTDIR[("/config/extensions")]
+  ADMIN --&gt; ADMINAPI
+  APP --&gt;|"适配器"| ADMINAPI
+  ADMIN --&gt;|"读 request.app.* 28 种,约 113 处(A1)"| APP
+  ADMIN --&gt;|"67 对 allowlist 导入(A1)"| CONFIG
+  ADMIN --&gt;|"旧 allowlist 导入(A1)"| QUOTA
+  ADMIN --&gt; RELOAD
+  RELOAD --&gt;|"写 5 个 app 属性(A1)"| STATE
+  APP --&gt; STATE
+  ADMINAPI -.-&gt;|"回退 import app.admin_context(A6)"| APP
+  ADMIN --&gt; LOGIN
+  LOGIN --&gt;|"不调用(A3)"| MWCTX
+  PROXY --&gt;|"自己记账(A4)"| QUOTA
+  PIPES --&gt;|"自己记账(A4)"| QUOTA
+  RELAY --&gt;|"自己记账(A4)"| QUOTA
+  APP --&gt; CONFIG
+  CONFIG --&gt; PINFO
+  CONFIG --&gt;|"ACP lane 解析在 config 里(A8)"| TRANSPORT
+  TRANSPORT --&gt; ACPQ
+  ACPQ --&gt;|"状态放错地方(A9)"| QUOTA
+  CONFIG -.-&gt;|"ProviderNotReady 函数内导入 7 处(A5)"| MAINT
+  PIPES -.-&gt;|"函数内导入(A5)"| MAINT
+  PROXY --&gt; OPS
+  OPS --&gt; OPSLOG
+  ADMIN --&gt;|"绕过 ops 直接写(A7)"| OPSLOG
+  APP --&gt;|"绕过 ops 直接写(A7)"| OPSLOG
+  EXTCORE --&gt;|"ext install / update"| EXTDIR
+  EXTGW --&gt;|"重建 shim 来源(A2:两套策略)"| EXTDIR
+  linkStyle 2,3,4,6,8,10,11,12,13,16,18,19,20,23,24,26 stroke:#c0392b,stroke-width:2px
+</pre></div></div>
+  </div>
+</section>
+<section id="gap_ideal">
+  <h2><span class="num">05</span>gateway 理想:#1830 完成之后</h2>
+  <p class="sub">同一批节点,红线都没有了。</p><details class="notes"><summary>说明与已解决项(2 条)</summary><ul><li>admin 只经 AdminContext;热重载、已生效配置和审计写入各有唯一的家;记账是一个 attempt_upstream;ACP lane 解析在 transport 一侧;quota 的状态回到 quota/,通过启动时注册的接收器进入 transport;ProviderNotReady 在叶子模块;扩展安装只有核心一套策略。</li><li>这是目标态,不是承诺的实现细节;每一项落地后,对应的红线从上一张图里去掉。</li></ul></details>
+  <div class="panel">
+    <span class="tag ">目标 · #1830</span>
+    <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_ideal"> <span id="z-gap_ideal">100%</span></label></div>
+    <div class="scroll"><div class="stage" id="stage-gap_ideal"><pre class="mermaid" id="m-gap_ideal">flowchart LR
+  ADMIN["admin/&lt;br/&gt;routes · js"]
+  ADMINAPI["admin_api.py&lt;br/&gt;AdminContext:reload_config 等"]
+  APP["app/&lt;br/&gt;factory · routes · admin_context&lt;br/&gt;热重载与唯一的已生效配置"]
+  LOGIN["admin/routes/auth.py&lt;br/&gt;限流状态在 app.auth_state,有上限"]
+  MWCTX["middleware/request_context&lt;br/&gt;extract_client_ip(遵守 trust_proxy)"]
+  PROXY["proxy/&lt;br/&gt;engine · streaming&lt;br/&gt;attempt_upstream(...)(A4)"]
+  PIPES["pipelines/typed.py"]
+  RELAY["app/routes_compact + routes_count_tokens"]
+  CONFIG["config/providers.py&lt;br/&gt;只做解析与装配"]
+  ACPPROF["transport/acp_profile.py&lt;br/&gt;ACP lane 解析(A8)"]
+  PINFO["transport/provider_info.py&lt;br/&gt;ProviderInfo:auth · ACP · quota 子记录"]
+  TRANSPORT["transport/acp.py"]
+  SINK["transport 的 quota 接收器&lt;br/&gt;(启动时由 quota 注册,A9)"]
+  QUOTA["quota/&lt;br/&gt;读数与锁在这里"]
+  PSTATE["provider_state.py(叶子)&lt;br/&gt;ProviderInitState · ProviderNotReady(A5)"]
+  MAINT["maintenance/startup.py"]
+  OPS["ops/&lt;br/&gt;唯一的审计写入者(A7)"]
+  OPSLOG["observability/ops_log"]
+  EXTCORE["core 的唯一安装策略&lt;br/&gt;select_entry + 预发布开关(A2)"]
+  EXTGW["gateway shims/&lt;br/&gt;调用核心策略"]
+  EXTDIR[("/config/extensions")]
+  ADMIN --&gt;|"只经这一条"| ADMINAPI
+  APP --&gt;|"适配器(必须存在,无回退)"| ADMINAPI
+  ADMIN --&gt; LOGIN
+  LOGIN --&gt; MWCTX
+  PROXY --&gt; QUOTA
+  PIPES --&gt;|"attempt_upstream"| PROXY
+  RELAY --&gt;|"attempt_upstream"| PROXY
+  APP --&gt; CONFIG
+  CONFIG --&gt; ACPPROF
+  CONFIG --&gt; PINFO
+  ACPPROF --&gt; TRANSPORT
+  TRANSPORT --&gt; SINK
+  QUOTA -.-&gt;|"注册"| SINK
+  CONFIG --&gt; PSTATE
+  PIPES --&gt; PSTATE
+  MAINT --&gt; PSTATE
+  PROXY --&gt; OPS
+  APP --&gt;|"启动 · 关闭 · 重载"| OPS
+  ADMINAPI --&gt;|"经 AdminContext"| OPS
+  OPS --&gt; OPSLOG
+  EXTGW --&gt; EXTCORE
+  EXTCORE --&gt; EXTDIR
 </pre></div></div>
   </div>
 </section>

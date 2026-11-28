@@ -8,6 +8,12 @@ sections = [
   "分层来自 tests/gateway/test_layers.py,只能向下导入。每个包都会用 core,图里只画了几条代表性的到 CORE 的线。admin 除了 admin_api 之外还有一批旧 allowlist 导入(config、keystore、maintenance、middleware、observability、ops、quota、routing、shims、transport、updates),名单只允许缩小,图里没画。shims 里的 manifest_sources 是要被 index.json 取代的部分。"),
  ("admin", "3. admin 页面与组件的关系",
   "已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。GET /admin/api/extensions 后端已有,目前没有页面调用它。"),
+("gap_actual", "4. gateway 现实:偏离设计的地方(#1830 的 A1–A9)",
+  "红线是评审量出来的问题:每条标了 #1830 里的编号。数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。A2:核心与 gateway 各有一套扩展安装策略,写同一个目录。A3:admin 登录限流总是信任 X-Forwarded-For,不看 trust_proxy。A4:上游尝试的记账有 5 份拷贝。A5:ProviderNotReady 放在 716 行的启动管理器里,7 处函数内导入。A6:admin_api 的回退导入让 admin、app、admin_api 成环。A7:4 处直接写 ops_log,绕过 ops 层。A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。A9:quota 的进程级状态放在 transport 里。图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。",
+  "现状 · master @ 215c832bbe", "now"),
+("gap_ideal", "5. gateway 理想:#1830 完成之后",
+  "同一批节点,红线都没有了。admin 只经 AdminContext;热重载、已生效配置和审计写入各有唯一的家;记账是一个 attempt_upstream;ACP lane 解析在 transport 一侧;quota 的状态回到 quota/,通过启动时注册的接收器进入 transport;ProviderNotReady 在叶子模块;扩展安装只有核心一套策略。这是目标态,不是承诺的实现细节;每一项落地后,对应的红线从上一张图里去掉。",
+  "目标 · #1830", ""),
 ]
 
 try:
@@ -24,7 +30,8 @@ def note_html(text):
 
 blocks = ""
 toc = ""
-for n, (key, title, note) in enumerate(sections, 1):
+for n, (key, title, note, *extra) in enumerate(sections, 1):
+    tag_text, tag_class = extra if extra else (f"现状 · master @ {master}", "now")
     label = title.split(". ", 1)[1]
     toc += f'<a href="#{key}">{n:02d} {html.escape(label)}</a>'
     blocks += f"""
@@ -32,7 +39,7 @@ for n, (key, title, note) in enumerate(sections, 1):
   <h2><span class="num">{n:02d}</span>{html.escape(label)}</h2>
   {note_html(note)}
   <div class="panel">
-    <span class="tag now">现状 · master @ {master}</span>
+    <span class="tag {tag_class}">{html.escape(tag_text)}</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="{key}"> <span id="z-{key}">100%</span></label></div>
     <div class="scroll"><div class="stage" id="stage-{key}"><pre class="mermaid" id="m-{key}">{src(key)}</pre></div></div>
   </div>
@@ -49,8 +56,8 @@ page = """<!doctype html>
 <div class="wrap">
 <header>
   <div class="eyebrow">LLM-Rosetta · Architecture</div>
-  <h1>现状:core、gateway 与 admin 的组件和依赖</h1>
-  <p class="lede">三张图都画 master 的实际结构,不画目标态。红色表示还没解决的反向依赖,绿色表示 core 与扩展之间的接线,虚线是函数内的懒加载。合并任一分层 PR 后,本页按 master 更新。</p>
+  <h1>现状:core、gateway 与 admin 的组件和依赖,以及 gateway 的理想与现实</h1>
+  <p class="lede">前三张图画 master 的实际结构,不画目标态;第 4、5 张把 #1830 评审出的问题画成“现实”与“理想”两张对照图。红色表示还没解决的反向依赖,绿色表示 core 与扩展之间的接线,虚线是函数内的懒加载。合并任一分层 PR 后,本页按 master 更新。</p>
   <div class="meta">
     <span>现状快照:<code>master @ """ + master + """</code></span>
     <span>分支:<code>docs_arch</code></span>

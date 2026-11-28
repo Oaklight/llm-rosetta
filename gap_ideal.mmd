@@ -1,0 +1,44 @@
+flowchart LR
+  ADMIN["admin/<br/>routes · js"]
+  ADMINAPI["admin_api.py<br/>AdminContext:reload_config 等"]
+  APP["app/<br/>factory · routes · admin_context<br/>热重载与唯一的已生效配置"]
+  LOGIN["admin/routes/auth.py<br/>限流状态在 app.auth_state,有上限"]
+  MWCTX["middleware/request_context<br/>extract_client_ip(遵守 trust_proxy)"]
+  PROXY["proxy/<br/>engine · streaming<br/>attempt_upstream(...)(A4)"]
+  PIPES["pipelines/typed.py"]
+  RELAY["app/routes_compact + routes_count_tokens"]
+  CONFIG["config/providers.py<br/>只做解析与装配"]
+  ACPPROF["transport/acp_profile.py<br/>ACP lane 解析(A8)"]
+  PINFO["transport/provider_info.py<br/>ProviderInfo:auth · ACP · quota 子记录"]
+  TRANSPORT["transport/acp.py"]
+  SINK["transport 的 quota 接收器<br/>(启动时由 quota 注册,A9)"]
+  QUOTA["quota/<br/>读数与锁在这里"]
+  PSTATE["provider_state.py(叶子)<br/>ProviderInitState · ProviderNotReady(A5)"]
+  MAINT["maintenance/startup.py"]
+  OPS["ops/<br/>唯一的审计写入者(A7)"]
+  OPSLOG["observability/ops_log"]
+  EXTCORE["core 的唯一安装策略<br/>select_entry + 预发布开关(A2)"]
+  EXTGW["gateway shims/<br/>调用核心策略"]
+  EXTDIR[("/config/extensions")]
+  ADMIN -->|"只经这一条"| ADMINAPI
+  APP -->|"适配器(必须存在,无回退)"| ADMINAPI
+  ADMIN --> LOGIN
+  LOGIN --> MWCTX
+  PROXY --> QUOTA
+  PIPES -->|"attempt_upstream"| PROXY
+  RELAY -->|"attempt_upstream"| PROXY
+  APP --> CONFIG
+  CONFIG --> ACPPROF
+  CONFIG --> PINFO
+  ACPPROF --> TRANSPORT
+  TRANSPORT --> SINK
+  QUOTA -.->|"注册"| SINK
+  CONFIG --> PSTATE
+  PIPES --> PSTATE
+  MAINT --> PSTATE
+  PROXY --> OPS
+  APP -->|"启动 · 关闭 · 重载"| OPS
+  ADMINAPI -->|"经 AdminContext"| OPS
+  OPS --> OPSLOG
+  EXTGW --> EXTCORE
+  EXTCORE --> EXTDIR
