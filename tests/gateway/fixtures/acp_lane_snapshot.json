@@ -1,0 +1,431 @@
+{
+ "a_plain_http_lane": {
+  "acp_argv": null,
+  "acp_argv_custom": false,
+  "acp_env": {},
+  "acp_env_unset": [],
+  "acp_harden": true,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": null,
+  "managed_auth_state_dir": null,
+  "transport": "http",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "a_shim_that_declares_the_lane_facts": {
+  "acp_argv": [
+   "agy",
+   "acp",
+   "--dangerously-skip-permissions=false"
+  ],
+  "acp_argv_custom": false,
+  "acp_env": {
+   "A": "<data>/acp/lane/a",
+   "C": "entry",
+   "LLM_ROSETTA_ACP_HOME": "<data>/acp/lane"
+  },
+  "acp_env_unset": [
+   "B",
+   "D"
+  ],
+  "acp_harden": true,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {
+   "mode": "text"
+  },
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": "<data>/acp/lane",
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {
+   "dir": "<data>/acp/lane",
+   "extra": 2,
+   "keep": 1
+  },
+  "transport_owner": null
+ },
+ "absolute_home": {
+  "acp_argv": null,
+  "acp_argv_custom": false,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/elsewhere/one"
+  },
+  "acp_env_unset": [],
+  "acp_harden": true,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/elsewhere/one",
+  "managed_acp_state_dir": null,
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "acp_block_not_a_mapping": {
+  "error": "Provider 'lane': acp must be a mapping of settings, got ['x']"
+ },
+ "agy_is_hardened_by_name": {
+  "acp_argv": [
+   "agy",
+   "acp"
+  ],
+  "acp_argv_custom": true,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/acp/lane"
+  },
+  "acp_env_unset": [],
+  "acp_harden": true,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": "<data>/acp/lane",
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "agy_unhardened_with_its_own_profile": {
+  "acp_argv": [
+   "agy",
+   "acp",
+   "--gemini-dir",
+   "<data>/mine"
+  ],
+  "acp_argv_custom": true,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/mine"
+  },
+  "acp_env_unset": [],
+  "acp_harden": false,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/mine",
+  "managed_acp_state_dir": null,
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "agy_unhardened_without_a_profile_flag": {
+  "error": "Provider 'lane': acp.harden: false runs agy as written, so the profile it reads is not knowable here. Name it with --gemini-dir <dir>, or leave hardening on."
+ },
+ "an_http_lane_ignores_the_acp_settings": {
+  "acp_argv": null,
+  "acp_argv_custom": false,
+  "acp_env": {
+   "A": "{acp_home}"
+  },
+  "acp_env_unset": [],
+  "acp_harden": true,
+  "acp_max_sessions": null,
+  "acp_processes": 2,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": null,
+  "managed_auth_state_dir": null,
+  "transport": "http",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "antigravity_shim": {
+  "acp_argv": [
+   "agy",
+   "acp",
+   "--dangerously-skip-permissions=false"
+  ],
+  "acp_argv_custom": false,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/acp/lane"
+  },
+  "acp_env_unset": [],
+  "acp_harden": true,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": "<data>/acp/lane",
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "antigravity_shim_with_its_own_command": {
+  "acp_argv": [
+   "agy-1.7",
+   "acp"
+  ],
+  "acp_argv_custom": true,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/acp/lane"
+  },
+  "acp_env_unset": [],
+  "acp_harden": false,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": "<data>/acp/lane",
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "bad_command": {
+  "error": "Provider 'lane': acp_argv must be a non-empty list of strings, got ['a', '']"
+ },
+ "bare": {
+  "acp_argv": null,
+  "acp_argv_custom": false,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/acp/lane"
+  },
+  "acp_env_unset": [],
+  "acp_harden": true,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": "<data>/acp/lane",
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "bare_without_a_data_dir": {
+  "acp_argv": null,
+  "acp_argv_custom": false,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<fallback>/lane"
+  },
+  "acp_env_unset": [],
+  "acp_harden": true,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<fallback>/lane",
+  "managed_acp_state_dir": null,
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "block_command_beats_top_level": {
+  "acp_argv": [
+   "new-agent"
+  ],
+  "acp_argv_custom": true,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/acp/lane"
+  },
+  "acp_env_unset": [],
+  "acp_harden": false,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": "<data>/acp/lane",
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "custom_command_in_the_block": {
+  "acp_argv": [
+   "my-agent",
+   "serve"
+  ],
+  "acp_argv_custom": true,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/acp/lane"
+  },
+  "acp_env_unset": [],
+  "acp_harden": false,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": "<data>/acp/lane",
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "environment_not_strings": {
+  "error": "Provider 'lane': acp_env must map strings to strings; 'A' has value 1"
+ },
+ "environment_with_the_home_placeholder": {
+  "acp_argv": null,
+  "acp_argv_custom": false,
+  "acp_env": {
+   "A": "<data>/acp/lane/x",
+   "B": "<data>/acp/lane",
+   "LLM_ROSETTA_ACP_HOME": "<data>/acp/lane"
+  },
+  "acp_env_unset": [],
+  "acp_harden": true,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": "<data>/acp/lane",
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "gemini_dir_and_home_disagree": {
+  "error": "Provider 'lane': acp.home and the --gemini-dir in the agent command name different directories ('/b' and '/a'); keep one, or make them equal"
+ },
+ "gemini_dir_relative": {
+  "error": "Provider 'lane': the --gemini-dir in the agent command must be an absolute path (or move the profile with acp.home), got 'rel'"
+ },
+ "gemini_dir_twice": {
+  "error": "Provider 'lane': the agent command names --gemini-dir more than once (['/a', '/b']); keep one profile"
+ },
+ "harden_not_a_boolean": {
+  "error": "Provider 'lane': acp.harden must be true or false, got 'yes'"
+ },
+ "home_climbs_out": {
+  "error": "Provider 'lane': acp.home must stay under the data directory; use an absolute path to point elsewhere, got '../out'"
+ },
+ "limit_processes_zero": {
+  "error": "Provider 'lane': acp.processes must be >= 1, got 0"
+ },
+ "limit_ttl_not_a_number": {
+  "error": "Provider 'lane': acp.session_ttl must be a number of seconds, got 'soon'"
+ },
+ "limits": {
+  "acp_argv": null,
+  "acp_argv_custom": false,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/acp/lane"
+  },
+  "acp_env_unset": [],
+  "acp_harden": true,
+  "acp_max_sessions": 7,
+  "acp_processes": 3,
+  "acp_session_meta": {},
+  "acp_session_ttl": 60.0,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": "<data>/acp/lane",
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "relative_home": {
+  "acp_argv": null,
+  "acp_argv_custom": false,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/profiles/one"
+  },
+  "acp_env_unset": [],
+  "acp_harden": true,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/profiles/one",
+  "managed_acp_state_dir": null,
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "top_level_command": {
+  "acp_argv": [
+   "old-agent",
+   "acp"
+  ],
+  "acp_argv_custom": true,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/acp/lane"
+  },
+  "acp_env_unset": [],
+  "acp_harden": false,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": "<data>/acp/lane",
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ },
+ "transport_options_not_an_object": {
+  "error": "Provider 'lane': transport_options must be an object, got 3"
+ },
+ "transport_options_with_the_home_placeholder": {
+  "acp_argv": null,
+  "acp_argv_custom": false,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/acp/lane"
+  },
+  "acp_env_unset": [],
+  "acp_harden": true,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": "<data>/acp/lane",
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {
+   "env": {
+    "DIR": "<data>/acp/lane"
+   },
+   "n": [
+    1,
+    "<data>/acp/lane"
+   ]
+  },
+  "transport_owner": null
+ },
+ "unknown_transport": {
+  "error": "Provider 'lane': unknown transport 'carrier-pigeon': transport 'carrier-pigeon' is not one this gateway ships (acp, http); only the shims of an extension can name an extension's transport."
+ },
+ "wrapper_forced_to_harden": {
+  "acp_argv": [
+   "run-agy.sh"
+  ],
+  "acp_argv_custom": true,
+  "acp_env": {
+   "LLM_ROSETTA_ACP_HOME": "<data>/acp/lane"
+  },
+  "acp_env_unset": [],
+  "acp_harden": true,
+  "acp_max_sessions": null,
+  "acp_processes": 1,
+  "acp_session_meta": {},
+  "acp_session_ttl": null,
+  "acp_state_dir": "<data>/acp/lane",
+  "managed_acp_state_dir": "<data>/acp/lane",
+  "managed_auth_state_dir": null,
+  "transport": "acp",
+  "transport_options": {},
+  "transport_owner": null
+ }
+}
