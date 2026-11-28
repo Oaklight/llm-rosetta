@@ -37,26 +37,15 @@ flowchart TB
   UP(["上游提供方"])
   subgraph SERVING["serving"]
     ADMINAPI["admin_api.py<br/>AdminContext 协议;不导入 app 与 observability"]
-    ADMIN["admin/<br/>routes/ · js/ · admin.html<br/>legacy allowlist 导入 + 读 request.app.* 28 种,约 113 处,其中 12 处直接读 gateway_config(A1,shrink-only 清单)"]
+    ADMIN["admin/<br/>routes/ · js/ · admin.html<br/>只导入 admin_api;仍有 107 处读 request.app.<attr>(61 对,shrink-only 清单),其中包含对 gateway_config 的直接读取(A1)"]
     APP["app/<br/>factory · routes_llm · routes_typed · routes_models<br/>routes_compact · routes_count_tokens · routes_health · tasks · admin_context<br/>已生效配置只有一个家 app.gateway_config"]
   end
   ADMIN -->|"唯一允许"| ADMINAPI
-  ADMIN -->|"legacy allowlist 导入(A1)"| CONFIG
-  ADMIN --> JOBS
-  ADMIN --> KEYSTORE
-  ADMIN --> MAINT
-  ADMIN --> MW
-  ADMIN --> MT
-  ADMIN --> OBS
-  ADMIN --> OPS
-  ADMIN --> QUOTA
-  ADMIN --> ROUTING
-  ADMIN --> SHIMS
-  ADMIN --> TRANSPORT
-  ADMIN --> UPD
   APP -.->|"只有 factory.py"| ADMIN
+  APP --> JOBS
   APP -->|"内置类型处理函数表 BUILTIN_HANDLERS"| PIPES
   APP --> SURF
+  APP --> UPD
   CLI -.->|"serve"| APP
   CONFIG --> MW
   CONFIG --> MT
@@ -82,4 +71,4 @@ flowchart TB
   TRANSPORT --> CORE
   CLIENT -->|HTTP| APP
   PROXY --> CORE
-  linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,34 stroke:#c0392b,stroke-width:2px
+  linkStyle 23 stroke:#c0392b,stroke-width:2px

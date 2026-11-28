@@ -402,7 +402,7 @@ flowchart TB
 </section>
 <section id="gap_actual">
   <h2><span class="num">04</span>gateway 现实:当前的完整架构与仍偏离设计的地方</h2>
-  <p class="sub">和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题:A1 admin 的边界:legacy allowlist 里还有一批 admin 导入,admin 读 request.app 的 28 种属性约 113 处(有 shrink-only 的扫描测试;热重载是 AdminContext.reload_config,已生效配置只有一个家 app.gateway_config,但 admin 路由里还有 12 处直接读它);ProviderInfo 的 58 个属性是已知现状,决定不拆。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。</li><li>为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。</li></ul></details>
+  <p class="sub">和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题:A1 admin 的边界:admin 只导入 admin、admin_api 和 _vendor.httpserver(纯规则的测试),但路由里仍有 107 处读 request.app.&lt;attr&gt;(61 对,shrink-only 的扫描测试;热重载是 AdminContext.reload_config,已生效配置只有一个家 app.gateway_config,但 admin 路由里还有直接读它的);ProviderInfo 的 58 个属性是已知现状,决定不拆。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>读取数来自 tests/gateway/test_admin_app_reads.py 的 _APP_READS(origin/master c72f32a265 之后)。</li><li>为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。</li></ul></details>
   <div class="panel">
     <span class="tag now">现状 · master @ master</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_actual"> <span id="z-gap_actual">100%</span></label></div>
@@ -445,26 +445,15 @@ flowchart TB
   UP(["上游提供方"])
   subgraph SERVING["serving"]
     ADMINAPI["admin_api.py&lt;br/&gt;AdminContext 协议;不导入 app 与 observability"]
-    ADMIN["admin/&lt;br/&gt;routes/ · js/ · admin.html&lt;br/&gt;legacy allowlist 导入 + 读 request.app.* 28 种,约 113 处,其中 12 处直接读 gateway_config(A1,shrink-only 清单)"]
+    ADMIN["admin/&lt;br/&gt;routes/ · js/ · admin.html&lt;br/&gt;只导入 admin_api;仍有 107 处读 request.app.&lt;attr&gt;(61 对,shrink-only 清单),其中包含对 gateway_config 的直接读取(A1)"]
     APP["app/&lt;br/&gt;factory · routes_llm · routes_typed · routes_models&lt;br/&gt;routes_compact · routes_count_tokens · routes_health · tasks · admin_context&lt;br/&gt;已生效配置只有一个家 app.gateway_config"]
   end
   ADMIN --&gt;|"唯一允许"| ADMINAPI
-  ADMIN --&gt;|"legacy allowlist 导入(A1)"| CONFIG
-  ADMIN --&gt; JOBS
-  ADMIN --&gt; KEYSTORE
-  ADMIN --&gt; MAINT
-  ADMIN --&gt; MW
-  ADMIN --&gt; MT
-  ADMIN --&gt; OBS
-  ADMIN --&gt; OPS
-  ADMIN --&gt; QUOTA
-  ADMIN --&gt; ROUTING
-  ADMIN --&gt; SHIMS
-  ADMIN --&gt; TRANSPORT
-  ADMIN --&gt; UPD
   APP -.-&gt;|"只有 factory.py"| ADMIN
+  APP --&gt; JOBS
   APP --&gt;|"内置类型处理函数表 BUILTIN_HANDLERS"| PIPES
   APP --&gt; SURF
+  APP --&gt; UPD
   CLI -.-&gt;|"serve"| APP
   CONFIG --&gt; MW
   CONFIG --&gt; MT
@@ -490,7 +479,7 @@ flowchart TB
   TRANSPORT --&gt; CORE
   CLIENT --&gt;|HTTP| APP
   PROXY --&gt; CORE
-  linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,34 stroke:#c0392b,stroke-width:2px
+  linkStyle 23 stroke:#c0392b,stroke-width:2px
 </pre></div></div>
   </div>
 </section>
@@ -547,6 +536,7 @@ flowchart TB
   APP --&gt; JOBS
   APP --&gt;|"内置类型处理函数表 BUILTIN_HANDLERS"| PIPES
   APP --&gt; SURF
+  APP --&gt; UPD
   CLI -.-&gt;|"serve"| APP
   CONFIG --&gt; MW
   CONFIG --&gt; MT

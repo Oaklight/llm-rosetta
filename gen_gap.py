@@ -19,7 +19,7 @@ OUT = pathlib.Path(__file__).parent
 ID = g.ID
 
 ACTUAL_PATCH = {
-    "ADMIN": "legacy allowlist 导入 + 读 request.app.* 28 种,约 113 处,其中 12 处直接读 gateway_config(A1,shrink-only 清单)",
+    "ADMIN": "只导入 admin_api;仍有 107 处读 request.app.<attr>(61 对,shrink-only 清单),其中包含对 gateway_config 的直接读取(A1)",
     "APP": "已生效配置只有一个家 app.gateway_config",
     "CONFIG": "providers.py:build_provider_info 装配 ProviderInfo;ACP lane 解析在 transport/acp/lane.py",
     "TRANSPORT": "provider_info.py:ProviderInfo 58 个属性(不拆) · acp/transport.py 2535 行",
@@ -30,7 +30,6 @@ ACTUAL_EXTRA = [
 ]
 ACTUAL_RED_EXTRA = set()  # plus every admin edge except admin_api, computed from the table
 ACTUAL_LABEL = {
-    ("admin", "config"): "legacy allowlist 导入(A1)",
 }
 
 IDEAL_PATCH = {
