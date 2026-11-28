@@ -507,3 +507,42 @@ class GatewayAdminContext:
             "version": declared.install.version,
             **done,
         }
+
+    # -- the running services (the observability routes) ---------------------
+
+    def persistence(self) -> Any | None:
+        """The persistence manager, or ``None`` in memory mode."""
+        return getattr(self._app, "persistence", None)
+
+    def metrics(self) -> Any:
+        """The metrics collector."""
+        return getattr(self._app, "metrics", None)
+
+    def request_log(self) -> Any:
+        """The request log."""
+        return getattr(self._app, "request_log", None)
+
+    def ops_log(self) -> Any | None:
+        """The ops log."""
+        return getattr(self._app, "ops_log", None)
+
+    def job_manager(self) -> Any | None:
+        """The background job manager, or ``None`` without persistence."""
+        return getattr(self._app, "jobs", None)
+
+    def rate_limit_state(self) -> Any | None:
+        """The rate limiter state, or ``None`` when rate limiting is off."""
+        return getattr(self._app, "rate_limit_state", None)
+
+    def profiler_state(self) -> Any:
+        """The request profiler's state."""
+        return getattr(self._app, "profiler_state", None)
+
+    def capture_state(self) -> Any:
+        """The content capture state."""
+        return getattr(self._app, "capture_state", None)
+
+    def admin_password_is_set(self) -> bool:
+        """Whether an admin password protects the panel."""
+        auth_state = getattr(self._app, "auth_state", None)
+        return bool(getattr(auth_state, "admin_password", None))

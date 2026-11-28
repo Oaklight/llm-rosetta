@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 
 from llm_rosetta_gateway.admin.routes import jobs as routes
+from llm_rosetta_gateway.app.admin_context import GatewayAdminContext
 from llm_rosetta_gateway.jobs import JOB_CANCELLED, JobManager
 from llm_rosetta_gateway.observability.persistence import PersistenceManager
 from llm_rosetta_gateway.observability.visibility import MAX_TS, MIN_TS
@@ -18,6 +19,7 @@ from llm_rosetta_gateway.observability.visibility import MAX_TS, MIN_TS
 class _App:
     def __init__(self, jobs: Any = None) -> None:
         self.jobs = jobs
+        self.admin = GatewayAdminContext(self)
 
 
 class _Request:

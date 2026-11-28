@@ -100,7 +100,7 @@ async def post_maintenance_run(request: Any, **kwargs: Any) -> Response:
 
 async def backfill_keys_last_used(request: Any, **kwargs: Any) -> Response:
     """The keys tab's button, over the maintenance step rather than beside it."""
-    if getattr(request.app, "persistence", None) is None:
+    if admin_context(request).persistence() is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
     result = await admin_context(request).run_maintenance_step(
         "api_keys.backfill_last_used"
@@ -112,7 +112,7 @@ async def backfill_keys_last_used(request: Any, **kwargs: Any) -> Response:
 
 async def backfill_dump_log_ids(request: Any, **kwargs: Any) -> Response:
     """The logs tab's button, over the maintenance step rather than beside it."""
-    if getattr(request.app, "persistence", None) is None:
+    if admin_context(request).persistence() is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
     result = await admin_context(request).run_maintenance_step(
         "error_dumps.backfill_log_ids"

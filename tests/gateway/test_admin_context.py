@@ -310,3 +310,45 @@ class TestEachAppKeepsItsOwnLaneAllowance:
         assert lane.record_lane_reading(update) is True
         assert lane.lane_reading() is not None
         assert second.gateway_config.providers["lane"].lane_reading() is None
+
+
+class TestTheServicesTheObservabilityRoutesRead:
+    """``AdminServiceState``: each member is the service the app holds, else ``None``."""
+
+    _MEMBERS = {
+        "persistence": "persistence",
+        "metrics": "metrics",
+        "request_log": "request_log",
+        "ops_log": "ops_log",
+        "job_manager": "jobs",
+        "rate_limit_state": "rate_limit_state",
+        "profiler_state": "profiler_state",
+        "capture_state": "capture_state",
+    }
+
+    @pytest.mark.parametrize("member", sorted(_MEMBERS))
+    def test_a_member_returns_what_the_app_holds(self, member):
+        marker = object()
+        app = SimpleNamespace(**{self._MEMBERS[member]: marker})
+        assert getattr(GatewayAdminContext(app), member)() is marker
+
+    @pytest.mark.parametrize("member", sorted(_MEMBERS))
+    def test_a_member_is_none_when_the_app_has_no_such_service(self, member):
+        assert getattr(GatewayAdminContext(SimpleNamespace()), member)() is None
+        assert getattr(GatewayAdminContext(), member)() is None
+
+    def test_the_admin_password_is_set_only_when_it_is_non_empty(self):
+        def context(**state):
+            return GatewayAdminContext(
+                SimpleNamespace(auth_state=SimpleNamespace(**state))
+            )
+
+        assert context(admin_password="pw").admin_password_is_set() is True
+        assert context(admin_password="").admin_password_is_set() is False
+        assert context(admin_password=None).admin_password_is_set() is False
+        assert GatewayAdminContext(SimpleNamespace()).admin_password_is_set() is False
+
+    def test_the_context_implements_the_protocol(self):
+        from llm_rosetta_gateway.admin_api import AdminServiceState
+
+        assert isinstance(GatewayAdminContext(SimpleNamespace()), AdminServiceState)

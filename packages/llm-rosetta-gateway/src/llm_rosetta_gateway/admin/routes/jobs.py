@@ -5,13 +5,14 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway.admin_api import admin_context
 
 from ._shared import _qp
 
 
 def _manager(request: Any) -> Any:
     """The job manager, or ``None`` when this app has no persistence."""
-    return getattr(request.app, "jobs", None)
+    return admin_context(request).job_manager()
 
 
 def _unavailable() -> Response:

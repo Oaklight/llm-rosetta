@@ -513,6 +513,51 @@ class AdminShimSources(Protocol):
         ...
 
 
+@runtime_checkable
+class AdminServiceState(Protocol):
+    """The gateway's running services, which the observability routes read.
+
+    Each returns the service the app holds, or ``None`` when the app was built
+    without it (an in-memory gateway has no persistence and no job manager).
+    """
+
+    def persistence(self) -> Any | None:
+        """The persistence manager, or ``None`` in memory mode."""
+        ...
+
+    def metrics(self) -> Any:
+        """The metrics collector; ``None`` only for an app built by hand without it."""
+        ...
+
+    def request_log(self) -> Any:
+        """The request log; ``None`` only for an app built by hand without it."""
+        ...
+
+    def ops_log(self) -> Any | None:
+        """The ops log."""
+        ...
+
+    def job_manager(self) -> Any | None:
+        """The background job manager, or ``None`` without persistence."""
+        ...
+
+    def rate_limit_state(self) -> Any | None:
+        """The rate limiter state, or ``None`` when rate limiting is off."""
+        ...
+
+    def profiler_state(self) -> Any:
+        """The request profiler's state; ``None`` only for an app built by hand without it."""
+        ...
+
+    def capture_state(self) -> Any:
+        """The content capture state; ``None`` only for an app built by hand without it."""
+        ...
+
+    def admin_password_is_set(self) -> bool:
+        """Whether an admin password protects the panel."""
+        ...
+
+
 class ExtensionInstallRefused(Exception):
     """An install the panel asked for did not happen.
 
@@ -645,6 +690,7 @@ class AdminContext(
     AdminJobs,
     AdminMaintenance,
     AdminServices,
+    AdminServiceState,
     AdminShimSources,
     Protocol,
 ):
