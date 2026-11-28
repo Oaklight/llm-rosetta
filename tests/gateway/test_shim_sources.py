@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from llm_rosetta_gateway.app.admin_context import GatewayAdminContext
 from llm_rosetta_gateway.admin.routes.config import (
     _shim_status_payload,
     _validate_shim_sources_body,
@@ -216,6 +217,7 @@ class TestReloadWiring:
         from llm_rosetta_gateway.admin.routes.config import shims as route
 
         app = SimpleNamespace(
+            admin=GatewayAdminContext(),
             config_path="/tmp/config.jsonc",
             shim_source_report="old-report",
             shim_source_signature="old-signature",
@@ -245,6 +247,7 @@ class TestReloadWiring:
         from llm_rosetta_gateway.shims import shim_sources as shim_sources_module
 
         app = SimpleNamespace(
+            admin=GatewayAdminContext(),
             shim_source_report="old-report",
             shim_source_signature="old-signature",
             shim_update_check={"sources": [], "checked_at": 1.0},

@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from llm_rosetta_gateway.app.admin_context import GatewayAdminContext
 from llm_rosetta_gateway.admin.routes._shared import _build_provider_entry
 
 COMMAND = ["python3", "token.py"]
@@ -413,6 +414,7 @@ def _save_request(tmp_path, raw: dict, body: dict, name: str = "p") -> SimpleNam
     path = tmp_path / "config.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
     app = SimpleNamespace(
+        admin=GatewayAdminContext(),
         config_path=str(path),
         config_io=JsoncConfigIO(),
         gateway_config=None,

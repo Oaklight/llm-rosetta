@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Generic, Protocol, runtime_checkable
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -74,17 +74,22 @@ async def test_create_app_wires_the_admin_context(tmp_path):
     assert isinstance(app.admin, GatewayAdminContext)
 
 
-def test_a_hand_built_app_gets_the_stock_adapter_and_one_warning(monkeypatch):
-    log = MagicMock()
-    monkeypatch.setattr(admin_api, "logger", log)
-    monkeypatch.setattr(admin_api, "_fallback_reported", False)
+def test_an_app_without_an_admin_context_is_refused():
     request = SimpleNamespace(app=SimpleNamespace())
-    assert isinstance(admin_context(request), GatewayAdminContext)
-    assert isinstance(admin_context(request), GatewayAdminContext)
-    assert log.warning.call_count == 1
-    wired = SimpleNamespace(app=SimpleNamespace(admin=GatewayAdminContext()))
-    admin_context(wired)
-    assert log.warning.call_count == 1
+    with pytest.raises(RuntimeError, match="app.admin"):
+        admin_context(request)
+
+
+def test_the_context_the_app_carries_is_the_one_returned():
+    context = GatewayAdminContext()
+    request = SimpleNamespace(app=SimpleNamespace(admin=context))
+    assert admin_context(request) is context
+
+
+def test_admin_api_does_not_reach_into_app():
+    source = Path(admin_api.__file__).read_text()
+    assert "app.admin_context" not in source
+    assert "from .app" not in source
 
 
 @pytest.mark.asyncio

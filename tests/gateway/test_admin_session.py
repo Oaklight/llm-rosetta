@@ -14,6 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from llm_rosetta_gateway.app.admin_context import GatewayAdminContext
 from llm_rosetta_gateway._vendor.httpserver import Response
 from llm_rosetta_gateway.admin.routes.auth import _set_session_cookie, admin_check
 from llm_rosetta_gateway.admin.routes.config.settings import put_server_settings
@@ -188,6 +189,7 @@ def _request(tmp_path, raw: dict, body: dict) -> SimpleNamespace:
     path = tmp_path / "config.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
     app = SimpleNamespace(
+        admin=GatewayAdminContext(),
         config_path=str(path),
         config_io=JsoncConfigIO(),
         gateway_config=None,
