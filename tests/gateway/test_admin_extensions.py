@@ -1052,3 +1052,125 @@ class TestWhichShimsNeedWhich:
 
         assert row["origin"] == "image"
         assert "rebuild the image" in row["remove_hint"]
+
+
+def _switch_config(**server):
+    from llm_rosetta_gateway.config import GatewayConfig
+
+    return GatewayConfig({"providers": {}, "models": {}, "server": server})
+
+
+class TestTheInstallSwitch:
+    """``server.extension_install`` gates the two paths that install (#1830)."""
+
+    @pytest.fixture
+    def installs(self, monkeypatch) -> list:
+        import llm_rosetta.api as api
+        from llm_rosetta_gateway.ops import extensions as ops_extensions
+
+        seen: list = []
+        monkeypatch.setattr(
+            ops_extensions,
+            "install_cli",
+            lambda ext_id, program, **kw: (
+                seen.append(("cli", ext_id))
+                or _result(program.name, program.install.version)
+            ),
+        )
+        monkeypatch.setattr(api, "load_index", lambda url: {"index": url})
+        monkeypatch.setattr(
+            api,
+            "install_from_index",
+            lambda ext_id, index, *, version=None: (
+                seen.append(("index", ext_id))
+                or [SimpleNamespace(id=ext_id, version=version)]
+            ),
+        )
+        monkeypatch.setattr(
+            GatewayAdminContext,
+            "shim_source_catalogue",
+            lambda self, config, report, *, refresh=False: CATALOGUE,
+        )
+        return seen
+
+    @staticmethod
+    def _app(**server):
+        app, _ = _ops_app()
+        app.gateway_config = _switch_config(**server)
+        return app
+
+    def test_a_config_without_the_key_allows_installs(self):
+        assert _switch_config().extension_install is True
+
+    def test_the_key_can_turn_installs_off(self):
+        assert _switch_config(extension_install=False).extension_install is False
+
+    @pytest.mark.parametrize("value", ["false", 0, "no"])
+    def test_a_value_that_is_not_a_boolean_is_refused(self, value):
+        with pytest.raises(ValueError, match="server.extension_install"):
+            _switch_config(extension_install=value)
+
+    def test_install_cli_is_refused_when_off_and_runs_nothing(self, ext_dir, installs):
+        _install(ext_dir, "acme", _manifest_with_cli("acme"))
+        status, body = _call(
+            extensions_route.post_extension_install_cli,
+            self._app(extension_install=False),
+            "acme",
+            body={"program": "acmecli"},
+        )
+        assert (status, body["reason"]) == (403, "install_disabled")
+        assert "server.extension_install" in body["error"]
+        assert installs == []
+
+    def test_install_cli_runs_when_on_and_when_the_key_is_absent(
+        self, ext_dir, installs
+    ):
+        _install(ext_dir, "acme", _manifest_with_cli("acme"))
+        for server in ({"extension_install": True}, {}):
+            status, _ = _call(
+                extensions_route.post_extension_install_cli,
+                self._app(**server),
+                "acme",
+                body={"program": "acmecli"},
+            )
+            assert status == 200
+        assert installs == [("cli", "acme"), ("cli", "acme")]
+
+    def test_update_is_refused_when_off_and_installs_nothing(
+        self, ext_dir, installs, reloads
+    ):
+        _install(ext_dir, "acme")
+        status, body = _call(
+            extensions_route.post_extension_update,
+            self._app(extension_install=False),
+            "acme",
+            body={},
+        )
+        assert (status, body["reason"]) == (403, "install_disabled")
+        assert "server.extension_install" in body["error"]
+        assert installs == [] and reloads == []
+
+    def test_update_runs_when_on_and_when_the_key_is_absent(
+        self, ext_dir, installs, reloads
+    ):
+        _install(ext_dir, "acme")
+        for server in ({"extension_install": True}, {}):
+            status, _ = _call(
+                extensions_route.post_extension_update,
+                self._app(**server),
+                "acme",
+                body={},
+            )
+            assert status == 200
+        assert installs == [("index", "acme"), ("index", "acme")]
+
+    def test_listing_removal_and_the_update_check_keep_working_when_off(
+        self, ext_dir, installs, reloads
+    ):
+        _install(ext_dir, "acme")
+        app = self._app(extension_install=False)
+        listing = _call(extensions_route.get_extensions, app)
+        plan = _call(extensions_route.get_extension_removal_plan, app, "acme")
+        check = _call(extensions_route.post_extension_check_updates, app, body={})
+        removed = _call(extensions_route.post_extension_remove, app, "acme", body={})
+        assert [r[0] for r in (listing, plan, check, removed)] == [200] * 4

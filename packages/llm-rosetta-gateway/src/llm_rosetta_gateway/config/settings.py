@@ -160,6 +160,19 @@ def _non_negative_int(value: Any, default: int, label: str) -> int:
     return parsed
 
 
+def _parse_extension_install(value: Any) -> bool:
+    """Parse ``server.extension_install``; only a boolean is accepted.
+
+    A string such as ``"false"`` is truthy, so it would leave installs on while
+    the operator meant them off.
+    """
+    if not isinstance(value, bool):
+        raise ValueError(
+            f"config: server.extension_install must be true or false, got {value!r}"
+        )
+    return value
+
+
 def apply_server_settings(config: GatewayConfig, _server: dict[str, Any]) -> None:
     """Parse server section: host, port, proxy, timeouts, CORS, etc."""
     config.host = _server.get("host", "0.0.0.0")
@@ -185,6 +198,14 @@ def apply_server_settings(config: GatewayConfig, _server: dict[str, Any]) -> Non
     # default: enabling changes which upstream a multi-format model
     # reaches.
     config.prefer_same_format = bool(_server.get("prefer_same_format", False))
+
+    # Whether the admin API may install or update an extension.  On by
+    # default: that is what every earlier release did.  ``false`` refuses the
+    # install-cli and update endpoints; listing, removal and the update check
+    # keep working.
+    config.extension_install = _parse_extension_install(
+        _server.get("extension_install", True)
+    )
 
     # The proxies whose forwarding headers are believed; empty trusts none and
     # the client is the TCP peer.

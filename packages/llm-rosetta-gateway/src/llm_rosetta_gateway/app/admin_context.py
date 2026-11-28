@@ -19,6 +19,12 @@ _REFUSED = {
     "no_install_spec": 409,
 }
 
+#: Refusal of an install while ``server.extension_install`` is false.
+_INSTALL_OFF = (
+    "installing extensions through the gateway is switched off: "
+    "set server.extension_install to true to allow it"
+)
+
 
 class GatewayAdminContext:
     """Serve the admin panel's needs from the gateway's own state.
@@ -215,6 +221,14 @@ class GatewayAdminContext:
         finally:
             self._installing.discard(ext_id)
 
+    def _require_install_enabled(self) -> None:
+        """Refuse an install or update when ``server.extension_install`` is off."""
+        from ..admin_api import ExtensionInstallRefused
+
+        config = self.served_config()
+        if config is not None and not config.extension_install:
+            raise ExtensionInstallRefused(403, "install_disabled", _INSTALL_OFF)
+
     def _ops_ctx(self) -> Any:
         from ..ops import OpsContext
 
@@ -288,6 +302,7 @@ class GatewayAdminContext:
         from ..ops import OpsExtensionUpdate
         from ..shims.extension_view import locate_extension
 
+        self._require_install_enabled()
         found = locate_extension(ext_id)
         if found is None:
             raise ExtensionInstallRefused(
@@ -335,6 +350,7 @@ class GatewayAdminContext:
         from ..ops import OpsContext, OpsExtensionCliInstall
         from ..shims.extension_view import ProgramRequestError, declared_program
 
+        self._require_install_enabled()
         try:
             declared = declared_program(ext_id, program)
         except ProgramRequestError as exc:

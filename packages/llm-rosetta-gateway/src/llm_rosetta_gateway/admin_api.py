@@ -76,7 +76,8 @@ class ExtensionInstallRefused(Exception):
     """An install the panel asked for did not happen.
 
     Attributes:
-        status: The HTTP status that fits: 404 (no such extension or program),
+        status: The HTTP status that fits: 403 (``server.extension_install``
+            is false), 404 (no such extension or program),
             400 (the program must be named), 409 (nothing to install, or one
             install of that extension is already running) or 502 (the install
             ran and failed).
