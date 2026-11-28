@@ -23,7 +23,8 @@ import pytest
 
 from llm_rosetta_gateway.routing.eligibility import provider_eligibility
 from llm_rosetta_gateway.config import GatewayConfig
-from llm_rosetta_gateway.maintenance.startup import DeferredStartup, ProviderInitState
+from llm_rosetta_gateway.maintenance.startup import DeferredStartup
+from llm_rosetta_gateway.transport.provider_readiness import ProviderInitState
 from llm_rosetta_gateway.transport.token_refresh import reset_reactive_state
 
 TYPED_TYPES = ("embeddings", "rerank", "decisions")

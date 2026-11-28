@@ -18,6 +18,7 @@ from llm_rosetta.api import ProviderType
 from llm_rosetta.contracts.routing import ResolvedRoute
 
 from .providers import BASE_FORMATS
+from ..transport.provider_readiness import ProviderNotReady
 from ..transport import ProviderInfo
 from .errors import RetiredConfigName
 from .schema import ProviderIdentity
@@ -315,8 +316,6 @@ def resolve(
         ProviderNotReady: If no provider for the model is ready.
     """
     from typing import cast
-
-    from ..maintenance.startup import ProviderNotReady
 
     model = ctx.model
     source_provider = cast(ProviderType, ctx.source_format)

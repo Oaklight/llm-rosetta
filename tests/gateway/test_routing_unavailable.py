@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from llm_rosetta_gateway.maintenance.startup import ProviderInitState
+from llm_rosetta_gateway.transport.provider_readiness import ProviderInitState
 from llm_rosetta_gateway.quota.state import QUOTA_STATE
 from llm_rosetta_gateway.routing import SelectionContext
 from llm_rosetta_gateway.routing.strategy import ModelRoute, ProviderEntry

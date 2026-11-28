@@ -24,6 +24,7 @@ from ..routing import (
     SelectionContext,
     RulesStage,
 )
+from ..transport.provider_readiness import ProviderNotReady
 from ..transport import ProviderInfo
 from .parse import (
     DEFAULT_CAPABILITIES as _DEFAULT_CAPABILITIES,
@@ -551,7 +552,6 @@ class GatewayConfig:
             ctx.with_failover_excluded(excluded)
         self._typed_selection.run(ctx)
         if ctx.chosen is None:
-            from ..maintenance.startup import ProviderNotReady
             from ..routing.unavailable import classify
 
             raise ProviderNotReady(

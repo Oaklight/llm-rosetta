@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..transport.provider_readiness import ProviderNotReady
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -45,7 +47,6 @@ def _resolve_or_none(
     selection: SelectionContext, resolve: _Resolve
 ) -> tuple[ResolvedRoute, ProviderInfo] | None:
     """Ask the resolver, and read "nothing left" as an answer rather than an error."""
-    from ..maintenance.startup import ProviderNotReady
 
     try:
         return resolve(selection)

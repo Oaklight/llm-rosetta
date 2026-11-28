@@ -437,7 +437,7 @@ class TestTheClientIsToldWhy:
     """
 
     def test_the_third_refusal_turns_the_answer_into_a_rate_limit(self):
-        from llm_rosetta_gateway.maintenance.startup import ProviderNotReady
+        from llm_rosetta_gateway.transport.provider_readiness import ProviderNotReady
 
         # One lane, so the disable is the whole route: with a sibling the
         # request would fail over and never ask this question.

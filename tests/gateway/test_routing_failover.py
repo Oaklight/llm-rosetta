@@ -8,7 +8,7 @@ nothing left reports "no target" rather than raising out of the failure path.
 
 from __future__ import annotations
 
-from llm_rosetta_gateway.maintenance.startup import ProviderNotReady
+from llm_rosetta_gateway.transport.provider_readiness import ProviderNotReady
 from llm_rosetta_gateway.routing import SelectionContext
 from llm_rosetta_gateway.routing.failover import (
     reselect_after_credential_refusal,

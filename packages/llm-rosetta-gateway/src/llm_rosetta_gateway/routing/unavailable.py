@@ -31,6 +31,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
+from ..transport.provider_readiness import ProviderInitState
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -171,7 +173,6 @@ def classify(
     Returns:
         The state to report, in the order documented on the module.
     """
-    from ..maintenance.startup import ProviderInitState
 
     table = config.providers if providers is None else providers
 

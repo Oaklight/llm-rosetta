@@ -327,7 +327,7 @@ class TestTheRoute:
         assert selection.chosen is not None and selection.chosen.name == "a"
 
     def test_a_route_with_only_disabled_providers_is_rate_limited(self):
-        from llm_rosetta_gateway.maintenance.startup import ProviderNotReady
+        from llm_rosetta_gateway.transport.provider_readiness import ProviderNotReady
 
         config = _config("a")
         for _ in range(3):
