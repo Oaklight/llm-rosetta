@@ -129,6 +129,7 @@ class GatewayConfig:
     model_upstream_names: Any
     model_url_templates: Any
     open_on_no_keys: bool
+    extension_install: bool
     trusted_proxies: TrustedProxies
     ops_log: dict[str, Any]
     port: int
