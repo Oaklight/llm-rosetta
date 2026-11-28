@@ -16,7 +16,7 @@ from ._shared import parse_json_body
 
 
 def _get_keystore(request: Any) -> Any:
-    ks = getattr(request.app, "keystore", None)
+    ks = admin_context(request).keystore()
     if ks is None:
         raise RuntimeError("KeyStore not configured on this application")
     return ks
@@ -114,13 +114,13 @@ async def get_key_usage(request: Any) -> Response:
     total — see the report for what each class means.
     """
     keystore = _get_keystore(request)
-    persistence = getattr(request.app, "persistence", None)
+    persistence = admin_context(request).persistence()
 
     # The panel asks for this on tab paint and again on every window switch,
     # and the answer is one pass over the widest usage window.  Five seconds of
     # memory makes the switch free without making the numbers stale to the eye
     # (#1522); the cache lives on the app, so it cannot outlive its store.
-    cached = getattr(request.app, "_usage_payload", None)
+    cached = admin_context(request).usage_payload_cache()
     if cached and time.monotonic() - cached[0] < 5.0:
         return JSONResponse(cached[1])
 
@@ -141,7 +141,7 @@ async def get_key_usage(request: Any) -> Response:
         internal_label=catalogue().internal_key_label(),
     )
     payload = report.to_payload(key_ids)
-    request.app._usage_payload = (time.monotonic(), payload)
+    admin_context(request).set_usage_payload_cache((time.monotonic(), payload))
     return JSONResponse(payload)
 
 
@@ -256,7 +256,7 @@ async def rotate_api_key(request: Any, **kwargs: Any) -> Response:
 
 async def get_internal_token(request: Any) -> Response:
     """Return the ephemeral internal token for admin panel test requests."""
-    token = getattr(request.app, "internal_token", None)
+    token = admin_context(request).internal_token()
     if not token:
         return JSONResponse({"error": "No internal token available"}, status_code=500)
     return JSONResponse({"token": token})

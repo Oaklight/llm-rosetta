@@ -125,7 +125,7 @@ def _compressible(content_type: str) -> bool:
 
 async def serve_admin_html(request: Any) -> Response:
     """Serve the admin panel SPA with optional custom_head injection."""
-    custom_head: str = getattr(request.app, "admin_custom_head", "")
+    custom_head: str = admin_context(request).admin_custom_head()
     cache_key = custom_head
     if cache_key not in _admin_html_cache:
         html = load_admin_html()
@@ -230,7 +230,7 @@ def _set_session_cookie(
 
 async def admin_login(request: Any) -> Response:
     """Validate admin password and return a session token."""
-    auth_state = request.app.auth_state
+    auth_state = admin_context(request).auth_state()
     if not auth_state.admin_password:
         return JSONResponse({"error": "Admin password not configured"}, status_code=400)
 
@@ -284,7 +284,7 @@ async def admin_check(request: Any) -> Response:
     inactivity timer for one — that timer signs the session out, which is
     exactly what "stay signed in" promised not to do.
     """
-    auth_state = request.app.auth_state
+    auth_state = admin_context(request).auth_state()
     requires_auth = bool(auth_state.admin_password)
     cookie_token = request.cookies.get(catalogue().admin_cookie_name(), "")
     session = auth_state.get_session(cookie_token) if cookie_token else None
@@ -300,7 +300,7 @@ async def admin_check(request: Any) -> Response:
 
 async def admin_logout(request: Any) -> Response:
     """Clear the admin session cookie and invalidate the session."""
-    auth_state = request.app.auth_state
+    auth_state = admin_context(request).auth_state()
     cookie_token = request.cookies.get(catalogue().admin_cookie_name(), "")
     if cookie_token:
         auth_state.invalidate_session(cookie_token)
@@ -313,7 +313,7 @@ async def change_password(request: Any) -> Response:
     """Change the admin password (requires current password)."""
     from ._shared import _get_config_io, _get_config_path, _reload_gateway_config
 
-    auth_state = request.app.auth_state
+    auth_state = admin_context(request).auth_state()
     if not auth_state.admin_password:
         return JSONResponse({"error": "Admin password not configured"}, status_code=400)
 
@@ -405,9 +405,9 @@ async def rotate_token(request: Any) -> Response:
     regenerates a fresh token regardless, so persistence is unnecessary.
     Sessions are NOT affected by rotation.
     """
-    auth_state = request.app.auth_state
+    auth_state = admin_context(request).auth_state()
     auth_state.rotate_internal_token()
-    request.app.internal_token = auth_state.internal_token
+    admin_context(request).set_internal_token(auth_state.internal_token)
 
     await admin_context(request).record_token_rotation()
 
@@ -416,7 +416,7 @@ async def rotate_token(request: Any) -> Response:
 
 async def logout_all_sessions(request: Any) -> Response:
     """Invalidate all admin sessions."""
-    auth_state = request.app.auth_state
+    auth_state = admin_context(request).auth_state()
     count = auth_state.invalidate_all_sessions()
 
     await admin_context(request).record_sessions_cleared(count)

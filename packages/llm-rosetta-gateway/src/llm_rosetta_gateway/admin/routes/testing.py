@@ -201,9 +201,6 @@ async def _run_test_task(
 
 def _get_gateway_config(request: Any) -> GatewayConfig | None:
     """Return the live GatewayConfig from the app or module."""
-    cfg = getattr(request.app, "gateway_config", None)
-    if cfg is not None:
-        return cfg
     return admin_context(request).served_config()
 
 
@@ -224,14 +221,13 @@ async def start_test(request: Any) -> Response:
     if not endpoint or not isinstance(payload, dict):
         return JSONResponse({"error": "Missing endpoint or payload"}, status_code=400)
 
-    internal_token = getattr(request.app, "internal_token", "")
+    internal_token = admin_context(request).internal_token()
     if not internal_token:
         return JSONResponse({"error": "No internal token available"}, status_code=500)
 
     # Determine the base URL the gateway is listening on so the test
     # task can POST back to ourselves.
-    host = getattr(request.app, "_bind_host", "127.0.0.1")
-    port = getattr(request.app, "_bind_port", 28765)
+    host, port = admin_context(request).bind_address()
     # Always use 127.0.0.1 for self-calls — even if bound to 0.0.0.0
     if host in ("0.0.0.0", "::"):
         host = "127.0.0.1"

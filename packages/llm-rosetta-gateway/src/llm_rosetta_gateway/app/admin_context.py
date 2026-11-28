@@ -27,7 +27,75 @@ _INSTALL_OFF = (
 )
 
 
-class GatewayAdminContext:
+class _AppStateMembers:
+    """The app attributes the admin routes read, behind their typed members.
+
+    Implements :class:`~llm_rosetta_gateway.admin_api.AdminPanelState`,
+    ``AdminAuthState``, ``AdminStores`` and ``AdminRuntime``.  Each member reads
+    the attribute when it is asked, so a value set after the context was built
+    is seen.
+    """
+
+    _app: Any
+
+    # -- AdminPanelState ----------------------------------------------------
+
+    def admin_custom_head(self) -> str:
+        return getattr(self._app, "admin_custom_head", "")  # type: ignore[no-any-return]
+
+    def set_admin_custom_head(self, head: str) -> None:
+        self._app.admin_custom_head = head
+
+    def admin_head_prefix(self) -> str:
+        return getattr(self._app, "_admin_head_prefix", "")  # type: ignore[no-any-return]
+
+    def set_admin_head_prefix(self, prefix: str) -> None:
+        self._app._admin_head_prefix = prefix
+
+    def disabled_tabs(self) -> Any:
+        return getattr(self._app, "disabled_tabs", frozenset())
+
+    def set_disabled_tabs(self, tabs: Any) -> None:
+        self._app.disabled_tabs = tabs
+
+    # -- AdminAuthState -----------------------------------------------------
+
+    def auth_state(self) -> Any:
+        return self._app.auth_state
+
+    def internal_token(self) -> str:
+        return getattr(self._app, "internal_token", None) or ""
+
+    def set_internal_token(self, token: str) -> None:
+        self._app.internal_token = token
+
+    # -- AdminStores --------------------------------------------------------
+
+    def keystore(self) -> Any | None:
+        return getattr(self._app, "keystore", None)
+
+    def usage_payload_cache(self) -> Any:
+        return getattr(self._app, "_usage_payload", None)
+
+    def set_usage_payload_cache(self, value: Any) -> None:
+        self._app._usage_payload = value
+
+    # -- AdminRuntime -------------------------------------------------------
+
+    def bind_address(self) -> tuple[str, int]:
+        return (
+            getattr(self._app, "_bind_host", "127.0.0.1"),
+            getattr(self._app, "_bind_port", 28765),
+        )
+
+    def transports(self) -> dict[str, Any]:
+        return getattr(self._app, "transports", {}) or {}
+
+    def deferred_startup(self) -> Any | None:
+        return getattr(self._app, "deferred_startup", None)
+
+
+class GatewayAdminContext(_AppStateMembers):
     """Serve the admin panel's needs from the gateway's own state.
 
     Args:
