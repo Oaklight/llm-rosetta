@@ -15,6 +15,7 @@ from llm_rosetta_gateway._vendor.httpserver import (
 )
 
 from ..observability.logging import get_logger
+from ..ops import OpsContext, OpsGatewayShutdown
 
 
 logger = get_logger()
@@ -223,22 +224,7 @@ async def _flush_now(app: App) -> None:
     # Record shutdown event (skip pruning to avoid latency before close)
     ops_log = getattr(app, "ops_log", None)
     if ops_log is not None:
-        from llm_rosetta_gateway.observability.ops_log import (
-            EVENT_SHUTDOWN,
-            OpsLogEntry,
-            SEVERITY_INFO,
-            SOURCE_GATEWAY,
-        )
-
-        await ops_log.add(
-            OpsLogEntry.create(
-                event_type=EVENT_SHUTDOWN,
-                severity=SEVERITY_INFO,
-                message="Gateway shutting down",
-                source=SOURCE_GATEWAY,
-            ),
-            _skip_prune=True,
-        )
+        await OpsGatewayShutdown(OpsContext(ops_log=ops_log)).execute()
 
     await persistence.close()
 

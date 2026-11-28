@@ -445,7 +445,7 @@ async def _reload_gateway_config(
         report = await loop.run_in_executor(None, apply_shim_sources, raw, config_path)
         _install_shim_report(request, report, signature)
 
-    from ...ops import OpsContext, OpsProviderValidation
+    from ...ops import OpsConfigReload, OpsContext, OpsProviderValidation
 
     recovery = OpsProviderValidation(
         getattr(request.app, "ops_ctx", None) or OpsContext(),
@@ -513,30 +513,9 @@ async def _reload_gateway_config(
             persistence.retention.ops_warn_max = max(100, int(ol_cfg["warn_max"]))
 
     # Record config reload event
-    ops_log = getattr(request.app, "ops_log", None)
-    if ops_log is not None:
-        from llm_rosetta_gateway.observability.ops_log import (
-            EVENT_CONFIG_RELOAD,
-            OpsLogEntry,
-            SEVERITY_INFO,
-            SOURCE_CONFIG,
-        )
-
-        await ops_log.add(
-            OpsLogEntry.create(
-                event_type=EVENT_CONFIG_RELOAD,
-                severity=SEVERITY_INFO,
-                message=(
-                    f"Config reloaded ({len(new_config.providers)} providers, "
-                    f"{len(new_config.models)} models)"
-                ),
-                details={
-                    "provider_count": len(new_config.providers),
-                    "model_count": len(new_config.models),
-                },
-                source=SOURCE_CONFIG,
-            )
-        )
+    await OpsConfigReload(
+        OpsContext(ops_log=getattr(request.app, "ops_log", None)), new_config
+    ).execute()
 
     # Re-seed credential-minting providers.  The rebuild above replaced every
     # ProviderInfo, so each of them is back on the pending sentinel with no

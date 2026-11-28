@@ -86,6 +86,8 @@ class OpsBase(ABC):
     event_type: ClassVar[str]
     severity: ClassVar[str] = SEVERITY_INFO
     source: ClassVar[str] = SOURCE_ADMIN
+    #: Bypass the log's amortized pruning (a row written just before close).
+    skip_prune: ClassVar[bool] = False
 
     def __init__(self, ctx: OpsContext) -> None:
         self._ctx = ctx
@@ -142,12 +144,14 @@ class OpsBase(ABC):
         details = self._details(result)
         if error is not None:
             details = {**details, "error": str(error)}
-        await self._ctx.ops_log.add(
-            OpsLogEntry.create(
-                event_type=self.event_type,
-                severity=SEVERITY_WARNING if error else self.severity,
-                message=self._message(result),
-                details=details,
-                source=self.source,
-            )
+        entry = OpsLogEntry.create(
+            event_type=self.event_type,
+            severity=SEVERITY_WARNING if error else self.severity,
+            message=self._message(result),
+            details=details,
+            source=self.source,
         )
+        if self.skip_prune:
+            await self._ctx.ops_log.add(entry, _skip_prune=True)
+        else:
+            await self._ctx.ops_log.add(entry)
