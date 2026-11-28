@@ -57,7 +57,14 @@ from .shim_manifests import (
     get_shim_manifest,
     get_shim_manifests,
 )
-from .extensions import get_extensions, post_extension_install_cli
+from .extensions import (
+    get_extension_removal_plan,
+    get_extensions,
+    post_extension_check_updates,
+    post_extension_install_cli,
+    post_extension_remove,
+    post_extension_update,
+)
 from .shim_source_catalog import get_shim_source_catalog
 from .shims import (
     _merge_shim_sources_body,
@@ -98,8 +105,12 @@ __all__ = [
     "delete_provider",
     "fetch_upstream_models",
     "get_config",
+    "get_extension_removal_plan",
     "get_extensions",
+    "post_extension_check_updates",
     "post_extension_install_cli",
+    "post_extension_remove",
+    "post_extension_update",
     "get_loaded_shim",
     "get_loaded_shims",
     "get_shim_manifest",
@@ -177,6 +188,18 @@ def register_config_routes(app: Any) -> None:
     )
     app.route("/admin/api/extensions", methods=["GET"])(
         _guard("providers", get_extensions)
+    )
+    app.route("/admin/api/extensions/<ext_id>/removal-plan", methods=["GET"])(
+        _guard("providers", get_extension_removal_plan)
+    )
+    app.route("/admin/api/extensions/<ext_id>/remove", methods=["POST"])(
+        _guard("providers", post_extension_remove)
+    )
+    app.route("/admin/api/extensions/check-updates", methods=["POST"])(
+        _guard("providers", post_extension_check_updates)
+    )
+    app.route("/admin/api/extensions/<ext_id>/update", methods=["POST"])(
+        _guard("providers", post_extension_update)
     )
     app.route("/admin/api/extensions/<ext_id>/install-cli", methods=["POST"])(
         _guard("providers", post_extension_install_cli)

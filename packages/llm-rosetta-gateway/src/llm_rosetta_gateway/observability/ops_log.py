@@ -74,6 +74,11 @@ EVENT_SELF_UPDATE = "self_update"
 
 EVENT_EXTENSION_CLI_INSTALL = "extension_cli_install"
 
+# -- Extension remove and update event types (#1829) ------------------------
+
+EVENT_EXTENSION_REMOVE = "extension_remove"
+EVENT_EXTENSION_UPDATE = "extension_update"
+
 ALL_EVENT_TYPES = [
     EVENT_STARTUP,
     EVENT_SHUTDOWN,
@@ -96,6 +101,8 @@ ALL_EVENT_TYPES = [
     EVENT_TOKEN_ROTATED,
     EVENT_SELF_UPDATE,
     EVENT_EXTENSION_CLI_INSTALL,
+    EVENT_EXTENSION_REMOVE,
+    EVENT_EXTENSION_UPDATE,
 ]
 
 # -- Severity constants ----------------------------------------------------
