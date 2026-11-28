@@ -6,8 +6,8 @@ import logging
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway.admin_api import catalogue
 
-from ....config.settings import MAX_ADMIN_CUSTOM_CSS
 from .._shared import (
     _sanitize_server_section,
     config_mutate,
@@ -95,11 +95,11 @@ def _apply_custom_css(server: dict[str, Any], css: Any) -> Response | None:
         return JSONResponse(
             {"error": "'admin_custom_css' must be a string"}, status_code=400
         )
-    if len(css) > MAX_ADMIN_CUSTOM_CSS:
+    if len(css) > catalogue().max_custom_css():
         return JSONResponse(
             {
                 "error": "'admin_custom_css' is limited to "
-                f"{MAX_ADMIN_CUSTOM_CSS} characters"
+                f"{catalogue().max_custom_css()} characters"
             },
             status_code=400,
         )

@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway.admin_api import catalogue
 
 from .._shared import (
     retired_type_error,
@@ -118,10 +119,8 @@ def _build_model_entry(
     render (yet) is carried over rather than silently dropped by a save that
     never knew about it.
     """
-    from ....model_types import registered_type_names
-
     model_type = body.get("type", "llm")
-    valid_types = registered_type_names()
+    valid_types = catalogue().registered_type_names()
     if model_type not in valid_types:
         # Fall back to "llm" for unrecognised types — maintains backward
         # compat with configs that omit the type field entirely.

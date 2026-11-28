@@ -15,13 +15,17 @@ keeps the list of not-yet-migrated imports shrinking.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 
 if TYPE_CHECKING:
+    import re
+
     from .config import ConfigIO, GatewayConfig
 
 __all__ = [
+    "AdminCatalogue",
     "AdminConfigAccess",
     "AdminContext",
     "AdminExtensions",
@@ -30,8 +34,11 @@ __all__ = [
     "ConfigIO",
     "ExtensionInstallRefused",
     "GatewayConfig",
+    "RetiredNameError",
     "admin_context",
     "app_admin_context",
+    "bind_catalogue",
+    "catalogue",
 ]
 
 
@@ -57,6 +64,112 @@ class AdminConfigAccess(Protocol):
         that read it, records the reload and seeds credential-minting providers
         again.  Returns the config now served.
         """
+        ...
+
+
+class RetiredNameError(ValueError):
+    """A config entry spells a name that was retired.
+
+    Attributes:
+        detail: The retired-names message alone (it ends with the
+            ``llm-rosetta gateway migrate`` command).
+        where: The JSON path of the offending value, or ``None``.
+        path: The config file, or ``None`` until the caller adds it.
+    """
+
+    def __init__(
+        self, detail: str, *, where: str | None = None, path: str | None = None
+    ) -> None:
+        self.detail = detail
+        self.where = where
+        self.path = path
+        super().__init__(": ".join(part for part in (path, where, detail) if part))
+
+    def located(
+        self, *, where: str | None = None, path: str | None = None
+    ) -> RetiredNameError:
+        """A copy with *where* and *path* filled in where they were not known."""
+        return RetiredNameError(
+            self.detail, where=self.where or where, path=self.path or path
+        )
+
+
+@runtime_checkable
+class AdminCatalogue(Protocol):
+    """What the gateway knows about model types, provider types and limits.
+
+    Stateless facts: the registries and constants the config editor validates
+    against and the panel renders from.
+    """
+
+    def model_types(self) -> list[Any]:
+        """Every registered model type descriptor, in registration order."""
+        ...
+
+    def registered_type_names(self) -> list[str]:
+        """The names of the registered model types."""
+        ...
+
+    def retired_type_message(self, name: object) -> str | None:
+        """The retired-names message when *name* is a retired model type."""
+        ...
+
+    def entry_capabilities(self) -> frozenset[str]:
+        """The capability names a ``models`` entry may declare."""
+        ...
+
+    def declared_model_type(self, entry: Any, where: str | None = None) -> str:
+        """The model type a ``models`` entry declares.
+
+        Raises:
+            RetiredNameError: The entry spells its type with a retired name.
+        """
+        ...
+
+    def face_value(self, entry: dict[str, Any], key: str, type_name: str) -> Any:
+        """One endpoint setting: the face block first, then the flat key."""
+        ...
+
+    def base_formats(self) -> tuple[str, ...]:
+        """The base formats a provider may use, in picker order."""
+        ...
+
+    def base_type_hints(self, provider_type: str) -> dict[str, str]:
+        """The placeholder ``base_url`` / ``api_key_env`` hints of a base format."""
+        ...
+
+    def default_supports_custom_tools(self, provider_type: str) -> bool:
+        """Whether a base format supports custom tools by default."""
+        ...
+
+    def known_provider_types(self) -> list[str]:
+        """The built-in provider type names."""
+        ...
+
+    def default_models_path(self, provider_type: str) -> str:
+        """The model-listing path appended to a provider's ``base_url``."""
+        ...
+
+    def version_suffix_search(self, base_url: str) -> re.Match[str] | None:
+        """Match a trailing ``/v1`` style version segment of *base_url*."""
+        ...
+
+    def max_custom_css(self) -> int:
+        """The most characters ``server.admin_custom_css`` may hold."""
+        ...
+
+    def gateway_version(self) -> str:
+        """The gateway distribution's version."""
+        ...
+
+    def parse_quota(self, quota: str) -> dict[str, Any]:
+        """Parse a rate quota such as ``"100/s"``; raises ``ValueError`` if bad."""
+        ...
+
+    def detect_routing_loops(
+        self, models: Mapping[str, Any], upstream_names: Mapping[str, str]
+    ) -> list[str]:
+        """Warnings for models whose upstream names route back into the gateway."""
         ...
 
 
@@ -227,7 +340,11 @@ class AdminExtensions(Protocol):
 
 @runtime_checkable
 class AdminContext(
-    AdminConfigAccess, AdminServices, AdminShimSources, AdminExtensions, Protocol
+    AdminConfigAccess,
+    AdminServices,
+    AdminShimSources,
+    AdminExtensions,
+    Protocol,
 ):
     """Everything the admin panel may ask of the running gateway.
 
@@ -235,6 +352,34 @@ class AdminContext(
     providers and credentials, shims, routing and quota, keys and auth,
     observability and data, jobs, maintenance.  Only config is migrated so far.
     """
+
+
+_catalogue: AdminCatalogue | None = None
+
+
+def bind_catalogue(impl: AdminCatalogue | None) -> None:
+    """Set the :class:`AdminCatalogue` that :func:`catalogue` returns.
+
+    ``create_app`` binds the gateway's own; a test binds a stand-in, or
+    ``None`` to unbind.
+    """
+    global _catalogue
+    _catalogue = impl
+
+
+def catalogue() -> AdminCatalogue:
+    """Return the bound :class:`AdminCatalogue`.
+
+    The registries it reads are process-wide, so no app is needed.
+
+    Raises:
+        RuntimeError: Nothing is bound: ``create_app`` binds it.
+    """
+    if _catalogue is None:
+        raise RuntimeError(
+            "no admin catalogue is bound: create_app binds it, and admin needs it"
+        )
+    return _catalogue
 
 
 def admin_context(request: Any) -> AdminContext:

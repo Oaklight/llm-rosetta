@@ -14,14 +14,8 @@ from llm_rosetta.api import (
     reasoning_capability,
 )
 
-from ....admin_api import admin_context
+from ....admin_api import RetiredNameError, admin_context, catalogue
 from ....config import GatewayConfig
-from ....config.providers import (
-    BASE_FORMATS,
-    get_base_type_hints,
-    get_default_supports_custom_tools,
-    known_provider_types,
-)
 from ....transport.token_refresh import public_token_status
 from .._shared import (
     _TOKEN_COMMAND_MARKER,
@@ -53,14 +47,16 @@ def _base_formats_payload() -> list[dict[str, Any]]:
     (the JS reads ``!== false``), so there is nothing to override.
     """
     out: list[dict[str, Any]] = []
-    for name in BASE_FORMATS:
-        hints = get_base_type_hints(name)
+    for name in catalogue().base_formats():
+        hints = catalogue().base_type_hints(name)
         out.append(
             {
                 "name": name,
                 "placeholder_base_url": hints.get("base_url", ""),
                 "placeholder_api_key_env": hints.get("api_key_env", ""),
-                "supports_custom_tools": get_default_supports_custom_tools(name),
+                "supports_custom_tools": catalogue().default_supports_custom_tools(
+                    name
+                ),
             }
         )
     return out
@@ -73,8 +69,6 @@ def _get_model_type_metadata() -> list[dict[str, Any]]:
     badges, seg-control options, and filters from server-provided data
     instead of hardcoding type names.
     """
-    from ....model_types import all_model_types
-
     return [
         {
             "name": desc.name,
@@ -92,7 +86,7 @@ def _get_model_type_metadata() -> list[dict[str, Any]]:
             "color": desc.color,
             "is_llm": desc.is_llm,
         }
-        for desc in all_model_types()
+        for desc in catalogue().model_types()
     ]
 
 
@@ -107,9 +101,7 @@ def _get_gateway_config(request: Any) -> GatewayConfig | None:
 def _get_version() -> str:
     """Return the gateway package version (the panel's own)."""
     try:
-        from llm_rosetta_gateway import __version__
-
-        return __version__
+        return catalogue().gateway_version()
     except Exception:
         return "unknown"
 
@@ -190,11 +182,9 @@ def _normalize_model_entry(value: Any, name: str | None = None) -> dict[str, Any
             spelling is then reported at ``models.<name>``.
 
     Raises:
-        RetiredConfigName: If the entry spells its type with a retired name;
+        RetiredNameError: If the entry spells its type with a retired name;
             ``where`` holds the JSON path of the offending value.
     """
-    from ....config.parse import declared_model_type
-
     if isinstance(value, str):
         return {
             "provider": value,
@@ -217,7 +207,7 @@ def _normalize_model_entry(value: Any, name: str | None = None) -> dict[str, Any
     # The derived type, not only an explicit one: the console reads this field
     # and nothing else, so the panel and the pools cannot apply different
     # rules to a legacy capability-only entry.
-    entry["type"] = declared_model_type(
+    entry["type"] = catalogue().declared_model_type(
         value, f"models.{name}" if name is not None else None
     )
     # ``upstream_model`` is the lane's own once the entry lists ``providers[]``;
@@ -328,9 +318,7 @@ def _normalise_endpoint_flags(masked: dict[str, Any]) -> None:
     ``embedding_*`` keys are not read any more: the loader rejects them with
     the key that replaces each and the ``llm-rosetta gateway migrate`` command.
     """
-    from ....model_types import all_model_types
-
-    for desc in all_model_types():
+    for desc in catalogue().model_types():
         if desc.is_llm:
             continue
         _normalise_face_block(masked, desc)
@@ -474,10 +462,6 @@ async def get_config(request: Any) -> Response:
                 masked["credential_source"] = pinfo.credential_source
         masked_providers[name] = masked
 
-    # ``config.parse`` re-exports the error; admin reaches the gateway only
-    # through the modules its import-boundary test allows.
-    from ....config.parse import RetiredConfigName
-
     # Normalize models to dict format for consistent admin UI
     raw_models = raw.get("models", {})
     try:
@@ -485,7 +469,7 @@ async def get_config(request: Any) -> Response:
             name: _normalize_model_entry(value, name)
             for name, value in raw_models.items()
         }
-    except RetiredConfigName as exc:
+    except RetiredNameError as exc:
         # The file was edited after the gateway loaded it (the loader refuses a
         # retired name at startup).  Name the file and the JSON path, as the
         # loader would, instead of failing the request without a location.
@@ -532,7 +516,7 @@ async def get_config(request: Any) -> Response:
             "api_keys_db": config.api_keys_db,
             "version": _get_version(),
             "core_version": _get_core_version(),
-            "known_provider_types": known_provider_types(),
+            "known_provider_types": catalogue().known_provider_types(),
             "base_formats": _base_formats_payload(),
             "registered_shims": [
                 {

@@ -9,7 +9,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway._vendor.ratelimit import parse_quota
+from llm_rosetta_gateway.admin_api import catalogue
 from llm_rosetta.contracts.usage import UsageReport
 
 from ...keystore import INTERNAL_LABEL, INTERNAL_USAGE_BUCKET, KeyStore
@@ -78,7 +78,7 @@ def _key_quota(raw: Any) -> tuple[str, str | None]:
     parts = [part.strip() for part in text.split(",") if part.strip()]
     for part in parts:
         try:
-            parsed = parse_quota(part)
+            parsed = catalogue().parse_quota(part)
         except ValueError:
             return text, (
                 f"Invalid rate limit '{part}': use N/unit, e.g. 60/m or 30/m, 500/h"

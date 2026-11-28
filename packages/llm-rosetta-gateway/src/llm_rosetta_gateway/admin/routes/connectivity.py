@@ -5,10 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.config.providers import default_models_path
-from llm_rosetta_gateway.transport.provider_info import VERSION_SUFFIXES
+from llm_rosetta_gateway.admin_api import catalogue
 
-from ...config.typed import face_value
 from ._shared import _resolve_models_path
 
 
@@ -113,8 +111,8 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
             # migrated provider as having no typed endpoints at all (#1595
             # review).  A shim declares the endpoint just as a format does.
             if not (
-                face_value(provider_cfg, fmt_key, ep_name)
-                or face_value(provider_cfg, f"{ep_name}_shim", ep_name)
+                catalogue().face_value(provider_cfg, fmt_key, ep_name)
+                or catalogue().face_value(provider_cfg, f"{ep_name}_shim", ep_name)
             ):
                 continue
             # The face's own host and path as written — what the operator has
@@ -122,11 +120,14 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
             # the probe asks for.
             face_host = (
                 str(
-                    face_value(provider_cfg, f"{ep_name}_base_url", ep_name) or ""
+                    catalogue().face_value(provider_cfg, f"{ep_name}_base_url", ep_name)
+                    or ""
                 ).rstrip("/")
                 or base_url
             )
-            face_path = face_value(provider_cfg, path_key, ep_name) or default_path
+            face_path = (
+                catalogue().face_value(provider_cfg, path_key, ep_name) or default_path
+            )
             _check_double_prefix(face_host, face_path, ep_name, results)
             url = _endpoint_url(config, name, ep_name, face_host, face_path)
             if url is None:
@@ -242,7 +243,7 @@ async def _probe_models(
     elif explicit_path:
         models_url = f"{base_url}{explicit_path}"
     else:
-        models_url = f"{base_url}{default_models_path(ptype)}"
+        models_url = f"{base_url}{catalogue().default_models_path(ptype)}"
     if not auth_ready:
         results["endpoints"]["models"] = {
             "url": models_url,
@@ -334,7 +335,7 @@ def _check_double_prefix(
     base_url: str, path: str, endpoint_name: str, results: dict
 ) -> None:
     """Warn if base_url and path share a version prefix."""
-    m = VERSION_SUFFIXES.search(base_url)
+    m = catalogue().version_suffix_search(base_url)
     if m and path.startswith(m.group()):
         results["warnings"].append(
             f"{endpoint_name}: base_url ends with '{m.group()}' and "
