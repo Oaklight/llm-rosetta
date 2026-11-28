@@ -15,6 +15,8 @@ rather than inferring it from the reply.
 from __future__ import annotations
 
 import asyncio
+import signal
+import contextlib
 import json
 import os
 import sys
@@ -1207,6 +1209,15 @@ class TestACancelledTurn:
         assert held is None
 
 
+def _alive(pid: int) -> bool:
+    """Whether *pid* is a running process (a reaped one is gone)."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
 class TestASessionThatNeverOpens:
     """Setup spends the turn's budget, because setup is a request too.
 
@@ -1291,6 +1302,38 @@ class TestASessionThatNeverOpens:
         starts = [entry["pid"] for entry in _log(tmp_path) if entry["kind"] == "start"]
         assert len(starts) == 2, starts
         assert starts[0] != starts[1]
+
+    async def test_a_dropped_process_is_stopped_not_left_running(
+        self, monkeypatch, tmp_path
+    ):
+        """Taking a stalled agent out of its pool also ends its process.
+
+        ``_drop_agent`` only emptied the slot, so ``close()`` (which stops the
+        pooled agents) never reached the process: it ran on, with its three
+        pipes, until the gateway exited.
+        """
+        pids: list[int] = []
+        transport = AcpTransport(timeout=0.2)
+        provider = _provider(monkeypatch, tmp_path, "mute-new", conversation="conv-1")
+        try:
+            resp = await asyncio.wait_for(
+                transport.send(provider, "", _turn("[User]\none")), 5.0
+            )
+            assert resp.status_code == 503
+            assert transport._pool("antigravity") == []
+            pids += [e["pid"] for e in _log(tmp_path) if e["kind"] == "start"]
+            assert len(pids) == 1
+            # Stopped by the drop itself, before the transport closes.
+            for _ in range(100):
+                if not _alive(pids[0]):
+                    break
+                await asyncio.sleep(0.05)
+            assert not _alive(pids[0]), "the dropped agent process is still running"
+        finally:
+            await transport.close()
+            for pid in pids:
+                with contextlib.suppress(ProcessLookupError):
+                    os.kill(pid, signal.SIGKILL)
 
 
 class TestAProcessThatStopped:

@@ -12,7 +12,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from llm_rosetta_gateway.transport.acp.lane import _transport_options
+from llm_rosetta_gateway.config.providers import (
+    _transport_options,
+)
 
 
 def _shim(options) -> SimpleNamespace:

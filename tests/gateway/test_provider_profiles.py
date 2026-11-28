@@ -20,11 +20,9 @@ from llm_rosetta_gateway.admin.routes.config.providers import _relocate_profiles
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.config.providers import (
     build_provider_info,
-    validate_provider_profiles,
-)
-from llm_rosetta_gateway.transport.acp.lane import (
     lane_profile_is_managed,
     managed_acp_state_dir,
+    validate_provider_profiles,
 )
 
 
