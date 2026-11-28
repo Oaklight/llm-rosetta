@@ -186,6 +186,9 @@ class _Agent:
     #: Set when the agent answered "method not found" to ``set_mode``: the
     #: whole process has no mode surface, so a later session need not ask.
     no_modes: bool = False
+    #: Set once the process has been handed to the background stop, so a
+    #: second drop of the same agent does not stop it twice.
+    retired: bool = False
 
     def can_resume(self) -> bool:
         """Whether the agent advertises ``session/resume``."""
@@ -610,6 +613,8 @@ class AcpTransport:
         # holds it for as long as it lives.
         self._agents: dict[str, list[_Agent | None]] = {}
         self._starting: dict[str, asyncio.Lock] = {}
+        # Stops of dropped agents still running; ``close()`` waits for them.
+        self._retiring: set[asyncio.Task[None]] = set()
         self._ledger = ledger or AcpSessionLedger()
         # The loopback MCP endpoints that carry client tools to agents.
         self._mcp = AcpMcpServer()
@@ -817,6 +822,8 @@ class AcpTransport:
 
     async def close(self) -> None:
         """Stop every agent process this transport started."""
+        if self._retiring:
+            await asyncio.gather(*list(self._retiring), return_exceptions=True)
         for key, pool in list(self._agents.items()):
             for agent in pool:
                 if agent is None:
@@ -2026,6 +2033,37 @@ class AcpTransport:
         for held in self._ledger.entries_of(agent.provider):
             if held.agent_slot == agent.slot:
                 held.live = False
+        self._retire(agent)
+
+    def _retire(self, agent: _Agent) -> None:
+        """Stop a dropped agent's process in the background.
+
+        Taking an agent out of its pool leaves nobody holding it, so
+        :meth:`close`, which stops what the pools hold, would never reach it: a
+        stalled process kept running, and its three pipes stayed open, until
+        the gateway exited.  The stop runs as a task because a drop happens in
+        sync code and must not wait on the process; :meth:`close` waits for it.
+        """
+        if agent.retired:
+            return
+        agent.retired = True
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        task = asyncio.ensure_future(self._stop_quietly(agent))
+        self._retiring.add(task)
+        task.add_done_callback(self._retiring.discard)
+
+    async def _stop_quietly(self, agent: _Agent) -> None:
+        try:
+            await agent.client.stop()
+        except Exception:  # noqa: BLE001 - a dropped agent must not raise
+            logger.debug(
+                "ACP agent %r did not stop cleanly after it was dropped",
+                agent.provider,
+                exc_info=True,
+            )
 
     def _prune_gone(self, provider_name: str) -> None:
         """Evict every process of *provider_name* whose process has exited."""
