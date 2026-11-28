@@ -780,6 +780,8 @@ keystore（`keys.db`）中。
 - `X-Real-IP` 只在受信对端没有可用 `X-Forwarded-For` 时读取，且不会覆盖由链得出的结论。
 - `X-Forwarded-Proto: https`（决定 admin 会话 cookie 的 `Secure` 标志）只在对端受信时算数。
 
+请求日志还会记录 TCP 对端（`peer_ip`）和收到的 `X-Forwarded-For` 原文（`forwarded_for`，截断到 500 个字符），仅供审计，无论对端是否可信都记录。二者不参与任何判定：伪造请求头不能改变限流或登录结果。
+
 条目非法时启动失败并指出是哪一项，例如 `server.trusted_proxies[1]`。配置重载时会重新应用这个列表。
 
 !!! warning "在反向代理后面"

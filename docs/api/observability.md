@@ -98,7 +98,9 @@ entry = RequestLogEntry.create(
 | `error_detail` | `str \| None` | 错误信息（如有） |
 | `api_key_label` | `str \| None` | API 密钥标签 |
 | `target_provider_name` | `str \| None` | 提供方显示名称 |
-| `client_ip` | `str \| None` | 客户端 IP 地址 |
+| `client_ip` | `str \| None` | 客户端 IP 地址，按 `server.trusted_proxies` 解析（未列出代理时就是 TCP 对端） |
+| `peer_ip` | `str \| None` | TCP 对端地址，按套接字所见记录，仅供审计 |
+| `forwarded_for` | `str \| None` | 收到的 `X-Forwarded-For` 原文，截断到 500 个字符。仅供审计：它是发送方写的内容，无论可信与否 |
 | `profile` | `dict \| None` | 性能分析数据 |
 | `request_id` | `str \| None` | `X-Request-Id` 中返回的 id，客户端看到的 id 因此能对应到一行 |
 

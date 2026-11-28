@@ -294,7 +294,7 @@ Embedding 模型只显示单一的 Test 按钮，因为只有一种测试适用�
 | Source → Target | 来源格式与目标提供方 |
 | Mode | 流式请求显示 `stream`，非流式留空 |
 | API Key | 发起调用的密钥标签 |
-| Client IP | 对端地址 |
+| Client IP | 解析出的客户端（见 `server.trusted_proxies`）。没有可信代理解析出地址、而请求带有 `X-Forwarded-For` 时，改为显示该头的第一项并标注*未验证*；悬停可看对端地址和原始链 |
 | Status | HTTP 状态码（颜色标记） |
 | Tokens | prompt 与 completion 计数，提供方上报时含 cache read |
 | Duration | 端到端耗时；已知 token 用量时附带每秒输出 token 数 |
