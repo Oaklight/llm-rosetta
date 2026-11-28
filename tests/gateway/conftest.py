@@ -6,6 +6,7 @@ Provides a minimal httpbin-compatible HTTP server, a SOCKS5 proxy server
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
@@ -16,6 +17,8 @@ import struct
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
+
+from typing import Any
 
 import pytest
 
@@ -340,3 +343,50 @@ def _acp_profile_stays_in_tmp(monkeypatch, tmp_path_factory):
 
     root = tmp_path_factory.mktemp("acp-profiles")
     monkeypatch.setattr(acp_profile, "fallback_root", lambda: root)
+
+
+# ---------------------------------------------------------------------------
+# Stores a test opened and never closed
+# ---------------------------------------------------------------------------
+
+
+def _track_store_creation(monkeypatch, opened: list[Any]) -> None:
+    """Record every store the gateway's two factories hand out during a test."""
+    from llm_rosetta_gateway.keystore import KeyStore
+    from llm_rosetta_gateway.observability import PersistenceManager
+
+    for cls in (PersistenceManager, KeyStore):
+        factory = cls.create.__func__  # type: ignore[attr-defined]
+
+        async def tracked(klass, *args, _factory=factory, **kwargs):
+            store = await _factory(klass, *args, **kwargs)
+            opened.append(store)
+            return store
+
+        monkeypatch.setattr(cls, "create", classmethod(tracked))
+
+
+@pytest.fixture
+async def _close_stores_left_open(monkeypatch):
+    """Close the SQLite stores an async test opened and did not close.
+
+    ``create_app`` opens a ``keys.db`` and a ``gateway.db``, and a test that
+    builds an app, or a ``PersistenceManager`` / ``KeyStore``, rarely closes
+    them.  Each leaves a connection, its worker thread and two or three file
+    descriptors behind until the interpreter collects it, and the gateway suite
+    runs in one process: it reached the descriptor limit (``Too many open
+    files``) on a machine with the common limit of 1024.  This closes them in
+    the test's own loop, after every other fixture has been torn down.
+    """
+    opened: list[Any] = []
+    _track_store_creation(monkeypatch, opened)
+    yield
+    for store in reversed(opened):
+        await store.close()
+
+
+@pytest.fixture(autouse=True)
+def _stores_are_closed(request):
+    """Attach the closer to every async test; a sync test has no loop to close in."""
+    if inspect.iscoroutinefunction(getattr(request.node, "obj", None)):
+        request.getfixturevalue("_close_stores_left_open")
