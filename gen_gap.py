@@ -21,25 +21,24 @@ ID = g.ID
 ACTUAL_PATCH = {
     "ADMIN": "legacy allowlist 导入 + 读 request.app.* 28 种,约 113 处,其中 12 处直接读 gateway_config(A1,shrink-only 清单)",
     "APP": "已生效配置只有一个家 app.gateway_config",
-    "CONFIG": "providers.py:build_provider_info 294 行,复杂度 49;约 20 个 ACP 辅助在这里(A8)",
+    "CONFIG": "providers.py:build_provider_info 装配 ProviderInfo;ACP lane 解析在 transport/acp/lane.py",
     "TRANSPORT": "provider_info.py:ProviderInfo 58 个属性(不拆) · acp/transport.py 2535 行",
 }
 ACTUAL_NODES = []
 ACTUAL_EXTRA = [
     ("ADMIN", "APP", "-->", "读 request.app.*(A1)", True),
 ]
-ACTUAL_RED_EXTRA = {("config", "transport")}  # plus every admin edge except admin_api, computed from the table
+ACTUAL_RED_EXTRA = set()  # plus every admin edge except admin_api, computed from the table
 ACTUAL_LABEL = {
     ("admin", "config"): "legacy allowlist 导入(A1)",
-    ("config", "transport"): "ACP lane 解析在 config(A8)",
 }
 
 IDEAL_PATCH = {
     "ADMINAPI": "admin 到 gateway 的唯一通道,含 reload_config",
     "APP": "热重载与唯一的已生效配置",
     "PROXY": "attempt.py:attempt_upstream 是上游尝试记账的唯一入口,pipelines 与 relay 路由经它",
-    "CONFIG": "解析与装配;ACP lane 解析不在这里",
-    "TRANSPORT": "http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码)<br/>lane_allowance(接收器接口) · 不导入 quota",
+    "CONFIG": "解析与装配;ACP lane 解析在 transport/acp/lane.py",
+    "TRANSPORT": "http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析)· usage(纯解码)<br/>lane_allowance(接收器接口) · 不导入 quota",
     "QUOTA": "lane_allowance(每个 app 一个读数库,重载后重新绑定)· lane_command(本地命令读取)",
     "OPS": "唯一的审计写入者",
 }

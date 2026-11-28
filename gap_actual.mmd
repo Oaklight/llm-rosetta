@@ -11,7 +11,7 @@ flowchart TB
     ROUTING["routing/<br/>select · strategy · failover · session · same_format"]
   end
   subgraph POLICY["policy"]
-    CONFIG["config/<br/>loader · parse · resolve · providers · settings · migrate/(配置迁移)<br/>providers.py:build_provider_info 294 行,复杂度 49;约 20 个 ACP 辅助在这里(A8)"]
+    CONFIG["config/<br/>loader · parse · resolve · providers · settings · migrate/(配置迁移)<br/>providers.py:build_provider_info 装配 ProviderInfo;ACP lane 解析在 transport/acp/lane.py"]
     MW["middleware/<br/>auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
@@ -62,7 +62,6 @@ flowchart TB
   CONFIG --> MT
   CONFIG --> ROUTING
   CONFIG --> SHIMS
-  CONFIG -->|"ACP lane 解析在 config(A8)"| TRANSPORT
   JOBS --> OPS
   KEYSTORE --> OBS
   MAINT --> KEYSTORE
@@ -83,4 +82,4 @@ flowchart TB
   TRANSPORT --> CORE
   CLIENT -->|HTTP| APP
   PROXY --> CORE
-  linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,22,35 stroke:#c0392b,stroke-width:2px
+  linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,34 stroke:#c0392b,stroke-width:2px

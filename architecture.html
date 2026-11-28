@@ -402,7 +402,7 @@ flowchart TB
 </section>
 <section id="gap_actual">
   <h2><span class="num">04</span>gateway 现实:当前的完整架构与仍偏离设计的地方</h2>
-  <p class="sub">和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题:A1 admin 的边界:legacy allowlist 里还有一批 admin 导入,admin 读 request.app 的 28 种属性约 113 处(有 shrink-only 的扫描测试;热重载是 AdminContext.reload_config,已生效配置只有一个家 app.gateway_config,但 admin 路由里还有 12 处直接读它);A8 config/providers.py 里有约 20 个 ACP 辅助(build_provider_info 复杂度 49);ProviderInfo 的 58 个属性是已知现状,决定不拆。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。</li><li>为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。</li></ul></details>
+  <p class="sub">和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题:A1 admin 的边界:legacy allowlist 里还有一批 admin 导入,admin 读 request.app 的 28 种属性约 113 处(有 shrink-only 的扫描测试;热重载是 AdminContext.reload_config,已生效配置只有一个家 app.gateway_config,但 admin 路由里还有 12 处直接读它);ProviderInfo 的 58 个属性是已知现状,决定不拆。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。</li><li>为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。</li></ul></details>
   <div class="panel">
     <span class="tag now">现状 · master @ master</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_actual"> <span id="z-gap_actual">100%</span></label></div>
@@ -419,7 +419,7 @@ flowchart TB
     ROUTING["routing/&lt;br/&gt;select · strategy · failover · session · same_format"]
   end
   subgraph POLICY["policy"]
-    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings · migrate/(配置迁移)&lt;br/&gt;providers.py:build_provider_info 294 行,复杂度 49;约 20 个 ACP 辅助在这里(A8)"]
+    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings · migrate/(配置迁移)&lt;br/&gt;providers.py:build_provider_info 装配 ProviderInfo;ACP lane 解析在 transport/acp/lane.py"]
     MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
@@ -470,7 +470,6 @@ flowchart TB
   CONFIG --&gt; MT
   CONFIG --&gt; ROUTING
   CONFIG --&gt; SHIMS
-  CONFIG --&gt;|"ACP lane 解析在 config(A8)"| TRANSPORT
   JOBS --&gt; OPS
   KEYSTORE --&gt; OBS
   MAINT --&gt; KEYSTORE
@@ -491,7 +490,7 @@ flowchart TB
   TRANSPORT --&gt; CORE
   CLIENT --&gt;|HTTP| APP
   PROXY --&gt; CORE
-  linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,22,35 stroke:#c0392b,stroke-width:2px
+  linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,34 stroke:#c0392b,stroke-width:2px
 </pre></div></div>
   </div>
 </section>
@@ -514,11 +513,11 @@ flowchart TB
     ROUTING["routing/&lt;br/&gt;select · strategy · failover · session · same_format"]
   end
   subgraph POLICY["policy"]
-    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings · migrate/(配置迁移)&lt;br/&gt;解析与装配;ACP lane 解析不在这里"]
+    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings · migrate/(配置迁移)&lt;br/&gt;解析与装配;ACP lane 解析在 transport/acp/lane.py"]
     MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · usage) · registry · provider_info · lane_allowance(接收器接口) · provider_readiness(ProviderNotReady)&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码)&lt;br/&gt;lane_allowance(接收器接口) · 不导入 quota"]
+    TRANSPORT["transport/&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · usage) · registry · provider_info · lane_allowance(接收器接口) · provider_readiness(ProviderNotReady)&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析)· usage(纯解码)&lt;br/&gt;lane_allowance(接收器接口) · 不导入 quota"]
     SURF["surface.py"]
     OBS["observability/&lt;br/&gt;logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]

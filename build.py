@@ -9,7 +9,7 @@ sections = [
  ("admin", "3. admin 页面与组件的关系",
   "已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。"),
 ("gap_actual", "4. gateway 现实:当前的完整架构与仍偏离设计的地方",
-  "和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题:A1 admin 的边界:legacy allowlist 里还有一批 admin 导入,admin 读 request.app 的 28 种属性约 113 处(有 shrink-only 的扫描测试;热重载是 AdminContext.reload_config,已生效配置只有一个家 app.gateway_config,但 admin 路由里还有 12 处直接读它);A8 config/providers.py 里有约 20 个 ACP 辅助(build_provider_info 复杂度 49);ProviderInfo 的 58 个属性是已知现状,决定不拆。数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。 为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。"),
+  "和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题:A1 admin 的边界:legacy allowlist 里还有一批 admin 导入,admin 读 request.app 的 28 种属性约 113 处(有 shrink-only 的扫描测试;热重载是 AdminContext.reload_config,已生效配置只有一个家 app.gateway_config,但 admin 路由里还有 12 处直接读它);ProviderInfo 的 58 个属性是已知现状,决定不拆。数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。 为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。"),
 ("gap_ideal", "5. gateway 理想:最终的架构",
   "同一批节点,没有红线。admin 只经 AdminContext;热重载和已生效配置在 app 里,审计写入只经 ops;上游尝试的记账是 proxy 里的一个 attempt_upstream;ACP lane 解析在 transport/acp/lane.py 里,ACP 是 transport/ 下的一个文件夹(和 http/ 对应);quota 的读数和锁在 quota/(每个 app 一个读数库,重载后重新绑定到 provider)。这是目标态,每一项落地后,第 4 页对应的红线就去掉。 为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。",
   "目标 · #1830", ""),
