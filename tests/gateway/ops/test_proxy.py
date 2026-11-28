@@ -85,6 +85,48 @@ class TestOpsProxyRequest:
         assert entry.conversation_id == "c" * 32
 
     @pytest.mark.asyncio
+    async def test_the_row_carries_the_peer_and_the_raw_chain_of_its_request(self):
+        """The one writer reads the origin addresses from the request context."""
+        from llm_rosetta_gateway.middleware.request_context import (
+            RequestContext,
+            request_context_var,
+        )
+
+        rl = MagicMock()
+        rl.add = AsyncMock()
+        ctx = _make_ctx(request_log=rl)
+        token = request_context_var.set(
+            RequestContext(
+                request_id="r",
+                client_ip="198.51.100.7",
+                api_format="openai",
+                is_admin=False,
+                peer_ip="172.29.0.1",
+                forwarded_for="198.51.100.7, 127.0.0.1",
+            )
+        )
+        try:
+            op = OpsProxyRequest(
+                ctx,
+                model="gpt-4",
+                source_provider="chat_completions",
+                target_provider="chat_completions",
+                provider_name="openai",
+                is_stream=False,
+                status_code=200,
+                duration_ms=1.0,
+                error_detail=None,
+            )
+            await op.execute()
+        finally:
+            request_context_var.reset(token)
+
+        entry = rl.add.call_args[0][0]
+        assert entry.client_ip == "198.51.100.7"
+        assert entry.peer_ip == "172.29.0.1"
+        assert entry.forwarded_for == "198.51.100.7, 127.0.0.1"
+
+    @pytest.mark.asyncio
     async def test_the_row_names_the_lane_that_served(self):
         """Two lanes of one provider are one name; the row must tell them apart."""
         rl = MagicMock()

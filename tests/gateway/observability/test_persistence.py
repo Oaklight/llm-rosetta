@@ -275,6 +275,73 @@ class TestSchemaVersioning:
         entries, _total = await pm.query_log_entries(limit=10)
         assert entries[0].get("conversation_id") is None
 
+    async def test_the_origin_columns_round_trip_and_stay_apart_from_client_ip(
+        self, pm
+    ):
+        """Migration v17: the peer and the raw chain are kept beside the resolved client."""
+        entry = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=50.0,
+            client_ip="198.51.100.7",
+            peer_ip="172.29.0.1",
+            forwarded_for="198.51.100.7, 127.0.0.1",
+        )
+        await pm.insert_log_entries([entry.to_dict()])
+        entries, _total = await pm.query_log_entries(limit=10)
+        assert entries[0]["client_ip"] == "198.51.100.7"
+        assert entries[0]["peer_ip"] == "172.29.0.1"
+        assert entries[0]["forwarded_for"] == "198.51.100.7, 127.0.0.1"
+
+    async def test_a_row_without_the_origin_columns_omits_the_keys(self, pm):
+        entry = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=50.0,
+        )
+        await pm.insert_log_entries([entry.to_dict()])
+        entries, _total = await pm.query_log_entries(limit=10)
+        assert "peer_ip" not in entries[0]
+        assert "forwarded_for" not in entries[0]
+
+    async def test_a_store_from_before_the_origin_columns_migrates_and_keeps_its_rows(
+        self, tmp_path
+    ):
+        """The production database gains both columns at startup, rows intact."""
+        pm = await PersistenceManager.create(str(tmp_path))
+        entry = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=50.0,
+            client_ip="172.29.0.1",
+        )
+        await pm.insert_log_entries([entry.to_dict()])
+        await pm._conn.execute("ALTER TABLE request_log DROP COLUMN peer_ip")
+        await pm._conn.execute("ALTER TABLE request_log DROP COLUMN forwarded_for")
+        await pm._conn.execute("DELETE FROM schema_version WHERE version = 17")
+        await pm._conn.commit()
+        await pm.close()
+
+        reopened = await PersistenceManager.create(str(tmp_path))
+        try:
+            cursor = await reopened._conn.execute("PRAGMA table_info(request_log)")
+            columns = {r[1] for r in await cursor.fetchall()}
+            assert {"peer_ip", "forwarded_for"} <= columns
+            entries, _total = await reopened.query_log_entries(limit=10)
+            assert entries[0]["client_ip"] == "172.29.0.1"
+            assert "peer_ip" not in entries[0]
+        finally:
+            await reopened.close()
+
     async def test_a_store_from_before_the_column_migrates_and_keeps_its_rows(
         self, tmp_path
     ):

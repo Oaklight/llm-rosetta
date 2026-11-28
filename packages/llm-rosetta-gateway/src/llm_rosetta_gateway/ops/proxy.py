@@ -54,6 +54,8 @@ class OpsProxyRequest(OpsBase):
         "request_id",
         "client_ip",
         "upstream_model",
+        "peer_ip",
+        "forwarded_for",
         "_entry_id",
     )
 
@@ -76,6 +78,8 @@ class OpsProxyRequest(OpsBase):
         request_id: str | None = None,
         client_ip: str | None = None,
         upstream_model: str | None = None,
+        peer_ip: str | None = None,
+        forwarded_for: str | None = None,
     ) -> None:
         super().__init__(ctx)
         self.model = model
@@ -93,6 +97,8 @@ class OpsProxyRequest(OpsBase):
         self.request_id = request_id
         self.client_ip = client_ip
         self.upstream_model = upstream_model
+        self.peer_ip = peer_ip
+        self.forwarded_for = forwarded_for
         self._entry_id: str | None = None
 
     @property
@@ -142,6 +148,7 @@ class OpsProxyRequest(OpsBase):
         request_log = self._ctx.request_log
         if request_log is not None:
             _kctx = api_key_context_var.get()
+            _rctx = request_context_var.get()
             entry = RequestLogEntry.create(
                 model=self.model,
                 source_provider=self.source_provider,
@@ -153,11 +160,11 @@ class OpsProxyRequest(OpsBase):
                 error_detail=self.error_detail,
                 api_key_label=_kctx.label if _kctx else None,
                 api_key_bucket=_kctx.usage_bucket if _kctx else None,
-                client_ip=self.client_ip
-                or (_rctx.client_ip if (_rctx := request_context_var.get()) else None),
-                user_agent=_rctx.user_agent
-                if (_rctx := request_context_var.get())
-                else None,
+                client_ip=self.client_ip or (_rctx.client_ip if _rctx else None),
+                peer_ip=self.peer_ip or (_rctx.peer_ip if _rctx else None),
+                forwarded_for=self.forwarded_for
+                or (_rctx.forwarded_for if _rctx else None),
+                user_agent=_rctx.user_agent if _rctx else None,
                 profile=self.profile,
                 model_type=self.model_type,
                 request_id=self.request_id,
@@ -195,6 +202,8 @@ async def record_proxy_request(
     request_id: str | None = None,
     client_ip: str | None = None,
     upstream_model: str | None = None,
+    peer_ip: str | None = None,
+    forwarded_for: str | None = None,
 ) -> None:
     """Record one proxy request against the app's ops context.
 
@@ -228,5 +237,7 @@ async def record_proxy_request(
         request_id=request_id,
         client_ip=client_ip,
         upstream_model=upstream_model,
+        peer_ip=peer_ip,
+        forwarded_for=forwarded_for,
     )
     await op.execute()

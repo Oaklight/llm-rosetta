@@ -44,6 +44,11 @@ class RequestContext:
             policy (the TCP peer unless it is a trusted proxy that names one).
         https: Whether the request arrived over HTTPS, as the peer or a
             trusted proxy reports it.
+        peer_ip: The TCP peer, as the socket showed it.  For audit only: no
+            decision reads it.
+        forwarded_for: The ``X-Forwarded-For`` header as received, cut to
+            :data:`_FORWARDED_FOR_MAX_CHARS`.  For audit only: it is what the
+            wire said, trusted or not, so no decision may read it.
         api_format: Detected API format based on the request path
             (``"openai"``, ``"anthropic"``, ``"google"``), or ``None``
             for paths where format detection is not meaningful (e.g.
@@ -65,6 +70,8 @@ class RequestContext:
     request_start: float | None = None
     user_agent: str | None = None
     https: bool = False
+    peer_ip: str | None = None
+    forwarded_for: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -96,6 +103,30 @@ def extract_user_agent(request: Any) -> str | None:
         return None
     text = str(value).strip()
     return text[:_USER_AGENT_MAX_CHARS] or None
+
+
+#: ``X-Forwarded-For`` is client-controlled and goes into a log row: a chain
+#: longer than this is cut.  Real chains are a few addresses.
+_FORWARDED_FOR_MAX_CHARS = 500
+
+
+def extract_peer_ip(request: Any) -> str | None:
+    """Return the TCP peer address of *request* as the socket showed it, or ``None``."""
+    addr = getattr(request, "client_addr", None)
+    if isinstance(addr, (tuple, list)) and addr and addr[0]:
+        return str(addr[0])
+    return None
+
+
+def extract_forwarded_for(request: Any) -> str | None:
+    """Return the raw ``X-Forwarded-For`` header, cut, or ``None`` when absent."""
+    headers = getattr(request, "headers", None)
+    if headers is None:
+        return None
+    value = headers.get("x-forwarded-for")
+    if not value:
+        return None
+    return str(value).strip()[:_FORWARDED_FOR_MAX_CHARS] or None
 
 
 class TrustedProxies:
@@ -255,6 +286,8 @@ def setup_request_context(policy: ProxyPolicy) -> Any:
             is_admin=admin,
             request_start=time.monotonic(),
             user_agent=extract_user_agent(request),
+            peer_ip=extract_peer_ip(request),
+            forwarded_for=extract_forwarded_for(request),
         )
         request_context_var.set(ctx)
 
