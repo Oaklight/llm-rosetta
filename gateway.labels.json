@@ -1,0 +1,22 @@
+{
+ "CLI>APP": [
+  "-.->",
+  "serve"
+ ],
+ "ADMIN>ADMINAPI": [
+  "-->",
+  "唯一允许"
+ ],
+ "APP>ADMIN": [
+  "-.->",
+  "只有 factory.py"
+ ],
+ "APP>PIPES": [
+  "-->",
+  "内置类型处理函数表 BUILTIN_HANDLERS(#1791)"
+ ],
+ "APP>ADMINAPI": [
+  "-->",
+  "适配器 admin_context.py"
+ ]
+}

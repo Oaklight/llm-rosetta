@@ -36,55 +36,86 @@ flowchart TB
     ADMIN["admin/<br/>routes/ · js/ · admin.html"]
     APP["app/<br/>factory · routes_llm · routes_typed · routes_models<br/>routes_compact · routes_count_tokens · routes_health · tasks · admin_context"]
   end
-  APP --> PROXY
-  CONFIG --> CORE
-  APP --> ROUTING
-  APP --> KEYSTORE
-  CLI --> OBS
-  APP --> MAINT
-  TRANSPORT -->|HTTP/SSE · ACP stdio| UP
-  CONFIG --> ROUTING
-  CLI -.->|serve| APP
-  APP --> OPS
-  CLI --> CONFIG
-  APP --> MW
-  PIPES --> MW
+  ADMIN -->|"唯一允许"| ADMINAPI
+  ADMIN --> CONFIG
+  ADMIN --> JOBS
+  ADMIN --> KEYSTORE
+  ADMIN --> MAINT
+  ADMIN --> MW
+  ADMIN --> MT
+  ADMIN --> OBS
+  ADMIN --> OPS
+  ADMIN --> QUOTA
+  ADMIN --> ROUTING
+  ADMIN --> SHIMS
+  ADMIN --> TRANSPORT
+  ADMIN --> UPD
+  APP -.->|"只有 factory.py"| ADMIN
+  APP -->|"适配器 admin_context.py"| ADMINAPI
   APP --> CONFIG
-  ADMIN -->|唯一允许| ADMINAPI
-  OBS --> CORE
-  PROXY --> MAINT
-  CLI --> SHIMS
-  SHIMS --> CORE
-  PIPES --> CONFIG
-  MW --> KEYSTORE
-  APP -.->|只有 factory.py| ADMIN
-  APP --> OBS
-  APP --> TRANSPORT
-  PROXY --> MW
-  PROXY --> ROUTING
-  CONFIG --> OBS
-  PIPES --> PROXY
-  PROXY --> OPS
-  MAINT --> OBS
-  JOBS --> OBS
-  OPS --> OBS
-  OPS --> MT
-  KEYSTORE --> OBS
-  APP --> QUOTA
-  QUOTA --> OBS
-  TRANSPORT --> CORE
-  CONFIG --> MT
-  OPS --> SHIMS
-  APP -->|"内置类型处理函数表 BUILTIN_HANDLERS(#1791)"| PIPES
-  CONFIG --> TRANSPORT
-  OPS --> ROUTING
-  CLIENT -->|HTTP| APP
+  APP --> JOBS
+  APP --> KEYSTORE
+  APP --> MAINT
+  APP --> MW
   APP --> MT
-  OPS --> MW
-  ROUTING --> QUOTA
-  PROXY --> CORE
+  APP --> OBS
+  APP --> OPS
+  APP -->|"内置类型处理函数表 BUILTIN_HANDLERS(#1791)"| PIPES
+  APP --> PROXY
+  APP --> QUOTA
+  APP --> ROUTING
+  APP --> SHIMS
+  APP --> SURF
+  APP --> TRANSPORT
+  CLI -.->|"serve"| APP
+  CLI --> CONFIG
+  CLI --> OBS
+  CLI --> OPS
+  CLI --> SHIMS
+  CONFIG --> MW
+  CONFIG --> MT
+  CONFIG --> OBS
+  CONFIG --> QUOTA
+  CONFIG --> ROUTING
+  CONFIG --> SHIMS
+  CONFIG --> TRANSPORT
+  JOBS --> OBS
+  JOBS --> OPS
+  KEYSTORE --> OBS
+  MAINT --> KEYSTORE
+  MAINT --> OBS
+  MAINT --> QUOTA
+  MAINT --> TRANSPORT
+  MW --> KEYSTORE
   MW --> OBS
-  PROXY --> TRANSPORT
-  APP -->|适配器 admin_context.py| ADMINAPI
-  PROXY --> OBS
+  OPS --> CONFIG
+  OPS --> MW
+  OPS --> MT
+  OPS --> OBS
+  OPS --> ROUTING
+  OPS --> SHIMS
+  PIPES --> CONFIG
+  PIPES --> MW
+  PIPES --> MT
+  PIPES --> OBS
+  PIPES --> PROXY
+  PIPES --> QUOTA
   PIPES --> TRANSPORT
+  PROXY --> MAINT
+  PROXY --> MW
+  PROXY --> OBS
+  PROXY --> OPS
+  PROXY --> QUOTA
+  PROXY --> ROUTING
+  PROXY --> TRANSPORT
+  QUOTA --> OBS
+  QUOTA --> TRANSPORT
+  ROUTING --> QUOTA
+  ROUTING --> TRANSPORT
+  CONFIG --> CORE
+  TRANSPORT -->|HTTP/SSE · ACP stdio| UP
+  OBS --> CORE
+  SHIMS --> CORE
+  TRANSPORT --> CORE
+  CLIENT -->|HTTP| APP
+  PROXY --> CORE
