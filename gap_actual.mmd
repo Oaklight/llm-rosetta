@@ -1,3 +1,7 @@
+---
+config:
+  layout: elk
+---
 flowchart TB
   ACPQ["transport/acp_quota.py<br/>进程级 _READINGS / _LOCKS(A9)"]
   subgraph STATE["state"]
@@ -20,8 +24,8 @@ flowchart TB
     SHIMS["shims/<br/>extension_view · manifest_sources · source_view(读扩展 index.json)"]
   end
   subgraph ENGINE["engine"]
-    PROXY["proxy/<br/>prepare · engine · streaming · failover · fidelity · preflight · lifecycle · errors<br/>上游尝试的记账是 5 份拷贝之一(A4)"]
-    PIPES["pipelines/<br/>embeddings · rerank · decision<br/>记账拷贝之一(A4)"]
+    PROXY["proxy/<br/>prepare · attempt(attempt_upstream:上游尝试记账) · engine · streaming · failover · fidelity · preflight · lifecycle · errors"]
+    PIPES["pipelines/<br/>embeddings · rerank · decision"]
   end
   subgraph OPERATIONS["operations"]
     OPS["ops/<br/>OpsBase 审计层 · data · keys · security · proxy · lifecycle(启动/关闭/重载审计)"]
@@ -35,7 +39,7 @@ flowchart TB
   subgraph SERVING["serving"]
     ADMINAPI["admin_api.py<br/>AdminContext 协议;不导入 app 与 observability"]
     ADMIN["admin/<br/>routes/ · js/ · admin.html<br/>热重载写在 routes/_shared.py,写 5 个 app 属性;读 request.app.* 28 种,约 113 处(A1)"]
-    APP["app/<br/>factory · routes_llm · routes_typed · routes_models<br/>routes_compact · routes_count_tokens · routes_health · tasks · admin_context<br/>已生效配置有两个落点:app.gateway_config 与 app/_state(A1)<br/>routes_compact · routes_count_tokens 自己记账(A4)"]
+    APP["app/<br/>factory · routes_llm · routes_typed · routes_models<br/>routes_compact · routes_count_tokens · routes_health · tasks · admin_context<br/>已生效配置有两个落点:app.gateway_config 与 app/_state(A1)"]
   end
   ADMIN -->|"唯一允许"| ADMINAPI
   ADMIN -->|"legacy allowlist 导入(A1)"| CONFIG
@@ -52,67 +56,26 @@ flowchart TB
   ADMIN --> TRANSPORT
   ADMIN --> UPD
   APP -.->|"只有 factory.py"| ADMIN
-  APP -->|"适配器 admin_context.py"| ADMINAPI
-  APP --> CONFIG
-  APP --> JOBS
-  APP --> KEYSTORE
-  APP --> MAINT
-  APP --> MW
-  APP --> MT
-  APP --> OBS
-  APP --> OPS
   APP -->|"内置类型处理函数表 BUILTIN_HANDLERS"| PIPES
-  APP --> PROXY
-  APP --> QUOTA
-  APP --> ROUTING
-  APP --> SHIMS
   APP --> SURF
-  APP --> TRANSPORT
   CLI -.->|"serve"| APP
-  CLI --> CONFIG
-  CLI --> OBS
-  CLI --> OPS
-  CLI --> SHIMS
   CONFIG --> MW
   CONFIG --> MT
-  CONFIG --> OBS
-  CONFIG --> QUOTA
   CONFIG --> ROUTING
   CONFIG --> SHIMS
   CONFIG -->|"ACP lane 解析在 config(A8)"| TRANSPORT
-  JOBS --> OBS
   JOBS --> OPS
   KEYSTORE --> OBS
   MAINT --> KEYSTORE
-  MAINT --> OBS
   MAINT --> QUOTA
-  MAINT --> TRANSPORT
   MW --> KEYSTORE
-  MW --> OBS
   OPS --> CONFIG
-  OPS --> MW
-  OPS --> MT
-  OPS --> OBS
-  OPS --> ROUTING
-  OPS --> SHIMS
-  PIPES --> CONFIG
-  PIPES --> MW
-  PIPES --> MT
-  PIPES --> OBS
   PIPES --> PROXY
-  PIPES -->|"自己记账(A4)"| QUOTA
-  PIPES --> TRANSPORT
   PROXY --> MAINT
-  PROXY --> MW
-  PROXY --> OBS
   PROXY --> OPS
-  PROXY -->|"自己记账(A4)"| QUOTA
-  PROXY --> ROUTING
-  PROXY --> TRANSPORT
   QUOTA --> OBS
   QUOTA --> TRANSPORT
   ROUTING --> QUOTA
-  ROUTING --> TRANSPORT
   ADMIN -->|"读 request.app.*(A1)"| APP
   TRANSPORT --> ACPQ
   ACPQ -.->|"状态放错地方(A9)"| QUOTA
@@ -123,4 +86,4 @@ flowchart TB
   TRANSPORT --> CORE
   CLIENT -->|HTTP| APP
   PROXY --> CORE
-  linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,42,63,69,76,78 stroke:#c0392b,stroke-width:2px
+  linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,22,35,37 stroke:#c0392b,stroke-width:2px

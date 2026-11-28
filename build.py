@@ -9,9 +9,9 @@ sections = [
  ("admin", "3. admin 页面与组件的关系",
   "已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。"),
 ("gap_actual", "4. gateway 现实:当前的完整架构与仍偏离设计的地方",
-  "和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题:A1 admin 的边界只在导入层有测试(legacy allowlist 的 13 条 admin 导入,加上 admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点);A4 上游尝试的记账有 5 份拷贝(proxy、pipelines 和两条 relay 路由);A8 config/providers.py 里有约 20 个 ACP 辅助(build_provider_info 复杂度 49);ProviderInfo 的 58 个属性是已知现状,决定不拆;A9 quota 的进程级状态放在 transport 里。数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。"),
+  "和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题(A4 已合并,不再画):A1 admin 的边界只在导入层有测试(legacy allowlist 的 13 条 admin 导入,加上 admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点);A8 config/providers.py 里有约 20 个 ACP 辅助(build_provider_info 复杂度 49);ProviderInfo 的 58 个属性是已知现状,决定不拆;A9 quota 的进程级状态放在 transport 里。数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。 为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。"),
 ("gap_ideal", "5. gateway 理想:最终的架构",
-  "同一批节点,没有红线。admin 只经 AdminContext;热重载和已生效配置在 app 里,审计写入只经 ops;上游尝试的记账是 proxy 里的一个 attempt_upstream;ACP lane 解析在 transport/acp/lane.py 里,ACP 是 transport/ 下的一个文件夹(和 http/ 对应);quota 的读数和锁回到 quota/,启动时向 transport 注册接收器。这是目标态,每一项落地后,第 4 页对应的红线就去掉。",
+  "同一批节点,没有红线。admin 只经 AdminContext;热重载和已生效配置在 app 里,审计写入只经 ops;上游尝试的记账是 proxy 里的一个 attempt_upstream;ACP lane 解析在 transport/acp/lane.py 里,ACP 是 transport/ 下的一个文件夹(和 http/ 对应);quota 的读数和锁回到 quota/,启动时向 transport 注册接收器。这是目标态,每一项落地后,第 4 页对应的红线就去掉。 为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。",
   "目标 · #1830", ""),
 ]
 
@@ -40,7 +40,7 @@ for n, (key, title, note, *extra) in enumerate(sections, 1):
   <div class="panel">
     <span class="tag {tag_class}">{html.escape(tag_text)}</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="{key}"> <span id="z-{key}">100%</span></label></div>
-    <div class="scroll"><div class="stage" id="stage-{key}"><pre class="mermaid" id="m-{key}">{src(key)}</pre></div></div>
+    <div class="scroll"><div class="stage" id="stage-{key}"><pre class="mmd-src" id="m-{key}">{src(key)}</pre></div></div>
   </div>
 </section>"""
 
@@ -73,11 +73,16 @@ page = """<!doctype html>
 """ + blocks + """
 <footer><span>由 <code>gen_core.py</code> 生成 core 图,<code>build.py</code> 生成本页;mermaid 在浏览器里渲染。</span><span>分支 <code>docs_arch</code></span></footer>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-<script>
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+try {
+  const elk = (await import("https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0/dist/mermaid-layout-elk.esm.min.mjs")).default;
+  mermaid.registerLayoutLoaders(elk);
+} catch (e) { console.warn("ELK layout unavailable, falling back to dagre: " + e); }
+window.mermaid = mermaid;
 (function () {
   var KEY = "llm-rosetta-arch-theme", btn = document.getElementById("themeBtn");
-  var panes = Array.prototype.map.call(document.querySelectorAll("pre.mermaid"), function (pre) {
+  var panes = Array.prototype.map.call(document.querySelectorAll("pre.mmd-src"), function (pre) {
     return { id: pre.id.replace("m-", ""), src: pre.textContent };
   });
   function preferred() {
@@ -97,6 +102,7 @@ page = """<!doctype html>
     mermaid.initialize({ startOnLoad: false, securityLevel: "loose", theme: theme === "dark" ? "dark" : "default",
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", sans-serif',
       flowchart: { useMaxWidth: false, htmlLabels: true, curve: "basis", nodeSpacing: 40, rankSpacing: 60 } });
+    try { await mermaid.parse("flowchart TB; a --> b"); } catch (e) {}
     for (var p of panes) {
       var stage = document.getElementById("stage-" + p.id);
       try {

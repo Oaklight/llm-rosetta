@@ -19,7 +19,7 @@ flowchart TB
     SHIMS["shims/<br/>extension_view · manifest_sources · source_view(读扩展 index.json)"]
   end
   subgraph ENGINE["engine"]
-    PROXY["proxy/<br/>prepare · engine · streaming · failover · fidelity · preflight · lifecycle · errors"]
+    PROXY["proxy/<br/>prepare · attempt(attempt_upstream:上游尝试记账) · engine · streaming · failover · fidelity · preflight · lifecycle · errors"]
     PIPES["pipelines/<br/>embeddings · rerank · decision"]
   end
   subgraph OPERATIONS["operations"]

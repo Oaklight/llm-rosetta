@@ -1,3 +1,7 @@
+---
+config:
+  layout: elk
+---
 flowchart TB
   subgraph STATE["state"]
     KEYSTORE["keystore/<br/>SQLite API key 库 · maintenance(schema 步骤)"]
@@ -19,7 +23,7 @@ flowchart TB
     SHIMS["shims/<br/>extension_view · manifest_sources · source_view(读扩展 index.json)"]
   end
   subgraph ENGINE["engine"]
-    PROXY["proxy/<br/>prepare · engine · streaming · failover · fidelity · preflight · lifecycle · errors<br/>attempt_upstream:唯一的上游尝试记账(A4);pipelines 与 relay 路由经它"]
+    PROXY["proxy/<br/>prepare · attempt(attempt_upstream:上游尝试记账) · engine · streaming · failover · fidelity · preflight · lifecycle · errors<br/>attempt.py:attempt_upstream 是上游尝试记账的唯一入口,pipelines 与 relay 路由经它"]
     PIPES["pipelines/<br/>embeddings · rerank · decision"]
   end
   subgraph OPERATIONS["operations"]
@@ -38,66 +42,26 @@ flowchart TB
   end
   ADMIN -->|"唯一允许"| ADMINAPI
   APP -.->|"只有 factory.py"| ADMIN
-  APP -->|"适配器 admin_context.py"| ADMINAPI
-  APP --> CONFIG
   APP --> JOBS
-  APP --> KEYSTORE
-  APP --> MAINT
-  APP --> MW
-  APP --> MT
-  APP --> OBS
-  APP --> OPS
   APP -->|"内置类型处理函数表 BUILTIN_HANDLERS"| PIPES
-  APP --> PROXY
-  APP --> QUOTA
-  APP --> ROUTING
-  APP --> SHIMS
   APP --> SURF
-  APP --> TRANSPORT
   CLI -.->|"serve"| APP
-  CLI --> CONFIG
-  CLI --> OBS
-  CLI --> OPS
-  CLI --> SHIMS
   CONFIG --> MW
   CONFIG --> MT
-  CONFIG --> OBS
-  CONFIG --> QUOTA
   CONFIG --> ROUTING
   CONFIG --> SHIMS
-  CONFIG --> TRANSPORT
-  JOBS --> OBS
   JOBS --> OPS
   KEYSTORE --> OBS
   MAINT --> KEYSTORE
-  MAINT --> OBS
   MAINT --> QUOTA
-  MAINT --> TRANSPORT
   MW --> KEYSTORE
-  MW --> OBS
   OPS --> CONFIG
-  OPS --> MW
-  OPS --> MT
-  OPS --> OBS
-  OPS --> ROUTING
-  OPS --> SHIMS
-  PIPES --> CONFIG
-  PIPES --> MW
-  PIPES --> MT
-  PIPES --> OBS
   PIPES --> PROXY
-  PIPES --> TRANSPORT
   PROXY --> MAINT
-  PROXY --> MW
-  PROXY --> OBS
   PROXY --> OPS
-  PROXY --> QUOTA
-  PROXY --> ROUTING
-  PROXY --> TRANSPORT
   QUOTA --> OBS
   QUOTA -.->|"启动时注册接收器(A9)"| TRANSPORT
   ROUTING --> QUOTA
-  ROUTING --> TRANSPORT
   CONFIG --> CORE
   TRANSPORT -->|HTTP/SSE · ACP stdio| UP
   OBS --> CORE
