@@ -227,7 +227,15 @@ class PersistenceManager(
             ops_log_max=ops_log_max,
             wal_max_bytes=wal_max_bytes,
         )
-        await instance._open(backup=backup, migrate=migrate)
+        try:
+            await instance._open(backup=backup, migrate=migrate)
+        except BaseException:
+            # A failed open must not leave its connection and worker thread
+            # behind.  Closed, not committed: the aborted work is rolled back.
+            conn = getattr(instance, "_conn", None)
+            if conn is not None:
+                await conn.close()
+            raise
         return instance
 
     @property

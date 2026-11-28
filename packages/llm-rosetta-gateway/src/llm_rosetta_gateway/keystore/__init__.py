@@ -254,21 +254,27 @@ class KeyStore:
         instance._db_path = Path(db_path)
         instance._db_path.parent.mkdir(parents=True, exist_ok=True)
         instance._conn = await aiosqlite.connect(str(instance._db_path))
-        await instance._conn.execute("PRAGMA journal_mode=WAL")
-        await instance._conn.execute("PRAGMA synchronous=NORMAL")
-        await instance._conn.execute(
-            """CREATE TABLE IF NOT EXISTS api_keys (
-                id          TEXT PRIMARY KEY,
-                key_hash    TEXT NOT NULL UNIQUE,
-                label       TEXT NOT NULL DEFAULT '',
-                created     TEXT NOT NULL,
-                rotated     TEXT
-            )"""
-        )
-        await instance._conn.commit()
-        instance.maintenance = build_registry()
-        await instance.maintenance.run(StepContext(keystore=instance))
-        await instance._refresh_cache()
+        try:
+            await instance._conn.execute("PRAGMA journal_mode=WAL")
+            await instance._conn.execute("PRAGMA synchronous=NORMAL")
+            await instance._conn.execute(
+                """CREATE TABLE IF NOT EXISTS api_keys (
+                    id          TEXT PRIMARY KEY,
+                    key_hash    TEXT NOT NULL UNIQUE,
+                    label       TEXT NOT NULL DEFAULT '',
+                    created     TEXT NOT NULL,
+                    rotated     TEXT
+                )"""
+            )
+            await instance._conn.commit()
+            instance.maintenance = build_registry()
+            await instance.maintenance.run(StepContext(keystore=instance))
+            await instance._refresh_cache()
+        except BaseException:
+            # A failed open (a MANDATORY migration raising) must not leave its
+            # connection and worker thread behind.  Closed, not committed.
+            await instance._conn.close()
+            raise
         return instance
 
     async def _refresh_cache(self) -> None:
