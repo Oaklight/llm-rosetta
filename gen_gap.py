@@ -21,7 +21,7 @@ ACTUAL_PATCH = {
     "ADMIN": "legacy allowlist 导入 + 读 request.app.* 28 种,约 113 处(A1);热重载已经是 AdminContext.reload_config",
     "APP": "已生效配置有两个落点:app.gateway_config 与 app/_state(A1)",
     "CONFIG": "providers.py:build_provider_info 294 行,复杂度 49;约 20 个 ACP 辅助在这里(A8)",
-    "TRANSPORT": "provider_info.py:ProviderInfo 58 个属性(不拆) · acp.py 2535 行",
+    "TRANSPORT": "provider_info.py:ProviderInfo 58 个属性(不拆) · acp/transport.py 2535 行 · acp/quota.py 持有配额状态(A9)",
 }
 ACTUAL_NODES = ['ACPQ["transport/acp_quota.py<br/>进程级 _READINGS / _LOCKS(A9)"]']
 ACTUAL_EXTRA = [

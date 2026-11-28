@@ -219,7 +219,7 @@
     MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info · provider_readiness(ProviderNotReady)"]
+    TRANSPORT["transport/&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · quota) · registry · provider_info · provider_readiness(ProviderNotReady)"]
     SURF["surface.py"]
     OBS["observability/&lt;br/&gt;logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]
@@ -469,7 +469,7 @@ flowchart TB
     MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info · provider_readiness(ProviderNotReady)&lt;br/&gt;provider_info.py:ProviderInfo 58 个属性(不拆) · acp.py 2535 行"]
+    TRANSPORT["transport/&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · quota) · registry · provider_info · provider_readiness(ProviderNotReady)&lt;br/&gt;provider_info.py:ProviderInfo 58 个属性(不拆) · acp/transport.py 2535 行 · acp/quota.py 持有配额状态(A9)"]
     SURF["surface.py"]
     OBS["observability/&lt;br/&gt;logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]
@@ -566,7 +566,7 @@ flowchart TB
     MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info · provider_readiness(ProviderNotReady)&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码,A9),A13)&lt;br/&gt;lane_allowance(接收器接口,A9) · 不导入 quota"]
+    TRANSPORT["transport/&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · quota) · registry · provider_info · provider_readiness(ProviderNotReady)&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码,A9),A13)&lt;br/&gt;lane_allowance(接收器接口,A9) · 不导入 quota"]
     SURF["surface.py"]
     OBS["observability/&lt;br/&gt;logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]

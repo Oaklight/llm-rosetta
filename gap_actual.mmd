@@ -16,7 +16,7 @@ flowchart TB
     MW["middleware/<br/>auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/<br/>http · acp · registry · provider_info · provider_readiness(ProviderNotReady)<br/>provider_info.py:ProviderInfo 58 个属性(不拆) · acp.py 2535 行"]
+    TRANSPORT["transport/<br/>http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · quota) · registry · provider_info · provider_readiness(ProviderNotReady)<br/>provider_info.py:ProviderInfo 58 个属性(不拆) · acp/transport.py 2535 行 · acp/quota.py 持有配额状态(A9)"]
     SURF["surface.py"]
     OBS["observability/<br/>logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]
