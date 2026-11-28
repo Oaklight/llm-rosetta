@@ -963,6 +963,24 @@ An invalid entry stops the start and names the item, for example `server.trusted
 !!! note "Migration"
     `rate_limit.trust_proxy` was removed. The gateway refuses to start while it is in the config; replace it with `server.trusted_proxies`.
 
+## Extension Installs { #extension-installs }
+
+`server.extension_install` (boolean, default `true`) says whether the gateway may install or update an extension:
+
+```jsonc
+{
+  "server": {
+    "extension_install": false
+  }
+}
+```
+
+With `false`, the admin endpoints `POST /admin/api/extensions/<id>/install-cli` and `POST /admin/api/extensions/<id>/update` answer `403` with the reason `install_disabled` and a message that names `server.extension_install`; nothing is downloaded or run. Listing the extensions, the removal plan, removal and the update check keep working, and extensions that are already installed keep loading. A config without the key allows installs, as every earlier release did.
+
+Only a boolean is accepted: any other value (a string such as `"false"` included) stops the start and names the key. The switch is read on every request, so a config reload applies it.
+
+It does not cover the `llm-rosetta ext` command line, which runs on the host as the operator, or the installs a config declares itself with `shims.sources` and `shims.install`; those run when the gateway starts or reloads.
+
 ## Routing Loop Detection
 
 When multiple gateway instances are chained (e.g. a campus gateway forwarding to a cloud gateway), routing loops can occur. The gateway detects these via a hop-count header:
