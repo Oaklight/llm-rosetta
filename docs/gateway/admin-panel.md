@@ -295,7 +295,7 @@ Every view shares one filter vocabulary:
 | Source → Target | Source format and target provider |
 | Mode | `stream`, or a blank cell for a non-streaming call |
 | API Key | Label of the key that called |
-| Client IP | Peer address |
+| Client IP | The resolved client (see `server.trusted_proxies`). When nothing trusted resolved and the request carried `X-Forwarded-For`, the first entry of that header is shown instead, marked *unverified*; hover the cell for the peer and the raw chain |
 | Status | HTTP status, colour-coded |
 | Tokens | Prompt and completion counts, plus cache reads where the provider reports them |
 | Duration | End to end, and output tokens per second where token usage is known |

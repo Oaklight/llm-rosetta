@@ -103,7 +103,9 @@ entry = RequestLogEntry.create(
 | `error_detail` | `str \| None` | Error message (if any) |
 | `api_key_label` | `str \| None` | API key label |
 | `target_provider_name` | `str \| None` | Provider display name |
-| `client_ip` | `str \| None` | Client IP address |
+| `client_ip` | `str \| None` | Client IP address, resolved under `server.trusted_proxies` (the TCP peer until a proxy is listed) |
+| `peer_ip` | `str \| None` | The TCP peer, as the socket showed it. For audit only |
+| `forwarded_for` | `str \| None` | The `X-Forwarded-For` header as received, cut to 500 characters. For audit only: it is what the sender wrote, trusted or not |
 | `profile` | `dict \| None` | Profiling data |
 | `request_id` | `str \| None` | The id returned in `X-Request-Id`, so a client-visible id resolves to a row |
 

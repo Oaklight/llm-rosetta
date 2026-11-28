@@ -953,6 +953,8 @@ The client address is resolved once per request, and the per-IP rate limit, the 
 - `X-Real-IP` is read only for a trusted peer that sent no usable `X-Forwarded-For`, and never overrides the chain.
 - `X-Forwarded-Proto: https` (which decides the `Secure` flag of the admin session cookie) counts only from a trusted peer.
 
+The request log also keeps, for audit only, the TCP peer (`peer_ip`) and the raw `X-Forwarded-For` header (`forwarded_for`, cut to 500 characters), whether or not the peer is trusted. Neither is read to decide anything: a forged header cannot change a limit or a login.
+
 An invalid entry stops the start and names the item, for example `server.trusted_proxies[1]`. The list is applied again when the config is reloaded.
 
 !!! warning "Behind a reverse proxy"
