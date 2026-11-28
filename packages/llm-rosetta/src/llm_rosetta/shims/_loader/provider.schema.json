@@ -83,6 +83,15 @@
           "description": "Provider-specific prefix for response IDs (e.g. 'chatcmpl-', 'msg_', 'resp_'). Empty string means passthrough.",
           "default": ""
         },
+        "needs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The programs this shim needs on the gateway host: names from its extension's plugin.yaml external[], or 'node' for the managed Node.js. Absent means every program the extension declares."
+        },
         "preserve_fields": {
           "type": "array",
           "items": {

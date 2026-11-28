@@ -164,7 +164,15 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "ExternalStatus",
             "IndexEntry",
             "InstalledExtension",
+            "PathEntry",
+            "RemovalPlan",
+            "RemovalResult",
             "RetiredEntryPoint",
+            "UpdatePlan",
+            "extension_origin",
+            "plan_removal",
+            "plan_updates",
+            "remove_with_programs",
             "check_external",
             "configure_extensions_dir",
             "entry_problems",
@@ -196,7 +204,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             # Version
             "__version__",
         ],
-        "max_count": 87,
+        "max_count": 95,
     },
     "llm_rosetta.ir.model": {
         "items": None,  # too many to enumerate; just check count
