@@ -1,4 +1,4 @@
-"""``admin/**`` reads the app only through ``AdminContext``, and the reads that remain only shrink.
+"""``admin/**`` never reads or writes the app; it asks ``AdminContext``.
 
 The import test (``test_admin_import_boundary.py``) sees what admin imports; it
 cannot see ``request.app.<attr>``, which reaches the same state without an
@@ -8,21 +8,14 @@ import.  This test finds those reads in the syntax tree:
 * ``getattr`` / ``setattr`` / ``hasattr`` / ``delattr`` on ``<name>.app`` or on a
   variable called ``app``, with a literal attribute name;
 * ``<name>.app`` handed on whole (``f(request.app)``), which hides every read the
-  callee makes; it is counted under ``<app passed on>``.
+  callee makes; it is reported as ``<app passed on>``.
 
 An app held under another name is not seen; the convention in ``admin/`` is
-``app`` and ``request.app``.
+``app`` and ``request.app``.  A need for gateway state becomes a member of
+``AdminContext`` (``admin_api.py``) and its implementation in
+``app/admin_context.py``.
 
-``_APP_READS`` lists, per file and attribute, how many there are today.  The
-list may only shrink: a read that is not on it fails the test, a count that
-dropped must be lowered, and ``_APP_READS_FROZEN`` (the list as it was drawn,
-never raised) refuses an entry that was added or raised in the same commit as
-the read it covers.  Replace a read with a member of ``AdminContext``
-(``admin_api.py``) and lower both lists.
-
-After a rebase, print the current counts with
-``python tests/gateway/test_admin_app_reads.py`` and paste the result over
-``_APP_READS``; lower the same entries in ``_APP_READS_FROZEN`` by hand.
+Print what the scan finds with ``python tests/gateway/test_admin_app_reads.py``.
 """
 
 from __future__ import annotations
@@ -41,51 +34,6 @@ _ATTR_FUNCS = {"getattr", "setattr", "hasattr", "delattr"}
 #: ``app.route(...)`` registers a handler while the panel is mounted; it reads no
 #: state, so it is not a read.
 _MOUNTING = {"route"}
-
-#: ``(file relative to admin/, attribute)`` to how many times admin reads it.
-_APP_READS: dict[tuple[str, str], int] = {
-    ("routes/config/extensions.py", "gateway_config"): 2,
-    ("routes/config/extensions.py", "shim_source_report"): 2,
-    ("routes/config/payload.py", "auth_state"): 1,
-    ("routes/config/payload.py", "gateway_config"): 3,
-    ("routes/config/providers.py", "transports"): 1,
-    ("routes/config/settings.py", "auth_state"): 1,
-    ("routes/config/shim_files.py", "_shim_file_index"): 2,
-    ("routes/config/shim_files.py", "gateway_config"): 1,
-    ("routes/config/shim_files.py", "shim_source_report"): 2,
-    ("routes/config/shim_manifests.py", "_shim_manifest_index"): 2,
-    ("routes/config/shim_manifests.py", "shim_source_report"): 1,
-    ("routes/config/shim_source_catalog.py", "gateway_config"): 1,
-    ("routes/config/shim_source_catalog.py", "shim_source_report"): 1,
-    ("routes/config/shims.py", "gateway_config"): 1,
-    ("routes/config/shims.py", "provider_validation_warnings"): 2,
-    ("routes/config/shims.py", "shim_source_report"): 2,
-    ("routes/config/shims.py", "shim_update_check"): 2,
-    ("routes/config/upstream.py", "config"): 1,
-}
-
-#: The counts when the rule was drawn.  Lower an entry when its reads migrate;
-#: never add one or raise a number.
-_APP_READS_FROZEN: dict[tuple[str, str], int] = {
-    ("routes/config/extensions.py", "gateway_config"): 2,
-    ("routes/config/extensions.py", "shim_source_report"): 2,
-    ("routes/config/payload.py", "auth_state"): 1,
-    ("routes/config/payload.py", "gateway_config"): 3,
-    ("routes/config/providers.py", "transports"): 1,
-    ("routes/config/settings.py", "auth_state"): 1,
-    ("routes/config/shim_files.py", "_shim_file_index"): 2,
-    ("routes/config/shim_files.py", "gateway_config"): 1,
-    ("routes/config/shim_files.py", "shim_source_report"): 2,
-    ("routes/config/shim_manifests.py", "_shim_manifest_index"): 2,
-    ("routes/config/shim_manifests.py", "shim_source_report"): 1,
-    ("routes/config/shim_source_catalog.py", "gateway_config"): 1,
-    ("routes/config/shim_source_catalog.py", "shim_source_report"): 1,
-    ("routes/config/shims.py", "gateway_config"): 1,
-    ("routes/config/shims.py", "provider_validation_warnings"): 2,
-    ("routes/config/shims.py", "shim_source_report"): 2,
-    ("routes/config/shims.py", "shim_update_check"): 2,
-    ("routes/config/upstream.py", "config"): 1,
-}
 
 
 def _is_request_app(node: ast.AST) -> bool:
@@ -148,20 +96,12 @@ def _app_reads() -> Counter[tuple[str, str]]:
     return found
 
 
-def test_a_read_of_the_app_is_listed_and_the_list_only_shrinks() -> None:
-    actual = app_reads()
-    new = {k: v for k, v in actual.items() if v > _APP_READS.get(k, 0)}
-    assert not new, (
+def test_admin_never_reads_the_app() -> None:
+    found = {key: count for key, count in sorted(app_reads().items())}
+    assert not found, (
         "admin reads the app outside AdminContext; add a member to "
-        f"admin_api.AdminContext instead of listing it: {new}"
+        f"admin_api.AdminContext instead: {found}"
     )
-    stale = {k: v for k, v in _APP_READS.items() if actual.get(k, 0) < v}
-    assert not stale, f"lower these counts in _APP_READS: {stale}"
-
-
-def test_the_list_is_never_raised() -> None:
-    raised = {k: v for k, v in _APP_READS.items() if v > _APP_READS_FROZEN.get(k, 0)}
-    assert not raised, f"_APP_READS gained or raised an entry: {raised}"
 
 
 def _printed(counts: Counter[tuple[str, str]]) -> str:

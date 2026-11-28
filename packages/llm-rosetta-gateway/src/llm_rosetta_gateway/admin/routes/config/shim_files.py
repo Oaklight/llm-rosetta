@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta_gateway.admin_api import catalogue
+from llm_rosetta_gateway.admin_api import admin_context, catalogue
 from llm_rosetta.api import list_shims
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
@@ -91,7 +91,7 @@ def _shim_roots(request: Any) -> list[tuple[str, str, Path]]:
     that shadows a built-in name wins — the registry keeps the later
     registration, and the panel must show the file that is actually in force.
     """
-    report = getattr(request.app, "shim_source_report", None)
+    report = admin_context(request).shim_source_report()
     roots: list[tuple[str, str, Path]] = [("builtin", "", _builtin_root())]
     for status in getattr(report, "sources", []) or []:
         resolved = getattr(status, "resolved_dir", None)
@@ -107,9 +107,9 @@ def _shim_index(request: Any) -> dict[str, dict[str, Any]]:
     Cached on the app, keyed by the last rebuild time: the walk reads one file
     per shim, and the report only changes when the sources are rebuilt.
     """
-    report = getattr(request.app, "shim_source_report", None)
+    report = admin_context(request).shim_source_report()
     stamp = getattr(report, "rebuilt_at", 0.0) if report is not None else 0.0
-    cached = getattr(request.app, "_shim_file_index", None)
+    cached = admin_context(request).shim_file_index()
     if cached is not None and cached[0] == stamp:
         return cached[1]
 
@@ -127,7 +127,7 @@ def _shim_index(request: Any) -> dict[str, dict[str, Any]]:
                     "path": str(yaml_path),
                     **{k: v for k, v in meta.items() if k != "name"},
                 }
-    request.app._shim_file_index = (stamp, index)
+    admin_context(request).set_shim_file_index((stamp, index))
     return index
 
 
@@ -199,7 +199,7 @@ def _shim_rows(request: Any) -> list[dict[str, Any]]:
     switch that hid it lives here.
     """
     index = _shim_index(request)
-    usage = _shim_usage(getattr(request.app, "gateway_config", None))
+    usage = _shim_usage(admin_context(request).served_config())
     disabled = set(_disabled_names(request))
     rows: dict[str, dict[str, Any]] = {}
     for shim in list_shims():

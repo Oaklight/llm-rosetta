@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.admin_api import catalogue
+from llm_rosetta_gateway.admin_api import admin_context, catalogue
 
 from .._shared import (
     _sanitize_server_section,
@@ -166,7 +166,7 @@ async def put_server_settings(request: Any) -> Response:  # noqa: C901
         # Credential visibility toggle
         if "credential_visible" in body:
             want_visible = bool(body["credential_visible"])
-            if want_visible and not request.app.auth_state.admin_password:
+            if want_visible and not admin_context(request).admin_password_is_set():
                 return JSONResponse(
                     {"error": "Credential reveal requires an admin password"},
                     status_code=403,

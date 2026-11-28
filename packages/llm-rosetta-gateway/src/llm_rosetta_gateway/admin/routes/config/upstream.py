@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.admin_api import catalogue
+from llm_rosetta_gateway.admin_api import admin_context, catalogue
 from llm_rosetta.api import get_model_list_transform, get_shim
 
 from .._shared import (
@@ -224,7 +224,7 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
 
 async def check_routing_loops(request: Any) -> Response:
     """Return any detected routing loops in the current config."""
-    config = getattr(request.app, "config", None)
+    config = admin_context(request).served_config()
     if config is None:
         return JSONResponse({"warnings": []})
 

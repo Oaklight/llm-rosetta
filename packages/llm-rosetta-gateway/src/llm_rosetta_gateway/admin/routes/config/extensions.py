@@ -168,8 +168,8 @@ async def post_extension_check_updates(request: Any) -> Response:
         isinstance(ids, list) and all(isinstance(i, str) for i in ids)
     ):
         return _bad_body("'ids' must be a list of strings")
-    config = getattr(request.app, "gateway_config", None)
-    report = getattr(request.app, "shim_source_report", None)
+    config = admin_context(request).served_config()
+    report = admin_context(request).shim_source_report()
     try:
         updates = await admin_context(request).check_extension_updates(
             config, report, ids
@@ -199,8 +199,8 @@ async def post_extension_update(request: Any, ext_id: str) -> Response:
     version = body.get("version")
     if version is not None and not isinstance(version, str):
         return _bad_body("'version' must be a string")
-    config = getattr(request.app, "gateway_config", None)
-    report = getattr(request.app, "shim_source_report", None)
+    config = admin_context(request).served_config()
+    report = admin_context(request).shim_source_report()
     try:
         result = await admin_context(request).update_extension(
             ext_id, config, report, version

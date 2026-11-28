@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.api import (
@@ -93,9 +93,6 @@ def _get_model_type_metadata() -> list[dict[str, Any]]:
 
 def _get_gateway_config(request: Any) -> GatewayConfig | None:
     """Return the live GatewayConfig from the app or module."""
-    cfg = getattr(request.app, "gateway_config", None)
-    if cfg is not None:
-        return cfg
     return admin_context(request).served_config()
 
 
@@ -426,7 +423,7 @@ async def get_config(request: Any) -> Response:
     # Mask API keys and ensure each provider has a "type" field
     providers = raw.get("providers", {})
     masked_providers: dict[str, Any] = {}
-    gateway_config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
+    gateway_config = admin_context(request).served_config()
     for name, cfg in providers.items():
         masked = _mask_provider_entry(name, cfg)
         _with_live_endpoint_markers(masked, name, gateway_config)
@@ -496,7 +493,7 @@ async def get_config(request: Any) -> Response:
             model_name, entry, raw_models, providers
         )
 
-    config: GatewayConfig = request.app.gateway_config
+    config = cast("GatewayConfig", admin_context(request).served_config())
     server = _effective_server_section(raw.get("server", {}), config)
     return JSONResponse(
         {
@@ -515,7 +512,7 @@ async def get_config(request: Any) -> Response:
                 "idle_minutes": config.admin_session_idle_minutes,
                 "remember_days": config.admin_session_remember_days,
             },
-            "has_admin_password": bool(request.app.auth_state.admin_password),
+            "has_admin_password": admin_context(request).admin_password_is_set(),
             "api_keys_db": config.api_keys_db,
             "version": _get_version(),
             "core_version": _get_core_version(),

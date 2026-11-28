@@ -607,7 +607,7 @@ async def test_fetch_upstream_models_unknown_provider_and_no_config() -> None:
 
 
 async def test_check_routing_loops() -> None:
-    app = SimpleNamespace(config=None)
+    app = fake_app()
     response = await upstream.check_routing_loops(_request(app, method="GET"))
     assert _body(response) == {"warnings": []}
 
@@ -615,7 +615,7 @@ async def test_check_routing_loops() -> None:
         models={"a": SimpleNamespace(providers=[]), "b": SimpleNamespace(providers=[])},
         model_upstream_names={"a": "b"},
     )
-    app = SimpleNamespace(config=config)
+    app = fake_app(gateway_config=config)
     response = await upstream.check_routing_loops(_request(app, method="GET"))
     assert response.status_code == 200
     [warning] = _body(response)["warnings"]

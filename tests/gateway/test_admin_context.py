@@ -408,3 +408,27 @@ class TestTheStateTheSharedRoutesRead:
         assert (
             GatewayAdminContext(SimpleNamespace()).provider_validation_warnings() == []
         )
+
+
+class TestTheShimIndexesTheConfigRoutesCache:
+    """``AdminShimSourceState``: each index is kept on the app, apart from the other."""
+
+    def test_an_index_is_none_until_one_is_cached(self):
+        context = GatewayAdminContext(SimpleNamespace())
+
+        assert context.shim_file_index() is None
+        assert context.shim_manifest_index() is None
+
+    def test_each_index_returns_what_was_cached_for_it(self):
+        context = GatewayAdminContext(SimpleNamespace())
+
+        context.set_shim_file_index((1.0, {"a": 1}))
+        context.set_shim_manifest_index((2.0, [{"vendor": "v"}]))
+
+        assert context.shim_file_index() == (1.0, {"a": 1})
+        assert context.shim_manifest_index() == (2.0, [{"vendor": "v"}])
+
+    def test_the_context_sees_an_index_the_app_already_holds(self):
+        app = SimpleNamespace(_shim_file_index=(3.0, {}))
+
+        assert GatewayAdminContext(app).shim_file_index() == (3.0, {})

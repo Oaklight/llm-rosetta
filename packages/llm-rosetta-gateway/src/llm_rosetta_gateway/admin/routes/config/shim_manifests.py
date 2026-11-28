@@ -20,7 +20,7 @@ from typing import Any
 
 from llm_rosetta.api import leaf_connection, manifest_vocabulary
 
-from llm_rosetta_gateway.admin_api import catalogue
+from llm_rosetta_gateway.admin_api import admin_context, catalogue
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
 from .._shared import _qp
@@ -173,9 +173,9 @@ def _manifest_entries(request: Any) -> list[dict[str, Any]]:
     which source they belong to.  Cached on the app like that index, keyed by
     the source report's last rebuild.
     """
-    report = getattr(request.app, "shim_source_report", None)
+    report = admin_context(request).shim_source_report()
     stamp = getattr(report, "rebuilt_at", 0.0) if report is not None else 0.0
-    cached = getattr(request.app, "_shim_manifest_index", None)
+    cached = admin_context(request).shim_manifest_index()
     if cached is not None and cached[0] == stamp:
         return cached[1]
 
@@ -184,7 +184,7 @@ def _manifest_entries(request: Any) -> list[dict[str, Any]]:
         entries.extend(_root_manifests(origin, location, root))
 
     entries.sort(key=lambda item: item["vendor"])
-    request.app._shim_manifest_index = (stamp, entries)
+    admin_context(request).set_shim_manifest_index((stamp, entries))
     return entries
 
 

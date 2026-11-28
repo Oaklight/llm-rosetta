@@ -8,7 +8,7 @@ from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
-from ....admin_api import catalogue
+from ....admin_api import admin_context, catalogue
 from .._shared import (
     _get_config_io,
     _install_shim_report,
@@ -23,7 +23,7 @@ logger = logging.getLogger("llm-rosetta-gateway")
 
 def _shim_status_payload(request: Any) -> dict[str, Any]:
     """Return the last shim-source report as a JSON-safe dict."""
-    report = getattr(request.app, "shim_source_report", None)
+    report = admin_context(request).shim_source_report()
     if report is None:
         return {
             "sources": [],
@@ -212,9 +212,7 @@ async def post_shims_reload(request: Any) -> Response:
         {
             "ok": True,
             "status": _shim_status_payload(request),
-            "provider_warnings": getattr(
-                request.app, "provider_validation_warnings", []
-            ),
+            "provider_warnings": admin_context(request).provider_validation_warnings(),
             "providers": list(new_config.providers.keys()),
         }
     )
@@ -236,13 +234,13 @@ async def post_shims_check_updates(request: Any) -> Response:
     carries the error and no verdict, so a rate limit reads as "unknown"
     rather than "up to date".
     """
-    report = getattr(request.app, "shim_source_report", None)
+    report = admin_context(request).shim_source_report()
     if report is None:
         return JSONResponse({"sources": [], "checked_at": 0.0})
 
     body, _err = parse_json_body(request)
     force = isinstance(body, dict) and bool(body.get("refresh"))
-    cached = getattr(request.app, "shim_update_check", None)
+    cached = admin_context(request).shim_update_check()
     now = time.time()
     if not force and isinstance(cached, dict):
         checked_at = cached.get("checked_at") or 0.0
@@ -255,7 +253,7 @@ async def post_shims_check_updates(request: Any) -> Response:
     # The check rides the same transport as the fetch it describes: a
     # deployment that reaches GitHub only through server.proxy would otherwise
     # read "Check failed" on every badge while its shims load fine.
-    config = getattr(request.app, "gateway_config", None)
+    config = admin_context(request).served_config()
     proxy = getattr(config, "proxy", None)
 
     loop = asyncio.get_running_loop()
@@ -263,7 +261,7 @@ async def post_shims_check_updates(request: Any) -> Response:
         None, functools.partial(catalogue().check_source_updates, report, proxy=proxy)
     )
     payload = {"sources": entries, "checked_at": now}
-    request.app.shim_update_check = payload
+    admin_context(request).set_shim_update_check(payload)
     return JSONResponse(payload)
 
 
@@ -281,8 +279,6 @@ async def reload_config(request: Any) -> Response:
             "ok": True,
             "providers": list(new_config.providers.keys()),
             "models": list(new_config.models),
-            "provider_warnings": getattr(
-                request.app, "provider_validation_warnings", []
-            ),
+            "provider_warnings": admin_context(request).provider_validation_warnings(),
         }
     )

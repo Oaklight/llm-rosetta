@@ -802,6 +802,22 @@ class AdminShimSourceState(Protocol):
         """The providers the last reload disabled, with the reason for each."""
         ...
 
+    def shim_file_index(self) -> Any | None:
+        """The cached ``(rebuild stamp, index)`` of the shim files, or ``None``."""
+        ...
+
+    def set_shim_file_index(self, value: Any) -> None:
+        """Cache the shim-file index with the stamp of the report it was built from."""
+        ...
+
+    def shim_manifest_index(self) -> Any | None:
+        """The cached ``(rebuild stamp, entries)`` of the vendor manifests, or ``None``."""
+        ...
+
+    def set_shim_manifest_index(self, value: Any) -> None:
+        """Cache the vendor-manifest index with the stamp of the report it was built from."""
+        ...
+
 
 @runtime_checkable
 class AdminContext(
