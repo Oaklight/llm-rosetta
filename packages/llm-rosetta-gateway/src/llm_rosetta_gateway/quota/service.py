@@ -399,7 +399,7 @@ async def _lane_quota_payload(
     refresh was asked for.  Its failure is stored too, so a broken command is
     not rerun on every card open.
     """
-    from ..transport.acp_quota import (
+    from ..transport.acp.quota import (
         ACP_QUOTA_PROBE,
         STATUS_ERROR,
         lane_credential,

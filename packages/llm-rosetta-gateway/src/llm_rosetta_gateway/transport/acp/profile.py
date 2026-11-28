@@ -51,7 +51,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .acp_mcp import MCP_SERVER_NAME
+from .mcp import MCP_SERVER_NAME
 
 logger = logging.getLogger("llm-rosetta-gateway")
 

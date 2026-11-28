@@ -556,13 +556,13 @@ class ProviderInfo:
         Returns:
             Whether the update carried an allowance.
         """
-        from .acp_quota import record_reading
+        from .acp.quota import record_reading
 
         return record_reading(update, self)
 
     def lane_reading(self) -> Any | None:
         """Return this lane's last stored allowance reading, if any."""
-        from .acp_quota import lanes_reading
+        from .acp.quota import lanes_reading
 
         return lanes_reading(self)
 

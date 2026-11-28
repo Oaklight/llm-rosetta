@@ -20,8 +20,8 @@ from pathlib import Path
 import pytest
 
 from llm_rosetta_gateway.transport.acp import AcpTransport
-from llm_rosetta_gateway.transport.acp_ledger import SessionKey
-from llm_rosetta_gateway.transport.acp_profile import (
+from llm_rosetta_gateway.transport.acp.ledger import SessionKey
+from llm_rosetta_gateway.transport.acp.profile import (
     AGENT_NAME,
     PERMISSION_FLAG,
     ensure_profile,

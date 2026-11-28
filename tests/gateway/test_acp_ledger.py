@@ -14,7 +14,7 @@ import asyncio
 import hashlib
 import json
 
-from llm_rosetta_gateway.transport.acp_ledger import (
+from llm_rosetta_gateway.transport.acp.ledger import (
     DIVERGES,
     EXTENDS,
     SAME,

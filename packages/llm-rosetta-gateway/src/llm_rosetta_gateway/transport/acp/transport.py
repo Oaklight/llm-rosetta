@@ -50,7 +50,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from .._vendor.acp import (
+from ..._vendor.acp import (
     ACPClient,
     ClientCapabilities,
     FsCapabilities,
@@ -58,15 +58,15 @@ from .._vendor.acp import (
     InitializeParams,
     PermissionOptionKind,
 )
-from .._vendor.jsonrpc import METHOD_NOT_FOUND, JSONRPCException
-from ..transport._base import (
+from ..._vendor.jsonrpc import METHOD_NOT_FOUND, JSONRPCException
+from .._base import (
     TransportProvider,
     UpstreamConnectionError,
     UpstreamResponse,
     UpstreamStream,
 )
-from ..transport.provider_info import ProviderInfo
-from .acp_chunks import (
+from ..provider_info import ProviderInfo
+from .chunks import (
     CHUNK_ERROR,
     CHUNK_SESSION_START,
     CHUNK_STOP,
@@ -80,16 +80,16 @@ from .acp_chunks import (
     _prompt_text,
     _stop_reason_of,
 )
-from .acp_ledger import (
+from .ledger import (
     EXTENDS,
     AcpSessionLedger,
     LedgerEntry,
     SessionKey,
     block_digests,
 )
-from .acp_mcp import AcpMcpServer, AcpToolBridge, MCP_SERVER_NAME, PendingCall
-from .acp_meta_client import AcpMetaClient
-from .acp_profile import (
+from .mcp import AcpMcpServer, AcpToolBridge, MCP_SERVER_NAME, PendingCall
+from .meta_client import AcpMetaClient
+from .profile import (
     ensure_profile,
     gemini_dir_of,
     harden_argv,
@@ -97,7 +97,7 @@ from .acp_profile import (
     state_dir_for,
     tool_name_of,
 )
-from .acp_quota import record_reading
+from .quota import record_reading
 
 logger = logging.getLogger("llm-rosetta-gateway")
 

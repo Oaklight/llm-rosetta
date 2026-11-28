@@ -20,7 +20,7 @@ from llm_rosetta_gateway.config.providers import (
     _bind_auth_exchange,
     build_provider_info,
 )
-from llm_rosetta_gateway.transport.acp_profile import state_dir_for
+from llm_rosetta_gateway.transport.acp.profile import state_dir_for
 
 
 def _shim(env: dict[str, str]) -> SimpleNamespace:

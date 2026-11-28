@@ -26,7 +26,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any, cast
 
-from .._vendor.acp import (
+from ..._vendor.acp import (
     ACPClient,
     NewSessionResult,
     _parse_available_commands,
