@@ -34,6 +34,21 @@ def _no_leaked_extensions_dir():
     configure_extensions_dir(None)
 
 
+@pytest.fixture(autouse=True)
+def _admin_catalogue():
+    """Bind the gateway's own admin catalogue, as ``create_app`` does.
+
+    The admin helpers read the registries through ``admin_api.catalogue()``; a
+    test that calls one without building an app needs it bound too.
+    """
+    from llm_rosetta_gateway.admin_api import bind_catalogue
+    from llm_rosetta_gateway.app.admin_catalogue import GatewayCatalogue
+
+    bind_catalogue(GatewayCatalogue())
+    yield
+    bind_catalogue(None)
+
+
 # ---------------------------------------------------------------------------
 # Minimal httpbin-compatible handler
 # ---------------------------------------------------------------------------

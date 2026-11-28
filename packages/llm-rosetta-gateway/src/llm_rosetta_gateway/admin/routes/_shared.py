@@ -12,7 +12,7 @@ from collections.abc import AsyncGenerator
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
-from ...admin_api import admin_context
+from ...admin_api import admin_context, catalogue
 from ...config import ConfigIO, GatewayConfig, async_config_lock
 
 logger = logging.getLogger("llm-rosetta-gateway")
@@ -184,9 +184,11 @@ def retired_type_error(body: Any) -> Response | None:
     answer names the replacement and the ``llm-rosetta gateway migrate`` command.
     Returns ``None`` when the body names no retired type.
     """
-    from ...model_types import retired_type_message
-
-    message = retired_type_message(body.get("type")) if isinstance(body, dict) else None
+    message = (
+        catalogue().retired_type_message(body.get("type"))
+        if isinstance(body, dict)
+        else None
+    )
     if message is None:
         return None
     return JSONResponse(dict(error=message), status_code=400)
@@ -552,8 +554,6 @@ def _optional_provider_keys() -> list[str]:
     Derives format/path keys from the model type registry so that new
     types are picked up automatically without hardcoding.
     """
-    from ...model_types import all_model_types
-
     keys: list[str] = [
         "models_path",
         "logo",
@@ -567,7 +567,7 @@ def _optional_provider_keys() -> list[str]:
         # the same credential-source block, and just as invisible to the editor.
         "token_command_env",
     ]
-    for desc in all_model_types():
+    for desc in catalogue().model_types():
         if desc.is_llm:
             continue
         if desc.config_format_key:
@@ -621,9 +621,7 @@ def _apply_face_blocks(entry: dict[str, Any], body: dict[str, Any]) -> None:
     and ignores it, and storing one here would make the editor's own mistake
     survive a save it could have refused.
     """
-    from ...model_types import all_model_types
-
-    for desc in all_model_types():
+    for desc in catalogue().model_types():
         if desc.is_llm or desc.name not in body:
             continue
         block = body[desc.name]
@@ -642,9 +640,9 @@ def _apply_face_blocks(entry: dict[str, Any], body: dict[str, Any]) -> None:
 
 def _typed_enable_keys() -> list[str]:
     """The ``<type>_enabled`` keys the registry's model types declare."""
-    from ...model_types import all_model_types
-
-    return [f"{desc.name}_enabled" for desc in all_model_types() if not desc.is_llm]
+    return [
+        f"{desc.name}_enabled" for desc in catalogue().model_types() if not desc.is_llm
+    ]
 
 
 def _shim_ships_credential_exchange(shim: Any) -> bool:

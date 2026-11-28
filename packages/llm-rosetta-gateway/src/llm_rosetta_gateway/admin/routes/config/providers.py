@@ -9,6 +9,7 @@ import time
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway.admin_api import catalogue
 from llm_rosetta.api import get_shim
 
 from .._shared import (
@@ -252,11 +253,8 @@ def _missing_provider_fields_error(
     (``embeddings_shim``, …) counts too, so a provider defined only by that
     shim needs no duplicated credentials.
     """
-    from ....config.typed import face_value
-    from ....model_types import all_model_types
-
     shims = [get_shim(body.get("type") or resolve_name)]
-    for desc in all_model_types():
+    for desc in catalogue().model_types():
         if desc.is_llm or not desc.config_shim_key:
             continue
         # The endpoint block first, the flat key after it — the runtime's own
@@ -264,7 +262,7 @@ def _missing_provider_fields_error(
         # already moved unsaveable: the shim that supplies its connection was
         # no longer where this looked, and the save answered 400 asking for a
         # base_url the operator had never typed (#1595 review).
-        named = face_value(body, desc.config_shim_key, desc.name)
+        named = catalogue().face_value(body, desc.config_shim_key, desc.name)
         shims.append(get_shim(named or ""))
     shim_base = any(s is not None and s.connection.base_url for s in shims)
     keyless_ok = any(s is not None and s.connection.keyless for s in shims)

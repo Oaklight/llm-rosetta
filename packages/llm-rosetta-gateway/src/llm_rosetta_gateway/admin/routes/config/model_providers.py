@@ -7,7 +7,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.config.parse import ENTRY_CAPABILITIES
+from llm_rosetta_gateway.admin_api import catalogue
 
 from .._shared import (
     config_mutate,
@@ -588,12 +588,12 @@ async def update_model_provider(request: Any, **kwargs: Any) -> Response:
     # so a value saved here cannot come back as an unknown name later.
     if isinstance(capabilities, list):
         names = [item.strip().lower() for item in capabilities]
-        unknown = sorted(set(names) - ENTRY_CAPABILITIES)
+        unknown = sorted(set(names) - catalogue().entry_capabilities())
         if unknown:
             return JSONResponse(
                 {
                     "error": f"Unknown capabilities: {', '.join(unknown)}; "
-                    f"known: {', '.join(sorted(ENTRY_CAPABILITIES))}"
+                    f"known: {', '.join(sorted(catalogue().entry_capabilities()))}"
                 },
                 status_code=400,
             )

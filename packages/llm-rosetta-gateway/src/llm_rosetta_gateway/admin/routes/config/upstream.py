@@ -7,9 +7,9 @@ from typing import Any
 
 from llm_rosetta_gateway._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway.admin_api import catalogue
 from llm_rosetta.api import get_model_list_transform, get_shim
 
-from ....config.providers import default_models_path
 from .._shared import (
     _resolve_models_path,
 )
@@ -167,7 +167,7 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
         else:
             models_url = f"{pinfo.base_url}{explicit_path}"
     else:
-        models_url = f"{pinfo.base_url}{default_models_path(ptype)}"
+        models_url = f"{pinfo.base_url}{catalogue().default_models_path(ptype)}"
 
     headers = {**pinfo.extra_headers, **pinfo.auth_headers()}
 
@@ -225,11 +225,11 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
 
 async def check_routing_loops(request: Any) -> Response:
     """Return any detected routing loops in the current config."""
-    from ....config import detect_routing_loops
-
     config = getattr(request.app, "config", None)
     if config is None:
         return JSONResponse({"warnings": []})
 
-    warnings = detect_routing_loops(config.models, config.model_upstream_names)
+    warnings = catalogue().detect_routing_loops(
+        config.models, config.model_upstream_names
+    )
     return JSONResponse({"warnings": warnings})

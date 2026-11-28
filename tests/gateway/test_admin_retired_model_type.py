@@ -18,14 +18,14 @@ import pytest
 from llm_rosetta_gateway.admin.routes.config import payload
 from llm_rosetta_gateway.admin.routes.config.payload import _normalize_model_entry
 from llm_rosetta_gateway.config import GatewayConfig
-from llm_rosetta_gateway.config.errors import RetiredConfigName
 from _admin_app import fake_app
+from llm_rosetta_gateway.admin_api import RetiredNameError
 
 _CONFIG_PATH = "/srv/gateway/config.jsonc"
 
 
 def test_the_helper_names_the_json_path_of_a_retired_type():
-    with pytest.raises(RetiredConfigName) as caught:
+    with pytest.raises(RetiredNameError) as caught:
         _normalize_model_entry({"provider": "p", "type": "embedding"}, "emb")
 
     assert caught.value.where == "models.emb.type"
@@ -33,7 +33,7 @@ def test_the_helper_names_the_json_path_of_a_retired_type():
 
 
 def test_the_helper_names_the_index_of_a_retired_capability():
-    with pytest.raises(RetiredConfigName) as caught:
+    with pytest.raises(RetiredNameError) as caught:
         _normalize_model_entry({"provider": "p", "capabilities": ["decision"]}, "d")
 
     assert caught.value.where == "models.d.capabilities[0]"

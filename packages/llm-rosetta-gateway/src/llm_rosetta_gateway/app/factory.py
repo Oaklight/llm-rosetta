@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 
+from ..admin_api import bind_catalogue
+from .admin_catalogue import GatewayCatalogue
 from .admin_context import GatewayAdminContext
 
 if TYPE_CHECKING:
@@ -602,6 +604,7 @@ async def create_app(
     app.auth_state = auth_state  # type: ignore
     app.keystore = keystore  # type: ignore
     app.admin = GatewayAdminContext(app)  # type: ignore
+    bind_catalogue(GatewayCatalogue())
 
     if not ext.skip_admin_setup:
         await setup_admin(

@@ -288,7 +288,6 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
         "keystore",
         "maintenance",
         "middleware",
-        "model_types",
         "observability",
         "ops",
         "quota",
