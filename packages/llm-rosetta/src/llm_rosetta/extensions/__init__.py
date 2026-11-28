@@ -30,6 +30,14 @@ from ._dirs import (
     tool_bin_dir,
     tools_dir,
 )
+from ._manage import (
+    PathEntry,
+    RemovalPlan,
+    RemovalResult,
+    extension_origin,
+    plan_removal,
+    remove_with_programs,
+)
 from ._tools import CliInstallError, install_cli
 from ._index import (
     DEFAULT_INDEX_URL,
@@ -93,6 +101,9 @@ __all__ = [
     "IndexEntry",
     "InstalledExtension",
     "KindLoadError",
+    "PathEntry",
+    "RemovalPlan",
+    "RemovalResult",
     "RetiredEntryPoint",
     "UpdatePlan",
     "activate_extensions_dir",
@@ -100,6 +111,7 @@ __all__ = [
     "configure_extensions_dir",
     "discover",
     "entry_problems",
+    "extension_origin",
     "extensions_dir",
     "tool_bin_dir",
     "tools_dir",
@@ -117,9 +129,11 @@ __all__ = [
     "missing_dependencies",
     "parse_index",
     "pip_available",
+    "plan_removal",
     "plan_updates",
     "register_kind_handler",
     "remove_extension",
+    "remove_with_programs",
     "retired_entry_points",
     "select_entry",
     "version_key",

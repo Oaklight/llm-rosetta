@@ -672,6 +672,10 @@ class ProviderShim:
             A reader forwards a client's value for one of these only when the
             **target** declares it, so a neutral upstream never receives a
             field its spec does not define.
+        needs: The programs the shim needs on the gateway host: the names of its
+            extension's ``external`` entries, or ``node`` for the managed Node.js.
+            ``None`` (default) means every program the extension declares; an
+            empty tuple means none.  A host reads it to show what is missing.
         default_capabilities: Capabilities (``text``, ``vision``, ``tools``,
             ``reasoning``) a model served by this shim has when its config
             entry declares none.  Empty (default) leaves the gateway default
@@ -765,6 +769,7 @@ class ProviderShim:
     preserve_fields: tuple[str, ...] = ()
     request_fields: tuple[str, ...] = ()
     default_capabilities: tuple[str, ...] = ()
+    needs: tuple[str, ...] | None = None
     store_default: bool | None = None
     hoist_system_messages: bool = True
     soft_error_patterns: tuple[SoftErrorPattern, ...] = ()
@@ -821,6 +826,7 @@ class ProviderShim:
             "preserve_fields": (),
             "request_fields": (),
             "default_capabilities": (),
+            "needs": None,
             "store_default": None,
             "hoist_system_messages": True,
             "soft_error_patterns": (),

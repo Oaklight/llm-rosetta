@@ -927,6 +927,35 @@ class TestDeclaredGrouping:
         )
 
 
+class TestNeeds:
+    """``needs:`` names the programs a shim needs; absent means all of them (#1829)."""
+
+    BASE = "name: x\nmodel_type: llm\nformat: chat_completions\n"
+
+    def _load(self, tmp_path: Path, extra: str = ""):
+        leaf = tmp_path / "leaf"
+        leaf.mkdir()
+        (leaf / "provider.yaml").write_text(self.BASE + extra)
+        return load_providers_from_dir(tmp_path, on_error="raise")
+
+    def test_absent_means_every_program(self, tmp_path: Path):
+        assert self._load(tmp_path)[0].needs is None
+
+    def test_a_list_is_kept_in_order(self, tmp_path: Path):
+        shim = self._load(tmp_path, "needs: [node, claude]\n")[0]
+        assert shim.needs == ("node", "claude")
+
+    def test_an_empty_list_means_none(self, tmp_path: Path):
+        assert self._load(tmp_path, "needs: []\n")[0].needs == ()
+
+    @pytest.mark.parametrize(
+        "extra", ["needs: node\n", "needs: [node, node]\n", "needs: ['']\n"]
+    )
+    def test_a_malformed_list_is_refused(self, tmp_path: Path, extra: str):
+        with pytest.raises(ValueError):
+            self._load(tmp_path, extra)
+
+
 class TestShimPair:
     """A shim declares ``(model_type, format)``; the pair is validated."""
 

@@ -92,6 +92,20 @@ def _local_quota(
     return tuple(argv), dict(env), float(timeout)
 
 
+def _needs(cfg: dict, path: object) -> tuple[str, ...] | None:
+    """Read ``needs:``: ``None`` when absent, else a tuple of distinct names."""
+    raw = cfg.get("needs")
+    if raw is None:
+        return None
+    if (
+        not isinstance(raw, list)
+        or not all(isinstance(name, str) and name for name in raw)
+        or len(set(raw)) != len(raw)
+    ):
+        raise ValueError(f"{path}: needs must be a list of distinct program names")
+    return tuple(raw)
+
+
 def _load_single_provider(
     provider_dir: Path,
     *,
@@ -329,6 +343,7 @@ def _load_single_provider(
         preserve_fields=tuple(cfg.get("preserve_fields") or ()),
         request_fields=tuple(cfg.get("request_fields") or ()),
         default_capabilities=tuple(cfg.get("default_capabilities") or ()),
+        needs=_needs(cfg, yaml_path),
         store_default=cfg.get("store_default"),
         hoist_system_messages=cfg.get("hoist_system_messages", True),
         soft_error_patterns=soft_errors,
