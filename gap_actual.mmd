@@ -4,8 +4,8 @@ flowchart LR
   APP["app/<br/>factory · routes · admin_context"]
   STATE["app/_state._config<br/>+ app.gateway_config(两个落点)"]
   RELOAD["admin/routes/_shared.py<br/>_reload_gateway_config(A1)"]
-  LOGIN["admin/routes/auth.py<br/>登录限流:总信任 X-Forwarded-For(A3)"]
-  MWCTX["middleware/request_context<br/>extract_client_ip(遵守 trust_proxy)"]
+  LOGIN["admin/routes/auth.py<br/>登录限流按 RequestContext.client_ip(A3,#1831 已合并)"]
+  MWCTX["middleware/request_context<br/>client_ip 一次解析,按 server.trusted_proxies(#1831)"]
   PROXY["proxy/<br/>engine · streaming"]
   PIPES["pipelines/typed.py"]
   RELAY["app/routes_compact + routes_count_tokens<br/>(各 140-150 行,复杂度 22-23)"]
@@ -15,7 +15,7 @@ flowchart LR
   ACPQ["transport/acp_quota.py<br/>进程级 _READINGS / _LOCKS(A9)"]
   QUOTA["quota/service.py"]
   MAINT["maintenance/startup.py(716 行)<br/>ProviderNotReady 已移走(A5,#1832 已合并)"]
-  OPS["ops/<br/>OpsBase 子类"]
+  OPS["ops/<br/>OpsBase 子类 + lifecycle(A7,#1835 已合并)"]
   OPSLOG["observability/ops_log"]
   EXTCORE["core extensions/_index.select_entry<br/>最新兼容版,含预发布"]
   EXTGW["gateway shims/manifest_sources<br/>select_release:稳定优先"]
@@ -29,7 +29,7 @@ flowchart LR
   RELOAD -->|"写 5 个 app 属性(A1)"| STATE
   APP --> STATE
   ADMIN --> LOGIN
-  LOGIN -->|"不调用(A3)"| MWCTX
+  LOGIN -->|"读 client_ip(A3,#1831 已合并)"| MWCTX
   PROXY -->|"自己记账(A4)"| QUOTA
   PIPES -->|"自己记账(A4)"| QUOTA
   RELAY -->|"自己记账(A4)"| QUOTA
@@ -40,8 +40,6 @@ flowchart LR
   ACPQ -->|"状态放错地方(A9)"| QUOTA
   PROXY --> OPS
   OPS --> OPSLOG
-  ADMIN -->|"绕过 ops 直接写(A7)"| OPSLOG
-  APP -->|"绕过 ops 直接写(A7)"| OPSLOG
   EXTCORE -->|"ext install / update"| EXTDIR
   EXTGW -->|"重建 shim 来源(A2:两套策略)"| EXTDIR
-  linkStyle 2,3,4,6,9,10,11,12,15,17,20,21,23 stroke:#c0392b,stroke-width:2px
+  linkStyle 2,3,4,6,10,11,12,15,17,21 stroke:#c0392b,stroke-width:2px

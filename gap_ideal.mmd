@@ -3,7 +3,7 @@ flowchart LR
   ADMINAPI["admin_api.py<br/>AdminContext:reload_config 等"]
   APP["app/<br/>factory · routes · admin_context<br/>热重载与唯一的已生效配置"]
   LOGIN["admin/routes/auth.py<br/>限流状态在 app.auth_state,有上限"]
-  MWCTX["middleware/request_context<br/>extract_client_ip(遵守 trust_proxy)"]
+  MWCTX["middleware/request_context<br/>client_ip 一次解析,按 server.trusted_proxies(#1831)"]
   PROXY["proxy/<br/>engine · streaming<br/>attempt_upstream(...)(A4)"]
   PIPES["pipelines/typed.py"]
   RELAY["app/routes_compact + routes_count_tokens"]

@@ -8,7 +8,7 @@ flowchart TB
   end
   subgraph POLICY["policy"]
     CONFIG["config/<br/>loader · parse · resolve · providers · settings · migrate/(配置迁移,原 maintenance,#1793)"]
-    MW["middleware/<br/>auth · ratelimit · hop_limit · circuit_breaker · request_context"]
+    MW["middleware/<br/>auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies,#1831)"]
   end
   subgraph FOUNDATION["foundation"]
     TRANSPORT["transport/<br/>http · acp · registry · provider_info · provider_readiness(ProviderNotReady,#1832)"]
@@ -23,7 +23,7 @@ flowchart TB
     PIPES["pipelines/<br/>embeddings · rerank · decision"]
   end
   subgraph OPERATIONS["operations"]
-    OPS["ops/<br/>OpsBase 审计层 · data · keys · security · proxy"]
+    OPS["ops/<br/>OpsBase 审计层 · data · keys · security · proxy · lifecycle(启动/关闭/重载审计,#1835)"]
   end
   subgraph ENTRY["entry"]
     CLI["cli/<br/>llm-rosetta-gateway · banner<br/>注册 gateway 与 serve 两个命令;gateway 下分发 serve/init/add/credential/password/db/usage/migrate(#1748)"]
