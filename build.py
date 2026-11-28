@@ -11,7 +11,7 @@ sections = [
 ("gap_actual", "4. gateway 现实:当前的完整架构与仍偏离设计的地方",
   "和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题:A1 admin 的边界只在导入层有测试(legacy allowlist 的 13 条 admin 导入,加上 admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点);A4 上游尝试的记账有 5 份拷贝(proxy、pipelines 和两条 relay 路由);A8 ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助;A9 quota 的进程级状态放在 transport 里。数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。"),
 ("gap_ideal", "5. gateway 理想:最终的架构",
-  "同一批节点,没有红线。admin 只经 AdminContext;热重载和已生效配置在 app 里,审计写入只经 ops;上游尝试的记账是 proxy 里的一个 attempt_upstream;ACP lane 解析在 transport 的 acp_profile 里,ProviderInfo 分成 auth、ACP、quota 子记录;quota 的读数和锁回到 quota/,启动时向 transport 注册接收器。这是目标态,每一项落地后,第 4 页对应的红线就去掉。",
+  "同一批节点,没有红线。admin 只经 AdminContext;热重载和已生效配置在 app 里,审计写入只经 ops;上游尝试的记账是 proxy 里的一个 attempt_upstream;ACP lane 解析在 transport 的 acp_lane 里,ProviderInfo 分成 auth、ACP、quota 子记录;quota 的读数和锁回到 quota/,启动时向 transport 注册接收器。这是目标态,每一项落地后,第 4 页对应的红线就去掉。",
   "目标 · #1830", ""),
 ]
 
