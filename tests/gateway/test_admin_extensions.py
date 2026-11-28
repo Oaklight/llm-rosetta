@@ -520,3 +520,535 @@ class TestInstallingFromThePanel:
         text = inspect.getsource(config_routes.register_config_routes)
         assert '"/admin/api/extensions/<ext_id>/install-cli", methods=["POST"]' in text
         assert '_guard("providers", post_extension_install_cli)' in text
+
+
+# -- managing the extensions themselves (#1829) -------------------------------
+
+
+def _ops_app():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from llm_rosetta_gateway.ops import OpsContext
+
+    log = MagicMock()
+    log.add = AsyncMock()
+    app = SimpleNamespace(ops_ctx=OpsContext(ops_log=log))
+    app.admin = GatewayAdminContext(app)
+    return app, log
+
+
+def _request(app, body=None):
+    class _Request:
+        def __init__(self):
+            self.app = app
+
+        def json(self):
+            if isinstance(body, Exception):
+                raise body
+            return body
+
+    return _Request()
+
+
+def _call(handler, app, *args, body=None):
+    response = asyncio.run(handler(_request(app, body), *args))
+    return response.status_code, json.loads(response.body)
+
+
+def _tools(ext_dir: Path, ext_id: str, *, npm: bool = False) -> Path:
+    root = ext_dir.parent / "tools" / ext_id
+    (root / ("npm-1.0.0" if npm else "release-1.0.0")).mkdir(parents=True)
+    (root / "installed.json").write_text("{}")
+    return root
+
+
+@pytest.fixture
+def reloads(monkeypatch) -> list:
+    seen: list = []
+
+    async def fake(request):
+        seen.append(1)
+        return None
+
+    monkeypatch.setattr(extensions_route, "_reload_shims", fake)
+    return seen
+
+
+class TestRemovingAnExtension:
+    def test_the_plan_lists_what_would_go_and_changes_nothing(self, ext_dir):
+        _install(ext_dir, "acme")
+        root = _tools(ext_dir, "acme")
+        app, _ = _ops_app()
+
+        status, plan = _call(extensions_route.get_extension_removal_plan, app, "acme")
+
+        assert status == 200 and plan["origin"] == "directory" and plan["removable"]
+        paths = [row["path"] for row in plan["delete"]]
+        assert str(ext_dir / "llm_rosetta_ext" / "acme") in paths
+        assert str(root) in paths
+        assert (ext_dir / "llm_rosetta_ext" / "acme").is_dir() and root.is_dir()
+
+    def test_an_unknown_extension_has_no_plan(self, ext_dir):
+        app, _ = _ops_app()
+        status, body = _call(extensions_route.get_extension_removal_plan, app, "ghost")
+        assert (status, body["reason"]) == (404, "unknown_extension")
+
+    def test_it_removes_the_extension_and_its_programs_and_reloads(
+        self, ext_dir, reloads
+    ):
+        _install(ext_dir, "acme")
+        root = _tools(ext_dir, "acme")
+        app, log = _ops_app()
+
+        status, body = _call(
+            extensions_route.post_extension_remove, app, "acme", body={}
+        )
+
+        assert status == 200 and body["extension"] == "acme"
+        assert body["failed"] == [] and body["reload_error"] is None
+        assert not (ext_dir / "llm_rosetta_ext" / "acme").exists()
+        assert not root.exists()
+        assert reloads == [1]
+        entry = log.add.call_args[0][0]
+        assert entry.event_type == "extension_remove"
+        assert (
+            entry.details["extension"] == "acme" and entry.details["replace"] is False
+        )
+
+    def test_a_replacement_is_marked_in_the_record(self, ext_dir, reloads):
+        _install(ext_dir, "acme")
+        app, log = _ops_app()
+        _call(
+            extensions_route.post_extension_remove,
+            app,
+            "acme",
+            body={"replace": True},
+        )
+        assert log.add.call_args[0][0].details["replace"] is True
+
+    def test_an_image_extension_is_refused_and_nothing_is_deleted(
+        self, ext_dir, tmp_path, monkeypatch, reloads
+    ):
+        from llm_rosetta_gateway.shims import extension_view
+
+        site = tmp_path / "site-packages" / "acme"
+        site.mkdir(parents=True)
+        root = _tools(ext_dir, "acme")
+        monkeypatch.setattr(
+            extension_view, "locate_extension", lambda ext_id: (site, "0.1.0")
+        )
+        app, log = _ops_app()
+
+        status, body = _call(
+            extensions_route.post_extension_remove, app, "acme", body={}
+        )
+
+        assert (status, body["reason"]) == (409, "not_removable")
+        assert "rebuild the image" in body["error"]
+        assert site.is_dir() and root.is_dir() and reloads == []
+        log.add.assert_not_called()
+
+    def test_an_unknown_extension_is_a_404(self, ext_dir, reloads):
+        app, _ = _ops_app()
+        status, body = _call(
+            extensions_route.post_extension_remove, app, "ghost", body={}
+        )
+        assert (status, body["reason"]) == (404, "unknown_extension")
+        assert reloads == []
+
+    def test_a_second_operation_on_the_same_extension_is_refused(
+        self, ext_dir, reloads
+    ):
+        _install(ext_dir, "acme")
+        app, _ = _ops_app()
+        app.admin._installing.add("acme")
+        status, body = _call(
+            extensions_route.post_extension_remove, app, "acme", body={}
+        )
+        assert (status, body["reason"]) == (409, "busy")
+        assert (ext_dir / "llm_rosetta_ext" / "acme").is_dir()
+
+    @pytest.mark.parametrize(
+        "body",
+        [{"path": "/etc"}, {"replace": "yes"}, {"replace": True, "tools": "x"}, []],
+    )
+    def test_nothing_but_replace_is_accepted(self, ext_dir, reloads, body):
+        _install(ext_dir, "acme")
+        app, _ = _ops_app()
+        status, answer = _call(
+            extensions_route.post_extension_remove, app, "acme", body=body
+        )
+        assert (status, answer["reason"]) == (400, "bad_body")
+        assert (ext_dir / "llm_rosetta_ext" / "acme").is_dir() and reloads == []
+
+    def test_a_failed_reload_is_reported_not_swallowed(self, ext_dir, monkeypatch):
+        _install(ext_dir, "acme")
+
+        async def boom(request, path, **kw):
+            raise RuntimeError("config broke")
+
+        monkeypatch.setattr(extensions_route, "_reload_gateway_config", boom)
+        monkeypatch.setattr(extensions_route, "_get_config_path", lambda r: "x.jsonc")
+        app, _ = _ops_app()
+        status, body = _call(
+            extensions_route.post_extension_remove, app, "acme", body={}
+        )
+        assert status == 200
+        assert "shim reload failed" in body["reload_error"]
+        assert "config broke" in body["reload_error"]
+
+
+CATALOGUE = {
+    "sources": [
+        {
+            "id": "contrib",
+            "url": "https://example.test/manifest.json",
+            "ok": True,
+            "vendors": [
+                {
+                    "vendor": "acme",
+                    "installable": "0.2.0",
+                    "newest": "0.2.0",
+                    "versions": ["0.2.0", "0.1.0"],
+                },
+                {
+                    "vendor": "same",
+                    "installable": "0.1.0",
+                    "newest": "0.1.0",
+                    "versions": ["0.1.0"],
+                },
+                {
+                    "vendor": "future",
+                    "installable": None,
+                    "newest": "9.0.0",
+                    "newest_problem": "requires surface 9",
+                    "versions": ["9.0.0"],
+                },
+            ],
+        }
+    ]
+}
+
+
+class TestCheckingForUpdates:
+    VERSIONS = {"acme": "0.1.0", "same": "0.1.0", "future": "0.1.0", "alone": "0.1.0"}
+
+    def test_each_extension_is_judged_the_same_way(self):
+        from llm_rosetta_gateway.shims.extension_view import update_report
+
+        rows = {r["id"]: r for r in update_report(self.VERSIONS, CATALOGUE)}
+
+        assert rows["acme"]["status"] == "update"
+        assert (rows["acme"]["current"], rows["acme"]["available"]) == (
+            "0.1.0",
+            "0.2.0",
+        )
+        assert rows["acme"]["source"] == "contrib"
+        assert rows["same"]["status"] == "current"
+        assert rows["future"]["status"] == "no_compatible"
+        assert rows["future"]["error"] == "requires surface 9"
+        assert rows["alone"]["status"] == "not_published"
+
+    def test_an_unreadable_source_is_never_reported_as_up_to_date(self):
+        from llm_rosetta_gateway.shims.extension_view import update_report
+
+        catalogue = {
+            "sources": [
+                {
+                    "id": "contrib",
+                    "ok": False,
+                    "error": "timed out after 10 s",
+                    "vendors": [],
+                }
+            ]
+        }
+        row = update_report({"acme": "0.1.0"}, catalogue)[0]
+        assert row["status"] == "failed"
+        assert "contrib: timed out after 10 s" in row["error"]
+
+    def test_a_cached_copy_does_not_confirm_that_it_is_up_to_date(self):
+        from llm_rosetta_gateway.shims.extension_view import update_report
+
+        catalogue = {
+            "sources": [
+                {
+                    "id": "contrib",
+                    "ok": True,
+                    "stale": True,
+                    "error": "timed out after 10 s",
+                    "url": "u",
+                    "vendors": [
+                        {
+                            "vendor": "same",
+                            "installable": "0.1.0",
+                            "versions": ["0.1.0"],
+                        },
+                        {
+                            "vendor": "acme",
+                            "installable": "0.2.0",
+                            "versions": ["0.2.0"],
+                        },
+                    ],
+                }
+            ]
+        }
+        rows = {
+            r["id"]: r
+            for r in update_report(
+                {"same": "0.1.0", "acme": "0.1.0", "alone": "0.1.0"}, catalogue
+            )
+        }
+        assert rows["same"]["status"] == "failed"
+        assert "cached copy only" in rows["same"]["error"]
+        assert rows["acme"]["status"] == "update"
+        assert rows["alone"]["status"] == "failed"
+        assert "timed out" in rows["alone"]["error"]
+
+    def test_the_ids_limit_the_report(self):
+        from llm_rosetta_gateway.shims.extension_view import update_report
+
+        rows = update_report(self.VERSIONS, CATALOGUE, ["same"])
+        assert [r["id"] for r in rows] == ["same"]
+
+    def test_the_route_refetches_the_sources_and_answers(self, ext_dir, monkeypatch):
+        _install(ext_dir, "acme")
+        seen: list = []
+
+        def catalogue(self, config, report, *, refresh=False):
+            seen.append(refresh)
+            return CATALOGUE
+
+        monkeypatch.setattr(GatewayAdminContext, "shim_source_catalogue", catalogue)
+        app, _ = _ops_app()
+
+        status, body = _call(
+            extensions_route.post_extension_check_updates, app, body={"ids": ["acme"]}
+        )
+
+        assert status == 200 and seen == [True]
+        assert [(u["id"], u["status"]) for u in body["updates"]] == [("acme", "update")]
+
+    def test_a_failure_to_read_says_why(self, ext_dir, monkeypatch):
+        def catalogue(self, config, report, *, refresh=False):
+            raise RuntimeError("no network")
+
+        monkeypatch.setattr(GatewayAdminContext, "shim_source_catalogue", catalogue)
+        app, _ = _ops_app()
+        status, body = _call(
+            extensions_route.post_extension_check_updates, app, body={}
+        )
+        assert status == 502 and "no network" in body["error"]
+
+    @pytest.mark.parametrize("body", [{"ids": "acme"}, {"ids": [1]}, {"x": 1}, []])
+    def test_a_malformed_body_is_refused(self, body):
+        app, _ = _ops_app()
+        status, answer = _call(
+            extensions_route.post_extension_check_updates, app, body=body
+        )
+        assert (status, answer["reason"]) == (400, "bad_body")
+
+
+class TestUpdatingAnExtension:
+    @pytest.fixture
+    def installs(self, monkeypatch) -> list:
+        import llm_rosetta.api as api
+
+        seen: list = []
+
+        def fake_load(url):
+            seen.append(("load", url))
+            return {"index": url}
+
+        def fake_install(ext_id, index, *, version=None):
+            seen.append(("install", ext_id, version))
+            return [SimpleNamespace(id=ext_id, version=version)]
+
+        monkeypatch.setattr(api, "load_index", fake_load)
+        monkeypatch.setattr(api, "install_from_index", fake_install)
+        monkeypatch.setattr(
+            GatewayAdminContext,
+            "shim_source_catalogue",
+            lambda self, config, report, *, refresh=False: CATALOGUE,
+        )
+        return seen
+
+    def test_it_installs_the_newest_release_and_reloads(
+        self, ext_dir, installs, reloads
+    ):
+        _install(ext_dir, "acme")
+        app, log = _ops_app()
+
+        status, body = _call(
+            extensions_route.post_extension_update, app, "acme", body={}
+        )
+
+        assert status == 200
+        assert (body["before"], body["after"]) == ("0.1.0", "0.2.0")
+        assert installs == [
+            ("load", "https://example.test/manifest.json"),
+            ("install", "acme", "0.2.0"),
+        ]
+        assert reloads == [1]
+        entry = log.add.call_args[0][0]
+        assert entry.event_type == "extension_update"
+        assert (entry.details["before"], entry.details["after"]) == ("0.1.0", "0.2.0")
+
+    def test_a_published_version_can_be_chosen(self, ext_dir, installs, reloads):
+        _install(ext_dir, "acme")
+        app, _ = _ops_app()
+        status, body = _call(
+            extensions_route.post_extension_update,
+            app,
+            "acme",
+            body={"version": "0.1.0"},
+        )
+        assert status == 200 and installs[-1] == ("install", "acme", "0.1.0")
+
+    def test_a_version_the_source_does_not_publish_is_refused(
+        self, ext_dir, installs, reloads
+    ):
+        _install(ext_dir, "acme")
+        app, _ = _ops_app()
+        status, body = _call(
+            extensions_route.post_extension_update,
+            app,
+            "acme",
+            body={"version": "7.7.7"},
+        )
+        assert (status, body["reason"]) == (400, "no_release")
+        assert installs == [] and reloads == []
+
+    def test_an_extension_no_source_publishes_is_a_404(
+        self, ext_dir, installs, reloads
+    ):
+        _install(ext_dir, "alone")
+        app, _ = _ops_app()
+        status, body = _call(
+            extensions_route.post_extension_update, app, "alone", body={}
+        )
+        assert (status, body["reason"]) == (404, "no_release")
+
+    def test_an_image_extension_is_refused(
+        self, ext_dir, tmp_path, monkeypatch, installs, reloads
+    ):
+        from llm_rosetta_gateway.shims import extension_view
+
+        monkeypatch.setattr(
+            extension_view, "locate_extension", lambda ext_id: (tmp_path, "0.1.0")
+        )
+        app, _ = _ops_app()
+        status, body = _call(
+            extensions_route.post_extension_update, app, "acme", body={}
+        )
+        assert (status, body["reason"]) == (409, "not_removable")
+        assert installs == []
+
+    def test_a_failing_install_is_a_502_and_is_recorded(
+        self, ext_dir, installs, reloads, monkeypatch
+    ):
+        import llm_rosetta.api as api
+
+        def refuse(ext_id, index, *, version=None):
+            raise api.ExtensionInstallError("sha256 mismatch")
+
+        monkeypatch.setattr(api, "install_from_index", refuse)
+        _install(ext_dir, "acme")
+        app, log = _ops_app()
+        status, body = _call(
+            extensions_route.post_extension_update, app, "acme", body={}
+        )
+        assert (status, body["reason"]) == (502, "failed")
+        assert "sha256 mismatch" in body["error"]
+        assert log.add.call_args[0][0].details["error"] == "sha256 mismatch"
+        assert reloads == []
+
+    def test_a_second_operation_is_refused(self, ext_dir, installs, reloads):
+        _install(ext_dir, "acme")
+        app, _ = _ops_app()
+        app.admin._installing.add("acme")
+        status, body = _call(
+            extensions_route.post_extension_update, app, "acme", body={}
+        )
+        assert (status, body["reason"]) == (409, "busy")
+        assert installs == []
+
+    @pytest.mark.parametrize("body", [{"url": "https://evil.test"}, {"version": 2}, []])
+    def test_only_a_version_string_is_accepted(self, ext_dir, installs, reloads, body):
+        _install(ext_dir, "acme")
+        app, _ = _ops_app()
+        status, answer = _call(
+            extensions_route.post_extension_update, app, "acme", body=body
+        )
+        assert (status, answer["reason"]) == (400, "bad_body")
+        assert installs == []
+
+
+class TestWhichShimsNeedWhich:
+    def test_a_program_names_the_shims_that_need_it(self, ext_dir, monkeypatch):
+        from llm_rosetta_gateway.shims import extension_view
+
+        _install(ext_dir, "acme", _manifest_with_external("acme"))
+        load_providers()
+        needs = {"acme--chat_completions": ["python"]}
+        monkeypatch.setattr(
+            extension_view,
+            "get_shim",
+            lambda name: SimpleNamespace(needs=needs.get(name)),
+        )
+
+        programs = {p["name"]: p for p in _by_id()["acme"]["external"]}
+
+        assert programs["python"]["used_by"] == ["acme--chat_completions"]
+        assert programs["nowhere"]["used_by"] == []
+
+    def test_a_shim_without_needs_uses_every_program(self, ext_dir, monkeypatch):
+        from llm_rosetta_gateway.shims import extension_view
+
+        _install(ext_dir, "acme", _manifest_with_external("acme"))
+        load_providers()
+        monkeypatch.setattr(
+            extension_view, "get_shim", lambda name: SimpleNamespace(needs=None)
+        )
+        programs = {p["name"]: p for p in _by_id()["acme"]["external"]}
+        assert programs["python"]["used_by"] == ["acme--chat_completions"]
+        assert programs["nowhere"]["used_by"] == ["acme--chat_completions"]
+
+    def test_naming_node_adds_the_managed_node_row(self, ext_dir, monkeypatch):
+        from llm_rosetta_gateway.shims import extension_view
+
+        _install(ext_dir, "acme", _manifest_with_external("acme"))
+        load_providers()
+        monkeypatch.setattr(
+            extension_view, "get_shim", lambda name: SimpleNamespace(needs=["node"])
+        )
+        programs = {p["name"]: p for p in _by_id()["acme"]["external"]}
+        assert programs["node"]["used_by"] == ["acme--chat_completions"]
+        assert programs["python"]["used_by"] == []
+
+    def test_a_directory_install_reports_its_origin(self, ext_dir):
+        _install(ext_dir, "acme")
+        row = _by_id()["acme"]
+        assert row["origin"] == "directory" and row["remove_hint"] is None
+
+    def test_an_image_extension_reports_its_origin_and_how_to_remove_it(
+        self, ext_dir, tmp_path, monkeypatch
+    ):
+        from llm_rosetta_gateway.shims import extension_view
+
+        site = tmp_path / "site-packages" / "llm_rosetta_ext" / "argo"
+        site.mkdir(parents=True)
+        item = SimpleNamespace(
+            id="argo",
+            manifest=None,
+            source="entry point",
+            state="loaded",
+            reason=None,
+            path=site,
+            shims=(),
+        )
+        monkeypatch.setattr(extension_view, "list_extensions", lambda: [item])
+
+        row = _by_id()["argo"]
+
+        assert row["origin"] == "image"
+        assert "rebuild the image" in row["remove_hint"]

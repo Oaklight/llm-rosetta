@@ -13,7 +13,11 @@ from .base import OpsBase, OpsContext
 from .proxy import OpsProxyRequest
 from .rejected import OpsRejectedRequest
 from .provider_validation import OpsProviderValidation, startup_validation_entry
-from .extensions import OpsExtensionCliInstall
+from .extensions import (
+    OpsExtensionCliInstall,
+    OpsExtensionRemove,
+    OpsExtensionUpdate,
+)
 from .keys import OpsKeyCreate, OpsKeyDelete, OpsKeyRotate, OpsKeyUpdate
 from .security import (
     OpsPasswordChange,
@@ -41,6 +45,8 @@ __all__ = [
     "OpsContext",
     "OpsDeleteErrorDump",
     "OpsExtensionCliInstall",
+    "OpsExtensionRemove",
+    "OpsExtensionUpdate",
     "OpsKeyCreate",
     "OpsKeyDelete",
     "OpsKeyRotate",

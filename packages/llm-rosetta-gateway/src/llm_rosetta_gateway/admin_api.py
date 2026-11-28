@@ -132,6 +132,64 @@ class AdminExtensions(Protocol):
         """
         ...
 
+    def extension_removal_plan(self, ext_id: str) -> dict[str, Any] | None:
+        """What removing the extension deletes and keeps, or ``None`` if unknown.
+
+        ``{"id", "version", "origin", "removable", "delete", "keep", "hint"}``;
+        *delete* and *keep* are lists of ``{path, size, note}``.  *origin* is
+        ``directory`` (removable) or ``image`` (provided by the image, e.g. a pip
+        package; *hint* says how to remove it).  Blocking: it measures sizes.
+        """
+        ...
+
+    async def remove_extension(
+        self, ext_id: str, *, replace: bool = False
+    ) -> dict[str, Any]:
+        """Remove an extension and the programs it installed, as the plan says.
+
+        One operation per extension runs at a time.  The attempt is recorded in
+        the ops log (extension, version, paths deleted or failed, paths kept).
+
+        Returns:
+            ``{"extension", "deleted", "failed"}``.
+
+        Raises:
+            ExtensionInstallRefused: The extension is unknown (404), provided by
+                the image (409 ``not_removable``), busy (409) or the removal
+                failed (502).
+        """
+        ...
+
+    async def check_extension_updates(
+        self, config: Any, report: Any, ids: list[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """Compare installed extensions with the manifest sources, refetching them.
+
+        One record per extension: ``id``, ``current``, ``available`` (the newest
+        release this core runs), ``newest``, ``source``, ``versions`` and
+        ``status`` (``update``, ``current``, ``not_published``,
+        ``no_compatible`` or ``failed``) with ``error`` for a failure.  A source
+        that cannot be read is named in the error, never skipped silently.
+        """
+        ...
+
+    async def update_extension(
+        self, ext_id: str, config: Any, report: Any, version: str | None = None
+    ) -> dict[str, Any]:
+        """Install the newest release (or *version*) of an extension from its source.
+
+        Recorded in the ops log (extension, version before and after).
+
+        Returns:
+            ``{"extension", "before", "after"}``.
+
+        Raises:
+            ExtensionInstallRefused: Unknown extension or version (404/400),
+                provided by the image (409), busy (409) or the install failed
+                (502).
+        """
+        ...
+
 
 @runtime_checkable
 class AdminContext(AdminConfigAccess, AdminShimSources, AdminExtensions, Protocol):
