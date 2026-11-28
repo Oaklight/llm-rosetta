@@ -417,7 +417,7 @@
 </section>
 <section id="gap_actual">
   <h2><span class="num">04</span>gateway 现实:偏离设计的地方(#1830 的 A1–A9)</h2>
-  <p class="sub">红线是评审量出来的问题:每条标了 #1830 里的编号。</p><details class="notes"><summary>说明与已解决项(11 条)</summary><ul><li>已合并并从图上去掉的:A5(#1832,ProviderNotReady 移到 transport/provider_readiness.py)、A6(#1833,admin_api 的回退已删)。</li><li>进行中:A3 与 A11(#1831)、A7(#1835)、A4、A2、A1。</li><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。</li><li>A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。</li><li>A2:核心与 gateway 各有一套扩展安装策略,写同一个目录。</li><li>A3:admin 登录限流总是信任 X-Forwarded-For,不看 trust_proxy。</li><li>A4:上游尝试的记账有 5 份拷贝。</li><li>A7:4 处直接写 ops_log,绕过 ops 层。</li><li>A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。</li><li>A9:quota 的进程级状态放在 transport 里。</li><li>图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。</li></ul></details>
+  <p class="sub">红线是评审量出来的问题:每条标了 #1830 里的编号。</p><details class="notes"><summary>说明与已解决项(8 条)</summary><ul><li>已合并并从图上去掉的:A3 与 A11(#1831,client_ip 一次解析,server.trusted_proxies)、A5(#1832,ProviderNotReady 移到 transport/provider_readiness.py)、A6(#1833,admin_api 的回退已删)、A7(#1835,生命周期审计走 ops)、A2(#1837,扩展安装策略归核心)。</li><li>进行中:A12(请求日志保留来源地址,peer_ip 与 forwarded_for)、A4、A1、A8、A9。</li><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。</li><li>A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。</li><li>A4:上游尝试的记账有 5 份拷贝。</li><li>A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。</li><li>A9:quota 的进程级状态放在 transport 里。</li><li>图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。</li></ul></details>
   <div class="panel">
     <span class="tag now">现状 · master @ 215c832bbe</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_actual"> <span id="z-gap_actual">100%</span></label></div>
@@ -440,8 +440,8 @@
   MAINT["maintenance/startup.py(716 行)&lt;br/&gt;ProviderNotReady 已移走(A5,#1832 已合并)"]
   OPS["ops/&lt;br/&gt;OpsBase 子类 + lifecycle(A7,#1835 已合并)"]
   OPSLOG["observability/ops_log"]
-  EXTCORE["core extensions/_index.select_entry&lt;br/&gt;最新兼容版,含预发布"]
-  EXTGW["gateway shims/manifest_sources&lt;br/&gt;select_release:稳定优先"]
+  EXTCORE["core extensions/_index&lt;br/&gt;choose_release / select_entry(prefer_stable)(A2,#1837 已合并)"]
+  EXTGW["gateway shims/manifest_sources&lt;br/&gt;调用核心策略(prefer_stable)"]
   EXTDIR[("/config/extensions")]
   ADMIN --&gt; ADMINAPI
   APP --&gt;|"适配器"| ADMINAPI
@@ -464,8 +464,9 @@
   PROXY --&gt; OPS
   OPS --&gt; OPSLOG
   EXTCORE --&gt;|"ext install / update"| EXTDIR
-  EXTGW --&gt;|"重建 shim 来源(A2:两套策略)"| EXTDIR
-  linkStyle 2,3,4,6,10,11,12,15,17,21 stroke:#c0392b,stroke-width:2px
+  EXTGW --&gt;|"choose_release(A2,#1837 已合并)"| EXTCORE
+  EXTGW --&gt;|"重建 shim 来源"| EXTDIR
+  linkStyle 2,3,4,6,10,11,12,15,17 stroke:#c0392b,stroke-width:2px
 </pre></div></div>
   </div>
 </section>
@@ -494,7 +495,7 @@
   MAINT["maintenance/startup.py"]
   OPS["ops/&lt;br/&gt;唯一的审计写入者(A7)"]
   OPSLOG["observability/ops_log"]
-  EXTCORE["core 的唯一安装策略&lt;br/&gt;select_entry + 预发布开关(A2)"]
+  EXTCORE["core 的唯一安装策略&lt;br/&gt;choose_release + prefer_stable(A2,#1837 已合并)"]
   EXTGW["gateway shims/&lt;br/&gt;调用核心策略"]
   EXTDIR[("/config/extensions")]
   ADMIN --&gt;|"只经这一条"| ADMINAPI

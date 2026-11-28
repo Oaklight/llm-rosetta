@@ -17,7 +17,7 @@ flowchart LR
   MAINT["maintenance/startup.py"]
   OPS["ops/<br/>唯一的审计写入者(A7)"]
   OPSLOG["observability/ops_log"]
-  EXTCORE["core 的唯一安装策略<br/>select_entry + 预发布开关(A2)"]
+  EXTCORE["core 的唯一安装策略<br/>choose_release + prefer_stable(A2,#1837 已合并)"]
   EXTGW["gateway shims/<br/>调用核心策略"]
   EXTDIR[("/config/extensions")]
   ADMIN -->|"只经这一条"| ADMINAPI

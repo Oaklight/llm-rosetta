@@ -43,8 +43,8 @@ ACTUAL_NODES = [
     'MAINT["maintenance/startup.py(716 行)<br/>ProviderNotReady 已移走(A5,#1832 已合并)"]',
     'OPS["ops/<br/>OpsBase 子类 + lifecycle(A7,#1835 已合并)"]',
     'OPSLOG["observability/ops_log"]',
-    'EXTCORE["core extensions/_index.select_entry<br/>最新兼容版,含预发布"]',
-    'EXTGW["gateway shims/manifest_sources<br/>select_release:稳定优先"]',
+    'EXTCORE["core extensions/_index<br/>choose_release / select_entry(prefer_stable)(A2,#1837 已合并)"]',
+    'EXTGW["gateway shims/manifest_sources<br/>调用核心策略(prefer_stable)"]',
     'EXTDIR[("/config/extensions")]',
 ]
 ACTUAL_EDGES = [
@@ -69,7 +69,8 @@ ACTUAL_EDGES = [
     ("PROXY", "OPS", "", False),
     ("OPS", "OPSLOG", "", False),
     ("EXTCORE", "EXTDIR", "ext install / update", False),
-    ("EXTGW", "EXTDIR", "重建 shim 来源(A2:两套策略)", True),
+    ("EXTGW", "EXTCORE", "choose_release(A2,#1837 已合并)", False),
+    ("EXTGW", "EXTDIR", "重建 shim 来源", False),
 ]
 
 IDEAL_NODES = [
@@ -91,7 +92,7 @@ IDEAL_NODES = [
     'MAINT["maintenance/startup.py"]',
     'OPS["ops/<br/>唯一的审计写入者(A7)"]',
     'OPSLOG["observability/ops_log"]',
-    'EXTCORE["core 的唯一安装策略<br/>select_entry + 预发布开关(A2)"]',
+    'EXTCORE["core 的唯一安装策略<br/>choose_release + prefer_stable(A2,#1837 已合并)"]',
     'EXTGW["gateway shims/<br/>调用核心策略"]',
     'EXTDIR[("/config/extensions")]',
 ]
