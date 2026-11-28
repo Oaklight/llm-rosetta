@@ -1,3 +1,7 @@
+---
+config:
+  layout: elk
+---
 flowchart TB
   subgraph STATE["state"]
     KEYSTORE["keystore/<br/>SQLite API key 库 · maintenance(schema 步骤)"]
@@ -37,80 +41,30 @@ flowchart TB
     APP["app/<br/>factory · routes_llm · routes_typed · routes_models<br/>routes_compact · routes_count_tokens · routes_health · tasks · admin_context"]
   end
   ADMIN -->|"唯一允许"| ADMINAPI
-  ADMIN --> CONFIG
   ADMIN --> JOBS
-  ADMIN --> KEYSTORE
   ADMIN --> MAINT
-  ADMIN --> MW
-  ADMIN --> MT
-  ADMIN --> OBS
-  ADMIN --> OPS
-  ADMIN --> QUOTA
-  ADMIN --> ROUTING
-  ADMIN --> SHIMS
-  ADMIN --> TRANSPORT
   ADMIN --> UPD
   APP -.->|"只有 factory.py"| ADMIN
   APP -->|"适配器 admin_context.py"| ADMINAPI
-  APP --> CONFIG
-  APP --> JOBS
-  APP --> KEYSTORE
-  APP --> MAINT
-  APP --> MW
-  APP --> MT
-  APP --> OBS
-  APP --> OPS
   APP -->|"内置类型处理函数表 BUILTIN_HANDLERS"| PIPES
-  APP --> PROXY
-  APP --> ROUTING
-  APP --> SHIMS
   APP --> SURF
-  APP --> TRANSPORT
   CLI -.->|"serve"| APP
-  CLI --> CONFIG
-  CLI --> OBS
-  CLI --> OPS
-  CLI --> SHIMS
   CONFIG --> MW
   CONFIG --> MT
-  CONFIG --> OBS
-  CONFIG --> QUOTA
   CONFIG --> ROUTING
   CONFIG --> SHIMS
-  CONFIG --> TRANSPORT
-  JOBS --> OBS
   JOBS --> OPS
   KEYSTORE --> OBS
   MAINT --> KEYSTORE
-  MAINT --> OBS
   MAINT --> QUOTA
-  MAINT --> TRANSPORT
   MW --> KEYSTORE
-  MW --> OBS
   OPS --> CONFIG
-  OPS --> MW
-  OPS --> MT
-  OPS --> OBS
-  OPS --> ROUTING
-  OPS --> SHIMS
-  PIPES --> CONFIG
-  PIPES --> MW
-  PIPES --> MT
-  PIPES --> OBS
   PIPES --> PROXY
-  PIPES --> QUOTA
-  PIPES --> TRANSPORT
   PROXY --> MAINT
-  PROXY --> MW
-  PROXY --> OBS
   PROXY --> OPS
-  PROXY --> QUOTA
-  PROXY --> ROUTING
-  PROXY --> TRANSPORT
   QUOTA --> OBS
   QUOTA --> TRANSPORT
   ROUTING --> QUOTA
-  ROUTING --> TRANSPORT
   CONFIG --> CORE
   TRANSPORT -->|HTTP/SSE · ACP stdio| UP
   OBS --> CORE

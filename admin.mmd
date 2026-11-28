@@ -1,4 +1,10 @@
-flowchart LR
+---
+config:
+  layout: elk
+  elk:
+    considerModelOrder: NONE
+---
+flowchart TB
   COMP["js/components/<br/>provider-picker · provider-row · logo-picker · logo-select · type-picker · fetch-models · test-runner"]
   subgraph APIS["/admin/api 分组(这几组名字来自各 JS 的调用)"]
     A_CFG["config"]

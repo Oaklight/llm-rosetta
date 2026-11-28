@@ -1,3 +1,7 @@
+---
+config:
+  layout: elk
+---
 flowchart TB
   GW["gateway:transport 注册表<br/>经 api 注册 transports 处理器"]
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
@@ -42,42 +46,33 @@ flowchart TB
   INIT --> PIPE
   SHIM -->|"注册 resolver"| CDECL
   CLI -.->|"把 ExtVerb 传给 ext_main"| DEV
-  CVT --> IRMODEL
   SHIM -->|"模块级:注册 shims 处理器;load_providers() 调 load_extensions()"| EXTS
   INIT -->|"接线(带保护的导入)"| SHIM
   PIPE -.->|"按需加载"| FID
   DEV -.->|"按需加载"| SHIM
   EXTS --> CDECL
-  DEV --> CDECL
   CVT --> CDECL
   IROPS --> IRMODEL
   CXF --> IROPS
   DEV -->|"ext new / check 的 ExtVerb 记录"| EXTS
   PIPE --> CVT
-  CAP --> CVT
   CDECL -->|"IREffort · IRMode · IR_VERSION"| IRMODEL
   CDECL -->|"usage.semantics"| FMT
-  PIPE --> IROPS
   CVT --> IROPS
-  PIPE --> CDECL
   REF -->|"转发(带警告)"| IRMODEL
-  SHIM --> IROPS
   CAP -->|"转发 enforcement"| PIPE
   CVT -->|"detect_provider 读格式目录"| FMT
   CLI -->|"注册 commands 处理器(加载器回放已加载的扩展)"| EXTS
   SHIM -->|"清转换器缓存"| CVT
   DET -->|"转发 get_converter_for_provider · detect_provider"| CVT
-  INIT --> CVT
   GW -.->|"经 api 注册 transports 处理器"| EXTS
   DET -->|"转发 convert · convert_response(pipeline/facade)"| PIPE
   TOOL --> CVT
-  CLI --> CDECL
   CDECL -->|"retired_names"| VOCAB
-  SHIM --> FMT
   INIT --> TOOL
   FMT --> IRMODEL
 
-  linkStyle 4 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 12 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 25 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 29 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 3 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 10 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 19 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 22 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c

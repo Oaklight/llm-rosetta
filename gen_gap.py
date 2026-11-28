@@ -13,6 +13,7 @@ import re
 import sys
 
 import gen_gateway as g
+from reduce import reduction
 
 OUT = pathlib.Path(__file__).parent
 ID = g.ID
@@ -45,26 +46,6 @@ IDEAL_PATCH = {
     "OPS": "唯一的审计写入者",
 }
 IDEAL_LABEL = {("quota", "transport"): ("-.->", "启动时注册接收器(A9)")}
-
-
-def reduction(edges, keep):
-    """Package edges that another path already implies (transitive reduction), minus *keep*."""
-    graph = {a: set(b) for a, b in edges.items()}
-
-    def reaches(src, dst, skip):
-        seen, todo = set(), [src]
-        while todo:
-            n = todo.pop()
-            for m in graph.get(n, ()):
-                if (n, m) == skip or m in seen:
-                    continue
-                if m == dst:
-                    return True
-                seen.add(m)
-                todo.append(m)
-        return False
-
-    return {(a, b) for a, bs in edges.items() for b in bs if (a, b) not in keep and reaches(a, b, (a, b))}
 
 
 def patch(lines, add):

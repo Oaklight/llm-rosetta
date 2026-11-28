@@ -110,11 +110,15 @@
 
 <section id="core">
   <h2><span class="num">01</span>core 现状:组件与依赖</h2>
-  <p class="sub">实线是模块顶层导入,虚线是函数内的懒加载。</p><details class="notes"><summary>说明(11 条)</summary><ul><li>ir、pipeline、formats、auto_detect、contracts 都不导入 shims 与 extensions,shim 名字经 contracts/resolver.py 读取。</li><li>四个编排器(chat、embeddings、rerank、decisions)都在 pipeline/,converters 不导入 pipeline,ConversionError 只定义在 converters/base/errors.py。</li><li>IR 是一个包 llm_rosetta.ir:ir/model(数据,只依赖标准库)在底层,ir/primitives、ir/tools、ir/passes 在它之上;types/ 只放提供方参考形状。</li><li>shims 向 extensions 注册 shims 处理器(绿线),两者不互相导入。</li><li>红色的依赖只有一条:contracts/transform.py 导入 ir.primitives(边表由 tests/test_core_layering.py 固定)。</li><li>“转换库”组是三层:pipeline 在最上,converters 在中间,IR 在最下,自上而下依赖;没有 shim 时这一组就是完整的转换库。</li><li>shims 和 extensions 是它外面的可选层;contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。</li><li>api 只是把下面各包再导出一遍,这些再导出的边不画,免得遮住真正的依赖。</li><li>tool_ops(入口便捷层)只画到 converters 的边,它到 ir 和 retired_names 的边在 CORE_EDGES 里有,图里不画。</li><li>未画的:shims/providers 转发层、弃用的 gateway/ 与 observability/ 转发包。</li><li>画的是 master 的树。</li></ul></details>
+  <p class="sub">实线是模块顶层导入,虚线是函数内的懒加载。</p><details class="notes"><summary>说明(12 条)</summary><ul><li>另一条路径已经隐含的实线导入没有画(传递性约简),带标签和带颜色的线一律保留;完整的边用 python gen_core.py --full 生成。</li><li>ir、pipeline、formats、auto_detect、contracts 都不导入 shims 与 extensions,shim 名字经 contracts/resolver.py 读取。</li><li>四个编排器(chat、embeddings、rerank、decisions)都在 pipeline/,converters 不导入 pipeline,ConversionError 只定义在 converters/base/errors.py。</li><li>IR 是一个包 llm_rosetta.ir:ir/model(数据,只依赖标准库)在底层,ir/primitives、ir/tools、ir/passes 在它之上;types/ 只放提供方参考形状。</li><li>shims 向 extensions 注册 shims 处理器(绿线),两者不互相导入。</li><li>红色的依赖只有一条:contracts/transform.py 导入 ir.primitives(边表由 tests/test_core_layering.py 固定)。</li><li>“转换库”组是三层:pipeline 在最上,converters 在中间,IR 在最下,自上而下依赖;没有 shim 时这一组就是完整的转换库。</li><li>shims 和 extensions 是它外面的可选层;contracts 在共享基础层,被转换、shim、扩展、cli、devtools 共用;api 是宿主门面,core 内部不导入它(有测试保证)。</li><li>api 只是把下面各包再导出一遍,这些再导出的边不画,免得遮住真正的依赖。</li><li>tool_ops(入口便捷层)只画到 converters 的边,它到 ir 和 retired_names 的边在 CORE_EDGES 里有,图里不画。</li><li>未画的:shims/providers 转发层、弃用的 gateway/ 与 observability/ 转发包。</li><li>画的是 master 的树。</li></ul></details>
   <div class="panel">
     <span class="tag now">现状 · master @ master</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="core"> <span id="z-core">100%</span></label></div>
-    <div class="scroll"><div class="stage" id="stage-core"><pre class="mmd-src" id="m-core">flowchart TB
+    <div class="scroll"><div class="stage" id="stage-core"><pre class="mmd-src" id="m-core">---
+config:
+  layout: elk
+---
+flowchart TB
   GW["gateway:transport 注册表&lt;br/&gt;经 api 注册 transports 处理器"]
   subgraph CORE["转换库(没有 shim 时,这一组就是完整的转换库)"]
     subgraph TIERS["三层,自上而下依赖"]
@@ -158,55 +162,50 @@
   INIT --&gt; PIPE
   SHIM --&gt;|"注册 resolver"| CDECL
   CLI -.-&gt;|"把 ExtVerb 传给 ext_main"| DEV
-  CVT --&gt; IRMODEL
   SHIM --&gt;|"模块级:注册 shims 处理器;load_providers() 调 load_extensions()"| EXTS
   INIT --&gt;|"接线(带保护的导入)"| SHIM
   PIPE -.-&gt;|"按需加载"| FID
   DEV -.-&gt;|"按需加载"| SHIM
   EXTS --&gt; CDECL
-  DEV --&gt; CDECL
   CVT --&gt; CDECL
   IROPS --&gt; IRMODEL
   CXF --&gt; IROPS
   DEV --&gt;|"ext new / check 的 ExtVerb 记录"| EXTS
   PIPE --&gt; CVT
-  CAP --&gt; CVT
   CDECL --&gt;|"IREffort · IRMode · IR_VERSION"| IRMODEL
   CDECL --&gt;|"usage.semantics"| FMT
-  PIPE --&gt; IROPS
   CVT --&gt; IROPS
-  PIPE --&gt; CDECL
   REF --&gt;|"转发(带警告)"| IRMODEL
-  SHIM --&gt; IROPS
   CAP --&gt;|"转发 enforcement"| PIPE
   CVT --&gt;|"detect_provider 读格式目录"| FMT
   CLI --&gt;|"注册 commands 处理器(加载器回放已加载的扩展)"| EXTS
   SHIM --&gt;|"清转换器缓存"| CVT
   DET --&gt;|"转发 get_converter_for_provider · detect_provider"| CVT
-  INIT --&gt; CVT
   GW -.-&gt;|"经 api 注册 transports 处理器"| EXTS
   DET --&gt;|"转发 convert · convert_response(pipeline/facade)"| PIPE
   TOOL --&gt; CVT
-  CLI --&gt; CDECL
   CDECL --&gt;|"retired_names"| VOCAB
-  SHIM --&gt; FMT
   INIT --&gt; TOOL
   FMT --&gt; IRMODEL
 
-  linkStyle 4 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 12 stroke:#d33,stroke-width:2.5px,color:#d33
-  linkStyle 25 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
-  linkStyle 29 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 3 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 10 stroke:#d33,stroke-width:2.5px,color:#d33
+  linkStyle 19 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
+  linkStyle 22 stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c
 </pre></div></div>
   </div>
 </section>
 <section id="gateway">
   <h2><span class="num">02</span>gateway 后端的组件与关系</h2>
-  <p class="sub">分层来自 tests/gateway/test_layers.py,只能向下导入;包间的边直接取自该文件的 GATEWAY_EDGES(由 gen_gateway.py 生成)。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>每个包都会用 core,图里只画了几条代表性的到 CORE 的线。</li><li>admin 除了 admin_api 之外还有一批 legacy allowlist 导入(config、keystore、maintenance、middleware、observability、ops、quota、routing、shims、transport、updates),名单只允许缩小,图里没画。</li></ul></details>
+  <p class="sub">分层来自 tests/gateway/test_layers.py,只能向下导入;另一条路径已经隐含的包间导入没有画(传递性约简),带标签的线保留,完整的边用 python gen_gateway.py --full 生成;包间的边直接取自该文件的 GATEWAY_EDGES(由 gen_gateway.py 生成)。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>每个包都会用 core,图里只画了几条代表性的到 CORE 的线。</li><li>admin 除了 admin_api 之外还有一批 legacy allowlist 导入(config、keystore、maintenance、middleware、observability、ops、quota、routing、shims、transport、updates),名单只允许缩小,图里没画。</li></ul></details>
   <div class="panel">
     <span class="tag now">现状 · master @ master</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gateway"> <span id="z-gateway">100%</span></label></div>
-    <div class="scroll"><div class="stage" id="stage-gateway"><pre class="mmd-src" id="m-gateway">flowchart TB
+    <div class="scroll"><div class="stage" id="stage-gateway"><pre class="mmd-src" id="m-gateway">---
+config:
+  layout: elk
+---
+flowchart TB
   subgraph STATE["state"]
     KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库 · maintenance(schema 步骤)"]
     MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup"]
@@ -245,80 +244,30 @@
     APP["app/&lt;br/&gt;factory · routes_llm · routes_typed · routes_models&lt;br/&gt;routes_compact · routes_count_tokens · routes_health · tasks · admin_context"]
   end
   ADMIN --&gt;|"唯一允许"| ADMINAPI
-  ADMIN --&gt; CONFIG
   ADMIN --&gt; JOBS
-  ADMIN --&gt; KEYSTORE
   ADMIN --&gt; MAINT
-  ADMIN --&gt; MW
-  ADMIN --&gt; MT
-  ADMIN --&gt; OBS
-  ADMIN --&gt; OPS
-  ADMIN --&gt; QUOTA
-  ADMIN --&gt; ROUTING
-  ADMIN --&gt; SHIMS
-  ADMIN --&gt; TRANSPORT
   ADMIN --&gt; UPD
   APP -.-&gt;|"只有 factory.py"| ADMIN
   APP --&gt;|"适配器 admin_context.py"| ADMINAPI
-  APP --&gt; CONFIG
-  APP --&gt; JOBS
-  APP --&gt; KEYSTORE
-  APP --&gt; MAINT
-  APP --&gt; MW
-  APP --&gt; MT
-  APP --&gt; OBS
-  APP --&gt; OPS
   APP --&gt;|"内置类型处理函数表 BUILTIN_HANDLERS"| PIPES
-  APP --&gt; PROXY
-  APP --&gt; ROUTING
-  APP --&gt; SHIMS
   APP --&gt; SURF
-  APP --&gt; TRANSPORT
   CLI -.-&gt;|"serve"| APP
-  CLI --&gt; CONFIG
-  CLI --&gt; OBS
-  CLI --&gt; OPS
-  CLI --&gt; SHIMS
   CONFIG --&gt; MW
   CONFIG --&gt; MT
-  CONFIG --&gt; OBS
-  CONFIG --&gt; QUOTA
   CONFIG --&gt; ROUTING
   CONFIG --&gt; SHIMS
-  CONFIG --&gt; TRANSPORT
-  JOBS --&gt; OBS
   JOBS --&gt; OPS
   KEYSTORE --&gt; OBS
   MAINT --&gt; KEYSTORE
-  MAINT --&gt; OBS
   MAINT --&gt; QUOTA
-  MAINT --&gt; TRANSPORT
   MW --&gt; KEYSTORE
-  MW --&gt; OBS
   OPS --&gt; CONFIG
-  OPS --&gt; MW
-  OPS --&gt; MT
-  OPS --&gt; OBS
-  OPS --&gt; ROUTING
-  OPS --&gt; SHIMS
-  PIPES --&gt; CONFIG
-  PIPES --&gt; MW
-  PIPES --&gt; MT
-  PIPES --&gt; OBS
   PIPES --&gt; PROXY
-  PIPES --&gt; QUOTA
-  PIPES --&gt; TRANSPORT
   PROXY --&gt; MAINT
-  PROXY --&gt; MW
-  PROXY --&gt; OBS
   PROXY --&gt; OPS
-  PROXY --&gt; QUOTA
-  PROXY --&gt; ROUTING
-  PROXY --&gt; TRANSPORT
   QUOTA --&gt; OBS
   QUOTA --&gt; TRANSPORT
   ROUTING --&gt; QUOTA
-  ROUTING --&gt; TRANSPORT
   CONFIG --&gt; CORE
   TRANSPORT --&gt;|HTTP/SSE · ACP stdio| UP
   OBS --&gt; CORE
@@ -335,7 +284,13 @@
   <div class="panel">
     <span class="tag now">现状 · master @ master</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="admin"> <span id="z-admin">100%</span></label></div>
-    <div class="scroll"><div class="stage" id="stage-admin"><pre class="mmd-src" id="m-admin">flowchart LR
+    <div class="scroll"><div class="stage" id="stage-admin"><pre class="mmd-src" id="m-admin">---
+config:
+  layout: elk
+  elk:
+    considerModelOrder: NONE
+---
+flowchart TB
   COMP["js/components/&lt;br/&gt;provider-picker · provider-row · logo-picker · logo-select · type-picker · fetch-models · test-runner"]
   subgraph APIS["/admin/api 分组(这几组名字来自各 JS 的调用)"]
     A_CFG["config"]

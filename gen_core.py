@@ -1,7 +1,19 @@
 RED = "stroke:#d33,stroke-width:2.5px,color:#d33"
 GREEN = "stroke:#1a8f3c,stroke-width:2.5px,color:#1a8f3c"
 
+def reduce_edges(edges):
+    from reduce import reduction
+    graph = {}
+    for a, b, label, kind, color in edges:
+        if kind == "solid":
+            graph.setdefault(a, set()).add(b)
+    keep = {(a, b) for a, b, label, kind, color in edges if label or color}
+    implied = reduction(graph, keep)
+    return [e for e in edges if not (e[3] == "solid" and (e[0], e[1]) in implied)]
+
 def render(header, edges):
+    header = header.replace("flowchart TB", "---\nconfig:\n  layout: elk\n---\nflowchart TB", 1)
+    edges = edges if "--full" in __import__("sys").argv else reduce_edges(edges)
     lines = [header, ""]
     styles = []
     for i, (a, b, label, kind, color) in enumerate(edges):
