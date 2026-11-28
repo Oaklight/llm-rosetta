@@ -49,7 +49,7 @@ IDEAL_PATCH = {
     "APP": "热重载与唯一的已生效配置",
     "PROXY": "attempt_upstream:唯一的上游尝试记账(A4);pipelines 与 relay 路由经它",
     "CONFIG": "只做解析与装配",
-    "TRANSPORT": "acp_lane(ACP lane 解析,A8) · ProviderInfo 分成 auth / ACP / quota 子记录(A8) · acp_usage(纯解码)· lane_allowance(接收器接口,A9) · 不导入 quota",
+    "TRANSPORT": "http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码,A9),A13)<br/>ProviderInfo 分成 auth / ACP / quota 子记录(A8) · lane_allowance(接收器接口,A9) · 不导入 quota",
     "QUOTA": "读数与锁在这里(A9)",
     "OPS": "唯一的审计写入者",
 }

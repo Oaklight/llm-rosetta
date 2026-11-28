@@ -600,7 +600,7 @@
     MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info · provider_readiness(ProviderNotReady)&lt;br/&gt;acp_lane(ACP lane 解析,A8) · ProviderInfo 分成 auth / ACP / quota 子记录(A8) · acp_usage(纯解码)· lane_allowance(接收器接口,A9) · 不导入 quota"]
+    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info · provider_readiness(ProviderNotReady)&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码,A9),A13)&lt;br/&gt;ProviderInfo 分成 auth / ACP / quota 子记录(A8) · lane_allowance(接收器接口,A9) · 不导入 quota"]
     SURF["surface.py"]
     OBS["observability/&lt;br/&gt;logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]
