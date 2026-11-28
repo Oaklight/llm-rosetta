@@ -26,7 +26,6 @@ def _request(tmp_path, raw: dict, *, cascade: bool = True) -> SimpleNamespace:
     path = tmp_path / "config.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
     app = SimpleNamespace(
-        admin=GatewayAdminContext(),
         config_path=str(path),
         config_io=JsoncConfigIO(),
         gateway_config=None,
@@ -34,6 +33,7 @@ def _request(tmp_path, raw: dict, *, cascade: bool = True) -> SimpleNamespace:
         shim_source_signature=None,
         rate_limit_state=None,
     )
+    app.admin = GatewayAdminContext(app)
     query = "?cascade=true" if cascade else ""
     return SimpleNamespace(
         app=app,

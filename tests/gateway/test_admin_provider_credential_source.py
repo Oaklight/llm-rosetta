@@ -414,7 +414,6 @@ def _save_request(tmp_path, raw: dict, body: dict, name: str = "p") -> SimpleNam
     path = tmp_path / "config.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
     app = SimpleNamespace(
-        admin=GatewayAdminContext(),
         config_path=str(path),
         config_io=JsoncConfigIO(),
         gateway_config=None,
@@ -422,6 +421,7 @@ def _save_request(tmp_path, raw: dict, body: dict, name: str = "p") -> SimpleNam
         shim_source_signature=None,
         rate_limit_state=None,
     )
+    app.admin = GatewayAdminContext(app)
     return SimpleNamespace(
         app=app,
         path_params={"name": name},

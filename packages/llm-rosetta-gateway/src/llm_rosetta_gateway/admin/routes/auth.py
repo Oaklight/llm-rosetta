@@ -375,7 +375,7 @@ async def change_password(request: Any) -> Response:
                 {"error": f"Failed to write config: {exc}"}, status_code=500
             )
 
-    # Hot-reload config (syncs auth state via _sync_auth_middleware).
+    # Hot-reload config (syncs auth state, see AdminContext.reload_config).
     # This calls change_password() on AuthState, which invalidates all sessions.
     await _reload_gateway_config(request, config_path)
 

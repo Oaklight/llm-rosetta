@@ -131,3 +131,98 @@ async def test_admin_reload_changes_what_v1_models_serves(tmp_path):
     finally:
         listener.close()
         await listener.wait_closed()
+
+
+class TestReloadConfig:
+    """``AdminContext.reload_config``: what a reload swaps in, besides the config."""
+
+    @staticmethod
+    async def _app(tmp_path, raw: dict[str, Any]) -> Any:
+        app: Any = await create_app(GatewayConfig(_raw(tmp_path, "m-one")))
+        app.config_io = SimpleNamespace(load=lambda _path: raw)
+        return app
+
+    @pytest.mark.asyncio
+    async def test_it_serves_the_new_config_from_both_homes(self, tmp_path):
+        app = await self._app(tmp_path, _raw(tmp_path, "m-one", "m-two"))
+        new = await app.admin.reload_config(str(tmp_path / "c.json"))
+        assert app.admin.served_config() is new
+        assert app.gateway_config is new
+        assert sorted(new.models) == ["m-one", "m-two"]
+
+    @pytest.mark.asyncio
+    async def test_it_applies_the_trusted_proxies_to_the_live_policy(self, tmp_path):
+        raw = _raw(tmp_path, "m-one")
+        raw["server"]["trusted_proxies"] = ["172.29.0.1/32"]
+        app = await self._app(tmp_path, raw)
+        assert "172.29.0.1" not in app.proxy_policy.trusted
+        await app.admin.reload_config(str(tmp_path / "c.json"))
+        assert "172.29.0.1" in app.proxy_policy.trusted
+
+    @pytest.mark.asyncio
+    async def test_it_applies_the_retention_caps_to_the_store(self, tmp_path):
+        raw = _raw(tmp_path, "m-one")
+        raw["server"]["request_log"] = {"success_max": 321, "error_dump_max": 12}
+        raw["server"]["ops_log"] = {"info_max": 1000, "warn_max": 5}
+        app = await self._app(tmp_path, raw)
+        app.persistence = SimpleNamespace(
+            success_max=0, dump_max=0, retention=SimpleNamespace()
+        )
+        await app.admin.reload_config(str(tmp_path / "c.json"))
+        assert app.persistence.success_max == 321
+        assert app.persistence.dump_max == 12
+        assert app.persistence.retention.ops_info_max == 1000
+        # Below the floor of 100, the floor wins.
+        assert app.persistence.retention.ops_warn_max == 100
+
+    @pytest.mark.asyncio
+    async def test_it_syncs_the_admin_password_and_sessions(self, tmp_path):
+        raw = _raw(tmp_path, "m-one")
+        raw["server"]["admin_password"] = "new-secret"
+        app = await self._app(tmp_path, raw)
+        calls: list[Any] = []
+        app.auth_state = SimpleNamespace(
+            admin_password="old-secret",
+            change_password=lambda value: calls.append(("password", value)),
+            configure_sessions=lambda **kw: calls.append(("sessions", kw)),
+        )
+        await app.admin.reload_config(str(tmp_path / "c.json"))
+        assert ("password", "new-secret") in calls
+        assert any(kind == "sessions" for kind, _ in calls)
+
+    @pytest.mark.asyncio
+    async def test_the_rate_limiter_is_rebuilt_only_when_its_settings_changed(
+        self, tmp_path
+    ):
+        raw = _raw(tmp_path, "m-one")
+        app = await self._app(tmp_path, raw)
+        rebuilt: list[Any] = []
+        app.rate_limit_state = SimpleNamespace(rebuild=rebuilt.append)
+        await app.admin.reload_config(str(tmp_path / "c.json"))
+        first = len(rebuilt)
+        await app.admin.reload_config(str(tmp_path / "c.json"))
+        assert first == 1 and len(rebuilt) == 1, "an unchanged config must not rebuild"
+        raw["server"]["rate_limit"] = {"enabled": True, "global": "5/minute"}
+        await app.admin.reload_config(str(tmp_path / "c.json"))
+        assert len(rebuilt) == 2
+
+    @pytest.mark.asyncio
+    async def test_the_reload_is_recorded_in_the_ops_log(self, tmp_path):
+        from llm_rosetta_gateway.observability.ops_log import EVENT_CONFIG_RELOAD
+
+        app = await self._app(tmp_path, _raw(tmp_path, "m-one"))
+        added: list[Any] = []
+
+        async def add(entry: Any, **_kw: Any) -> None:
+            added.append(entry)
+
+        app.ops_log = SimpleNamespace(add=add)
+        await app.admin.reload_config(str(tmp_path / "c.json"))
+        assert [e.event_type for e in added] == [EVENT_CONFIG_RELOAD]
+
+    @pytest.mark.asyncio
+    async def test_an_app_with_no_config_reader_cannot_reload(self, tmp_path):
+        app: Any = await create_app(GatewayConfig(_raw(tmp_path, "m-one")))
+        app.config_io = None
+        with pytest.raises(RuntimeError, match="ConfigIO"):
+            await app.admin.reload_config(str(tmp_path / "c.json"))

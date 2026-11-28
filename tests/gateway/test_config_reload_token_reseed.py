@@ -91,7 +91,7 @@ class _App:
         self.gateway_config: Any = None
         self.deferred_startup: Any = None
         self._prev_gateway_config: Any = None
-        self.admin = GatewayAdminContext()
+        self.admin = GatewayAdminContext(self)
 
 
 class _Request:
