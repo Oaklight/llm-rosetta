@@ -197,6 +197,18 @@ Pinned versions the shipped extensions declare:
 | `claude` | `claude` | npm `@anthropic-ai/claude-code` | `2.1.299` | any npm supports (the musl build is chosen on Alpine) |
 | `antigravity` | `agy` | release archive `agy_cli_<platform>.tar.gz` | `1.5.15` | `linux_x64_musl`, `linux_arm64_musl` |
 
+### Managing extensions from the admin panel { #managing-from-the-panel }
+
+The Shims page shows every installed extension the same way, whatever put it on the host (the panel, `llm-rosetta ext install`, `shims.install`, a folder placed by hand, or a pip package in the image). The **Sources** view lists one row per extension with its version, origin, shims and external programs.
+
+- **Origin.** `origin: extensions directory` means the folder lies in `LLM_ROSETTA_EXTENSIONS_DIR`; the panel can update and remove it. `origin: image / pip` means it is provided by something outside that directory (a pip package in the image); the panel cannot remove it, shows no Remove button and says to run `pip uninstall <package>` or rebuild the image. The `SOURCE` column of `llm-rosetta ext list` says how the folder was *found* (an entry point or the namespace), not how it was installed.
+- **Check for updates** re-reads the manifest sources and compares each installed extension with what they publish, showing the current and the available version. A source that cannot be read, or that only answered from its cache, is named in the row; it is never shown as "up to date". **Update** appears only after a check found a newer release.
+- **Remove** deletes the extension, the programs it installed (`<tools>/<id>/`) and their entry links. The dialog lists every path before anything is deleted. The shared Node.js (`<tools>/node/` and the links `node`, `npm`, `npx`) is deleted only when no other `<tools>/<id>/npm-<version>/` is left; otherwise it is kept and the dialog names the extensions that still use it.
+- **Use declared source** (when a declared source in `shims.install` selects the extension) removes the extension and reloads the shims, so the declared source installs its release; **Install this version** installs one of the versions the last check found. A declared source whose vendor is already provided by an installed extension is skipped, and the skip is shown on that extension's row.
+- **External programs follow the shim.** An Installed vendor card lists the programs its extension needs (`Requires claude ≥ 2.1.299 — NOT INSTALLED`) with an Install button, and the provider editor shows the same warning when the selected shim needs a program that is not ready. A shim may name the programs it needs with `needs:` in its `provider.yaml` (names from the extension's `external:`, or `node` for the managed Node.js); without it a shim needs every program of the extension, and `needs: []` means none.
+
+Each remove, update and replacement is written to the ops log (`extension_remove`, `extension_update`) with the extension id, the versions or the paths deleted, and the result.
+
 ## The gateway and extensions
 
 The gateway's `shims` section selects what to install from extension indexes and what to switch off; see [External shim sources](../gateway/configuration.md#external-shim-sources). An extension that is installed loads whether or not `shims.install` still selects it. A shim name that core already registers wins: it is not replaced, and the extension's status says which owner holds the name. A vendor that moved out of core is installed by itself when a config names its shim ([Migrating to 0.14](migrating-to-0.14.md#moved-to-contrib)).
