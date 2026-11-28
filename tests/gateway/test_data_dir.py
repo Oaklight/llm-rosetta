@@ -15,6 +15,7 @@ from typing import Any
 
 class _MockApp:
     persistence: Any = None
+    admin: Any = None
 
 
 def _write_config(path: str, server: dict | None = None) -> None:
@@ -85,6 +86,7 @@ class TestSetupAdminDataDir:
 
     @pytest.mark.asyncio
     async def test_explicit_data_dir_wins(self, tmp_path):
+        from llm_rosetta_gateway.app.admin_context import GatewayAdminContext
         from llm_rosetta_gateway.config import GatewayConfig
 
         explicit_dir = str(tmp_path / "explicit")
@@ -98,6 +100,7 @@ class TestSetupAdminDataDir:
         _write_config(config_path)
 
         app = _MockApp()
+        app.admin = GatewayAdminContext(app)
         from llm_rosetta_gateway.admin import setup_admin
 
         await setup_admin(app, config, config_path, data_dir=explicit_dir)
@@ -106,6 +109,7 @@ class TestSetupAdminDataDir:
 
     @pytest.mark.asyncio
     async def test_config_relative_resolved(self, tmp_path):
+        from llm_rosetta_gateway.app.admin_context import GatewayAdminContext
         from llm_rosetta_gateway.config import GatewayConfig
 
         raw = {
@@ -118,6 +122,7 @@ class TestSetupAdminDataDir:
         _write_config(config_path)
 
         app = _MockApp()
+        app.admin = GatewayAdminContext(app)
         from llm_rosetta_gateway.admin import setup_admin
 
         await setup_admin(app, config, config_path)

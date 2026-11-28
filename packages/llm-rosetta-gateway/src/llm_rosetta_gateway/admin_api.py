@@ -19,15 +19,19 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 
 if TYPE_CHECKING:
-    from .config import GatewayConfig
+    from .config import ConfigIO, GatewayConfig
 
 __all__ = [
     "AdminConfigAccess",
     "AdminContext",
     "AdminExtensions",
+    "AdminServices",
     "AdminShimSources",
+    "ConfigIO",
     "ExtensionInstallRefused",
+    "GatewayConfig",
     "admin_context",
+    "app_admin_context",
 ]
 
 
@@ -53,6 +57,31 @@ class AdminConfigAccess(Protocol):
         that read it, records the reload and seeds credential-minting providers
         again.  Returns the config now served.
         """
+        ...
+
+
+@runtime_checkable
+class AdminServices(Protocol):
+    """The gateway services the admin panel runs on, started once per app."""
+
+    async def start_services(
+        self,
+        config: GatewayConfig,
+        config_path: str | None,
+        config_io: ConfigIO | None,
+        data_dir: str | None,
+    ) -> None:
+        """Build the metrics, logs, persistence, jobs and ops context.
+
+        Stores them on the app (``metrics``, ``request_log``, ``ops_log``,
+        ``persistence``, ``jobs``, ``ops_ctx``, ``config_path``, ``config_io``,
+        ``profiler_state``, ``capture_state``).  *config_io* defaults to the
+        JSONC reader; *data_dir* overrides the config's data directory.
+        """
+        ...
+
+    async def record_admin_setup(self) -> None:
+        """Write the audit row that says the admin panel is wired."""
         ...
 
 
@@ -197,7 +226,9 @@ class AdminExtensions(Protocol):
 
 
 @runtime_checkable
-class AdminContext(AdminConfigAccess, AdminShimSources, AdminExtensions, Protocol):
+class AdminContext(
+    AdminConfigAccess, AdminServices, AdminShimSources, AdminExtensions, Protocol
+):
     """Everything the admin panel may ask of the running gateway.
 
     Capabilities are added as base classes, one per concern: config,
@@ -209,13 +240,22 @@ class AdminContext(AdminConfigAccess, AdminShimSources, AdminExtensions, Protoco
 def admin_context(request: Any) -> AdminContext:
     """Return the :class:`AdminContext` the app of *request* exposes.
 
+    Raises:
+        RuntimeError: The app has no ``admin`` context.
+    """
+    return app_admin_context(request.app)
+
+
+def app_admin_context(app: Any) -> AdminContext:
+    """Return the :class:`AdminContext` that *app* exposes.
+
     ``create_app`` sets ``app.admin``; an app that lacks it was not built by
     ``create_app``, and admin has nothing to fall back on.
 
     Raises:
         RuntimeError: The app has no ``admin`` context.
     """
-    context = getattr(request.app, "admin", None)
+    context = getattr(app, "admin", None)
     if context is None:
         raise RuntimeError(
             "app.admin is not set: create_app sets it, and admin needs it"

@@ -10,7 +10,7 @@ from ..quota.lane_allowance import bind_lane_allowance
 from ..shims.extension_view import pick_release, update_report
 
 if TYPE_CHECKING:
-    from ..config import GatewayConfig
+    from ..config import ConfigIO, GatewayConfig
 
 
 _REFUSED = {
@@ -195,6 +195,24 @@ class GatewayAdminContext:
                 idle_minutes=config.admin_session_idle_minutes,
                 remember_days=config.admin_session_remember_days,
             )
+
+    async def start_services(
+        self,
+        config: GatewayConfig,
+        config_path: str | None,
+        config_io: ConfigIO | None,
+        data_dir: str | None,
+    ) -> None:
+        """Build the services the admin panel runs on and store them on the app."""
+        from .admin_services import start_admin_services
+
+        await start_admin_services(self._app, config, config_path, config_io, data_dir)
+
+    async def record_admin_setup(self) -> None:
+        """Write the audit row that says the admin panel is wired."""
+        from ..ops import OpsAdminSetup
+
+        await OpsAdminSetup(self._app.ops_ctx).execute()
 
     def shim_source_catalogue(
         self, config: Any, report: Any, *, refresh: bool = False
