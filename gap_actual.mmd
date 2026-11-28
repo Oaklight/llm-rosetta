@@ -38,7 +38,7 @@ flowchart TB
   UP(["上游提供方"])
   subgraph SERVING["serving"]
     ADMINAPI["admin_api.py<br/>AdminContext 协议;不导入 app 与 observability"]
-    ADMIN["admin/<br/>routes/ · js/ · admin.html<br/>热重载写在 routes/_shared.py,写 5 个 app 属性;读 request.app.* 28 种,约 113 处(A1)"]
+    ADMIN["admin/<br/>routes/ · js/ · admin.html<br/>legacy allowlist 导入 + 读 request.app.* 28 种,约 113 处(A1);热重载已经是 AdminContext.reload_config"]
     APP["app/<br/>factory · routes_llm · routes_typed · routes_models<br/>routes_compact · routes_count_tokens · routes_health · tasks · admin_context<br/>已生效配置有两个落点:app.gateway_config 与 app/_state(A1)"]
   end
   ADMIN -->|"唯一允许"| ADMINAPI

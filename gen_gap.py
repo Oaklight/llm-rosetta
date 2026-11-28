@@ -18,7 +18,7 @@ OUT = pathlib.Path(__file__).parent
 ID = g.ID
 
 ACTUAL_PATCH = {
-    "ADMIN": "热重载写在 routes/_shared.py,写 5 个 app 属性;读 request.app.* 28 种,约 113 处(A1)",
+    "ADMIN": "legacy allowlist 导入 + 读 request.app.* 28 种,约 113 处(A1);热重载已经是 AdminContext.reload_config",
     "APP": "已生效配置有两个落点:app.gateway_config 与 app/_state(A1)",
     "CONFIG": "providers.py:build_provider_info 294 行,复杂度 49;约 20 个 ACP 辅助在这里(A8)",
     "TRANSPORT": "provider_info.py:ProviderInfo 58 个属性(不拆) · acp.py 2535 行",
@@ -29,12 +29,7 @@ ACTUAL_EXTRA = [
     ("TRANSPORT", "ACPQ", "-->", "", False),
     ("ACPQ", "QUOTA", "-.->", "状态放错地方(A9)", True),
 ]
-ACTUAL_RED = {
-    ("admin", d) for d in (
-        "config", "jobs", "keystore", "maintenance", "middleware", "model_types", "observability",
-        "ops", "quota", "routing", "shims", "transport", "updates",
-    )
-} | {("config", "transport")}
+ACTUAL_RED_EXTRA = {("config", "transport")}  # plus every admin edge except admin_api, computed from the table
 ACTUAL_LABEL = {
     ("admin", "config"): "legacy allowlist 导入(A1)",
     ("config", "transport"): "ACP lane 解析在 config(A8)",
@@ -49,7 +44,6 @@ IDEAL_PATCH = {
     "QUOTA": "读数与锁在这里(A9)",
     "OPS": "唯一的审计写入者",
 }
-IDEAL_DROP = {pair for pair in ACTUAL_RED if pair[0] == "admin"}
 IDEAL_LABEL = {("quota", "transport"): ("-.->", "启动时注册接收器(A9)")}
 
 
@@ -120,6 +114,9 @@ def emit(name, node_lines, edges, extras, red_pairs, labels, drop):
 if __name__ == "__main__":
     ref = next((a for a in sys.argv[1:] if not a.startswith("--")), "origin/master")
     edges = g.gateway_edges(ref)
+    admin_red = {("admin", d) for d in edges["admin"] if d != "admin_api"}
+    ACTUAL_RED = admin_red | ACTUAL_RED_EXTRA
+    IDEAL_DROP = admin_red
     reduce_ = "--full" not in sys.argv
     flat = {a: tuple(b for b in bs if (a, b) not in IDEAL_DROP) for a, bs in edges.items()}
     drop_a = reduction(edges, ACTUAL_RED | set(ACTUAL_LABEL)) if reduce_ else set()

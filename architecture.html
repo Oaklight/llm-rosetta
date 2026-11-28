@@ -447,7 +447,7 @@
 </section>
 <section id="gap_actual">
   <h2><span class="num">04</span>gateway 现实:当前的完整架构与仍偏离设计的地方</h2>
-  <p class="sub">和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题(A4 已合并,不再画):A1 admin 的边界只在导入层有测试(legacy allowlist 的 13 条 admin 导入,加上 admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点);A8 config/providers.py 里有约 20 个 ACP 辅助(build_provider_info 复杂度 49);ProviderInfo 的 58 个属性是已知现状,决定不拆;A9 quota 的进程级状态放在 transport 里。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。</li><li>为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。</li></ul></details>
+  <p class="sub">和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题(A4 已合并,不再画):A1 admin 的边界:legacy allowlist 里还有一批 admin 导入,admin 读 request.app 的 28 种属性约 113 处(第一个 PR 已经加了 shrink-only 的扫描测试,热重载已经是 AdminContext.reload_config);已生效配置还有两个落点(app.gateway_config 与 app/_state);A8 config/providers.py 里有约 20 个 ACP 辅助(build_provider_info 复杂度 49);ProviderInfo 的 58 个属性是已知现状,决定不拆;A9 quota 的进程级状态放在 transport 里。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。</li><li>为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。</li></ul></details>
   <div class="panel">
     <span class="tag now">现状 · master @ master</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_actual"> <span id="z-gap_actual">100%</span></label></div>
@@ -491,7 +491,7 @@ flowchart TB
   UP(["上游提供方"])
   subgraph SERVING["serving"]
     ADMINAPI["admin_api.py&lt;br/&gt;AdminContext 协议;不导入 app 与 observability"]
-    ADMIN["admin/&lt;br/&gt;routes/ · js/ · admin.html&lt;br/&gt;热重载写在 routes/_shared.py,写 5 个 app 属性;读 request.app.* 28 种,约 113 处(A1)"]
+    ADMIN["admin/&lt;br/&gt;routes/ · js/ · admin.html&lt;br/&gt;legacy allowlist 导入 + 读 request.app.* 28 种,约 113 处(A1);热重载已经是 AdminContext.reload_config"]
     APP["app/&lt;br/&gt;factory · routes_llm · routes_typed · routes_models&lt;br/&gt;routes_compact · routes_count_tokens · routes_health · tasks · admin_context&lt;br/&gt;已生效配置有两个落点:app.gateway_config 与 app/_state(A1)"]
   end
   ADMIN --&gt;|"唯一允许"| ADMINAPI
