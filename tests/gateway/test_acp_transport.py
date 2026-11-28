@@ -2614,3 +2614,66 @@ class TestTheAllowanceAnAgentReports:
         assert reading is not None and [w.name for w in reading.windows] == ["5 hours"]
         # A request-scoped clone shares the lane's reading.
         assert provider.with_session("s").lane_reading() is reading
+
+    async def test_a_turn_hands_the_update_to_the_sink_the_lane_is_bound_to(
+        self, monkeypatch, tmp_path
+    ):
+        class _Sink:
+            def __init__(self) -> None:
+                self.recorded: list[tuple[dict[str, Any], Any]] = []
+
+            def record(self, update: Any, lane: Any) -> bool:
+                self.recorded.append((update, lane))
+                return True
+
+            def reading(self, lane: Any) -> Any | None:
+                return "the sink's reading"
+
+        sink = _Sink()
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok")
+        provider.lane_allowance = sink
+        try:
+            stream = await transport.send_streaming(provider, "", TURN)
+            [chunk async for chunk in stream]
+        finally:
+            await transport.close()
+
+        # Every session update goes to the sink, which picks out the allowance.
+        kinds = [item["update"]["sessionUpdate"] for item, _ in sink.recorded]
+        assert "usage_update" in kinds
+        assert all(lane is provider for _, lane in sink.recorded)
+        assert provider.lane_reading() == "the sink's reading"
+        # The process store was not touched.
+        from llm_rosetta_gateway.transport.acp.quota import lanes_reading
+
+        assert lanes_reading(provider) is None
+
+    def test_a_request_scoped_clone_keeps_the_sink(self, monkeypatch, tmp_path):
+        provider = _provider(monkeypatch, tmp_path, "ok")
+
+        class _Sink:
+            def record(self, update: Any, lane: Any) -> bool:
+                return False
+
+            def reading(self, lane: Any) -> Any | None:
+                return None
+
+        sink = _Sink()
+        provider.lane_allowance = sink
+        assert provider.with_session("s").lane_allowance is sink
+
+    def test_the_transport_holds_no_allowance_state_of_its_own(self):
+        """It reports through the provider; the module of the store is not imported."""
+        import ast
+        import inspect
+
+        from llm_rosetta_gateway.transport.acp import transport as transport_module
+
+        tree = ast.parse(inspect.getsource(transport_module))
+        imported = {
+            node.module
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom) and node.level == 1
+        }
+        assert "quota" not in imported

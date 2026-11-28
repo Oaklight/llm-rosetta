@@ -97,7 +97,6 @@ from .profile import (
     state_dir_for,
     tool_name_of,
 )
-from .quota import record_reading
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -1602,7 +1601,7 @@ class AcpTransport:
         Returns:
             Whether this update carried an allowance.
         """
-        return record_reading(update, provider_info)
+        return provider_info.record_lane_reading(update)
 
     async def _run_turn(
         self,
