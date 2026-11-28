@@ -25,7 +25,7 @@ from typing import Any
 import pytest
 
 from llm_rosetta_gateway.transport.acp import AcpTransport
-from llm_rosetta_gateway.transport.acp_ledger import (
+from llm_rosetta_gateway.transport.acp.ledger import (
     AcpSessionLedger,
     LedgerEntry,
     SessionKey,
@@ -597,7 +597,7 @@ class TestTheStream:
     """What one turn yields, chunk by chunk."""
 
     async def test_a_turn_streams_text_thought_and_a_stop(self, monkeypatch, tmp_path):
-        from llm_rosetta_gateway.transport.acp_quota import lanes_reading
+        from llm_rosetta_gateway.transport.acp.quota import lanes_reading
 
         transport = AcpTransport()
         provider = _provider(monkeypatch, tmp_path, "ok")
@@ -766,7 +766,7 @@ class TestTurnUsage:
 
     def test_a_v2_idle_carries_the_turns_usage(self):
         """ACP v2 acks the prompt; the idle state update is the bill."""
-        from llm_rosetta_gateway.transport.acp_meta_client import AcpMetaClient
+        from llm_rosetta_gateway.transport.acp.meta_client import AcpMetaClient
 
         client = AcpMetaClient(["unused"])
         stop = client._stop_reason_from_update(
@@ -1173,7 +1173,7 @@ class TestACancelledTurn:
     """
 
     async def test_cancelling_a_turn_gives_its_locks_back(self, monkeypatch, tmp_path):
-        from llm_rosetta_gateway.transport import acp as acp_module
+        from llm_rosetta_gateway.transport.acp import transport as acp_module
 
         monkeypatch.setattr(acp_module, "CLEANUP_TIMEOUT", 0.05)
         transport = AcpTransport(timeout=30.0)
@@ -1594,7 +1594,7 @@ class TestTheModelSwitch:
 
 
 def _digests_for(messages: list[str]) -> tuple[str, ...]:
-    from llm_rosetta_gateway.transport.acp_ledger import block_digests
+    from llm_rosetta_gateway.transport.acp.ledger import block_digests
 
     return block_digests({"type": "text", "text": m} for m in messages)
 
@@ -1869,7 +1869,7 @@ class TestAgentToolsAreOff:
         assert "close" in kinds
 
     def test_the_default_argv_turns_the_agent_auto_approve_off(self):
-        from llm_rosetta_gateway.transport.acp import DEFAULT_AGENT_ARGV
+        from llm_rosetta_gateway.transport.acp.transport import DEFAULT_AGENT_ARGV
 
         assert "--dangerously-skip-permissions=false" in DEFAULT_AGENT_ARGV
 

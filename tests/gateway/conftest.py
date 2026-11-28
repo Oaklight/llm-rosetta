@@ -336,7 +336,7 @@ def _acp_profile_stays_in_tmp(monkeypatch, tmp_path_factory):
     A provider with no data directory falls back to a per-user location; a
     test must never write there.
     """
-    from llm_rosetta_gateway.transport import acp_profile
+    from llm_rosetta_gateway.transport.acp import profile as acp_profile
 
     root = tmp_path_factory.mktemp("acp-profiles")
     monkeypatch.setattr(acp_profile, "fallback_root", lambda: root)

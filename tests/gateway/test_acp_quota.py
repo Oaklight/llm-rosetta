@@ -21,8 +21,8 @@ from llm_rosetta.contracts.quota import QuotaProbeError, QuotaWindow
 from llm_rosetta_gateway.quota.models import credential_fingerprint
 from llm_rosetta_gateway.quota.service import read_provider_quota
 from llm_rosetta_gateway.quota.state import QUOTA_STATE
-from llm_rosetta_gateway.transport.acp_chunks import _chunk_of
-from llm_rosetta_gateway.transport.acp_quota import (
+from llm_rosetta_gateway.transport.acp.chunks import _chunk_of
+from llm_rosetta_gateway.transport.acp.quota import (
     ACP_QUOTA_PROBE,
     LaneReading,
     clear_lane_readings,

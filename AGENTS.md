@@ -44,9 +44,9 @@ serves them from a per-session loopback endpoint (named
 ``llm_rosetta_tools``) given to the agent in ``session/new``, turns a
 ``tools/call`` into an IR tool call, and resumes the pending turn when the next
 request carries the result.  The agent's own built-in tools are refused.  The
-matching transport is `transport/acp.py`, chosen per provider by
-`connection.transport`; its MCP bridge is `transport/acp_mcp.py`, its session
-ledger is `transport/acp_ledger.py`, and the vendored protocol client is
+matching transport is `transport/acp/transport.py`, chosen per provider by
+`connection.transport`; its MCP bridge is `transport/acp/mcp.py`, its session
+ledger is `transport/acp/ledger.py`, and the vendored protocol client is
 `_vendor/acp.py`.
 
 `OpenResponsesConverter` implements the vendor-neutral Open Responses spec (the
@@ -163,7 +163,7 @@ supported format and forwards them to any configured upstream provider.
 | `quota/` | Provider quota probing and quota-aware credential rotation: `service.py` runs the probes (callers import every quota function from it), `allowance.py` answers what routing and admin read, `signals.py` records what live requests report |
 | `maintenance/` | Maintenance steps of the stores below the config layer: backfills, dumps, startup (the config-file migrations live in `config/migrate/`, the key store's schema steps in `keystore/maintenance.py`) |
 | `middleware/` | Auth, rate limiting, error format, hop limit, headers |
-| `transport/` | Upstream transports: `http` (HTTP/SSE), `acp` (a local agent CLI over stdio JSON-RPC; its body/event codec is `acp_chunks.py`); a provider picks one with `connection.transport`. An extension adds transports scoped to itself (the `claude` extension ships `claude_cli`): its manifest declares them and `llm_rosetta_ext.<id>.transport` exposes `TRANSPORTS`; `registry.py` resolves a shim's name from its own extension, then the built-ins, then the extensions it requires, and builds each once at app creation; it also registers the `transports` kind handler with core's extension loader (`register_kind_handler` on `llm_rosetta.api`), which fails an extension that claims a built-in id at load time |
+| `transport/` | Upstream transports: `http` (HTTP/SSE), `acp` (a local agent CLI over stdio JSON-RPC; it lives in the `transport/acp/` package, whose body/event codec is `chunks.py`); a provider picks one with `connection.transport`. An extension adds transports scoped to itself (the `claude` extension ships `claude_cli`): its manifest declares them and `llm_rosetta_ext.<id>.transport` exposes `TRANSPORTS`; `registry.py` resolves a shim's name from its own extension, then the built-ins, then the extensions it requires, and builds each once at app creation; it also registers the `transports` kind handler with core's extension loader (`register_kind_handler` on `llm_rosetta.api`), which fails an extension that claims a built-in id at load time |
 | `ops/` | Unified operations audit layer (OpsBase + typed operation subclasses) |
 | `admin/` | Admin panel and its routes, over the observability layer; reaches the gateway through `admin_api.py` (see *Admin boundary*) |
 | `admin_api.py` | The `AdminContext` protocols admin depends on; `create_app` exposes the adapter (`app/admin_context.py`) as `app.admin` |

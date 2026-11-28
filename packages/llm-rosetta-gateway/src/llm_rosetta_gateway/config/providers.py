@@ -353,7 +353,7 @@ def _acp_state_dir(
             present but is not a non-empty path, a relative home climbs out
             of the data directory, or the named path is not a directory.
     """
-    from ..transport.acp_profile import fallback_root, state_dir_for
+    from ..transport.acp.profile import fallback_root, state_dir_for
 
     raw = (cfg or {}).get("acp")
     if raw is None:
@@ -399,7 +399,7 @@ def lane_profile_is_managed(provider: str, cfg: dict[str, Any]) -> bool:
     if argv is None and isinstance(acp, dict):
         argv = acp.get("argv")
     if isinstance(argv, (list, tuple)) and argv:
-        from ..transport.acp_profile import gemini_dir_values
+        from ..transport.acp.profile import gemini_dir_values
 
         try:
             if gemini_dir_values([str(item) for item in argv]):
@@ -422,7 +422,7 @@ def managed_acp_state_dir(
     """
     if not data_dir or not lane_profile_is_managed(provider, cfg):
         return None
-    from ..transport.acp_profile import state_dir_for
+    from ..transport.acp.profile import state_dir_for
 
     return state_dir_for(data_dir, provider)
 
@@ -930,7 +930,7 @@ def _effective_harden(declared: bool | None, argv: tuple[str, ...] | None) -> bo
         # An ACP lane with no command of its own runs the transport's default
         # agent, which is ``agy`` and therefore hardened.
         return True
-    from ..transport.acp_profile import is_agy
+    from ..transport.acp.profile import is_agy
 
     return is_agy(list(argv))
 
@@ -985,7 +985,7 @@ def _resolve_acp_install(
         and shim.connection.acp_argv
         and argv is not None
     ):
-        from ..transport.acp_profile import is_agy
+        from ..transport.acp.profile import is_agy
 
         if is_agy(list(shim.connection.acp_argv)) and not is_agy(list(argv)):
             _warn_not_hardened(provider_key, argv)
@@ -1074,7 +1074,7 @@ def _lane_environment(
         return _acp_state_dir(data_dir, provider_key), _acp_env(cfg, shim, provider_key)
     home = _acp_state_dir(data_dir, provider_key, cfg)
     if argv:
-        from ..transport.acp_profile import gemini_dir_values, is_agy
+        from ..transport.acp.profile import gemini_dir_values, is_agy
 
         agy = is_agy(list(argv))
         named: str | None = None

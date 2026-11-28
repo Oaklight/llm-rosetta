@@ -13,7 +13,7 @@ import json
 from typing import Any
 from urllib.parse import urlsplit
 
-from llm_rosetta_gateway.transport.acp_mcp import AcpMcpServer, AcpToolBridge
+from llm_rosetta_gateway.transport.acp.mcp import AcpMcpServer, AcpToolBridge
 
 ECHO = {
     "name": "echo",

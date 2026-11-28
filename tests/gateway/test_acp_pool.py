@@ -15,7 +15,7 @@ import pytest
 
 from llm_rosetta_gateway.config.providers import _resolve_acp_limits
 from llm_rosetta_gateway.transport.acp import AcpTransport
-from llm_rosetta_gateway.transport.acp_ledger import SessionKey
+from llm_rosetta_gateway.transport.acp.ledger import SessionKey
 
 from .test_acp_transport import _kinds, _provider, _turn
 
