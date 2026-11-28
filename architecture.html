@@ -106,7 +106,7 @@
     <span><i class="green"></i>接线(注册处理器)</span>
   </div>
 </header>
-<nav class="toc"><a href="#core">01 core 现状:组件与依赖</a><a href="#gateway">02 gateway 后端的组件与关系</a><a href="#admin">03 admin 页面与组件的关系</a><a href="#gap_actual">04 gateway 现实:仍偏离设计的地方(#1830)</a><a href="#gap_ideal">05 gateway 理想:#1830 完成之后</a></nav>
+<nav class="toc"><a href="#core">01 core 现状:组件与依赖</a><a href="#gateway">02 gateway 后端的组件与关系</a><a href="#admin">03 admin 页面与组件的关系</a><a href="#gap_actual">04 gateway 现实:当前的完整架构与仍偏离设计的地方</a><a href="#gap_ideal">05 gateway 理想:最终的架构</a></nav>
 
 <section id="core">
   <h2><span class="num">01</span>core 现状:组件与依赖</h2>
@@ -447,110 +447,253 @@
   </div>
 </section>
 <section id="gap_actual">
-  <h2><span class="num">04</span>gateway 现实:仍偏离设计的地方(#1830)</h2>
-  <p class="sub">红线是评审量出来的问题,每条标了 #1830 里的编号;图里只留还没解决的:A1、A4、A8、A9。</p><details class="notes"><summary>说明(6 条)</summary><ul><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。</li><li>A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。</li><li>A4:上游尝试的记账有 5 份拷贝。</li><li>A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。</li><li>A9:quota 的进程级状态放在 transport 里。</li><li>图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。</li></ul></details>
+  <h2><span class="num">04</span>gateway 现实:当前的完整架构与仍偏离设计的地方</h2>
+  <p class="sub">和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题:A1 admin 的边界只在导入层有测试(legacy allowlist 的 13 条 admin 导入,加上 admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点);A4 上游尝试的记账有 5 份拷贝(proxy、pipelines 和两条 relay 路由);A8 ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助;A9 quota 的进程级状态放在 transport 里。</p><details class="notes"><summary>说明(1 条)</summary><ul><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。</li></ul></details>
   <div class="panel">
-    <span class="tag now">现状 · master @ 215c832bbe</span>
+    <span class="tag now">现状 · master @ master</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_actual"> <span id="z-gap_actual">100%</span></label></div>
-    <div class="scroll"><div class="stage" id="stage-gap_actual"><pre class="mermaid" id="m-gap_actual">flowchart LR
-  ADMIN["admin/&lt;br/&gt;routes · js"]
-  ADMINAPI["admin_api.py&lt;br/&gt;AdminContext(5 个成员)"]
-  APP["app/&lt;br/&gt;factory · routes · admin_context"]
-  STATE["app/_state._config&lt;br/&gt;+ app.gateway_config(两个落点)"]
-  RELOAD["admin/routes/_shared.py&lt;br/&gt;_reload_gateway_config(A1)"]
-  LOGIN["admin/routes/auth.py&lt;br/&gt;登录限流按 RequestContext.client_ip"]
-  MWCTX["middleware/request_context&lt;br/&gt;client_ip 一次解析,按 server.trusted_proxies"]
-  PROXY["proxy/&lt;br/&gt;engine · streaming"]
-  PIPES["pipelines/typed.py"]
-  RELAY["app/routes_compact + routes_count_tokens&lt;br/&gt;(各 140-150 行,复杂度 22-23)"]
-  CONFIG["config/providers.py&lt;br/&gt;build_provider_info 294 行,复杂度 49&lt;br/&gt;+ 约 20 个 ACP lane 辅助(A8)"]
-  PINFO["transport/provider_info.py&lt;br/&gt;ProviderInfo:58 个属性"]
-  TRANSPORT["transport/acp.py(2535 行)"]
+    <div class="scroll"><div class="stage" id="stage-gap_actual"><pre class="mermaid" id="m-gap_actual">flowchart TB
   ACPQ["transport/acp_quota.py&lt;br/&gt;进程级 _READINGS / _LOCKS(A9)"]
-  QUOTA["quota/service.py"]
-  MAINT["maintenance/startup.py(716 行)"]
-  OPS["ops/&lt;br/&gt;OpsBase 子类 + lifecycle"]
-  OPSLOG["observability/ops_log"]
-  EXTCORE["core extensions/_index&lt;br/&gt;choose_release / select_entry(prefer_stable)"]
-  EXTGW["gateway shims/manifest_sources&lt;br/&gt;调用核心策略(prefer_stable)"]
-  EXTDIR[("/config/extensions")]
-  ADMIN --&gt; ADMINAPI
-  APP --&gt;|"适配器"| ADMINAPI
-  ADMIN --&gt;|"读 request.app.* 28 种,约 113 处(A1)"| APP
-  ADMIN --&gt;|"67 对 allowlist 导入(A1)"| CONFIG
-  ADMIN --&gt;|"旧 allowlist 导入(A1)"| QUOTA
-  ADMIN --&gt; RELOAD
-  RELOAD --&gt;|"写 5 个 app 属性(A1)"| STATE
-  APP --&gt; STATE
-  ADMIN --&gt; LOGIN
-  LOGIN --&gt;|"读 client_ip"| MWCTX
-  PROXY --&gt;|"自己记账(A4)"| QUOTA
-  PIPES --&gt;|"自己记账(A4)"| QUOTA
-  RELAY --&gt;|"自己记账(A4)"| QUOTA
+  subgraph STATE["state"]
+    KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库 · maintenance(schema 步骤)"]
+    MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup"]
+    JOBS["jobs/&lt;br/&gt;envelope · queue · worker · handlers"]
+    QUOTA["quota/&lt;br/&gt;service · allowance · signals · probes · rate_limit"]
+    ROUTING["routing/&lt;br/&gt;select · strategy · failover · session · same_format"]
+  end
+  subgraph POLICY["policy"]
+    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings · migrate/(配置迁移)&lt;br/&gt;providers.py:build_provider_info 294 行,复杂度 49;约 20 个 ACP 辅助(A8)"]
+    MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
+  end
+  subgraph FOUNDATION["foundation"]
+    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info · provider_readiness(ProviderNotReady)&lt;br/&gt;provider_info.py:ProviderInfo 58 个属性(A8) · acp.py 2535 行"]
+    SURF["surface.py"]
+    OBS["observability/&lt;br/&gt;logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
+    UPD["updates.py"]
+    MT["model_types/"]
+    SHIMS["shims/&lt;br/&gt;extension_view · manifest_sources · source_view(读扩展 index.json)"]
+  end
+  subgraph ENGINE["engine"]
+    PROXY["proxy/&lt;br/&gt;prepare · engine · streaming · failover · fidelity · preflight · lifecycle · errors&lt;br/&gt;上游尝试的记账是 5 份拷贝之一(A4)"]
+    PIPES["pipelines/&lt;br/&gt;embeddings · rerank · decision&lt;br/&gt;记账拷贝之一(A4)"]
+  end
+  subgraph OPERATIONS["operations"]
+    OPS["ops/&lt;br/&gt;OpsBase 审计层 · data · keys · security · proxy · lifecycle(启动/关闭/重载审计)"]
+  end
+  subgraph ENTRY["entry"]
+    CLI["cli/&lt;br/&gt;llm-rosetta-gateway · banner&lt;br/&gt;注册 gateway 与 serve 两个命令;gateway 下分发 serve/init/add/credential/password/db/usage/migrate"]
+  end
+  CLIENT(["客户端&lt;br/&gt;OpenAI / Anthropic / Google 格式"])
+  CORE["llm_rosetta.api + llm_rosetta.contracts&lt;br/&gt;(gateway 进入 core 的唯一入口,测试强制)"]
+  UP(["上游提供方"])
+  subgraph SERVING["serving"]
+    ADMINAPI["admin_api.py&lt;br/&gt;AdminContext 协议;不导入 app 与 observability"]
+    ADMIN["admin/&lt;br/&gt;routes/ · js/ · admin.html&lt;br/&gt;热重载写在 routes/_shared.py,写 5 个 app 属性;读 request.app.* 28 种,约 113 处(A1)"]
+    APP["app/&lt;br/&gt;factory · routes_llm · routes_typed · routes_models&lt;br/&gt;routes_compact · routes_count_tokens · routes_health · tasks · admin_context&lt;br/&gt;已生效配置有两个落点:app.gateway_config 与 app/_state(A1)&lt;br/&gt;routes_compact · routes_count_tokens 自己记账(A4)"]
+  end
+  ADMIN --&gt;|"唯一允许"| ADMINAPI
+  ADMIN --&gt;|"legacy allowlist 导入(A1)"| CONFIG
+  ADMIN --&gt; JOBS
+  ADMIN --&gt; KEYSTORE
+  ADMIN --&gt; MAINT
+  ADMIN --&gt; MW
+  ADMIN --&gt; MT
+  ADMIN --&gt; OBS
+  ADMIN --&gt; OPS
+  ADMIN --&gt; QUOTA
+  ADMIN --&gt; ROUTING
+  ADMIN --&gt; SHIMS
+  ADMIN --&gt; TRANSPORT
+  ADMIN --&gt; UPD
+  APP -.-&gt;|"只有 factory.py"| ADMIN
+  APP --&gt;|"适配器 admin_context.py"| ADMINAPI
   APP --&gt; CONFIG
-  CONFIG --&gt; PINFO
-  CONFIG --&gt;|"ACP lane 解析在 config 里(A8)"| TRANSPORT
-  TRANSPORT --&gt; ACPQ
-  ACPQ --&gt;|"状态放错地方(A9)"| QUOTA
+  APP --&gt; JOBS
+  APP --&gt; KEYSTORE
+  APP --&gt; MAINT
+  APP --&gt; MW
+  APP --&gt; MT
+  APP --&gt; OBS
+  APP --&gt; OPS
+  APP --&gt;|"内置类型处理函数表 BUILTIN_HANDLERS"| PIPES
+  APP --&gt; PROXY
+  APP --&gt; QUOTA
+  APP --&gt; ROUTING
+  APP --&gt; SHIMS
+  APP --&gt; SURF
+  APP --&gt; TRANSPORT
+  CLI -.-&gt;|"serve"| APP
+  CLI --&gt; CONFIG
+  CLI --&gt; OBS
+  CLI --&gt; OPS
+  CLI --&gt; SHIMS
+  CONFIG --&gt; MW
+  CONFIG --&gt; MT
+  CONFIG --&gt; OBS
+  CONFIG --&gt; QUOTA
+  CONFIG --&gt; ROUTING
+  CONFIG --&gt; SHIMS
+  CONFIG --&gt;|"ACP lane 解析在 config(A8)"| TRANSPORT
+  JOBS --&gt; OBS
+  JOBS --&gt; OPS
+  KEYSTORE --&gt; OBS
+  MAINT --&gt; KEYSTORE
+  MAINT --&gt; OBS
+  MAINT --&gt; QUOTA
+  MAINT --&gt; TRANSPORT
+  MW --&gt; KEYSTORE
+  MW --&gt; OBS
+  OPS --&gt; CONFIG
+  OPS --&gt; MW
+  OPS --&gt; MT
+  OPS --&gt; OBS
+  OPS --&gt; ROUTING
+  OPS --&gt; SHIMS
+  PIPES --&gt; CONFIG
+  PIPES --&gt; MW
+  PIPES --&gt; MT
+  PIPES --&gt; OBS
+  PIPES --&gt; PROXY
+  PIPES --&gt;|"自己记账(A4)"| QUOTA
+  PIPES --&gt; TRANSPORT
+  PROXY --&gt; MAINT
+  PROXY --&gt; MW
+  PROXY --&gt; OBS
   PROXY --&gt; OPS
-  OPS --&gt; OPSLOG
-  EXTCORE --&gt;|"ext install / update"| EXTDIR
-  EXTGW --&gt;|"choose_release"| EXTCORE
-  EXTGW --&gt;|"重建 shim 来源"| EXTDIR
-  linkStyle 2,3,4,6,10,11,12,15,17 stroke:#c0392b,stroke-width:2px
+  PROXY --&gt;|"自己记账(A4)"| QUOTA
+  PROXY --&gt; ROUTING
+  PROXY --&gt; TRANSPORT
+  QUOTA --&gt; OBS
+  QUOTA --&gt; TRANSPORT
+  ROUTING --&gt; QUOTA
+  ROUTING --&gt; TRANSPORT
+  ADMIN --&gt;|"读 request.app.*(A1)"| APP
+  TRANSPORT --&gt; ACPQ
+  ACPQ -.-&gt;|"状态放错地方(A9)"| QUOTA
+  CONFIG --&gt; CORE
+  TRANSPORT --&gt;|HTTP/SSE · ACP stdio| UP
+  OBS --&gt; CORE
+  SHIMS --&gt; CORE
+  TRANSPORT --&gt; CORE
+  CLIENT --&gt;|HTTP| APP
+  PROXY --&gt; CORE
+  linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,42,63,69,76,78 stroke:#c0392b,stroke-width:2px
 </pre></div></div>
   </div>
 </section>
 <section id="gap_ideal">
-  <h2><span class="num">05</span>gateway 理想:#1830 完成之后</h2>
-  <p class="sub">同一批节点,红线都没有了。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>admin 只经 AdminContext;热重载、已生效配置和审计写入各有唯一的家;记账是一个 attempt_upstream;ACP lane 解析在 transport 一侧;quota 的状态回到 quota/,通过启动时注册的接收器进入 transport;ProviderNotReady 在叶子模块;扩展安装只有核心一套策略。</li><li>这是目标态,不是承诺的实现细节;每一项落地后,对应的红线从上一张图里去掉。</li></ul></details>
+  <h2><span class="num">05</span>gateway 理想:最终的架构</h2>
+  <p class="sub">同一批节点,没有红线。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>admin 只经 AdminContext;热重载和已生效配置在 app 里,审计写入只经 ops;上游尝试的记账是 proxy 里的一个 attempt_upstream;ACP lane 解析在 transport 的 acp_profile 里,ProviderInfo 分成 auth、ACP、quota 子记录;quota 的读数和锁回到 quota/,启动时向 transport 注册接收器。</li><li>这是目标态,每一项落地后,第 4 页对应的红线就去掉。</li></ul></details>
   <div class="panel">
     <span class="tag ">目标 · #1830</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_ideal"> <span id="z-gap_ideal">100%</span></label></div>
-    <div class="scroll"><div class="stage" id="stage-gap_ideal"><pre class="mermaid" id="m-gap_ideal">flowchart LR
-  ADMIN["admin/&lt;br/&gt;routes · js"]
-  ADMINAPI["admin_api.py&lt;br/&gt;AdminContext:reload_config 等"]
-  APP["app/&lt;br/&gt;factory · routes · admin_context&lt;br/&gt;热重载与唯一的已生效配置"]
-  LOGIN["admin/routes/auth.py&lt;br/&gt;限流状态在 app.auth_state,有上限"]
-  MWCTX["middleware/request_context&lt;br/&gt;client_ip 一次解析,按 server.trusted_proxies"]
-  PROXY["proxy/&lt;br/&gt;engine · streaming&lt;br/&gt;attempt_upstream(...)(A4)"]
-  PIPES["pipelines/typed.py"]
-  RELAY["app/routes_compact + routes_count_tokens"]
-  CONFIG["config/providers.py&lt;br/&gt;只做解析与装配"]
-  ACPPROF["transport/acp_profile.py&lt;br/&gt;ACP lane 解析(A8)"]
-  PINFO["transport/provider_info.py&lt;br/&gt;ProviderInfo:auth · ACP · quota 子记录"]
-  TRANSPORT["transport/acp.py"]
-  SINK["transport 的 quota 接收器&lt;br/&gt;(启动时由 quota 注册,A9)"]
-  QUOTA["quota/&lt;br/&gt;读数与锁在这里"]
-  PSTATE["transport/provider_readiness.py(叶子)&lt;br/&gt;ProviderInitState · ProviderNotReady"]
-  MAINT["maintenance/startup.py"]
-  OPS["ops/&lt;br/&gt;唯一的审计写入者(A7)"]
-  OPSLOG["observability/ops_log"]
-  EXTCORE["core 的唯一安装策略&lt;br/&gt;choose_release + prefer_stable"]
-  EXTGW["gateway shims/&lt;br/&gt;调用核心策略"]
-  EXTDIR[("/config/extensions")]
-  ADMIN --&gt;|"只经这一条"| ADMINAPI
-  APP --&gt;|"适配器(必须存在,无回退)"| ADMINAPI
-  ADMIN --&gt; LOGIN
-  LOGIN --&gt; MWCTX
-  PROXY --&gt; QUOTA
-  PIPES --&gt;|"attempt_upstream"| PROXY
-  RELAY --&gt;|"attempt_upstream"| PROXY
+    <div class="scroll"><div class="stage" id="stage-gap_ideal"><pre class="mermaid" id="m-gap_ideal">flowchart TB
+  subgraph STATE["state"]
+    KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库 · maintenance(schema 步骤)"]
+    MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup"]
+    JOBS["jobs/&lt;br/&gt;envelope · queue · worker · handlers"]
+    QUOTA["quota/&lt;br/&gt;service · allowance · signals · probes · rate_limit&lt;br/&gt;读数与锁在这里(A9)"]
+    ROUTING["routing/&lt;br/&gt;select · strategy · failover · session · same_format"]
+  end
+  subgraph POLICY["policy"]
+    CONFIG["config/&lt;br/&gt;loader · parse · resolve · providers · settings · migrate/(配置迁移)&lt;br/&gt;只做解析与装配"]
+    MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
+  end
+  subgraph FOUNDATION["foundation"]
+    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info · provider_readiness(ProviderNotReady)&lt;br/&gt;acp_profile(ACP lane 解析,A8) · ProviderInfo 分成 auth / ACP / quota 子记录(A8) · quota 接收器(A9)"]
+    SURF["surface.py"]
+    OBS["observability/&lt;br/&gt;logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
+    UPD["updates.py"]
+    MT["model_types/"]
+    SHIMS["shims/&lt;br/&gt;extension_view · manifest_sources · source_view(读扩展 index.json)"]
+  end
+  subgraph ENGINE["engine"]
+    PROXY["proxy/&lt;br/&gt;prepare · engine · streaming · failover · fidelity · preflight · lifecycle · errors&lt;br/&gt;attempt_upstream:唯一的上游尝试记账(A4);pipelines 与 relay 路由经它"]
+    PIPES["pipelines/&lt;br/&gt;embeddings · rerank · decision"]
+  end
+  subgraph OPERATIONS["operations"]
+    OPS["ops/&lt;br/&gt;OpsBase 审计层 · data · keys · security · proxy · lifecycle(启动/关闭/重载审计)&lt;br/&gt;唯一的审计写入者"]
+  end
+  subgraph ENTRY["entry"]
+    CLI["cli/&lt;br/&gt;llm-rosetta-gateway · banner&lt;br/&gt;注册 gateway 与 serve 两个命令;gateway 下分发 serve/init/add/credential/password/db/usage/migrate"]
+  end
+  CLIENT(["客户端&lt;br/&gt;OpenAI / Anthropic / Google 格式"])
+  CORE["llm_rosetta.api + llm_rosetta.contracts&lt;br/&gt;(gateway 进入 core 的唯一入口,测试强制)"]
+  UP(["上游提供方"])
+  subgraph SERVING["serving"]
+    ADMINAPI["admin_api.py&lt;br/&gt;AdminContext 协议;不导入 app 与 observability&lt;br/&gt;admin 到 gateway 的唯一通道,含 reload_config"]
+    ADMIN["admin/&lt;br/&gt;routes/ · js/ · admin.html"]
+    APP["app/&lt;br/&gt;factory · routes_llm · routes_typed · routes_models&lt;br/&gt;routes_compact · routes_count_tokens · routes_health · tasks · admin_context&lt;br/&gt;热重载与唯一的已生效配置"]
+  end
+  ADMIN --&gt;|"唯一允许"| ADMINAPI
+  APP -.-&gt;|"只有 factory.py"| ADMIN
+  APP --&gt;|"适配器 admin_context.py"| ADMINAPI
   APP --&gt; CONFIG
-  CONFIG --&gt; ACPPROF
-  CONFIG --&gt; PINFO
-  ACPPROF --&gt; TRANSPORT
-  TRANSPORT --&gt; SINK
-  QUOTA -.-&gt;|"注册"| SINK
-  CONFIG --&gt; PSTATE
-  PIPES --&gt; PSTATE
-  MAINT --&gt; PSTATE
+  APP --&gt; JOBS
+  APP --&gt; KEYSTORE
+  APP --&gt; MAINT
+  APP --&gt; MW
+  APP --&gt; MT
+  APP --&gt; OBS
+  APP --&gt; OPS
+  APP --&gt;|"内置类型处理函数表 BUILTIN_HANDLERS"| PIPES
+  APP --&gt; PROXY
+  APP --&gt; QUOTA
+  APP --&gt; ROUTING
+  APP --&gt; SHIMS
+  APP --&gt; SURF
+  APP --&gt; TRANSPORT
+  CLI -.-&gt;|"serve"| APP
+  CLI --&gt; CONFIG
+  CLI --&gt; OBS
+  CLI --&gt; OPS
+  CLI --&gt; SHIMS
+  CONFIG --&gt; MW
+  CONFIG --&gt; MT
+  CONFIG --&gt; OBS
+  CONFIG --&gt; QUOTA
+  CONFIG --&gt; ROUTING
+  CONFIG --&gt; SHIMS
+  CONFIG --&gt; TRANSPORT
+  JOBS --&gt; OBS
+  JOBS --&gt; OPS
+  KEYSTORE --&gt; OBS
+  MAINT --&gt; KEYSTORE
+  MAINT --&gt; OBS
+  MAINT --&gt; QUOTA
+  MAINT --&gt; TRANSPORT
+  MW --&gt; KEYSTORE
+  MW --&gt; OBS
+  OPS --&gt; CONFIG
+  OPS --&gt; MW
+  OPS --&gt; MT
+  OPS --&gt; OBS
+  OPS --&gt; ROUTING
+  OPS --&gt; SHIMS
+  PIPES --&gt; CONFIG
+  PIPES --&gt; MW
+  PIPES --&gt; MT
+  PIPES --&gt; OBS
+  PIPES --&gt; PROXY
+  PIPES --&gt; TRANSPORT
+  PROXY --&gt; MAINT
+  PROXY --&gt; MW
+  PROXY --&gt; OBS
   PROXY --&gt; OPS
-  APP --&gt;|"启动 · 关闭 · 重载"| OPS
-  ADMINAPI --&gt;|"经 AdminContext"| OPS
-  OPS --&gt; OPSLOG
-  EXTGW --&gt; EXTCORE
-  EXTCORE --&gt; EXTDIR
+  PROXY --&gt; QUOTA
+  PROXY --&gt; ROUTING
+  PROXY --&gt; TRANSPORT
+  QUOTA --&gt; OBS
+  QUOTA -.-&gt;|"启动时注册接收器(A9)"| TRANSPORT
+  ROUTING --&gt; QUOTA
+  ROUTING --&gt; TRANSPORT
+  CONFIG --&gt; CORE
+  TRANSPORT --&gt;|HTTP/SSE · ACP stdio| UP
+  OBS --&gt; CORE
+  SHIMS --&gt; CORE
+  TRANSPORT --&gt; CORE
+  CLIENT --&gt;|HTTP| APP
+  PROXY --&gt; CORE
 </pre></div></div>
   </div>
 </section>

@@ -8,11 +8,10 @@ sections = [
   "分层来自 tests/gateway/test_layers.py,只能向下导入;包间的边直接取自该文件的 GATEWAY_EDGES(由 gen_gateway.py 生成)。每个包都会用 core,图里只画了几条代表性的到 CORE 的线。admin 除了 admin_api 之外还有一批 legacy allowlist 导入(config、keystore、maintenance、middleware、observability、ops、quota、routing、shims、transport、updates),名单只允许缩小,图里没画。"),
  ("admin", "3. admin 页面与组件的关系",
   "已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。"),
-("gap_actual", "4. gateway 现实:仍偏离设计的地方(#1830)",
-  "红线是评审量出来的问题,每条标了 #1830 里的编号;图里只留还没解决的:A1、A4、A8、A9。数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。A4:上游尝试的记账有 5 份拷贝。A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。A9:quota 的进程级状态放在 transport 里。图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。",
-  "现状 · master @ 215c832bbe", "now"),
-("gap_ideal", "5. gateway 理想:#1830 完成之后",
-  "同一批节点,红线都没有了。admin 只经 AdminContext;热重载、已生效配置和审计写入各有唯一的家;记账是一个 attempt_upstream;ACP lane 解析在 transport 一侧;quota 的状态回到 quota/,通过启动时注册的接收器进入 transport;ProviderNotReady 在叶子模块;扩展安装只有核心一套策略。这是目标态,不是承诺的实现细节;每一项落地后,对应的红线从上一张图里去掉。",
+("gap_actual", "4. gateway 现实:当前的完整架构与仍偏离设计的地方",
+  "和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题:A1 admin 的边界只在导入层有测试(legacy allowlist 的 13 条 admin 导入,加上 admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点);A4 上游尝试的记账有 5 份拷贝(proxy、pipelines 和两条 relay 路由);A8 ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助;A9 quota 的进程级状态放在 transport 里。数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。"),
+("gap_ideal", "5. gateway 理想:最终的架构",
+  "同一批节点,没有红线。admin 只经 AdminContext;热重载和已生效配置在 app 里,审计写入只经 ops;上游尝试的记账是 proxy 里的一个 attempt_upstream;ACP lane 解析在 transport 的 acp_profile 里,ProviderInfo 分成 auth、ACP、quota 子记录;quota 的读数和锁回到 quota/,启动时向 transport 注册接收器。这是目标态,每一项落地后,第 4 页对应的红线就去掉。",
   "目标 · #1830", ""),
 ]
 

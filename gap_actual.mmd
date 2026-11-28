@@ -1,46 +1,126 @@
-flowchart LR
-  ADMIN["admin/<br/>routes · js"]
-  ADMINAPI["admin_api.py<br/>AdminContext(5 个成员)"]
-  APP["app/<br/>factory · routes · admin_context"]
-  STATE["app/_state._config<br/>+ app.gateway_config(两个落点)"]
-  RELOAD["admin/routes/_shared.py<br/>_reload_gateway_config(A1)"]
-  LOGIN["admin/routes/auth.py<br/>登录限流按 RequestContext.client_ip"]
-  MWCTX["middleware/request_context<br/>client_ip 一次解析,按 server.trusted_proxies"]
-  PROXY["proxy/<br/>engine · streaming"]
-  PIPES["pipelines/typed.py"]
-  RELAY["app/routes_compact + routes_count_tokens<br/>(各 140-150 行,复杂度 22-23)"]
-  CONFIG["config/providers.py<br/>build_provider_info 294 行,复杂度 49<br/>+ 约 20 个 ACP lane 辅助(A8)"]
-  PINFO["transport/provider_info.py<br/>ProviderInfo:58 个属性"]
-  TRANSPORT["transport/acp.py(2535 行)"]
+flowchart TB
   ACPQ["transport/acp_quota.py<br/>进程级 _READINGS / _LOCKS(A9)"]
-  QUOTA["quota/service.py"]
-  MAINT["maintenance/startup.py(716 行)"]
-  OPS["ops/<br/>OpsBase 子类 + lifecycle"]
-  OPSLOG["observability/ops_log"]
-  EXTCORE["core extensions/_index<br/>choose_release / select_entry(prefer_stable)"]
-  EXTGW["gateway shims/manifest_sources<br/>调用核心策略(prefer_stable)"]
-  EXTDIR[("/config/extensions")]
-  ADMIN --> ADMINAPI
-  APP -->|"适配器"| ADMINAPI
-  ADMIN -->|"读 request.app.* 28 种,约 113 处(A1)"| APP
-  ADMIN -->|"67 对 allowlist 导入(A1)"| CONFIG
-  ADMIN -->|"旧 allowlist 导入(A1)"| QUOTA
-  ADMIN --> RELOAD
-  RELOAD -->|"写 5 个 app 属性(A1)"| STATE
-  APP --> STATE
-  ADMIN --> LOGIN
-  LOGIN -->|"读 client_ip"| MWCTX
-  PROXY -->|"自己记账(A4)"| QUOTA
-  PIPES -->|"自己记账(A4)"| QUOTA
-  RELAY -->|"自己记账(A4)"| QUOTA
+  subgraph STATE["state"]
+    KEYSTORE["keystore/<br/>SQLite API key 库 · maintenance(schema 步骤)"]
+    MAINT["maintenance/<br/>backfills · dumps · startup"]
+    JOBS["jobs/<br/>envelope · queue · worker · handlers"]
+    QUOTA["quota/<br/>service · allowance · signals · probes · rate_limit"]
+    ROUTING["routing/<br/>select · strategy · failover · session · same_format"]
+  end
+  subgraph POLICY["policy"]
+    CONFIG["config/<br/>loader · parse · resolve · providers · settings · migrate/(配置迁移)<br/>providers.py:build_provider_info 294 行,复杂度 49;约 20 个 ACP 辅助(A8)"]
+    MW["middleware/<br/>auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
+  end
+  subgraph FOUNDATION["foundation"]
+    TRANSPORT["transport/<br/>http · acp · registry · provider_info · provider_readiness(ProviderNotReady)<br/>provider_info.py:ProviderInfo 58 个属性(A8) · acp.py 2535 行"]
+    SURF["surface.py"]
+    OBS["observability/<br/>logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
+    UPD["updates.py"]
+    MT["model_types/"]
+    SHIMS["shims/<br/>extension_view · manifest_sources · source_view(读扩展 index.json)"]
+  end
+  subgraph ENGINE["engine"]
+    PROXY["proxy/<br/>prepare · engine · streaming · failover · fidelity · preflight · lifecycle · errors<br/>上游尝试的记账是 5 份拷贝之一(A4)"]
+    PIPES["pipelines/<br/>embeddings · rerank · decision<br/>记账拷贝之一(A4)"]
+  end
+  subgraph OPERATIONS["operations"]
+    OPS["ops/<br/>OpsBase 审计层 · data · keys · security · proxy · lifecycle(启动/关闭/重载审计)"]
+  end
+  subgraph ENTRY["entry"]
+    CLI["cli/<br/>llm-rosetta-gateway · banner<br/>注册 gateway 与 serve 两个命令;gateway 下分发 serve/init/add/credential/password/db/usage/migrate"]
+  end
+  CLIENT(["客户端<br/>OpenAI / Anthropic / Google 格式"])
+  CORE["llm_rosetta.api + llm_rosetta.contracts<br/>(gateway 进入 core 的唯一入口,测试强制)"]
+  UP(["上游提供方"])
+  subgraph SERVING["serving"]
+    ADMINAPI["admin_api.py<br/>AdminContext 协议;不导入 app 与 observability"]
+    ADMIN["admin/<br/>routes/ · js/ · admin.html<br/>热重载写在 routes/_shared.py,写 5 个 app 属性;读 request.app.* 28 种,约 113 处(A1)"]
+    APP["app/<br/>factory · routes_llm · routes_typed · routes_models<br/>routes_compact · routes_count_tokens · routes_health · tasks · admin_context<br/>已生效配置有两个落点:app.gateway_config 与 app/_state(A1)<br/>routes_compact · routes_count_tokens 自己记账(A4)"]
+  end
+  ADMIN -->|"唯一允许"| ADMINAPI
+  ADMIN -->|"legacy allowlist 导入(A1)"| CONFIG
+  ADMIN --> JOBS
+  ADMIN --> KEYSTORE
+  ADMIN --> MAINT
+  ADMIN --> MW
+  ADMIN --> MT
+  ADMIN --> OBS
+  ADMIN --> OPS
+  ADMIN --> QUOTA
+  ADMIN --> ROUTING
+  ADMIN --> SHIMS
+  ADMIN --> TRANSPORT
+  ADMIN --> UPD
+  APP -.->|"只有 factory.py"| ADMIN
+  APP -->|"适配器 admin_context.py"| ADMINAPI
   APP --> CONFIG
-  CONFIG --> PINFO
-  CONFIG -->|"ACP lane 解析在 config 里(A8)"| TRANSPORT
-  TRANSPORT --> ACPQ
-  ACPQ -->|"状态放错地方(A9)"| QUOTA
+  APP --> JOBS
+  APP --> KEYSTORE
+  APP --> MAINT
+  APP --> MW
+  APP --> MT
+  APP --> OBS
+  APP --> OPS
+  APP -->|"内置类型处理函数表 BUILTIN_HANDLERS"| PIPES
+  APP --> PROXY
+  APP --> QUOTA
+  APP --> ROUTING
+  APP --> SHIMS
+  APP --> SURF
+  APP --> TRANSPORT
+  CLI -.->|"serve"| APP
+  CLI --> CONFIG
+  CLI --> OBS
+  CLI --> OPS
+  CLI --> SHIMS
+  CONFIG --> MW
+  CONFIG --> MT
+  CONFIG --> OBS
+  CONFIG --> QUOTA
+  CONFIG --> ROUTING
+  CONFIG --> SHIMS
+  CONFIG -->|"ACP lane 解析在 config(A8)"| TRANSPORT
+  JOBS --> OBS
+  JOBS --> OPS
+  KEYSTORE --> OBS
+  MAINT --> KEYSTORE
+  MAINT --> OBS
+  MAINT --> QUOTA
+  MAINT --> TRANSPORT
+  MW --> KEYSTORE
+  MW --> OBS
+  OPS --> CONFIG
+  OPS --> MW
+  OPS --> MT
+  OPS --> OBS
+  OPS --> ROUTING
+  OPS --> SHIMS
+  PIPES --> CONFIG
+  PIPES --> MW
+  PIPES --> MT
+  PIPES --> OBS
+  PIPES --> PROXY
+  PIPES -->|"自己记账(A4)"| QUOTA
+  PIPES --> TRANSPORT
+  PROXY --> MAINT
+  PROXY --> MW
+  PROXY --> OBS
   PROXY --> OPS
-  OPS --> OPSLOG
-  EXTCORE -->|"ext install / update"| EXTDIR
-  EXTGW -->|"choose_release"| EXTCORE
-  EXTGW -->|"重建 shim 来源"| EXTDIR
-  linkStyle 2,3,4,6,10,11,12,15,17 stroke:#c0392b,stroke-width:2px
+  PROXY -->|"自己记账(A4)"| QUOTA
+  PROXY --> ROUTING
+  PROXY --> TRANSPORT
+  QUOTA --> OBS
+  QUOTA --> TRANSPORT
+  ROUTING --> QUOTA
+  ROUTING --> TRANSPORT
+  ADMIN -->|"读 request.app.*(A1)"| APP
+  TRANSPORT --> ACPQ
+  ACPQ -.->|"状态放错地方(A9)"| QUOTA
+  CONFIG --> CORE
+  TRANSPORT -->|HTTP/SSE · ACP stdio| UP
+  OBS --> CORE
+  SHIMS --> CORE
+  TRANSPORT --> CORE
+  CLIENT -->|HTTP| APP
+  PROXY --> CORE
+  linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,42,63,69,76,78 stroke:#c0392b,stroke-width:2px
