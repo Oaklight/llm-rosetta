@@ -790,6 +790,24 @@ keystore（`keys.db`）中。
 !!! note "迁移"
     `rate_limit.trust_proxy` 已删除。配置里还有它时网关拒绝启动；请改用 `server.trusted_proxies`。
 
+## 扩展安装 { #extension-installs }
+
+`server.extension_install`（布尔值，默认 `true`）决定网关能否安装或更新扩展：
+
+```jsonc
+{
+  "server": {
+    "extension_install": false
+  }
+}
+```
+
+设为 `false` 时，admin 接口 `POST /admin/api/extensions/<id>/install-cli` 和 `POST /admin/api/extensions/<id>/update` 返回 `403`，原因为 `install_disabled`，提示里写明 `server.extension_install`；不会下载或运行任何东西。扩展列表、移除计划、移除和更新检查照常可用，已安装的扩展照常加载。配置里没有这个键时允许安装，与此前所有版本一致。
+
+只接受布尔值：其他任何值（包括字符串 `"false"`）都会让启动失败并指出这个键。每个请求都会读取该开关，所以重载配置即可生效。
+
+它不管 `llm-rosetta ext` 命令行（由运维人员在主机上运行），也不管配置自己用 `shims.sources` 和 `shims.install` 声明的安装；那些在网关启动或重载时执行。
+
 ## 路由环路检测
 
 当多个网关实例链式连接时（如校园网关转发到云端网关），可能出现路由环路。网关通过跳数 header 检测：
