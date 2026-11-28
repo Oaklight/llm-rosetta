@@ -1,6 +1,20 @@
 """Root conftest — shared fixtures for the entire test suite."""
 
-import pytest
+import os
+import tempfile
+
+# ``import llm_rosetta`` activates the per-user extensions directory when it
+# exists, which puts it on ``sys.path`` for the whole session, before any
+# fixture runs; the per-test isolation below then snapshots and restores that
+# ``sys.path``.  A developer's own installs (``~/.local/share/llm-rosetta``)
+# would show up in every test that lists or loads extensions.  The variable is
+# set here, before the first import of ``llm_rosetta``, to a path nothing
+# creates, so there is nothing to activate.
+os.environ["LLM_ROSETTA_EXTENSIONS_DIR"] = os.path.join(
+    tempfile.gettempdir(), f"llm-rosetta-tests-no-extensions-{os.getpid()}"
+)
+
+import pytest  # noqa: E402
 
 # The teardown check below is only as good as the fingerprints it compares,
 # and recording them is opt-in: production pays a canonical serialization per
