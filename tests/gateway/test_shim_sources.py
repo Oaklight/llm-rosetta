@@ -247,7 +247,6 @@ class TestReloadWiring:
         from llm_rosetta_gateway.shims import shim_sources as shim_sources_module
 
         app = SimpleNamespace(
-            admin=GatewayAdminContext(),
             shim_source_report="old-report",
             shim_source_signature="old-signature",
             shim_update_check={"sources": [], "checked_at": 1.0},
@@ -257,6 +256,7 @@ class TestReloadWiring:
             ops_ctx=None,
             provider_validation_warnings=[],
         )
+        app.admin = GatewayAdminContext(app)
         new_report = object()
         monkeypatch.setattr(
             shim_sources_module, "apply_shim_sources", lambda *a, **k: new_report
@@ -272,9 +272,6 @@ class TestReloadWiring:
         monkeypatch.setattr(ops_module, "OpsProviderValidation", _Validation)
         monkeypatch.setattr(
             _shared, "apply_admin_theme", lambda *a, **k: None, raising=False
-        )
-        monkeypatch.setattr(
-            _shared, "_sync_auth_middleware", lambda *a, **k: None, raising=False
         )
 
         response = asyncio.run(

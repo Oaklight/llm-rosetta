@@ -43,6 +43,18 @@ class AdminConfigAccess(Protocol):
         """Make *config* the one the gateway serves from now on."""
         ...
 
+    async def reload_config(
+        self, config_path: str, *, force_shims: bool = False
+    ) -> GatewayConfig:
+        """Re-read *config_path*, rebuild the config and swap it in everywhere.
+
+        Reapplies the declarative shim sources when their section changed (or
+        *force_shims* is set), serves the new config, updates the live settings
+        that read it, records the reload and seeds credential-minting providers
+        again.  Returns the config now served.
+        """
+        ...
+
 
 @runtime_checkable
 class AdminShimSources(Protocol):

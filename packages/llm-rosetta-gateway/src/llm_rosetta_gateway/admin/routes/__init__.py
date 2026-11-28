@@ -23,7 +23,6 @@ from ._shared import (  # noqa: F401  (re-exported for backward compat)
     _mask_api_key,
     _qp,
     _reload_gateway_config,
-    _sync_auth_middleware,
 )
 from .logos import get_logo
 from .auth import (

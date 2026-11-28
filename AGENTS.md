@@ -196,9 +196,12 @@ Gateway tests may import non-private internal modules but not private names;
 `admin_api.py` plus its implementation in `app/admin_context.py`.  Imports that
 predate the rule sit on `_LEGACY_ALLOWLIST` in
 `tests/gateway/test_admin_import_boundary.py`; the list may only shrink
-(regenerate with `python tests/gateway/test_admin_import_boundary.py`).  Only
-`app/factory.py` imports `admin` (`setup_admin`, `register_admin_routes`).
-Admin never imports `app._state`.
+(regenerate with `python tests/gateway/test_admin_import_boundary.py`).  Reads of
+the app (`request.app.<attr>`, `getattr(request.app, "x")`) are counted by
+`tests/gateway/test_admin_app_reads.py`; its list may only shrink too, and a
+new need is a member of `AdminContext` (the config hot reload is
+`AdminContext.reload_config`).  Only `app/factory.py` imports `admin`
+(`setup_admin`, `register_admin_routes`).  Admin never imports `app._state`.
 
 ### IR type system
 

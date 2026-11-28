@@ -418,130 +418,19 @@ def _install_shim_report(request: Any, report: Any, signature: str) -> None:
 async def _reload_gateway_config(
     request: Any, config_path: str, *, force_shims: bool = False
 ) -> GatewayConfig:
-    """Re-read config from disk, rebuild GatewayConfig, swap into app state.
+    """Re-read config from disk and swap it in, then refresh the admin theme.
 
-    Declarative shim sources are (re)applied before the config is rebuilt, but
-    only when the ``shims`` section changed (or ``force_shims`` is set) so an
-    unrelated admin edit never triggers a remote refetch.  Applying them drops
-    shims whose source was removed.
+    The reload itself is the gateway's (``AdminContext.reload_config``); the
+    theme is admin's own, so it is applied here.
     """
-    import asyncio
-
-    from ...shims.shim_sources import apply_shim_sources, shims_signature
-
-    config_io = _get_config_io(request)
-    raw = config_io.load(config_path)
-    # Taken in the same turn as the read, before anything can await: the reader
-    # records the registry for the document it just read, and this is the config
-    # object built from that document, so it is the one that reports it.  A
-    # reader that runs no load-time steps has no such attribute, and reports
-    # nothing — the same answer as a config built from a literal.
-    maintenance = getattr(config_io, "last_load_registry", None)
-
-    report = getattr(request.app, "shim_source_report", None)
-    signature = shims_signature(raw)
-    if force_shims or signature != getattr(request.app, "shim_source_signature", None):
-        loop = asyncio.get_running_loop()
-        report = await loop.run_in_executor(None, apply_shim_sources, raw, config_path)
-        _install_shim_report(request, report, signature)
-
-    from ...ops import OpsConfigReload, OpsContext, OpsProviderValidation
-
-    recovery = OpsProviderValidation(
-        getattr(request.app, "ops_ctx", None) or OpsContext(),
-        raw,
-        report=report if "report" in locals() else None,
-        persist=True,
-    )
-    recovery_result = await recovery.execute()
-    request.app.provider_validation_warnings = recovery_result.get("disabled", [])
-    new_config = GatewayConfig(raw, maintenance=maintenance, config_path=config_path)
-    admin_context(request).publish_config(new_config)
-    request.app.gateway_config = new_config
-
-    # A theme saved from the admin panel must reach the next page load.
     from .. import apply_admin_theme
 
+    new_config = await admin_context(request).reload_config(
+        config_path, force_shims=force_shims
+    )
+    # A theme saved from the admin panel must reach the next page load.
     apply_admin_theme(request.app, getattr(new_config, "admin_custom_css", ""))
-
-    _sync_auth_middleware(request.app, new_config)
-
-    # Hot-reload log level
-    from llm_rosetta_gateway.observability.logging import (
-        setup_logging as _setup_logging,
-    )
-
-    _setup_logging(
-        verbose=new_config.verbose,
-        log_bodies=new_config.log_bodies,
-        log_format=new_config.log_format,
-    )
-
-    # Hot-reload rate limiting (only rebuild if config actually changed)
-    rate_limit_state = getattr(request.app, "rate_limit_state", None)
-    if rate_limit_state is not None:
-        old_config = getattr(request.app, "_prev_gateway_config", None)
-        rl_changed = old_config is None or any(
-            getattr(new_config, a, None) != getattr(old_config, a, None)
-            for a in (
-                "rate_limit_enabled",
-                "rate_limit_algorithm",
-                "rate_limit_global",
-                "rate_limit_per_ip",
-                "rate_limit_per_key",
-                "rate_limit_per_model",
-                "rate_limit_exclude",
-            )
-        )
-        if rl_changed:
-            rate_limit_state.rebuild(new_config)
-    request.app._prev_gateway_config = new_config
-    proxy_policy = getattr(request.app, "proxy_policy", None)
-    if proxy_policy is not None:
-        proxy_policy.trusted = new_config.trusted_proxies
-
-    # Hot-reload log retention caps
-    persistence = getattr(request.app, "persistence", None)
-    if persistence is not None:
-        rl_cfg = new_config.request_log or {}
-        if "success_max" in rl_cfg:
-            persistence.success_max = int(rl_cfg["success_max"])
-        if "error_dump_max" in rl_cfg:
-            persistence.dump_max = int(rl_cfg["error_dump_max"])
-        ol_cfg = new_config.ops_log or {}
-        if "info_max" in ol_cfg:
-            persistence.retention.ops_info_max = max(100, int(ol_cfg["info_max"]))
-        if "warn_max" in ol_cfg:
-            persistence.retention.ops_warn_max = max(100, int(ol_cfg["warn_max"]))
-
-    # Record config reload event
-    await OpsConfigReload(
-        OpsContext(ops_log=getattr(request.app, "ops_log", None)), new_config
-    ).execute()
-
-    # Re-seed credential-minting providers.  The rebuild above replaced every
-    # ProviderInfo, so each of them is back on the pending sentinel with no
-    # refresh loop.  Seeding otherwise runs only at process start, so without
-    # this the provider never obtains a credential and every request to it is
-    # rejected until the process restarts.
-    deferred = getattr(request.app, "deferred_startup", None)
-    if deferred is not None:
-        await deferred.apply_config_reload(new_config)
-
     return new_config
-
-
-def _sync_auth_middleware(app: Any, config: GatewayConfig) -> None:
-    """Update the auth hook's state for hot-reload."""
-    auth_state = getattr(app, "auth_state", None)
-    if auth_state is not None:
-        # Sync admin password (e.g. changed via CLI or config edit)
-        if config.admin_password != auth_state.admin_password:
-            auth_state.change_password(config.admin_password or "")
-        auth_state.configure_sessions(
-            idle_minutes=config.admin_session_idle_minutes,
-            remember_days=config.admin_session_remember_days,
-        )
 
 
 def _apply_auth_fields(
