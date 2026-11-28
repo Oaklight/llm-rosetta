@@ -142,7 +142,7 @@
   end
   subgraph OPT["可选外层(没有它们,转换库照样完整)"]
     SHIM["shims/&lt;br/&gt;provider_shim 注册表 · _loader · builtin/各 vendor · providers 转发层"]
-    EXTS["extensions/&lt;br/&gt;_discovery · _load · _dirs · _install · _index · _probe · _tools · _cli&lt;br/&gt;ext install-cli:外部程序按精确版本装进 /config/tools(#1821、#1823)"]
+    EXTS["extensions/&lt;br/&gt;_discovery · _load · _dirs · _install · _index · _probe · _tools · _node · _manage · _cli&lt;br/&gt;ext install-cli:外部程序按精确版本装进 /config/tools(#1821、#1823);node 24.22.3 也装进 /config/tools/node(musl 用 unofficial-builds,#1825);_manage:移除计划(连程序一起删,共享 node 最后一个用户走才删)与 shim 的 needs(#1834)"]
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
     REF["types/&lt;br/&gt;提供方参考形状:openai · google · messages&lt;br/&gt;types.ir 是 0.13.0 的转发,0.15.0 删除"]
@@ -219,7 +219,7 @@
     MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info"]
+    TRANSPORT["transport/&lt;br/&gt;http · acp · registry · provider_info · provider_readiness(ProviderNotReady,#1832)"]
     SURF["surface.py"]
     OBS["observability/&lt;br/&gt;logging · metrics · request_log · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]
@@ -240,7 +240,7 @@
   CORE["llm_rosetta.api + llm_rosetta.contracts&lt;br/&gt;(gateway 进入 core 的唯一入口,测试强制)"]
   UP(["上游提供方"])
   subgraph SERVING["serving"]
-    ADMINAPI["admin_api.py&lt;br/&gt;AdminContext 协议"]
+    ADMINAPI["admin_api.py&lt;br/&gt;AdminContext 协议;不再导入 app 与 observability(回退已删,#1833)"]
     ADMIN["admin/&lt;br/&gt;routes/ · js/ · admin.html"]
     APP["app/&lt;br/&gt;factory · routes_llm · routes_typed · routes_models&lt;br/&gt;routes_compact · routes_count_tokens · routes_health · tasks · admin_context"]
   end
@@ -249,7 +249,6 @@
   APP --&gt; ROUTING
   APP --&gt; KEYSTORE
   CLI --&gt; OBS
-  ADMINAPI --&gt; OBS
   APP --&gt; MAINT
   TRANSPORT --&gt;|HTTP/SSE · ACP stdio| UP
   CONFIG --&gt; ROUTING
@@ -294,7 +293,6 @@
   PROXY --&gt; CORE
   MW --&gt; OBS
   PROXY --&gt; TRANSPORT
-  CONFIG -.-&gt;|"ProviderNotReady"| MAINT
   APP --&gt;|适配器 admin_context.py| ADMINAPI
   PROXY --&gt; OBS
   PIPES --&gt; TRANSPORT
@@ -349,7 +347,7 @@
   subgraph TABJS["页面脚本 js/tabs/"]
     T_DASH["dashboard.js"]
     T_LOGS["logs.js"]
-    T_SHIMS["shims.js · shims-page.js · shim-sources-editor.js&lt;br/&gt;+ core/shim-sources.js · core/extension-cards.js(扩展视图:外部程序状态与 install-cli 命令,#1824)&lt;br/&gt;后端的编辑、删除、预览路由已删,只读(#1732);前端编辑器是否清理未确认"]
+    T_SHIMS["shims.js · shims-page.js · shim-sources-editor.js&lt;br/&gt;+ core/shim-sources.js · core/extension-cards.js(外部程序状态与安装按钮,#1824、#1828)· core/extension-manage.js(Sources 标签里每个已装扩展一行:检查更新、更新、移除、改用声明源,pip 来源的行不放移除按钮,#1834);独立的 Extensions 标签已撤&lt;br/&gt;后端的编辑、删除、预览路由已删,只读(#1732);前端编辑器是否清理未确认"]
     T_OPS["ops-log.js"]
     T_MOD["models.js"]
     T_ROUTE["routing.js"]
@@ -419,7 +417,7 @@
 </section>
 <section id="gap_actual">
   <h2><span class="num">04</span>gateway 现实:偏离设计的地方(#1830 的 A1–A9)</h2>
-  <p class="sub">红线是评审量出来的问题:每条标了 #1830 里的编号。</p><details class="notes"><summary>说明与已解决项(11 条)</summary><ul><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。</li><li>A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。</li><li>A2:核心与 gateway 各有一套扩展安装策略,写同一个目录。</li><li>A3:admin 登录限流总是信任 X-Forwarded-For,不看 trust_proxy。</li><li>A4:上游尝试的记账有 5 份拷贝。</li><li>A5:ProviderNotReady 放在 716 行的启动管理器里,7 处函数内导入。</li><li>A6:admin_api 的回退导入让 admin、app、admin_api 成环。</li><li>A7:4 处直接写 ops_log,绕过 ops 层。</li><li>A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。</li><li>A9:quota 的进程级状态放在 transport 里。</li><li>图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。</li></ul></details>
+  <p class="sub">红线是评审量出来的问题:每条标了 #1830 里的编号。</p><details class="notes"><summary>说明与已解决项(11 条)</summary><ul><li>已合并并从图上去掉的:A5(#1832,ProviderNotReady 移到 transport/provider_readiness.py)、A6(#1833,admin_api 的回退已删)。</li><li>进行中:A3 与 A11(#1831)、A7(#1835)、A4、A2、A1。</li><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。</li><li>A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。</li><li>A2:核心与 gateway 各有一套扩展安装策略,写同一个目录。</li><li>A3:admin 登录限流总是信任 X-Forwarded-For,不看 trust_proxy。</li><li>A4:上游尝试的记账有 5 份拷贝。</li><li>A7:4 处直接写 ops_log,绕过 ops 层。</li><li>A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。</li><li>A9:quota 的进程级状态放在 transport 里。</li><li>图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。</li></ul></details>
   <div class="panel">
     <span class="tag now">现状 · master @ 215c832bbe</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_actual"> <span id="z-gap_actual">100%</span></label></div>
@@ -439,7 +437,7 @@
   TRANSPORT["transport/acp.py(2535 行)"]
   ACPQ["transport/acp_quota.py&lt;br/&gt;进程级 _READINGS / _LOCKS(A9)"]
   QUOTA["quota/service.py"]
-  MAINT["maintenance/startup.py(716 行)&lt;br/&gt;ProviderNotReady(A5)"]
+  MAINT["maintenance/startup.py(716 行)&lt;br/&gt;ProviderNotReady 已移走(A5,#1832 已合并)"]
   OPS["ops/&lt;br/&gt;OpsBase 子类"]
   OPSLOG["observability/ops_log"]
   EXTCORE["core extensions/_index.select_entry&lt;br/&gt;最新兼容版,含预发布"]
@@ -453,7 +451,6 @@
   ADMIN --&gt; RELOAD
   RELOAD --&gt;|"写 5 个 app 属性(A1)"| STATE
   APP --&gt; STATE
-  ADMINAPI -.-&gt;|"回退 import app.admin_context(A6)"| APP
   ADMIN --&gt; LOGIN
   LOGIN --&gt;|"不调用(A3)"| MWCTX
   PROXY --&gt;|"自己记账(A4)"| QUOTA
@@ -464,15 +461,13 @@
   CONFIG --&gt;|"ACP lane 解析在 config 里(A8)"| TRANSPORT
   TRANSPORT --&gt; ACPQ
   ACPQ --&gt;|"状态放错地方(A9)"| QUOTA
-  CONFIG -.-&gt;|"ProviderNotReady 函数内导入 7 处(A5)"| MAINT
-  PIPES -.-&gt;|"函数内导入(A5)"| MAINT
   PROXY --&gt; OPS
   OPS --&gt; OPSLOG
   ADMIN --&gt;|"绕过 ops 直接写(A7)"| OPSLOG
   APP --&gt;|"绕过 ops 直接写(A7)"| OPSLOG
   EXTCORE --&gt;|"ext install / update"| EXTDIR
   EXTGW --&gt;|"重建 shim 来源(A2:两套策略)"| EXTDIR
-  linkStyle 2,3,4,6,8,10,11,12,13,16,18,19,20,23,24,26 stroke:#c0392b,stroke-width:2px
+  linkStyle 2,3,4,6,9,10,11,12,15,17,20,21,23 stroke:#c0392b,stroke-width:2px
 </pre></div></div>
   </div>
 </section>
@@ -497,7 +492,7 @@
   TRANSPORT["transport/acp.py"]
   SINK["transport 的 quota 接收器&lt;br/&gt;(启动时由 quota 注册,A9)"]
   QUOTA["quota/&lt;br/&gt;读数与锁在这里"]
-  PSTATE["provider_state.py(叶子)&lt;br/&gt;ProviderInitState · ProviderNotReady(A5)"]
+  PSTATE["transport/provider_readiness.py(叶子)&lt;br/&gt;ProviderInitState · ProviderNotReady(A5,#1832 已合并)"]
   MAINT["maintenance/startup.py"]
   OPS["ops/&lt;br/&gt;唯一的审计写入者(A7)"]
   OPSLOG["observability/ops_log"]
@@ -505,7 +500,7 @@
   EXTGW["gateway shims/&lt;br/&gt;调用核心策略"]
   EXTDIR[("/config/extensions")]
   ADMIN --&gt;|"只经这一条"| ADMINAPI
-  APP --&gt;|"适配器(必须存在,无回退)"| ADMINAPI
+  APP --&gt;|"适配器(必须存在,无回退;A6,#1833 已合并)"| ADMINAPI
   ADMIN --&gt; LOGIN
   LOGIN --&gt; MWCTX
   PROXY --&gt; QUOTA

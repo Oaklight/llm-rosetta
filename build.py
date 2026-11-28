@@ -9,7 +9,7 @@ sections = [
  ("admin", "3. admin 页面与组件的关系",
   "已核对:页面→脚本、脚本→API 分组(来自各 JS 里的 /admin/api 调用)、9 个标签页及子区域(admin.html)。未核对:右半段“API 分组→后端组件”按名字推断;settings 页的 JS 接线只确认了文件;components/ 是否也被 models 等其他页使用。GET /admin/api/extensions 后端已有,目前没有页面调用它。"),
 ("gap_actual", "4. gateway 现实:偏离设计的地方(#1830 的 A1–A9)",
-  "红线是评审量出来的问题:每条标了 #1830 里的编号。数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。A2:核心与 gateway 各有一套扩展安装策略,写同一个目录。A3:admin 登录限流总是信任 X-Forwarded-For,不看 trust_proxy。A4:上游尝试的记账有 5 份拷贝。A5:ProviderNotReady 放在 716 行的启动管理器里,7 处函数内导入。A6:admin_api 的回退导入让 admin、app、admin_api 成环。A7:4 处直接写 ops_log,绕过 ops 层。A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。A9:quota 的进程级状态放在 transport 里。图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。",
+  "红线是评审量出来的问题:每条标了 #1830 里的编号。已合并并从图上去掉的:A5(#1832,ProviderNotReady 移到 transport/provider_readiness.py)、A6(#1833,admin_api 的回退已删)。进行中:A3 与 A11(#1831)、A7(#1835)、A4、A2、A1。数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交,共同变更只覆盖一周),本页没有重算。A1:admin 的边界只在导入层有测试,admin 读 request.app 的 28 种属性约 113 处,测试看不到;热重载写在 admin 里,已生效配置有两个落点。A2:核心与 gateway 各有一套扩展安装策略,写同一个目录。A3:admin 登录限流总是信任 X-Forwarded-For,不看 trust_proxy。A4:上游尝试的记账有 5 份拷贝。A7:4 处直接写 ops_log,绕过 ops 层。A8:ProviderInfo 有 58 个属性,config 里有约 20 个 ACP 辅助。A9:quota 的进程级状态放在 transport 里。图只画了被评审点到的部分,不是 gateway 全图;节点顺序没有做交叉优化。",
   "现状 · master @ 215c832bbe", "now"),
 ("gap_ideal", "5. gateway 理想:#1830 完成之后",
   "同一批节点,红线都没有了。admin 只经 AdminContext;热重载、已生效配置和审计写入各有唯一的家;记账是一个 attempt_upstream;ACP lane 解析在 transport 一侧;quota 的状态回到 quota/,通过启动时注册的接收器进入 transport;ProviderNotReady 在叶子模块;扩展安装只有核心一套策略。这是目标态,不是承诺的实现细节;每一项落地后,对应的红线从上一张图里去掉。",

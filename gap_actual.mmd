@@ -14,7 +14,7 @@ flowchart LR
   TRANSPORT["transport/acp.py(2535 行)"]
   ACPQ["transport/acp_quota.py<br/>进程级 _READINGS / _LOCKS(A9)"]
   QUOTA["quota/service.py"]
-  MAINT["maintenance/startup.py(716 行)<br/>ProviderNotReady(A5)"]
+  MAINT["maintenance/startup.py(716 行)<br/>ProviderNotReady 已移走(A5,#1832 已合并)"]
   OPS["ops/<br/>OpsBase 子类"]
   OPSLOG["observability/ops_log"]
   EXTCORE["core extensions/_index.select_entry<br/>最新兼容版,含预发布"]
@@ -28,7 +28,6 @@ flowchart LR
   ADMIN --> RELOAD
   RELOAD -->|"写 5 个 app 属性(A1)"| STATE
   APP --> STATE
-  ADMINAPI -.->|"回退 import app.admin_context(A6)"| APP
   ADMIN --> LOGIN
   LOGIN -->|"不调用(A3)"| MWCTX
   PROXY -->|"自己记账(A4)"| QUOTA
@@ -39,12 +38,10 @@ flowchart LR
   CONFIG -->|"ACP lane 解析在 config 里(A8)"| TRANSPORT
   TRANSPORT --> ACPQ
   ACPQ -->|"状态放错地方(A9)"| QUOTA
-  CONFIG -.->|"ProviderNotReady 函数内导入 7 处(A5)"| MAINT
-  PIPES -.->|"函数内导入(A5)"| MAINT
   PROXY --> OPS
   OPS --> OPSLOG
   ADMIN -->|"绕过 ops 直接写(A7)"| OPSLOG
   APP -->|"绕过 ops 直接写(A7)"| OPSLOG
   EXTCORE -->|"ext install / update"| EXTDIR
   EXTGW -->|"重建 shim 来源(A2:两套策略)"| EXTDIR
-  linkStyle 2,3,4,6,8,10,11,12,13,16,18,19,20,23,24,26 stroke:#c0392b,stroke-width:2px
+  linkStyle 2,3,4,6,9,10,11,12,15,17,20,21,23 stroke:#c0392b,stroke-width:2px

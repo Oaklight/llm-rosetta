@@ -13,7 +13,7 @@ flowchart LR
   TRANSPORT["transport/acp.py"]
   SINK["transport 的 quota 接收器<br/>(启动时由 quota 注册,A9)"]
   QUOTA["quota/<br/>读数与锁在这里"]
-  PSTATE["provider_state.py(叶子)<br/>ProviderInitState · ProviderNotReady(A5)"]
+  PSTATE["transport/provider_readiness.py(叶子)<br/>ProviderInitState · ProviderNotReady(A5,#1832 已合并)"]
   MAINT["maintenance/startup.py"]
   OPS["ops/<br/>唯一的审计写入者(A7)"]
   OPSLOG["observability/ops_log"]
@@ -21,7 +21,7 @@ flowchart LR
   EXTGW["gateway shims/<br/>调用核心策略"]
   EXTDIR[("/config/extensions")]
   ADMIN -->|"只经这一条"| ADMINAPI
-  APP -->|"适配器(必须存在,无回退)"| ADMINAPI
+  APP -->|"适配器(必须存在,无回退;A6,#1833 已合并)"| ADMINAPI
   ADMIN --> LOGIN
   LOGIN --> MWCTX
   PROXY --> QUOTA

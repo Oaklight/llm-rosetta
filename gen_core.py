@@ -39,7 +39,7 @@ current_header = '''flowchart TB
   end
   subgraph OPT["可选外层(没有它们,转换库照样完整)"]
     SHIM["shims/<br/>provider_shim 注册表 · _loader · builtin/各 vendor · providers 转发层"]
-    EXTS["extensions/<br/>_discovery · _load · _dirs · _install · _index · _probe · _tools · _cli<br/>ext install-cli:外部程序按精确版本装进 /config/tools(#1821、#1823)"]
+    EXTS["extensions/<br/>_discovery · _load · _dirs · _install · _index · _probe · _tools · _node · _manage · _cli<br/>ext install-cli:外部程序按精确版本装进 /config/tools(#1821、#1823);node 24.22.3 也装进 /config/tools/node(musl 用 unofficial-builds,#1825);_manage:移除计划(连程序一起删,共享 node 最后一个用户走才删)与 shim 的 needs(#1834)"]
   end
   subgraph FOUND["共享基础(契约、格式目录、词汇、参考形状)"]
     REF["types/<br/>提供方参考形状:openai · google · messages<br/>types.ir 是 0.13.0 的转发,0.15.0 删除"]

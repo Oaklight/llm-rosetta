@@ -11,7 +11,7 @@ flowchart TB
     MW["middleware/<br/>auth · ratelimit · hop_limit · circuit_breaker · request_context"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/<br/>http · acp · registry · provider_info"]
+    TRANSPORT["transport/<br/>http · acp · registry · provider_info · provider_readiness(ProviderNotReady,#1832)"]
     SURF["surface.py"]
     OBS["observability/<br/>logging · metrics · request_log · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]
@@ -32,7 +32,7 @@ flowchart TB
   CORE["llm_rosetta.api + llm_rosetta.contracts<br/>(gateway 进入 core 的唯一入口,测试强制)"]
   UP(["上游提供方"])
   subgraph SERVING["serving"]
-    ADMINAPI["admin_api.py<br/>AdminContext 协议"]
+    ADMINAPI["admin_api.py<br/>AdminContext 协议;不再导入 app 与 observability(回退已删,#1833)"]
     ADMIN["admin/<br/>routes/ · js/ · admin.html"]
     APP["app/<br/>factory · routes_llm · routes_typed · routes_models<br/>routes_compact · routes_count_tokens · routes_health · tasks · admin_context"]
   end
@@ -41,7 +41,6 @@ flowchart TB
   APP --> ROUTING
   APP --> KEYSTORE
   CLI --> OBS
-  ADMINAPI --> OBS
   APP --> MAINT
   TRANSPORT -->|HTTP/SSE · ACP stdio| UP
   CONFIG --> ROUTING
@@ -86,7 +85,6 @@ flowchart TB
   PROXY --> CORE
   MW --> OBS
   PROXY --> TRANSPORT
-  CONFIG -.->|"ProviderNotReady"| MAINT
   APP -->|适配器 admin_context.py| ADMINAPI
   PROXY --> OBS
   PIPES --> TRANSPORT
