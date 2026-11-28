@@ -2537,3 +2537,80 @@ class TestAgentLaneConformance:
         )
         assert "error" in fs_reply and "result" not in fs_reply
         assert not (tmp_path / "shell-side-effect").exists()
+
+
+class TestTheAllowanceAnAgentReports:
+    """Where a turn's ``usage_update`` ends up: the lane's stored reading."""
+
+    @pytest.fixture(autouse=True)
+    def _no_reading_from_an_earlier_test(self):
+        from llm_rosetta_gateway.transport.acp.quota import clear_lane_readings
+
+        clear_lane_readings()
+        yield
+        clear_lane_readings()
+
+    async def test_a_turn_reaches_the_quota_payload_of_its_lane(
+        self, monkeypatch, tmp_path
+    ):
+        from types import SimpleNamespace
+
+        from llm_rosetta_gateway.quota.service import read_provider_quota
+
+        transport = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok")
+        try:
+            stream = await transport.send_streaming(provider, "", TURN)
+            [chunk async for chunk in stream]
+        finally:
+            await transport.close()
+
+        config = SimpleNamespace(providers={"lane": provider})
+        payload = await read_provider_quota(config, "lane")
+        windows = payload["credentials"][0]["reading"]["windows"]
+        assert [window["name"] for window in windows] == ["5 hours", "7 days"]
+
+    async def test_a_rebuilt_transport_still_serves_the_last_reading(
+        self, monkeypatch, tmp_path
+    ):
+        """A config reload builds a new transport; the account's windows stay."""
+        from llm_rosetta_gateway.transport.acp.quota import lanes_reading
+
+        first = AcpTransport()
+        provider = _provider(monkeypatch, tmp_path, "ok")
+        try:
+            stream = await first.send_streaming(provider, "", TURN)
+            [chunk async for chunk in stream]
+        finally:
+            await first.close()
+        second = AcpTransport()
+        try:
+            reading = lanes_reading(provider)
+        finally:
+            await second.close()
+        assert reading is not None
+        assert [window.name for window in reading.windows] == ["5 hours", "7 days"]
+
+    async def test_a_provider_hands_an_update_to_the_store_and_reads_it_back(
+        self, monkeypatch, tmp_path
+    ):
+        """The seam an extension's transport uses (``record_lane_reading``)."""
+        provider = _provider(monkeypatch, tmp_path, "ok")
+        update = {
+            "sessionUpdate": "usage_update",
+            "_meta": {
+                "_claude/rateLimit": {
+                    "status": "allowed",
+                    "rateLimitType": "five_hour",
+                    "resetsAt": 1800000000,
+                    "unifiedWindows": {"five_hour": {"utilization": 0.5}},
+                }
+            },
+        }
+        assert provider.lane_reading() is None
+        assert provider.record_lane_reading(update) is True
+        assert provider.record_lane_reading({"sessionUpdate": "usage_update"}) is False
+        reading = provider.lane_reading()
+        assert reading is not None and [w.name for w in reading.windows] == ["5 hours"]
+        # A request-scoped clone shares the lane's reading.
+        assert provider.with_session("s").lane_reading() is reading
