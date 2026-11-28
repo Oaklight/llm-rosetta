@@ -22,8 +22,8 @@ ACTUAL_PATCH = {
     "APP": "已生效配置有两个落点:app.gateway_config 与 app/_state(A1)<br/>routes_compact · routes_count_tokens 自己记账(A4)",
     "PROXY": "上游尝试的记账是 5 份拷贝之一(A4)",
     "PIPES": "记账拷贝之一(A4)",
-    "CONFIG": "providers.py:build_provider_info 294 行,复杂度 49;约 20 个 ACP 辅助(A8)",
-    "TRANSPORT": "provider_info.py:ProviderInfo 58 个属性(A8) · acp.py 2535 行",
+    "CONFIG": "providers.py:build_provider_info 294 行,复杂度 49;约 20 个 ACP 辅助在这里(A8)",
+    "TRANSPORT": "provider_info.py:ProviderInfo 58 个属性(不拆) · acp.py 2535 行",
 }
 ACTUAL_NODES = ['ACPQ["transport/acp_quota.py<br/>进程级 _READINGS / _LOCKS(A9)"]']
 ACTUAL_EXTRA = [
@@ -48,8 +48,8 @@ IDEAL_PATCH = {
     "ADMINAPI": "admin 到 gateway 的唯一通道,含 reload_config",
     "APP": "热重载与唯一的已生效配置",
     "PROXY": "attempt_upstream:唯一的上游尝试记账(A4);pipelines 与 relay 路由经它",
-    "CONFIG": "只做解析与装配",
-    "TRANSPORT": "http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码,A9),A13)<br/>ProviderInfo 分成 auth / ACP / quota 子记录(A8) · lane_allowance(接收器接口,A9) · 不导入 quota",
+    "CONFIG": "解析与装配;ACP lane 解析不在这里",
+    "TRANSPORT": "http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码,A9),A13)<br/>lane_allowance(接收器接口,A9) · 不导入 quota",
     "QUOTA": "读数与锁在这里(A9)",
     "OPS": "唯一的审计写入者",
 }
