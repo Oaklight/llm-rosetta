@@ -313,6 +313,7 @@ def test_the_extension_index_names_are_the_extensions_packages_objects():
     for name in (
         "ExtensionIndex",
         "IndexEntry",
+        "choose_release",
         "entry_problems",
         "install_from_index",
         "load_index",

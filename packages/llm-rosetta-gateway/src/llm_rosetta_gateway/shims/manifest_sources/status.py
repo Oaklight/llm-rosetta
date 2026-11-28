@@ -8,7 +8,7 @@ from collections.abc import Collection, Sequence
 from dataclasses import replace
 from typing import Any
 
-from llm_rosetta.api import ExtensionIndex, version_key
+from llm_rosetta.api import ExtensionIndex, choose_release, version_key
 
 from .._types import (
     HttpGet,
@@ -17,7 +17,6 @@ from .._types import (
 )
 from .freshness import _fetch_manifest_once
 from .plan import ManifestSourceSpec
-from .releases import select_release
 from .selection import _provided_by
 
 
@@ -130,7 +129,7 @@ def check_manifest_updates(
         elif status.vendor not in manifest:
             entry["error"] = f"{status.vendor} is no longer in the index"
         else:
-            chosen, _ = select_release(manifest[status.vendor])
+            chosen, _ = choose_release(manifest[status.vendor], prefer_stable=True)
             if chosen is None:
                 entry["error"] = "no version is installable on this core"
             else:

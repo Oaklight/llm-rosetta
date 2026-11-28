@@ -5,7 +5,7 @@ The existing tests (``test_shim_manifest_sources.py``, ``test_shim_releases.py``
 with an example.  The checks here state the rules once and run them over
 generated input, against a reference written out in this file:
 
-* ``select_release``: the newest installable *stable* release wins, a
+* ``choose_release(prefer_stable=True)``: the newest installable *stable* release wins, a
   pre-release wins only when no stable release is installable, the skipped
   list is the incompatible releases newer than the choice, and none of it
   depends on the order the index lists them;
@@ -37,12 +37,11 @@ pytest.importorskip("hypothesis")
 from hypothesis import HealthCheck, assume, given, settings  # noqa: E402
 from hypothesis import strategies as st  # noqa: E402
 
-from llm_rosetta.api import IndexEntry, parse_index  # noqa: E402
+from llm_rosetta.api import IndexEntry, choose_release, parse_index  # noqa: E402
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION  # noqa: E402
 from llm_rosetta_gateway.shims.manifest_sources import (  # noqa: E402
     freshness,
     plan,
-    releases,
     selection,
 )
 
@@ -55,7 +54,6 @@ _SETTINGS = settings(
 
 
 def test_the_targets_are_the_product_s_own() -> None:
-    assert selection.select_release is releases.select_release
     assert selection.pick_selector is plan.pick_selector
     assert freshness.parse_index is parse_index
 
@@ -129,13 +127,17 @@ def _usable(entry: IndexEntry) -> bool:
     return entry.surface == SURFACE_VERSION
 
 
-# --- select_release ----------------------------------------------------------
+# --- the stable-first reading of choose_release -------------------------------
+
+
+def _select_release(items):
+    return choose_release(items, prefer_stable=True)
 
 
 @_SETTINGS
 @given(items=_releases())
 def test_select_release_prefers_the_newest_stable_then_the_newest_pre(items) -> None:
-    chosen, skipped = releases.select_release(items)
+    chosen, skipped = _select_release(items)
     usable = [e for e in items if _usable(e)]
     stable = [e.version for e in usable if "-" not in e.version]
     pre = [e.version for e in usable if "-" in e.version]
@@ -162,8 +164,8 @@ def test_select_release_prefers_the_newest_stable_then_the_newest_pre(items) -> 
 @given(items=_releases(min_size=2), data=st.data())
 def test_select_release_does_not_depend_on_listing_order(items, data) -> None:
     shuffled = data.draw(st.permutations(items))
-    first, skipped = releases.select_release(items)
-    again, skipped_again = releases.select_release(shuffled)
+    first, skipped = _select_release(items)
+    again, skipped_again = _select_release(shuffled)
     assert again == first
     assert {e.version for e, _ in skipped_again} == {e.version for e, _ in skipped}
 
@@ -694,7 +696,7 @@ def test_without_a_pin_the_newest_installable_release_is_chosen(items) -> None:
     chosen, passed_over, problem = selection._choose_release(
         items, _selector(), "contrib", "acme"
     )
-    expected, skipped = releases.select_release(items)
+    expected, skipped = _select_release(items)
     assert problem is None
     assert chosen == expected
     assert passed_over == list(skipped)

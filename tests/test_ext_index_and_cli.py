@@ -33,6 +33,7 @@ from llm_rosetta.extensions._index import (
     load_index,
     parse_index,
     plan_updates,
+    choose_release,
     select_entry,
     version_key,
 )
@@ -361,6 +362,48 @@ class TestSelect:
     def test_a_pinned_version_is_chosen_over_a_newer_one(self):
         index = {"acme": [_entry("0.1.0"), _entry("0.2.0")]}
         assert select_entry(index, "acme", version="0.1.0").version == "0.1.0"
+
+    def test_a_prerelease_competes_by_version_unless_stable_is_preferred(self):
+        index = {"acme": [_entry("1.0.0"), _entry("1.1.0-rc.1")]}
+        assert select_entry(index, "acme").version == "1.1.0-rc.1"
+        assert select_entry(index, "acme", prefer_stable=True).version == "1.0.0"
+
+    def test_prefer_stable_falls_back_to_a_prerelease_when_no_stable_fits(self):
+        index = {
+            "acme": [_entry("1.0.0", requires_python=">=99"), _entry("1.1.0-rc.1")]
+        }
+        assert select_entry(index, "acme", prefer_stable=True).version == "1.1.0-rc.1"
+
+    def test_a_pinned_prerelease_is_chosen_whatever_the_policy(self):
+        index = {"acme": [_entry("1.0.0"), _entry("1.1.0-rc.1")]}
+        assert (
+            select_entry(
+                index, "acme", version="1.1.0-rc.1", prefer_stable=True
+            ).version
+            == "1.1.0-rc.1"
+        )
+
+    def test_choose_release_reports_the_newer_incompatible_ones(self):
+        chosen, skipped = choose_release(
+            [_entry("1.0.0"), _entry("2.0.0", surface=SURFACE_VERSION + 1)]
+        )
+        assert chosen is not None and chosen.version == "1.0.0"
+        assert [entry.version for entry, _ in skipped] == ["2.0.0"]
+
+    def test_an_incompatible_release_older_than_a_prerelease_choice_is_not_reported(
+        self,
+    ):
+        chosen, skipped = choose_release(
+            [_entry("1.1.0-rc.1"), _entry("1.0.0", surface=SURFACE_VERSION + 1)],
+            prefer_stable=True,
+        )
+        assert chosen is not None and chosen.version == "1.1.0-rc.1"
+        assert skipped == ()
+
+    def test_choose_release_with_nothing_compatible_returns_none_and_every_reason(self):
+        chosen, skipped = choose_release([_entry("2.0.0", ir=IR_VERSION + 1)])
+        assert chosen is None
+        assert [entry.version for entry, _ in skipped] == ["2.0.0"]
 
 
 class TestLoad:

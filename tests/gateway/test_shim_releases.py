@@ -6,14 +6,18 @@ moved to ``manifest_sources/releases.py`` when the manifest format went away.
 
 from __future__ import annotations
 
-from llm_rosetta.api import IndexEntry
+from llm_rosetta.api import IndexEntry, choose_release
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
 from llm_rosetta_gateway.shims.manifest_sources.releases import (
     release_from_dict,
     release_to_dict,
     requirement_problem,
-    select_release,
 )
+
+
+def select_release(releases):
+    """The gateway's reading of core's one install policy: stable first."""
+    return choose_release(releases, prefer_stable=True)
 
 
 def _entry(

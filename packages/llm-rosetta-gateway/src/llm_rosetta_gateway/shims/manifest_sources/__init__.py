@@ -6,7 +6,7 @@ assets (the format is :mod:`llm_rosetta.extensions`).  The gateway's
 extensions to take from them.  Per selected extension this package:
 
 1. picks the newest release this interpreter and core can run
-   (:func:`.releases.select_release`) and logs a WARNING for each newer one it
+   (:func:`llm_rosetta.api.choose_release`, stable first) and logs a WARNING for each newer one it
    passed over;
 2. keeps the installed version when it is still compatible and not older than
    that choice: a gateway upgrades only when a newer installable version

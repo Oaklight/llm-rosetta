@@ -10,14 +10,14 @@ from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta.api import ExtensionIndex, IndexEntry, version_key
+from llm_rosetta.api import ExtensionIndex, IndexEntry, choose_release, version_key
 
 from .._cache import _read_stamp
 from .._types import (
     ShimSourceStatus,
     logger,
 )
-from .releases import release_from_dict, requirement_problem, select_release
+from .releases import release_from_dict, requirement_problem
 from .plan import (
     InstallSelector,
     ManifestSourceSpec,
@@ -114,7 +114,7 @@ def _select_vendors(
         releases = manifest.get(vendor, ())
         # The record that would be installed speaks for the tags: one newer
         # release this core cannot run must not drop the vendor from a tag.
-        installable, _ = select_release(releases)
+        installable, _ = choose_release(releases, prefer_stable=True)
         record = installable or (releases[0] if releases else None)
         if record is None and root is not None:
             record = _installed_release(
@@ -180,7 +180,7 @@ def _choose_release(
                 problem,
             )
         return chosen, [], problem
-    chosen, passed_over = select_release(releases)
+    chosen, passed_over = choose_release(releases, prefer_stable=True)
     for release, why in passed_over:
         logger.warning(
             "Shim source %s: %s %s is not installable here: %s",
