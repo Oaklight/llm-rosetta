@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from _admin_app import attach_admin
 from unittest.mock import AsyncMock, MagicMock
 
 from llm_rosetta_gateway.admin.routes import maintenance as routes
@@ -24,6 +25,7 @@ class _App:
         self.gateway_config = None
         # Attached by the test that checks a started run's registry wins.
         self.deferred_startup: Any = None
+        attach_admin(self)
 
 
 class _Request:

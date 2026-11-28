@@ -16,6 +16,7 @@ from types import SimpleNamespace
 import pytest
 
 from llm_rosetta_gateway.admin.routes import connectivity
+from _admin_app import fake_app
 
 
 class _Response:
@@ -63,7 +64,7 @@ def _request(tmp_path, entry: dict, models: dict | None = None) -> SimpleNamespa
     path = tmp_path / "config.jsonc"
     path.write_text(json.dumps({"providers": {"mix": entry}, "models": models or {}}))
     config = load_gateway_config(str(path))
-    app = SimpleNamespace(gateway_config=config, config_path=str(path))
+    app = fake_app(gateway_config=config, config_path=str(path))
     return SimpleNamespace(app=app, path_params={"name": "mix"})
 
 
@@ -95,7 +96,7 @@ class TestAnAgentLane:
                     "quota_observed": True,
                 }
 
-        app = SimpleNamespace(
+        app = fake_app(
             gateway_config=config,
             transports={"acp": _Lane()},
         )
@@ -133,7 +134,7 @@ class TestAnAgentLane:
                 }
 
         request = SimpleNamespace(
-            app=SimpleNamespace(gateway_config=config, transports={"acp": _Lane()})
+            app=fake_app(gateway_config=config, transports={"acp": _Lane()})
         )
 
         response = await connectivity.test_provider_connectivity(request, "claude")

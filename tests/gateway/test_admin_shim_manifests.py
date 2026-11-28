@@ -27,6 +27,7 @@ from llm_rosetta_gateway.admin.routes.config.shim_manifests import (
 from llm_rosetta_gateway.admin.routes.config.shim_files import get_loaded_shims
 from llm_rosetta_gateway.config import JsoncConfigIO
 from llm_rosetta_gateway.shims.sources import ShimLoadReport, ShimSourceStatus
+from _admin_app import fake_app
 
 
 def _manifest(connection: str) -> str:
@@ -93,7 +94,7 @@ def _request(
         total_shims=3 if source is not None else 0,
         rebuilt_at=123.0,
     )
-    app = SimpleNamespace(
+    app = fake_app(
         config_path=str(path),
         config_io=JsoncConfigIO(),
         gateway_config=SimpleNamespace(provider_shim_names={}),

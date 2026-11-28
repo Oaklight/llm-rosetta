@@ -26,6 +26,7 @@ from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.maintenance.startup import DeferredStartup
 from llm_rosetta_gateway.transport.provider_readiness import ProviderInitState
 from llm_rosetta_gateway.transport.token_refresh import reset_reactive_state
+from _admin_app import fake_app
 
 TYPED_TYPES = ("embeddings", "rerank", "decisions")
 
@@ -383,7 +384,7 @@ class TestTheAdminPayload:
         cfg.admin_session_idle_minutes = 30
         cfg.admin_session_remember_days = 30
         request = SimpleNamespace(
-            app=SimpleNamespace(
+            app=fake_app(
                 gateway_config=cfg,
                 auth_state=SimpleNamespace(admin_password=None),
             )
@@ -445,7 +446,7 @@ class TestTheTyped401Retry:
         return SimpleNamespace(
             json=lambda: body,
             headers={},
-            app=SimpleNamespace(
+            app=fake_app(
                 transport=transport, metrics=None, request_log=None, state=None
             ),
         )

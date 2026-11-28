@@ -16,6 +16,7 @@ from typing import Any
 
 from _moved_vendors import load_providers_with_moved
 from llm_rosetta.shims import load_providers_from_dir
+from _admin_app import fake_app
 
 # The vendors these tests read moved to contrib (#1660); their frozen copies
 # are registered for every test here.
@@ -115,7 +116,7 @@ class TestTheConfigPayload:
         config.admin_session_idle_minutes = 30
         config.admin_session_remember_days = 30
         request = SimpleNamespace(
-            app=SimpleNamespace(
+            app=fake_app(
                 gateway_config=config,
                 auth_state=SimpleNamespace(admin_password=None),
             )

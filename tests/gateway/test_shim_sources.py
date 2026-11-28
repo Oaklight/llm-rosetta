@@ -27,6 +27,7 @@ from llm_rosetta_gateway.shims._types import ShimLoadReport, ShimSourceStatus
 from llm_rosetta_gateway.shims.sources import check_source_updates
 from llm_rosetta.api import staging_registry
 from llm_rosetta.testing import restore_registry, snapshot_registry
+from _admin_app import fake_app
 
 
 @pytest.fixture(autouse=True)
@@ -174,7 +175,7 @@ class TestReportInstallation:
     def test_installing_a_report_drops_the_cached_verdicts(self):
         from llm_rosetta_gateway.admin.routes._shared import _install_shim_report
 
-        app = SimpleNamespace(
+        app = fake_app(
             shim_source_report="old-report",
             shim_source_signature="old-signature",
             shim_update_check={"sources": [{"location": "x"}], "checked_at": 1.0},
@@ -216,7 +217,7 @@ class TestReloadWiring:
     def test_the_reload_endpoint_drops_the_cached_verdicts(self, monkeypatch):
         from llm_rosetta_gateway.admin.routes.config import shims as route
 
-        app = SimpleNamespace(
+        app = fake_app(
             admin=GatewayAdminContext(),
             config_path="/tmp/config.jsonc",
             shim_source_report="old-report",
@@ -246,7 +247,7 @@ class TestReloadWiring:
         from llm_rosetta_gateway import ops as ops_module
         from llm_rosetta_gateway.shims import shim_sources as shim_sources_module
 
-        app = SimpleNamespace(
+        app = fake_app(
             shim_source_report="old-report",
             shim_source_signature="old-signature",
             shim_update_check={"sources": [], "checked_at": 1.0},
@@ -289,7 +290,7 @@ class TestCheckUpdatesRoute:
 
     @staticmethod
     def _request(*, report=None, config=None, body=None):
-        app = SimpleNamespace(
+        app = fake_app(
             shim_source_report=report,
             gateway_config=config,
             shim_update_check=None,
@@ -373,7 +374,7 @@ class TestCheckUpdatesRoute:
 
 class TestAdminHelpers:
     def test_status_payload_without_report(self):
-        request = SimpleNamespace(app=SimpleNamespace(shim_source_report=None))
+        request = SimpleNamespace(app=fake_app(shim_source_report=None))
         payload = _shim_status_payload(request)
         assert payload == {
             "sources": [],
@@ -384,7 +385,7 @@ class TestAdminHelpers:
 
     def test_status_payload_with_report(self):
         report = SimpleNamespace(to_dict=lambda: {"sources": [{"ok": True}]})
-        request = SimpleNamespace(app=SimpleNamespace(shim_source_report=report))
+        request = SimpleNamespace(app=fake_app(shim_source_report=report))
         assert _shim_status_payload(request) == {"sources": [{"ok": True}]}
 
     def test_validate_accepts_good_body(self, tmp_path: Path):

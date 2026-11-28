@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from llm_rosetta_gateway.admin.routes.config.payload import _effective_server_section
 from llm_rosetta_gateway.config import GatewayConfig
+from _admin_app import fake_app
 
 
 def _config(server: dict | None = None) -> GatewayConfig:
@@ -80,7 +81,7 @@ class TestTheEndpoint:
         cfg.admin_session_idle_minutes = 30
         cfg.admin_session_remember_days = 30
         request = SimpleNamespace(
-            app=SimpleNamespace(
+            app=fake_app(
                 gateway_config=cfg,
                 auth_state=SimpleNamespace(admin_password=None),
             )
