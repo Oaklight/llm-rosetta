@@ -38,6 +38,9 @@ _ROOT = (
 )
 _PASSED_ON = "<app passed on>"
 _ATTR_FUNCS = {"getattr", "setattr", "hasattr", "delattr"}
+#: ``app.route(...)`` registers a handler while the panel is mounted; it reads no
+#: state, so it is not a read.
+_MOUNTING = {"route"}
 
 #: ``(file relative to admin/, attribute)`` to how many times admin reads it.
 _APP_READS: dict[tuple[str, str], int] = {
@@ -48,7 +51,6 @@ _APP_READS: dict[tuple[str, str], int] = {
     ("__init__.py", "config_io"): 1,
     ("__init__.py", "config_path"): 1,
     ("__init__.py", "disabled_tabs"): 1,
-    ("__init__.py", "gateway_config"): 1,
     ("__init__.py", "jobs"): 1,
     ("__init__.py", "metrics"): 1,
     ("__init__.py", "ops_ctx"): 1,
@@ -56,7 +58,6 @@ _APP_READS: dict[tuple[str, str], int] = {
     ("__init__.py", "persistence"): 1,
     ("__init__.py", "profiler_state"): 1,
     ("__init__.py", "request_log"): 1,
-    ("routes/__init__.py", "route"): 91,
     ("routes/_shared.py", "<app passed on>"): 1,
     ("routes/_shared.py", "config_io"): 1,
     ("routes/_shared.py", "config_path"): 1,
@@ -70,7 +71,6 @@ _APP_READS: dict[tuple[str, str], int] = {
     ("routes/auth.py", "internal_token"): 1,
     ("routes/auth.py", "ops_ctx"): 3,
     ("routes/capture.py", "capture_state"): 6,
-    ("routes/config/__init__.py", "route"): 32,
     ("routes/config/extensions.py", "gateway_config"): 2,
     ("routes/config/extensions.py", "shim_source_report"): 2,
     ("routes/config/payload.py", "auth_state"): 1,
@@ -137,7 +137,6 @@ _APP_READS_FROZEN: dict[tuple[str, str], int] = {
     ("__init__.py", "config_io"): 1,
     ("__init__.py", "config_path"): 1,
     ("__init__.py", "disabled_tabs"): 1,
-    ("__init__.py", "gateway_config"): 1,
     ("__init__.py", "jobs"): 1,
     ("__init__.py", "metrics"): 1,
     ("__init__.py", "ops_ctx"): 1,
@@ -145,7 +144,6 @@ _APP_READS_FROZEN: dict[tuple[str, str], int] = {
     ("__init__.py", "persistence"): 1,
     ("__init__.py", "profiler_state"): 1,
     ("__init__.py", "request_log"): 1,
-    ("routes/__init__.py", "route"): 91,
     ("routes/_shared.py", "<app passed on>"): 1,
     ("routes/_shared.py", "config_io"): 1,
     ("routes/_shared.py", "config_path"): 1,
@@ -159,7 +157,6 @@ _APP_READS_FROZEN: dict[tuple[str, str], int] = {
     ("routes/auth.py", "internal_token"): 1,
     ("routes/auth.py", "ops_ctx"): 3,
     ("routes/capture.py", "capture_state"): 6,
-    ("routes/config/__init__.py", "route"): 32,
     ("routes/config/extensions.py", "gateway_config"): 2,
     ("routes/config/extensions.py", "shim_source_report"): 2,
     ("routes/config/payload.py", "auth_state"): 1,
@@ -253,7 +250,11 @@ def _app_reads() -> Counter[tuple[str, str]]:
         tree = ast.parse(path.read_text(), filename=str(path))
         named: set[int] = set()
         for node in ast.walk(tree):
-            if isinstance(node, ast.Attribute) and _is_app(node.value):
+            if (
+                isinstance(node, ast.Attribute)
+                and _is_app(node.value)
+                and node.attr not in _MOUNTING
+            ):
                 found[(rel, node.attr)] += 1
                 named.add(id(node.value))
             elif (

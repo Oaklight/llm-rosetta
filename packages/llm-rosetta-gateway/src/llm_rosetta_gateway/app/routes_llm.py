@@ -46,7 +46,6 @@ from ..proxy import (
 )
 from ..transport.provider_readiness import ProviderNotReady
 
-from . import _state
 
 logger = get_logger()
 
@@ -128,7 +127,8 @@ async def _proxy_handler(
     force_stream: bool = False,
 ) -> Response | StreamingResponse:
     """Shared handler for all proxy endpoints."""
-    assert _state._config is not None
+    config = request.app.gateway_config
+    assert config is not None
 
     async def _handle(
         request: Any, config: GatewayConfig
@@ -139,7 +139,7 @@ async def _proxy_handler(
 
     return await instrumented_handler(
         request,
-        _state._config,
+        config,
         _handle,
         source_format=source_provider,
         error_phase="conversion",

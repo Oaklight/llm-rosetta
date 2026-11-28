@@ -337,7 +337,6 @@ async def setup_admin(
 
         persistence.on_prune = _on_prune
 
-    app.gateway_config = config
     app.config_path = config_path
     app.config_io = config_io
     app.profiler_state = profiler_state

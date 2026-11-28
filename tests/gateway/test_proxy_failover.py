@@ -1210,7 +1210,6 @@ class TestTheRouteWiring:
         import llm_rosetta_gateway.app as app_module
         from llm_rosetta_gateway.proxy import lifecycle
         from llm_rosetta_gateway._vendor.httpserver import StreamingResponse
-        from llm_rosetta_gateway.app import _state
 
         config = _config()
         captured: dict[str, Any] = {}
@@ -1236,7 +1235,6 @@ class TestTheRouteWiring:
         monkeypatch.setattr(
             app_module.routes_llm, "handle_non_streaming", _fake_plain_handler
         )
-        monkeypatch.setattr(_state, "_config", config)
 
         ctx = lifecycle.LifecycleContext(
             config=config,

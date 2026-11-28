@@ -17,8 +17,6 @@ from ..observability.logging import get_logger
 from ..model_types import retired_type_message
 
 
-from . import _state
-
 logger = get_logger()
 
 
@@ -66,7 +64,8 @@ async def handle_list_models(request: Any) -> Response:
     * ``type=rerank`` — only rerank models
     * ``type=all`` or omitted — all model types
     """
-    assert _state._config is not None
+    config = request.app.gateway_config
+    assert config is not None
 
     # Parse optional type filter from query params
     type_filter, rejected = _type_filter(request)
@@ -77,11 +76,11 @@ async def handle_list_models(request: Any) -> Response:
 
     # LLM models (main pool)
     if type_filter is None or type_filter == "llm":
-        for name in _visible(sorted(_state._config.models.keys())):
-            model_route = _state._config.models[name]
+        for name in _visible(sorted(config.models.keys())):
+            model_route = config.models[name]
             provider_name = model_route.providers[0].name
-            api_standard = _state._config.provider_types.get(provider_name, "unknown")
-            capabilities = _state._config.model_capabilities.get(name, ["text"])
+            api_standard = config.provider_types.get(provider_name, "unknown")
+            capabilities = config.model_capabilities.get(name, ["text"])
             entry: dict[str, Any] = {
                 "id": name,
                 "object": "model",
@@ -102,9 +101,9 @@ async def handle_list_models(request: Any) -> Response:
 
     # Embedding models
     if type_filter is None or type_filter == "embeddings":
-        for name in _visible(sorted(_state._config.embeddings_models.keys())):
-            provider_name = _state._config.embeddings_models[name]
-            api_standard = _state._config.provider_types.get(provider_name, "unknown")
+        for name in _visible(sorted(config.embeddings_models.keys())):
+            provider_name = config.embeddings_models[name]
+            api_standard = config.provider_types.get(provider_name, "unknown")
             data.append(
                 {
                     "id": name,
@@ -121,9 +120,9 @@ async def handle_list_models(request: Any) -> Response:
 
     # Rerank models
     if type_filter is None or type_filter == "rerank":
-        for name in _visible(sorted(_state._config.rerank_models.keys())):
-            provider_name = _state._config.rerank_models[name]
-            api_standard = _state._config.provider_types.get(provider_name, "unknown")
+        for name in _visible(sorted(config.rerank_models.keys())):
+            provider_name = config.rerank_models[name]
+            api_standard = config.provider_types.get(provider_name, "unknown")
             data.append(
                 {
                     "id": name,
@@ -155,7 +154,8 @@ async def handle_list_models_google(request: Any) -> Response:
 
     Supports the same ``?type=`` filter as :func:`handle_list_models`.
     """
-    assert _state._config is not None
+    config = request.app.gateway_config
+    assert config is not None
 
     # Parse optional type filter from query params
     type_filter, rejected = _type_filter(request)
@@ -165,7 +165,7 @@ async def handle_list_models_google(request: Any) -> Response:
     models_list: list[dict[str, Any]] = []
 
     if type_filter is None or type_filter == "llm":
-        for name in _visible(sorted(_state._config.models.keys())):
+        for name in _visible(sorted(config.models.keys())):
             models_list.append(
                 {
                     "name": f"models/{name}",
@@ -178,7 +178,7 @@ async def handle_list_models_google(request: Any) -> Response:
             )
 
     if type_filter is None or type_filter == "embeddings":
-        for name in _visible(sorted(_state._config.embeddings_models.keys())):
+        for name in _visible(sorted(config.embeddings_models.keys())):
             models_list.append(
                 {
                     "name": f"models/{name}",
@@ -188,7 +188,7 @@ async def handle_list_models_google(request: Any) -> Response:
             )
 
     if type_filter is None or type_filter == "rerank":
-        for name in _visible(sorted(_state._config.rerank_models.keys())):
+        for name in _visible(sorted(config.rerank_models.keys())):
             models_list.append(
                 {
                     "name": f"models/{name}",

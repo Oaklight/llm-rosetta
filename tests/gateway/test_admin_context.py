@@ -143,7 +143,7 @@ class TestReloadConfig:
         return app
 
     @pytest.mark.asyncio
-    async def test_it_serves_the_new_config_from_both_homes(self, tmp_path):
+    async def test_it_serves_the_new_config(self, tmp_path):
         app = await self._app(tmp_path, _raw(tmp_path, "m-one", "m-two"))
         new = await app.admin.reload_config(str(tmp_path / "c.json"))
         assert app.admin.served_config() is new
@@ -226,3 +226,38 @@ class TestReloadConfig:
         app.config_io = None
         with pytest.raises(RuntimeError, match="ConfigIO"):
             await app.admin.reload_config(str(tmp_path / "c.json"))
+
+
+class TestTheServedConfigHasOneHome:
+    """The config an app serves is ``app.gateway_config``, nothing else (#1830 A1)."""
+
+    @pytest.mark.asyncio
+    async def test_create_app_puts_the_config_on_the_app(self, tmp_path):
+        config = GatewayConfig(_raw(tmp_path, "m-one"))
+        app: Any = await create_app(config)
+        assert app.gateway_config is config
+        assert app.admin.served_config() is config
+
+    @pytest.mark.asyncio
+    async def test_publish_replaces_it_for_the_routes_and_the_panel(self, tmp_path):
+        app: Any = await create_app(GatewayConfig(_raw(tmp_path, "m-one")))
+        new = GatewayConfig(_raw(tmp_path, "m-one", "m-two"))
+        app.admin.publish_config(new)
+        assert app.gateway_config is new
+        assert app.admin.served_config() is new
+
+    @pytest.mark.asyncio
+    async def test_two_apps_in_one_process_serve_their_own_config(self, tmp_path):
+        first: Any = await create_app(GatewayConfig(_raw(tmp_path, "m-one")))
+        second: Any = await create_app(GatewayConfig(_raw(tmp_path, "m-two")))
+        assert first.admin.served_config() is first.gateway_config
+        assert second.admin.served_config() is second.gateway_config
+        assert first.gateway_config is not second.gateway_config
+
+    def test_there_is_no_second_home(self):
+        import importlib.util
+
+        assert importlib.util.find_spec("llm_rosetta_gateway.app._state") is None
+
+    def test_an_adapter_with_no_app_serves_nothing(self):
+        assert GatewayAdminContext().served_config() is None

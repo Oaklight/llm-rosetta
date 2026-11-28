@@ -7,7 +7,6 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import llm_rosetta_gateway.app as app_module
-from llm_rosetta_gateway.app import _state
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse
 from llm_rosetta_gateway.middleware.headers import build_upstream_extra_headers
 from llm_rosetta.contracts.routing import ResolvedRoute
@@ -93,7 +92,6 @@ def test_proxy_handler_forwards_user_agent_to_non_streaming_proxy(monkeypatch):
         captured_headers.update(kwargs["extra_headers"])
         return JSONResponse({"ok": True}), {}
 
-    monkeypatch.setattr(_state, "_config", _Config())
     monkeypatch.setattr(
         app_module.routes_llm, "handle_non_streaming", _fake_handle_non_streaming
     )

@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 
-from ._state import set_config
 from .admin_context import GatewayAdminContext
 
 if TYPE_CHECKING:
@@ -444,7 +443,6 @@ async def create_app(
     from ..surface import check_core_surface
 
     check_core_surface()
-    set_config(config)
     ext = extensions or GatewayExtensions()
 
     if shim_source_report is None and load_shim_sources and config.shims:
@@ -487,6 +485,9 @@ async def create_app(
     # unchanged.  The signature is computed by the loader from the raw
     # section; the reload path hashes the same raw section, so the two are
     # comparable.  ``App`` does not declare these, so set them dynamically.
+    # The config the app serves has this one home; a reload replaces it through
+    # ``AdminContext.publish_config``.
+    setattr(app, "gateway_config", config)
     setattr(app, "shim_source_report", shim_source_report)
     setattr(app, "shim_source_signature", config.shims_signature)
 

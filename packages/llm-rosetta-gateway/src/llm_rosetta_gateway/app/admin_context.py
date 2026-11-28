@@ -7,7 +7,6 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
 from ..shims.extension_view import pick_release, update_report
-from . import _state
 
 if TYPE_CHECKING:
     from ..config import GatewayConfig
@@ -36,11 +35,11 @@ class GatewayAdminContext:
 
     def served_config(self) -> GatewayConfig | None:
         """Return the config the gateway serves, or ``None`` if none is set."""
-        return _state.get_config()
+        return getattr(self._app, "gateway_config", None)
 
     def publish_config(self, config: GatewayConfig) -> None:
         """Make *config* the one the route handlers read."""
-        _state.set_config(config)
+        self._app.gateway_config = config
 
     async def reload_config(
         self, config_path: str, *, force_shims: bool = False
@@ -111,7 +110,6 @@ class GatewayAdminContext:
             raw, maintenance=maintenance, config_path=config_path
         )
         self.publish_config(new_config)
-        app.gateway_config = new_config
 
         self._sync_auth(new_config)
 
