@@ -352,3 +352,59 @@ class TestTheServicesTheObservabilityRoutesRead:
         from llm_rosetta_gateway.admin_api import AdminServiceState
 
         assert isinstance(GatewayAdminContext(SimpleNamespace()), AdminServiceState)
+
+
+class TestTheStateTheSharedRoutesRead:
+    """``AdminRuntime`` paths and ``AdminShimSourceState``: the app's attribute, else the empty answer."""
+
+    @pytest.mark.parametrize("member", ["config_path", "config_io"])
+    def test_a_runtime_member_returns_what_the_app_holds(self, member):
+        marker = object()
+        app = SimpleNamespace(**{member: marker})
+        assert getattr(GatewayAdminContext(app), member)() is marker
+
+    @pytest.mark.parametrize("member", ["config_path", "config_io"])
+    def test_a_runtime_member_is_none_without_the_attribute(self, member):
+        assert getattr(GatewayAdminContext(SimpleNamespace()), member)() is None
+        assert getattr(GatewayAdminContext(), member)() is None
+
+    @pytest.mark.parametrize(
+        "member", ["shim_source_report", "shim_source_signature", "shim_update_check"]
+    )
+    def test_a_shim_source_member_returns_what_the_app_holds(self, member):
+        marker = object()
+        app = SimpleNamespace(**{member: marker})
+        assert getattr(GatewayAdminContext(app), member)() is marker
+        assert getattr(GatewayAdminContext(SimpleNamespace()), member)() is None
+
+    def test_installing_a_report_drops_the_verdicts_cached_for_the_old_one(self):
+        app = SimpleNamespace(shim_update_check={"stale": True})
+        context = GatewayAdminContext(app)
+
+        context.install_shim_report("report", "sig")
+
+        assert (context.shim_source_report(), context.shim_source_signature()) == (
+            "report",
+            "sig",
+        )
+        assert context.shim_update_check() is None
+
+    def test_the_update_verdicts_can_be_cached_and_dropped(self):
+        context = GatewayAdminContext(SimpleNamespace())
+
+        context.set_shim_update_check({"ok": 1})
+        assert context.shim_update_check() == {"ok": 1}
+        context.set_shim_update_check(None)
+        assert context.shim_update_check() is None
+
+    def test_the_warnings_are_a_copy_and_empty_when_none_were_recorded(self):
+        held = [{"provider": "p"}]
+        context = GatewayAdminContext(
+            SimpleNamespace(provider_validation_warnings=held)
+        )
+
+        assert context.provider_validation_warnings() == held
+        assert context.provider_validation_warnings() is not held
+        assert (
+            GatewayAdminContext(SimpleNamespace()).provider_validation_warnings() == []
+        )

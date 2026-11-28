@@ -44,14 +44,6 @@ _MOUNTING = {"route"}
 
 #: ``(file relative to admin/, attribute)`` to how many times admin reads it.
 _APP_READS: dict[tuple[str, str], int] = {
-    ("routes/_shared.py", "<app passed on>"): 1,
-    ("routes/_shared.py", "config_io"): 1,
-    ("routes/_shared.py", "config_path"): 1,
-    ("routes/_shared.py", "disabled_tabs"): 1,
-    ("routes/_shared.py", "provider_validation_warnings"): 1,
-    ("routes/_shared.py", "shim_source_report"): 1,
-    ("routes/_shared.py", "shim_source_signature"): 1,
-    ("routes/_shared.py", "shim_update_check"): 1,
     ("routes/config/extensions.py", "gateway_config"): 2,
     ("routes/config/extensions.py", "shim_source_report"): 2,
     ("routes/config/payload.py", "auth_state"): 1,
@@ -70,22 +62,11 @@ _APP_READS: dict[tuple[str, str], int] = {
     ("routes/config/shims.py", "shim_source_report"): 2,
     ("routes/config/shims.py", "shim_update_check"): 2,
     ("routes/config/upstream.py", "config"): 1,
-    ("routes/logos.py", "<app passed on>"): 2,
-    ("routes/logos.py", "config"): 1,
-    ("routes/updates.py", "config"): 1,
 }
 
 #: The counts when the rule was drawn.  Lower an entry when its reads migrate;
 #: never add one or raise a number.
 _APP_READS_FROZEN: dict[tuple[str, str], int] = {
-    ("routes/_shared.py", "<app passed on>"): 1,
-    ("routes/_shared.py", "config_io"): 1,
-    ("routes/_shared.py", "config_path"): 1,
-    ("routes/_shared.py", "disabled_tabs"): 1,
-    ("routes/_shared.py", "provider_validation_warnings"): 1,
-    ("routes/_shared.py", "shim_source_report"): 1,
-    ("routes/_shared.py", "shim_source_signature"): 1,
-    ("routes/_shared.py", "shim_update_check"): 1,
     ("routes/config/extensions.py", "gateway_config"): 2,
     ("routes/config/extensions.py", "shim_source_report"): 2,
     ("routes/config/payload.py", "auth_state"): 1,
@@ -104,9 +85,6 @@ _APP_READS_FROZEN: dict[tuple[str, str], int] = {
     ("routes/config/shims.py", "shim_source_report"): 2,
     ("routes/config/shims.py", "shim_update_check"): 2,
     ("routes/config/upstream.py", "config"): 1,
-    ("routes/logos.py", "<app passed on>"): 2,
-    ("routes/logos.py", "config"): 1,
-    ("routes/updates.py", "config"): 1,
 }
 
 

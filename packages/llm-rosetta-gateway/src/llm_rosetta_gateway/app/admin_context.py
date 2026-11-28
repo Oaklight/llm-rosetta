@@ -94,6 +94,12 @@ class _AppStateMembers:
     def deferred_startup(self) -> Any | None:
         return getattr(self._app, "deferred_startup", None)
 
+    def config_path(self) -> str | None:
+        return getattr(self._app, "config_path", None)
+
+    def config_io(self) -> Any | None:
+        return getattr(self._app, "config_io", None)
+
 
 class GatewayAdminContext(_AppStateMembers):
     """Serve the admin panel's needs from the gateway's own state.
@@ -614,3 +620,31 @@ class GatewayAdminContext(_AppStateMembers):
         """Whether an admin password protects the panel."""
         auth_state = getattr(self._app, "auth_state", None)
         return bool(getattr(auth_state, "admin_password", None))
+
+    # -- AdminShimSourceState -------------------------------------------------
+
+    def shim_source_report(self) -> Any | None:
+        """The report of the last shim-source apply."""
+        return getattr(self._app, "shim_source_report", None)
+
+    def shim_source_signature(self) -> str | None:
+        """The signature of the ``shims`` section that report came from."""
+        return getattr(self._app, "shim_source_signature", None)
+
+    def shim_update_check(self) -> Any | None:
+        """The cached update verdicts for the current report."""
+        return getattr(self._app, "shim_update_check", None)
+
+    def set_shim_update_check(self, payload: Any | None) -> None:
+        """Cache the update verdicts for the current report."""
+        self._app.shim_update_check = payload
+
+    def install_shim_report(self, report: Any, signature: str) -> None:
+        """Record a freshly applied report and drop the verdicts cached for the old one."""
+        self._app.shim_source_report = report
+        self._app.shim_source_signature = signature
+        self._app.shim_update_check = None
+
+    def provider_validation_warnings(self) -> list[Any]:
+        """The providers the last reload disabled."""
+        return list(getattr(self._app, "provider_validation_warnings", None) or [])

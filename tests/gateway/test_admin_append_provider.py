@@ -349,6 +349,8 @@ class TestBulkAddReportsAnIgnoredEntry:
         import json
         from types import SimpleNamespace
 
+        from _admin_app import attach_admin
+
         from llm_rosetta_gateway.config import JsoncConfigIO
 
         path = tmp_path / "config.json"
@@ -361,6 +363,7 @@ class TestBulkAddReportsAnIgnoredEntry:
             shim_source_signature=None,
             rate_limit_state=None,
         )
+        attach_admin(app)
         body = {"provider": "p", "models_append": ["broken"]}
         return SimpleNamespace(
             app=app,

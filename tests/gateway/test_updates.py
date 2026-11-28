@@ -334,7 +334,7 @@ def test_a_build_without_a_changelog_says_so(
 
 
 def _request(body: dict[str, Any] | None = None, config: Any = None) -> Any:
-    app = fake_app(config=config, ops_ctx=None)
+    app = fake_app(gateway_config=config, ops_ctx=None)
 
     def _json() -> dict[str, Any]:
         if body is None:

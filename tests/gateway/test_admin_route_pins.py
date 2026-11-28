@@ -1117,8 +1117,9 @@ async def test_get_updates_forwards_force_and_the_proxy(monkeypatch) -> None:
         return {"checked": True, "update": None}
 
     monkeypatch.setattr(updates, "check", check)
-    app = SimpleNamespace(config=SimpleNamespace(proxy="http://p:1", update_check=True))
-    app = fake_app(config=app.config)
+    app = fake_app(
+        gateway_config=SimpleNamespace(proxy="http://p:1", update_check=True)
+    )
 
     plain = await updates_routes.get_updates(_request(app, method="GET"))
     forced = await updates_routes.get_updates(
@@ -1167,7 +1168,7 @@ async def test_get_updates_disabled_skips_the_probe(monkeypatch) -> None:
         raise AssertionError("the probe must not run")
 
     monkeypatch.setattr(updates, "check", check)
-    app = fake_app(config=SimpleNamespace(update_check=False))
+    app = fake_app(gateway_config=SimpleNamespace(update_check=False))
 
     response = await updates_routes.get_updates(_request(app, method="GET"))
 
@@ -1280,7 +1281,7 @@ async def test_apply_update_records_the_version_it_installed(monkeypatch) -> Non
     monkeypatch.setattr(updates, "restart_process", lambda: restarts.append(1))
     ops_log = OpsLog()
     app = fake_app(
-        config=SimpleNamespace(update_check=True, self_update=True, proxy=None),
+        gateway_config=SimpleNamespace(update_check=True, self_update=True, proxy=None),
         ops_ctx=OpsContext(ops_log=ops_log),
     )
 
