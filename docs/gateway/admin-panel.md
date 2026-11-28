@@ -320,7 +320,7 @@ Embedding 模型只显示单一的 Test 按钮，因为只有一种测试适用�
 | API Key | `key_create`、`key_update`、`key_delete`、`key_rotate` | 密钥管理操作 |
 | 数据变更 | `data_cleared`、`data_cleanup`、`data_trimmed`、`data_vacuumed`、`data_rebuilt` | 数据库维护操作 |
 | 安全 | `password_changed`、`token_rotated`、`session_logout_all` | 认证和会话事件 |
-| 扩展 | `extension_cli_install` | 管理员安装了扩展声明的程序（扩展、程序、固定版本、结果；不含环境变量或安装输出） |
+| 扩展 | `extension_cli_install`、`extension_remove`、`extension_update` | 管理员安装了扩展声明的程序（扩展、程序、固定版本、结果；不含环境变量或安装输出） |
 | 健康 | `health_status_change` | 提供方健康状态变化 |
 
 #### 严重性级别

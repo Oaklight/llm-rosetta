@@ -199,6 +199,18 @@ llm-rosetta ext doctor claude               # external claude: ok 2.1.299
 | `claude` | `claude` | npm `@anthropic-ai/claude-code` | `2.1.299` | npm 支持的平台（Alpine 上选 musl 构建） |
 | `antigravity` | `agy` | release 归档 `agy_cli_<platform>.tar.gz` | `1.5.15` | `linux_x64_musl`、`linux_arm64_musl` |
 
+### 在管理页管理扩展 { #managing-from-the-panel }
+
+Shims 页用同一种方式显示每个已安装的扩展,不论它是怎么装进来的(管理页、`llm-rosetta ext install`、`shims.install`、手工放进去的文件夹,或镜像里的 pip 包)。**Sources** 视图每个扩展一行,写明版本、来源、提供的 shim 和外部程序。
+
+- **来源(origin)。** `origin: extensions directory` 表示文件夹在 `LLM_ROSETTA_EXTENSIONS_DIR` 里,面板可以更新和移除。`origin: image / pip` 表示由该目录之外的东西提供(镜像里的 pip 包),面板不能移除它,不显示“移除”按钮,并提示运行 `pip uninstall <包名>` 或重建镜像。`llm-rosetta ext list` 的 `SOURCE` 列说的是文件夹是*怎么被发现*的(entry point 或命名空间),不是怎么安装的。
+- **检查更新**会重新读取清单源,把每个已装扩展与源里发布的版本比较,显示当前版本和可用版本。读不到的源,或只能用缓存回答的源,会写在该行里,绝不显示成“已是最新”。只有检查发现更新的版本之后才出现**更新**。
+- **移除**会删除扩展、它安装的程序(`<tools>/<id>/`)及其入口链接。对话框在删除前列出每一个路径。共享的 Node.js(`<tools>/node/` 以及 `node`、`npm`、`npx` 链接)只有在没有其他 `<tools>/<id>/npm-<版本>/` 时才删除;否则保留,并列出仍在使用它的扩展。
+- **改用声明源**(`shims.install` 里有声明源选中了该扩展时)会移除扩展并重载 shim,由声明源安装它的版本;**安装此版本**安装上次检查发现的版本之一。声明源里的厂商已被某个已装扩展提供时会被跳过,这个跳过显示在该扩展的行上。
+- **外部程序跟着 shim 走。**Installed 厂商卡片列出其扩展需要的程序(`需要 claude ≥ 2.1.299 — 未安装`)并带安装按钮;provider 编辑器在所选 shim 需要的程序未就绪时显示同样的警告。shim 可以在 `provider.yaml` 里用 `needs:` 写明它需要的程序(扩展 `external:` 里的名字,或表示托管 Node.js 的 `node`);不写则需要扩展的全部程序,`needs: []` 表示一个都不需要。
+
+每次移除、更新和更换都会写入 ops 日志(`extension_remove`、`extension_update`),记录扩展 id、版本或被删除的路径以及结果。
+
 ## 网关与扩展 { #the-gateway-and-extensions }
 
 网关的 `shims` 配置段负责从扩展索引中选择要安装的内容以及要关闭的内容，见[外部 Shim 源](../gateway/configuration.md#external-shim-sources)。已安装的扩展无论 `shims.install` 是否仍选中它都会加载。core 已经注册的 shim 名称优先：不会被替换，扩展的状态会说明是哪个持有者占用了该名称。已迁出 core 的服务方，在配置里提到它的 shim 时会被自动安装（见[迁移到 0.14](migrating-to-0.14.md#moved-to-contrib)）。
