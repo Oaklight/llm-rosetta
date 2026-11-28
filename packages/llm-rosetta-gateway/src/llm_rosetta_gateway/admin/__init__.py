@@ -65,8 +65,9 @@ def apply_admin_theme(app: Any, css: str | None) -> None:
         app: The httpserver application.
         css: The operator's CSS override, or ``None``.
     """
-    parts = [getattr(app, "_admin_head_prefix", ""), _admin_theme_style(css)]
-    app.admin_custom_head = "\n".join(part for part in parts if part)
+    context = app_admin_context(app)
+    parts = [context.admin_head_prefix(), _admin_theme_style(css)]
+    context.set_admin_custom_head("\n".join(part for part in parts if part))
 
 
 async def setup_admin(
@@ -126,7 +127,7 @@ async def setup_admin(
             ", ".join(sorted(_VALID_TABS)),
         )
         disabled = disabled & _VALID_TABS
-    app.disabled_tabs = disabled
+    app_admin_context(app).set_disabled_tabs(disabled)
     await app_admin_context(app).start_services(
         config, config_path, config_io, data_dir
     )
@@ -157,7 +158,7 @@ async def setup_admin(
         parts.append(f"<script>window.__branding={serialized};</script>")
     # Kept so a config reload can rebuild the head with a new theme
     # override without repeating the disabled-tab and branding fragments.
-    app._admin_head_prefix = "\n".join(parts)
+    app_admin_context(app).set_admin_head_prefix("\n".join(parts))
     apply_admin_theme(app, getattr(config, "admin_custom_css", ""))
 
     # Record admin setup event (after all wiring is complete)

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-from types import SimpleNamespace
 from typing import Any
 
 from llm_rosetta_gateway.admin.routes.auth import admin_login, change_password
 from llm_rosetta_gateway.middleware.auth import AuthState
+from _admin_app import fake_app
 from llm_rosetta_gateway.middleware.request_context import (
     ProxyPolicy,
     TrustedProxies,
@@ -44,7 +44,7 @@ class _Request:
 def _app(*, trust_proxy: bool) -> Any:
     """An app whose policy trusts the test peer (or nobody)."""
     trusted = TrustedProxies.parse(["10.0.0.0/8"] if trust_proxy else None)
-    return SimpleNamespace(
+    return fake_app(
         auth_state=AuthState(None, None, admin_password=PASSWORD),
         proxy_policy=ProxyPolicy(trusted),
     )
@@ -78,7 +78,7 @@ def test_forwarded_for_names_the_client_when_proxy_trusted() -> None:
 
 
 def test_a_request_without_a_context_is_counted_under_one_key() -> None:
-    app = SimpleNamespace(auth_state=AuthState(None, None, admin_password=PASSWORD))
+    app = fake_app(auth_state=AuthState(None, None, admin_password=PASSWORD))
     statuses = [
         asyncio.run(admin_login(_Request(app, xff=f"203.0.113.{i}"))).status_code
         for i in range(6)

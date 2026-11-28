@@ -20,6 +20,7 @@ import pytest
 
 from llm_rosetta_gateway.admin import themes as registry
 from llm_rosetta_gateway.admin.routes.auth import serve_admin_html
+from _admin_app import fake_app
 
 ADMIN_DIR = Path(registry.__file__).parent
 THEME_DIR = ADMIN_DIR / "css" / "themes"
@@ -250,7 +251,7 @@ class TestThemeFiles:
 class TestInjection:
     @pytest.mark.asyncio
     async def test_the_page_receives_the_registry_once(self):
-        app = SimpleNamespace(admin_custom_head="")
+        app = fake_app(admin_custom_head="")
         response = await serve_admin_html(SimpleNamespace(app=app))
 
         html = (
@@ -267,7 +268,7 @@ class TestInjection:
 
     @pytest.mark.asyncio
     async def test_a_custom_head_does_not_duplicate_the_registry(self):
-        app = SimpleNamespace(admin_custom_head="<style>.downstream{}</style>")
+        app = fake_app(admin_custom_head="<style>.downstream{}</style>")
         response = await serve_admin_html(SimpleNamespace(app=app))
 
         html = (
@@ -300,7 +301,7 @@ class TestInjection:
             "hostile", "x</script><script>alert(1)</script>", "css/themes/hostile.css"
         )
         monkeypatch.setattr(registry, "THEMES", (*registry.THEMES, hostile))
-        app = SimpleNamespace(admin_custom_head="<style>.unique-hostile{}</style>")
+        app = fake_app(admin_custom_head="<style>.unique-hostile{}</style>")
 
         response = await serve_admin_html(SimpleNamespace(app=app))
         html = (

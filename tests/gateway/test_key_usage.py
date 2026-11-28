@@ -21,6 +21,7 @@ from llm_rosetta_gateway.middleware.auth import api_key_context_var
 from llm_rosetta_gateway.ops.base import OpsContext
 from llm_rosetta_gateway.ops.proxy import OpsProxyRequest
 from llm_rosetta_gateway.observability import PersistenceManager, RequestLog
+from _admin_app import fake_app
 
 
 def bucket_of(raw_key: str) -> str:
@@ -286,7 +287,7 @@ class TestProxyWiring:
 class TestGetKeyUsageRoute:
     @staticmethod
     def _request(keystore, persistence):
-        app = SimpleNamespace(keystore=keystore, persistence=persistence)
+        app = fake_app(keystore=keystore, persistence=persistence)
         return SimpleNamespace(app=app)
 
     async def test_zero_fills_keys_without_traffic(self, keystore, pm):

@@ -42,6 +42,7 @@ from llm_rosetta_gateway.observability.request_log import RequestLog
 from llm_rosetta_gateway.ops import OpsContext
 from llm_rosetta_gateway.ops.proxy import record_proxy_request
 from llm_rosetta_gateway.ops.rejected import record_read_rejection
+from _admin_app import fake_app
 
 
 class _Request:
@@ -293,7 +294,7 @@ def test_the_api_rate_limit_counts_the_resolved_client() -> None:
 
 def test_the_login_lockout_counts_the_resolved_client() -> None:
     state = AuthState(None, None, admin_password="right")
-    app = SimpleNamespace(auth_state=state)
+    app = fake_app(auth_state=state)
 
     async def attempt(forged: str) -> int:
         request = _Request(peer="203.0.113.9", headers={"X-Forwarded-For": forged})
@@ -309,7 +310,7 @@ def test_the_login_lockout_counts_the_resolved_client() -> None:
 
 def test_the_login_lockout_separates_clients_behind_a_trusted_proxy() -> None:
     state = AuthState(None, None, admin_password="right")
-    app = SimpleNamespace(auth_state=state)
+    app = fake_app(auth_state=state)
     trusted = _trusted("10.0.0.0/8")
 
     async def attempt(client: str) -> int:
@@ -328,7 +329,7 @@ def test_the_login_lockout_separates_clients_behind_a_trusted_proxy() -> None:
 
 def test_the_request_log_row_carries_the_resolved_client() -> None:
     log = RequestLog()
-    app = SimpleNamespace(ops_ctx=OpsContext(request_log=log))
+    app = fake_app(ops_ctx=OpsContext(request_log=log))
     hook = _hooked(_trusted("10.0.0.0/8"))
     request = _Request(peer="10.0.0.2", headers={"X-Forwarded-For": "198.51.100.7"})
 
@@ -358,7 +359,7 @@ def test_the_rejected_log_row_carries_the_resolved_client() -> None:
         async def add(self, entry: Any) -> None:
             rows.append(entry)
 
-    app = SimpleNamespace(
+    app = fake_app(
         ops_ctx=OpsContext(request_log=Log()),
         proxy_policy=ProxyPolicy(_trusted("10.0.0.0/8")),
     )

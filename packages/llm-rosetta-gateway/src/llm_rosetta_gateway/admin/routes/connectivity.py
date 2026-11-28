@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.admin_api import catalogue
+from llm_rosetta_gateway.admin_api import admin_context, catalogue
 
 from ._shared import _resolve_models_path
 
@@ -28,9 +28,7 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
     2. Each configured endpoint (models list, embedding, rerank)
     3. Double version prefix detection
     """
-    config = getattr(request.app, "config", None) or getattr(
-        request.app, "gateway_config", None
-    )
+    config = admin_context(request).served_config()
     if config is None:
         return JSONResponse({"error": "No config loaded"}, status_code=500)
 
@@ -154,7 +152,7 @@ async def _probe_agent_lane(
     # A transport is keyed by its owning extension too, which only the
     # provider's resolved lane knows.
     key = getattr(pinfo, "transport_key", lane) if pinfo is not None else lane
-    transport = (getattr(request.app, "transports", {}) or {}).get(key)
+    transport = admin_context(request).transports().get(key)
     lane_probe = getattr(transport, "probe_provider", None)
     if not callable(lane_probe) or pinfo is None:
         return JSONResponse(

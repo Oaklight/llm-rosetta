@@ -17,6 +17,7 @@ import pytest
 
 from llm_rosetta_gateway.admin.routes import logos
 from llm_rosetta_gateway.admin.routes.auth import serve_admin_html, serve_admin_static
+from _admin_app import fake_app
 
 
 class _Request:
@@ -33,7 +34,7 @@ class _Request:
         self.headers = headers or {}
         self.query_params = query or {}
         self.path_params = path_params or {}
-        self.app = app
+        self.app = app if app is not None else fake_app()
 
 
 @pytest.mark.asyncio

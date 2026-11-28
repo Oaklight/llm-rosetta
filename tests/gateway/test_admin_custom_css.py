@@ -18,6 +18,7 @@ from llm_rosetta_gateway.admin import _admin_theme_style, apply_admin_theme
 from llm_rosetta_gateway.admin.routes.config.settings import put_server_settings
 from llm_rosetta_gateway.config import GatewayConfig, JsoncConfigIO
 from llm_rosetta_gateway.config.settings import MAX_ADMIN_CUSTOM_CSS
+from _admin_app import fake_app
 
 
 def _config(server: dict | None = None) -> GatewayConfig:
@@ -53,7 +54,7 @@ class TestHeadInjection:
         assert "<\\/style>" in block
 
     def test_the_override_goes_after_any_downstream_fragment(self):
-        app = SimpleNamespace()
+        app = fake_app()
         app._admin_head_prefix = "<style>.downstream{}</style>"
 
         apply_admin_theme(app, ":root{--accent:red}")
@@ -62,7 +63,7 @@ class TestHeadInjection:
         assert html.index(".downstream") < html.index("admin-custom-css")
 
     def test_clearing_removes_the_block(self):
-        app = SimpleNamespace()
+        app = fake_app()
         app._admin_head_prefix = "<style>.downstream{}</style>"
         apply_admin_theme(app, ":root{--accent:red}")
 
@@ -74,7 +75,7 @@ class TestHeadInjection:
 def _request(tmp_path, raw: dict, body: dict) -> SimpleNamespace:
     path = tmp_path / "config.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
-    app = SimpleNamespace(
+    app = fake_app(
         config_path=str(path),
         config_io=JsoncConfigIO(),
         gateway_config=None,

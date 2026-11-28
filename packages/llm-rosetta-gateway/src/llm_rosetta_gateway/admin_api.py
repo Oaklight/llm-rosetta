@@ -28,10 +28,14 @@ if TYPE_CHECKING:
 __all__ = [
     "AdminCatalogue",
     "AdminAudit",
+    "AdminAuthState",
     "AdminConfigAccess",
     "AdminContext",
     "AdminJobs",
     "AdminMaintenance",
+    "AdminPanelState",
+    "AdminRuntime",
+    "AdminStores",
     "AdminExtensions",
     "AdminServices",
     "AdminShimSources",
@@ -683,15 +687,99 @@ class AdminExtensions(Protocol):
 
 
 @runtime_checkable
+class AdminPanelState(Protocol):
+    """The panel's own page state: its head fragment and the hidden tabs."""
+
+    def admin_custom_head(self) -> str:
+        """The HTML injected before ``</head>`` of the admin page (``""`` if none)."""
+        ...
+
+    def set_admin_custom_head(self, head: str) -> None:
+        """Replace the head the admin page is served with."""
+        ...
+
+    def admin_head_prefix(self) -> str:
+        """The head fragments built at setup, before the operator's CSS override."""
+        ...
+
+    def set_admin_head_prefix(self, prefix: str) -> None:
+        """Store the head fragments a theme rebuild starts from."""
+        ...
+
+    def disabled_tabs(self) -> Any:
+        """The tab identifiers hidden from the panel (a set; empty if none)."""
+        ...
+
+    def set_disabled_tabs(self, tabs: Any) -> None:
+        """Set the tab identifiers hidden from the panel."""
+        ...
+
+
+@runtime_checkable
+class AdminAuthState(Protocol):
+    """The admin sign-in state and the token the panel calls the gateway with."""
+
+    def auth_state(self) -> Any:
+        """The mutable auth state: sessions, the password, the login limiter."""
+        ...
+
+    def internal_token(self) -> str:
+        """The ephemeral token the panel's own test requests carry (``""`` if none)."""
+        ...
+
+    def set_internal_token(self, token: str) -> None:
+        """Make *token* the internal token (after a rotation)."""
+        ...
+
+
+@runtime_checkable
+class AdminStores(Protocol):
+    """The key store the admin routes read, and the usage report's short cache."""
+
+    def keystore(self) -> Any | None:
+        """The API key store, or ``None`` when none is configured."""
+        ...
+
+    def usage_payload_cache(self) -> Any:
+        """The cached per-key usage report as ``(monotonic time, payload)``, or ``None``."""
+        ...
+
+    def set_usage_payload_cache(self, value: Any) -> None:
+        """Store the per-key usage report with the time it was built."""
+        ...
+
+
+@runtime_checkable
+class AdminRuntime(Protocol):
+    """What the running process offers the panel: where it listens and its lanes."""
+
+    def bind_address(self) -> tuple[str, int]:
+        """The host and port the gateway listens on (``127.0.0.1``, ``28765`` by default)."""
+        ...
+
+    def transports(self) -> dict[str, Any]:
+        """The non-HTTP transports by the name a provider declares."""
+        ...
+
+    def deferred_startup(self) -> Any | None:
+        """The deferred-startup controller, or ``None`` when startup was not deferred."""
+        ...
+
+
+@runtime_checkable
 class AdminContext(
     AdminAudit,
+    AdminAuthState,
     AdminConfigAccess,
     AdminExtensions,
     AdminJobs,
     AdminMaintenance,
+    AdminPanelState,
+    AdminRuntime,
     AdminServices,
     AdminServiceState,
     AdminShimSources,
+    AdminStores,
     Protocol,
 ):
     """Everything the admin panel may ask of the running gateway.

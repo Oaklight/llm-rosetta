@@ -19,6 +19,7 @@ from llm_rosetta_gateway._vendor.httpserver import Response
 from llm_rosetta_gateway.admin.routes.auth import _set_session_cookie, admin_check
 from llm_rosetta_gateway.admin.routes.config.settings import put_server_settings
 from llm_rosetta_gateway.config import GatewayConfig, JsoncConfigIO
+from _admin_app import fake_app
 from llm_rosetta_gateway.middleware.auth import (
     ADMIN_COOKIE_NAME,
     DEFAULT_SESSION_IDLE_MINUTES,
@@ -154,7 +155,7 @@ class TestAuthCheck:
     async def test_reports_the_lifetimes(self):
         state = _state(session_idle_minutes=15, session_remember_days=7)
         state.admin_password = "pw"
-        request = SimpleNamespace(app=SimpleNamespace(auth_state=state), cookies={})
+        request = SimpleNamespace(app=fake_app(auth_state=state), cookies={})
 
         payload = json.loads((await admin_check(request)).body)
 
@@ -174,9 +175,7 @@ class TestAuthCheck:
         remembered = state.create_session(remember=True)
 
         async def _ask(cookies):
-            request = SimpleNamespace(
-                app=SimpleNamespace(auth_state=state), cookies=cookies
-            )
+            request = SimpleNamespace(app=fake_app(auth_state=state), cookies=cookies)
             return json.loads((await admin_check(request)).body)
 
         assert (await _ask({ADMIN_COOKIE_NAME: plain}))["remembered"] is False
@@ -188,7 +187,7 @@ class TestAuthCheck:
 def _request(tmp_path, raw: dict, body: dict) -> SimpleNamespace:
     path = tmp_path / "config.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
-    app = SimpleNamespace(
+    app = fake_app(
         config_path=str(path),
         config_io=JsoncConfigIO(),
         gateway_config=None,

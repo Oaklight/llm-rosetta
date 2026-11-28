@@ -18,7 +18,7 @@ import json
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.admin_api import catalogue
+from llm_rosetta_gateway.admin_api import admin_context, catalogue
 
 from ._shared import exchange_field_text, exchange_fields, parse_json_body
 from .config.payload import _get_gateway_config
@@ -399,8 +399,8 @@ async def test_provider_credential(request: Any, name: str) -> Response:
         return _error(exc)
 
     lane = getattr(pinfo, "transport", "http") or "http"
-    transport = (getattr(request.app, "transports", {}) or {}).get(
-        getattr(pinfo, "transport_key", lane)
+    transport = (
+        admin_context(request).transports().get(getattr(pinfo, "transport_key", lane))
     )
     lane_probe = getattr(transport, "probe_provider", None)
     if lane != "http" and callable(lane_probe):
@@ -597,7 +597,7 @@ async def delete_provider_credential(request: Any, name: str) -> Response:
     await _reseed(pinfo)
     removed = bool(exchange.needs_interactive_setup(pinfo.auth_context))
     if removed:
-        deferred = getattr(request.app, "deferred_startup", None)
+        deferred = admin_context(request).deferred_startup()
         deactivate = getattr(deferred, "provider_credential_removed", None)
         if deactivate is not None:
             await deactivate(name, pinfo)
@@ -624,7 +624,7 @@ async def _activate_after_reseed(
     """Notify the application lifecycle when a credential became usable."""
     if error is not None:
         return
-    deferred = getattr(request.app, "deferred_startup", None)
+    deferred = admin_context(request).deferred_startup()
     activate = getattr(deferred, "provider_credential_ready", None)
     if activate is not None:
         await activate(name, pinfo)
