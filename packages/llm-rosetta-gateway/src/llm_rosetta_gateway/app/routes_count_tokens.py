@@ -46,9 +46,7 @@ from ..observability.logging import get_logger
 from ..middleware.auth import api_key_context_var
 from ..middleware.headers import build_upstream_extra_headers, get_request_id
 from ..proxy import error_response_for_source
-from ..proxy.errors import note_transport_refusal
-from ..proxy.failover import attempted_lane
-from ..quota.service import note_upstream_success
+from ..proxy.attempt import UpstreamAttempt, attempt_upstream
 from ..transport import UpstreamConnectionError, UpstreamTimeoutError
 
 from . import _state
@@ -72,10 +70,8 @@ COUNT_TOKENS_PATH = "/v1/messages/count_tokens"
 
 def _transport_failure(
     request_id: str,
-    provider_info: Any,
     exc: UpstreamConnectionError,
-    config: GatewayConfig,
-    lane: str,
+    attempt: UpstreamAttempt,
 ) -> tuple[int, str, Response]:
     """Count a missed connection on its lane, and build the answer to send.
 
@@ -88,11 +84,7 @@ def _transport_failure(
         ``(status, detail, response)``, so the caller has one exit for the
         request ledger.
     """
-    note_transport_refusal(
-        provider_info,
-        rate_limit=getattr(config, "routing_rate_limit", None),
-        lane=lane,
-    )
+    attempt.unreachable()
     if isinstance(exc, UpstreamTimeoutError):
         detail = f"Upstream timeout: {exc}"
         return 504, detail, _error(request_id, 504, detail)
@@ -253,7 +245,9 @@ async def handle_messages_count_tokens(request: Any, config: GatewayConfig) -> R
     upstream_model = route.upstream_model or model
     # The lane this attempt is counted under, the same key the chat proxy
     # uses: a transport failure is evidence about one lane.
-    lane = attempted_lane(selection, route, model)
+    attempt = attempt_upstream(
+        config, provider_info, route=route, model=model, selection=selection
+    )
     upstream_body = dict(body)
     upstream_body["model"] = upstream_model
 
@@ -290,11 +284,11 @@ async def handle_messages_count_tokens(request: Any, config: GatewayConfig) -> R
                 (error_detail or "")[:200],
             )
         if not resp.is_error:
-            note_upstream_success(provider_info, lane=lane)
+            attempt.served()
         return _relay(resp, request_id)
     except UpstreamConnectionError as exc:
         status_code, error_detail, response = _transport_failure(
-            request_id, provider_info, exc, config, lane
+            request_id, exc, attempt
         )
         return response
     finally:

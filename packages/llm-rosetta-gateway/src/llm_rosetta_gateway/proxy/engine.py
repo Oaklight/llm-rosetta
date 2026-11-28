@@ -37,11 +37,10 @@ from .errors import (
     connection_refusal_decision,
     decide_on_refusal,
     error_response_for_source,
-    note_upstream_success,
 )
+from .attempt import attempt_upstream
 from .failover import (
     FailoverBudget,
-    attempted_lane,
     prepare_failover,
     record_failover,
 )
@@ -147,6 +146,13 @@ async def _connection_failover(
         The attempt's response and merged profile, or ``None`` when the model
         has not opted in or nothing else can serve.
     """
+    attempt = attempt_upstream(
+        config,
+        provider_info,
+        route=route,
+        model=selection.model,
+        selection=selection,
+    )
     return await _failover_response(
         config,
         selection,
@@ -155,8 +161,8 @@ async def _connection_failover(
         decision=connection_refusal_decision(
             provider_info,
             exc,
-            rate_limit=getattr(config, "routing_rate_limit", None),
-            lane=attempted_lane(selection, route, selection.model),
+            rate_limit=attempt.rate_limit,
+            lane=attempt.lane,
         ),
         transport=transport,
         metadata_store=metadata_store,
@@ -367,6 +373,13 @@ async def _non_streaming_from_stream(  # noqa: C901 - one branch per refusal kin
     upstream_url = provider_info.upstream_url(model, stream=True)
     stream = None
     error_text = ""
+    attempt = attempt_upstream(
+        config,
+        provider_info,
+        route=route,
+        model=selection.model if selection else model,
+        selection=selection,
+    )
     for _attempt in range(2):
         stream = await transport.send_streaming(
             provider_info, upstream_url, target_body, extra_headers=extra_headers
@@ -375,12 +388,7 @@ async def _non_streaming_from_stream(  # noqa: C901 - one branch per refusal kin
             from ..quota.service import clear_upstream_rate_limit
 
             clear_upstream_rate_limit(provider_info)
-            note_upstream_success(
-                provider_info,
-                lane=attempted_lane(
-                    selection, route, selection.model if selection else model
-                ),
-            )
+            attempt.served()
             break
         error_text = await stream.read_error()
         status = stream.status_code
@@ -393,10 +401,8 @@ async def _non_streaming_from_stream(  # noqa: C901 - one branch per refusal kin
             status,
             error_text,
             route.source_provider,
-            rate_limit=getattr(config, "routing_rate_limit", None),
-            lane=attempted_lane(
-                selection, route, selection.model if selection else model
-            ),
+            rate_limit=attempt.rate_limit,
+            lane=attempt.lane,
         )
         if decision.action is RefusalAction.RETURN:
             assert decision.response is not None
@@ -604,6 +610,13 @@ async def handle_non_streaming(  # noqa: C901
     # reactively refresh the token and retry once.
     upstream_url = provider_info.upstream_url(model)
     resp = None
+    attempt = attempt_upstream(
+        config,
+        provider_info,
+        route=route,
+        model=selection.model,
+        selection=selection,
+    )
     for _attempt in range(2):
         t_upstream = time.perf_counter()
         try:
@@ -644,8 +657,8 @@ async def handle_non_streaming(  # noqa: C901
             resp.status_code,
             resp.error_text,
             route.source_provider,
-            rate_limit=getattr(config, "routing_rate_limit", None),
-            lane=attempted_lane(selection, route, selection.model),
+            rate_limit=attempt.rate_limit,
+            lane=attempt.lane,
         )
         if decision.action is RefusalAction.RETURN:
             assert decision.response is not None
@@ -687,9 +700,7 @@ async def handle_non_streaming(  # noqa: C901
         from ..quota.service import clear_upstream_rate_limit
 
         clear_upstream_rate_limit(provider_info)
-        note_upstream_success(
-            provider_info, lane=attempted_lane(selection, route, selection.model)
-        )
+        attempt.served()
 
     # Check for upstream errors (HTTP 4xx/5xx) or soft-errors (HTTP 200
     # with an error embedded in the body, e.g. Argo auth warnings).
