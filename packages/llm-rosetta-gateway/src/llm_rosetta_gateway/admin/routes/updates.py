@@ -23,7 +23,7 @@ _install_lock = asyncio.Lock()
 
 
 def _config(request: Any) -> Any:
-    return getattr(request.app, "config", None)
+    return admin_context(request).served_config()
 
 
 async def get_updates(request: Any) -> Response:

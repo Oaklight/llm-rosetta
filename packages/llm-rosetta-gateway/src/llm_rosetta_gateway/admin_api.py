@@ -765,6 +765,43 @@ class AdminRuntime(Protocol):
         """The deferred-startup controller, or ``None`` when startup was not deferred."""
         ...
 
+    def config_path(self) -> str | None:
+        """The config file this gateway was started from, or ``None`` when it has none."""
+        ...
+
+    def config_io(self) -> Any | None:
+        """The config reader and writer (``ConfigIO``), or ``None`` when none is set."""
+        ...
+
+
+@runtime_checkable
+class AdminShimSourceState(Protocol):
+    """The shim-source report the gateway holds, and what the last reload found wrong."""
+
+    def shim_source_report(self) -> Any | None:
+        """The report of the last shim-source apply, or ``None`` before one ran."""
+        ...
+
+    def shim_source_signature(self) -> str | None:
+        """The signature of the ``shims`` section that report was built from."""
+        ...
+
+    def shim_update_check(self) -> Any | None:
+        """The cached update verdicts for that report, or ``None`` when none are held."""
+        ...
+
+    def set_shim_update_check(self, payload: Any | None) -> None:
+        """Cache the update verdicts for the current report, or drop them with ``None``."""
+        ...
+
+    def install_shim_report(self, report: Any, signature: str) -> None:
+        """Record a freshly applied report; the verdicts cached for the old one are dropped."""
+        ...
+
+    def provider_validation_warnings(self) -> list[Any]:
+        """The providers the last reload disabled, with the reason for each."""
+        ...
+
 
 @runtime_checkable
 class AdminContext(
@@ -779,6 +816,7 @@ class AdminContext(
     AdminServices,
     AdminServiceState,
     AdminShimSources,
+    AdminShimSourceState,
     AdminStores,
     Protocol,
 ):

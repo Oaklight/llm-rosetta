@@ -148,7 +148,7 @@ def _guard(tab_id: str, handler: Any) -> Any:
 
     @functools.wraps(handler)
     async def _guarded(request: Any, **kw: Any) -> Any:
-        if tab_id in getattr(request.app, "disabled_tabs", ()):
+        if tab_id in admin_context(request).disabled_tabs():
             return JSONResponse(
                 {"error": "Tab disabled", "disabled": True}, status_code=404
             )
@@ -273,7 +273,7 @@ async def config_mutate(
     # Reload happens outside the lock
     try:
         ctx.new_config = await _reload_gateway_config(request, config_path)
-        ctx.warnings = list(getattr(request.app, "provider_validation_warnings", []))
+        ctx.warnings = admin_context(request).provider_validation_warnings()
     except Exception as exc:
         ctx.error = JSONResponse(
             {
@@ -371,7 +371,7 @@ def _sanitize_server_section(server: dict[str, Any]) -> dict[str, Any]:
 
 def _get_config_path(request: Any) -> str:
     """Return the config file path stored on the app object."""
-    path = getattr(request.app, "config_path", None)
+    path = admin_context(request).config_path()
     if path is None:
         raise RuntimeError("No config file path available")
     return path
@@ -379,7 +379,7 @@ def _get_config_path(request: Any) -> str:
 
 def _get_config_io(request: Any) -> ConfigIO:
     """Return the :class:`ConfigIO` adapter stored on the app object."""
-    io = getattr(request.app, "config_io", None)
+    io = admin_context(request).config_io()
     if io is None:
         raise RuntimeError("No ConfigIO adapter configured on this application")
     return io
@@ -391,9 +391,7 @@ def _install_shim_report(request: Any, report: Any, signature: str) -> None:
     The update verdicts cached on ``shim_update_check`` describe the previous
     report — which pinned other commits — so they are dropped with it.
     """
-    request.app.shim_source_report = report
-    request.app.shim_source_signature = signature
-    request.app.shim_update_check = None
+    admin_context(request).install_shim_report(report, signature)
 
 
 async def _reload_gateway_config(
@@ -404,13 +402,13 @@ async def _reload_gateway_config(
     The reload itself is the gateway's (``AdminContext.reload_config``); the
     theme is admin's own, so it is applied here.
     """
-    from .. import apply_admin_theme
+    from .. import apply_theme
 
     new_config = await admin_context(request).reload_config(
         config_path, force_shims=force_shims
     )
     # A theme saved from the admin panel must reach the next page load.
-    apply_admin_theme(request.app, getattr(new_config, "admin_custom_css", ""))
+    apply_theme(admin_context(request), getattr(new_config, "admin_custom_css", ""))
     return new_config
 
 

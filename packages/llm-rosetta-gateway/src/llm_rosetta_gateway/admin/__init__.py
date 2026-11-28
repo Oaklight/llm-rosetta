@@ -9,11 +9,12 @@ from typing import TYPE_CHECKING, Any
 from ..admin_api import app_admin_context
 
 if TYPE_CHECKING:
-    from ..admin_api import ConfigIO, GatewayConfig
+    from ..admin_api import AdminContext, ConfigIO, GatewayConfig
 
 __all__ = [
     "setup_admin",
     "apply_admin_theme",
+    "apply_theme",
 ]
 
 logger = logging.getLogger("llm-rosetta-gateway")
@@ -65,7 +66,11 @@ def apply_admin_theme(app: Any, css: str | None) -> None:
         app: The httpserver application.
         css: The operator's CSS override, or ``None``.
     """
-    context = app_admin_context(app)
+    apply_theme(app_admin_context(app), css)
+
+
+def apply_theme(context: AdminContext, css: str | None) -> None:
+    """Rebuild the custom head held by *context* from its prefix and *css*."""
     parts = [context.admin_head_prefix(), _admin_theme_style(css)]
     context.set_admin_custom_head("\n".join(part for part in parts if part))
 

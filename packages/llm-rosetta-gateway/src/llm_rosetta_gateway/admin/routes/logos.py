@@ -20,7 +20,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.admin_api import catalogue
+from llm_rosetta_gateway.admin_api import admin_context, catalogue
 
 from ._shared import _qp
 
@@ -40,10 +40,9 @@ _MAX_BYTES = 512 * 1024
 _cache: dict[str, tuple[bytes, str, float]] = {}
 
 
-def _configured_logo_hosts(app: Any) -> set[str]:
+def _configured_logo_hosts(config: Any) -> set[str]:
     """Every host the configured provider entries name in their ``logo``."""
     hosts: set[str] = set()
-    config = getattr(app, "config", None)
     raw = getattr(config, "_raw_providers", None) if config is not None else None
     for entry in (raw or {}).values():
         logo = (entry or {}).get("logo") if isinstance(entry, dict) else None
@@ -54,11 +53,11 @@ def _configured_logo_hosts(app: Any) -> set[str]:
     return hosts
 
 
-def _allowed(src: str, app: Any) -> bool:
+def _allowed(src: str, config: Any) -> bool:
     parsed = urlparse(src)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         return False
-    return parsed.hostname in _BUILTIN_HOSTS | _configured_logo_hosts(app)
+    return parsed.hostname in _BUILTIN_HOSTS | _configured_logo_hosts(config)
 
 
 async def get_logo(request: Any) -> Response:
@@ -69,7 +68,7 @@ async def get_logo(request: Any) -> Response:
     src = (_qp(request, "src", "") or "").strip()
     if not src:
         return JSONResponse({"error": "src is required"}, status_code=400)
-    if not _allowed(src, request.app):
+    if not _allowed(src, admin_context(request).served_config()):
         return JSONResponse(
             {"error": "That host is not a logo source"}, status_code=403
         )
@@ -95,7 +94,7 @@ async def get_logo(request: Any) -> Response:
     # The allow-list has to hold for the URL the bytes came from, not the one
     # the caller asked for: an allowed host that redirects is still a door to
     # every host this gateway cannot name (#1522 review).
-    if not _allowed(answer.url, request.app):
+    if not _allowed(answer.url, admin_context(request).served_config()):
         return JSONResponse(
             {"error": "That host is not a logo source"}, status_code=403
         )

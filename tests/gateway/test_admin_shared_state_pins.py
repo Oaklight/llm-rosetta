@@ -145,7 +145,7 @@ class TestTheLogoSources:
         config = SimpleNamespace(
             _raw_providers={"p": {"logo": "https://cdn.example.org/p.svg"}}
         )
-        app = fake_app(config=config)
+        app = fake_app(gateway_config=config)
 
         response = await logos.get_logo(
             _request(app, src="https://cdn.example.org/p.svg")
@@ -159,7 +159,7 @@ class TestTheLogoSources:
         config = SimpleNamespace(
             _raw_providers={"p": {"logo": "https://cdn.example.org/p.svg"}}
         )
-        app = fake_app(config=config)
+        app = fake_app(gateway_config=config)
 
         response = await logos.get_logo(
             _request(app, src="https://elsewhere.example.net/p.svg")
@@ -239,36 +239,8 @@ class TestAnAllowedHostThatRedirects:
 class TestTheUpdateSwitch:
     @pytest.mark.asyncio
     async def test_a_config_that_turns_the_check_off_answers_disabled(self):
-        app = fake_app(config=SimpleNamespace(update_check=False))
-
-        response = await updates.get_updates(_request(app))
-
-        assert json.loads(response.body) == {"checked": False, "reason": "disabled"}
-
-
-class TestTheConfigAnAppServes:
-    """A running gateway keeps its config on ``gateway_config``; nothing sets ``config``."""
-
-    @pytest.mark.asyncio
-    async def test_the_update_switch_is_not_read_from_the_served_config(self):
         app = fake_app(gateway_config=SimpleNamespace(update_check=False))
 
         response = await updates.get_updates(_request(app))
 
-        assert json.loads(response.body) != {"checked": False, "reason": "disabled"}
-
-    @pytest.mark.asyncio
-    async def test_a_logo_host_the_served_config_names_is_not_a_source(
-        self, monkeypatch
-    ):
-        monkeypatch.setattr(logos, "catalogue", lambda: _Offline())
-        config = SimpleNamespace(
-            _raw_providers={"p": {"logo": "https://cdn.example.org/p.svg"}}
-        )
-        app = fake_app(gateway_config=config)
-
-        response = await logos.get_logo(
-            _request(app, src="https://cdn.example.org/p.svg")
-        )
-
-        assert response.status_code == 403
+        assert json.loads(response.body) == {"checked": False, "reason": "disabled"}
