@@ -311,6 +311,7 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
         "ops",
         "pipelines",
         "proxy",
+        "quota",
         "routing",
         "shims",
         "surface",

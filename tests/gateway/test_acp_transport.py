@@ -24,6 +24,7 @@ from typing import Any
 
 import pytest
 
+from llm_rosetta_gateway.quota.lane_allowance import LaneAllowanceStore
 from llm_rosetta_gateway.transport.acp import AcpTransport
 from llm_rosetta_gateway.transport.acp.ledger import (
     AcpSessionLedger,
@@ -481,6 +482,10 @@ FAKE_AGENT = textwrap.dedent(
 )
 
 
+#: The store every lane of these tests reports to, as the app's would.
+LANES = LaneAllowanceStore()
+
+
 def _provider(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Any,
@@ -540,6 +545,7 @@ def _provider(
         acp_processes=processes,
         session_header=session_header,
     )
+    provider.lane_allowance = LANES
     return provider.with_acp_conversation(conversation)
 
 
@@ -597,15 +603,13 @@ class TestTheStream:
     """What one turn yields, chunk by chunk."""
 
     async def test_a_turn_streams_text_thought_and_a_stop(self, monkeypatch, tmp_path):
-        from llm_rosetta_gateway.transport.acp.quota import lanes_reading
-
         transport = AcpTransport()
         provider = _provider(monkeypatch, tmp_path, "ok")
         try:
             stream = await transport.send_streaming(provider, "", TURN)
             assert stream.status_code == 200
             chunks = [chunk async for chunk in stream]
-            reading = lanes_reading(provider)
+            reading = provider.lane_reading()
         finally:
             await transport.close()
         kinds = [chunk["type"] for chunk in chunks]
@@ -2544,11 +2548,9 @@ class TestTheAllowanceAnAgentReports:
 
     @pytest.fixture(autouse=True)
     def _no_reading_from_an_earlier_test(self):
-        from llm_rosetta_gateway.transport.acp.quota import clear_lane_readings
-
-        clear_lane_readings()
+        LANES.clear()
         yield
-        clear_lane_readings()
+        LANES.clear()
 
     async def test_a_turn_reaches_the_quota_payload_of_its_lane(
         self, monkeypatch, tmp_path
@@ -2574,8 +2576,6 @@ class TestTheAllowanceAnAgentReports:
         self, monkeypatch, tmp_path
     ):
         """A config reload builds a new transport; the account's windows stay."""
-        from llm_rosetta_gateway.transport.acp.quota import lanes_reading
-
         first = AcpTransport()
         provider = _provider(monkeypatch, tmp_path, "ok")
         try:
@@ -2585,7 +2585,7 @@ class TestTheAllowanceAnAgentReports:
             await first.close()
         second = AcpTransport()
         try:
-            reading = lanes_reading(provider)
+            reading = provider.lane_reading()
         finally:
             await second.close()
         assert reading is not None
@@ -2644,10 +2644,8 @@ class TestTheAllowanceAnAgentReports:
         assert "usage_update" in kinds
         assert all(lane is provider for _, lane in sink.recorded)
         assert provider.lane_reading() == "the sink's reading"
-        # The process store was not touched.
-        from llm_rosetta_gateway.transport.acp.quota import lanes_reading
-
-        assert lanes_reading(provider) is None
+        # The store the lane was bound to before was not touched.
+        assert LANES.reading(provider) is None
 
     def test_a_request_scoped_clone_keeps_the_sink(self, monkeypatch, tmp_path):
         provider = _provider(monkeypatch, tmp_path, "ok")

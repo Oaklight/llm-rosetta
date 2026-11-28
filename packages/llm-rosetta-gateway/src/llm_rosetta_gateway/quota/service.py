@@ -36,6 +36,7 @@ from llm_rosetta_gateway.observability.sanitize import scrub_credential_patterns
 # ``quota.allowance.provider_spent`` flips it.  A test that patches the facade
 # and asserts on the routing snapshot would be green for the wrong reason;
 # patch the defining module instead.
+from ..transport.acp.usage import ACP_QUOTA_PROBE
 from ._common import provider_config_key  # noqa: F401
 from .allowance import (  # noqa: F401
     READING_MAX_AGE_SECONDS,
@@ -49,6 +50,8 @@ from .allowance import (  # noqa: F401
     reading_max_age,
     routing_facts,
 )
+from .lane_allowance import LaneAllowanceStore, lane_credential
+from .lane_command import refresh_local
 from .models import (
     STATUS_ERROR,
     STATUS_OK,
@@ -399,31 +402,23 @@ async def _lane_quota_payload(
     refresh was asked for.  Its failure is stored too, so a broken command is
     not rerun on every card open.
     """
-    from ..transport.acp.quota import (
-        ACP_QUOTA_PROBE,
-        STATUS_ERROR,
-        lane_credential,
-        lane_lock,
-        lanes_reading,
-        refresh_local,
-    )
-
     credential = lane_credential(pinfo)
     local_argv = tuple(getattr(pinfo, "quota_local_argv", ()) or ())
     probe = getattr(pinfo, "quota_probe_impl", None)
     refreshed = False
     warning: str | None = None
-    reading = lanes_reading(pinfo)
+    store: LaneAllowanceStore | None = getattr(pinfo, "lane_allowance", None)
+    reading = store.reading(pinfo) if store is not None else None
     if local_argv and probe is None:
         warning = (
             "quota.local is declared without a probe to decode it; "
             "set quota.probe on this entry or in its shim"
         )
-    elif local_argv:
+    elif local_argv and store is not None:
         # One command per profile at a time: two cards, or the poll and a
         # card, would otherwise run the vendor CLI against one profile folder.
-        async with lane_lock(pinfo):
-            reading = lanes_reading(pinfo)
+        async with store.lock(pinfo):
+            reading = store.reading(pinfo)
             fresh = (
                 reading is not None
                 and not force
@@ -431,13 +426,14 @@ async def _lane_quota_payload(
             )
             if not fresh:
                 result = await refresh_local(
+                    store,
                     pinfo,
                     probe,
                     local_argv,
                     getattr(pinfo, "quota_local_env", None),
                     timeout=float(getattr(pinfo, "quota_local_timeout", 30.0)),
                 )
-                kept = lanes_reading(pinfo)
+                kept = store.reading(pinfo)
                 if (
                     result.status == STATUS_ERROR
                     and kept is not None
@@ -450,6 +446,8 @@ async def _lane_quota_payload(
                 else:
                     reading = result
                 refreshed = True
+    elif local_argv:
+        warning = "no allowance store is bound to this lane"
     probe_id = getattr(probe, "id", None) if local_argv else None
     payload: dict[str, Any] = {
         "provider": name,

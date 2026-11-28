@@ -4,8 +4,10 @@ An agent that serves a lane reports the account's rate-limit windows during a
 turn.  The transport does not keep them: it hands each update to the lane's
 :class:`LaneAllowanceSink` through ``ProviderInfo.record_lane_reading``, and
 reads the last reading back through ``ProviderInfo.lane_reading``.  Whoever owns
-the allowance state (the quota layer) provides the sink, so the transport, which
-is the foundation layer, needs no import of it and holds no state of its own.
+the allowance state (the quota layer) provides the sink and binds it to the
+providers it serves, so the transport, which is the foundation layer, needs no
+import of it and holds no state of its own.  A provider that no sink was bound
+to drops the report: nobody is listening.
 
 A transport that ships in an extension reaches the same two methods, so they are
 the seam an extension's lane uses to report an allowance.
@@ -35,3 +37,18 @@ class LaneAllowanceSink(Protocol):
     def reading(self, lane: Any) -> Any | None:
         """Return *lane*'s last stored allowance reading, or ``None``."""
         ...
+
+
+class _Unbound:
+    """The sink of a provider nobody bound: nothing is kept, nothing is read."""
+
+    def record(self, update: Mapping[str, Any], lane: Any) -> bool:
+        """Drop *update*; no store is listening."""
+        return False
+
+    def reading(self, lane: Any) -> Any | None:
+        """Return ``None``: nothing was kept."""
+        return None
+
+
+UNBOUND: LaneAllowanceSink = _Unbound()

@@ -261,3 +261,52 @@ class TestTheServedConfigHasOneHome:
 
     def test_an_adapter_with_no_app_serves_nothing(self):
         assert GatewayAdminContext().served_config() is None
+
+
+class TestEachAppKeepsItsOwnLaneAllowance:
+    """What the lanes report belongs to the app that serves them (#1830 A9)."""
+
+    @staticmethod
+    def _lane_raw(tmp_path, name):
+        return {
+            "providers": {
+                name: {
+                    "type": "open_responses",
+                    "base_url": "https://example.test/v1",
+                    "api_key": "k",
+                }
+            },
+            "models": {"m": name},
+            "server": {"data_dir": str(tmp_path)},
+        }
+
+    @pytest.mark.asyncio
+    async def test_every_provider_of_the_served_config_reports_to_the_apps_store(
+        self, tmp_path
+    ):
+        config = GatewayConfig(self._lane_raw(tmp_path, "lane"))
+        app: Any = await create_app(config)
+        assert config.providers["lane"].lane_allowance is app.lane_allowance
+
+    @pytest.mark.asyncio
+    async def test_a_reload_binds_the_new_providers_to_the_same_store(self, tmp_path):
+        app: Any = await create_app(GatewayConfig(self._lane_raw(tmp_path, "lane")))
+        store = app.lane_allowance
+        rebuilt = GatewayConfig(self._lane_raw(tmp_path, "lane"))
+        assert rebuilt.providers["lane"].lane_allowance is None
+        app.admin.publish_config(rebuilt)
+        assert rebuilt.providers["lane"].lane_allowance is store
+
+    @pytest.mark.asyncio
+    async def test_two_apps_do_not_share_a_reading(self, tmp_path):
+        first: Any = await create_app(GatewayConfig(self._lane_raw(tmp_path, "lane")))
+        second: Any = await create_app(GatewayConfig(self._lane_raw(tmp_path, "lane")))
+        update = {
+            "sessionUpdate": "usage_update",
+            "_meta": {"_claude/rateLimit": {"utilization": 0.5}},
+        }
+        lane = first.gateway_config.providers["lane"]
+        assert first.lane_allowance is not second.lane_allowance
+        assert lane.record_lane_reading(update) is True
+        assert lane.lane_reading() is not None
+        assert second.gateway_config.providers["lane"].lane_reading() is None
