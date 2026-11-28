@@ -209,6 +209,39 @@ def startup_validation_entry(result: Any) -> OpsLogEntry | None:
     )
 
 
+class OpsStartupValidation(OpsBase):
+    """Write the audit row of a load-time validation run, once the log is open.
+
+    The run itself happens before the ops log exists (issue #1386), so it
+    leaves its result on the config; this op writes the row for it, and writes
+    nothing when the run changed nothing.
+    """
+
+    event_type: ClassVar[str] = OpsProviderValidation.event_type
+    severity: ClassVar[str] = OpsProviderValidation.severity
+    source: ClassVar[str] = OpsProviderValidation.source
+
+    __slots__ = ("_result",)
+
+    def __init__(self, ctx: OpsContext, result: Any) -> None:
+        super().__init__(ctx)
+        self._result = result
+
+    async def _run(self) -> Any:
+        return self._result
+
+    async def _record(self, result: Any, *, error: BaseException | None = None) -> None:
+        if startup_validation_entry(result) is None:
+            return
+        await super()._record(result, error=error)
+
+    def _message(self, result: Any) -> str:
+        return OpsProviderValidation(OpsContext(), {})._message(result)
+
+    def _details(self, result: Any) -> dict[str, Any]:
+        return OpsProviderValidation(OpsContext(), {})._details(result)
+
+
 class ProviderIssue:
     """Small internal value object describing one provider-local failure."""
 

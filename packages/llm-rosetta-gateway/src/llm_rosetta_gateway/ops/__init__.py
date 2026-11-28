@@ -12,7 +12,17 @@ audit recording.  Route handlers construct an Ops object and call
 from .base import OpsBase, OpsContext
 from .proxy import OpsProxyRequest
 from .rejected import OpsRejectedRequest
-from .provider_validation import OpsProviderValidation, startup_validation_entry
+from .lifecycle import (
+    OpsAdminSetup,
+    OpsConfigReload,
+    OpsGatewayShutdown,
+    OpsGatewayStartup,
+)
+from .provider_validation import (
+    OpsProviderValidation,
+    OpsStartupValidation,
+    startup_validation_entry,
+)
 from .extensions import (
     OpsExtensionCliInstall,
     OpsExtensionRemove,
@@ -38,8 +48,10 @@ from .data import (
 )
 
 __all__ = [
+    "OpsAdminSetup",
     "OpsBase",
     "OpsCleanupData",
+    "OpsConfigReload",
     "OpsClearData",
     "OpsClearOpsLog",
     "OpsContext",
@@ -47,6 +59,8 @@ __all__ = [
     "OpsExtensionCliInstall",
     "OpsExtensionRemove",
     "OpsExtensionUpdate",
+    "OpsGatewayShutdown",
+    "OpsGatewayStartup",
     "OpsKeyCreate",
     "OpsKeyDelete",
     "OpsKeyRotate",
@@ -60,6 +74,7 @@ __all__ = [
     "OpsRebuildMetrics",
     "OpsRejectedRequest",
     "OpsSelfUpdate",
+    "OpsStartupValidation",
     "OpsTrimData",
     "OpsSessionLogoutAll",
     "OpsTokenRotate",

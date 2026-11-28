@@ -9,14 +9,10 @@ from typing import TYPE_CHECKING, Any
 
 from llm_rosetta_gateway.observability import (
     DEFAULT_SUCCESS_MAX,
-    EVENT_ADMIN_SETUP,
     MetricsCollector,
     OpsLog,
-    OpsLogEntry,
     PersistenceManager,
     RequestLog,
-    SEVERITY_INFO,
-    SOURCE_ADMIN,
 )
 
 if TYPE_CHECKING:
@@ -310,7 +306,7 @@ async def setup_admin(
     job_manager = JobManager(persistence) if persistence is not None else None
     app.jobs = job_manager
     # Unified ops context — used by gateway/ops/ operation layer
-    from llm_rosetta_gateway.ops import OpsContext
+    from llm_rosetta_gateway.ops import OpsAdminSetup, OpsContext
 
     _ops_ctx = OpsContext(
         ops_log=ops_log,
@@ -377,11 +373,4 @@ async def setup_admin(
     apply_admin_theme(app, getattr(config, "admin_custom_css", ""))
 
     # Record admin setup event (after all wiring is complete)
-    await ops_log.add(
-        OpsLogEntry.create(
-            event_type=EVENT_ADMIN_SETUP,
-            severity=SEVERITY_INFO,
-            message="Admin panel initialized",
-            source=SOURCE_ADMIN,
-        )
-    )
+    await OpsAdminSetup(_ops_ctx).execute()

@@ -32,6 +32,7 @@ from ..middleware.error_format import (
 )
 from ..keystore import KeyStore
 from ..middleware.request_context import request_context_var, setup_request_context
+from ..ops import OpsContext, OpsGatewayStartup, OpsStartupValidation
 from ..ops.rejected import record_read_rejection, record_unrecorded_rejection
 from ..observability.logging import get_logger
 
@@ -624,34 +625,12 @@ async def _record_startup_entries(app: Any, host: str, port: int) -> None:
     if ops_log is None:
         return
 
-    from llm_rosetta_gateway.observability.ops_log import (
-        EVENT_STARTUP,
-        OpsLogEntry,
-        SEVERITY_INFO,
-        SOURCE_GATEWAY,
-    )
-    from llm_rosetta_gateway.ops.provider_validation import startup_validation_entry
-
     config = getattr(app, "gateway_config", None)
-    validation_entry = startup_validation_entry(
-        config.provider_validation_result if config is not None else None
-    )
-    if validation_entry is not None:
-        await ops_log.add(validation_entry)
-    await ops_log.add(
-        OpsLogEntry.create(
-            event_type=EVENT_STARTUP,
-            severity=SEVERITY_INFO,
-            message=f"Gateway starting on {host}:{port}",
-            details={
-                "host": host,
-                "port": port,
-                "provider_count": len(config.providers) if config else 0,
-                "model_count": len(config.models) if config else 0,
-            },
-            source=SOURCE_GATEWAY,
-        )
-    )
+    ctx = OpsContext(ops_log=ops_log)
+    await OpsStartupValidation(
+        ctx, config.provider_validation_result if config is not None else None
+    ).execute()
+    await OpsGatewayStartup(ctx, host, port, config).execute()
 
 
 async def run_gateway(
