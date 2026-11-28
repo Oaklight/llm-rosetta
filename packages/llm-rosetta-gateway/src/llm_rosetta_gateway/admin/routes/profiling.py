@@ -6,9 +6,8 @@ retrieving results.  The data-layer :class:`ProfilerState` lives in
 for backward compatibility.
 
 The :class:`ProfilerState` is instantiated in :func:`~admin.setup_admin`
-and attached to ``app.profiler_state``.  Route handlers access it via
-``request.app.profiler_state``.  ``app.py`` accesses it the same way
-(never imports :class:`ProfilerState` directly).
+and attached to ``app.profiler_state``.  Route handlers reach it through
+``admin_context(request).profiler_state()``.
 """
 
 from __future__ import annotations
@@ -16,6 +15,7 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
+from llm_rosetta_gateway.admin_api import admin_context
 
 from ._shared import _qp
 
@@ -27,13 +27,13 @@ from ._shared import _qp
 
 async def get_profiling_status(request: Any) -> Response:
     """Return current profiling status."""
-    state: Any = request.app.profiler_state
+    state: Any = admin_context(request).profiler_state()
     return JSONResponse(state.status())
 
 
 async def enable_profiling(request: Any) -> Response:
     """Enable profiling for the next N requests."""
-    state: Any = request.app.profiler_state
+    state: Any = admin_context(request).profiler_state()
 
     try:
         body = request.json()
@@ -47,13 +47,13 @@ async def enable_profiling(request: Any) -> Response:
 
 async def disable_profiling(request: Any) -> Response:
     """Disable profiling."""
-    state: Any = request.app.profiler_state
+    state: Any = admin_context(request).profiler_state()
     return JSONResponse(state.disable())
 
 
 async def get_profiling_results(request: Any) -> Response:
     """Return profiling results (summaries without HTML/text bodies)."""
-    state: Any = request.app.profiler_state
+    state: Any = admin_context(request).profiler_state()
     summaries = [
         {k: v for k, v in r.items() if k not in ("html", "text")} for r in state.results
     ]
@@ -66,7 +66,7 @@ async def get_profiling_result(request: Any, **kwargs: Any) -> Response:
     Query param ``format=html`` returns the flamegraph HTML directly
     (with ``text/html`` content type).
     """
-    state: Any = request.app.profiler_state
+    state: Any = admin_context(request).profiler_state()
     try:
         index = int(request.path_params["index"])
     except (ValueError, TypeError, KeyError):
@@ -92,7 +92,7 @@ async def download_profiling_results(request: Any) -> Response:
     import io
     import zipfile
 
-    state: Any = request.app.profiler_state
+    state: Any = admin_context(request).profiler_state()
     if not state.results:
         return JSONResponse({"error": "No results to download"}, status_code=404)
 
@@ -115,6 +115,6 @@ async def download_profiling_results(request: Any) -> Response:
 
 async def clear_profiling_results(request: Any) -> Response:
     """Clear all profiling results."""
-    state: Any = request.app.profiler_state
+    state: Any = admin_context(request).profiler_state()
     state.clear_results()
     return JSONResponse({"ok": True})

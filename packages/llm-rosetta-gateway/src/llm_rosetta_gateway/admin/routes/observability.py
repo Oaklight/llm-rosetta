@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from llm_rosetta_gateway._vendor.httpserver import (
     JSONResponse,
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 def _jobs(request: Any) -> Any:
     """The job manager, or ``None`` when this app has no persistence."""
-    return getattr(request.app, "jobs", None)
+    return admin_context(request).job_manager()
 
 
 def _accepted(job: Any) -> Response:
@@ -158,12 +158,12 @@ async def _persistence_snapshot(persistence: Any) -> dict[str, Any] | None:
 
 async def get_metrics(request: Any) -> Response:
     """Return a full metrics snapshot."""
-    metrics = request.app.metrics
+    metrics = admin_context(request).metrics()
     seconds = int(_qp(request, "seconds", "60"))
     seconds = max(1, min(seconds, 300))
     snap = metrics.snapshot(series_seconds=seconds)
 
-    persistence = getattr(request.app, "persistence", None)
+    persistence = admin_context(request).persistence()
     persistence_snap = await _persistence_snapshot(persistence)
     if persistence_snap is not None:
         snap["persistence"] = persistence_snap
@@ -172,7 +172,7 @@ async def get_metrics(request: Any) -> Response:
         snap.update(await persistence.query_rolling_24h_tokens())
 
     # Include circuit breaker states when the feature is enabled
-    config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
+    config: GatewayConfig | None = admin_context(request).served_config()
     if config is not None and config.circuit_breaker_registry.enabled:
         snap["circuit_breakers"] = config.circuit_breaker_registry.get_all_states()
 
@@ -189,7 +189,7 @@ async def get_request_histogram(request: Any) -> Response:
     The in-memory series stops at five minutes, so the dashboard's longer
     view reads the log instead.
     """
-    persistence = getattr(request.app, "persistence", None)
+    persistence = admin_context(request).persistence()
     if persistence is None:
         return JSONResponse({"error": "Persistence is disabled"}, status_code=404)
     try:
@@ -207,7 +207,7 @@ async def get_circuit_breaker_states(request: Any) -> Response:
 
     Returns an empty dict when circuit breaking is disabled globally.
     """
-    config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
+    config: GatewayConfig | None = admin_context(request).served_config()
     if config is None or not config.circuit_breaker_registry.enabled:
         return JSONResponse({"enabled": False, "providers": {}})
     states = config.circuit_breaker_registry.get_all_states()
@@ -220,7 +220,7 @@ async def get_rate_limit_status(request: Any) -> Response:
     Query params:
         key: Limiter key to peek (default: ``__global__``).
     """
-    rate_limit_state = getattr(request.app, "rate_limit_state", None)
+    rate_limit_state = admin_context(request).rate_limit_state()
     if rate_limit_state is None:
         return JSONResponse({"enabled": False, "dimensions": {}})
     key = _qp(request, "key", "__global__")
@@ -247,7 +247,7 @@ async def rebuild_metrics(request: Any) -> Response:
 
 async def get_token_usage(request: Any) -> Response:
     """Daily token usage, optionally filtered by key label and model type."""
-    persistence = getattr(request.app, "persistence", None)
+    persistence = admin_context(request).persistence()
     if persistence is None:
         return JSONResponse({"days": [], "totals": {}})
     days = int(_qp(request, "days", "7"))
@@ -263,7 +263,7 @@ async def get_token_usage(request: Any) -> Response:
 
 async def get_request_key_labels(request: Any) -> Response:
     """Return API key labels seen in request logs."""
-    log = request.app.request_log
+    log = admin_context(request).request_log()
     return JSONResponse({"labels": await log.get_api_key_labels()})
 
 
@@ -274,7 +274,7 @@ async def get_requests(request: Any) -> Response:
     explicit offset); ``until`` is exclusive so adjacent windows do not
     double-count the boundary instant.
     """
-    log = request.app.request_log
+    log = admin_context(request).request_log()
     model = _qp(request, "model")
     provider = _qp(request, "provider")
     status = _qp(request, "status")
@@ -296,7 +296,7 @@ async def get_requests(request: Any) -> Response:
     # disabled providers (missing API key, etc.) are resolvable.
     provider_type: str | None = None
     if provider:
-        config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
+        config: GatewayConfig | None = admin_context(request).served_config()
         if config is not None:
             provider_type = config.provider_types.get(provider)
         if provider_type is None:
@@ -332,7 +332,7 @@ async def get_requests(request: Any) -> Response:
 
 async def get_request_by_id(request: Any, **kwargs: Any) -> Response:
     """Return a single request log entry by ID."""
-    log = request.app.request_log
+    log = admin_context(request).request_log()
     entry_id = kwargs.get("entry_id") or request.path_params["entry_id"]
     entry = await log.get_entry(entry_id)
     if entry is None:
@@ -350,8 +350,8 @@ async def clear_requests(request: Any) -> Response:
 
 async def get_provider_key(request: Any, **kwargs: Any) -> Response:
     """Return the raw (unmasked) API key for a single provider."""
-    config: GatewayConfig = request.app.gateway_config
-    if not request.app.auth_state.admin_password:
+    config = cast("GatewayConfig", admin_context(request).served_config())
+    if not admin_context(request).admin_password_is_set():
         return JSONResponse(
             {"error": "Credential reveal requires an admin password"},
             status_code=403,
@@ -386,7 +386,7 @@ async def network_diagnostics(request: Any) -> Response:
     reflect the actual outbound path of API requests.
     """
     # Resolve the global proxy from current gateway config
-    gw_config: GatewayConfig | None = getattr(request.app, "gateway_config", None)
+    gw_config: GatewayConfig | None = admin_context(request).served_config()
     proxy_url = gw_config.proxy if gw_config else None
 
     client_kwargs: dict[str, Any] = {"timeout": 15.0}
@@ -539,7 +539,7 @@ def _dump_ids(request: Any) -> list[str] | None:
 
 async def get_error_dumps(request: Any) -> Response:
     """Return paginated, filtered error dump entries."""
-    persistence = getattr(request.app, "persistence", None)
+    persistence = admin_context(request).persistence()
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
@@ -565,7 +565,7 @@ async def get_error_dump_ids(request: Any) -> Response:
     page on screen; this route is how the panel reaches it without loading
     the rows.
     """
-    persistence = getattr(request.app, "persistence", None)
+    persistence = admin_context(request).persistence()
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
@@ -580,7 +580,7 @@ async def get_error_dump_ids(request: Any) -> Response:
 
 async def get_error_dump_facets(request: Any) -> Response:
     """Return the provider and model values present in the dump store."""
-    persistence = getattr(request.app, "persistence", None)
+    persistence = admin_context(request).persistence()
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
     return JSONResponse(await persistence.error_dump_facets())
@@ -588,7 +588,7 @@ async def get_error_dump_facets(request: Any) -> Response:
 
 async def get_error_dump_detail(request: Any, **kwargs: Any) -> Response:
     """Return a single error dump with decompressed bodies."""
-    persistence = getattr(request.app, "persistence", None)
+    persistence = admin_context(request).persistence()
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
@@ -624,7 +624,7 @@ async def get_error_dump_detail(request: Any, **kwargs: Any) -> Response:
 
 async def get_error_dump_body(request: Any, **kwargs: Any) -> Response:
     """Download the raw decompressed request body JSON for an error dump."""
-    persistence = getattr(request.app, "persistence", None)
+    persistence = admin_context(request).persistence()
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
@@ -757,7 +757,7 @@ async def cleanup_error_dumps_by_age(request: Any) -> Response:
 
 async def export_error_dumps(request: Any) -> Response | StreamingResponse:
     """Export error dumps in a date range as a streamed tar.gz."""
-    persistence = getattr(request.app, "persistence", None)
+    persistence = admin_context(request).persistence()
     if persistence is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
 
@@ -809,7 +809,7 @@ async def export_error_dumps(request: Any) -> Response | StreamingResponse:
 
 async def get_ops_log(request: Any) -> Response:
     """Return paginated, filtered ops log entries."""
-    ops_log = getattr(request.app, "ops_log", None)
+    ops_log = admin_context(request).ops_log()
     if ops_log is None:
         return JSONResponse({"entries": [], "total": 0})
     try:

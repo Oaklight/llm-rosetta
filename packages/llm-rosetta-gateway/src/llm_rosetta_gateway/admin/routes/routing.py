@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from ..._vendor.httpserver import JSONResponse, Response
-from ...admin_api import catalogue
+from ...admin_api import admin_context, catalogue
 from ._shared import _qp, config_mutate, parse_json_body
 from .config.payload import _get_gateway_config
 
@@ -305,7 +305,7 @@ async def list_routable_models(request: Any, **kwargs: Any) -> Response:
     # them unknown rather than zero, so the roster does not report an idle
     # gateway when what broke was the reading.
     activity: dict[str, dict[str, Any]] | None = {}
-    log = getattr(request.app, "request_log", None)
+    log = admin_context(request).request_log()
     if log is not None:
         try:
             activity = await log.activity_by_model(_window_since(window))
@@ -505,7 +505,7 @@ async def get_model_routing(request: Any, **kwargs: Any) -> Response:
 
     decisions: list[dict[str, Any]] = []
     sessions: dict[str, Any] = {"sessions": [], "count": 0, "sample": 0}
-    log = getattr(request.app, "request_log", None)
+    log = admin_context(request).request_log()
     if log is not None:
         try:
             entries, _total = await log.get_entries(

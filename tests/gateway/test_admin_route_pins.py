@@ -243,7 +243,7 @@ async def test_logout_all_sessions_without_ops_ctx_writes_no_row(tmp_path) -> No
 
 
 async def test_capture_lifecycle() -> None:
-    app = SimpleNamespace(capture_state=CaptureState())
+    app = fake_app(capture_state=CaptureState())
 
     status = await capture.get_capture_status(_request(app))
     assert _body(status) == {"enabled": False, "remaining": 0, "captured": 0}
@@ -279,7 +279,7 @@ async def test_capture_lifecycle() -> None:
     [(None, 5), ({"requests": 0}, 1), ({"requests": 500}, 100), ({}, 5)],
 )
 async def test_enable_capture_clamps_the_request_count(body, remaining) -> None:
-    app = SimpleNamespace(capture_state=CaptureState())
+    app = fake_app(capture_state=CaptureState())
 
     response = await capture.enable_capture(_request(app, body=body))
 
@@ -295,7 +295,7 @@ async def test_enable_capture_clamps_the_request_count(body, remaining) -> None:
     ],
 )
 async def test_capture_result_index_errors(index, status, error) -> None:
-    app = SimpleNamespace(capture_state=CaptureState())
+    app = fake_app(capture_state=CaptureState())
 
     response = await capture.get_capture_result(
         _request(app, path_params={"index": index})
@@ -306,7 +306,7 @@ async def test_capture_result_index_errors(index, status, error) -> None:
 
 
 async def test_capture_result_without_an_index_is_invalid() -> None:
-    app = SimpleNamespace(capture_state=CaptureState())
+    app = fake_app(capture_state=CaptureState())
 
     response = await capture.get_capture_result(_request(app, path_params={}))
 
@@ -329,7 +329,7 @@ def _profile_result(model: str = "a/b:c") -> dict[str, Any]:
 
 
 async def test_profiling_lifecycle() -> None:
-    app = SimpleNamespace(profiler_state=ProfilerState())
+    app = fake_app(profiler_state=ProfilerState())
 
     status = _body(await profiling.get_profiling_status(_request(app)))
     assert status == {
@@ -357,7 +357,7 @@ async def test_profiling_lifecycle() -> None:
 
 
 async def test_profiling_results_listing_hides_bodies() -> None:
-    app = SimpleNamespace(profiler_state=ProfilerState())
+    app = fake_app(profiler_state=ProfilerState())
     app.profiler_state.results.append(_profile_result())
 
     body = _body(await profiling.get_profiling_results(_request(app)))
@@ -369,7 +369,7 @@ async def test_profiling_results_listing_hides_bodies() -> None:
 
 
 async def test_profiling_result_detail_json_and_html() -> None:
-    app = SimpleNamespace(profiler_state=ProfilerState())
+    app = fake_app(profiler_state=ProfilerState())
     app.profiler_state.results.append(_profile_result())
 
     as_json = await profiling.get_profiling_result(
@@ -391,7 +391,7 @@ async def test_profiling_result_detail_json_and_html() -> None:
     [("x", 400, "Invalid index"), ("3", 404, "Index out of range")],
 )
 async def test_profiling_result_index_errors(index, status, error) -> None:
-    app = SimpleNamespace(profiler_state=ProfilerState())
+    app = fake_app(profiler_state=ProfilerState())
 
     response = await profiling.get_profiling_result(
         _request(app, path_params={"index": index})
@@ -405,7 +405,7 @@ async def test_profiling_download_zip_and_clear() -> None:
     import io
     import zipfile
 
-    app = SimpleNamespace(profiler_state=ProfilerState())
+    app = fake_app(profiler_state=ProfilerState())
 
     empty = await profiling.download_profiling_results(_request(app))
     assert empty.status_code == 404

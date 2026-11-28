@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
+from _admin_app import attach_admin, fake_app
 
 from llm_rosetta_gateway._vendor.httpserver import App, Request, StreamingResponse
 from llm_rosetta_gateway.admin.routes.observability import (
@@ -125,7 +126,7 @@ def test_half_a_cursor_is_refused(query: dict[str, str]) -> None:
 @pytest.mark.asyncio
 async def test_a_bad_status_answers_400_not_500() -> None:
     req = _req(status="nope")
-    req.app = SimpleNamespace(persistence=object())
+    req.app = fake_app(persistence=object())
     response = await get_error_dumps(req)
     assert response.status_code == 400
 
@@ -146,7 +147,7 @@ async def test_the_cursor_reaches_the_read() -> None:
         before_id="d9",
         limit="500",
     )
-    req.app = SimpleNamespace(persistence=_Persistence())
+    req.app = fake_app(persistence=_Persistence())
     response = await get_error_dumps(req)
     assert response.status_code == 200
     assert seen["before"] == ("2026-11-01T00:00:00+00:00", "d9")
@@ -174,7 +175,7 @@ async def test_the_export_route_streams_the_archive() -> None:
             return _gen()
 
     req = _req(start="2026-11-01T00:00:00Z")
-    req.app = SimpleNamespace(persistence=_Persistence())
+    req.app = fake_app(persistence=_Persistence())
 
     response = await export_error_dumps(req)
 
@@ -210,7 +211,7 @@ async def test_a_store_error_is_raised_before_the_download_starts() -> None:
             return _gen()
 
     req = _req()
-    req.app = SimpleNamespace(persistence=_Persistence())
+    req.app = fake_app(persistence=_Persistence())
 
     with pytest.raises(RuntimeError):
         await export_error_dumps(req)
@@ -229,7 +230,7 @@ async def test_the_server_router_answers_the_export_path() -> None:
     from llm_rosetta_gateway.admin.routes import register_admin_routes
     from llm_rosetta_gateway.admin.routes.observability import get_error_dump_detail
 
-    app = App()
+    app = attach_admin(App())
     register_admin_routes(app)
 
     class _Persistence:
@@ -290,7 +291,7 @@ async def test_an_abandoned_download_closes_the_export() -> None:
             return _gen()
 
     req = _req()
-    req.app = SimpleNamespace(persistence=_Persistence())
+    req.app = fake_app(persistence=_Persistence())
 
     response = await export_error_dumps(req)
     assert isinstance(response, StreamingResponse)
