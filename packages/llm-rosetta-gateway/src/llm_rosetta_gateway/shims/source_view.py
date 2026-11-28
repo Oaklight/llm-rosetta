@@ -20,7 +20,7 @@ from collections.abc import Callable, Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta.api import ExtensionIndex, IndexEntry, version_key
+from llm_rosetta.api import ExtensionIndex, IndexEntry, choose_release, version_key
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
 
 from ._cache import _file_lock
@@ -37,7 +37,6 @@ from .manifest_sources.plan import (
 from .manifest_sources.releases import (
     release_from_dict,
     requirement_problem,
-    select_release,
 )
 from .manifest_sources.selection import _pinned_release
 
@@ -110,7 +109,7 @@ def vendor_view(
     """
     ordered = sorted(releases, key=lambda r: version_key(r.version), reverse=True)
     newest = ordered[0] if ordered else None
-    installable, _passed = select_release(ordered)
+    installable, _passed = choose_release(ordered, prefer_stable=True)
     # The record that would be installed speaks for maturity and tags, as it
     # does for the tag selectors; with nothing installable, the newest does.
     record = installable or newest

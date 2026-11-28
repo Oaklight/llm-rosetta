@@ -396,15 +396,66 @@ def entry_problems(entry: IndexEntry) -> list[str]:
     return problems
 
 
+def choose_release(
+    entries: Iterable[IndexEntry], *, prefer_stable: bool = False
+) -> tuple[IndexEntry | None, tuple[tuple[IndexEntry, str], ...]]:
+    """Pick the entry of one extension this interpreter and core should install.
+
+    This is the one install policy: every caller that chooses a version (the
+    ``llm-rosetta`` commands and the gateway's manifest sources) asks here.
+    By default the newest compatible entry wins, a pre-release included.  With
+    *prefer_stable* the newest compatible **stable** entry wins, and a
+    pre-release is chosen only when no stable entry is compatible, so one
+    pre-release published to a source does not upgrade every reader of it.
+
+    Args:
+        entries: One extension's entries, in any order.
+        prefer_stable: Let a stable entry beat a newer pre-release.
+
+    Returns:
+        ``(chosen, skipped)``: the chosen entry (``None`` when none is
+        compatible), and every entry *newer* than it that was refused as
+        incompatible, with the reason.  Older incompatible entries, and newer
+        pre-releases passed over for a stable one, are not reported.
+    """
+    ordered = sorted(entries, key=lambda e: version_key(e.version), reverse=True)
+    incompatible: list[tuple[IndexEntry, str]] = []
+    prerelease: IndexEntry | None = None
+    chosen: IndexEntry | None = None
+    for entry in ordered:
+        problems = entry_problems(entry)
+        if problems:
+            incompatible.append((entry, "; ".join(problems)))
+        elif not prefer_stable or "-" not in entry.version:
+            chosen = entry
+            break
+        elif prerelease is None:
+            prerelease = entry
+    chosen = chosen or prerelease
+    if chosen is None:
+        return None, tuple(incompatible)
+    floor = version_key(chosen.version)
+    return chosen, tuple(
+        (entry, why)
+        for entry, why in incompatible
+        if version_key(entry.version) > floor
+    )
+
+
 def select_entry(
-    index: Mapping[str, list[IndexEntry]], ext_id: str, *, version: str | None = None
+    index: Mapping[str, list[IndexEntry]],
+    ext_id: str,
+    *,
+    version: str | None = None,
+    prefer_stable: bool = False,
 ) -> IndexEntry:
-    """Pick the newest entry of *ext_id* this interpreter and core accept.
+    """Pick the entry of *ext_id* this interpreter and core accept.
 
     Args:
         index: From :func:`load_index`.
         ext_id: The extension id.
         version: Only this version, when given.
+        prefer_stable: See :func:`choose_release`.
 
     Returns:
         The chosen entry.
@@ -422,8 +473,8 @@ def select_entry(
             raise ExtensionInstallError(
                 f"the index has no version {version} of {ext_id!r}"
             )
-    usable = [entry for entry in entries if not entry_problems(entry)]
-    if not usable:
+    chosen, _skipped = choose_release(entries, prefer_stable=prefer_stable)
+    if chosen is None:
         reasons = "; ".join(
             f"{entry.version}: {', '.join(entry_problems(entry))}"
             for entry in sorted(entries, key=lambda e: version_key(e.version))
@@ -431,7 +482,7 @@ def select_entry(
         raise ExtensionInstallError(
             f"no version of {ext_id!r} can run here ({reasons})"
         )
-    return max(usable, key=lambda entry: version_key(entry.version))
+    return chosen
 
 
 def install_entry(

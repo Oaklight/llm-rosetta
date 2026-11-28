@@ -174,6 +174,7 @@ EXPECTED_EXPORTS: dict[str, _ModuleSpec] = {
             "plan_updates",
             "remove_with_programs",
             "check_external",
+            "choose_release",
             "configure_extensions_dir",
             "entry_problems",
             "extensions_dir",
