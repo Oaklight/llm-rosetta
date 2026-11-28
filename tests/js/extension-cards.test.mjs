@@ -91,7 +91,6 @@ test('every status and the labels the card paints exist in both languages', () =
     'ext.status.ready', 'ext.status.missing', 'ext.status.broken', 'ext.status.too_old', 'ext.status.unknown',
     'ext.found', 'ext.minimum', 'ext.pinned', 'ext.install', 'ext.empty', 'ext.copy',
     'ext.installBtn', 'ext.installing', 'ext.installDone',
-    'shimPage.extensions',
   ];
   for (const key of keys) {
     const count = source.split(`'${key}'`).length - 1;

@@ -25,7 +25,8 @@ import { suggestedProviderName, pickDestination } from '../core/provider-pick.js
 import { degradedEndpoints, categoryKey, endpointState, degradedMarker, providerStatus, orderedProviders, nonLlmFormatType } from '../core/provider-endpoints.js';
 import { routingRows, blockRow } from '../core/quota-lines.js';
 import { shimHintText } from '../core/shim-hint.js';
-import { cssValue, jsArg, logoUrl } from '../core/html.js';
+import { extensionForVendor, unreadyPrograms } from '../core/extension-manage.js';
+import { cssValue, html, jsArg, logoUrl, raw, render } from '../core/html.js';
 import { filteredEmptyHtml } from '../core/empty.js';
 import { providerFormError } from '../core/form-validate.js';
 import { isDialogPristine, markDialogPristine } from '../core/dialog.js';
@@ -64,12 +65,47 @@ function _applyTypePlaceholders(s, { preserveKeyHint = false } = {}) {
  *  The element is a single truncated line (see ``.shim-hint``); its ``title``
  *  carries the full text for hover.  Text is inserted as text, never HTML. */
 function _applyShimHint(shim) {
+  _applyShimNeeds(shim);
   const el = document.getElementById('provShimHint');
   if (!el) return;
   const text = shimHintText(shim && shim.hint_msg, S.currentLang);
   el.textContent = text;
   el.title = text;
   el.hidden = !text;
+}
+
+/** Warn, in place, when the selected shim needs a program that is not ready.
+ *
+ *  The extension listing runs each program's version check, so it is read once
+ *  and kept in `S.extensions`; the Shims page refreshes it after an install. */
+function _applyShimNeeds(shim) {
+  const el = document.getElementById('provShimNeeds');
+  if (!el) return;
+  if (!shim || !shim.name) {
+    el.hidden = true;
+    return;
+  }
+  if (!Array.isArray(S.extensions)) {
+    if (S.extensionsLoading) return;
+    S.extensionsLoading = true;
+    api.get('/admin/api/extensions').then((body) => {
+      S.extensions = Array.isArray(body && body.extensions) ? body.extensions : [];
+    }).catch(() => { S.extensions = []; }).finally(() => {
+      S.extensionsLoading = false;
+      refreshShimHint();
+    });
+    return;
+  }
+  const ext = extensionForVendor(S.extensions, shim.group || String(shim.name).split('--')[0]);
+  const missing = ext ? unreadyPrograms(ext, shim.name) : [];
+  el.hidden = !missing.length;
+  render(el, html`${missing.map((p) => {
+    const pinned = p.install && p.install.version;
+    const act = pinned && p.install_command
+      ? html`<button type="button" class="btn btn-sm btn-primary" onclick="installExtensionProgram(this, ${raw(jsArg(ext.id))}, ${raw(jsArg(p.name))}, ${raw(jsArg(pinned))})">${t('ext.installBtn')}</button>`
+      : (p.install_hint ? html` <code>${p.install_hint}</code>` : '');
+    return html`<div class="shim-needs" data-status="${p.status}"><span><b>${t('extMgr.needsWarn', {name: p.name})}</b> ${t('ext.status.' + p.status)}</span>${act}</div>`;
+  })}`);
 }
 
 /** Re-render the hint for the picker's current selection.
