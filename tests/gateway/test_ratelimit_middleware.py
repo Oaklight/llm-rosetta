@@ -18,7 +18,8 @@ from llm_rosetta_gateway.middleware.ratelimit import (
 )
 from llm_rosetta_gateway.middleware.request_context import (
     RequestContext,
-    extract_client_ip,
+    TrustedProxies,
+    resolve_client_ip,
     request_context_var,
 )
 
@@ -76,7 +77,6 @@ class FakeConfig:
         self.rate_limit_exclude = (
             exclude if exclude is not None else ["/health", "/admin"]
         )
-        self.rate_limit_trust_proxy = False
 
 
 def _run(coro):
@@ -111,28 +111,31 @@ class TestDetectFormat:
 
 
 class TestExtractClientIp:
+    _LOOPBACK = TrustedProxies.parse(["127.0.0.1"])
+
     def test_xff_ignored_when_untrusted(self):
         req = FakeRequest(
             headers={"x-forwarded-for": "1.2.3.4"},
             client_addr=("10.0.0.1", 1),
         )
-        assert extract_client_ip(req, trust_proxy=False) == "10.0.0.1"
+        assert resolve_client_ip(req, TrustedProxies()) == "10.0.0.1"
 
     def test_xff_trusted_when_enabled(self):
         req = FakeRequest(headers={"x-forwarded-for": "1.2.3.4"})
-        assert extract_client_ip(req, trust_proxy=True) == "1.2.3.4"
+        assert resolve_client_ip(req, self._LOOPBACK) == "1.2.3.4"
 
     def test_xff_chain_takes_first(self):
+        """The first untrusted address from the right, not the leftmost one."""
         req = FakeRequest(headers={"x-forwarded-for": "1.2.3.4, 5.6.7.8"})
-        assert extract_client_ip(req, trust_proxy=True) == "1.2.3.4"
+        assert resolve_client_ip(req, self._LOOPBACK) == "5.6.7.8"
 
     def test_x_real_ip_trusted(self):
         req = FakeRequest(headers={"x-real-ip": "10.0.0.1"})
-        assert extract_client_ip(req, trust_proxy=True) == "10.0.0.1"
+        assert resolve_client_ip(req, self._LOOPBACK) == "10.0.0.1"
 
     def test_client_addr_fallback(self):
         req = FakeRequest(client_addr=("192.168.1.1", 9999))
-        assert extract_client_ip(req, trust_proxy=False) == "192.168.1.1"
+        assert resolve_client_ip(req, TrustedProxies()) == "192.168.1.1"
 
 
 # ---------------------------------------------------------------------------

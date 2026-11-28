@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import hmac
 import json
-import time
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
-from llm_rosetta_gateway.middleware.auth import ADMIN_COOKIE_NAME
+from llm_rosetta_gateway.middleware.auth import ADMIN_COOKIE_NAME, request_is_https
 
 from ..static import load_admin_html, load_static_file
 from ..themes import registry_payload
@@ -208,60 +207,6 @@ async def serve_admin_static(request: Any, **kwargs: Any) -> Response:
 # Login rate limiter
 # ---------------------------------------------------------------------------
 
-# Per-IP failure tracking: {ip: {"count": int, "locked_until": float}}
-_login_failures: dict[str, dict[str, Any]] = {}
-_LOGIN_MAX_ATTEMPTS = 5  # failures before lockout
-_LOGIN_LOCKOUT_SECONDS = 300  # 5-minute lockout window
-
-
-def _get_client_ip(request: Any) -> str:
-    """Extract client IP, honouring X-Forwarded-For when present."""
-    xff = request.headers.get("x-forwarded-for", "")
-    if xff:
-        return xff.split(",")[0].strip()
-    addr = getattr(request, "client_addr", None)
-    if addr:
-        return str(addr[0])
-    return "unknown"
-
-
-def _check_login_rate_limit(ip: str) -> tuple[bool, float]:
-    """Return (is_blocked, retry_after_seconds).
-
-    An IP is blocked for ``_LOGIN_LOCKOUT_SECONDS`` after
-    ``_LOGIN_MAX_ATTEMPTS`` consecutive failures.
-    """
-    rec = _login_failures.get(ip)
-    if not rec:
-        return False, 0.0
-    locked_until = rec.get("locked_until", 0.0)
-    if locked_until and time.monotonic() < locked_until:
-        return True, locked_until - time.monotonic()
-    return False, 0.0
-
-
-def _record_login_failure(ip: str) -> None:
-    """Increment failure counter; lock out the IP after max attempts."""
-    rec = _login_failures.setdefault(ip, {"count": 0, "locked_until": 0.0})
-    # Reset counter if a previous lockout has expired
-    if rec["locked_until"] and time.monotonic() >= rec["locked_until"]:
-        rec["count"] = 0
-        rec["locked_until"] = 0.0
-    rec["count"] += 1
-    if rec["count"] >= _LOGIN_MAX_ATTEMPTS:
-        rec["locked_until"] = time.monotonic() + _LOGIN_LOCKOUT_SECONDS
-
-
-def _clear_login_failures(ip: str) -> None:
-    """Reset failure counter on successful login."""
-    _login_failures.pop(ip, None)
-
-
-def _is_secure_request(request: Any) -> bool:
-    """Check if the request arrived over HTTPS (direct or via reverse proxy)."""
-    proto = request.headers.get("x-forwarded-proto", "")
-    return proto.lower() == "https"
-
 
 def _set_session_cookie(
     resp: Response, token: str, *, secure: bool = False, max_age: int | None = None
@@ -289,8 +234,8 @@ async def admin_login(request: Any) -> Response:
     if not auth_state.admin_password:
         return JSONResponse({"error": "Admin password not configured"}, status_code=400)
 
-    ip = _get_client_ip(request)
-    blocked, retry_after = _check_login_rate_limit(ip)
+    ip = auth_state.login_limiter.client_of()
+    blocked, retry_after = auth_state.login_limiter.check(ip)
     if blocked:
         return JSONResponse(
             {
@@ -306,8 +251,8 @@ async def admin_login(request: Any) -> Response:
 
     password = body.get("password", "")
     if not hmac.compare_digest(password, auth_state.admin_password):
-        _record_login_failure(ip)
-        blocked, retry_after = _check_login_rate_limit(ip)
+        auth_state.login_limiter.record_failure(ip)
+        blocked, retry_after = auth_state.login_limiter.check(ip)
         resp: dict[str, Any] = {"error": "Invalid password"}
         if blocked:
             resp["error"] = (
@@ -315,14 +260,14 @@ async def admin_login(request: Any) -> Response:
             )
         return JSONResponse(resp, status_code=401)
 
-    _clear_login_failures(ip)
+    auth_state.login_limiter.clear(ip)
     remember = bool(body.get("remember")) and auth_state.remember_seconds > 0
     session_id = auth_state.create_session(ip=ip, remember=remember)
     resp = JSONResponse({"ok": True, "remember": remember})
     _set_session_cookie(
         resp,
         session_id,
-        secure=_is_secure_request(request),
+        secure=request_is_https(request),
         max_age=auth_state.remember_seconds if remember else None,
     )
     return resp
@@ -374,8 +319,8 @@ async def change_password(request: Any) -> Response:
         return JSONResponse({"error": "Admin password not configured"}, status_code=400)
 
     # Rate-limit password change attempts the same way as login
-    ip = _get_client_ip(request)
-    blocked, retry_after = _check_login_rate_limit(ip)
+    ip = auth_state.login_limiter.client_of()
+    blocked, retry_after = auth_state.login_limiter.check(ip)
     if blocked:
         return JSONResponse(
             {
@@ -405,10 +350,10 @@ async def change_password(request: Any) -> Response:
         )
 
     if not hmac.compare_digest(current, auth_state.admin_password):
-        _record_login_failure(ip)
+        auth_state.login_limiter.record_failure(ip)
         return JSONResponse({"error": "Current password is incorrect"}, status_code=401)
 
-    _clear_login_failures(ip)
+    auth_state.login_limiter.clear(ip)
 
     # Persist to config file
     config_path = _get_config_path(request)
@@ -451,7 +396,7 @@ async def change_password(request: Any) -> Response:
     _set_session_cookie(
         resp,
         session_id,
-        secure=_is_secure_request(request),
+        secure=request_is_https(request),
         max_age=auth_state.remember_seconds if was_remembered else None,
     )
     return resp

@@ -22,7 +22,7 @@ from typing import Any, ClassVar
 from ..observability.logging import get_logger
 from ..middleware.error_format import is_admin_path
 from ..middleware.headers import get_request_id
-from ..middleware.request_context import extract_client_ip, request_context_var
+from ..middleware.request_context import ProxyPolicy, request_context_var
 from ..model_types import get_model_type
 from ..observability.sanitize import scrub_credential_patterns
 from .base import OpsContext
@@ -150,7 +150,7 @@ async def record_unrecorded_rejection(request: Any, response: Any) -> None:
 
     rctx = request_context_var.get()
     request_id = rctx.request_id if rctx else get_request_id(request)
-    client_ip = rctx.client_ip if rctx else extract_client_ip(request)
+    client_ip = rctx.client_ip if rctx else _policy(request.app).client_ip(request)
     response.headers.setdefault("x-request-id", request_id)
 
     ctx = _ops_context(request.app)
@@ -173,9 +173,12 @@ async def record_unrecorded_rejection(request: Any, response: Any) -> None:
     ).execute()
 
 
-async def record_read_rejection(
-    app: Any, rejection: Any, *, trust_proxy: bool = True
-) -> None:
+def _policy(app: Any) -> ProxyPolicy:
+    """The app's trusted-proxy policy; an app without one trusts no proxy."""
+    return getattr(app, "proxy_policy", None) or ProxyPolicy()
+
+
+async def record_read_rejection(app: Any, rejection: Any) -> None:
     """Record a request the server refused while still reading it.
 
     These never become a ``Request``, so no hook or lifecycle saw them: a body
@@ -186,8 +189,6 @@ async def record_read_rejection(
     Args:
         app: The application holding ``ops_ctx``.
         rejection: The server's ``RejectedRequest``.
-        trust_proxy: Whether forwarding headers may name the client, as for a
-            served request.
     """
     if rejection.path is not None and not is_recorded_path(rejection.path):
         return
@@ -214,6 +215,6 @@ async def record_read_rejection(
         duration_ms=0.0,
         error_detail=detail,
         request_id=rejection.request_id,
-        client_ip=extract_client_ip(peer, trust_proxy=trust_proxy),
+        client_ip=_policy(app).client_ip(peer),
         source_provider=route_source_format(rejection.path or ""),
     ).execute()

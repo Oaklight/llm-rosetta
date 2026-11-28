@@ -345,5 +345,4 @@ class _NoConfig:
     rate_limit_per_key = None
     rate_limit_per_model = None
     rate_limit_exclude = ["/health", "/admin"]
-    rate_limit_trust_proxy = False
     rate_limit_enabled = False

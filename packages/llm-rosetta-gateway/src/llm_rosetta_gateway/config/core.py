@@ -62,6 +62,7 @@ from .typed import _typed_descriptors, parse_typed_config, reject_retired_sectio
 logger = logging.getLogger("llm-rosetta-gateway")
 
 if TYPE_CHECKING:
+    from ..middleware.request_context import TrustedProxies
     from ..quota.rate_limit import RateLimitPolicy
     from ..shims.shim_sources import ShimSources
 
@@ -128,6 +129,7 @@ class GatewayConfig:
     model_upstream_names: Any
     model_url_templates: Any
     open_on_no_keys: bool
+    trusted_proxies: TrustedProxies
     ops_log: dict[str, Any]
     port: int
     prefer_same_format: bool
@@ -148,7 +150,6 @@ class GatewayConfig:
     rate_limit_per_ip: str | list[str] | None
     rate_limit_per_key: str | list[str] | None
     rate_limit_per_model: str | list[str] | None
-    rate_limit_trust_proxy: bool
     raw_providers: dict[str, dict[str, str]]
     read_timeout: float
     request_log: dict[str, Any]

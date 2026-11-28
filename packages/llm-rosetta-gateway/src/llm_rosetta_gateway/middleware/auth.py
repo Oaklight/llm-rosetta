@@ -22,6 +22,7 @@ import hashlib
 import hmac
 import secrets
 import time
+from collections import OrderedDict
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
@@ -165,6 +166,87 @@ class SessionInfo:
     remember: bool = False
 
 
+class LoginLimiter:
+    """Per-client failure counter for the admin password endpoints.
+
+    A client is locked for ``lockout_seconds`` after ``max_attempts`` failures.
+    The table holds at most ``max_entries`` clients: when it is full, the
+    oldest client that is not locked goes first, so a flood of one-off
+    addresses cannot evict a client that is locked out.
+    """
+
+    def __init__(
+        self,
+        *,
+        max_attempts: int = 5,
+        lockout_seconds: float = 300.0,
+        max_entries: int = 4096,
+    ) -> None:
+        self.max_attempts = max_attempts
+        self.lockout_seconds = lockout_seconds
+        self.max_entries = max_entries
+        # client -> [failure count, locked_until (monotonic; 0.0 = not locked)]
+        self._records: OrderedDict[str, list[float]] = OrderedDict()
+
+    def __len__(self) -> int:
+        return len(self._records)
+
+    @staticmethod
+    def client_of() -> str:
+        """The client the current request is counted under.
+
+        It is the address the request context resolved under the trusted-proxy
+        policy; nothing here reads a forwarding header.
+        """
+        ctx = request_context_var.get()
+        return ctx.client_ip if ctx else "unknown"
+
+    def check(self, client: str) -> tuple[bool, float]:
+        """Return ``(is_blocked, retry_after_seconds)`` for *client*."""
+        rec = self._records.get(client)
+        if not rec:
+            return False, 0.0
+        now = time.monotonic()
+        if rec[1] and now < rec[1]:
+            return True, rec[1] - now
+        return False, 0.0
+
+    def record_failure(self, client: str) -> None:
+        """Count a failure; lock *client* out after ``max_attempts``."""
+        now = time.monotonic()
+        rec = self._records.get(client)
+        if rec is None:
+            rec = self._records[client] = [0, 0.0]
+            self._evict(now)
+        elif rec[1] and now >= rec[1]:
+            # A previous lockout has expired: start counting again.
+            rec[0], rec[1] = 0, 0.0
+        self._records.move_to_end(client)
+        rec[0] += 1
+        if rec[0] >= self.max_attempts:
+            rec[1] = now + self.lockout_seconds
+
+    def clear(self, client: str) -> None:
+        """Forget *client* after a successful login."""
+        self._records.pop(client, None)
+
+    def _evict(self, now: float) -> None:
+        while len(self._records) > self.max_entries:
+            victim = next(
+                (c for c, r in self._records.items() if not (r[1] and now < r[1])),
+                None,
+            )
+            self._records.pop(
+                victim if victim is not None else next(iter(self._records))
+            )
+
+
+def request_is_https(request: Any) -> bool:
+    """Whether the current request arrived over HTTPS (see ``ProxyPolicy.is_https``)."""
+    ctx = request_context_var.get()
+    return bool(ctx and ctx.https)
+
+
 class AuthState:
     """Mutable state container for auth hook — allows hot-reload from admin."""
 
@@ -184,6 +266,7 @@ class AuthState:
         self.session_idle_minutes = session_idle_minutes
         self.session_remember_days = session_remember_days
         self._sessions: dict[str, SessionInfo] = {}
+        self.login_limiter = LoginLimiter()
 
     def _has_keys(self) -> bool:
         return self.keystore.has_keys() if self.keystore else False
