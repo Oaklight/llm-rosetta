@@ -7,7 +7,9 @@ from typing import Any
 
 from llm_rosetta_gateway.middleware.request_context import (
     RequestContext,
-    extract_client_ip,
+    ProxyPolicy,
+    TrustedProxies,
+    resolve_client_ip,
     request_context_var,
     setup_request_context,
 )
@@ -36,6 +38,11 @@ class FakeRequest:
         self.headers = headers or {}
         self.client_addr = client_addr
         self.query_params = query_params or {}
+
+
+#: Trusts the proxy the fake requests come from (their default peer).
+_LOOPBACK = TrustedProxies.parse(["127.0.0.1"])
+_NOBODY = TrustedProxies.parse(None)
 
 
 def _run(coro: Any) -> Any:
@@ -93,58 +100,59 @@ class TestRequestContext:
 class TestExtractClientIp:
     def test_trust_proxy_xff(self):
         req = FakeRequest(headers={"x-forwarded-for": "1.2.3.4"})
-        assert extract_client_ip(req, trust_proxy=True) == "1.2.3.4"
+        assert resolve_client_ip(req, _LOOPBACK) == "1.2.3.4"
 
     def test_trust_proxy_xff_chain_takes_first(self):
+        """The first untrusted address from the right, not the leftmost one."""
         req = FakeRequest(headers={"x-forwarded-for": "1.2.3.4, 5.6.7.8, 9.0.0.1"})
-        assert extract_client_ip(req, trust_proxy=True) == "1.2.3.4"
+        assert resolve_client_ip(req, _LOOPBACK) == "9.0.0.1"
 
     def test_trust_proxy_xff_whitespace(self):
-        req = FakeRequest(headers={"x-forwarded-for": "  1.2.3.4 , 5.6.7.8"})
-        assert extract_client_ip(req, trust_proxy=True) == "1.2.3.4"
+        req = FakeRequest(headers={"x-forwarded-for": "  5.6.7.8 , 1.2.3.4  "})
+        assert resolve_client_ip(req, _LOOPBACK) == "1.2.3.4"
 
     def test_trust_proxy_x_real_ip(self):
         req = FakeRequest(headers={"x-real-ip": "10.0.0.1"})
-        assert extract_client_ip(req, trust_proxy=True) == "10.0.0.1"
+        assert resolve_client_ip(req, _LOOPBACK) == "10.0.0.1"
 
     def test_trust_proxy_xff_takes_precedence_over_real_ip(self):
         req = FakeRequest(
             headers={"x-forwarded-for": "1.2.3.4", "x-real-ip": "10.0.0.1"}
         )
-        assert extract_client_ip(req, trust_proxy=True) == "1.2.3.4"
+        assert resolve_client_ip(req, _LOOPBACK) == "1.2.3.4"
 
     def test_no_trust_ignores_xff(self):
         req = FakeRequest(
             headers={"x-forwarded-for": "1.2.3.4"},
             client_addr=("10.0.0.1", 1),
         )
-        assert extract_client_ip(req, trust_proxy=False) == "10.0.0.1"
+        assert resolve_client_ip(req, _NOBODY) == "10.0.0.1"
 
     def test_no_trust_ignores_real_ip(self):
         req = FakeRequest(
             headers={"x-real-ip": "1.2.3.4"},
             client_addr=("10.0.0.1", 1),
         )
-        assert extract_client_ip(req, trust_proxy=False) == "10.0.0.1"
+        assert resolve_client_ip(req, _NOBODY) == "10.0.0.1"
 
     def test_default_trusts_proxy(self):
-        """Default trust_proxy=True should honour proxy headers."""
+        """An empty trusted set (the default) trusts no proxy header."""
         req = FakeRequest(headers={"x-forwarded-for": "1.2.3.4"})
-        assert extract_client_ip(req) == "1.2.3.4"
+        assert resolve_client_ip(req, TrustedProxies()) == "127.0.0.1"
 
     def test_client_addr_fallback(self):
         req = FakeRequest(client_addr=("192.168.1.1", 9999))
-        assert extract_client_ip(req, trust_proxy=True) == "192.168.1.1"
+        assert resolve_client_ip(req, _LOOPBACK) == "192.168.1.1"
 
     def test_no_addr_returns_unknown(self):
         req = FakeRequest()
         req.client_addr = None  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
-        assert extract_client_ip(req, trust_proxy=False) == "unknown"
+        assert resolve_client_ip(req, _NOBODY) == "unknown"
 
     def test_empty_tuple_returns_unknown(self):
         req = FakeRequest()
         req.client_addr = (None, 0)  # type: ignore[assignment]  # ty: ignore[invalid-assignment]
-        assert extract_client_ip(req, trust_proxy=False) == "unknown"
+        assert resolve_client_ip(req, _NOBODY) == "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +162,9 @@ class TestExtractClientIp:
 
 class TestSetupRequestContext:
     def test_populates_context_for_openai_path(self):
-        hook = setup_request_context(trust_proxy=True)
+        hook = setup_request_context(
+            ProxyPolicy(TrustedProxies.parse(["10.0.0.0/8", "127.0.0.1"]))
+        )
         req = FakeRequest(
             path="/v1/chat/completions",
             headers={"x-forwarded-for": "1.2.3.4", "x-request-id": "req-123"},
@@ -168,7 +178,9 @@ class TestSetupRequestContext:
         assert ctx.is_admin is False
 
     def test_populates_context_for_anthropic_path(self):
-        hook = setup_request_context(trust_proxy=True)
+        hook = setup_request_context(
+            ProxyPolicy(TrustedProxies.parse(["10.0.0.0/8", "127.0.0.1"]))
+        )
         req = FakeRequest(
             path="/v1/messages",
             headers={"x-request-id": "req-456"},
@@ -179,7 +191,9 @@ class TestSetupRequestContext:
         assert ctx.is_admin is False
 
     def test_populates_context_for_google_path(self):
-        hook = setup_request_context(trust_proxy=True)
+        hook = setup_request_context(
+            ProxyPolicy(TrustedProxies.parse(["10.0.0.0/8", "127.0.0.1"]))
+        )
         req = FakeRequest(
             path="/v1beta/models/gemini:generateContent",
             headers={"x-request-id": "req-789"},
@@ -189,7 +203,9 @@ class TestSetupRequestContext:
         assert ctx.api_format == "google"
 
     def test_admin_path_sets_is_admin_and_none_format(self):
-        hook = setup_request_context(trust_proxy=True)
+        hook = setup_request_context(
+            ProxyPolicy(TrustedProxies.parse(["10.0.0.0/8", "127.0.0.1"]))
+        )
         req = FakeRequest(path="/admin/api/config")
         _, ctx = _run(_run_hook_and_get_context(hook, req))
         assert ctx is not None
@@ -197,7 +213,9 @@ class TestSetupRequestContext:
         assert ctx.api_format is None
 
     def test_generates_request_id_when_missing(self):
-        hook = setup_request_context(trust_proxy=True)
+        hook = setup_request_context(
+            ProxyPolicy(TrustedProxies.parse(["10.0.0.0/8", "127.0.0.1"]))
+        )
         req = FakeRequest(path="/v1/chat/completions")
         _, ctx = _run(_run_hook_and_get_context(hook, req))
         assert ctx is not None
@@ -206,7 +224,7 @@ class TestSetupRequestContext:
         assert "-" in ctx.request_id
 
     def test_trust_proxy_false_uses_client_addr(self):
-        hook = setup_request_context(trust_proxy=False)
+        hook = setup_request_context(ProxyPolicy())
         req = FakeRequest(
             path="/v1/chat/completions",
             headers={"x-forwarded-for": "1.2.3.4"},
@@ -218,14 +236,18 @@ class TestSetupRequestContext:
 
     def test_hook_returns_none(self):
         """The hook should not short-circuit the request."""
-        hook = setup_request_context(trust_proxy=True)
+        hook = setup_request_context(
+            ProxyPolicy(TrustedProxies.parse(["10.0.0.0/8", "127.0.0.1"]))
+        )
         req = FakeRequest(path="/v1/chat/completions")
         result, _ = _run(_run_hook_and_get_context(hook, req))
         assert result is None
 
     def test_health_path_gets_format(self):
         """Health paths are not admin — they get a format string."""
-        hook = setup_request_context(trust_proxy=True)
+        hook = setup_request_context(
+            ProxyPolicy(TrustedProxies.parse(["10.0.0.0/8", "127.0.0.1"]))
+        )
         req = FakeRequest(path="/health")
         _, ctx = _run(_run_hook_and_get_context(hook, req))
         assert ctx is not None
@@ -250,7 +272,9 @@ class TestContextvarIsolation:
 
     def test_context_overwritten_per_request(self):
         """Within a single async context, second hook call overwrites the first."""
-        hook = setup_request_context(trust_proxy=True)
+        hook = setup_request_context(
+            ProxyPolicy(TrustedProxies.parse(["10.0.0.0/8", "127.0.0.1"]))
+        )
 
         async def _two_requests():
             req1 = FakeRequest(path="/v1/messages", headers={"x-request-id": "first"})

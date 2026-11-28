@@ -31,7 +31,11 @@ from ..middleware.error_format import (
     is_admin_path as _is_admin_path,
 )
 from ..keystore import KeyStore
-from ..middleware.request_context import request_context_var, setup_request_context
+from ..middleware.request_context import (
+    ProxyPolicy,
+    request_context_var,
+    setup_request_context,
+)
 from ..ops import OpsContext, OpsGatewayStartup, OpsStartupValidation
 from ..ops.rejected import record_read_rejection, record_unrecorded_rejection
 from ..observability.logging import get_logger
@@ -316,7 +320,6 @@ def _install_rejection_recording(app: App, config: GatewayConfig) -> None:
     the rejection signal sees the reads the server refused before a request
     existed.
     """
-    trust_proxy = config.rate_limit_trust_proxy
 
     @app.on_response_started
     async def _record_rejection(request: Any, response: Any) -> None:
@@ -324,7 +327,7 @@ def _install_rejection_recording(app: App, config: GatewayConfig) -> None:
 
     @app.on_request_rejected
     async def _record_read_rejection(rejection: Any) -> None:
-        await record_read_rejection(app, rejection, trust_proxy=trust_proxy)
+        await record_read_rejection(app, rejection)
 
 
 def _install_lifecycle_hooks(app: App) -> None:
@@ -516,7 +519,9 @@ async def create_app(
     resolved_data_dir = _resolve_data_dir_for_app(config, config_path)
 
     # --- Request context (earliest hook — before auth and rate limiting) ---
-    app.before_request(setup_request_context(trust_proxy=config.rate_limit_trust_proxy))
+    proxy_policy = ProxyPolicy(config.trusted_proxies)
+    app.proxy_policy = proxy_policy  # type: ignore
+    app.before_request(setup_request_context(proxy_policy))
 
     # --- Hop-count loop detection (before auth — no point authenticating a loop) ---
     from ..middleware.hop_limit import create_hop_limit_hook

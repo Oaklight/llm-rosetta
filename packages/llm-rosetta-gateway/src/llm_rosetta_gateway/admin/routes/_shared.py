@@ -491,12 +491,14 @@ async def _reload_gateway_config(
                 "rate_limit_per_key",
                 "rate_limit_per_model",
                 "rate_limit_exclude",
-                "rate_limit_trust_proxy",
             )
         )
         if rl_changed:
             rate_limit_state.rebuild(new_config)
     request.app._prev_gateway_config = new_config
+    proxy_policy = getattr(request.app, "proxy_policy", None)
+    if proxy_policy is not None:
+        proxy_policy.trusted = new_config.trusted_proxies
 
     # Hot-reload log retention caps
     persistence = getattr(request.app, "persistence", None)

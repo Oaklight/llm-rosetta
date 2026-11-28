@@ -186,6 +186,12 @@ def apply_server_settings(config: GatewayConfig, _server: dict[str, Any]) -> Non
     # reaches.
     config.prefer_same_format = bool(_server.get("prefer_same_format", False))
 
+    # The proxies whose forwarding headers are believed; empty trusts none and
+    # the client is the TCP peer.
+    from ..middleware.request_context import TrustedProxies
+
+    config.trusted_proxies = TrustedProxies.parse(_server.get("trusted_proxies"))
+
     config.admin_password = _server.get("admin_password")
     if config.admin_password and _ENV_VAR_RE.search(config.admin_password):
         raise ValueError(
@@ -326,9 +332,11 @@ def apply_rate_limit_settings(config: GatewayConfig, _server: dict[str, Any]) ->
     config.rate_limit_per_key = rl.get("per_key")
     config.rate_limit_per_model = rl.get("per_model")
     config.rate_limit_exclude = rl.get("exclude_paths", ["/health", "/admin"])
-    # When True, trust X-Forwarded-For / X-Real-IP for per-IP limiting.
-    # Default False — use direct peer address (safe when exposed directly).
-    config.rate_limit_trust_proxy = bool(rl.get("trust_proxy", False))
+    if "trust_proxy" in rl:
+        raise ValueError(
+            "config: rate_limit.trust_proxy was removed; list the proxies in "
+            "front of the gateway as CIDRs in server.trusted_proxies instead"
+        )
 
 
 def apply_routing_settings(config: GatewayConfig, _routing: Any) -> None:

@@ -110,12 +110,19 @@
     "host": "0.0.0.0",
     "port": 8765,
 
+    // Reverse proxies in front of the gateway, as CIDRs (a bare address is one
+    // host).  Only a request whose TCP peer is listed may name its client in
+    // X-Forwarded-For; the chain is read from the right, skipping listed
+    // proxies, and the first other address is the client.  Empty (the default)
+    // trusts nobody: the client is the TCP peer.  Per-IP rate limits, the admin
+    // login lockout and the request logs all count that one address.
+    // "trusted_proxies": ["10.0.0.0/8", "172.16.0.0/12", "127.0.0.1/32"],
+
     // Rate limiting (disabled by default).
     // Quota strings: "N/unit" (e.g. "100/m", "10/s", "10000/d").
     // Multi-window: use an array to enforce multiple windows simultaneously,
     // e.g. ["60/m", "1000/h"] enforces both per-minute and per-hour limits.
     // Recommended hierarchy: global >= per_ip >= per_key >= per_model.
-    // Set trust_proxy to true when behind a reverse proxy that sets X-Forwarded-For.
     // "rate_limit": {
     //   "enabled": true,
     //   "algorithm": "sliding_window",
@@ -123,7 +130,6 @@
     //   "per_ip": ["120/m", "5000/h"],
     //   "per_key": "60/m",
     //   "per_model": "30/m",
-    //   "trust_proxy": false,
     //   "exclude_paths": ["/health", "/admin"]
     // }
   }

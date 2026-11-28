@@ -121,12 +121,11 @@ class RateLimitState:
     mix of old and new limiters.
     """
 
-    __slots__ = ("enabled", "exclude_prefixes", "trust_proxy", "_snap", "_key_limits")
+    __slots__ = ("enabled", "exclude_prefixes", "_snap", "_key_limits")
 
     def __init__(self) -> None:
         self.enabled: bool = False
         self.exclude_prefixes: list[str] = ["/health", "/admin"]
-        self.trust_proxy: bool = False
         self._snap: _LimiterSnapshot = _LimiterSnapshot(None, None, None, None)
         #: (key identity, quota spec) → its windows, when they were last used
         #: and how long the longest one runs.  A key whose limit changes gets
@@ -202,7 +201,6 @@ class RateLimitState:
         # Single reference assignment — atomic under the GIL.
         self._snap = snap
         self.exclude_prefixes = list(config.rate_limit_exclude)
-        self.trust_proxy = config.rate_limit_trust_proxy
         self.enabled = config.rate_limit_enabled
         self._prune_key_limits(time.monotonic())
         if self.enabled:
