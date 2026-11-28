@@ -12,9 +12,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from llm_rosetta_gateway import updates
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.ops.security import OpsSelfUpdate
+from llm_rosetta_gateway.admin_api import admin_context, catalogue
 
 from ._shared import _qp, parse_json_body
 
@@ -33,7 +32,9 @@ async def get_updates(request: Any) -> Response:
     if config is not None and not getattr(config, "update_check", True):
         return JSONResponse({"checked": False, "reason": "disabled"})
     force = (_qp(request, "force") or "") in ("1", "true")
-    payload = await updates.check(getattr(config, "proxy", None), force=force)
+    payload = await catalogue().check_for_update(
+        getattr(config, "proxy", None), force=force
+    )
     return JSONResponse(payload)
 
 
@@ -44,7 +45,7 @@ async def get_changelog(request: Any) -> Response:
     hides the "what changed" entry rather than showing an empty dialog.
     """
     language = _qp(request, "lang") or "en"
-    return JSONResponse({"markdown": updates.read_changelog(language)})
+    return JSONResponse({"markdown": catalogue().read_changelog(language)})
 
 
 async def apply_update(request: Any) -> Response:
@@ -72,7 +73,7 @@ async def apply_update(request: Any) -> Response:
         )
     proxy = getattr(config, "proxy", None)
     async with _install_lock:
-        status = await updates.check(proxy)
+        status = await catalogue().check_for_update(proxy)
         offered = status.get("update") or {}
         offered_version = offered.get("version")
         requested = body.get("version")
@@ -98,18 +99,16 @@ async def apply_update(request: Any) -> Response:
                 },
                 status_code=409,
             )
-        result = await updates.install(target, proxy)
+        result = await catalogue().install_update(target, proxy)
         if not result["ok"]:
             return JSONResponse(
                 {"status": "failed", "output": result["output"]},
                 status_code=502,
             )
-        ops_ctx = getattr(request.app, "ops_ctx", None)
-        if ops_ctx is not None:
-            await OpsSelfUpdate(ops_ctx, version=target).execute()
+        await admin_context(request).record_self_update(target)
         # The browser needs the response before the interpreter it is talking
         # to is replaced; half a second is one poll interval, not a timeout.
-        asyncio.get_running_loop().call_later(0.8, updates.restart_process)
+        asyncio.get_running_loop().call_later(0.8, catalogue().restart_process)
         return JSONResponse(
             {
                 "status": "restarting",

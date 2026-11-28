@@ -16,6 +16,7 @@ keeps the list of not-yet-migrated imports shrinking.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import AbstractAsyncContextManager
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 
@@ -26,14 +27,18 @@ if TYPE_CHECKING:
 
 __all__ = [
     "AdminCatalogue",
+    "AdminAudit",
     "AdminConfigAccess",
     "AdminContext",
+    "AdminJobs",
+    "AdminMaintenance",
     "AdminExtensions",
     "AdminServices",
     "AdminShimSources",
     "ConfigIO",
     "ExtensionInstallRefused",
     "GatewayConfig",
+    "MaintenanceLoadTimeStep",
     "RetiredNameError",
     "admin_context",
     "app_admin_context",
@@ -95,7 +100,7 @@ class RetiredNameError(ValueError):
 
 
 @runtime_checkable
-class AdminCatalogue(Protocol):
+class AdminRegistries(Protocol):
     """What the gateway knows about model types, provider types and limits.
 
     Stateless facts: the registries and constants the config editor validates
@@ -170,6 +175,300 @@ class AdminCatalogue(Protocol):
         self, models: Mapping[str, Any], upstream_names: Mapping[str, str]
     ) -> list[str]:
         """Warnings for models whose upstream names route back into the gateway."""
+        ...
+
+    def embeddings_formats(self) -> list[str]:
+        """The wire formats an ``embeddings`` provider may use."""
+        ...
+
+    def rerank_formats(self) -> list[str]:
+        """The wire formats a ``rerank`` provider may use."""
+        ...
+
+    def config_lock(self, path: str) -> AbstractAsyncContextManager[None]:
+        """Hold the in-process and cross-process lock on the config file *path*."""
+        ...
+
+    def provider_preflight_error(
+        self, providers: Mapping[str, Any], data_dir: str | None = None
+    ) -> str | None:
+        """Build each provider in *providers* and return the first refusal.
+
+        *providers* is the raw ``providers`` section with environment
+        placeholders already expanded and disabled entries removed.  Nothing is
+        kept: the point is to refuse a document the loader would reject before
+        it is written.  *data_dir* is the resolved data directory.
+        """
+        ...
+
+    def admin_cookie_name(self) -> str:
+        """The name of the admin session cookie."""
+        ...
+
+    def request_is_https(self, request: Any) -> bool:
+        """Whether *request* arrived over HTTPS, as the trusted-proxy policy sees it."""
+        ...
+
+    def public_token_status(self, status: Any) -> dict[str, Any]:
+        """A credential-minting provider's token status, without any secret."""
+        ...
+
+    async def refresh_credential(self, pinfo: Any, *, debounce: bool = True) -> bool:
+        """Re-mint the credential of *pinfo*; ``False`` when it cannot be."""
+        ...
+
+    def token_pending_sentinel(self) -> str:
+        """The key a credential-minting provider holds until its first mint."""
+        ...
+
+    def account_token_for(self, account_id: str) -> str | None:
+        """The opaque token that names an account in the panel's URLs."""
+        ...
+
+
+@runtime_checkable
+class AdminQuotaRouting(Protocol):
+    """What routing and quota say about a provider, read from process-wide state."""
+
+    async def read_provider_quota(
+        self, config: Any, name: str, *, force: bool = False
+    ) -> dict[str, Any]:
+        """Probe (or read the cached probe of) one provider's usage allowance."""
+        ...
+
+    def provider_allowance(self, pinfo: Any) -> Any:
+        """One provider's allowance as a yes/no and a comparable number."""
+        ...
+
+    def provider_cooldown(self, name: str, pinfo: Any) -> dict[str, Any] | None:
+        """A provider-wide block, or ``None``."""
+        ...
+
+    def lane_eligibility(
+        self, pinfo: Any, name: str | None = None, *, lane: str
+    ) -> Any:
+        """Whether one lane of *pinfo* may serve, and why not."""
+        ...
+
+    def provider_eligibility(self, pinfo: Any, name: str | None = None) -> Any:
+        """Whether *pinfo* may serve as a provider, and why not."""
+        ...
+
+    def rate_limited_reason(self) -> str:
+        """The eligibility reason code for a rate-limited lane."""
+        ...
+
+    def parse_model_routing(self, raw: Any, *, label: str) -> Any:
+        """Parse one model's ``routing`` block; raises ``ValueError`` if invalid."""
+        ...
+
+
+@runtime_checkable
+class AdminShimSourceFacts(Protocol):
+    """The declarative shim sources, read and applied without an app."""
+
+    def shims_signature(self, raw: Mapping[str, Any] | None) -> str:
+        """A stable hash of the ``shims`` section of *raw*."""
+        ...
+
+    def resolve_source_config(
+        self, section: Mapping[str, Any] | None, config_path: str | None
+    ) -> str:
+        """Resolve a ``shims`` section into its cache root; raises if invalid."""
+        ...
+
+    def apply_shim_sources(
+        self,
+        raw: Mapping[str, Any],
+        config_path: str | None = None,
+        *,
+        force_refresh: bool = False,
+    ) -> Any:
+        """Apply the declared sources and return the load report.  Blocking."""
+        ...
+
+    def check_source_updates(self, report: Any, *, proxy: str | None = None) -> Any:
+        """Compare each installed source with what it publishes.  Blocking."""
+        ...
+
+
+@runtime_checkable
+class AdminSupport(Protocol):
+    """Vendored helpers, the update check and log vocabularies the panel uses."""
+
+    def http_client(self, **options: Any) -> Any:
+        """An async HTTP client; use it as ``async with``."""
+        ...
+
+    def is_http_response(self, value: Any) -> bool:
+        """Whether *value* is a buffered response of :meth:`http_client`."""
+        ...
+
+    def yaml_load(self, text: str) -> Any:
+        """Parse a YAML document."""
+        ...
+
+    def scrub_credential_patterns(self, text: str) -> str:
+        """*text* with anything shaped like a credential removed."""
+        ...
+
+    def decompress_error_dump_body(self, data: bytes) -> dict[str, Any]:
+        """Decode one stored error-dump body."""
+        ...
+
+    def ops_event_types(self) -> list[str]:
+        """Every ops-log event type."""
+        ...
+
+    def ops_sources(self) -> list[str]:
+        """Every ops-log source."""
+        ...
+
+    def internal_key_label(self) -> str:
+        """The label under which the gateway's own requests are counted."""
+        ...
+
+    def internal_usage_bucket(self) -> str:
+        """The usage subject of the gateway's own requests."""
+        ...
+
+    async def check_for_update(
+        self, proxy: str | None = None, *, force: bool = False
+    ) -> dict[str, Any]:
+        """What PyPI offers and whether this process may update itself."""
+        ...
+
+    def read_changelog(self, language: str) -> str:
+        """The changelog bundled with this build, as markdown."""
+        ...
+
+    async def install_update(self, version: str, proxy: str | None) -> dict[str, Any]:
+        """Install *version* with pip; ``{"ok", "output", "dists"}``."""
+        ...
+
+    def restart_process(self) -> None:
+        """Replace this process image with a fresh interpreter."""
+        ...
+
+
+@runtime_checkable
+class AdminCatalogue(
+    AdminRegistries,
+    AdminQuotaRouting,
+    AdminShimSourceFacts,
+    AdminSupport,
+    Protocol,
+):
+    """Everything the admin panel reads that needs no app.
+
+    Process-wide facts and helpers: the registries and constants, the quota and
+    eligibility state, the shim-source operations, and the vendored helpers.
+    Bound once by ``create_app`` and reached with :func:`catalogue`.
+    """
+
+
+class MaintenanceLoadTimeStep(Exception):
+    """A step that runs when a document is loaded, not on demand.
+
+    Its context is the document a *previous* load read, so re-running it from a
+    request would correct a stale copy and, for a caller that writes the result
+    back, rewrite the config from it.  The surface refuses instead.
+    """
+
+
+@runtime_checkable
+class AdminMaintenance(Protocol):
+    """The maintenance steps of every store, for the maintenance page."""
+
+    def maintenance_registries(self) -> list[Any]:
+        """Every registry this app reports on, in the order an operator reads it.
+
+        Each has ``name``, ``policy``, ``steps`` and ``results``.
+        """
+        ...
+
+    async def run_maintenance_step(self, name: str) -> Any | None:
+        """Run one step by name and return its result, or ``None`` if unknown.
+
+        A step that fails still answers: the recorded result says why.
+
+        Raises:
+            MaintenanceLoadTimeStep: The step belongs to the load-time registry.
+        """
+        ...
+
+
+@runtime_checkable
+class AdminJobs(Protocol):
+    """Queue the destructive data operations as background jobs."""
+
+    async def enqueue_rebuild(self, manager: Any) -> Any:
+        """Queue the counter rebuild."""
+        ...
+
+    async def enqueue_clear(self, manager: Any, table: str) -> Any:
+        """Hide every row of *table* and queue its deletion."""
+        ...
+
+    async def enqueue_cleanup(self, manager: Any, **options: Any) -> Any:
+        """Hide the rows a cleanup selects and queue their deletion."""
+        ...
+
+    async def enqueue_vacuum(self, manager: Any) -> Any:
+        """Queue a database vacuum."""
+        ...
+
+    async def enqueue_trim(self, manager: Any) -> Any:
+        """Queue a trim of the logs to their retention caps."""
+        ...
+
+
+@runtime_checkable
+class AdminAudit(Protocol):
+    """Record what the operator did in the ops log.
+
+    Each does nothing when the app has no ops context.
+    """
+
+    async def record_password_change(self) -> None:
+        """The admin password was changed."""
+        ...
+
+    async def record_token_rotation(self) -> None:
+        """The internal proxy token was rotated."""
+        ...
+
+    async def record_sessions_cleared(self, count: int) -> None:
+        """Every admin session was invalidated; *count* were open."""
+        ...
+
+    async def record_key_created(self, key_id: str, label: str) -> None:
+        """A gateway API key was created."""
+        ...
+
+    async def record_key_updated(self, key_id: str, changed_fields: list[str]) -> None:
+        """A gateway API key was edited."""
+        ...
+
+    async def record_key_deleted(self, key_id: str, label: str | None) -> None:
+        """A gateway API key was deleted."""
+        ...
+
+    async def record_key_rotated(self, key_id: str, label: str | None) -> None:
+        """A gateway API key was rotated."""
+        ...
+
+    async def record_self_update(self, version: str) -> None:
+        """The gateway installed *version* and is restarting into it."""
+        ...
+
+    async def delete_error_dump(self, dump_id: str) -> bool | None:
+        """Delete one error dump and audit it.
+
+        Returns:
+            ``True`` if it existed, ``False`` if not, ``None`` when the app has
+            no persistence.
+        """
         ...
 
 
@@ -340,17 +639,21 @@ class AdminExtensions(Protocol):
 
 @runtime_checkable
 class AdminContext(
+    AdminAudit,
     AdminConfigAccess,
+    AdminExtensions,
+    AdminJobs,
+    AdminMaintenance,
     AdminServices,
     AdminShimSources,
-    AdminExtensions,
     Protocol,
 ):
     """Everything the admin panel may ask of the running gateway.
 
-    Capabilities are added as base classes, one per concern: config,
-    providers and credentials, shims, routing and quota, keys and auth,
-    observability and data, jobs, maintenance.  Only config is migrated so far.
+    Capabilities are base classes, one per concern: the audit trail, config,
+    extensions, jobs, maintenance, the services admin runs on, and shim sources.
+    What needs no app (registries, constants, the quota and eligibility state,
+    vendored helpers) is on :class:`AdminCatalogue` instead.
     """
 
 

@@ -5,13 +5,14 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from llm_rosetta_gateway._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
-from ...config import GatewayConfig
-from ...admin_api import admin_context
+if TYPE_CHECKING:
+    from llm_rosetta_gateway.admin_api import GatewayConfig
+
+from ...admin_api import admin_context, catalogue
 from ._shared import parse_json_body
 
 # In-memory store: task_id → {status, result, asyncio_task, started, ...}
@@ -121,7 +122,7 @@ async def _run_test_task(
     try:
         # Use a per-task client to avoid lock contention / deadlock
         # with the shared proxy client.
-        client = AsyncClient(timeout=float(_TASK_TIMEOUT))
+        client = catalogue().http_client(timeout=float(_TASK_TIMEOUT))
         try:
             headers = {
                 "Content-Type": "application/json",
@@ -154,7 +155,7 @@ async def _run_test_task(
                     client.post(url, json=current, headers=headers),
                     timeout=_TASK_TIMEOUT,
                 )
-                assert isinstance(resp, HttpResponse)
+                assert catalogue().is_http_response(resp)
                 body = _response_body(resp)
                 if resp.status_code >= 400:
                     break

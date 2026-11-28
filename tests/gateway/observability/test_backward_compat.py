@@ -6,7 +6,7 @@ import sys
 import pytest
 
 import llm_rosetta_gateway.observability as obs
-from llm_rosetta_gateway.admin.routes.profiling import ProfilerState
+from llm_rosetta_gateway.observability.profiling import ProfilerState
 
 _REMOVED_ADMIN_PATHS = [
     "llm_rosetta_gateway.admin.metrics",

@@ -196,6 +196,113 @@ class GatewayAdminContext:
                 remember_days=config.admin_session_remember_days,
             )
 
+    async def _audit(self, build: Any) -> None:
+        """Run the op *build* makes from the ops context, if the app has one."""
+        ctx = getattr(self._app, "ops_ctx", None)
+        if ctx is not None:
+            await build(ctx).execute()
+
+    async def record_password_change(self) -> None:
+        """The admin password was changed."""
+        from ..ops.security import OpsPasswordChange
+
+        await self._audit(OpsPasswordChange)
+
+    async def record_token_rotation(self) -> None:
+        """The internal proxy token was rotated."""
+        from ..ops.security import OpsTokenRotate
+
+        await self._audit(OpsTokenRotate)
+
+    async def record_sessions_cleared(self, count: int) -> None:
+        """Every admin session was invalidated; *count* were open."""
+        from ..ops.security import OpsSessionLogoutAll
+
+        await self._audit(lambda ctx: OpsSessionLogoutAll(ctx, count=count))
+
+    async def record_key_created(self, key_id: str, label: str) -> None:
+        """A gateway API key was created."""
+        from ..ops.keys import OpsKeyCreate
+
+        await self._audit(lambda ctx: OpsKeyCreate(ctx, key_id=key_id, label=label))
+
+    async def record_key_updated(self, key_id: str, changed_fields: list[str]) -> None:
+        """A gateway API key was edited."""
+        from ..ops.keys import OpsKeyUpdate
+
+        await self._audit(
+            lambda ctx: OpsKeyUpdate(ctx, key_id=key_id, changed_fields=changed_fields)
+        )
+
+    async def record_key_deleted(self, key_id: str, label: str | None) -> None:
+        """A gateway API key was deleted."""
+        from ..ops.keys import OpsKeyDelete
+
+        await self._audit(lambda ctx: OpsKeyDelete(ctx, key_id=key_id, label=label))
+
+    async def record_key_rotated(self, key_id: str, label: str | None) -> None:
+        """A gateway API key was rotated."""
+        from ..ops.keys import OpsKeyRotate
+
+        await self._audit(lambda ctx: OpsKeyRotate(ctx, key_id=key_id, label=label))
+
+    async def record_self_update(self, version: str) -> None:
+        """The gateway installed *version* and is restarting into it."""
+        from ..ops.security import OpsSelfUpdate
+
+        await self._audit(lambda ctx: OpsSelfUpdate(ctx, version=version))
+
+    async def delete_error_dump(self, dump_id: str) -> bool | None:
+        """Delete one error dump and audit it; ``None`` without persistence."""
+        from ..ops.data import OpsDeleteErrorDump
+
+        ctx = getattr(self._app, "ops_ctx", None)
+        if ctx is None or ctx.persistence is None:
+            return None
+        return bool(await OpsDeleteErrorDump(ctx, dump_id=dump_id).execute())
+
+    async def enqueue_rebuild(self, manager: Any) -> Any:
+        """Queue the counter rebuild."""
+        from ..jobs.enqueue import enqueue_rebuild
+
+        return await enqueue_rebuild(manager)
+
+    async def enqueue_clear(self, manager: Any, table: str) -> Any:
+        """Hide every row of *table* and queue its deletion."""
+        from ..jobs.enqueue import enqueue_clear
+
+        return await enqueue_clear(manager, table)
+
+    async def enqueue_cleanup(self, manager: Any, **options: Any) -> Any:
+        """Hide the rows a cleanup selects and queue their deletion."""
+        from ..jobs.enqueue import enqueue_cleanup
+
+        return await enqueue_cleanup(manager, **options)
+
+    async def enqueue_vacuum(self, manager: Any) -> Any:
+        """Queue a database vacuum."""
+        from ..jobs.enqueue import enqueue_vacuum
+
+        return await enqueue_vacuum(manager)
+
+    async def enqueue_trim(self, manager: Any) -> Any:
+        """Queue a trim of the logs to their retention caps."""
+        from ..jobs.enqueue import enqueue_trim
+
+        return await enqueue_trim(manager)
+
+    def maintenance_registries(self) -> list[Any]:
+        """Every registry this app reports on, in the order an operator reads it."""
+        from .admin_maintenance import registries_for
+
+        return registries_for(self._app)
+
+    async def run_maintenance_step(self, name: str) -> Any | None:
+        """Run one step by name and return its result, or ``None`` if unknown."""
+        from .admin_maintenance import run_step
+
+        return await run_step(self._app, name)
+
     async def start_services(
         self,
         config: GatewayConfig,

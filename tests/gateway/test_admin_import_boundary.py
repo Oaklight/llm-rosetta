@@ -3,12 +3,10 @@
 ``admin/`` is served by the gateway but is meant to be replaceable.  Guards:
 
 * ``admin/**`` may import only the admin package, ``admin_api`` and the vendored
-  HTTP server from the gateway distribution.  The imports that predate the rule
-  sit on ``_LEGACY_ALLOWLIST``; the list may only shrink, so an entry that no
-  longer occurs fails the test, a new offender fails it, and so does an entry
-  that is not on ``_LEGACY_ALLOWLIST_FROZEN`` (a copy of the list as it was
-  drawn, so adding an entry and the import it covers in one commit, or swapping
-  one pair for another, cannot pass).
+  HTTP server from the gateway distribution.  There is no allowlist: what admin
+  needs from the gateway is a member of ``admin_api.AdminContext`` (the parts
+  that are tied to one app) or of ``admin_api.AdminCatalogue`` (registries,
+  constants and helpers that need no app), implemented in ``app/``;
 * no module in the gateway package outside ``admin/`` imports the admin package,
   except the app factory, which mounts it (``tests/``, ``scripts/`` and
   ``tools/`` are not scanned: tests legitimately import ``admin``);
@@ -18,12 +16,8 @@
 The core distribution (``llm_rosetta``) is a legitimate dependency of admin and
 is not scanned here.
 
-After a rebase, print the current offenders with
-``python tests/gateway/test_admin_import_boundary.py`` and paste the result over
-``_LEGACY_ALLOWLIST``.  Migrating an import deletes its entry from both
-``_LEGACY_ALLOWLIST`` and ``_LEGACY_ALLOWLIST_FROZEN``; the frozen copy is never
-regenerated, so the printer does not emit it.  The entries carry no line
-numbers.
+Print the current offenders with
+``python tests/gateway/test_admin_import_boundary.py``.
 """
 
 from __future__ import annotations
@@ -52,122 +46,6 @@ _FORBIDDEN = {
     _GATEWAY + ".transport.provider_info._VERSION_SUFFIXES",
     _GATEWAY + ".shims.sources._selection_predicate",
 }
-
-#: Gateway imports in ``admin/**`` that predate the rule, as ``(file, module)``
-#: with *file* relative to the gateway package.  Migrate one, delete its entry.
-_LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("admin/routes/_shared.py", "llm_rosetta_gateway.config"),
-        ("admin/routes/_shared.py", "llm_rosetta_gateway.config.resolve"),
-        ("admin/routes/_shared.py", "llm_rosetta_gateway.config.providers"),
-        ("admin/routes/auth.py", "llm_rosetta_gateway.config"),
-        ("admin/routes/auth.py", "llm_rosetta_gateway.middleware.auth"),
-        ("admin/routes/auth.py", "llm_rosetta_gateway.ops.security"),
-        ("admin/routes/capture.py", "llm_rosetta_gateway.observability.capture"),
-        ("admin/routes/config/payload.py", "llm_rosetta_gateway.config"),
-        (
-            "admin/routes/config/payload.py",
-            "llm_rosetta_gateway.transport.token_refresh",
-        ),
-        ("admin/routes/config/settings.py", "llm_rosetta_gateway.middleware.ratelimit"),
-        ("admin/routes/config/shim_files.py", "llm_rosetta_gateway._vendor.yaml"),
-        ("admin/routes/config/shim_manifests.py", "llm_rosetta_gateway._vendor.yaml"),
-        ("admin/routes/config/shims.py", "llm_rosetta_gateway.shims.sources"),
-        ("admin/routes/config/shims.py", "llm_rosetta_gateway.shims.shim_sources"),
-        ("admin/routes/config/upstream.py", "llm_rosetta_gateway._vendor.httpclient"),
-        ("admin/routes/connectivity.py", "llm_rosetta_gateway._vendor.httpclient"),
-        ("admin/routes/credential.py", "llm_rosetta_gateway.config.providers"),
-        ("admin/routes/credential.py", "llm_rosetta_gateway.transport.provider_info"),
-        ("admin/routes/credential.py", "llm_rosetta_gateway.transport.token_refresh"),
-        ("admin/routes/keys.py", "llm_rosetta_gateway.keystore"),
-        ("admin/routes/keys.py", "llm_rosetta_gateway.ops.keys"),
-        ("admin/routes/logos.py", "llm_rosetta_gateway._vendor.httpclient"),
-        ("admin/routes/maintenance.py", "llm_rosetta_gateway.maintenance.backfills"),
-        ("admin/routes/maintenance.py", "llm_rosetta_gateway.keystore.maintenance"),
-        (
-            "admin/routes/maintenance.py",
-            "llm_rosetta_gateway.observability.maintenance",
-        ),
-        ("admin/routes/observability.py", "llm_rosetta_gateway._vendor.httpclient"),
-        ("admin/routes/observability.py", "llm_rosetta_gateway.config"),
-        ("admin/routes/observability.py", "llm_rosetta_gateway.jobs.enqueue"),
-        (
-            "admin/routes/observability.py",
-            "llm_rosetta_gateway.observability.error_dump",
-        ),
-        ("admin/routes/observability.py", "llm_rosetta_gateway.observability.ops_log"),
-        ("admin/routes/observability.py", "llm_rosetta_gateway.ops.data"),
-        ("admin/routes/profiling.py", "llm_rosetta_gateway.observability.profiling"),
-        ("admin/routes/quota.py", "llm_rosetta_gateway.observability.sanitize"),
-        ("admin/routes/quota.py", "llm_rosetta_gateway.quota.service"),
-        ("admin/routes/routing.py", "llm_rosetta_gateway.quota.service"),
-        ("admin/routes/routing.py", "llm_rosetta_gateway.routing"),
-        ("admin/routes/routing.py", "llm_rosetta_gateway.routing.eligibility"),
-        ("admin/routes/testing.py", "llm_rosetta_gateway._vendor.httpclient"),
-        ("admin/routes/testing.py", "llm_rosetta_gateway.config"),
-        ("admin/routes/updates.py", "llm_rosetta_gateway.ops.security"),
-        ("admin/routes/updates.py", "llm_rosetta_gateway.updates"),
-    }
-)
-
-#: The pairs on the list when the boundary was drawn, never added to.  Delete an
-#: entry here together with the same entry in ``_LEGACY_ALLOWLIST`` when its
-#: import migrates.  A pair on the live list but not here is a new offender that
-#: was allow-listed instead of routed through ``admin_api``.
-_LEGACY_ALLOWLIST_FROZEN: frozenset[tuple[str, str]] = frozenset(
-    {
-        ("admin/routes/_shared.py", "llm_rosetta_gateway.config"),
-        ("admin/routes/_shared.py", "llm_rosetta_gateway.config.resolve"),
-        ("admin/routes/_shared.py", "llm_rosetta_gateway.config.providers"),
-        ("admin/routes/auth.py", "llm_rosetta_gateway.config"),
-        ("admin/routes/auth.py", "llm_rosetta_gateway.middleware.auth"),
-        ("admin/routes/auth.py", "llm_rosetta_gateway.ops.security"),
-        ("admin/routes/capture.py", "llm_rosetta_gateway.observability.capture"),
-        ("admin/routes/config/payload.py", "llm_rosetta_gateway.config"),
-        (
-            "admin/routes/config/payload.py",
-            "llm_rosetta_gateway.transport.token_refresh",
-        ),
-        ("admin/routes/config/settings.py", "llm_rosetta_gateway.middleware.ratelimit"),
-        ("admin/routes/config/shim_files.py", "llm_rosetta_gateway._vendor.yaml"),
-        ("admin/routes/config/shim_manifests.py", "llm_rosetta_gateway._vendor.yaml"),
-        ("admin/routes/config/shims.py", "llm_rosetta_gateway.shims.sources"),
-        ("admin/routes/config/shims.py", "llm_rosetta_gateway.shims.shim_sources"),
-        ("admin/routes/config/upstream.py", "llm_rosetta_gateway._vendor.httpclient"),
-        ("admin/routes/connectivity.py", "llm_rosetta_gateway._vendor.httpclient"),
-        ("admin/routes/credential.py", "llm_rosetta_gateway.config.providers"),
-        ("admin/routes/credential.py", "llm_rosetta_gateway.transport.provider_info"),
-        ("admin/routes/credential.py", "llm_rosetta_gateway.transport.token_refresh"),
-        ("admin/routes/keys.py", "llm_rosetta_gateway.keystore"),
-        ("admin/routes/keys.py", "llm_rosetta_gateway.ops.keys"),
-        ("admin/routes/logos.py", "llm_rosetta_gateway._vendor.httpclient"),
-        ("admin/routes/maintenance.py", "llm_rosetta_gateway.maintenance.backfills"),
-        ("admin/routes/maintenance.py", "llm_rosetta_gateway.keystore.maintenance"),
-        (
-            "admin/routes/maintenance.py",
-            "llm_rosetta_gateway.observability.maintenance",
-        ),
-        ("admin/routes/observability.py", "llm_rosetta_gateway._vendor.httpclient"),
-        ("admin/routes/observability.py", "llm_rosetta_gateway.config"),
-        ("admin/routes/observability.py", "llm_rosetta_gateway.jobs.enqueue"),
-        (
-            "admin/routes/observability.py",
-            "llm_rosetta_gateway.observability.error_dump",
-        ),
-        ("admin/routes/observability.py", "llm_rosetta_gateway.observability.ops_log"),
-        ("admin/routes/observability.py", "llm_rosetta_gateway.ops.data"),
-        ("admin/routes/profiling.py", "llm_rosetta_gateway.observability.profiling"),
-        ("admin/routes/quota.py", "llm_rosetta_gateway.observability.sanitize"),
-        ("admin/routes/quota.py", "llm_rosetta_gateway.quota.service"),
-        ("admin/routes/routing.py", "llm_rosetta_gateway.quota.service"),
-        ("admin/routes/routing.py", "llm_rosetta_gateway.routing"),
-        ("admin/routes/routing.py", "llm_rosetta_gateway.routing.eligibility"),
-        ("admin/routes/testing.py", "llm_rosetta_gateway._vendor.httpclient"),
-        ("admin/routes/testing.py", "llm_rosetta_gateway.config"),
-        ("admin/routes/updates.py", "llm_rosetta_gateway.ops.security"),
-        ("admin/routes/updates.py", "llm_rosetta_gateway.updates"),
-    }
-)
 
 
 def _absolute_module(path: Path, node: ast.ImportFrom) -> str:
@@ -263,27 +141,10 @@ def _admin_offenders() -> set[tuple[str, str]]:
 
 
 def test_admin_imports_only_its_boundary():
-    new = sorted(_admin_offenders() - _LEGACY_ALLOWLIST)
-    assert new == [], (
+    offenders = sorted(_admin_offenders())
+    assert offenders == [], (
         "admin/ must reach the gateway through llm_rosetta_gateway.admin_api; "
-        f"new gateway imports: {new}"
-    )
-
-
-def test_legacy_allowlist_only_shrinks():
-    stale = sorted(_LEGACY_ALLOWLIST - _admin_offenders())
-    assert stale == [], f"remove these entries from _LEGACY_ALLOWLIST: {stale}"
-
-
-def test_legacy_allowlist_never_grows():
-    # The two checks above compare the list with the tree, so a commit that adds
-    # an entry together with the import it covers passes both.  The frozen copy
-    # pins membership, which also bounds the size, so a swap of one pair for
-    # another fails too (this replaces a size ceiling, which a swap passed).
-    added = sorted(_LEGACY_ALLOWLIST - _LEGACY_ALLOWLIST_FROZEN)
-    assert added == [], (
-        f"new entries on _LEGACY_ALLOWLIST: {added}. Route the import through "
-        "llm_rosetta_gateway.admin_api instead of allow-listing it."
+        f"gateway imports outside it: {offenders}"
     )
 
 
@@ -336,7 +197,5 @@ def test_guard_catches_absolute_relative_and_dynamic_imports():
 
 
 if __name__ == "__main__":
-    print("_LEGACY_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(\n    {")
     for _file, _module in sorted(_admin_offenders()):
-        print(f'        ("{_file}", "{_module}"),')
-    print("    }\n)")
+        print(f'("{_file}", "{_module}"),')

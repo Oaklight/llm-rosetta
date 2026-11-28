@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta.api import (
@@ -15,8 +15,6 @@ from llm_rosetta.api import (
 )
 
 from ....admin_api import RetiredNameError, admin_context, catalogue
-from ....config import GatewayConfig
-from ....transport.token_refresh import public_token_status
 from .._shared import (
     _TOKEN_COMMAND_MARKER,
     _get_config_io,
@@ -28,6 +26,9 @@ from .._shared import (
 )
 
 from .shims import _shim_status_payload
+
+if TYPE_CHECKING:
+    from ....admin_api import GatewayConfig
 
 logger = logging.getLogger("llm-rosetta-gateway")
 
@@ -436,7 +437,9 @@ async def get_config(request: Any) -> Response:
                 # The same bounded view the credential endpoints return: this
                 # payload is what the panel loads on open, so a command's
                 # unbounded diagnostics would reach the browser here first.
-                masked["token_status"] = public_token_status(pinfo.token_status)
+                masked["token_status"] = catalogue().public_token_status(
+                    pinfo.token_status
+                )
             elif pinfo is not None and pinfo.mints_credential:
                 masked["token_status"] = {
                     "enabled": True,
@@ -594,8 +597,8 @@ async def get_config(request: Any) -> Response:
                 }
                 for s in list_shims()
             ],
-            "embeddings_formats": GatewayConfig.embeddings_formats(),
-            "rerank_formats": GatewayConfig.rerank_formats(),
+            "embeddings_formats": catalogue().embeddings_formats(),
+            "rerank_formats": catalogue().rerank_formats(),
             "model_types": _get_model_type_metadata(),
         }
     )

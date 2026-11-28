@@ -9,18 +9,17 @@ from __future__ import annotations
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.observability.capture import CaptureState  # noqa: F401
 
 
 async def get_capture_status(request: Any) -> Response:
     """Return current capture status."""
-    state: CaptureState = request.app.capture_state
+    state: Any = request.app.capture_state
     return JSONResponse(state.status())
 
 
 async def enable_capture(request: Any) -> Response:
     """Enable content capture for the next N requests."""
-    state: CaptureState = request.app.capture_state
+    state: Any = request.app.capture_state
     try:
         body = request.json()
     except Exception:
@@ -32,20 +31,20 @@ async def enable_capture(request: Any) -> Response:
 
 async def disable_capture(request: Any) -> Response:
     """Disable content capture."""
-    state: CaptureState = request.app.capture_state
+    state: Any = request.app.capture_state
     return JSONResponse(state.disable())
 
 
 async def get_capture_results(request: Any) -> Response:
     """Return capture result summaries (no bodies)."""
-    state: CaptureState = request.app.capture_state
+    state: Any = request.app.capture_state
     summaries = [r.summary() for r in state.results]
     return JSONResponse({"results": summaries, "total": len(summaries)})
 
 
 async def get_capture_result(request: Any, **kwargs: Any) -> Response:
     """Return a single capture result by index (full detail)."""
-    state: CaptureState = request.app.capture_state
+    state: Any = request.app.capture_state
     try:
         index = int(request.path_params["index"])
     except (ValueError, TypeError, KeyError):
@@ -59,6 +58,6 @@ async def get_capture_result(request: Any, **kwargs: Any) -> Response:
 
 async def clear_capture_results(request: Any) -> Response:
     """Clear all capture results."""
-    state: CaptureState = request.app.capture_state
+    state: Any = request.app.capture_state
     state.clear_results()
     return JSONResponse({"ok": True})

@@ -21,8 +21,6 @@ def _apply_rate_limit_settings(
     server: dict[str, Any], rl_body: dict[str, Any]
 ) -> Response | None:
     """Validate and apply rate_limit settings; return error Response or None."""
-    from llm_rosetta_gateway.middleware.ratelimit import parse_quota
-
     rl_cfg = server.setdefault("rate_limit", {})
     if "enabled" in rl_body:
         rl_cfg["enabled"] = bool(rl_body["enabled"])
@@ -44,7 +42,7 @@ def _apply_rate_limit_settings(
                 quotas = val if isinstance(val, list) else [val]
                 for q in quotas:
                     try:
-                        parse_quota(q)
+                        catalogue().parse_quota(q)
                     except ValueError as exc:
                         return JSONResponse(
                             {"error": f"Invalid {quota_key} quota: {exc}"},

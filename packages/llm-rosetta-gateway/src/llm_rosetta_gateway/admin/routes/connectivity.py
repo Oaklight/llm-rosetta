@@ -56,11 +56,9 @@ async def test_provider_connectivity(request: Any, name: str) -> Response:
     if lane and lane != "http":
         return await _probe_agent_lane(request, pinfo, name, base_url, lane)
 
-    from llm_rosetta_gateway._vendor.httpclient import AsyncClient
-
     proxy = provider_cfg.get("proxy") or getattr(config, "proxy", None)
     timeout = float(provider_cfg.get("timeout", 10))
-    async with AsyncClient(timeout=min(timeout, 10), proxy=proxy) as client:
+    async with catalogue().http_client(timeout=min(timeout, 10), proxy=proxy) as client:
         # Build auth headers from provider config (same as fetch-models)
         pinfo = config.providers.get(name) if hasattr(config, "providers") else None
         # A token_command provider still holding the pending sentinel would

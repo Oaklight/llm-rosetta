@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from llm_rosetta_gateway._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 from llm_rosetta_gateway.admin_api import catalogue
 from llm_rosetta.api import get_model_list_transform, get_shim
@@ -172,10 +171,10 @@ async def fetch_upstream_models(request: Any, **kwargs: Any) -> Response:
     headers = {**pinfo.extra_headers, **pinfo.auth_headers()}
 
     try:
-        client = AsyncClient(timeout=10.0, proxy=pinfo.proxy_url)
+        client = catalogue().http_client(timeout=10.0, proxy=pinfo.proxy_url)
         raw_resp = await client.get(models_url, headers=headers)
-        assert isinstance(raw_resp, HttpResponse), "Expected non-streaming response"
-        resp: HttpResponse = raw_resp
+        assert catalogue().is_http_response(raw_resp), "Expected non-streaming response"
+        resp: Any = raw_resp
         await client.aclose()
     except Exception as exc:
         logger.warning("Failed to fetch models from %s: %s", provider_name, exc)

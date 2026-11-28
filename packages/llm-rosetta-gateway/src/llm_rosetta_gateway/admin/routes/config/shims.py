@@ -8,11 +8,7 @@ from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
-from ....shims.shim_sources import (
-    apply_shim_sources,
-    resolve_source_config,
-    shims_signature,
-)
+from ....admin_api import catalogue
 from .._shared import (
     _get_config_io,
     _install_shim_report,
@@ -58,7 +54,7 @@ def _validate_shim_sources_body(
             {"error": "'disabled' must be an array of shim names"}, status_code=400
         )
     try:
-        resolve_source_config(body, config_path)
+        catalogue().resolve_source_config(body, config_path)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     return None
@@ -167,13 +163,15 @@ async def _refetch_and_reload(
         loop = asyncio.get_running_loop()
         report = await loop.run_in_executor(
             None,
-            functools.partial(apply_shim_sources, raw, config_path, force_refresh=True),
+            functools.partial(
+                catalogue().apply_shim_sources, raw, config_path, force_refresh=True
+            ),
         )
     except Exception as exc:
         return JSONResponse(
             {"error": f"Shim reload failed: {exc}"}, status_code=500
         ), None
-    _install_shim_report(request, report, shims_signature(raw))
+    _install_shim_report(request, report, catalogue().shims_signature(raw))
 
     try:
         new_config = await _reload_gateway_config(
@@ -251,8 +249,6 @@ async def post_shims_check_updates(request: Any) -> Response:
         if now - float(checked_at) < UPDATE_CHECK_TTL:
             return JSONResponse(cached)
 
-    from ....shims.sources import check_source_updates
-
     import asyncio
     import functools
 
@@ -264,7 +260,7 @@ async def post_shims_check_updates(request: Any) -> Response:
 
     loop = asyncio.get_running_loop()
     entries = await loop.run_in_executor(
-        None, functools.partial(check_source_updates, report, proxy=proxy)
+        None, functools.partial(catalogue().check_source_updates, report, proxy=proxy)
     )
     payload = {"sources": entries, "checked_at": now}
     request.app.shim_update_check = payload

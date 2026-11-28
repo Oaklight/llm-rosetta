@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from llm_rosetta_gateway._vendor.yaml import load as yaml_load
+from llm_rosetta_gateway.admin_api import catalogue
 from llm_rosetta.api import list_shims
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
 
@@ -59,7 +59,7 @@ def _builtin_root() -> Path:
 def _yaml_meta(path: Path) -> dict[str, Any] | None:
     """Return the fields the inventory needs from a ``provider.yaml``."""
     try:
-        cfg = yaml_load(path.read_text(encoding="utf-8"))
+        cfg = catalogue().yaml_load(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(cfg, dict) or not isinstance(cfg.get("name"), str):

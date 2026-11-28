@@ -4,17 +4,20 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import datetime, timezone
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from llm_rosetta_gateway._vendor.httpclient import AsyncClient, Response as HttpResponse
 from llm_rosetta_gateway._vendor.httpserver import (
     JSONResponse,
     Response,
     StreamingResponse,
 )
 
-from ...config import GatewayConfig
+from llm_rosetta_gateway.admin_api import admin_context, catalogue
+
 from ._shared import _qp, parse_json_body
+
+if TYPE_CHECKING:
+    from llm_rosetta_gateway.admin_api import GatewayConfig
 
 
 def _jobs(request: Any) -> Any:
@@ -239,9 +242,7 @@ async def rebuild_metrics(request: Any) -> Response:
             {"error": "No persistence configured (in-memory mode)"},
             status_code=400,
         )
-    from llm_rosetta_gateway.jobs.enqueue import enqueue_rebuild
-
-    return _accepted(await enqueue_rebuild(manager))
+    return _accepted(await admin_context(request).enqueue_rebuild(manager))
 
 
 async def get_token_usage(request: Any) -> Response:
@@ -344,9 +345,7 @@ async def clear_requests(request: Any) -> Response:
     manager = _jobs(request)
     if manager is None:
         return JSONResponse({"error": "No ops context configured"}, status_code=400)
-    from llm_rosetta_gateway.jobs.enqueue import enqueue_clear
-
-    return _accepted(await enqueue_clear(manager, "request_log"))
+    return _accepted(await admin_context(request).enqueue_clear(manager, "request_log"))
 
 
 async def get_provider_key(request: Any, **kwargs: Any) -> Response:
@@ -400,11 +399,11 @@ async def network_diagnostics(request: Any) -> Response:
 
     # IP geolocation via ip-api.com (no key required, JSON by default)
     try:
-        async with AsyncClient(**client_kwargs) as client:
+        async with catalogue().http_client(**client_kwargs) as client:
             resp = await client.get(
                 "http://ip-api.com/json/?fields=query,country,city,isp"
             )
-            assert isinstance(resp, HttpResponse)
+            assert catalogue().is_http_response(resp)
             if resp.status_code == 200:
                 data = resp.json()
                 results["ip"] = {
@@ -423,7 +422,7 @@ async def network_diagnostics(request: Any) -> Response:
 
     # Google connectivity
     try:
-        async with AsyncClient(**client_kwargs) as client:
+        async with catalogue().http_client(**client_kwargs) as client:
             resp = await client.get("https://www.google.com/generate_204")
             results["google"] = {
                 "ok": resp.status_code == 204,
@@ -598,14 +597,14 @@ async def get_error_dump_detail(request: Any, **kwargs: Any) -> Response:
     if entry is None:
         return JSONResponse({"error": "Not found"}, status_code=404)
 
-    from llm_rosetta_gateway.observability.error_dump import decompress_body
-
     # Decompress request body if present
     if "body_hash" in entry:
         body_data = await persistence.get_dump_body(entry["body_hash"])
         if body_data:
             try:
-                entry["request_body"] = decompress_body(body_data)
+                entry["request_body"] = catalogue().decompress_error_dump_body(
+                    body_data
+                )
             except Exception:
                 entry["request_body"] = None
 
@@ -614,7 +613,9 @@ async def get_error_dump_detail(request: Any, **kwargs: Any) -> Response:
         conv_data = await persistence.get_dump_body(entry["converted_body_hash"])
         if conv_data:
             try:
-                entry["converted_body"] = decompress_body(conv_data)
+                entry["converted_body"] = catalogue().decompress_error_dump_body(
+                    conv_data
+                )
             except Exception:
                 entry["converted_body"] = None
 
@@ -660,20 +661,15 @@ async def clear_error_dumps(request: Any) -> Response:
     manager = _jobs(request)
     if manager is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
-    from llm_rosetta_gateway.jobs.enqueue import enqueue_clear
-
-    return _accepted(await enqueue_clear(manager, "error_dumps"))
+    return _accepted(await admin_context(request).enqueue_clear(manager, "error_dumps"))
 
 
 async def delete_error_dump(request: Any, **kwargs: Any) -> Response:
     """Delete a single error dump by ID."""
-    from llm_rosetta_gateway.ops.data import OpsDeleteErrorDump
-
-    ctx = getattr(request.app, "ops_ctx", None)
-    if ctx is None or ctx.persistence is None:
-        return JSONResponse({"error": "No persistence configured"}, status_code=400)
     dump_id = request.path_params["dump_id"]
-    found = await OpsDeleteErrorDump(ctx, dump_id=dump_id).execute()
+    found = await admin_context(request).delete_error_dump(dump_id)
+    if found is None:
+        return JSONResponse({"error": "No persistence configured"}, status_code=400)
     if found:
         return JSONResponse({"ok": True})
     return JSONResponse({"error": "Not found"}, status_code=404)
@@ -695,10 +691,8 @@ async def db_cleanup(request: Any) -> Response:
             {"error": "max_age_days must be a positive integer"}, status_code=400
         )
 
-    from llm_rosetta_gateway.jobs.enqueue import enqueue_cleanup
-
     return _accepted(
-        await enqueue_cleanup(
+        await admin_context(request).enqueue_cleanup(
             manager,
             mode="age",
             tables=("request_log", "error_dumps", "ops_log"),
@@ -712,9 +706,7 @@ async def db_vacuum(request: Any) -> Response:
     manager = _jobs(request)
     if manager is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
-    from llm_rosetta_gateway.jobs.enqueue import enqueue_vacuum
-
-    return _accepted(await enqueue_vacuum(manager))
+    return _accepted(await admin_context(request).enqueue_vacuum(manager))
 
 
 async def cleanup_requests_by_age(request: Any) -> Response:
@@ -733,10 +725,8 @@ async def cleanup_requests_by_age(request: Any) -> Response:
             {"error": "max_age_days must be a positive integer"}, status_code=400
         )
 
-    from llm_rosetta_gateway.jobs.enqueue import enqueue_cleanup
-
     return _accepted(
-        await enqueue_cleanup(
+        await admin_context(request).enqueue_cleanup(
             manager, mode="age", tables=("request_log",), max_age_days=max_age_days
         )
     )
@@ -758,10 +748,8 @@ async def cleanup_error_dumps_by_age(request: Any) -> Response:
             {"error": "max_age_days must be a positive integer"}, status_code=400
         )
 
-    from llm_rosetta_gateway.jobs.enqueue import enqueue_cleanup
-
     return _accepted(
-        await enqueue_cleanup(
+        await admin_context(request).enqueue_cleanup(
             manager, mode="age", tables=("error_dumps",), max_age_days=max_age_days
         )
     )
@@ -847,23 +835,17 @@ async def clear_ops_log(request: Any) -> Response:
     manager = _jobs(request)
     if manager is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
-    from llm_rosetta_gateway.jobs.enqueue import enqueue_clear
-
-    return _accepted(await enqueue_clear(manager, "ops_log"))
+    return _accepted(await admin_context(request).enqueue_clear(manager, "ops_log"))
 
 
 async def get_ops_log_event_types(request: Any) -> Response:
     """Return the list of known ops log event types."""
-    from llm_rosetta_gateway.observability.ops_log import ALL_EVENT_TYPES
-
-    return JSONResponse({"event_types": ALL_EVENT_TYPES})
+    return JSONResponse({"event_types": catalogue().ops_event_types()})
 
 
 async def get_ops_log_sources(request: Any) -> Response:
     """Return the list of known ops log source subsystems."""
-    from llm_rosetta_gateway.observability.ops_log import ALL_SOURCES
-
-    return JSONResponse({"sources": ALL_SOURCES})
+    return JSONResponse({"sources": catalogue().ops_sources()})
 
 
 async def cleanup_ops_log_by_age(request: Any) -> Response:
@@ -882,10 +864,8 @@ async def cleanup_ops_log_by_age(request: Any) -> Response:
             {"error": "max_age_days must be a positive integer"}, status_code=400
         )
 
-    from llm_rosetta_gateway.jobs.enqueue import enqueue_cleanup
-
     return _accepted(
-        await enqueue_cleanup(
+        await admin_context(request).enqueue_cleanup(
             manager, mode="age", tables=("ops_log",), max_age_days=max_age_days
         )
     )
@@ -916,10 +896,10 @@ async def db_cleanup_before(request: Any) -> Response:
         )
 
     tables = _TARGET_TABLES.get(body.get("target", "all"), _TARGET_TABLES["all"])
-    from llm_rosetta_gateway.jobs.enqueue import enqueue_cleanup
-
     return _accepted(
-        await enqueue_cleanup(manager, mode="before", tables=tables, before=before)
+        await admin_context(request).enqueue_cleanup(
+            manager, mode="before", tables=tables, before=before
+        )
     )
 
 
@@ -945,10 +925,8 @@ async def db_cleanup_range(request: Any) -> Response:
         )
 
     tables = _TARGET_TABLES.get(body.get("target", "all"), _TARGET_TABLES["all"])
-    from llm_rosetta_gateway.jobs.enqueue import enqueue_cleanup
-
     return _accepted(
-        await enqueue_cleanup(
+        await admin_context(request).enqueue_cleanup(
             manager, mode="range", tables=tables, start=start, end=end
         )
     )
@@ -963,6 +941,4 @@ async def db_trim(request: Any) -> Response:
     manager = _jobs(request)
     if manager is None:
         return JSONResponse({"error": "No persistence configured"}, status_code=400)
-    from llm_rosetta_gateway.jobs.enqueue import enqueue_trim
-
-    return _accepted(await enqueue_trim(manager))
+    return _accepted(await admin_context(request).enqueue_trim(manager))

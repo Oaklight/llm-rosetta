@@ -15,6 +15,7 @@ from _admin_app import attach_admin
 from unittest.mock import AsyncMock, MagicMock
 
 from llm_rosetta_gateway.admin.routes import maintenance as routes
+from llm_rosetta_gateway.app import admin_maintenance
 from llm_rosetta_gateway.maintenance.backfills import build_registry
 
 
@@ -85,7 +86,7 @@ class TestTheSurface:
     async def test_a_step_that_has_run_reports_what_it_changed(self):
         persistence, key_store = _stores()
         app = _App(persistence=persistence, keystore=key_store)
-        await routes.run_step(app, "request_log.backfill_total_tokens")
+        await admin_maintenance.run_step(app, "request_log.backfill_total_tokens")
 
         body = _body(await routes.get_maintenance(_Request(app)))
 
@@ -391,8 +392,8 @@ class TestWhichRegistryIsUsed:
         persistence, key_store = _stores()
         app = _App(persistence=persistence, keystore=key_store)
 
-        first = routes.registry_for(app)
-        second = routes.registry_for(app)
+        first = admin_maintenance.registry_for(app)
+        second = admin_maintenance.registry_for(app)
 
         assert first is second
         await routes.post_maintenance_run(
@@ -404,4 +405,4 @@ class TestWhichRegistryIsUsed:
 
 
 def _context(app: _App):
-    return routes.context_for(app)
+    return admin_maintenance.context_for(app)
