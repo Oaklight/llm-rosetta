@@ -210,7 +210,7 @@ flowchart TB
     KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库 · maintenance(schema 步骤)"]
     MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup"]
     JOBS["jobs/&lt;br/&gt;envelope · queue · worker · handlers"]
-    QUOTA["quota/&lt;br/&gt;service · allowance · signals · probes · rate_limit"]
+    QUOTA["quota/&lt;br/&gt;service · allowance · lane_allowance · lane_command · signals · probes · rate_limit"]
     ROUTING["routing/&lt;br/&gt;select · strategy · failover · session · same_format"]
   end
   subgraph POLICY["policy"]
@@ -218,7 +218,7 @@ flowchart TB
     MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · quota) · registry · provider_info · lane_allowance(接收器接口) · provider_readiness(ProviderNotReady)"]
+    TRANSPORT["transport/&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · usage) · registry · provider_info · lane_allowance(接收器接口) · provider_readiness(ProviderNotReady)"]
     SURF["surface.py"]
     OBS["observability/&lt;br/&gt;logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]
@@ -402,7 +402,7 @@ flowchart TB
 </section>
 <section id="gap_actual">
   <h2><span class="num">04</span>gateway 现实:当前的完整架构与仍偏离设计的地方</h2>
-  <p class="sub">和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题(A4 已合并,不再画):A1 admin 的边界:legacy allowlist 里还有一批 admin 导入,admin 读 request.app 的 28 种属性约 113 处(有 shrink-only 的扫描测试;热重载是 AdminContext.reload_config,已生效配置只有一个家 app.gateway_config,但 admin 路由里还有 12 处直接读它);A8 config/providers.py 里有约 20 个 ACP 辅助(build_provider_info 复杂度 49);ProviderInfo 的 58 个属性是已知现状,决定不拆;A9 quota 的进程级状态放在 transport 里。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。</li><li>为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。</li></ul></details>
+  <p class="sub">和第 2 页同一批节点、同一张包间导入表,红线是 #1830 评审量出来的、还没解决的问题:A1 admin 的边界:legacy allowlist 里还有一批 admin 导入,admin 读 request.app 的 28 种属性约 113 处(有 shrink-only 的扫描测试;热重载是 AdminContext.reload_config,已生效配置只有一个家 app.gateway_config,但 admin 路由里还有 12 处直接读它);A8 config/providers.py 里有约 20 个 ACP 辅助(build_provider_info 复杂度 49);ProviderInfo 的 58 个属性是已知现状,决定不拆。</p><details class="notes"><summary>说明(2 条)</summary><ul><li>数字来自对 origin/master 215c832bbe 的只读评审(导入图、AST 复杂度、最近 300 次提交),本页没有重算。</li><li>为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。</li></ul></details>
   <div class="panel">
     <span class="tag now">现状 · master @ master</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_actual"> <span id="z-gap_actual">100%</span></label></div>
@@ -411,12 +411,11 @@ config:
   layout: elk
 ---
 flowchart TB
-  ACPQ["transport/acp_quota.py&lt;br/&gt;进程级 _READINGS / _LOCKS(A9)"]
   subgraph STATE["state"]
     KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库 · maintenance(schema 步骤)"]
     MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup"]
     JOBS["jobs/&lt;br/&gt;envelope · queue · worker · handlers"]
-    QUOTA["quota/&lt;br/&gt;service · allowance · signals · probes · rate_limit"]
+    QUOTA["quota/&lt;br/&gt;service · allowance · lane_allowance · lane_command · signals · probes · rate_limit"]
     ROUTING["routing/&lt;br/&gt;select · strategy · failover · session · same_format"]
   end
   subgraph POLICY["policy"]
@@ -424,7 +423,7 @@ flowchart TB
     MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · quota) · registry · provider_info · lane_allowance(接收器接口) · provider_readiness(ProviderNotReady)&lt;br/&gt;provider_info.py:ProviderInfo 58 个属性(不拆) · acp/transport.py 2535 行 · acp/quota.py 持有配额状态,经 lane_allowance 接缝进入(A9)"]
+    TRANSPORT["transport/&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · usage) · registry · provider_info · lane_allowance(接收器接口) · provider_readiness(ProviderNotReady)&lt;br/&gt;provider_info.py:ProviderInfo 58 个属性(不拆) · acp/transport.py 2535 行"]
     SURF["surface.py"]
     OBS["observability/&lt;br/&gt;logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]
@@ -485,8 +484,6 @@ flowchart TB
   QUOTA --&gt; TRANSPORT
   ROUTING --&gt; QUOTA
   ADMIN --&gt;|"读 request.app.*(A1)"| APP
-  TRANSPORT --&gt; ACPQ
-  ACPQ -.-&gt;|"状态放错地方(A9)"| QUOTA
   CONFIG --&gt; CORE
   TRANSPORT --&gt;|HTTP/SSE · ACP stdio| UP
   OBS --&gt; CORE
@@ -494,13 +491,13 @@ flowchart TB
   TRANSPORT --&gt; CORE
   CLIENT --&gt;|HTTP| APP
   PROXY --&gt; CORE
-  linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,22,35,37 stroke:#c0392b,stroke-width:2px
+  linkStyle 1,2,3,4,5,6,7,8,9,10,11,12,13,22,35 stroke:#c0392b,stroke-width:2px
 </pre></div></div>
   </div>
 </section>
 <section id="gap_ideal">
   <h2><span class="num">05</span>gateway 理想:最终的架构</h2>
-  <p class="sub">同一批节点,没有红线。</p><details class="notes"><summary>说明(3 条)</summary><ul><li>admin 只经 AdminContext;热重载和已生效配置在 app 里,审计写入只经 ops;上游尝试的记账是 proxy 里的一个 attempt_upstream;ACP lane 解析在 transport/acp/lane.py 里,ACP 是 transport/ 下的一个文件夹(和 http/ 对应);quota 的读数和锁回到 quota/,启动时向 transport 注册接收器。</li><li>这是目标态,每一项落地后,第 4 页对应的红线就去掉。</li><li>为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。</li></ul></details>
+  <p class="sub">同一批节点,没有红线。</p><details class="notes"><summary>说明(3 条)</summary><ul><li>admin 只经 AdminContext;热重载和已生效配置在 app 里,审计写入只经 ops;上游尝试的记账是 proxy 里的一个 attempt_upstream;ACP lane 解析在 transport/acp/lane.py 里,ACP 是 transport/ 下的一个文件夹(和 http/ 对应);quota 的读数和锁在 quota/(每个 app 一个读数库,重载后重新绑定到 provider)。</li><li>这是目标态,每一项落地后,第 4 页对应的红线就去掉。</li><li>为了读得清楚,这一页不画能由其他路径推出的包间依赖(传递约简,A→B→C 已经隐含 A→C),红线和带标签的边总是画出;完整的边表在第 2 页,布局用 ELK。</li></ul></details>
   <div class="panel">
     <span class="tag ">目标 · #1830</span>
     <div class="zoom"><label>缩放 <input type="range" min="40" max="200" value="100" step="5" data-target="gap_ideal"> <span id="z-gap_ideal">100%</span></label></div>
@@ -513,7 +510,7 @@ flowchart TB
     KEYSTORE["keystore/&lt;br/&gt;SQLite API key 库 · maintenance(schema 步骤)"]
     MAINT["maintenance/&lt;br/&gt;backfills · dumps · startup"]
     JOBS["jobs/&lt;br/&gt;envelope · queue · worker · handlers"]
-    QUOTA["quota/&lt;br/&gt;service · allowance · signals · probes · rate_limit&lt;br/&gt;读数与锁在这里(A9)"]
+    QUOTA["quota/&lt;br/&gt;service · allowance · lane_allowance · lane_command · signals · probes · rate_limit&lt;br/&gt;lane_allowance(每个 app 一个读数库,重载后重新绑定)· lane_command(本地命令读取)"]
     ROUTING["routing/&lt;br/&gt;select · strategy · failover · session · same_format"]
   end
   subgraph POLICY["policy"]
@@ -521,7 +518,7 @@ flowchart TB
     MW["middleware/&lt;br/&gt;auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · quota) · registry · provider_info · lane_allowance(接收器接口) · provider_readiness(ProviderNotReady)&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码,A9),A13)&lt;br/&gt;lane_allowance(接收器接口,A9) · 不导入 quota"]
+    TRANSPORT["transport/&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · usage) · registry · provider_info · lane_allowance(接收器接口) · provider_readiness(ProviderNotReady)&lt;br/&gt;http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码)&lt;br/&gt;lane_allowance(接收器接口) · 不导入 quota"]
     SURF["surface.py"]
     OBS["observability/&lt;br/&gt;logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]
@@ -566,7 +563,7 @@ flowchart TB
   PROXY --&gt; MAINT
   PROXY --&gt; OPS
   QUOTA --&gt; OBS
-  QUOTA -.-&gt;|"启动时注册接收器(A9)"| TRANSPORT
+  QUOTA --&gt; TRANSPORT
   ROUTING --&gt; QUOTA
   CONFIG --&gt; CORE
   TRANSPORT --&gt;|HTTP/SSE · ACP stdio| UP

@@ -22,13 +22,11 @@ ACTUAL_PATCH = {
     "ADMIN": "legacy allowlist 导入 + 读 request.app.* 28 种,约 113 处,其中 12 处直接读 gateway_config(A1,shrink-only 清单)",
     "APP": "已生效配置只有一个家 app.gateway_config",
     "CONFIG": "providers.py:build_provider_info 294 行,复杂度 49;约 20 个 ACP 辅助在这里(A8)",
-    "TRANSPORT": "provider_info.py:ProviderInfo 58 个属性(不拆) · acp/transport.py 2535 行 · acp/quota.py 持有配额状态,经 lane_allowance 接缝进入(A9)",
+    "TRANSPORT": "provider_info.py:ProviderInfo 58 个属性(不拆) · acp/transport.py 2535 行",
 }
-ACTUAL_NODES = ['ACPQ["transport/acp_quota.py<br/>进程级 _READINGS / _LOCKS(A9)"]']
+ACTUAL_NODES = []
 ACTUAL_EXTRA = [
     ("ADMIN", "APP", "-->", "读 request.app.*(A1)", True),
-    ("TRANSPORT", "ACPQ", "-->", "", False),
-    ("ACPQ", "QUOTA", "-.->", "状态放错地方(A9)", True),
 ]
 ACTUAL_RED_EXTRA = {("config", "transport")}  # plus every admin edge except admin_api, computed from the table
 ACTUAL_LABEL = {
@@ -41,11 +39,11 @@ IDEAL_PATCH = {
     "APP": "热重载与唯一的已生效配置",
     "PROXY": "attempt.py:attempt_upstream 是上游尝试记账的唯一入口,pipelines 与 relay 路由经它",
     "CONFIG": "解析与装配;ACP lane 解析不在这里",
-    "TRANSPORT": "http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码,A9),A13)<br/>lane_allowance(接收器接口,A9) · 不导入 quota",
-    "QUOTA": "读数与锁在这里(A9)",
+    "TRANSPORT": "http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码)<br/>lane_allowance(接收器接口) · 不导入 quota",
+    "QUOTA": "lane_allowance(每个 app 一个读数库,重载后重新绑定)· lane_command(本地命令读取)",
     "OPS": "唯一的审计写入者",
 }
-IDEAL_LABEL = {("quota", "transport"): ("-.->", "启动时注册接收器(A9)")}
+IDEAL_LABEL = {}
 
 
 def patch(lines, add):

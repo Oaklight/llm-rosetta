@@ -7,7 +7,7 @@ flowchart TB
     KEYSTORE["keystore/<br/>SQLite API key 库 · maintenance(schema 步骤)"]
     MAINT["maintenance/<br/>backfills · dumps · startup"]
     JOBS["jobs/<br/>envelope · queue · worker · handlers"]
-    QUOTA["quota/<br/>service · allowance · signals · probes · rate_limit<br/>读数与锁在这里(A9)"]
+    QUOTA["quota/<br/>service · allowance · lane_allowance · lane_command · signals · probes · rate_limit<br/>lane_allowance(每个 app 一个读数库,重载后重新绑定)· lane_command(本地命令读取)"]
     ROUTING["routing/<br/>select · strategy · failover · session · same_format"]
   end
   subgraph POLICY["policy"]
@@ -15,7 +15,7 @@ flowchart TB
     MW["middleware/<br/>auth · ratelimit · hop_limit · circuit_breaker · request_context(client_ip 一次解析,server.trusted_proxies)"]
   end
   subgraph FOUNDATION["foundation"]
-    TRANSPORT["transport/<br/>http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · quota) · registry · provider_info · lane_allowance(接收器接口) · provider_readiness(ProviderNotReady)<br/>http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码,A9),A13)<br/>lane_allowance(接收器接口,A9) · 不导入 quota"]
+    TRANSPORT["transport/<br/>http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · usage) · registry · provider_info · lane_allowance(接收器接口) · provider_readiness(ProviderNotReady)<br/>http/ · acp/(transport · chunks · ledger · mcp · meta_client · profile · lane(ACP lane 解析,A8)· usage(纯解码)<br/>lane_allowance(接收器接口) · 不导入 quota"]
     SURF["surface.py"]
     OBS["observability/<br/>logging · metrics · request_log(client_ip · peer_ip · forwarded_for) · ops_log · error_dump · capture · retention · usage · persistence"]
     UPD["updates.py"]
@@ -60,7 +60,7 @@ flowchart TB
   PROXY --> MAINT
   PROXY --> OPS
   QUOTA --> OBS
-  QUOTA -.->|"启动时注册接收器(A9)"| TRANSPORT
+  QUOTA --> TRANSPORT
   ROUTING --> QUOTA
   CONFIG --> CORE
   TRANSPORT -->|HTTP/SSE · ACP stdio| UP
