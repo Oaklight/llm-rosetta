@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
-from .observability.logging import get_logger
 
 if TYPE_CHECKING:
     from .config import GatewayConfig
@@ -30,13 +29,6 @@ __all__ = [
     "ExtensionInstallRefused",
     "admin_context",
 ]
-
-logger = get_logger()
-
-#: Set once the stock-adapter fallback has been reported.  The fallback is taken
-#: on every admin request of such an app, so a per-call warning would flood the
-#: log; one line per process is enough to make a missing wiring visible.
-_fallback_reported = False
 
 
 @runtime_checkable
@@ -146,21 +138,15 @@ class AdminContext(AdminConfigAccess, AdminShimSources, AdminExtensions, Protoco
 def admin_context(request: Any) -> AdminContext:
     """Return the :class:`AdminContext` the app of *request* exposes.
 
-    ``create_app`` sets ``app.admin``.  An app object built by hand (a test
-    double, an embedding host) may lack it; it then gets the stock adapter,
-    which reads the same process state.
+    ``create_app`` sets ``app.admin``; an app that lacks it was not built by
+    ``create_app``, and admin has nothing to fall back on.
+
+    Raises:
+        RuntimeError: The app has no ``admin`` context.
     """
     context = getattr(request.app, "admin", None)
-    if context is not None:
-        return context  # type: ignore[no-any-return]
-    from .app.admin_context import GatewayAdminContext
-
-    global _fallback_reported
-    if not _fallback_reported:
-        _fallback_reported = True
-        logger.warning(
-            "app.admin is not set; admin falls back to the stock "
-            "GatewayAdminContext (create_app sets app.admin, so this app was "
-            "built by hand)"
+    if context is None:
+        raise RuntimeError(
+            "app.admin is not set: create_app sets it, and admin needs it"
         )
-    return GatewayAdminContext()
+    return context  # type: ignore[no-any-return]

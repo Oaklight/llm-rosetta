@@ -17,6 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from llm_rosetta_gateway.app.admin_context import GatewayAdminContext
 from llm_rosetta_gateway.admin.routes.config.providers import delete_provider
 from llm_rosetta_gateway.config import JsoncConfigIO
 
@@ -25,6 +26,7 @@ def _request(tmp_path, raw: dict, *, cascade: bool = True) -> SimpleNamespace:
     path = tmp_path / "config.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
     app = SimpleNamespace(
+        admin=GatewayAdminContext(),
         config_path=str(path),
         config_io=JsoncConfigIO(),
         gateway_config=None,

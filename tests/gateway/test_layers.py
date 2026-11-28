@@ -297,10 +297,7 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
         "transport",
         "updates",
     ),
-    "admin_api": (
-        "app",
-        "observability",
-    ),
+    "admin_api": (),
     "app": (
         "admin",
         "admin_api",

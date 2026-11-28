@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from llm_rosetta_gateway.app.admin_context import GatewayAdminContext
 from llm_rosetta_gateway.admin import _admin_theme_style, apply_admin_theme
 from llm_rosetta_gateway.admin.routes.config.settings import put_server_settings
 from llm_rosetta_gateway.config import GatewayConfig, JsoncConfigIO
@@ -74,6 +75,7 @@ def _request(tmp_path, raw: dict, body: dict) -> SimpleNamespace:
     path = tmp_path / "config.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
     app = SimpleNamespace(
+        admin=GatewayAdminContext(),
         config_path=str(path),
         config_io=JsoncConfigIO(),
         gateway_config=None,

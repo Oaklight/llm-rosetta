@@ -15,6 +15,7 @@ import json
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+from llm_rosetta_gateway.app.admin_context import GatewayAdminContext
 from llm_rosetta_gateway.routing.eligibility import provider_eligibility
 from llm_rosetta_gateway.admin.routes._shared import _reload_gateway_config
 from llm_rosetta_gateway.admin.routes.config import fetch_upstream_models
@@ -89,6 +90,7 @@ class _App:
         self.gateway_config: Any = None
         self.deferred_startup: Any = None
         self._prev_gateway_config: Any = None
+        self.admin = GatewayAdminContext()
 
 
 class _Request:

@@ -16,6 +16,7 @@ from typing import Any
 
 import pytest
 
+from llm_rosetta_gateway.app.admin_context import GatewayAdminContext
 from llm_rosetta_gateway.admin.routes.config.models import put_model
 from llm_rosetta_gateway.admin.routes.config.providers import _handle_rename_merge
 from llm_rosetta_gateway.config import JsoncConfigIO
@@ -50,6 +51,7 @@ def _request(
     path = tmp_path / "config.json"
     path.write_text(json.dumps(raw), encoding="utf-8")
     app = SimpleNamespace(
+        admin=GatewayAdminContext(),
         config_path=str(path),
         config_io=JsoncConfigIO(),
         gateway_config=None,

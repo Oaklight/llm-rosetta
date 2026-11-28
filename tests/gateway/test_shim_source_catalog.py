@@ -14,6 +14,7 @@ from typing import Any
 
 from llm_rosetta.api import parse_index
 from llm_rosetta.contracts import IR_VERSION, SURFACE_VERSION
+from llm_rosetta_gateway.app.admin_context import GatewayAdminContext
 from llm_rosetta_gateway.shims.manifest_sources.plan import (
     ManifestPlan,
     ManifestSourceSpec,
@@ -295,7 +296,11 @@ class TestEndpoint:
             proxy=None,
         )
         request = SimpleNamespace(
-            app=SimpleNamespace(gateway_config=config, shim_source_report=None),
+            app=SimpleNamespace(
+                admin=GatewayAdminContext(),
+                gateway_config=config,
+                shim_source_report=None,
+            ),
             query_params={},
         )
 
