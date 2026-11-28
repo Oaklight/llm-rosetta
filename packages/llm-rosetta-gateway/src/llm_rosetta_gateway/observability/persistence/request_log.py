@@ -50,6 +50,8 @@ class _RequestLogMixin(_StoreState):
         "user_agent",
         "conversation_id",
         "upstream_model",
+        "peer_ip",
+        "forwarded_for",
     ]
 
     async def insert_log_entries(self, entries: list[dict[str, Any]]) -> None:
@@ -64,8 +66,8 @@ class _RequestLogMixin(_StoreState):
             "input_tokens, output_tokens, total_tokens, "
             "cache_read_tokens, cache_creation_tokens, reasoning_tokens, "
             "api_key_bucket, model_type, request_id, ttft_ms, user_agent, "
-            "conversation_id, upstream_model) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "conversation_id, upstream_model, peer_ip, forwarded_for) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     e["id"],
@@ -100,6 +102,8 @@ class _RequestLogMixin(_StoreState):
                     e.get("user_agent"),
                     e.get("conversation_id"),
                     e.get("upstream_model"),
+                    e.get("peer_ip"),
+                    e.get("forwarded_for"),
                 )
                 for e in entries
             ],
@@ -527,6 +531,8 @@ class _RequestLogMixin(_StoreState):
                     "ttft_ms",
                     "conversation_id",
                     "upstream_model",
+                    "peer_ip",
+                    "forwarded_for",
                 )
                 and val is None
             ):

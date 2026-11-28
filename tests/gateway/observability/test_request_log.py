@@ -21,6 +21,31 @@ class TestRequestLogEntry:
         assert e.timestamp
         assert e.error_detail is None
 
+    def test_the_origin_addresses_are_kept_apart_and_absent_when_unknown(self):
+        e = RequestLogEntry.create(
+            model="gpt-4o",
+            source_provider="openai_chat",
+            target_provider="anthropic",
+            is_stream=False,
+            status_code=200,
+            duration_ms=1.0,
+            client_ip="198.51.100.7",
+            peer_ip="172.29.0.1",
+            forwarded_for="198.51.100.7, 127.0.0.1",
+        )
+        d = e.to_dict()
+        assert (d["client_ip"], d["peer_ip"]) == ("198.51.100.7", "172.29.0.1")
+        assert d["forwarded_for"] == "198.51.100.7, 127.0.0.1"
+        bare = RequestLogEntry.create(
+            model="m",
+            source_provider="a",
+            target_provider="b",
+            is_stream=False,
+            status_code=200,
+            duration_ms=1.0,
+        ).to_dict()
+        assert "peer_ip" not in bare and "forwarded_for" not in bare
+
     def test_to_dict_minimal(self):
         e = RequestLogEntry.create(
             model="gpt-4o",

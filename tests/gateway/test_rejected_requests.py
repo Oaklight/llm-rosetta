@@ -208,6 +208,67 @@ class TestEarlyRejectionsLeaveARow:
         served.metrics.record_request.assert_not_called()
 
 
+class TestRejectedRowsKeepTheOriginAddresses:
+    """A refusal keeps the peer and the raw chain too (#1830 A12)."""
+
+    async def test_a_routing_refusal_keeps_the_peer_and_the_chain(self, served):
+        await served.send("GET", "/nowhere", headers={"X-Forwarded-For": "203.0.113.9"})
+
+        (row,) = await served.rows()
+        assert row["peer_ip"] == "127.0.0.1"
+        assert row["forwarded_for"] == "203.0.113.9"
+        # Nothing trusts the peer, so the header decided nothing.
+        assert row["client_ip"] == "127.0.0.1"
+
+    async def test_a_read_phase_refusal_keeps_the_peer_and_the_chain(self, served):
+        raw = (
+            b"POST /v1/chat/completions HTTP/1.1\r\nHost: t\r\n"
+            b"X-Forwarded-For: 203.0.113.9, 10.0.0.1\r\n"
+            b"Content-Length: 100\r\nContent-Type: application/json\r\n\r\n"
+        )
+        status, _, _ = await served.send_raw(raw + b'{"model": "m"')
+
+        assert status == 400
+        (row,) = await served.rows()
+        assert row["peer_ip"] == "127.0.0.1"
+        assert row["forwarded_for"] == "203.0.113.9, 10.0.0.1"
+        assert row["client_ip"] == "127.0.0.1"
+
+    async def test_a_refusal_without_the_header_has_no_chain(self, served):
+        await served.send("GET", "/nowhere")
+
+        (row,) = await served.rows()
+        assert row["peer_ip"] == "127.0.0.1"
+        assert "forwarded_for" not in row
+
+
+class TestRejectedRowsWithoutAContext:
+    """The response hook can run when no request context was set (a refusal before the hook)."""
+
+    async def test_the_addresses_are_read_from_the_request_itself(self, served):
+        from types import SimpleNamespace
+
+        from llm_rosetta_gateway.middleware.request_context import request_context_var
+
+        assert request_context_var.get() is None
+        request = SimpleNamespace(
+            path="/v1/chat/completions",
+            method="POST",
+            headers={"x-forwarded-for": "203.0.113.9"},
+            client_addr=("172.29.0.1", 1),
+            app=served.app,
+            state=SimpleNamespace(),
+        )
+        response = SimpleNamespace(
+            status_code=400, headers={}, body=b"bad", set_header=lambda *a: None
+        )
+        await rejected_module.record_unrecorded_rejection(request, response)
+
+        (row,) = await served.rows()
+        assert row["peer_ip"] == "172.29.0.1"
+        assert row["forwarded_for"] == "203.0.113.9"
+
+
 class TestReadPhaseRejections:
     """Failures while the request is still being read, before a ``Request`` exists."""
 

@@ -9,7 +9,8 @@ import { pageCount, clampPage, offsetForPage, shouldResync } from '../core/pagin
 import { api, esc, formatDuration, inlineConfirm, showToast } from '../core/utils.js';
 import { closeMenus, openMenu } from '../core/utils.js';
 import { providerRowsHtml, providerLogoHtml, openPickerMenu } from '../components/provider-picker.js';
-import { jsArg } from '../core/html.js';
+import { jsArg, raw } from '../core/html.js';
+import { clientAddress } from '../core/client-address.js';
 
 // ===================== Request Log =====================
 
@@ -139,7 +140,20 @@ function renderLogs(entries, total) {
       const detailId = 'logErr-' + idx;
       const isExpanded = S.expandedLogRows.has(rowId);
       const expandHint = hasDetail ? ` title="${esc(t('log.expandHint'))}"` : '';
-      const clientIp = e.client_ip || '—';
+      // The resolved client; with no trusted proxy configured that is the
+      // proxy, so the first X-Forwarded-For entry stands in, marked unverified.
+      const addr = clientAddress(e);
+      const clientIp = addr.ip || '—';
+      const clientTitle = [
+        addr.peer ? t('log.peerIp') + ': ' + addr.peer : '',
+        addr.chain ? 'X-Forwarded-For: ' + addr.chain : '',
+      ].filter(Boolean).join('\n');
+      const clientTitleAttr = clientTitle ? ' title="' + esc(clientTitle) + '"' : '';
+      const clientCell = esc(clientIp)
+        + (addr.unverified
+          ? ' <small class="log-ip-unverified" title="' + esc(t('log.ipUnverifiedHint')) + '">'
+            + esc(t('log.ipUnverified')) + '</small>'
+          : '');
       // Whole declarations, never an interpolated one: the lint rejects a
       // `${…}` inside `style="…"` that is not a cssValue().
       const hl = S._highlightLogId === e.id;
@@ -160,7 +174,7 @@ function renderLogs(entries, total) {
         <td class="log-source" role="cell" aria-labelledby="thLogSourceTarget">${esc(e.source_provider)} &rarr; ${esc(e.target_provider_name || resolveProviderName(e.target_provider))}${e.upstream_model ? ` <small style="color:var(--text-dim)">${esc(e.upstream_model)}</small>` : ''}</td>
         <td class="log-mode" role="cell" aria-labelledby="thLogMode">${modeBadge}</td>
         <td class="log-key" role="cell" aria-labelledby="thLogApiKey">${esc(keyLabel)}</td>
-        <td class="log-ip" role="cell" aria-labelledby="thLogClientIp">${esc(clientIp)}</td>
+        <td class="log-ip" role="cell" aria-labelledby="thLogClientIp"${raw(clientTitleAttr)}>${raw(clientCell)}</td>
         <td class="log-status" role="cell" aria-labelledby="thLogStatus"><span class="tag is-pill ${statusCls}">${esc(e.status_code)}${hasDetail ? ' ▸' : ''}</span>${e.status_code >= 400 ? ` <button class="btn btn-sm" onclick="event.stopPropagation();jumpToErrorDump(${jsArg(e.id)})" title="${esc(t('btn.viewErrorDump'))}" style="padding:2px 4px;margin-left:2px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>` : ''}</td>
         <td class="log-tokens" role="cell" aria-labelledby="thLogTokens" style="font-size:12px">${e.total_tokens != null ? fmtTokens(e.total_tokens) : '—'}${e.cache_read_tokens ? `<br><span title="${esc(t('token.cacheRead'))}" style="color:var(--info);font-size:10px;cursor:help">C↓ ${fmtTokens(e.cache_read_tokens)}</span>` : ''}${e.reasoning_tokens ? `<br><span title="${esc(t('token.reasoning'))}" style="color:var(--neg);font-size:10px;cursor:help">R ${fmtTokens(e.reasoning_tokens)}</span>` : ''}</td>
         <td class="log-duration" role="cell" aria-labelledby="thLogDuration">${_durationCell(e)}${_tokensPerSecond(e)}</td>

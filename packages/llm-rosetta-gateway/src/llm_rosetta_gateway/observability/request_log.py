@@ -70,6 +70,12 @@ class RequestLogEntry:
     #: served — ``None`` on a lane with no alias and on rows written before
     #: the column existed.
     upstream_model: str | None = None
+    #: The TCP peer and the ``X-Forwarded-For`` header as received (cut).  They
+    #: are what the wire showed, for audit: ``client_ip`` is the address the
+    #: trusted-proxy rule resolved, and these two never feed a decision.
+    #: ``None`` on a row written before the columns existed.
+    peer_ip: str | None = None
+    forwarded_for: str | None = None
 
     @classmethod
     def create(
@@ -99,6 +105,8 @@ class RequestLogEntry:
         user_agent: str | None = None,
         conversation_id: str | None = None,
         upstream_model: str | None = None,
+        peer_ip: str | None = None,
+        forwarded_for: str | None = None,
     ) -> RequestLogEntry:
         """Factory with auto-generated id and timestamp."""
         return cls(
@@ -128,6 +136,8 @@ class RequestLogEntry:
             user_agent=user_agent,
             conversation_id=conversation_id,
             upstream_model=upstream_model,
+            peer_ip=peer_ip,
+            forwarded_for=forwarded_for,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -165,6 +175,8 @@ class RequestLogEntry:
             ("user_agent", self.user_agent),
             ("conversation_id", self.conversation_id),
             ("upstream_model", self.upstream_model),
+            ("peer_ip", self.peer_ip),
+            ("forwarded_for", self.forwarded_for),
         ):
             if value is not None:
                 d[key] = value

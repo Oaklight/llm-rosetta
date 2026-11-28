@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from typing import Any
 
 from llm_rosetta_gateway.middleware.request_context import (
@@ -296,3 +297,65 @@ class TestContextvarIsolation:
         assert ctx2 is not None
         assert ctx2.request_id == "second"
         assert ctx2.api_format == "openai"
+
+
+class TestAuditAddresses:
+    """``peer_ip`` and ``forwarded_for`` keep what the wire showed (#1830 A12)."""
+
+    def _ctx(self, policy: ProxyPolicy, req: Any) -> RequestContext:
+        _, ctx = _run(_run_hook_and_get_context(setup_request_context(policy), req))
+        assert ctx is not None
+        return ctx
+
+    def test_an_untrusted_peer_keeps_its_header_but_it_does_not_decide(self):
+        req = FakeRequest(
+            headers={"x-forwarded-for": "203.0.113.9, 10.0.0.2"},
+            client_addr=("172.29.0.1", 1),
+        )
+        ctx = self._ctx(ProxyPolicy(_NOBODY), req)
+        assert ctx.client_ip == "172.29.0.1"
+        assert ctx.peer_ip == "172.29.0.1"
+        assert ctx.forwarded_for == "203.0.113.9, 10.0.0.2"
+
+    def test_a_trusted_peer_resolves_the_client_and_still_keeps_the_raw_chain(self):
+        trusted = TrustedProxies.parse(["172.29.0.1/32", "127.0.0.0/8"])
+        req = FakeRequest(
+            headers={"x-forwarded-for": "198.51.100.7, 127.0.0.1"},
+            client_addr=("172.29.0.1", 1),
+        )
+        ctx = self._ctx(ProxyPolicy(trusted), req)
+        assert ctx.client_ip == "198.51.100.7"
+        assert ctx.peer_ip == "172.29.0.1"
+        assert ctx.forwarded_for == "198.51.100.7, 127.0.0.1"
+
+    def test_a_request_with_no_header_has_none(self):
+        ctx = self._ctx(ProxyPolicy(_NOBODY), FakeRequest())
+        assert ctx.forwarded_for is None
+        assert ctx.peer_ip == "127.0.0.1"
+
+    def test_a_request_with_no_peer_has_none(self):
+        req = SimpleNamespace(
+            path="/v1/chat/completions",
+            method="POST",
+            headers={},
+            client_addr=(),
+            query_params={},
+        )
+        ctx = self._ctx(ProxyPolicy(_NOBODY), req)
+        assert ctx.peer_ip is None
+        assert ctx.client_ip == "unknown"
+
+    def test_the_header_is_cut_so_a_client_cannot_grow_a_log_row(self):
+        req = FakeRequest(headers={"x-forwarded-for": "1.2.3.4, " * 400})
+        ctx = self._ctx(ProxyPolicy(_NOBODY), req)
+        assert ctx.forwarded_for is not None and len(ctx.forwarded_for) == 500
+
+    def test_the_audit_fields_never_change_the_resolved_client(self):
+        """A forged chain from an untrusted peer decides nothing."""
+        forged = FakeRequest(
+            headers={"x-forwarded-for": "6.6.6.6", "x-real-ip": "7.7.7.7"},
+            client_addr=("203.0.113.5", 1),
+        )
+        ctx = self._ctx(ProxyPolicy(_LOOPBACK), forged)
+        assert ctx.client_ip == "203.0.113.5"
+        assert ctx.forwarded_for == "6.6.6.6"

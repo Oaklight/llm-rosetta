@@ -22,7 +22,12 @@ from typing import Any, ClassVar
 from ..observability.logging import get_logger
 from ..middleware.error_format import is_admin_path
 from ..middleware.headers import get_request_id
-from ..middleware.request_context import ProxyPolicy, request_context_var
+from ..middleware.request_context import (
+    ProxyPolicy,
+    extract_forwarded_for,
+    extract_peer_ip,
+    request_context_var,
+)
 from ..model_types import get_model_type
 from ..observability.sanitize import scrub_credential_patterns
 from .base import OpsContext
@@ -69,6 +74,8 @@ class OpsRejectedRequest(OpsProxyRequest):
         request_id: str,
         client_ip: str | None,
         source_provider: str = "",
+        peer_ip: str | None = None,
+        forwarded_for: str | None = None,
     ) -> None:
         super().__init__(
             ctx,
@@ -82,6 +89,8 @@ class OpsRejectedRequest(OpsProxyRequest):
             error_detail=scrub_credential_patterns(error_detail),
             request_id=request_id,
             client_ip=client_ip,
+            peer_ip=peer_ip,
+            forwarded_for=forwarded_for,
         )
 
     async def _record(self, result: Any, *, error: BaseException | None = None) -> None:
@@ -151,6 +160,8 @@ async def record_unrecorded_rejection(request: Any, response: Any) -> None:
     rctx = request_context_var.get()
     request_id = rctx.request_id if rctx else get_request_id(request)
     client_ip = rctx.client_ip if rctx else _policy(request.app).client_ip(request)
+    peer_ip = rctx.peer_ip if rctx else extract_peer_ip(request)
+    forwarded_for = rctx.forwarded_for if rctx else extract_forwarded_for(request)
     response.headers.setdefault("x-request-id", request_id)
 
     ctx = _ops_context(request.app)
@@ -170,6 +181,8 @@ async def record_unrecorded_rejection(request: Any, response: Any) -> None:
         request_id=request_id,
         client_ip=client_ip,
         source_provider=route_source_format(request.path),
+        peer_ip=peer_ip,
+        forwarded_for=forwarded_for,
     ).execute()
 
 
@@ -217,4 +230,6 @@ async def record_read_rejection(app: Any, rejection: Any) -> None:
         request_id=rejection.request_id,
         client_ip=_policy(app).client_ip(peer),
         source_provider=route_source_format(rejection.path or ""),
+        peer_ip=extract_peer_ip(peer),
+        forwarded_for=extract_forwarded_for(peer),
     ).execute()

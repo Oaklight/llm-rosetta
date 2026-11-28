@@ -317,6 +317,19 @@ class _SchemaMixin(_StoreState):
                 "input_tokens, output_tokens, total_tokens)",
             ],
         ),
+        (
+            17,
+            "add request_log.peer_ip and forwarded_for so a row keeps what the wire showed",
+            [
+                # ``client_ip`` is the address the trusted-proxy rule resolved,
+                # which is the peer itself until ``server.trusted_proxies`` names
+                # the proxies in front.  These two keep the TCP peer and the raw
+                # ``X-Forwarded-For`` for audit; nothing reads them to decide.
+                # NULL on a row written before the columns existed.
+                "ALTER TABLE request_log ADD COLUMN peer_ip TEXT",
+                "ALTER TABLE request_log ADD COLUMN forwarded_for TEXT",
+            ],
+        ),
     ]
 
     async def _run_migrations(self) -> None:

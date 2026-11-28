@@ -102,6 +102,7 @@ tr:hover td { background: var(--surface-2); }
 #requestLogTable .log-key, #requestLogTable .log-ip {
   font-size: var(--fs-micro); color: var(--text-muted);
 }
+#requestLogTable .log-ip-unverified { color: var(--text-dim); font-size: 10px; }
 /* A status is one line: the code pill and the error-dump button stay in
    reading order.  On a card the cell is also a flex row, so the 18px pill
    centres against the 28px button instead of sitting on its baseline. */
