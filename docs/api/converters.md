@@ -11,11 +11,13 @@ title: Converters
 
 ## Convenience Functions
 
-::: llm_rosetta.auto_detect.convert
+These are importable from `llm_rosetta` (`llm_rosetta.convert()`, `llm_rosetta.get_converter_for_provider()`); the deprecated `llm_rosetta.auto_detect` only forwards them and is removed in 0.15.0.
 
-::: llm_rosetta.auto_detect.convert_response
+::: llm_rosetta.pipeline.convert
 
-::: llm_rosetta.auto_detect.get_converter_for_provider
+::: llm_rosetta.pipeline.convert_response
+
+::: llm_rosetta.converters.registry.get_converter_for_provider
 
 ## Conversion Context
 
