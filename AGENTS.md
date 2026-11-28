@@ -201,7 +201,7 @@ the app (`request.app.<attr>`, `getattr(request.app, "x")`) are counted by
 `tests/gateway/test_admin_app_reads.py`; its list may only shrink too, and a
 new need is a member of `AdminContext` (the config hot reload is
 `AdminContext.reload_config`).  Only `app/factory.py` imports `admin`
-(`setup_admin`, `register_admin_routes`).  Admin never imports `app._state`.
+(`setup_admin`, `register_admin_routes`).  The config an app serves is `app.gateway_config` (one home, no module-level copy); admin reads it through `AdminContext.served_config()`.
 
 ### IR type system
 

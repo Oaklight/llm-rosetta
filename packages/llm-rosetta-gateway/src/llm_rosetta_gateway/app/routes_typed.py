@@ -22,7 +22,6 @@ from ..pipelines.decision import handle_decision
 from ..pipelines.embeddings import handle_embeddings
 from ..pipelines.rerank import handle_rerank
 
-from . import _state
 
 logger = get_logger()
 
@@ -81,10 +80,11 @@ def _make_typed_handler(raw_handler: Callable, type_name: str) -> Callable:
     """Wrap a typed pipeline handler in the shared request lifecycle."""
 
     async def _handler(request: Any) -> Response | StreamingResponse:
-        assert _state._config is not None
+        config = request.app.gateway_config
+        assert config is not None
         return await instrumented_handler(
             request,
-            _state._config,
+            config,
             raw_handler,
             source_format=type_name,
             model_type=type_name,

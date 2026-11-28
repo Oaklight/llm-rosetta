@@ -270,24 +270,25 @@ class TestThroughTheLifecycle:
     refusal can be mistaken for a provider failure.
     """
 
-    def _lifecycle_request(self, body: dict[str, Any], transport: Any) -> MagicMock:
+    def _lifecycle_request(
+        self, body: dict[str, Any], transport: Any, config: Any
+    ) -> MagicMock:
         request = _request(body, transport)
+        request.app.gateway_config = config
         request.app.persistence = None
         request.app.profiler_state = None
         request.app.ops_ctx = None
         return request
 
     def test_a_501_is_not_charged_to_the_provider(self, monkeypatch):
-        from llm_rosetta_gateway.app import _state
         from llm_rosetta_gateway.app.routes_compact import route_responses_compact
         from llm_rosetta_gateway.middleware.circuit_breaker import CircuitState
 
         config = _config("chat_completions", breaker=2)
-        monkeypatch.setattr(_state, "_config", config)
         transport = _transport(
             UpstreamResponse(status_code=200, body={}, raw_content=b"{}")
         )
-        request = self._lifecycle_request(COMPACTION_BODY, transport)
+        request = self._lifecycle_request(COMPACTION_BODY, transport, config)
 
         for _ in range(3):
             response = asyncio.run(route_responses_compact(request))
@@ -303,13 +304,11 @@ class TestThroughTheLifecycle:
         Its own note is the only place that path records the lane, so a row
         for it would otherwise name the provider and nothing else.
         """
-        from llm_rosetta_gateway.app import _state
         from llm_rosetta_gateway.app.routes_compact import route_responses_compact
         from llm_rosetta_gateway.observability import PersistenceManager, RequestLog
         from llm_rosetta_gateway.ops import OpsContext
 
         config = _config("chat_completions", upstream_model="upstream-compact")
-        monkeypatch.setattr(_state, "_config", config)
         transport = _transport(
             UpstreamResponse(status_code=200, body={}, raw_content=b"{}")
         )
@@ -317,7 +316,7 @@ class TestThroughTheLifecycle:
         async def scenario() -> dict[str, Any]:
             pm = await PersistenceManager.create(str(tmp_path / "gateway.db"))
             request_log = RequestLog(persistence=pm)
-            request = self._lifecycle_request(COMPACTION_BODY, transport)
+            request = self._lifecycle_request(COMPACTION_BODY, transport, config)
             request.app.persistence = pm
             request.app.ops_ctx = OpsContext(request_log=request_log, persistence=pm)
             request.app.request_log = request_log
@@ -350,13 +349,11 @@ class TestThroughTheLifecycle:
         used to note the lane again after the call, and that second note is
         gone — the rejection never reaches the code after the call at all.
         """
-        from llm_rosetta_gateway.app import _state
         from llm_rosetta_gateway.app.routes_compact import route_responses_compact
         from llm_rosetta_gateway.observability import PersistenceManager, RequestLog
         from llm_rosetta_gateway.ops import OpsContext
 
         config = _config("open_responses", upstream_model="upstream-compact", breaker=2)
-        monkeypatch.setattr(_state, "_config", config)
         transport = _transport(
             UpstreamResponse(
                 status_code=200,
@@ -364,7 +361,7 @@ class TestThroughTheLifecycle:
                 raw_content=json.dumps(COMPACTED).encode(),
             )
         )
-        request = self._lifecycle_request(COMPACTION_BODY, transport)
+        request = self._lifecycle_request(COMPACTION_BODY, transport, config)
         request.path = "/v1/responses/compact"
 
         async def scenario() -> list[dict[str, Any]]:
@@ -400,16 +397,14 @@ class TestThroughTheLifecycle:
 
     def test_an_upstream_failure_still_counts(self, monkeypatch):
         """The breaker keeps doing its job for failures that are the provider's."""
-        from llm_rosetta_gateway.app import _state
         from llm_rosetta_gateway.app.routes_compact import route_responses_compact
         from llm_rosetta_gateway.middleware.circuit_breaker import CircuitState
 
         config = _config(breaker=2)
-        monkeypatch.setattr(_state, "_config", config)
         transport = _transport(
             UpstreamResponse(status_code=500, body=None, raw_content=b"boom")
         )
-        request = self._lifecycle_request(COMPACTION_BODY, transport)
+        request = self._lifecycle_request(COMPACTION_BODY, transport, config)
 
         for _ in range(2):
             response = asyncio.run(route_responses_compact(request))

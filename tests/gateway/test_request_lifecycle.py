@@ -15,7 +15,6 @@ from unittest.mock import MagicMock
 import pytest
 
 import llm_rosetta_gateway.app as app_module
-from llm_rosetta_gateway.app import _state
 from llm_rosetta_gateway._vendor.httpserver import App, JSONResponse
 from llm_rosetta_gateway.config import GatewayConfig
 from llm_rosetta_gateway.proxy.lifecycle import begin_typed, finish_typed
@@ -117,7 +116,11 @@ def fake_type(monkeypatch):
     _reset_registry()
 
 
-def _request(pm: PersistenceManager, path: str = "/v1/fake") -> MagicMock:
+def _request(
+    pm: PersistenceManager,
+    path: str = "/v1/fake",
+    config: GatewayConfig | None = None,
+) -> MagicMock:
     request = MagicMock()
     request.json.return_value = {"model": "fake-model"}
     request.headers = {}
@@ -125,6 +128,7 @@ def _request(pm: PersistenceManager, path: str = "/v1/fake") -> MagicMock:
     request.state = SimpleNamespace()
     request_log = RequestLog(persistence=pm)
     request.app = SimpleNamespace(
+        gateway_config=config or _config(),
         persistence=pm,
         request_log=request_log,
         metrics=None,
@@ -139,7 +143,6 @@ def _request(pm: PersistenceManager, path: str = "/v1/fake") -> MagicMock:
 def _typed_handler(config: GatewayConfig) -> Any:
     """The wrapper `_register_non_llm_routes` would install for the fake type."""
     app = _CapturingApp()
-    _state._config = config
     app_module._register_non_llm_routes(cast(App, app), config)
     return app.handlers["/v1/fake"]
 
@@ -171,9 +174,8 @@ class TestTypedRouteLifecycle:
         _register(monkeypatch, "exploding", "/v1/exploding", _exploding_route)
         app = _CapturingApp()
         config = _config()
-        _state._config = config
         app_module._register_non_llm_routes(cast(App, app), config)
-        request = _request(pm, path="/v1/exploding")
+        request = _request(pm, path="/v1/exploding", config=config)
 
         response = await app.handlers["/v1/exploding"](request)
 
@@ -222,7 +224,7 @@ class TestTypedRouteCircuitBreaker:
         breaker.record_failure()
         assert breaker.failure_count == 1
         handler = _typed_handler(config)
-        request = _request(pm)
+        request = _request(pm, config=config)
 
         response = await handler(request)
 
@@ -247,7 +249,7 @@ class TestTypedRouteCircuitBreaker:
                 },
             }
         )
-        request = _request(pm)
+        request = _request(pm, config=config)
 
         async def _failing(request: Any, config: GatewayConfig) -> Any:
             rejection = begin_typed(
@@ -261,7 +263,6 @@ class TestTypedRouteCircuitBreaker:
             return JSONResponse({"error": "bad gateway"}, status_code=502)
 
         app = _CapturingApp()
-        _state._config = config
         _register(monkeypatch, "failing", "/v1/failing", _failing)
         app_module._register_non_llm_routes(cast(App, app), config)
         request.path = "/v1/failing"

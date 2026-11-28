@@ -49,7 +49,6 @@ from ..proxy import error_response_for_source
 from ..proxy.attempt import UpstreamAttempt, attempt_upstream
 from ..transport import UpstreamConnectionError, UpstreamTimeoutError
 
-from . import _state
 from .routes_llm import (
     _resolve_or_error,
     model_allowed,
@@ -310,14 +309,15 @@ async def handle_messages_count_tokens(request: Any, config: GatewayConfig) -> R
 
 async def route_messages_count_tokens(request: Any) -> Response | StreamingResponse:
     """The router entry point: the same handler under the request lifecycle."""
-    assert _state._config is not None
+    config = request.app.gateway_config
+    assert config is not None
 
     async def _handle(request: Any, config: GatewayConfig) -> Response:
         return await handle_messages_count_tokens(request, config)
 
     return await instrumented_handler(
         request,
-        _state._config,
+        config,
         _handle,
         source_format=SOURCE_FORMAT,
         error_phase="conversion",

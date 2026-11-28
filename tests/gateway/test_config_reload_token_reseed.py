@@ -273,8 +273,6 @@ class _RecordingDeferred:
 
 def test_reload_config_reseeds_providers():
     """``_reload_gateway_config`` must hand the new config to the deferred seeder."""
-    from llm_rosetta_gateway.app import _state as app_state
-
     raw: dict[str, Any] = {"providers": {}, "models": {}}
     app = _App()
     app.config_path = "/tmp/does-not-exist.jsonc"
@@ -283,13 +281,9 @@ def test_reload_config_reseeds_providers():
     app.gateway_config = None
     app.deferred_startup = _RecordingDeferred()
 
-    original = app_state._config
-    try:
-        new_config = asyncio.run(
-            _reload_gateway_config(_Request(app), "/tmp/does-not-exist.jsonc")
-        )
-    finally:
-        app_state._config = original
+    new_config = asyncio.run(
+        _reload_gateway_config(_Request(app), "/tmp/does-not-exist.jsonc")
+    )
 
     assert app.deferred_startup.reloaded_with == [new_config]
     assert new_config.maintenance is None, (
@@ -304,8 +298,6 @@ def test_reload_config_carries_the_registry_the_reader_ran(tmp_path):
     Taken in the same turn as the read, so the config built from the document is
     the one that carries it — not whichever config happens to be built next.
     """
-    from llm_rosetta_gateway.app import _state as app_state
-
     from llm_rosetta_gateway.config import JsoncConfigIO
     from llm_rosetta_gateway.config.migrate.apply import STEPS
 
@@ -331,11 +323,7 @@ def test_reload_config_carries_the_registry_the_reader_ran(tmp_path):
     app.gateway_config = None
     app.deferred_startup = _RecordingDeferred()
 
-    original = app_state._config
-    try:
-        new_config = asyncio.run(_reload_gateway_config(_Request(app), str(path)))
-    finally:
-        app_state._config = original
+    new_config = asyncio.run(_reload_gateway_config(_Request(app), str(path)))
 
     assert new_config.maintenance is not None
     assert new_config.maintenance.name == "config"
