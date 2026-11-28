@@ -21,6 +21,8 @@ from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from typing import Any
 
+from .lane_allowance import LaneAllowanceSink
+
 # Type alias for auth-header builder callables
 AuthHeaderFn = Callable[[str], dict[str, str]]
 
@@ -426,6 +428,9 @@ class ProviderInfo:
         # Set by ``gateway.quota.service.bind_provider_quota``: says whether
         # the provider (not one key) is cooling down.
         self.quota_provider_blocked: Callable[[], bool] | None = None
+        # Where this lane's reported allowance goes.  ``None`` takes the process
+        # store; the quota layer binds its own.
+        self.lane_allowance: LaneAllowanceSink | None = None
 
     # -- readiness ----------------------------------------------------------
 
@@ -556,15 +561,19 @@ class ProviderInfo:
         Returns:
             Whether the update carried an allowance.
         """
-        from .acp.quota import record_reading
-
-        return record_reading(update, self)
+        return self._lane_sink().record(update, self)
 
     def lane_reading(self) -> Any | None:
         """Return this lane's last stored allowance reading, if any."""
-        from .acp.quota import lanes_reading
+        return self._lane_sink().reading(self)
 
-        return lanes_reading(self)
+    def _lane_sink(self) -> LaneAllowanceSink:
+        """The sink this lane's allowance goes to: the one bound, else the process one."""
+        if self.lane_allowance is not None:
+            return self.lane_allowance
+        from .acp.quota import PROCESS_LANE_ALLOWANCE
+
+        return PROCESS_LANE_ALLOWANCE
 
     def active_key(self) -> str | None:
         """Return the credential this request went out with, if any."""

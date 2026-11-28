@@ -148,8 +148,23 @@ class LaneReading:
         }
 
 
+class ProcessLaneAllowance:
+    """The sink over this module's process-wide store (until the quota layer owns it)."""
+
+    def record(self, update: Any, lane: Any) -> bool:
+        """Store the allowance *update* reports for *lane*, if it carries one."""
+        return record_reading(update, lane)
+
+    def reading(self, lane: Any) -> LaneReading | None:
+        """Return *lane*'s last stored reading, or ``None``."""
+        return lanes_reading(lane)
+
+
 _READINGS: dict[str, LaneReading] = {}
 _READINGS_LOCK = threading.Lock()
+
+
+PROCESS_LANE_ALLOWANCE = ProcessLaneAllowance()
 
 
 def clear_lane_readings() -> None:
