@@ -648,3 +648,19 @@ class GatewayAdminContext(_AppStateMembers):
     def provider_validation_warnings(self) -> list[Any]:
         """The providers the last reload disabled."""
         return list(getattr(self._app, "provider_validation_warnings", None) or [])
+
+    def shim_file_index(self) -> Any | None:
+        """The cached index of the shim files."""
+        return getattr(self._app, "_shim_file_index", None)
+
+    def set_shim_file_index(self, value: Any) -> None:
+        """Cache the index of the shim files."""
+        self._app._shim_file_index = value
+
+    def shim_manifest_index(self) -> Any | None:
+        """The cached index of the vendor manifests."""
+        return getattr(self._app, "_shim_manifest_index", None)
+
+    def set_shim_manifest_index(self, value: Any) -> None:
+        """Cache the index of the vendor manifests."""
+        self._app._shim_manifest_index = value

@@ -387,7 +387,7 @@ class TestTheConfigTheRoutingLoopCheckReads:
     """A running gateway keeps its config on ``gateway_config``; nothing sets ``config``."""
 
     @pytest.mark.asyncio
-    async def test_the_served_config_is_not_checked_for_loops(self):
+    async def test_the_served_config_is_checked_for_loops(self):
         config = SimpleNamespace(
             models={
                 "a": SimpleNamespace(providers=[]),
@@ -399,6 +399,13 @@ class TestTheConfigTheRoutingLoopCheckReads:
         response = await upstream.check_routing_loops(
             _request(fake_app(gateway_config=config))
         )
+
+        [warning] = _body(response)["warnings"]
+        assert "a" in warning and "b" in warning
+
+    @pytest.mark.asyncio
+    async def test_an_app_with_no_config_reports_no_loops(self):
+        response = await upstream.check_routing_loops(_request(fake_app()))
 
         assert _body(response) == {"warnings": []}
 

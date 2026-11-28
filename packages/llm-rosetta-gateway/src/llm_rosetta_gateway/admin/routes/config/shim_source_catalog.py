@@ -32,8 +32,8 @@ async def get_shim_source_catalog(request: Any) -> Response:
         error, and no vendors.
     """
     refresh = str(_qp(request, "refresh", "") or "").lower() in ("1", "true", "yes")
-    config = getattr(request.app, "gateway_config", None)
-    report = getattr(request.app, "shim_source_report", None)
+    config = admin_context(request).served_config()
+    report = admin_context(request).shim_source_report()
     loop = asyncio.get_running_loop()
     try:
         payload = await loop.run_in_executor(

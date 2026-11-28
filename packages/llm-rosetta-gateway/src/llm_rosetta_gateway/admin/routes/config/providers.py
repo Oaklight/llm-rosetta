@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 from llm_rosetta_gateway._vendor.httpserver import JSONResponse, Response
-from llm_rosetta_gateway.admin_api import catalogue
+from llm_rosetta_gateway.admin_api import admin_context, catalogue
 from llm_rosetta.api import get_shim
 
 from .._shared import (
@@ -222,7 +222,7 @@ def _relocate_profiles(
 
 async def _close_lane_processes(request: Any, names: list[str]) -> None:
     """Drop the agent processes bound to a renamed or deleted entry."""
-    transports = list((getattr(request.app, "transports", {}) or {}).values())
+    transports = list(admin_context(request).transports().values())
     seen: set[int] = set()
     for transport in transports:
         if id(transport) in seen:
