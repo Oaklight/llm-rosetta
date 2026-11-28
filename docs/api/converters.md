@@ -11,11 +11,13 @@ title: Converters
 
 ## Convenience Functions
 
-::: llm_rosetta.auto_detect.convert
+以下函数都可从 `llm_rosetta` 导入（`llm_rosetta.convert()`、`llm_rosetta.get_converter_for_provider()`）；已弃用的 `llm_rosetta.auto_detect` 只做转发，将在 0.15.0 移除。
 
-::: llm_rosetta.auto_detect.convert_response
+::: llm_rosetta.pipeline.convert
 
-::: llm_rosetta.auto_detect.get_converter_for_provider
+::: llm_rosetta.pipeline.convert_response
+
+::: llm_rosetta.converters.registry.get_converter_for_provider
 
 ## Conversion Context
 
