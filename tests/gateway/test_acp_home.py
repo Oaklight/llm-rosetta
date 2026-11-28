@@ -14,12 +14,11 @@ from types import SimpleNamespace
 import pytest
 
 from llm_rosetta_gateway.config.providers import (
-    _acp_env,
-    _acp_state_dir,
     _auth_context,
     _bind_auth_exchange,
     build_provider_info,
 )
+from llm_rosetta_gateway.transport.acp.lane import _acp_env, _acp_state_dir
 from llm_rosetta_gateway.transport.acp.profile import state_dir_for
 
 
