@@ -328,7 +328,6 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
         "shims",
     ),
     "config": (
-        "maintenance",
         "middleware",
         "model_types",
         "observability",
@@ -363,7 +362,6 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
     ),
     "pipelines": (
         "config",
-        "maintenance",
         "middleware",
         "model_types",
         "observability",
@@ -385,7 +383,6 @@ GATEWAY_EDGES: dict[str, tuple[str, ...]] = {
         "transport",
     ),
     "routing": (
-        "maintenance",
         "quota",
         "transport",
     ),

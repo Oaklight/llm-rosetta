@@ -1089,8 +1089,8 @@ class TestVendorManagedLogin:
 
     def test_signing_out_does_not_mark_the_lane_failed(self):
         """The CLI's sign-out is not the gateway's credential failing."""
-        from llm_rosetta_gateway.maintenance.startup import (
-            DeferredStartup,
+        from llm_rosetta_gateway.maintenance.startup import DeferredStartup
+        from llm_rosetta_gateway.transport.provider_readiness import (
             ProviderInitState,
         )
 

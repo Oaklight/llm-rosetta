@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from llm_rosetta_gateway.config import GatewayConfig
-from llm_rosetta_gateway.maintenance.startup import ProviderNotReady
+from llm_rosetta_gateway.transport.provider_readiness import ProviderNotReady
 from llm_rosetta_gateway.quota.models import (
     QuotaReading,
     QuotaWindow,

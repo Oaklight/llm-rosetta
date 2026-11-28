@@ -26,6 +26,7 @@ from ..config import GatewayConfig, TypedRoute
 from ..proxy.lifecycle import begin_typed, finish_typed
 from ..observability.logging import get_logger
 from ..middleware.headers import build_upstream_extra_headers, get_request_id
+from ..transport.provider_readiness import ProviderNotReady
 from ..transport import UpstreamConnectionError, UpstreamTimeoutError, UpstreamTransport
 from ._fidelity import check_same_format_fidelity
 
@@ -225,7 +226,6 @@ def _failover_target(
     counter chat feeds, so a typed 429 sinks and eventually disables a provider
     like any other.  The refused provider is then left out of the re-resolution.
     """
-    from ..maintenance.startup import ProviderNotReady
     from ..quota.service import note_upstream_rate_limit
 
     note_upstream_rate_limit(route.provider_info)
@@ -336,8 +336,6 @@ def _parse_and_resolve(
     model = body.get("model")
     if not model:
         return _error("Missing 'model' in request body", "invalid_request_error", 400)
-
-    from ..maintenance.startup import ProviderNotReady
 
     try:
         route = handler.resolve(config, model)

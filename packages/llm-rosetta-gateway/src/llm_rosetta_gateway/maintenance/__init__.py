@@ -32,23 +32,19 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .backfills import build_registry as build_deferred_registry
     from .dumps import DeferredDumpStore
-    from .startup import DeferredStartup, ProviderInitState, ProviderNotReady
+    from .startup import DeferredStartup
 
 #: Public name -> (submodule, attribute).  Kept as data so the façade costs
 #: nothing at import time; see the module docstring for why that matters.
 _EXPORTS: dict[str, tuple[str, str]] = {
     "DeferredDumpStore": (".dumps", "DeferredDumpStore"),
     "DeferredStartup": (".startup", "DeferredStartup"),
-    "ProviderInitState": (".startup", "ProviderInitState"),
-    "ProviderNotReady": (".startup", "ProviderNotReady"),
     "build_deferred_registry": (".backfills", "build_registry"),
 }
 
 __all__ = [
     "DeferredDumpStore",
     "DeferredStartup",
-    "ProviderInitState",
-    "ProviderNotReady",
     "build_deferred_registry",
 ]
 

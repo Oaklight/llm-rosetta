@@ -21,7 +21,8 @@ from llm_rosetta_gateway.admin.routes.config import fetch_upstream_models
 from llm_rosetta_gateway.admin.routes.connectivity import (
     test_provider_connectivity as _provider_connectivity,
 )
-from llm_rosetta_gateway.maintenance.startup import DeferredStartup, ProviderInitState
+from llm_rosetta_gateway.maintenance.startup import DeferredStartup
+from llm_rosetta_gateway.transport.provider_readiness import ProviderInitState
 from llm_rosetta_gateway.shims.shim_sources import shims_signature
 from llm_rosetta_gateway.transport.provider_info import (
     TOKEN_PENDING_SENTINEL,

@@ -44,7 +44,7 @@ from ..proxy import (
     handle_non_streaming,
     handle_streaming,
 )
-from ..maintenance.startup import ProviderNotReady
+from ..transport.provider_readiness import ProviderNotReady
 
 from . import _state
 

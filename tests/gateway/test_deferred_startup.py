@@ -13,8 +13,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from llm_rosetta_gateway.routing.eligibility import provider_eligibility
-from llm_rosetta_gateway.maintenance.startup import (
-    DeferredStartup,
+from llm_rosetta_gateway.maintenance.startup import DeferredStartup
+from llm_rosetta_gateway.transport.provider_readiness import (
     ProviderInitState,
     ProviderNotReady,
 )
