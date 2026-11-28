@@ -21,7 +21,7 @@ from collections.abc import Callable, Mapping
 from contextvars import ContextVar
 from typing import Any
 
-from .lane_allowance import LaneAllowanceSink
+from .lane_allowance import UNBOUND, LaneAllowanceSink
 
 # Type alias for auth-header builder callables
 AuthHeaderFn = Callable[[str], dict[str, str]]
@@ -568,12 +568,8 @@ class ProviderInfo:
         return self._lane_sink().reading(self)
 
     def _lane_sink(self) -> LaneAllowanceSink:
-        """The sink this lane's allowance goes to: the one bound, else the process one."""
-        if self.lane_allowance is not None:
-            return self.lane_allowance
-        from .acp.quota import PROCESS_LANE_ALLOWANCE
-
-        return PROCESS_LANE_ALLOWANCE
+        """The sink this lane's allowance goes to: the one bound, else none."""
+        return self.lane_allowance if self.lane_allowance is not None else UNBOUND
 
     def active_key(self) -> str | None:
         """Return the credential this request went out with, if any."""

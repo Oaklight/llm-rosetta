@@ -6,6 +6,7 @@ import contextlib
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
+from ..quota.lane_allowance import bind_lane_allowance
 from ..shims.extension_view import pick_release, update_report
 
 if TYPE_CHECKING:
@@ -45,6 +46,9 @@ class GatewayAdminContext:
 
     def publish_config(self, config: GatewayConfig) -> None:
         """Make *config* the one the route handlers read."""
+        store = getattr(self._app, "lane_allowance", None)
+        if store is not None:
+            bind_lane_allowance(config, store)
         self._app.gateway_config = config
 
     async def reload_config(

@@ -22,19 +22,17 @@ from llm_rosetta_gateway.quota.models import credential_fingerprint
 from llm_rosetta_gateway.quota.service import read_provider_quota
 from llm_rosetta_gateway.quota.state import QUOTA_STATE
 from llm_rosetta_gateway.transport.acp.chunks import _chunk_of
-from llm_rosetta_gateway.transport.acp.quota import (
+from llm_rosetta_gateway.quota.lane_allowance import LaneAllowanceStore, lane_credential
+from llm_rosetta_gateway.quota.lane_command import refresh_local
+from llm_rosetta_gateway.quota.models import QuotaReading
+from llm_rosetta_gateway.transport.acp.usage import (
     ACP_QUOTA_PROBE,
-    LaneReading,
-    clear_lane_readings,
-    lane_credential,
-    lanes_reading,
     observation_of,
-    reading_of,
-    record_reading,
-    refresh_local,
-    store_reading,
     windows_of,
 )
+
+#: The store the lanes of these tests report to, as an app's would.
+STORE = LaneAllowanceStore()
 
 RATE_LIMIT = {
     "status": "allowed",
@@ -64,16 +62,17 @@ def _provider(tmp_path):
         quota_identity=None,
         quota_probe=None,
         key_ring=None,
+        lane_allowance=STORE,
     )
 
 
 @pytest.fixture(autouse=True)
 def _clean_quota_state():
     QUOTA_STATE.clear()
-    clear_lane_readings()
+    STORE.clear()
     yield
     QUOTA_STATE.clear()
-    clear_lane_readings()
+    STORE.clear()
 
 
 def test_the_usage_chunk_keeps_the_metadata_and_cost():
@@ -110,7 +109,7 @@ def test_utilization_is_a_fraction_and_resets_are_unix_seconds():
 def test_a_reading_is_keyed_by_the_lane_profile(tmp_path):
     provider = _provider(tmp_path)
 
-    reading = reading_of(UPDATE, provider)
+    reading = STORE.reading_of(UPDATE, provider)
 
     assert reading is not None
     assert reading.probe == ACP_QUOTA_PROBE
@@ -137,7 +136,7 @@ def test_the_quota_payload_says_how_to_get_a_first_reading(tmp_path):
 def test_the_quota_payload_returns_the_recorded_windows(tmp_path):
     provider = _provider(tmp_path)
     config = SimpleNamespace(providers={"claude": provider})
-    assert record_reading(UPDATE, provider) is True
+    assert STORE.record(UPDATE, provider) is True
 
     payload = asyncio.run(read_provider_quota(config, "claude"))
 
@@ -170,25 +169,26 @@ def test_two_entries_with_different_profiles_do_not_share_a_reading(tmp_path):
         quota_identity=None,
         quota_probe=None,
         key_ring=None,
+        lane_allowance=STORE,
     )
-    assert record_reading(UPDATE, first) is True
+    assert STORE.record(UPDATE, first) is True
 
-    first_reading = lanes_reading(first)
+    first_reading = STORE.reading(first)
     assert first_reading is not None
     assert first_reading.to_dict()["windows"]
-    assert lanes_reading(second) is None
+    assert STORE.reading(second) is None
 
 
 def test_a_reading_survives_a_restart(tmp_path):
     """The last good reading is kept beside the profile, not only in memory."""
     provider = _provider(tmp_path)
     os.makedirs(provider.acp_state_dir)
-    assert record_reading(UPDATE, provider) is True
-    before = lanes_reading(provider)
+    assert STORE.record(UPDATE, provider) is True
+    before = STORE.reading(provider)
 
-    clear_lane_readings()
+    STORE.clear()
 
-    reading = lanes_reading(provider)
+    reading = STORE.reading(provider)
     assert reading is not None
     assert [window.name for window in reading.windows] == ["5 hours", "7 days"]
     assert reading.probe == ACP_QUOTA_PROBE
@@ -209,9 +209,9 @@ def test_a_reading_survives_a_restart(tmp_path):
 def test_an_error_reading_is_not_kept(tmp_path):
     provider = _provider(tmp_path)
     os.makedirs(provider.acp_state_dir)
-    store_reading(
+    STORE.store(
         provider,
-        LaneReading(
+        QuotaReading(
             probe="local_test",
             credential=lane_credential(provider),
             status="error",
@@ -219,9 +219,9 @@ def test_an_error_reading_is_not_kept(tmp_path):
         ),
     )
 
-    clear_lane_readings()
+    STORE.clear()
 
-    assert lanes_reading(provider) is None
+    assert STORE.reading(provider) is None
     assert not os.path.exists(
         os.path.join(provider.acp_state_dir, ".llm-rosetta-quota.json")
     )
@@ -230,16 +230,16 @@ def test_an_error_reading_is_not_kept(tmp_path):
 def test_a_profile_without_a_directory_keeps_the_reading_in_memory(tmp_path):
     provider = _provider(tmp_path)
 
-    assert record_reading(UPDATE, provider) is True
-    clear_lane_readings()
+    assert STORE.record(UPDATE, provider) is True
+    STORE.clear()
 
-    assert lanes_reading(provider) is None
+    assert STORE.reading(provider) is None
 
 
 def test_a_reading_appears_when_the_profile_directory_arrives(tmp_path):
     """A first miss is not remembered: a login or a late mount creates it."""
     provider = _provider(tmp_path)
-    assert lanes_reading(provider) is None
+    assert STORE.reading(provider) is None
 
     _write_raw(
         provider,
@@ -252,7 +252,7 @@ def test_a_reading_appears_when_the_profile_directory_arrives(tmp_path):
         },
     )
 
-    reading = lanes_reading(provider)
+    reading = STORE.reading(provider)
     assert reading is not None
     assert [window.name for window in reading.windows] == ["5 hours"]
 
@@ -274,7 +274,7 @@ def test_a_kept_reading_without_a_timestamp_takes_the_file_age(tmp_path):
     stamp = time.time() - 3600
     os.utime(path, (stamp, stamp))
 
-    reading = lanes_reading(provider)
+    reading = STORE.reading(provider)
 
     assert reading is not None
     written = datetime.fromtimestamp(stamp, timezone.utc)
@@ -297,7 +297,7 @@ def test_a_future_schema_is_refused(tmp_path):
         {"schema": 2, "reading": {"windows": [{"name": "from the future"}]}},
     )
 
-    assert lanes_reading(provider) is None
+    assert STORE.reading(provider) is None
 
 
 def test_a_file_that_claims_an_error_is_not_a_reading(tmp_path):
@@ -315,7 +315,7 @@ def test_a_file_that_claims_an_error_is_not_a_reading(tmp_path):
         },
     )
 
-    assert lanes_reading(provider) is None
+    assert STORE.reading(provider) is None
 
 
 def test_an_infinite_share_is_dropped(tmp_path):
@@ -331,7 +331,7 @@ def test_an_infinite_share_is_dropped(tmp_path):
         },
     )
 
-    reading = lanes_reading(provider)
+    reading = STORE.reading(provider)
 
     assert reading is not None
     assert reading.windows[0].used_percent is None
@@ -354,7 +354,7 @@ def test_a_malformed_window_is_skipped(tmp_path):
         },
     )
 
-    reading = lanes_reading(provider)
+    reading = STORE.reading(provider)
 
     assert reading is not None
     assert [window.name for window in reading.windows] == ["7 days"]
@@ -392,6 +392,7 @@ def _local_provider(tmp_path, script, **env):
         quota_identity=None,
         quota_probe=None,
         key_ring=None,
+        lane_allowance=STORE,
         quota_probes=(_LocalProbe(),),
         quota_probe_id="local_test",
         quota_probe_impl=_LocalProbe(),
@@ -504,6 +505,7 @@ def test_a_placeholder_is_expanded_in_argv_and_env(tmp_path):
 
     reading = asyncio.run(
         refresh_local(
+            STORE,
             provider,
             provider.quota_probe_impl,
             provider.quota_local_argv,
@@ -513,7 +515,7 @@ def test_a_placeholder_is_expanded_in_argv_and_env(tmp_path):
     )
 
     assert reading.status == "ok"
-    stored = lanes_reading(provider)
+    stored = STORE.reading(provider)
     assert stored is not None
     assert stored.to_dict()["windows"]
     assert _LocalProbe.last is not None
@@ -531,7 +533,7 @@ def test_a_failed_command_is_stored_as_an_error_reading(tmp_path):
 
     assert payload["status"] == "error"
     assert "the quota command failed" in payload["reason"]
-    reading = lanes_reading(provider)
+    reading = STORE.reading(provider)
     assert reading is not None
     assert reading.status == "error"
 
@@ -542,6 +544,7 @@ def test_a_parser_refusal_is_an_error_reading(tmp_path):
 
     reading = asyncio.run(
         refresh_local(
+            STORE,
             provider,
             provider.quota_probe_impl,
             provider.quota_local_argv,
@@ -557,16 +560,16 @@ def test_a_parser_refusal_is_an_error_reading(tmp_path):
 def test_a_reading_from_another_source_can_be_stored(tmp_path):
     provider = _local_provider(tmp_path, _script(tmp_path, {}))
     window = QuotaWindow(name="7 days", used_percent=10.0)
-    store_reading(
+    STORE.store(
         provider,
-        LaneReading(
+        QuotaReading(
             probe="other",
             credential=lane_credential(provider),
             windows=[window],
         ),
     )
 
-    stored = lanes_reading(provider)
+    stored = STORE.reading(provider)
     assert stored is not None
     assert stored.windows[0].name == "7 days"
 
@@ -579,6 +582,7 @@ def test_a_local_command_that_leaves_a_helper_is_bounded(tmp_path):
 
     reading = asyncio.run(
         refresh_local(
+            STORE,
             provider,
             provider.quota_probe_impl,
             provider.quota_local_argv,
@@ -603,6 +607,7 @@ def test_a_helper_that_outlives_its_parent_is_still_killed(tmp_path):
 
     reading = asyncio.run(
         refresh_local(
+            STORE,
             provider,
             provider.quota_probe_impl,
             provider.quota_local_argv,
@@ -624,6 +629,7 @@ def test_cancelling_a_local_read_kills_the_command(tmp_path):
     async def run():
         task = asyncio.create_task(
             refresh_local(
+                STORE,
                 provider,
                 provider.quota_probe_impl,
                 provider.quota_local_argv,
@@ -678,9 +684,9 @@ def test_a_keyless_http_lane_with_a_local_command_can_report(tmp_path):
 def test_a_failed_local_read_keeps_the_agents_reading(tmp_path):
     script = _script(tmp_path, {}, exit_code=2)
     provider = _local_provider(tmp_path, script)
-    store_reading(
+    STORE.store(
         provider,
-        LaneReading(
+        QuotaReading(
             probe="agent",
             credential=lane_credential(provider),
             windows=[QuotaWindow(name="7 days", used_percent=12.0)],
@@ -693,7 +699,7 @@ def test_a_failed_local_read_keeps_the_agents_reading(tmp_path):
     assert payload["status"] == "ok"
     assert payload["credentials"][0]["reading"]["windows"][0]["name"] == "7 days"
     assert "the quota command failed" in payload["warning"]
-    stored = lanes_reading(provider)
+    stored = STORE.reading(provider)
     assert stored is not None
     assert stored.windows[0].name == "7 days"
 
@@ -707,6 +713,7 @@ def test_a_command_that_floods_stdout_is_cut_off(tmp_path):
 
     reading = asyncio.run(
         refresh_local(
+            STORE,
             provider,
             provider.quota_probe_impl,
             provider.quota_local_argv,
@@ -725,6 +732,7 @@ def test_a_footer_after_the_json_is_tolerated(tmp_path):
 
     reading = asyncio.run(
         refresh_local(
+            STORE,
             provider,
             provider.quota_probe_impl,
             provider.quota_local_argv,
@@ -842,3 +850,58 @@ class TestTheLocalCommandDeclaration:
     def test_a_malformed_override_is_refused(self, local, message):
         with pytest.raises(ValueError, match=message):
             self._info({"quota": {"local": local}})
+
+
+class TestTheStoreBelongsToTheApp:
+    def test_two_stores_do_not_share_a_reading(self, tmp_path):
+        provider = _provider(tmp_path)
+        other = LaneAllowanceStore()
+
+        assert STORE.record(UPDATE, provider) is True
+
+        assert STORE.reading(provider) is not None
+        assert other.reading(provider) is None
+
+    def test_a_lane_nobody_bound_drops_the_report_and_reads_nothing(self, tmp_path):
+        from llm_rosetta_gateway.transport.provider_info import (
+            ProviderInfo,
+            openai_auth,
+        )
+
+        lane = ProviderInfo(
+            "acp",
+            config_name="claude",
+            api_key="",
+            base_url="http://agent.local",
+            auth_header_fn=openai_auth,
+            url_template="{base_url}/acp-turn",
+            keyless=True,
+            transport="acp",
+        )
+        assert lane.lane_allowance is None
+
+        assert lane.record_lane_reading(UPDATE) is False
+        assert lane.lane_reading() is None
+
+    def test_the_quota_payload_of_an_unbound_lane_reports_nothing_yet(self, tmp_path):
+        provider = _provider(tmp_path)
+        provider.lane_allowance = None
+        config = SimpleNamespace(providers={"claude": provider})
+
+        payload = asyncio.run(read_provider_quota(config, "claude"))
+
+        assert payload["credentials"] == []
+        assert "press Test" in payload["reason"]
+
+    def test_a_local_command_on_an_unbound_lane_says_so_and_does_not_run(
+        self, tmp_path
+    ):
+        marker = tmp_path / "runs"
+        provider = _local_provider(tmp_path, _script(tmp_path, {}, marker=marker))
+        provider.lane_allowance = None
+        config = SimpleNamespace(providers={"local": provider})
+
+        payload = asyncio.run(read_provider_quota(config, "local"))
+
+        assert payload["warning"] == "no allowance store is bound to this lane"
+        assert not marker.exists()

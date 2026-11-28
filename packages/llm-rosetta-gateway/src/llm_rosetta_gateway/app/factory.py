@@ -30,6 +30,7 @@ from ..middleware.error_format import (
     is_admin_path as _is_admin_path,
 )
 from ..keystore import KeyStore
+from ..quota.lane_allowance import LaneAllowanceStore, bind_lane_allowance
 from ..middleware.request_context import (
     ProxyPolicy,
     request_context_var,
@@ -488,6 +489,11 @@ async def create_app(
     # The config the app serves has this one home; a reload replaces it through
     # ``AdminContext.publish_config``.
     setattr(app, "gateway_config", config)
+    # What the lanes report about their allowance is this app's, and every
+    # provider of every config it serves reports to it.
+    lane_allowance = LaneAllowanceStore()
+    setattr(app, "lane_allowance", lane_allowance)
+    bind_lane_allowance(config, lane_allowance)
     setattr(app, "shim_source_report", shim_source_report)
     setattr(app, "shim_source_signature", config.shims_signature)
 
